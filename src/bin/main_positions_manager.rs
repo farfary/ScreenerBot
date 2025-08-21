@@ -479,7 +479,7 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<(Arc<Notify>
     let mut task_handles = Vec::new();
 
     // Start PositionsManager service if not already running
-    if get_positions_handle().is_none() {
+    if get_positions_handle().await.is_none() {
         if config.debug {
             log(LogTag::Positions, "INFO", "🚀 Starting PositionsManager service...");
             log(LogTag::Positions, "INFO", "🚀 Initializing PositionsManager service...");
@@ -663,7 +663,7 @@ async fn list_open_positions(config: &PositionsManagerArgs) -> Result<(), String
     log(LogTag::Positions, "INFO", &format!("{}", "📈 OPEN POSITIONS".bright_green().bold()));
     log(LogTag::Positions, "INFO", &format!("{}", "================".bright_green()));
 
-    if get_positions_handle().is_none() {
+    if get_positions_handle().await.is_none() {
         log(LogTag::Positions, "WARN", "⚠️  PositionsManager service not available. Start the main bot first to view actual positions.");
         return Ok(());
     }
@@ -701,7 +701,7 @@ async fn list_closed_positions(config: &PositionsManagerArgs) -> Result<(), Stri
     log(LogTag::Positions, "INFO", &format!("{}", "📊 CLOSED POSITIONS".bright_yellow().bold()));
     log(LogTag::Positions, "INFO", &format!("{}", "==================".bright_yellow()));
 
-    if get_positions_handle().is_none() {
+    if get_positions_handle().await.is_none() {
         log(LogTag::Positions, "WARN", "⚠️  PositionsManager service not available. Start the main bot first to view actual positions.");
         return Ok(());
     }
@@ -935,7 +935,7 @@ async fn show_positions_summary(config: &PositionsManagerArgs) -> Result<(), Str
     log(LogTag::Positions, "INFO", &format!("{}", "📊 POSITIONS SUMMARY".bright_magenta().bold()));
     log(LogTag::Positions, "INFO", &format!("{}", "===================".bright_magenta()));
 
-    if get_positions_handle().is_none() {
+    if get_positions_handle().await.is_none() {
         log(LogTag::Positions, "WARN", "⚠️  PositionsManager service not available. Start the main bot first to view actual summary.");
         return Ok(());
     }
@@ -978,7 +978,7 @@ async fn show_positions_diagnostics(config: &PositionsManagerArgs) -> Result<(),
     log(LogTag::Positions, "INFO", &format!("{}", "🧪 POSITIONS DIAGNOSTICS".bright_white().bold()));
     log(LogTag::Positions, "INFO", &format!("{}", "======================".bright_white()));
 
-    if get_positions_handle().is_none() {
+    if get_positions_handle().await.is_none() {
         log(LogTag::Positions, "WARN", "⚠️  PositionsManager service not available.");
         return Ok(());
     }
@@ -1010,7 +1010,7 @@ async fn force_reverify_positions(config: &PositionsManagerArgs) -> Result<(), S
     log(LogTag::Positions, "INFO", &format!("{}", "🔄 FORCE REVERIFY TRANSACTIONS".bright_yellow().bold()));
     log(LogTag::Positions, "INFO", &format!("{}", "=============================".bright_yellow()));
 
-    if get_positions_handle().is_none() {
+    if get_positions_handle().await.is_none() {
         log(LogTag::Positions, "WARN", "⚠️  PositionsManager service not available.");
         return Ok(());
     }

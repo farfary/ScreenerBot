@@ -17,17 +17,16 @@ use colored::Colorize;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
 use std::sync::Arc;
-use std::sync::Mutex as StdMutex;
-use tokio::sync::{mpsc, oneshot, Notify};
+use tokio::sync::{mpsc, oneshot, Notify, Mutex as AsyncMutex};
+use tokio::fs;
 use tokio::time::{interval, Duration};
 
 /// Unified profit/loss calculation for both open and closed positions
 /// Uses effective prices and actual token amounts when available
 /// For closed positions with sol_received, uses actual SOL invested vs SOL received
 /// NOTE: sol_received should contain ONLY the SOL from token sale, excluding ATA rent reclaim
-pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
+pub async fn calculate_position_pnl_async(position: &Position, current_price: Option<f64>) -> (f64, f64) {
     if is_debug_positions_enabled() {
         log(LogTag::Positions, "DEBUG", &format!(
             "🧮 Calculating P&L for {} - entry: {:.8}, exit: {:?}, current: {:?}",
@@ -94,8 +93,8 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
         // For closed positions: actual transaction-based calculation
         if let Some(token_amount) = position.token_amount {
-            // Get token decimals from cache (synchronous)
-            let token_decimals_opt = crate::tokens::get_token_decimals_sync(&position.mint);
+            // Get token decimals from cache (async)
+            let token_decimals_opt = crate::tokens::get_token_decimals(&position.mint).await;
 
             // CRITICAL: Skip P&L calculation if decimals are not available
             let token_decimals = match token_decimals_opt {
@@ -155,8 +154,8 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
         // For open positions: current value vs entry cost
         if let Some(token_amount) = position.token_amount {
-            // Get token decimals from cache (synchronous)
-            let token_decimals_opt = crate::tokens::get_token_decimals_sync(&position.mint);
+            // Get token decimals from cache (async)
+            let token_decimals_opt = crate::tokens::get_token_decimals(&position.mint).await;
 
             // CRITICAL: Skip P&L calculation if decimals are not available
             let token_decimals = match token_decimals_opt {
@@ -171,6 +170,210 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
                         )
                     );
                     return (0.0, 0.0); // Return zero P&L instead of wrong calculation
+                }
+            };
+
+            let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+            let current_value = ui_token_amount * current;
+            let entry_cost = position.entry_size_sol;
+
+            // Account for actual buy fee (already paid) + estimated sell fee + profit buffer
+            let buy_fee = position
+                .entry_fee_lamports
+                .map_or(0.0, |fee| lamports_to_sol(fee));
+            let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
+            let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
+            let net_pnl_sol = current_value - entry_cost - total_fees;
+            let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
+
+            return (net_pnl_sol, net_pnl_percent);
+        }
+
+        // Fallback for open positions without token amount
+        let price_change = (current - entry_price) / entry_price;
+        let buy_fee = position
+            .entry_fee_lamports
+            .map_or(0.0, |fee| lamports_to_sol(fee));
+        let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
+        let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
+        let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
+        let net_pnl_percent = price_change * 100.0 - fee_percent;
+        let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
+
+        return (net_pnl_sol, net_pnl_percent);
+    }
+
+    // No price available
+    (0.0, 0.0)
+}
+
+/// Synchronous wrapper for calculate_position_pnl for backward compatibility
+/// This function will use the sync decimals function and may block briefly
+/// For new code, prefer calculate_position_pnl_async when possible
+pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
+    if is_debug_positions_enabled() {
+        log(LogTag::Positions, "DEBUG", &format!(
+            "🧮 Calculating P&L (SYNC) for {} - entry: {:.8}, exit: {:?}, current: {:?}",
+            position.symbol, 
+            position.effective_entry_price.unwrap_or(position.entry_price),
+            position.exit_price,
+            current_price
+        ));
+    }
+    
+    // Safety check: validate position has valid entry price
+    let entry_price = position
+        .effective_entry_price
+        .unwrap_or(position.entry_price);
+    if entry_price <= 0.0 || !entry_price.is_finite() {
+        if is_debug_positions_enabled() {
+            log(LogTag::Positions, "DEBUG", &format!(
+                "❌ Invalid entry price for {}: {}", position.symbol, entry_price
+            ));
+        }
+        // Invalid entry price - return neutral P&L to avoid triggering emergency exits
+        return (0.0, 0.0);
+    }
+
+    // For open positions, validate current price if provided
+    if let Some(current) = current_price {
+        if current <= 0.0 || !current.is_finite() {
+            // Invalid current price - return neutral P&L to avoid false emergency signals
+            return (0.0, 0.0);
+        }
+    }
+
+    // For closed positions, prioritize sol_received for most accurate P&L
+    if let (Some(exit_price), Some(sol_received)) = (position.exit_price, position.sol_received) {
+        // Use actual SOL invested vs SOL received for closed positions
+        let sol_invested = position.entry_size_sol;
+
+        // Use actual transaction fees plus profit buffer for P&L calculation
+        let buy_fee = position
+            .entry_fee_lamports
+            .map_or(0.0, |fee| lamports_to_sol(fee));
+        let sell_fee = position
+            .exit_fee_lamports
+            .map_or(0.0, |fee| lamports_to_sol(fee));
+        let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer in P&L calculation
+
+        let net_pnl_sol = sol_received - sol_invested - total_fees;
+        let safe_invested = if sol_invested < 0.00001 {
+            0.00001
+        } else {
+            sol_invested
+        };
+        let net_pnl_percent = (net_pnl_sol / safe_invested) * 100.0;
+
+        return (net_pnl_sol, net_pnl_percent);
+    }
+
+    // Fallback for closed positions without sol_received (backward compatibility)
+    if let Some(exit_price) = position.exit_price {
+        let entry_price = position
+            .effective_entry_price
+            .unwrap_or(position.entry_price);
+        let effective_exit = position.effective_exit_price.unwrap_or(exit_price);
+
+        // For closed positions: actual transaction-based calculation
+        if let Some(token_amount) = position.token_amount {
+            // Get token decimals from cache (synchronous - may block briefly)
+            let token_decimals_opt = crate::tokens::get_token_decimals_sync(&position.mint);
+
+            // CRITICAL: Skip P&L calculation if decimals are not available
+            let token_decimals = match token_decimals_opt {
+                Some(decimals) => decimals,
+                None => {
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG", 
+                            &format!("❌ No decimals available for {} - using price change fallback", position.symbol)
+                        );
+                    }
+                    // Fall back to price-change calculation
+                    let price_change = (effective_exit - entry_price) / entry_price;
+                    let buy_fee = position
+                        .entry_fee_lamports
+                        .map_or(0.0, |fee| lamports_to_sol(fee));
+                    let sell_fee = position
+                        .exit_fee_lamports
+                        .map_or(0.0, |fee| lamports_to_sol(fee));
+                    let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL;
+                    let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
+                    let net_pnl_percent = price_change * 100.0 - fee_percent;
+                    let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
+                    return (net_pnl_sol, net_pnl_percent);
+                }
+            };
+
+            let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+            let entry_cost = position.entry_size_sol;
+            let exit_value = ui_token_amount * effective_exit;
+
+            // Account for actual buy + sell fees plus profit buffer
+            let buy_fee = position
+                .entry_fee_lamports
+                .map_or(0.0, |fee| lamports_to_sol(fee));
+            let sell_fee = position
+                .exit_fee_lamports
+                .map_or(0.0, |fee| lamports_to_sol(fee));
+            let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
+            let net_pnl_sol = exit_value - entry_cost - total_fees;
+            let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
+
+            return (net_pnl_sol, net_pnl_percent);
+        }
+
+        // Fallback for closed positions without token amount
+        let price_change = (effective_exit - entry_price) / entry_price;
+        let buy_fee = position
+            .entry_fee_lamports
+            .map_or(0.0, |fee| lamports_to_sol(fee));
+        let sell_fee = position
+            .exit_fee_lamports
+            .map_or(0.0, |fee| lamports_to_sol(fee));
+        let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
+        let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
+        let net_pnl_percent = price_change * 100.0 - fee_percent;
+        let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
+
+        return (net_pnl_sol, net_pnl_percent);
+    }
+
+    // For open positions, use current price
+    if let Some(current) = current_price {
+        let entry_price = position
+            .effective_entry_price
+            .unwrap_or(position.entry_price);
+
+        // For open positions: current value vs entry cost
+        if let Some(token_amount) = position.token_amount {
+            // Get token decimals from cache (synchronous - may block briefly)
+            let token_decimals_opt = crate::tokens::get_token_decimals_sync(&position.mint);
+
+            // CRITICAL: Skip P&L calculation if decimals are not available
+            let token_decimals = match token_decimals_opt {
+                Some(decimals) => decimals,
+                None => {
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG", 
+                            &format!("❌ No decimals available for {} - using price change fallback", position.symbol)
+                        );
+                    }
+                    // Fall back to price-change calculation
+                    let price_change = (current - entry_price) / entry_price;
+                    let buy_fee = position
+                        .entry_fee_lamports
+                        .map_or(0.0, |fee| lamports_to_sol(fee));
+                    let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
+                    let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL;
+                    let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
+                    let net_pnl_percent = price_change * 100.0 - fee_percent;
+                    let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
+                    return (net_pnl_sol, net_pnl_percent);
                 }
             };
 
@@ -280,7 +483,7 @@ impl PositionsManager {
             log(LogTag::Positions, "DEBUG", "🏗️ Creating new PositionsManager instance");
         }
         
-        let mut manager = Self {
+        let manager = Self {
             shutdown,
             pending_verifications: HashMap::new(),
             retry_queue: HashMap::new(),
@@ -290,21 +493,28 @@ impl PositionsManager {
             last_open_position_at: None,
         };
         
+        if is_debug_positions_enabled() {
+            log(LogTag::Positions, "DEBUG", "📊 PositionsManager instance created, async initialization pending");
+        }
+        
+        manager
+    }
+
+    /// Async initialization after construction
+    pub async fn initialize(&mut self) {
         // Load positions from disk on startup
-        manager.load_positions_from_disk();
+        self.load_positions_from_disk().await;
         
         // Re-queue unverified transactions for comprehensive verification
-        manager.requeue_unverified_transactions();
+        self.requeue_unverified_transactions();
         
         if is_debug_positions_enabled() {
             log(LogTag::Positions, "DEBUG", &format!(
                 "📊 PositionsManager initialized with {} positions loaded from disk, {} pending verifications queued",
-                manager.positions.len(),
-                manager.pending_verifications.len()
+                self.positions.len(),
+                self.pending_verifications.len()
             ));
         }
-        
-        manager
     }
 
     /// Run actor loop: handle incoming requests and periodic background tasks
@@ -422,7 +632,7 @@ impl PositionsManager {
                 let _ = reply.send(self.get_positions_by_state(&state));
             }
             PositionsRequest::RemoveByEntrySignature { signature, reason, reply } => {
-                let _ = reply.send(self.remove_position_by_entry_signature(&signature, &reason));
+                let _ = reply.send(self.remove_position_by_entry_signature(&signature, &reason).await);
             }
             PositionsRequest::GetActiveFrozenCooldowns { reply } => {
                 let _ = reply.send(self.get_active_frozen_cooldowns());
@@ -820,7 +1030,7 @@ impl PositionsManager {
                 self.positions.push(new_position);
                 
                 // Save positions to disk after adding new position
-                self.save_positions_to_disk();
+                self.save_positions_to_disk().await;
 
                 if is_debug_positions_enabled() {
                     log(LogTag::Positions, "DEBUG", &format!(
@@ -1243,7 +1453,7 @@ impl PositionsManager {
                     *pos = position.clone();
                     
                     // Save positions to disk after updating position
-                    self.save_positions_to_disk();
+                    self.save_positions_to_disk().await;
                 }
 
                 // Log exit transaction with comprehensive verification
@@ -1385,7 +1595,7 @@ impl PositionsManager {
     }
 
     /// Remove position by entry signature
-    fn remove_position_by_entry_signature(&mut self, signature: &str, reason: &str) -> bool {
+    async fn remove_position_by_entry_signature(&mut self, signature: &str, reason: &str) -> bool {
         let before = self.positions.len();
         self.positions.retain(|p| {
             let target = p.entry_transaction_signature.as_deref() == Some(signature);
@@ -1408,7 +1618,7 @@ impl PositionsManager {
         
         // Save positions to disk after removal
         if removed {
-            self.save_positions_to_disk();
+            self.save_positions_to_disk().await;
         }
         
         removed
@@ -1638,7 +1848,7 @@ impl PositionsManager {
                             
                             if verification_success {
                                 // Save positions to disk after verification update
-                                self.save_positions_to_disk();
+                                self.save_positions_to_disk().await;
                             }
                             
                             // Remove from pending
@@ -1805,7 +2015,7 @@ impl PositionsManager {
             );
             
             // Save positions to disk after verification update
-            self.save_positions_to_disk();
+            self.save_positions_to_disk().await;
         }
 
         Ok(())
@@ -2007,7 +2217,7 @@ impl PositionsManager {
             }
             
             // Save positions to disk after handling failure
-            self.save_positions_to_disk();
+            self.save_positions_to_disk().await;
         }
 
         Ok(())
@@ -2104,7 +2314,7 @@ impl PositionsManager {
                 self.positions.remove(*idx);
             }
             // Persist updated positions
-            self.save_positions_to_disk();
+            self.save_positions_to_disk().await;
         }
     }
 
@@ -2176,7 +2386,7 @@ impl PositionsManager {
                 position.total_size_sol = swap_pnl_info.sol_amount;
                 
                 // Convert token amount from float to units (with decimals)
-                if let Some(token_decimals) = crate::tokens::get_token_decimals_sync(&position.mint) {
+                if let Some(token_decimals) = crate::tokens::get_token_decimals(&position.mint).await {
                     let token_amount_units = (swap_pnl_info.token_amount.abs() * 
                         (10_f64).powi(token_decimals as i32)) as u64;
                     position.token_amount = Some(token_amount_units);
@@ -2319,14 +2529,14 @@ impl PositionsManager {
     }
 
     /// Load positions from disk on startup
-    fn load_positions_from_disk(&mut self) {
+    async fn load_positions_from_disk(&mut self) {
         if is_debug_positions_enabled() {
             log(LogTag::Positions, "DEBUG", &format!(
                 "📂 Loading positions from disk: {}", POSITIONS_FILE
             ));
         }
         
-        match fs::read_to_string(POSITIONS_FILE) {
+        match tokio::fs::read_to_string(POSITIONS_FILE).await {
             Ok(content) => {
                 match serde_json::from_str::<Vec<Position>>(&content) {
                     Ok(positions) => {
@@ -2419,7 +2629,7 @@ impl PositionsManager {
     }
 
     /// Save positions to disk after changes
-    fn save_positions_to_disk(&mut self) {
+    async fn save_positions_to_disk(&mut self) {
         // First, remove phantom positions marked for deletion
         let initial_count = self.positions.len();
         self.positions.retain(|p| !p.phantom_remove);
@@ -2450,7 +2660,7 @@ impl PositionsManager {
 
         match serde_json::to_string_pretty(&self.positions) {
             Ok(json_content) => {
-                match fs::write(POSITIONS_FILE, json_content) {
+                match tokio::fs::write(POSITIONS_FILE, json_content).await {
                     Ok(_) => {
                         log(LogTag::Positions, "DEBUG", &format!(
                             "💾 Saved {} positions to disk ({})",
@@ -2613,27 +2823,26 @@ impl PositionsHandle {
     }
 }
 
-static GLOBAL_POSITIONS_HANDLE: Lazy<StdMutex<Option<PositionsHandle>>> = Lazy::new(|| StdMutex::new(None));
+static GLOBAL_POSITIONS_HANDLE: Lazy<AsyncMutex<Option<PositionsHandle>>> = Lazy::new(|| AsyncMutex::new(None));
 
-pub fn set_positions_handle(handle: PositionsHandle) {
-    if let Ok(mut guard) = GLOBAL_POSITIONS_HANDLE.lock() {
-        *guard = Some(handle);
-    }
+pub async fn set_positions_handle(handle: PositionsHandle) {
+    let mut guard = GLOBAL_POSITIONS_HANDLE.lock().await;
+    *guard = Some(handle);
 }
 
-pub fn get_positions_handle() -> Option<PositionsHandle> {
-    if let Ok(guard) = GLOBAL_POSITIONS_HANDLE.lock() {
-        guard.clone()
-    } else { None }
+pub async fn get_positions_handle() -> Option<PositionsHandle> {
+    let guard = GLOBAL_POSITIONS_HANDLE.lock().await;
+    guard.clone()
 }
 
 /// Start the PositionsManager service (actor) and expose a global handle
 pub async fn start_positions_manager_service(shutdown: Arc<Notify>) {
     let (tx, rx) = mpsc::channel::<PositionsRequest>(256);
     let handle = PositionsHandle::new(tx.clone());
-    set_positions_handle(handle);
+    set_positions_handle(handle).await;
 
-    let manager = PositionsManager::new(shutdown.clone());
+    let mut manager = PositionsManager::new(shutdown.clone());
+    manager.initialize().await;
     tokio::spawn(async move { manager.run_actor(rx).await; });
 
     log(LogTag::Positions, "INFO", "PositionsManager service initialized (actor)");
@@ -2644,24 +2853,24 @@ pub async fn start_positions_manager_service(shutdown: Arc<Notify>) {
 // =============================================================================
 
 pub async fn get_open_positions() -> Vec<Position> {
-    if let Some(h) = get_positions_handle() { h.get_open_positions().await } else { Vec::new() }
+    if let Some(h) = get_positions_handle().await { h.get_open_positions().await } else { Vec::new() }
 }
 
 pub async fn get_closed_positions() -> Vec<Position> {
-    if let Some(h) = get_positions_handle() { h.get_closed_positions().await } else { Vec::new() }
+    if let Some(h) = get_positions_handle().await { h.get_closed_positions().await } else { Vec::new() }
 }
 
 pub async fn get_open_positions_count() -> usize {
-    if let Some(h) = get_positions_handle() { h.get_open_positions_count().await } else { 0 }
+    if let Some(h) = get_positions_handle().await { h.get_open_positions_count().await } else { 0 }
 }
 
 pub async fn get_positions_by_state(state: PositionState) -> Vec<Position> {
-    if let Some(h) = get_positions_handle() { h.get_positions_by_state(state).await } else { Vec::new() }
+    if let Some(h) = get_positions_handle().await { h.get_positions_by_state(state).await } else { Vec::new() }
 }
 
 /// Check if a position is currently open for the given mint
 pub async fn is_open_position(mint: &str) -> bool {
-    if let Some(h) = get_positions_handle() { 
+    if let Some(h) = get_positions_handle().await { 
         h.is_open(mint.to_string()).await 
     } else { 
         false 
@@ -2671,7 +2880,7 @@ pub async fn is_open_position(mint: &str) -> bool {
 /// Compatibility function for old SAVED_POSITIONS usage - returns all positions (open + closed)
 /// This replaces the old SAVED_POSITIONS.lock() pattern
 pub async fn get_all_positions() -> Vec<Position> {
-    if let Some(h) = get_positions_handle() {
+    if let Some(h) = get_positions_handle().await {
         let mut all_positions = h.get_open_positions().await;
         all_positions.extend(h.get_closed_positions().await);
         all_positions
@@ -2681,7 +2890,7 @@ pub async fn get_all_positions() -> Vec<Position> {
 }
 
 pub async fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
-    if let Some(h) = get_positions_handle() { h.get_active_frozen_cooldowns().await } else { Vec::new() }
+    if let Some(h) = get_positions_handle().await { h.get_active_frozen_cooldowns().await } else { Vec::new() }
 }
 
 // Global helper functions for opening and closing positions
@@ -2691,7 +2900,7 @@ pub async fn open_position_global(
     percent_change: f64,
     size_sol: f64,
 ) -> Result<(String, String), String> {
-    if let Some(h) = get_positions_handle() {
+    if let Some(h) = get_positions_handle().await {
         h.open_position(token, price, percent_change, size_sol).await
     } else {
         Err("PositionsManager not available".to_string())
@@ -2704,7 +2913,7 @@ pub async fn close_position_global(
     exit_price: f64,
     exit_time: DateTime<Utc>,
 ) -> Result<(String, String), String> {
-    if let Some(h) = get_positions_handle() {
+    if let Some(h) = get_positions_handle().await {
         h.close_position(mint, token, exit_price, exit_time).await
     } else {
         Err("PositionsManager not available".to_string())

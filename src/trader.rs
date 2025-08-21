@@ -39,7 +39,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 1;
+pub const MAX_OPEN_POSITIONS: usize = 3;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
@@ -277,7 +277,7 @@ pub async fn get_tokens_from_safe_system() -> Vec<Token> {
 
 /// Update open positions tracking in price service
 async fn update_position_tracking_in_service() {
-    let open_mints = if let Some(h) = crate::positions::get_positions_handle() {
+    let open_mints = if let Some(h) = crate::positions::get_positions_handle().await {
         h.get_open_mints().await
     } else {
         Vec::new()
@@ -672,7 +672,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             let token = token.clone();
             let shutdown_clone = shutdown.clone();
             // Spawn a new task for this token with overall timeout
-            let positions_handle_opt = crate::positions::get_positions_handle();
+            let positions_handle_opt = crate::positions::get_positions_handle().await;
             let handle = tokio::spawn(async move {
                 // Keep the permit alive for the duration of this task
                 let _permit = permit; // This will be automatically dropped when the task completes
@@ -834,7 +834,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         }
 
         // First, collect all open position mints to fetch pool prices in parallel
-        let open_position_mints: Vec<String> = if let Some(h) = crate::positions::get_positions_handle() {
+        let open_position_mints: Vec<String> = if let Some(h) = crate::positions::get_positions_handle().await {
             h.get_open_mints().await
         } else { Vec::new() };
 
@@ -853,7 +853,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
     let mut positions_to_close = Vec::new();
 
         // First, collect open positions data (without holding mutex across await)
-        let open_positions_data_all: Vec<crate::positions::Position> = if let Some(h) = crate::positions::get_positions_handle() {
+        let open_positions_data_all: Vec<crate::positions::Position> = if let Some(h) = crate::positions::get_positions_handle().await {
             h.get_open_positions().await
         } else { Vec::new() };
 
@@ -890,14 +890,14 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             if let Some(current_price) = get_token_price_blocking_safe(&position.mint).await {
                 if current_price > 0.0 && current_price.is_finite() {
                     // Update position tracking via PositionsManager actor
-                    if let Some(h) = crate::positions::get_positions_handle() {
+                    if let Some(h) = crate::positions::get_positions_handle().await {
                         let _ = h.update_tracking(position.mint.clone(), current_price).await;
                     }
 
                     let now = Utc::now();
 
                     // Calculate P&L for logging and decision making
-                    let (pnl_sol, pnl_percent) = crate::positions::calculate_position_pnl(&position, Some(current_price));
+                    let (pnl_sol, pnl_percent) = crate::positions::calculate_position_pnl_async(&position, Some(current_price)).await;
 
                     // Calculate sell decision using the unified profit system
                     let should_exit = crate::profit::should_sell(&position, current_price).await;
@@ -1094,7 +1094,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 // Clone shutdown for use in the spawned sell task
                 let shutdown_for_task = shutdown.clone();
                 // We already have the position from the analysis phase for logging only
-                let positions_handle_opt = crate::positions::get_positions_handle();
+                let positions_handle_opt = crate::positions::get_positions_handle().await;
                 let handle = tokio::spawn(async move {
                     let _permit = permit; // Keep permit alive for duration of task
 
