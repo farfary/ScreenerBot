@@ -449,6 +449,68 @@ pub struct Position {
 
 
 // =============================================================================
+// DUPLICATE SWAP PROTECTION
+// =============================================================================
+
+/// Recent swap attempts tracking to prevent duplicate transactions
+#[derive(Debug, Clone)]
+struct SwapAttempt {
+    timestamp: DateTime<Utc>,
+    mint: String,
+    amount_sol: f64,
+    operation_type: String, // "BUY" or "SELL"
+}
+
+/// Global cache for recent swap attempts (prevents duplicate swaps during network delays)
+static RECENT_SWAP_ATTEMPTS: Lazy<Arc<AsyncMutex<HashMap<String, SwapAttempt>>>> = 
+    Lazy::new(|| Arc::new(AsyncMutex::new(HashMap::new())));
+
+/// Duration to prevent duplicate swaps (30 seconds)
+const DUPLICATE_SWAP_PREVENTION_SECS: i64 = 30;
+
+/// Check if a similar swap was recently attempted for the same token
+async fn is_duplicate_swap_attempt(mint: &str, amount_sol: f64, operation: &str) -> bool {
+    let mut recent_attempts = RECENT_SWAP_ATTEMPTS.lock().await;
+    let now = Utc::now();
+    
+    // Clean old attempts (older than prevention window)
+    recent_attempts.retain(|_, attempt| {
+        now.signed_duration_since(attempt.timestamp).num_seconds() < DUPLICATE_SWAP_PREVENTION_SECS
+    });
+    
+    // Check for recent similar attempts
+    let key = format!("{}_{}", mint, operation);
+    if let Some(recent_attempt) = recent_attempts.get(&key) {
+        let time_since = now.signed_duration_since(recent_attempt.timestamp).num_seconds();
+        if time_since < DUPLICATE_SWAP_PREVENTION_SECS {
+            // Similar amount check (within 10% tolerance)
+            let amount_diff = (amount_sol - recent_attempt.amount_sol).abs() / recent_attempt.amount_sol;
+            if amount_diff < 0.1 {
+                log(
+                    LogTag::Swap,
+                    "DUPLICATE_PREVENTED",
+                    &format!(
+                        "🚫 DUPLICATE SWAP PREVENTED: {} {} for {} (last attempt {:.1}s ago)", 
+                        operation, mint, amount_sol, time_since
+                    )
+                );
+                return true;
+            }
+        }
+    }
+    
+    // Record this attempt
+    recent_attempts.insert(key, SwapAttempt {
+        timestamp: now,
+        mint: mint.to_string(),
+        amount_sol,
+        operation_type: operation.to_string(),
+    });
+    
+    false
+}
+
+// =============================================================================
 // POSITIONS MANAGER - CENTRALIZED POSITION HANDLING
 // =============================================================================
 
@@ -878,6 +940,14 @@ impl PositionsManager {
 
         // Execute the buy transaction
         let _guard = crate::trader::CriticalOperationGuard::new(&format!("BUY {}", token.symbol));
+
+        // DUPLICATE SWAP PREVENTION: Check if similar swap was recently attempted
+        if is_duplicate_swap_attempt(&token.mint, size_sol, "BUY").await {
+            return Err(format!(
+                "Duplicate swap prevented for {} - similar buy attempted within last {}s", 
+                token.symbol, DUPLICATE_SWAP_PREVENTION_SECS
+            ));
+        }
 
         if is_debug_positions_enabled() {
             log(LogTag::Positions, "DEBUG", &format!(
@@ -1315,6 +1385,16 @@ impl PositionsManager {
                         actual_wallet_balance
                     )
                 );
+
+                // DUPLICATE SWAP PREVENTION: Check if similar sell was recently attempted
+                let expected_sol_amount = exit_price; // Use expected SOL from exit calculation
+                if is_duplicate_swap_attempt(&token.mint, expected_sol_amount, "SELL").await {
+                    last_error = Some(format!(
+                        "Duplicate sell prevented for {} - similar sell attempted within last {}s", 
+                        token.symbol, DUPLICATE_SWAP_PREVENTION_SECS
+                    ));
+                    continue;
+                }
 
                 let best_quote = match get_best_quote(
                     &token.mint,

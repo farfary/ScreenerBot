@@ -557,7 +557,7 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<(Arc<Notify>
         tokio::time::sleep(Duration::from_millis(1000)).await;
         
         // Verify both services are available and responding
-        if let Some(handle) = get_positions_handle() {
+        if let Some(handle) = get_positions_handle().await {
             if config.debug {
                 log(LogTag::Positions, "INFO", "✅ PositionsManager service started successfully");
                 log(LogTag::Positions, "INFO", "✅ PositionsManager service initialized and handle available");
@@ -1021,7 +1021,7 @@ async fn force_reverify_positions(config: &PositionsManagerArgs) -> Result<(), S
         log(LogTag::Positions, "DEBUG", "🔄 Triggering force reverification via positions handle");
     }
 
-    match get_positions_handle().unwrap().force_reverify_all().await {
+    match get_positions_handle().await.unwrap().force_reverify_all().await {
         count if count > 0 => {
             log(LogTag::Positions, "INFO", &format!("✅ {} unverified transactions re-queued for verification", count));
             log(LogTag::Positions, "INFO", "   Verification will occur in the background every 10 seconds");
@@ -1261,7 +1261,7 @@ async fn close_position(mint: &str, config: &PositionsManagerArgs) -> Result<(),
     }
 
     // Get the PositionsManager handle for closing the position
-    if let Some(handle) = get_positions_handle() {
+    if let Some(handle) = get_positions_handle().await {
         let exit_time = Utc::now();
         match handle.close_position(mint.to_string(), token, current_price, exit_time).await {
             Ok((position_id, exit_transaction)) => {

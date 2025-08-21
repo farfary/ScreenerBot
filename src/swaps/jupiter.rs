@@ -80,34 +80,14 @@ pub async fn jupiter_sign_and_send_transaction(
         );
     }
     
-    // Enforce propagation policy (3 attempts @ 5s). Abort if not propagated.
-    match rpc_client.wait_for_signature_propagation(&signature).await {
-        Ok(true) => {
-            if is_debug_swaps_enabled() {
-                log(
-                    LogTag::Swap,
-                    "JUPITER_PROPAGATION_DONE",
-                    &format!("🔎 Jupiter: Propagation confirmed for {}", &signature[..8])
-                );
-            }
-        }
-        Ok(false) => {
-            log(
-                LogTag::Swap,
-                "JUPITER_PROPAGATION_FAILED",
-                &format!("❌ Jupiter: Signature {} not propagated in policy window; aborting swap", &signature[..8])
-            );
-            return Err(SwapError::TransactionError(format!("Transaction {} not propagated (dropped)", &signature[..8])));
-        }
-        Err(e) => {
-            log(
-                LogTag::Swap,
-                "JUPITER_PROPAGATION_ERROR",
-                &format!("⚠️ Jupiter: Propagation check error for {}: {}", &signature[..8], e)
-            );
-            return Err(SwapError::TransactionError(format!("Propagation check error: {}", e)));
-        }
-    }
+    // Skip aggressive propagation check to prevent false failures during network congestion
+    // The transaction verification service will handle confirmation in the background
+    // This prevents duplicate swaps when propagation is delayed but transaction succeeds
+    log(
+        LogTag::Swap,
+        "JUPITER_PROPAGATION_SKIP",
+        &format!("⏭️ Jupiter: Skipping propagation check for {} - will verify via background service", &signature[..8])
+    );
     
     if is_debug_swaps_enabled() {
         log(
