@@ -3377,9 +3377,37 @@ async fn execute_gmgn_swap_test(
         slippage,
     ).await?;
 
-    // Execute the swap (note: execute_gmgn_swap has different signature, adapt as needed)
-    // For now, return a placeholder result
-    Err(SwapError::ConfigError("GMGN swap execution not yet implemented in test".to_string()))
+    // Get quote first to create swap data
+    let quote = get_gmgn_quote(
+        &input_mint,
+        &output_mint,
+        input_amount,
+        &wallet_address,
+        slippage,
+    ).await?;
+
+    // Execute the swap through GMGN
+    let swap_result = screenerbot::swaps::gmgn::execute_gmgn_swap(
+        token,
+        &input_mint,
+        &output_mint,
+        input_amount,
+        quote,
+    ).await?;
+
+    // Convert to JupiterSwapResult format for consistency
+    Ok(JupiterSwapResult {
+        success: swap_result.success,
+        transaction_signature: swap_result.transaction_signature,
+        input_amount: swap_result.input_amount,
+        output_amount: swap_result.output_amount,
+        price_impact: swap_result.price_impact,
+        fee_lamports: swap_result.fee_lamports,
+        execution_time: swap_result.execution_time,
+        effective_price: swap_result.effective_price,
+        swap_data: swap_result.swap_data,
+        error: swap_result.error,
+    })
 }
 
 /// Execute Raydium CPMM direct swap test (DEPRECATED - Raydium direct API is no longer available)

@@ -449,6 +449,26 @@ pub struct Position {
 
 
 // =============================================================================
+// DEADLOCK PREVENTION RULES FOR GLOBAL LOCKS
+// =============================================================================
+//
+// This module uses multiple global locks that can create deadlock scenarios.
+// 
+// LOCK HIERARCHY (must be acquired in this order to prevent deadlocks):
+// 1. RECENT_SWAP_ATTEMPTS
+// 2. GLOBAL_TRANSACTION_MANAGER  
+// 3. GLOBAL_POSITIONS_HANDLE
+//
+// RULES:
+// - NEVER hold multiple locks simultaneously unless following the hierarchy above
+// - NEVER perform async operations (await) while holding any global lock
+// - Use timeouts on all lock acquisitions to prevent indefinite blocking
+// - Keep lock scopes as minimal as possible
+// - Pre-calculate data before acquiring locks when possible
+//
+// =============================================================================
+
+// =============================================================================
 // DUPLICATE SWAP PROTECTION
 // =============================================================================
 
@@ -469,8 +489,23 @@ static RECENT_SWAP_ATTEMPTS: Lazy<Arc<AsyncMutex<HashMap<String, SwapAttempt>>>>
 const DUPLICATE_SWAP_PREVENTION_SECS: i64 = 30;
 
 /// Check if a similar swap was recently attempted for the same token
+/// NOTE: This function must NOT call other functions that might acquire global locks
+/// to prevent deadlocks. Keep lock scope minimal and avoid async operations while holding the lock.
 async fn is_duplicate_swap_attempt(mint: &str, amount_sol: f64, operation: &str) -> bool {
-    let mut recent_attempts = RECENT_SWAP_ATTEMPTS.lock().await;
+    // Use timeout to prevent indefinite blocking
+    let lock_result = tokio::time::timeout(
+        Duration::from_secs(2), 
+        RECENT_SWAP_ATTEMPTS.lock()
+    ).await;
+    
+    let mut recent_attempts = match lock_result {
+        Ok(guard) => guard,
+        Err(_) => {
+            log(LogTag::Positions, "WARN", "🔒 Timeout acquiring RECENT_SWAP_ATTEMPTS lock, assuming no duplicate");
+            return false;
+        }
+    };
+    
     let now = Utc::now();
     
     // Clean old attempts (older than prevention window)
@@ -514,12 +549,16 @@ async fn is_duplicate_swap_attempt(mint: &str, amount_sol: f64, operation: &str)
 // POSITIONS MANAGER - CENTRALIZED POSITION HANDLING
 // =============================================================================
 
-/// Helper enum to categorize position states
+/// Enhanced position state enum with comprehensive lifecycle tracking
 #[derive(Debug, Clone, PartialEq)]
 pub enum PositionState {
-    Open,    // No exit transaction, actively trading
-    Closing, // Exit transaction submitted but not yet verified
-    Closed,  // Exit transaction verified and exit_price set
+    Open,           // No exit transaction, actively trading
+    Closing,        // Exit transaction submitted but not yet verified
+    Closed,         // Exit transaction verified and exit_price set
+    ExitPending,    // Exit transaction in verification queue (similar to Closing but more explicit)
+    ExitFailed,     // Exit transaction failed and needs retry
+    Phantom,        // Position exists but wallet has zero tokens (needs reconciliation)
+    Reconciling,    // Auto-healing in progress for phantom positions
 }
 
 /// PositionsManager handles all position operations in a centralized service
@@ -531,6 +570,8 @@ pub struct PositionsManager {
     frozen_cooldowns: HashMap<String, DateTime<Utc>>,      // mint -> cooldown_time
     last_close_time_per_mint: HashMap<String, DateTime<Utc>>, // mint -> last_close_time
     last_open_position_at: Option<DateTime<Utc>>,          // global open cooldown
+    applied_exit_signatures: HashMap<String, DateTime<Utc>>, // signature -> applied_at (prevents double-processing)
+    verification_deadlines: HashMap<String, DateTime<Utc>>, // signature -> deadline (guards against premature reset)
 }
 
 /// Constants for cooldowns
@@ -553,6 +594,8 @@ impl PositionsManager {
             frozen_cooldowns: HashMap::new(),
             last_close_time_per_mint: HashMap::new(),
             last_open_position_at: None,
+            applied_exit_signatures: HashMap::new(),
+            verification_deadlines: HashMap::new(),
         };
         
         if is_debug_positions_enabled() {
@@ -598,6 +641,7 @@ impl PositionsManager {
         let mut verification_interval = interval(Duration::from_secs(10));
         let mut retry_interval = interval(Duration::from_secs(30));
         let mut cleanup_interval = interval(Duration::from_secs(60));
+        let mut reconciliation_interval = interval(Duration::from_secs(300)); // Reduced frequency: 5 minutes instead of 2
 
         loop {
             tokio::select! {
@@ -605,24 +649,69 @@ impl PositionsManager {
                     log(LogTag::Positions, "INFO", "PositionsManager shutting down gracefully");
                     break;
                 }
-        _ = verification_interval.tick() => { 
-            if is_debug_positions_enabled() {
-                log(LogTag::Positions, "DEBUG", "⏰ Running verification tick");
-            }
-            self.check_pending_verifications().await; 
-        }
-        _ = retry_interval.tick() => { 
-            if is_debug_positions_enabled() {
-                log(LogTag::Positions, "DEBUG", "🔄 Running retry tick");
-            }
-            self.process_retry_queue().await; 
-        }
-        _ = cleanup_interval.tick() => { 
-            if is_debug_positions_enabled() {
-                log(LogTag::Positions, "DEBUG", "🧹 Running cleanup tick");
-            }
-            self.cleanup_phantom_positions().await; 
-        }
+                _ = verification_interval.tick() => { 
+                    if is_debug_positions_enabled() {
+                        log(LogTag::Positions, "DEBUG", "⏰ Running verification tick");
+                    }
+                    self.check_pending_verifications().await; 
+                }
+                _ = retry_interval.tick() => { 
+                    if is_debug_positions_enabled() {
+                        log(LogTag::Positions, "DEBUG", "🔄 Running retry tick");
+                    }
+                    self.process_retry_queue().await; 
+                }
+                _ = cleanup_interval.tick() => { 
+                    if is_debug_positions_enabled() {
+                        log(LogTag::Positions, "DEBUG", "🧹 Running cleanup tick");
+                    }
+                    self.cleanup_phantom_positions().await; 
+                }
+                _ = reconciliation_interval.tick() => {
+                    // Only run reconciliation on positions with missing fields or inconsistent state
+                    let positions_needing_reconciliation: Vec<_> = self.positions.iter().enumerate()
+                        .filter_map(|(index, p)| {
+                            // Check for specific missing field conditions that indicate reconciliation is needed
+                            let needs_reconciliation = 
+                                // Case 1: Has exit signature but not verified (failed verification)
+                                (p.exit_transaction_signature.is_some() && !p.transaction_exit_verified) ||
+                                
+                                // Case 2: Has token amount but missing exit data (potential phantom)
+                                (p.token_amount.unwrap_or(0) > 0 && 
+                                 p.exit_transaction_signature.is_none() && 
+                                 p.exit_price.is_none() && 
+                                 !p.phantom_remove) ||
+                                
+                                // Case 3: Marked for phantom removal but still has exit data inconsistency
+                                (p.phantom_remove && p.exit_transaction_signature.is_some() && !p.transaction_exit_verified) ||
+                                
+                                // Case 4: Has sol_received but no exit_price (incomplete exit data)
+                                (p.sol_received.is_some() && p.exit_price.is_none() && p.token_amount.unwrap_or(0) > 0);
+                                
+                            if needs_reconciliation {
+                                Some((index, p.mint.clone(), p.symbol.clone()))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    
+                    if !positions_needing_reconciliation.is_empty() {
+                        if is_debug_positions_enabled() {
+                            log(LogTag::Positions, "DEBUG", &format!(
+                                "🩺 Running targeted reconciliation on {} positions with missing fields: {}",
+                                positions_needing_reconciliation.len(),
+                                positions_needing_reconciliation.iter()
+                                    .map(|(_, _, symbol)| symbol.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            ));
+                        }
+                        self.run_targeted_reconciliation(positions_needing_reconciliation).await;
+                    } else if is_debug_positions_enabled() {
+                        log(LogTag::Positions, "DEBUG", "🩺 Skipping reconciliation - no positions with missing fields");
+                    }
+                }
                 maybe_msg = rx.recv() => {
                     match maybe_msg {
                         Some(msg) => {
@@ -721,14 +810,14 @@ impl PositionsManager {
             .count()
     }
 
-    /// Get open positions (includes Open and Closing states)
+    /// Get open positions (includes Open, Closing, and ExitPending states)
     fn get_open_positions(&self) -> Vec<Position> {
         self.positions
             .iter()
             .filter(|p| {
                 p.position_type == "buy" && {
                     let state = self.get_position_state(p);
-                    state == PositionState::Open || state == PositionState::Closing
+                    matches!(state, PositionState::Open | PositionState::Closing | PositionState::ExitPending)
                 }
             })
             .cloned()
@@ -746,26 +835,26 @@ impl PositionsManager {
             .collect()
     }
 
-    /// Get open positions mints (includes Open and Closing states)
+    /// Get open positions mints (includes Open, Closing, and ExitPending states)
     fn get_open_positions_mints(&self) -> Vec<String> {
         self.positions
             .iter()
             .filter(|p| {
                 p.position_type == "buy" && {
                     let state = self.get_position_state(p);
-                    state == PositionState::Open || state == PositionState::Closing
+                    matches!(state, PositionState::Open | PositionState::Closing | PositionState::ExitPending)
                 }
             })
             .map(|p| p.mint.clone())
             .collect()
     }
 
-    /// Check if mint is an open position (includes Open and Closing states)
+    /// Check if mint is an open position (includes Open, Closing, and ExitPending states)
     fn is_open_position(&self, mint: &str) -> bool {
         self.positions.iter().any(|p| {
             p.mint == mint && p.position_type == "buy" && {
                 let state = self.get_position_state(p);
-                state == PositionState::Open || state == PositionState::Closing
+                matches!(state, PositionState::Open | PositionState::Closing | PositionState::ExitPending)
             }
         })
     }
@@ -779,21 +868,411 @@ impl PositionsManager {
             .collect()
     }
 
-    /// Get position state
+    /// Get position state with enhanced phantom detection
     pub fn get_position_state(&self, position: &Position) -> PositionState {
-        if position.transaction_entry_verified
-            && position.transaction_exit_verified
-            && position.exit_price.is_some()
-        {
-            PositionState::Closed
-        } else if position.exit_transaction_signature.is_some() {
-            PositionState::Closing
-        } else {
-            PositionState::Open
+        // Check for phantom state first (most critical)
+        if position.phantom_remove {
+            return PositionState::Phantom;
         }
+        
+        // Fully closed: entry verified, exit verified, and has exit price
+        if position.transaction_entry_verified 
+            && position.transaction_exit_verified 
+            && position.exit_price.is_some() 
+        {
+            return PositionState::Closed;
+        }
+        
+        // Exit submitted but verification failed - needs retry
+        if position.exit_transaction_signature.is_some() 
+            && position.exit_price.is_some()
+            && !position.transaction_exit_verified 
+        {
+            return PositionState::ExitFailed;
+        }
+        
+        // Exit transaction submitted and pending verification
+        if position.exit_transaction_signature.is_some() {
+            // Check if signature is in pending verification queue
+            if let Some(signature) = &position.exit_transaction_signature {
+                if self.pending_verifications.contains_key(signature) {
+                    return PositionState::ExitPending;
+                }
+            }
+            return PositionState::Closing;
+        }
+        
+        // Default to open state
+        PositionState::Open
     }
 
-    /// Update position tracking directly
+    /// Targeted reconciliation - only processes positions with missing fields or inconsistent state
+    /// This is much more efficient than checking all positions
+    async fn run_targeted_reconciliation(&mut self, positions_to_check: Vec<(usize, String, String)>) {
+        let now = Utc::now();
+        let mut healed_positions = 0;
+        let mut positions_to_heal: Vec<(usize, String)> = Vec::new(); // (index, signature)
+        
+        log(LogTag::Positions, "RECONCILE", &format!(
+            "🎯 Targeted reconciliation: checking {} specific positions", positions_to_check.len()
+        ));
+        
+        // Get wallet address once for all checks
+        let wallet_address = match crate::utils::get_wallet_address() {
+            Ok(addr) => addr,
+            Err(_) => {
+                log(LogTag::Positions, "RECONCILE_ERROR", "Failed to get wallet address");
+                return;
+            }
+        };
+        
+        // Process each position that needs reconciliation  
+        let mut positions_to_heal = Vec::new();
+        let mut failed_signatures_to_clear = Vec::new(); // Track failed transaction signatures to clear
+        
+        for (index, mint, symbol) in positions_to_check {
+            // Rate limiting: small delay between checks
+            tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+            
+            let position = &self.positions[index];
+            
+            log(LogTag::Positions, "RECONCILE", &format!(
+                "🔍 Checking position {} for missing fields", symbol
+            ));
+            
+            // Case 1: Unverified exit transaction - check if it actually succeeded
+            if let Some(ref exit_sig) = position.exit_transaction_signature {
+                if !position.transaction_exit_verified {
+                    log(LogTag::Positions, "RECONCILE", &format!(
+                        "🔄 Checking unverified exit transaction {} for {}", 
+                        get_signature_prefix(exit_sig), symbol
+                    ));
+                    
+                    match get_transaction(exit_sig).await {
+                        Ok(Some(tx)) => {
+                            // Check transaction status and success
+                            match tx.status {
+                                TransactionStatus::Finalized | TransactionStatus::Confirmed => {
+                                    if tx.success && !self.applied_exit_signatures.contains_key(exit_sig) {
+                                        log(LogTag::Positions, "RECONCILE_FOUND", &format!(
+                                            "✅ Found successful verified exit transaction {} for {}",
+                                            get_signature_prefix(exit_sig), symbol
+                                        ));
+                                        positions_to_heal.push((index, exit_sig.clone()));
+                                        continue; // Move to next position
+                                    } else if !tx.success {
+                                        log(LogTag::Positions, "RECONCILE_FAILED_TX", &format!(
+                                            "❌ Exit transaction {} failed for {} - marking for signature clearing",
+                                            get_signature_prefix(exit_sig), symbol
+                                        ));
+                                        // Mark failed transaction signature for clearing
+                                        failed_signatures_to_clear.push((index, "exit".to_string()));
+                                    }
+                                }
+                                TransactionStatus::Pending => {
+                                    log(LogTag::Positions, "RECONCILE_STILL_PENDING", &format!(
+                                        "⏳ Exit transaction {} still pending for {} - will retry later",
+                                        get_signature_prefix(exit_sig), symbol
+                                    ));
+                                }
+                                TransactionStatus::Failed(ref error) => {
+                                    log(LogTag::Positions, "RECONCILE_CONFIRMED_FAILED", &format!(
+                                        "❌ Exit transaction {} confirmed failed for {}: {} - marking for signature clearing",
+                                        get_signature_prefix(exit_sig), symbol, error
+                                    ));
+                                    // Mark confirmed failed transaction signature for clearing
+                                    failed_signatures_to_clear.push((index, "exit".to_string()));
+                                }
+                            }
+                        }
+                        Ok(None) => {
+                            log(LogTag::Positions, "RECONCILE_TX_NOT_FOUND", &format!(
+                                "📄 Exit transaction {} not found or still pending for {} - will retry",
+                                get_signature_prefix(exit_sig), symbol
+                            ));
+                        }
+                        Err(e) => {
+                            log(LogTag::Positions, "RECONCILE_TX_ERROR", &format!(
+                                "⚠️ Error fetching exit transaction {} for {}: {}",
+                                get_signature_prefix(exit_sig), symbol, e
+                            ));
+                        }
+                    }
+                }
+            }
+            
+            // Case 2: Potential phantom - check wallet balance and search for missing exit
+            if position.token_amount.unwrap_or(0) > 0 && 
+               position.exit_transaction_signature.is_none() && 
+               position.exit_price.is_none() 
+            {
+                if let Ok(wallet_balance) = crate::utils::get_token_balance(&wallet_address, &mint).await {
+                    if wallet_balance == 0 {
+                        log(LogTag::Positions, "RECONCILE", &format!(
+                            "👻 Confirmed phantom position {} - searching for missing exit transaction", symbol
+                        ));
+                        
+                        // Search for missing exit transaction
+                        if let Some(exit_signature) = self.find_missing_exit_transaction_targeted(position).await {
+                            if !self.applied_exit_signatures.contains_key(&exit_signature) {
+                                positions_to_heal.push((index, exit_signature));
+                            }
+                        }
+                    } else {
+                        log(LogTag::Positions, "RECONCILE", &format!(
+                            "✅ Position {} has wallet balance {}, not phantom", symbol, wallet_balance
+                        ));
+                    }
+                } else {
+                    log(LogTag::Positions, "RECONCILE_ERROR", &format!(
+                        "Failed to get wallet balance for {}", symbol
+                    ));
+                }
+            }
+            
+            // Case 3: Incomplete exit data - has sol_received but missing exit_price
+            if position.sol_received.is_some() && position.exit_price.is_none() && position.token_amount.unwrap_or(0) > 0 {
+                log(LogTag::Positions, "RECONCILE", &format!(
+                    "🔧 Position {} has sol_received but missing exit_price - calculating", symbol
+                ));
+                
+                // This will be handled in the healing phase if we have the necessary data
+                if let Some(ref exit_sig) = position.exit_transaction_signature {
+                    positions_to_heal.push((index, exit_sig.clone()));
+                }
+            }
+        }
+        
+        // Clear failed transaction signatures (separate phase to avoid borrowing conflicts)
+        for (index, signature_type) in failed_signatures_to_clear {
+            if let Some(pos) = self.positions.get_mut(index) {
+                match signature_type.as_str() {
+                    "exit" => {
+                        pos.exit_transaction_signature = None;
+                        pos.transaction_exit_verified = false;
+                        log(LogTag::Positions, "RECONCILE_CLEARED", &format!(
+                            "🧹 Cleared failed exit signature for position {}", pos.symbol
+                        ));
+                    }
+                    "entry" => {
+                        pos.entry_transaction_signature = None;
+                        pos.transaction_entry_verified = false;
+                        log(LogTag::Positions, "RECONCILE_CLEARED", &format!(
+                            "🧹 Cleared failed entry signature for position {}", pos.symbol
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        
+        // Apply healing to identified positions
+        for (index, exit_signature) in positions_to_heal {
+            // Rate limiting: small delay between healing operations
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            
+            log(LogTag::Positions, "RECONCILE_HEAL", &format!(
+                "✨ Auto-healing position with found exit tx {}",
+                get_signature_prefix(&exit_signature)
+            ));
+            
+            // Get transaction details first (outside the mutable borrow)
+            let healing_result = {
+                // Get transaction details
+                match get_transaction(&exit_signature).await {
+                    Ok(Some(transaction)) => {
+                        // Check transaction status first
+                        match transaction.status {
+                            TransactionStatus::Finalized | TransactionStatus::Confirmed => {
+                                if transaction.success {
+                                    // Convert to swap info
+                                    let empty_cache = std::collections::HashMap::new();
+                                    match self.convert_to_swap_pnl_info(&transaction, &empty_cache, true).await {
+                                        Some(swap_info) => {
+                                            // Calculate exit time
+                                            let exit_time = DateTime::from_timestamp(transaction.block_time.unwrap_or(0) as i64, 0)
+                                                .unwrap_or_else(|| Utc::now());
+                                            
+                                            // Get fee from transaction (use fee_sol field converted to lamports)
+                                            let fee = if transaction.fee_sol > 0.0 {
+                                                Some(crate::rpc::sol_to_lamports(transaction.fee_sol))
+                                            } else {
+                                                None
+                                            };
+                                            
+                                            Some((swap_info, exit_time, fee))
+                                        }
+                                        None => {
+                                            log(LogTag::Positions, "RECONCILE_HEAL_NO_SWAP", &format!(
+                                                "⚠️ Transaction {} is not a valid swap - cannot heal position",
+                                                get_signature_prefix(&exit_signature)
+                                            ));
+                                            None
+                                        }
+                                    }
+                                } else {
+                                    log(LogTag::Positions, "RECONCILE_HEAL_FAILED", &format!(
+                                        "❌ Transaction {} failed - cannot use for healing: {}",
+                                        get_signature_prefix(&exit_signature),
+                                        transaction.error_message.unwrap_or("Unknown error".to_string())
+                                    ));
+                                    None
+                                }
+                            }
+                            TransactionStatus::Pending => {
+                                log(LogTag::Positions, "RECONCILE_HEAL_PENDING", &format!(
+                                    "⏳ Transaction {} still pending - healing will retry later",
+                                    get_signature_prefix(&exit_signature)
+                                ));
+                                None
+                            }
+                            TransactionStatus::Failed(ref error) => {
+                                log(LogTag::Positions, "RECONCILE_HEAL_CONFIRMED_FAILED", &format!(
+                                    "❌ Transaction {} confirmed failed - cannot use for healing: {}",
+                                    get_signature_prefix(&exit_signature), error
+                                ));
+                                None
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        log(LogTag::Positions, "RECONCILE_HEAL_NOT_FOUND", &format!(
+                            "📄 Transaction {} not found or pending - healing will retry",
+                            get_signature_prefix(&exit_signature)
+                        ));
+                        None
+                    }
+                    Err(e) => {
+                        log(LogTag::Positions, "RECONCILE_HEAL_ERROR", &format!(
+                            "⚠️ Error fetching transaction {} for healing: {}",
+                            get_signature_prefix(&exit_signature), e
+                        ));
+                        None
+                    }
+                }
+            };
+            
+            if let Some((swap_info, exit_time, fee)) = healing_result {
+                // Now apply the healing with all the data we need
+                if let Some(position) = self.positions.get_mut(index) {
+                    // Apply exit data to position
+                    position.exit_transaction_signature = Some(exit_signature.clone());
+                    position.transaction_exit_verified = true;
+                    position.exit_time = Some(exit_time);
+                    position.sol_received = Some(swap_info.sol_amount);
+                    position.exit_fee_lamports = fee;
+                    
+                    // Calculate effective exit price from actual transaction
+                    if let Some(token_amount) = position.token_amount {
+                        if let Some(decimals) = crate::tokens::get_token_decimals(&position.mint).await {
+                            let ui_token_amount = (token_amount as f64) / (10_f64).powi(decimals as i32);
+                            if ui_token_amount > 0.0 {
+                                position.effective_exit_price = Some(swap_info.sol_amount / ui_token_amount);
+                                if position.exit_price.is_none() {
+                                    position.exit_price = position.effective_exit_price;
+                                }
+                            }
+                        }
+                    }
+                    
+                    log(LogTag::Positions, "RECONCILE_SUCCESS", &format!(
+                        "✅ Successfully applied retroactive exit for {} - SOL received: {:.6}, effective price: {:.8}",
+                        position.symbol,
+                        swap_info.sol_amount,
+                        position.effective_exit_price.unwrap_or(0.0)
+                    ));
+                    
+                    healed_positions += 1;
+                    self.applied_exit_signatures.insert(exit_signature, now);
+                } else {
+                    log(LogTag::Positions, "RECONCILE_ERROR", &format!(
+                        "❌ Position index {} no longer valid during healing", index
+                    ));
+                }
+            } else {
+                log(LogTag::Positions, "RECONCILE_ERROR", &format!(
+                    "❌ Failed to get transaction details for exit signature {}", 
+                    get_signature_prefix(&exit_signature)
+                ));
+            }
+        }
+        
+        if healed_positions > 0 {
+            log(LogTag::Positions, "RECONCILE_COMPLETE", &format!(
+                "🎯 Targeted reconciliation healed {} positions", healed_positions
+            ));
+            self.save_positions_to_disk().await;
+        } else {
+            log(LogTag::Positions, "RECONCILE_COMPLETE", "🎯 Targeted reconciliation completed - no healing needed");
+        }
+    }
+    
+    /// Targeted search for missing exit transaction - only searches for specific position
+    async fn find_missing_exit_transaction_targeted(&self, position: &Position) -> Option<String> {
+        let search_start = position.entry_time;
+        
+        // Pre-calculate expected amount WITHOUT holding any locks
+        let (expected_amount, _token_decimals) = if let Some(position_token_amount) = position.token_amount {
+            if let Some(decimals) = crate::tokens::get_token_decimals(&position.mint).await {
+                ((position_token_amount as f64) / (10_f64).powi(decimals as i32), decimals)
+            } else {
+                log(LogTag::Positions, "RECONCILE_ERROR", &format!(
+                    "Cannot get decimals for {} during targeted search", position.symbol
+                ));
+                return None;
+            }
+        } else {
+            log(LogTag::Positions, "RECONCILE_ERROR", &format!(
+                "Position {} has no token_amount for targeted search", position.symbol
+            ));
+            return None;
+        };
+        
+        // Only hold the lock for the minimum time needed
+        use crate::transactions::GLOBAL_TRANSACTION_MANAGER;
+        let manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+        
+        if let Some(ref manager) = *manager_guard {
+            
+            // Targeted search: only look through recent transactions (limited scope)
+            if let Ok(recent_transactions) = manager.get_recent_transactions(50).await { // Even more limited for targeted search
+                for transaction in recent_transactions {
+                    // Time filter
+                    if let Some(block_time) = transaction.block_time {
+                        let tx_time = chrono::DateTime::from_timestamp(block_time as i64, 0)
+                            .unwrap_or_else(|| Utc::now());
+                        if tx_time <= search_start {
+                            continue;
+                        }
+                    }
+                    
+                    // Quick filters before expensive analysis
+                    if !transaction.success || !manager.involves_token(&transaction, &position.mint) {
+                        continue;
+                    }
+                    
+                    // Analyze transaction
+                    let empty_cache = std::collections::HashMap::new();
+                    if let Some(swap_info) = manager.convert_to_swap_pnl_info(&transaction, &empty_cache, true) {
+                        if swap_info.swap_type == "Sell" && swap_info.token_mint == position.mint {
+                            // Check amount match (within 10% tolerance)
+                            let amount_difference = (swap_info.token_amount.abs() - expected_amount).abs() / expected_amount;
+                            if amount_difference <= 0.10 {
+                                log(LogTag::Positions, "RECONCILE_FOUND", &format!(
+                                    "🎯 Targeted search found exit transaction {} for {} - amount match: {:.2}% difference",
+                                    get_signature_prefix(&transaction.signature), position.symbol, amount_difference * 100.0
+                                ));
+                                return Some(transaction.signature);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+    
     pub fn update_position_tracking_direct(&mut self, position: &mut Position, current_price: f64) {
         if current_price == 0.0 {
             log(
@@ -1549,6 +2028,9 @@ impl PositionsManager {
                 // Track for comprehensive verification using RPC and transaction analysis
                 self.pending_verifications
                     .insert(exit_signature.clone(), Utc::now());
+                
+                // Set verification deadline to prevent premature reset
+                self.set_exit_verification_deadline(&exit_signature, 5); // 5 minute deadline
 
                 // Record close time for re-entry cooldown
                 self.record_close_time_for_mint(&position.mint, exit_time);
@@ -1557,7 +2039,7 @@ impl PositionsManager {
                     LogTag::Positions,
                     "SUCCESS",
                     &format!(
-                        "✅ POSITION CLOSED: {} | TX: {} | Exit Price: {:.12} SOL | Verification: Pending",
+                        "✅ POSITION CLOSED: {} | TX: {} | Exit Price: {:.12} SOL | Verification: Pending (Deadline: 5min)",
                         position.symbol,
                         get_signature_prefix(&exit_signature),
                         exit_price
@@ -2052,13 +2534,26 @@ impl PositionsManager {
         }
     }
 
-    /// Update position data from verified transaction
+    /// Update position data from verified transaction with proper status handling
     async fn update_position_from_transaction(&mut self, signature: &str) -> Result<(), String> {
         // Get transaction from transactions manager
         let transaction = match get_transaction(signature).await? {
             Some(tx) => tx,
-            None => return Err("Transaction not found".to_string()),
+            None => return Err("Transaction not found or still pending".to_string()),
         };
+
+        // Check transaction status first
+        match transaction.status {
+            TransactionStatus::Finalized | TransactionStatus::Confirmed => {
+                // Transaction is confirmed - proceed with update
+            }
+            TransactionStatus::Pending => {
+                return Err("Transaction still pending verification".to_string());
+            }
+            TransactionStatus::Failed(ref error) => {
+                return Err(format!("Transaction failed: {}", error));
+            }
+        }
 
         // Find the position with this signature
         let mut position_updated = false;
@@ -2068,15 +2563,29 @@ impl PositionsManager {
             p.entry_transaction_signature.as_ref() == Some(&signature.to_string())
                 || p.exit_transaction_signature.as_ref() == Some(&signature.to_string())
         }) {
-        // Update position with transaction data
+            // Update position with transaction data
             if position.entry_transaction_signature.as_ref() == Some(&signature.to_string()) {
                 position.transaction_entry_verified = transaction.success;
-                // Extract actual token amount, effective price, fees from transaction
-                // This would require parsing the transaction details
-                // For now, just mark as verified
+                if !transaction.success {
+                    log(LogTag::Positions, "ENTRY_FAILED", &format!(
+                        "❌ Entry transaction {} failed for position {}: {}",
+                        get_signature_prefix(signature), position.symbol,
+                        transaction.error_message.unwrap_or("Unknown error".to_string())
+                    ));
+                    // Clear failed entry transaction
+                    position.entry_transaction_signature = None;
+                }
             } else if position.exit_transaction_signature.as_ref() == Some(&signature.to_string()) {
                 position.transaction_exit_verified = transaction.success;
-                // Extract actual SOL received, exit fees from transaction
+                if !transaction.success {
+                    log(LogTag::Positions, "EXIT_FAILED", &format!(
+                        "❌ Exit transaction {} failed for position {}: {}",
+                        get_signature_prefix(signature), position.symbol,
+                        transaction.error_message.unwrap_or("Unknown error".to_string())
+                    ));
+                    // Clear failed exit transaction
+                    position.exit_transaction_signature = None;
+                }
             }
 
             position_symbol = position.symbol.clone();
@@ -2088,9 +2597,10 @@ impl PositionsManager {
                 LogTag::Positions,
                 "VERIFIED",
                 &format!(
-                    "✅ Position updated from verified transaction: {} | {}",
+                    "✅ Position updated from verified transaction: {} | {} (success: {})",
                     position_symbol,
-            get_signature_prefix(signature)
+                    get_signature_prefix(signature),
+                    transaction.success
                 ),
             );
             
@@ -2303,7 +2813,60 @@ impl PositionsManager {
         Ok(())
     }
 
-    /// Handle transaction timeout by treating it as failed for safety
+    /// Check if exit transaction should be reset based on verification deadline and transaction status
+    fn should_reset_exit_transaction(&self, signature: &str) -> bool {
+        let now = Utc::now();
+        
+        // Check if we have a verification deadline for this signature
+        if let Some(deadline) = self.verification_deadlines.get(signature) {
+            if now < *deadline {
+                // Still within verification window - don't reset yet
+                return false;
+            }
+        }
+        
+        // Beyond deadline or no deadline set - check if we've already applied this signature
+        if self.applied_exit_signatures.contains_key(signature) {
+            // Already applied successfully - don't reset
+            return false;
+        }
+        
+        // Safe to reset - either past deadline or no verification pending
+        true
+    }
+    
+    /// Record failed exit attempt for analytics
+    fn record_failed_exit_attempt(&mut self, mint: &str, signature: &str) {
+        log(
+            LogTag::Positions,
+            "EXIT_FAILURE",
+            &format!(
+                "❌ Recording failed exit attempt for {} with signature {}",
+                get_mint_prefix(mint), get_signature_prefix(signature)
+            ),
+        );
+        
+        // Remove from verification deadlines since it's confirmed failed
+        self.verification_deadlines.remove(signature);
+    }
+    
+    /// Set verification deadline for exit transaction
+    fn set_exit_verification_deadline(&mut self, signature: &str, deadline_minutes: i64) {
+        let deadline = Utc::now() + chrono::Duration::minutes(deadline_minutes);
+        self.verification_deadlines.insert(signature.to_string(), deadline);
+        
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "EXIT_DEADLINE_SET",
+                &format!(
+                    "⏰ Set verification deadline for {} at {}",
+                    get_signature_prefix(signature),
+                    deadline.format("%H:%M:%S")
+                ),
+            );
+        }
+    }
     async fn handle_transaction_timeout(&mut self, signature: &str) -> Result<(), String> {
         log(
             LogTag::Positions,
@@ -2584,7 +3147,7 @@ impl PositionsManager {
         token_symbol_cache: &std::collections::HashMap<String, String>,
         silent: bool,
     ) -> Option<crate::transactions::SwapPnLInfo> {
-        // Access the global transaction manager
+        // Access the global transaction manager with timeout to prevent deadlocks
         use crate::transactions::GLOBAL_TRANSACTION_MANAGER;
         
         if !silent {
@@ -2594,7 +3157,22 @@ impl PositionsManager {
             ));
         }
         
-        let manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+        // Use timeout to prevent indefinite blocking
+        let lock_result = tokio::time::timeout(
+            Duration::from_secs(5), 
+            GLOBAL_TRANSACTION_MANAGER.lock()
+        ).await;
+        
+        let manager_guard = match lock_result {
+            Ok(guard) => guard,
+            Err(_) => {
+                if !silent {
+                    log(LogTag::Positions, "ERROR", "🔒 Timeout acquiring GLOBAL_TRANSACTION_MANAGER lock");
+                }
+                return None;
+            }
+        };
+        
         if let Some(ref manager) = *manager_guard {
             if !silent {
                 log(LogTag::Positions, "DEBUG", "✅ Global TransactionsManager found, calling convert_to_swap_pnl_info");

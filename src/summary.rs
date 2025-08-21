@@ -784,12 +784,22 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         );
     }
 
+    // Calculate wallet balance
+    let wallet_balance = if let Ok(wallet_pubkey) = crate::utils::get_wallet_address() {
+        match crate::utils::get_sol_balance(&wallet_pubkey).await {
+            Ok(balance) => format!("{:.6} SOL", balance),
+            Err(_) => "Error".to_string(),
+        }
+    } else {
+        "N/A".to_string()
+    };
+
     // Calculate bot uptime
     let uptime = format_duration_compact(*STARTUP_TIME, Utc::now());
 
     // Create display structures
     let overview = BotOverviewDisplay {
-        wallet_balance: "N/A".to_string(), // TODO: Add wallet balance calculation
+        wallet_balance,
         open_positions: format!("{}", open_count),
         total_trades,
         bot_uptime: uptime,

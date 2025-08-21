@@ -9,7 +9,7 @@
 pub const GMGN_ENABLED: bool = true;
 
 /// Enable/disable Jupiter router
-pub const JUPITER_ENABLED: bool = true;
+pub const JUPITER_ENABLED: bool = false;
 
 /// Enable/disable Raydium router (deprecated - API no longer available)
 pub const RAYDIUM_ENABLED: bool = false;

@@ -90,11 +90,11 @@ fn get_mint_prefix(mint: &str) -> &str {
 /// This replaces the complex adaptive timing system with predictable intervals
 
 // Main monitoring intervals
-const NORMAL_CHECK_INTERVAL_SECS: u64 = 15;      // Normal transaction checking every 15 seconds
+const NORMAL_CHECK_INTERVAL_SECS: u64 = 10;      // Normal transaction checking every 15 seconds
 
 // RPC and batch processing limits
 const RPC_BATCH_SIZE: usize = 1000;                      // Transaction signatures fetch batch size (increased for fewer pages)
-const TRANSACTION_DATA_BATCH_SIZE: usize = 50;           // Transaction data fetch batch size (optimized for speed)
+const TRANSACTION_DATA_BATCH_SIZE: usize = 20;           // Transaction data fetch batch size (optimized for speed)
 
 // Solana network constants  
 const ATA_RENT_COST_SOL: f64 = 0.00203928;              // Standard ATA creation/closure cost
@@ -1820,14 +1820,6 @@ impl TransactionsManager {
                         }
                     }
                 }
-
-                // Extract token balance changes
-                if let Some(pre_token_balances) = meta.get("preTokenBalances").and_then(|v| v.as_array()) {
-                    let post_token_balances = meta.get("postTokenBalances").and_then(|v| v.as_array()).unwrap_or(&Vec::new());
-                    
-                    // Process token balance changes here if needed
-                    // This is a placeholder for future token balance change analysis
-                }
             }
         }
 
@@ -1868,13 +1860,40 @@ impl TransactionsManager {
             }
         }
 
-        // 2. Check for Jupiter swaps (most common aggregator)
+        // 2. Check for GMGN swaps (external router with token balance changes)
+        if log_text.contains("GMGN") || 
+           // Also check for GMGN-like patterns: token operations with SOL balance change but no major DEX program IDs
+           (transaction.sol_balance_change.abs() > 0.001 && // Minimum 0.001 SOL change
+            (log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") ||
+             log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") ||
+             transaction.instructions.iter().any(|i| 
+                 i.program_id.starts_with("ATokenGP") || 
+                 i.program_id.starts_with("Tokenkeg"))) &&
+            // Exclude if already matched other major routers
+            !log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") &&
+            !log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") &&
+            !log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") &&
+            !log_text.contains("CPMMoo8L3VgkEru3h4j8mu4baRUeJBmK7nfD5fC2pXg") &&
+            !log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP")) {
+            
+            if self.debug_enabled {
+                log(LogTag::Transactions, "STEP_2", &format!("{} - GMGN swap detected", 
+                    &transaction.signature[..8]));
+            }
+            
+            if let Ok(swap_type) = self.analyze_gmgn_swap(transaction).await {
+                transaction.transaction_type = swap_type;
+                return Ok(());
+            }
+        }
+
+        // 3. Check for Jupiter swaps (most common aggregator)
         if log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") || 
            log_text.contains("Jupiter") || 
            transaction.instructions.iter().any(|i| i.program_id == "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") {
             
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_2", &format!("{} - Jupiter swap detected", 
+                log(LogTag::Transactions, "STEP_3", &format!("{} - Jupiter swap detected", 
                     &transaction.signature[..8]));
             }
             
@@ -1884,7 +1903,7 @@ impl TransactionsManager {
             }
         }
 
-        // 3. Check for Raydium swaps (both AMM and CPMM)
+        // 4. Check for Raydium swaps (both AMM and CPMM)
         if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") ||
            log_text.contains("CPMMoo8L3VgkEru3h4j8mu4baRUeJBmK7nfD5fC2pXg") ||
            log_text.contains("Raydium") ||
@@ -1892,7 +1911,7 @@ impl TransactionsManager {
                                                     i.program_id.starts_with("CPMMoo8L")) {
             
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_3", &format!("{} - Raydium swap detected", 
+                log(LogTag::Transactions, "STEP_4", &format!("{} - Raydium swap detected", 
                     &transaction.signature[..8]));
             }
             
@@ -1912,13 +1931,13 @@ impl TransactionsManager {
             }
         }
 
-        // 4. Check for Orca swaps
+        // 5. Check for Orca swaps
         if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") ||
            log_text.contains("Orca") ||
            transaction.instructions.iter().any(|i| i.program_id == "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
             
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_4", &format!("{} - Orca swap detected", 
+                log(LogTag::Transactions, "STEP_5", &format!("{} - Orca swap detected", 
                     &transaction.signature[..8]));
             }
             
@@ -1928,13 +1947,13 @@ impl TransactionsManager {
             }
         }
 
-        // 5. Check for Serum/OpenBook swaps
+        // 6. Check for Serum/OpenBook swaps
         if log_text.contains("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin") ||
            log_text.contains("Serum") ||
            transaction.instructions.iter().any(|i| i.program_id == "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin") {
             
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_5", &format!("{} - Serum/OpenBook swap detected", 
+                log(LogTag::Transactions, "STEP_6", &format!("{} - Serum/OpenBook swap detected", 
                     &transaction.signature[..8]));
             }
             
@@ -1944,61 +1963,61 @@ impl TransactionsManager {
             }
         }
 
-        // 6. Check for standalone ATA close operations
+        // 7. Check for standalone ATA close operations
         if let Ok(ata_close_data) = self.extract_ata_close_data(transaction).await {
             transaction.transaction_type = ata_close_data;
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_6", &format!("{} - ATA close detected", 
+                log(LogTag::Transactions, "STEP_7", &format!("{} - ATA close detected", 
                     &transaction.signature[..8]));
             }
             return Ok(());
         }
 
-        // 7. Check for SOL transfers
+        // 8. Check for SOL transfers
         if let Ok(transfer_data) = self.extract_sol_transfer_data(transaction).await {
             transaction.transaction_type = transfer_data;
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_7", &format!("{} - SOL transfer detected", 
+                log(LogTag::Transactions, "STEP_8", &format!("{} - SOL transfer detected", 
                     &transaction.signature[..8]));
             }
             return Ok(());
         }
 
-        // 8. Check for token transfers
+        // 9. Check for token transfers
         if let Ok(transfer_data) = self.extract_token_transfer_data(transaction).await {
             transaction.transaction_type = transfer_data;
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_8", &format!("{} - Token transfer detected", 
+                log(LogTag::Transactions, "STEP_9", &format!("{} - Token transfer detected", 
                     &transaction.signature[..8]));
             }
             return Ok(());
         }
 
-        // 9. Check for token-to-token swaps (multi-hop transactions)
+        // 10. Check for token-to-token swaps (multi-hop transactions)
         if let Ok(swap_data) = self.extract_token_to_token_swap_data(transaction).await {
             transaction.transaction_type = swap_data;
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_9", &format!("{} - Token-to-token swap detected", 
+                log(LogTag::Transactions, "STEP_10", &format!("{} - Token-to-token swap detected", 
                     &transaction.signature[..8]));
             }
             return Ok(());
         }
 
-        // 9. Check for bulk transfers and other spam-like activities
+        // 11. Check for bulk transfers and other spam-like activities
         if let Ok(other_data) = self.detect_other_transaction_patterns(transaction).await {
             transaction.transaction_type = other_data;
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_9", &format!("{} - Other pattern detected", 
+                log(LogTag::Transactions, "STEP_11", &format!("{} - Other pattern detected", 
                     &transaction.signature[..8]));
             }
             return Ok(());
         }
 
-        // 10. Fallback: Check for failed DEX transactions based on program IDs
+        // 12. Fallback: Check for failed DEX transactions based on program IDs
         if let Ok(failed_swap_data) = self.detect_failed_dex_transactions(transaction).await {
             transaction.transaction_type = failed_swap_data;
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_10", &format!("{} - Failed DEX transaction detected", 
+                log(LogTag::Transactions, "STEP_12", &format!("{} - Failed DEX transaction detected", 
                     &transaction.signature[..8]));
             }
             return Ok(());
@@ -4693,7 +4712,9 @@ async fn get_global_transaction_manager() -> Option<std::sync::Arc<tokio::sync::
     Some(GLOBAL_TRANSACTION_MANAGER.clone())
 }
 
-/// Get transaction by signature (for positions.rs integration) - cache-first approach
+/// Get transaction by signature (for positions.rs integration) - cache-first approach with status validation
+/// CRITICAL: Only returns transactions that are in Finalized or Confirmed status
+/// Pending/Failed transactions trigger fresh RPC fetch or return None
 pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, String> {
     if is_debug_transactions_enabled() {
         log(LogTag::Transactions, "GET_TX_START", &format!("🔍 Getting transaction: {}", &signature[..8]));
@@ -4701,99 +4722,142 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
     
     let cache_file = format!("{}/{}.json", get_transactions_cache_dir().display(), signature);
     
-    if !Path::new(&cache_file).exists() {
+    // Check cache first
+    if Path::new(&cache_file).exists() {
         if is_debug_transactions_enabled() {
-            log(LogTag::Transactions, "CACHE_MISS", &format!("📄 No cache file for {}, fetching from RPC", &signature[..8]));
+            log(LogTag::Transactions, "CACHE_CHECK", &format!("� Checking cached transaction: {}", &signature[..8]));
         }
         
-        // Try to fetch and cache if not found
-        let wallet_address = match load_wallet_address_from_config().await {
-            Ok(addr) => addr,
-            Err(e) => {
-                if is_debug_transactions_enabled() {
-                    log(LogTag::Transactions, "WALLET_ERROR", &format!("❌ Failed to load wallet address: {}", e));
-                }
-                return Ok(None); // Can't fetch without wallet
-            },
-        };
+        // Load from cache
+        let content = fs::read_to_string(&cache_file)
+            .map_err(|e| format!("Failed to read cache file: {}", e))?;
         
-        let mut manager = TransactionsManager::new(wallet_address).await
-            .map_err(|e| format!("Failed to create manager: {}", e))?;
+        let mut cached_transaction: Transaction = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse cached transaction: {}", e))?;
         
-        match manager.process_transaction(signature).await {
-            Ok(transaction) => {
+        // CRITICAL CACHE VALIDATION: Check if cached transaction is in valid final state
+        match cached_transaction.status {
+            TransactionStatus::Finalized | TransactionStatus::Confirmed => {
                 if is_debug_transactions_enabled() {
-                    log(LogTag::Transactions, "FETCH_SUCCESS", &format!("✅ Fetched transaction {}: success={}, status={:?}", &signature[..8], transaction.success, transaction.status));
+                    log(LogTag::Transactions, "CACHE_VALID", &format!(
+                        "✅ Valid cached transaction {}: status={:?}, success={}", 
+                        &signature[..8], cached_transaction.status, cached_transaction.success
+                    ));
                 }
-                return Ok(Some(transaction));
-            },
-            Err(e) => {
-                if is_debug_transactions_enabled() {
-                    log(LogTag::Transactions, "FETCH_ERROR", &format!("❌ Failed to fetch transaction {}: {}", &signature[..8], e));
+                
+                // CRITICAL FIX: Cached transactions have calculated fields set to defaults
+                // We need to recalculate analysis for proper usage in convert_to_swap_pnl_info
+                if cached_transaction.transaction_type == TransactionType::Unknown {
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "RECALC_NEEDED", &format!("🔄 Transaction {} has Unknown type, recalculating analysis", &signature[..8]));
+                    }
+                    
+                    // Create a temporary manager to recalculate the transaction
+                    let wallet_address = match load_wallet_address_from_config().await {
+                        Ok(addr) => addr,
+                        Err(e) => {
+                            if is_debug_transactions_enabled() {
+                                log(LogTag::Transactions, "WALLET_ERROR", &format!("❌ Failed to load wallet address for recalc: {}", e));
+                            }
+                            // Return cached transaction as-is if we can't recalculate
+                            return Ok(Some(cached_transaction));
+                        },
+                    };
+                    
+                    let mut manager = TransactionsManager::new(wallet_address).await
+                        .map_err(|e| format!("Failed to create manager for recalc: {}", e))?;
+                    
+                    // Recalculate analysis on the cached transaction
+                    match manager.recalculate_transaction_analysis(&mut cached_transaction).await {
+                        Ok(_) => {
+                            if is_debug_transactions_enabled() {
+                                log(LogTag::Transactions, "RECALC_SUCCESS", &format!("✅ Recalculated transaction {}: type={:?}", &signature[..8], cached_transaction.transaction_type));
+                            }
+                        },
+                        Err(e) => {
+                            if is_debug_transactions_enabled() {
+                                log(LogTag::Transactions, "RECALC_ERROR", &format!("⚠️ Failed to recalculate transaction {}: {} - returning cached version", &signature[..8], e));
+                            }
+                            // Continue with cached transaction even if recalculation fails
+                        }
+                    }
                 }
-                return Ok(None); // Transaction not found or error
-            },
-        }
-    }
-
-    if is_debug_transactions_enabled() {
-        log(LogTag::Transactions, "CACHE_HIT", &format!("📂 Loading cached transaction: {}", &signature[..8]));
-    }
-    
-    // Load from cache
-    let content = fs::read_to_string(&cache_file)
-        .map_err(|e| format!("Failed to read cache file: {}", e))?;
-    
-    let mut cached_transaction: Transaction = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse cached transaction: {}", e))?;
-    
-    // CRITICAL FIX: Cached transactions have calculated fields set to defaults
-    // We need to recalculate analysis for proper usage in convert_to_swap_pnl_info
-    if cached_transaction.transaction_type == TransactionType::Unknown {
-        if is_debug_transactions_enabled() {
-            log(LogTag::Transactions, "RECALC_NEEDED", &format!("🔄 Transaction {} has Unknown type, recalculating analysis", &signature[..8]));
-        }
-        
-        // Create a temporary manager to recalculate the transaction
-        let wallet_address = match load_wallet_address_from_config().await {
-            Ok(addr) => addr,
-            Err(e) => {
-                if is_debug_transactions_enabled() {
-                    log(LogTag::Transactions, "WALLET_ERROR", &format!("❌ Failed to load wallet address for recalc: {}", e));
-                }
-                // Return cached transaction as-is if we can't recalculate
+                
                 return Ok(Some(cached_transaction));
-            },
-        };
-        
-        let mut manager = TransactionsManager::new(wallet_address).await
-            .map_err(|e| format!("Failed to create manager for recalc: {}", e))?;
-        
-        // Recalculate analysis on the cached transaction
-        match manager.recalculate_transaction_analysis(&mut cached_transaction).await {
-            Ok(_) => {
+            }
+            TransactionStatus::Pending => {
                 if is_debug_transactions_enabled() {
-                    log(LogTag::Transactions, "RECALC_SUCCESS", &format!("✅ Recalculated transaction {}: type={:?}", &signature[..8], cached_transaction.transaction_type));
+                    log(LogTag::Transactions, "CACHE_PENDING", &format!("⏳ Cached transaction {} is still pending - will attempt fresh fetch", &signature[..8]));
                 }
-            },
-            Err(e) => {
+                // Don't return pending cached transactions - try fresh fetch
+            }
+            TransactionStatus::Failed(ref error) => {
                 if is_debug_transactions_enabled() {
-                    log(LogTag::Transactions, "RECALC_ERROR", &format!("⚠️ Failed to recalculate transaction {}: {} - returning cached version", &signature[..8], e));
+                    log(LogTag::Transactions, "CACHE_FAILED", &format!("❌ Cached transaction {} is failed: {} - will attempt fresh fetch", &signature[..8], error));
                 }
-                // Continue with cached transaction even if recalculation fails
+                // Don't return failed cached transactions - try fresh fetch to see if status changed
             }
         }
     }
     
+    // No valid cache or cache contains pending/failed transaction - fetch from RPC
     if is_debug_transactions_enabled() {
-        log(LogTag::Transactions, "CACHE_LOADED", &format!("📋 Loaded transaction {}: success={}, status={:?}, type={:?}", 
-            &signature[..8], cached_transaction.success, cached_transaction.status, cached_transaction.transaction_type));
+        log(LogTag::Transactions, "CACHE_MISS", &format!("� No valid cache for {}, fetching from RPC", &signature[..8]));
     }
     
-    Ok(Some(cached_transaction))
+    // Try to fetch and cache if not found or cache invalid
+    let wallet_address = match load_wallet_address_from_config().await {
+        Ok(addr) => addr,
+        Err(e) => {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "WALLET_ERROR", &format!("❌ Failed to load wallet address: {}", e));
+            }
+            return Ok(None); // Can't fetch without wallet
+        },
+    };
+    
+    let mut manager = TransactionsManager::new(wallet_address).await
+        .map_err(|e| format!("Failed to create manager: {}", e))?;
+    
+    match manager.process_transaction(signature).await {
+        Ok(transaction) => {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "FETCH_SUCCESS", &format!(
+                    "✅ Fetched transaction {}: success={}, status={:?}", 
+                    &signature[..8], transaction.success, transaction.status
+                ));
+            }
+            
+            // Only return finalized or confirmed transactions
+            match transaction.status {
+                TransactionStatus::Finalized | TransactionStatus::Confirmed => {
+                    Ok(Some(transaction))
+                }
+                TransactionStatus::Pending => {
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "FETCH_STILL_PENDING", &format!("⏳ Fresh fetch shows {} still pending", &signature[..8]));
+                    }
+                    Ok(None) // Don't return pending transactions
+                }
+                TransactionStatus::Failed(ref error) => {
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "FETCH_CONFIRMED_FAILED", &format!("❌ Fresh fetch confirms {} failed: {}", &signature[..8], error));
+                    }
+                    // Return the failed transaction so callers can see the failure details
+                    Ok(Some(transaction))
+                }
+            }
+        },
+        Err(e) => {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "FETCH_ERROR", &format!("❌ Failed to fetch transaction {}: {}", &signature[..8], e));
+            }
+            Ok(None) // Transaction not found or RPC error
+        },
+    }
 }
 
-/// Check if transaction is verified/finalized
+/// Check if transaction is verified/finalized with enhanced status reporting
 pub async fn is_transaction_verified(signature: &str) -> bool {
     if is_debug_transactions_enabled() {
         log(LogTag::Transactions, "VERIFY_CHECK", &format!("🔍 Checking verification for transaction: {}", &signature[..8]));
@@ -4801,7 +4865,7 @@ pub async fn is_transaction_verified(signature: &str) -> bool {
     
     match get_transaction(signature).await {
         Ok(Some(tx)) => {
-            let is_verified = tx.status == TransactionStatus::Finalized && tx.success;
+            let is_verified = matches!(tx.status, TransactionStatus::Finalized | TransactionStatus::Confirmed) && tx.success;
             if is_debug_transactions_enabled() {
                 log(LogTag::Transactions, "VERIFY_RESULT", &format!(
                     "📋 Transaction {}: status={:?}, success={}, verified={}",
@@ -4822,6 +4886,18 @@ pub async fn is_transaction_verified(signature: &str) -> bool {
             }
             false
         }
+    }
+}
+
+/// Get detailed transaction status for better error handling by callers
+/// Returns (status, success, error_message) tuple for comprehensive status checking
+pub async fn get_transaction_status(signature: &str) -> Result<Option<(TransactionStatus, bool, Option<String>)>, String> {
+    match get_transaction(signature).await {
+        Ok(Some(tx)) => {
+            Ok(Some((tx.status.clone(), tx.success, tx.error_message.clone())))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => Err(e),
     }
 }
 
@@ -5572,6 +5648,156 @@ impl TransactionsManager {
                         }
                     }
                     if sum_ui > 0.0 { return sum_ui; }
+                }
+            }
+        }
+        
+        0.0
+    }
+    
+    /// Analyze GMGN swap transactions
+    /// GMGN is an external router that shows token balance changes but doesn't match standard program IDs
+    async fn analyze_gmgn_swap(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        if self.debug_enabled {
+            log(LogTag::Transactions, "GMGN_ANALYSIS", &format!("{} - Analyzing GMGN swap", 
+                &transaction.signature[..8]));
+        }
+        
+        // For GMGN swaps, we primarily rely on balance changes since program IDs may vary
+        let has_token_operations = !transaction.token_transfers.is_empty() ||
+                                 transaction.log_messages.iter().any(|msg| 
+                                     msg.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") ||
+                                     msg.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"));
+        
+        // Extract token mint from transaction
+        let target_token_mint = self.extract_target_token_mint_from_gmgn(transaction).await
+            .unwrap_or_else(|| "Unknown".to_string());
+        
+        // Extract amounts
+        let token_amount = self.extract_token_amount_from_gmgn(transaction).await;
+        
+        if self.debug_enabled {
+            log(LogTag::Transactions, "GMGN_ANALYSIS", &format!(
+                "{} - GMGN analysis: sol_change={}, token_amount={}, has_token_ops={}", 
+                &transaction.signature[..8], 
+                transaction.sol_balance_change,
+                token_amount,
+                has_token_operations
+            ));
+        }
+        
+        // Determine swap direction based on SOL balance change
+        if has_token_operations && transaction.sol_balance_change.abs() > 0.000001 {
+            if transaction.sol_balance_change < -0.000001 {
+                // User spent SOL = SOL to Token swap (BUY)
+                return Ok(TransactionType::SwapSolToToken {
+                    router: "GMGN".to_string(),
+                    token_mint: target_token_mint,
+                    sol_amount: transaction.sol_balance_change.abs(),
+                    token_amount: token_amount,
+                });
+            } else if transaction.sol_balance_change > 0.000001 {
+                // User received SOL = Token to SOL swap (SELL)
+                return Ok(TransactionType::SwapTokenToSol {
+                    router: "GMGN".to_string(),
+                    token_mint: target_token_mint,
+                    token_amount: token_amount,
+                    sol_amount: transaction.sol_balance_change.abs(),
+                });
+            }
+        }
+        
+        Err("Not a GMGN swap".to_string())
+    }
+    
+    /// Extract target token mint from GMGN transaction
+    async fn extract_target_token_mint_from_gmgn(&self, transaction: &Transaction) -> Option<String> {
+        // First check token transfers
+        if !transaction.token_transfers.is_empty() {
+            return Some(transaction.token_transfers[0].mint.clone());
+        }
+        
+        // Check pre/post token balance changes similar to Jupiter
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                if let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                    meta.get("postTokenBalances").and_then(|v| v.as_array())
+                ) {
+                    let wallet_str = self.wallet_pubkey.to_string();
+                    
+                    // Look for token balance changes for our wallet (excluding WSOL)
+                    for post_balance in post_balances {
+                        if let Some(post_owner) = post_balance.get("owner").and_then(|v| v.as_str()) {
+                            if let Some(mint) = post_balance.get("mint").and_then(|v| v.as_str()) {
+                                if post_owner == wallet_str && mint != "So11111111111111111111111111111111111111112" {
+                                    return Some(mint.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+    
+    /// Extract token amount from GMGN transaction
+    async fn extract_token_amount_from_gmgn(&self, transaction: &Transaction) -> f64 {
+        // First check existing token transfers
+        if !transaction.token_transfers.is_empty() {
+            return transaction.token_transfers[0].amount;
+        }
+        
+        // Check pre/post token balance changes similar to Jupiter method
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                if let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                    meta.get("postTokenBalances").and_then(|v| v.as_array())
+                ) {
+                    let wallet_str = self.wallet_pubkey.to_string();
+                    
+                    for (post_idx, post_balance) in post_balances.iter().enumerate() {
+                        if let Some(post_owner) = post_balance.get("owner").and_then(|v| v.as_str()) {
+                            let mint_str = post_balance.get("mint").and_then(|v| v.as_str()).unwrap_or("unknown");
+                            
+                            // Skip WSOL
+                            if mint_str == "So11111111111111111111111111111111111111112" { continue; }
+                            
+                            if post_owner == wallet_str {
+                                let account_index = post_balance.get("accountIndex").and_then(|v| v.as_u64()).unwrap_or(999);
+                                
+                                // Get pre-balance for same account
+                                let pre_amount = pre_balances.iter()
+                                    .find(|pre| pre.get("accountIndex").and_then(|v| v.as_u64()) == Some(account_index))
+                                    .and_then(|pre| pre.get("uiTokenAmount"))
+                                    .and_then(|ui| ui.get("uiAmount"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+                                
+                                // Get post-balance
+                                let post_amount = post_balance.get("uiTokenAmount")
+                                    .and_then(|ui| ui.get("uiAmount"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+                                
+                                let token_change = post_amount - pre_amount;
+                                
+                                if self.debug_enabled {
+                                    log(LogTag::Transactions, "GMGN_TOKEN", &format!(
+                                        "💰 GMGN token balance change for account[{}]: {} -> {} = {} (mint: {})",
+                                        account_index, pre_amount, post_amount, token_change, mint_str
+                                    ));
+                                }
+                                
+                                if token_change.abs() > 1e-12 {
+                                    return token_change.abs();
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

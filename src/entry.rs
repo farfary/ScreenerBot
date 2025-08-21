@@ -11,7 +11,6 @@ use crate::tokens::is_token_excluded_from_trading;
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_entry_enabled };
 use crate::tokens::cache::TokenDatabase;
-// use crate::positions::SAVED_POSITIONS; // TODO: read-only access to past trades - refactor to async
 use chrono::Utc;
 use std::cmp::Ordering;
 use std::collections::HashMap;

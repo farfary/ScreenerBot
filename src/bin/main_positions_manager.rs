@@ -737,8 +737,22 @@ async fn list_closed_positions(config: &PositionsManagerArgs) -> Result<(), Stri
 
 /// Display a single position row in the table
 async fn display_position_row(position: &Position, config: &PositionsManagerArgs) {
-    // Placeholder for P&L calculation
-    let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None); // TODO: Get current price
+    // Cache price service access to avoid repeated calls
+    static PRICE_SERVICE_CACHE: std::sync::OnceLock<Option<std::sync::Arc<screenerbot::tokens::price::TokenPriceService>>> = std::sync::OnceLock::new();
+    
+    // Get current price for P&L calculation (with caching to reduce API calls)
+    let current_price = PRICE_SERVICE_CACHE.get_or_init(|| {
+        screenerbot::tokens::price::PRICE_SERVICE.get().cloned()
+    });
+    
+    let price = if let Some(price_service) = current_price {
+        price_service.get_token_price(&position.mint).await
+    } else {
+        // Fallback to DexScreener API only if price service is not available
+        None // Skip expensive fallback for table display
+    };
+    
+    let (pnl_sol, pnl_percent) = calculate_position_pnl(position, price);
     
     let mint_short = format!("{}...", &position.mint[..8]);
     let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
@@ -860,8 +874,13 @@ async fn show_position_status(mint: &str, config: &PositionsManagerArgs) -> Resu
             if let Some(sig) = &position.entry_transaction_signature {
                 log(LogTag::Positions, "INFO", &format!("   Entry TX: {}", get_signature_prefix(sig)));
                 
-                // TODO: Check transaction verification status
-                log(LogTag::Positions, "INFO", "   📋 Entry transaction recorded");
+                // Check transaction verification status
+                let verification_status = if position.transaction_entry_verified {
+                    "✅ Verified".bright_green()
+                } else {
+                    "⏳ Pending verification".bright_yellow()
+                };
+                log(LogTag::Positions, "INFO", &format!("   📋 Entry status: {}", verification_status));
             }
         } else {
             // Check closed positions
@@ -967,8 +986,41 @@ async fn show_positions_summary(config: &PositionsManagerArgs) -> Result<(), Str
 
     log(LogTag::Positions, "INFO", &format!("💸 Realized P&L: {}", total_realized_pnl_colored));
 
-    // TODO: Calculate unrealized P&L for open positions
-    log(LogTag::Positions, "INFO", "📊 Unrealized P&L: TBD (requires current prices)");
+    // Calculate unrealized P&L for open positions (with rate limiting)
+    let open_positions = get_open_positions().await;
+    let mut total_unrealized_pnl = 0.0;
+    let mut unrealized_positions_count = 0;
+    
+    // Limit the number of price lookups to avoid API spam
+    let max_price_lookups = 10; // Limit to first 10 positions
+    let mut price_lookups = 0;
+    
+    for position in open_positions.iter().take(max_price_lookups) {
+        if let Some(price_service) = screenerbot::tokens::price::PRICE_SERVICE.get() {
+            if let Some(current_price) = price_service.get_token_price(&position.mint).await {
+                let (pnl_sol, _pnl_percent) = calculate_position_pnl(position, Some(current_price));
+                total_unrealized_pnl += pnl_sol;
+                unrealized_positions_count += 1;
+                price_lookups += 1;
+                
+                // Small delay to avoid overwhelming price service
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            }
+        }
+    }
+    
+    let total_open_positions = open_positions.len();
+    let unrealized_display = if unrealized_positions_count < total_open_positions {
+        format!("📊 Unrealized P&L: {} ({}/{} positions with prices)", 
+               if total_unrealized_pnl >= 0.0 { format!("{:+.6} SOL", total_unrealized_pnl).bright_green() } else { format!("{:+.6} SOL", total_unrealized_pnl).bright_red() },
+               unrealized_positions_count, total_open_positions)
+    } else {
+        format!("📊 Unrealized P&L: {} ({} positions)", 
+               if total_unrealized_pnl >= 0.0 { format!("{:+.6} SOL", total_unrealized_pnl).bright_green() } else { format!("{:+.6} SOL", total_unrealized_pnl).bright_red() },
+               unrealized_positions_count)
+    };
+    
+    log(LogTag::Positions, "INFO", &unrealized_display);
 
     Ok(())
 }
@@ -1378,15 +1430,46 @@ fn validate_mint_address(mint: &str) -> Result<(), String> {
         return Err("Invalid mint address: too long".to_string());
     }
     
-    // TODO: Add more sophisticated validation (base58 check, etc.)
+    // Validate base58 encoding and proper length
+    if mint.len() < 32 || mint.len() > 44 {
+        return Err("Invalid mint address: wrong length".to_string());
+    }
+    
+    // Basic character validation for base58
+    let valid_chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    for ch in mint.chars() {
+        if !valid_chars.contains(ch) {
+            return Err("Invalid mint address: contains invalid characters".to_string());
+        }
+    }
     
     Ok(())
 }
 
 /// Get token information for display purposes
 async fn get_token_info_placeholder(mint: &str) -> Result<(String, String), String> {
-    // TODO: Implement actual token info lookup
-    // This would query token metadata, symbol, name, etc.
+    // Try to get token info from various sources
+    
+    // First try from positions data (if we have a position for this token)
+    let positions = screenerbot::positions::get_all_positions().await;
+    if let Some(position) = positions.iter().find(|p| p.mint == mint) {
+        return Ok((position.symbol.clone(), format!("{} (from position)", position.symbol)));
+    }
+    
+    // Try to get from DexScreener API
+    match screenerbot::tokens::dexscreener::get_token_price_from_global_api(mint).await {
+        Some(_) => {
+            // If we can get price data, the token exists
+            // For now return mint as symbol (could be enhanced to fetch metadata)
+            let short_mint = format!("{}...", &mint[..8]);
+            return Ok((short_mint.clone(), short_mint));
+        },
+        None => {
+            // Fallback to mint address format
+            let short_mint = format!("{}...", &mint[..8]);
+            return Ok((short_mint.clone(), format!("{} (unknown token)", short_mint)));
+        }
+    }
     
     let symbol = format!("TOKEN_{}", &mint[..8]);
     let name = format!("Token {}", &mint[..8]);

@@ -179,11 +179,17 @@ async fn perform_ata_cleanup() -> Result<(u32, Vec<String>), Box<dyn std::error:
         match crate::utils::close_single_ata(&wallet_address, &account.mint).await {
             Ok(signature) => {
                 closed_count += 1;
-                total_rent_reclaimed += 0.00203928; // Standard ATA rent - TODO: Query actual rent
+                // Query actual ATA rent from chain
+                let actual_rent = match crate::rpc::get_ata_rent_lamports().await {
+                    Ok(rent_lamports) => (rent_lamports as f64) / 1_000_000_000.0,
+                    Err(_) => 0.00203928, // Fallback to standard ATA rent
+                };
+                total_rent_reclaimed += actual_rent;
                 log(
                     LogTag::Wallet,
                     "ATA_SERVICE",
-                    &format!("Closed ATA for {} - Tx: {}", &account.mint[..8], signature)
+                    &format!("Closed ATA for {} - Tx: {} - Rent reclaimed: {:.8} SOL", 
+                        &account.mint[..8], signature, actual_rent)
                 );
                 signatures.push(signature);
             }
