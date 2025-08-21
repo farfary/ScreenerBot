@@ -539,7 +539,7 @@ pub async fn start_enhanced_monitoring(
             }
         }
 
-        log(LogTag::System, "STOP", "Enhanced monitoring stopped");
+        log(LogTag::Monitor, "STOP", "Enhanced monitoring stopped");
     });
 
     Ok(handle)
@@ -555,12 +555,12 @@ async fn enhanced_monitoring_cycle(shutdown: Arc<Notify>) -> Result<(), String> 
     let priority_mints = get_priority_tokens_safe().await;
 
     if priority_mints.is_empty() {
-        log(LogTag::System, "MONITOR", "No priority tokens for monitoring");
+        log(LogTag::Monitor, "MONITOR", "No priority tokens for monitoring");
         return Ok(());
     }
 
     log(
-        LogTag::System,
+        LogTag::Monitor,
         "MONITOR",
         &format!("Starting enhanced monitoring for {} priority tokens", priority_mints.len())
     );
@@ -579,7 +579,7 @@ async fn enhanced_monitoring_cycle(shutdown: Arc<Notify>) -> Result<(), String> 
         // Respect shutdown between chunks
         if crate::utils::check_shutdown_or_delay(&shutdown, std::time::Duration::from_millis(0)).await {
             if is_debug_monitor_enabled() {
-                log(LogTag::System, "SHUTDOWN", "Stopping enhanced monitoring cycle mid-run due to shutdown");
+                log(LogTag::Monitor, "SHUTDOWN", "Stopping enhanced monitoring cycle mid-run due to shutdown");
             }
             break;
         }
@@ -594,7 +594,7 @@ async fn enhanced_monitoring_cycle(shutdown: Arc<Notify>) -> Result<(), String> 
                 // Update database
                 if let Err(e) = db.update_tokens(&updated_tokens).await {
                     log(
-                        LogTag::System,
+                        LogTag::Monitor,
                         "ERROR",
                         &format!("Failed to update tokens in database: {}", e)
                     );
@@ -624,7 +624,7 @@ async fn enhanced_monitoring_cycle(shutdown: Arc<Notify>) -> Result<(), String> 
         // Rate limiting between batches (reduced for faster updates) - but still cancellable
         if crate::utils::check_shutdown_or_delay(&shutdown, std::time::Duration::from_millis(100)).await {
             if is_debug_monitor_enabled() {
-                log(LogTag::System, "SHUTDOWN", "Stopping enhanced monitoring cycle during inter-batch delay");
+                log(LogTag::Monitor, "SHUTDOWN", "Stopping enhanced monitoring cycle during inter-batch delay");
             }
             break;
         }
