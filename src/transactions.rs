@@ -6400,15 +6400,74 @@ impl TransactionsManager {
 
     /// Extract token transfer data
     async fn extract_token_transfer_data(&self, transaction: &Transaction) -> Result<TransactionType, String> {
-        for transfer in &transaction.token_transfers {
+        if transaction.token_transfers.is_empty() {
+            return Err("No token transfer found".to_string());
+        }
+
+        let wallet = self.wallet_pubkey.to_string();
+        let wsol_mint = "So11111111111111111111111111111111111111112";
+
+        // 1) Prefer transfers involving the wallet (sender or recipient)
+        let mut candidates: Vec<&TokenTransfer> = transaction
+            .token_transfers
+            .iter()
+            .filter(|t| t.from == wallet || t.to == wallet)
+            .collect();
+
+        // 2) Exclude WSOL mint for generic token transfer detection (it's usually part of swaps)
+        let mut non_wsol: Vec<&TokenTransfer> = candidates
+            .iter()
+            .copied()
+            .filter(|t| t.mint != wsol_mint)
+            .collect();
+
+        if non_wsol.is_empty() {
+            // If all involve WSOL fall back to original candidates
+            non_wsol = candidates.clone();
+        }
+
+        // 3) If still none (wallet not directly in transfers), fall back to all non-WSOL transfers
+        if non_wsol.is_empty() {
+            non_wsol = transaction
+                .token_transfers
+                .iter()
+                .filter(|t| t.mint != wsol_mint)
+                .collect();
+        }
+
+        // 4) Final fallback: all transfers
+        if non_wsol.is_empty() {
+            non_wsol = transaction.token_transfers.iter().collect();
+        }
+
+        // Choose the transfer with the largest absolute amount (UI amount already normalized)
+        if let Some(best) = non_wsol
+            .into_iter()
+            .max_by(|a, b| a.amount.partial_cmp(&b.amount).unwrap_or(std::cmp::Ordering::Equal))
+        {
+            if self.debug_enabled && transaction.token_transfers.len() > 1 {
+                log(
+                    LogTag::Transactions,
+                    "TOKEN_TRANSFER_SELECT",
+                    &format!(
+                        "{} selected mint={} amount={} from={} to={} among {} transfers",
+                        &transaction.signature[..8],
+                        get_mint_prefix(&best.mint),
+                        best.amount,
+                        get_signature_prefix(&best.from),
+                        get_signature_prefix(&best.to),
+                        transaction.token_transfers.len()
+                    ),
+                );
+            }
             return Ok(TransactionType::TokenTransfer {
-                mint: transfer.mint.clone(),
-                amount: transfer.amount,
-                from: transfer.from.clone(),
-                to: transfer.to.clone(),
+                mint: best.mint.clone(),
+                amount: best.amount,
+                from: best.from.clone(),
+                to: best.to.clone(),
             });
         }
 
-        Err("No token transfer found".to_string())
+        Err("Failed to select token transfer".to_string())
     }
 }

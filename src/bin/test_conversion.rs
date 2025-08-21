@@ -1,23 +1,25 @@
 use screenerbot::*;
-use screenerbot::transactions::TransactionsManager;
+use screenerbot::transactions::{TransactionsManager, get_transaction};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🧪 Testing convert_to_swap_pnl_info conversion");
     
-    // Initialize the system
-    let config = configs::read_configs()?;
-    let rpc_client = rpc::init_rpc_client()?;
+    // Get wallet pubkey from address
+    let wallet_address_str = utils::get_wallet_address()?;
+    let wallet_pubkey = solana_sdk::pubkey::Pubkey::from_str(&wallet_address_str)
+        .map_err(|e| format!("Invalid wallet address: {}", e))?;
     
     // Initialize transactions manager
-    let transactions_manager = TransactionsManager::new(rpc_client, config).await;
+    let transactions_manager = TransactionsManager::new(wallet_pubkey).await?;
     
     // Load the specific transaction
     let signature = "eQNWDCLwg9AnR4Wnc75kHBAcMFE9ZV76qXcj4SkzFLzyh4NdgBkiseam6xEcNrDUmqbW8BhcgGdRziCgk4hiooQ";
     
     println!("🔍 Loading transaction: {}", &signature[..8]);
-    if let Ok(Some(transaction)) = transactions_manager.load_transaction(signature).await {
+    if let Ok(Some(transaction)) = get_transaction(signature).await {
         println!("✅ Transaction loaded successfully");
         println!("   Type: {:?}", transaction.transaction_type);
         println!("   Success: {}", transaction.success);
