@@ -31,7 +31,7 @@ use std::path::Path;
 const POOL_CACHE_TTL_SECONDS: i64 = 600;
 
 /// Price cache TTL (1 second for real-time monitoring)
-const PRICE_CACHE_TTL_SECONDS: i64 = 1;
+const PRICE_CACHE_TTL_SECONDS: i64 = 2;
 
 /// Watch list timeout (5 minutes) - remove tokens that haven't had successful price updates
 const WATCH_LIST_TIMEOUT_SECONDS: i64 = 300;
@@ -2152,7 +2152,26 @@ impl PoolPriceService {
         }
 
         let api_start_time = Utc::now();
-        let pairs = get_token_pairs_from_api(token_address).await?;
+        let pairs = match get_token_pairs_from_api(token_address).await {
+            Ok(pairs) => pairs,
+            Err(e) => {
+                // Handle API timeouts gracefully - this is often normal during shutdown
+                if e.contains("timeout") || e.contains("shutting down") {
+                    log(
+                        LogTag::Pool,
+                        "INFO",
+                        &format!("API timeout for {} (system may be shutting down): {}", token_address, e)
+                    );
+                } else {
+                    log(
+                        LogTag::Pool,
+                        "ERROR",
+                        &format!("API error for {}: {}", token_address, e)
+                    );
+                }
+                return Err(format!("Failed to fetch pools from API: {}", e));
+            }
+        };
         let api_duration = Utc::now() - api_start_time;
 
         if is_debug_pool_prices_enabled() {
