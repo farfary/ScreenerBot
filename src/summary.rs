@@ -391,16 +391,33 @@ pub async fn display_positions_table() {
     // for open positions, so we don't need to refresh them here
 
     // Use existing safe functions instead of locking SAVED_POSITIONS directly
+    // Add timeouts to prevent blocking when positions manager is busy
     let collect_start = Instant::now();
-    let open_positions = get_open_positions().await;
-    let closed_positions = get_closed_positions().await;
+    
+    let (open_positions, closed_positions) = match tokio::time::timeout(
+        Duration::from_secs(5), 
+        async {
+            let open = get_open_positions().await;
+            let closed = get_closed_positions().await;
+            (open, closed)
+        }
+    ).await {
+        Ok((open, closed)) => (open, closed),
+        Err(_) => {
+            log(LogTag::Summary, "WARN", "Timeout collecting positions data - using empty sets");
+            (Vec::new(), Vec::new())
+        }
+    };
+    
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "Collected positions in {} ms",
-                collect_start.elapsed().as_millis()
+                "Collected positions in {} ms (open: {}, closed: {})",
+                collect_start.elapsed().as_millis(),
+                open_positions.len(),
+                closed_positions.len()
             )
         );
     }
@@ -480,7 +497,18 @@ pub async fn display_positions_table() {
     // Display bot summary section (now with owned data)
     let closed_refs: Vec<&Position> = closed_positions.iter().collect();
     let summary_start = Instant::now();
-    let bot_summary = build_bot_summary(&closed_refs).await;
+    
+    let bot_summary = match tokio::time::timeout(
+        Duration::from_secs(3),
+        build_bot_summary(&closed_refs)
+    ).await {
+        Ok(summary) => summary,
+        Err(_) => {
+            log(LogTag::Summary, "WARN", "Bot summary generation timeout - using fallback");
+            format!("\n💰 Bot Summary (timeout - showing basic info)\nTotal Positions: {}\n\n", closed_positions.len())
+        }
+    };
+    
     positions_output.push_str(&bot_summary);
     if is_debug_summary_enabled() {
         log(

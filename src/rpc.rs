@@ -2148,14 +2148,14 @@ impl RpcClient {
             );
         }
 
-        // Decode the base64 transaction
-        let transaction_bytes = base64::engine::general_purpose::STANDARD
+        // Decode the base64 transaction once (we will mutate & re-sign on retries)
+        let original_tx_bytes = base64::engine::general_purpose::STANDARD
             .decode(swap_transaction_base64)
             .map_err(|e| SwapError::SigningError(format!("Failed to decode transaction: {}", e)))?;
 
         // Deserialize the VersionedTransaction
         let mut transaction: VersionedTransaction = bincode
-            ::deserialize(&transaction_bytes)
+            ::deserialize(&original_tx_bytes)
             .map_err(|e|
                 SwapError::SigningError(format!("Failed to deserialize transaction: {}", e))
             )?;
@@ -2170,314 +2170,150 @@ impl RpcClient {
             SwapError::ConfigError(format!("Failed to create keypair: {}", e))
         )?;
 
-        // Sign the transaction
-        let signature = keypair.sign_message(&transaction.message.serialize());
-
-        if is_debug_wallet_enabled() {
-            log(
-                LogTag::Rpc,
-                "DEBUG",
-                &format!(
-                    "Transaction signed successfully: wallet_pubkey={}, signature={}",
-                    keypair.pubkey(),
-                    signature
-                )
-            );
-        }
-
-        // Add the signature to the transaction
-        if transaction.signatures.is_empty() {
-            transaction.signatures.push(signature);
-        } else {
-            transaction.signatures[0] = signature;
-        }
-
-        // Serialize the signed transaction back to base64
-        let signed_transaction_bytes = bincode
-            ::serialize(&transaction)
-            .map_err(|e|
-                SwapError::SigningError(format!("Failed to serialize signed transaction: {}", e))
-            )?;
-        let signed_transaction_base64 = base64::engine::general_purpose::STANDARD.encode(
-            &signed_transaction_bytes
-        );
-
-        // Send the signed transaction using our send method
-        let rpc_payload =
-            serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "sendTransaction",
-            "params": [
-                signed_transaction_base64,
-                {
-                    "encoding": "base64",
-                    "skipPreflight": false,
-                    "preflightCommitment": "processed"
-                }
-            ]
-        });
-
-        let client = reqwest::Client::new();
-
-        // If premium RPC only mode is active, use only premium RPC
-        if is_premium_rpc_only() {
-            if is_debug_rpc_enabled(){
-                log(LogTag::Rpc, "PREMIUM_ONLY", "FORCE_PREMIUM_RPC_ONLY is active - sending signed transaction to premium RPC only");
-            }
-
-            if is_debug_transactions_enabled() {
+        // Helper to (re)sign & serialize current transaction state
+        let mut sign_and_serialize = |tx: &mut VersionedTransaction| -> Result<String, SwapError> {
+            let sig = keypair.sign_message(&tx.message.serialize());
+            if tx.signatures.is_empty() { tx.signatures.push(sig); } else { tx.signatures[0] = sig; }
+            if is_debug_wallet_enabled() {
                 log(
                     LogTag::Rpc,
-                    "TX_DEBUG_SEND_PREMIUM_ONLY", 
-                    &format!("🎯 Sending transaction to premium RPC only: {}", &configs.rpc_url_premium)
+                    "DEBUG",
+                    &format!(
+                        "Transaction signed: wallet_pubkey={}, signature={}",
+                        keypair.pubkey(), sig
+                    )
                 );
             }
+            let bytes = bincode::serialize(tx).map_err(|e| SwapError::SigningError(format!("Failed to serialize signed transaction: {}", e)))?;
+            Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+        };
 
-            match
-                client
-                    .post(&configs.rpc_url_premium)
+        // Extract current recent blockhash (for logging / comparison)
+        let initial_blockhash = match &transaction.message {
+            solana_sdk::message::VersionedMessage::Legacy(m) => m.recent_blockhash,
+            solana_sdk::message::VersionedMessage::V0(m) => m.recent_blockhash,
+        };
+        if is_debug_transactions_enabled() {
+            log(LogTag::Rpc, "TX_DEBUG_BLOCKHASH", &format!("Initial tx blockhash: {}", initial_blockhash));
+        }
+
+        // Retry loop with blockhash refresh on specific errors
+        const MAX_ATTEMPTS: usize = 3; // 1 initial + up to 2 refresh attempts
+        let mut attempt = 0usize;
+        let client = reqwest::Client::new();
+        let mut last_err: Option<SwapError> = None;
+    // flag removed: no 'goto' in Rust; retry handled by loop control
+
+        while attempt < MAX_ATTEMPTS {
+            if attempt > 0 {
+                log(LogTag::Rpc, "RETRY", &format!("Retrying transaction send attempt {}", attempt + 1));
+            }
+
+            // Re-sign (possibly after blockhash update)
+            let signed_transaction_base64 = sign_and_serialize(&mut transaction)?;
+
+            // Build payload each attempt (fresh signed tx)
+            let rpc_payload = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "sendTransaction",
+                "params": [
+                    signed_transaction_base64,
+                    { "encoding": "base64", "skipPreflight": false, "preflightCommitment": "processed" }
+                ]
+            });
+
+
+            // Attempt premium (or premium-only path) then fallbacks mirroring prior logic
+            let mut endpoints: Vec<String> = Vec::new();
+            if is_premium_rpc_only() {
+                endpoints.push(configs.rpc_url_premium.clone());
+            } else {
+                endpoints.push(configs.rpc_url_premium.clone());
+                endpoints.extend(configs.rpc_fallbacks.clone());
+            }
+
+            for (idx, url_ref) in endpoints.iter().enumerate() {
+                let url = url_ref.clone();
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Rpc, "TX_DEBUG_SEND", &format!("Attempt {} -> Endpoint {}: {}", attempt + 1, idx + 1, url));
+                }
+                let send_result = client
+                    .post(&url)
                     .header("Content-Type", "application/json")
                     .json(&rpc_payload)
-                    .send().await
-            {
-                Ok(response) => {
-                    if is_debug_transactions_enabled() {
-                        log(
-                            LogTag::Rpc,
-                            "TX_DEBUG_RESPONSE_STATUS",
-                            &format!("📡 Premium RPC response status: {}", response.status())
-                        );
-                    }
-
-                    if response.status().is_success() {
-                        if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                            if is_debug_transactions_enabled() {
-                                log(
-                                    LogTag::Rpc,
-                                    "TX_DEBUG_RESPONSE_BODY",
-                                    &format!("📄 Premium RPC response: {}", serde_json::to_string_pretty(&rpc_response).unwrap_or_else(|_| "Failed to serialize".to_string()))
-                                );
-                            }
-
-                            if let Some(result) = rpc_response.get("result") {
-                                if let Some(tx_sig) = result.as_str() {
-                                    log(
-                                        LogTag::Rpc,
-                                        "SUCCESS",
-                                        &format!("Signed transaction sent successfully via premium RPC only: {}", tx_sig)
-                                    );
-                                    self.record_call_for_url(&configs.rpc_url_premium, "send_transaction");
-                                    
-                                    if is_debug_transactions_enabled() {
-                                        log(
-                                            LogTag::Rpc,
-                                            "TX_DEBUG_SUCCESS",
-                                            &format!("🎉 Transaction successfully submitted! Signature: {}", tx_sig)
-                                        );
+                    .send().await;
+                match send_result {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            match resp.json::<serde_json::Value>().await {
+                                Ok(v) => {
+                                    if let Some(result) = v.get("result").and_then(|r| r.as_str()) {
+                                        log(LogTag::Rpc, "SUCCESS", &format!("Transaction sent successfully via {}: {}", url, result));
+                                        self.record_call_for_url(&url, "send_transaction");
+                                        return Ok(result.to_string());
                                     }
-                                    
-                                    return Ok(tx_sig.to_string());
-                                }
-                            }
-
-                            if let Some(error) = rpc_response.get("error") {
-                                let error_msg = error
-                                    .get("message")
-                                    .and_then(|m| m.as_str())
-                                    .unwrap_or("Unknown RPC error");
-                                
-                                if is_debug_transactions_enabled() {
-                                    log(
-                                        LogTag::Rpc,
-                                        "TX_DEBUG_ERROR",
-                                        &format!("❌ Premium RPC returned error: {}", error_msg)
-                                    );
-                                    if let Some(error_code) = error.get("code") {
-                                        log(
-                                            LogTag::Rpc,
-                                            "TX_DEBUG_ERROR_CODE",
-                                            &format!("📍 Error code: {}", error_code)
-                                        );
+                                    if let Some(err_obj) = v.get("error") {
+                                        // Extract error message for classification
+                                        let msg = err_obj.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown RPC error");
+                                        if is_debug_transactions_enabled() { log(LogTag::Rpc, "TX_DEBUG_ERROR", &format!("Endpoint {} error: {}", url, msg)); }
+                                        // Detect blockhash-not-found
+                                        let bh_stale = msg.contains("blockhash not found") || msg.contains("BlockhashNotFound") || msg.contains("Blockhash not found");
+                                        if bh_stale {
+                                            log(LogTag::Rpc, "BLOCKHASH_STALE", &format!("Blockhash not found at endpoint {} (attempt {})", url, attempt + 1));
+                                            // Refresh blockhash for next attempt (if attempts remain)
+                                            if attempt + 1 < MAX_ATTEMPTS {
+                                                match self.get_latest_blockhash().await {
+                                                    Ok(new_bh) => {
+                                                        if is_debug_transactions_enabled() { log(LogTag::Rpc, "TX_DEBUG_BLOCKHASH_REFRESH", &format!("Fetched fresh blockhash: {}", new_bh)); }
+                                                        // Update message blockhash
+                                                        match &mut transaction.message {
+                                                            solana_sdk::message::VersionedMessage::Legacy(m) => { m.recent_blockhash = new_bh; },
+                                                            solana_sdk::message::VersionedMessage::V0(m) => { m.recent_blockhash = new_bh; },
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        log(LogTag::Rpc, "ERROR", &format!("Failed to refresh blockhash: {:?}", e));
+                                                    }
+                                                }
+                                            }
+                                            // Break to outer retry loop
+                                            last_err = Some(SwapError::TransactionError(msg.to_string()));
+                                        } else {
+                                            last_err = Some(SwapError::TransactionError(msg.to_string()));
+                                        }
+                                    } else {
+                                        last_err = Some(SwapError::TransactionError("Malformed RPC response".to_string()));
                                     }
                                 }
-                                
-                                return Err(
-                                    SwapError::TransactionError(format!("Premium RPC error: {}", error_msg))
-                                );
+                                Err(e) => {
+                                    last_err = Some(SwapError::TransactionError(format!("Failed parsing RPC JSON: {}", e)));
+                                }
                             }
                         } else {
-                            if is_debug_transactions_enabled() {
-                                log(
-                                    LogTag::Rpc,
-                                    "TX_DEBUG_PARSE_ERROR",
-                                    "❌ Failed to parse premium RPC response as JSON"
-                                );
-                            }
-                        }
-                    } else {
-                        if is_debug_transactions_enabled() {
-                            log(
-                                LogTag::Rpc,
-                                "TX_DEBUG_HTTP_ERROR",
-                                &format!("❌ Premium RPC returned HTTP error: {}", response.status())
-                            );
+                            last_err = Some(SwapError::TransactionError(format!("HTTP status {}", resp.status())));
                         }
                     }
+                    Err(e) => { last_err = Some(SwapError::NetworkError(e)); }
                 }
-                Err(e) => {
-                    if is_debug_transactions_enabled() {
-                        log(
-                            LogTag::Rpc,
-                            "TX_DEBUG_NETWORK_ERROR",
-                            &format!("❌ Network error sending to premium RPC: {}", e)
-                        );
-                    }
-                    return Err(SwapError::NetworkError(e));
+                // If we flagged retry due to stale blockhash, break endpoint loop
+                if let Some(SwapError::TransactionError(ref m)) = last_err {
+                    if m.contains("Blockhash") || m.contains("blockhash") { break; }
                 }
             }
 
-            return Err(SwapError::TransactionError("Premium RPC failed in premium-only mode".to_string()));
+            // Decide if we retry
+            if let Some(SwapError::TransactionError(ref m)) = last_err {
+                let bh_stale = m.contains("blockhash not found") || m.contains("BlockhashNotFound") || m.contains("Blockhash not found");
+                if bh_stale && attempt + 1 < MAX_ATTEMPTS {
+                    attempt += 1;
+                    continue; // refreshed above
+                }
+            }
+            break; // no retry condition met
         }
 
-        // Normal mode: Use premium RPC URL first
-        let premium_rpc = &configs.rpc_url_premium;
-
-        log(LogTag::Rpc, "SEND", "Sending signed transaction to premium RPC");
-
-        match
-            client
-                .post(premium_rpc)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send().await
-        {
-            Ok(response) => {
-                if response.status().is_success() {
-                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                        if let Some(result) = rpc_response.get("result") {
-                            if let Some(tx_sig) = result.as_str() {
-                                log(
-                                    LogTag::Rpc,
-                                    "SUCCESS",
-                                    &format!("Transaction sent successfully via premium RPC: {}", tx_sig)
-                                );
-                                // Record successful premium RPC call
-                                self.record_call_for_url(premium_rpc, "send_transaction");
-                                return Ok(tx_sig.to_string());
-                            }
-                        }
-
-                        if let Some(error) = rpc_response.get("error") {
-                            let error_msg = error
-                                .get("message")
-                                .and_then(|m| m.as_str())
-                                .unwrap_or("Unknown RPC error");
-                            log(LogTag::Rpc, "ERROR", &format!("Premium RPC error: {}", error_msg));
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                log(LogTag::Rpc, "ERROR", &format!("Failed to send to premium RPC: {}", e));
-            }
-        }
-
-        // Try fallback RPCs
-        for fallback_rpc in &configs.rpc_fallbacks {
-            log(LogTag::Rpc, "SEND", &format!("Trying fallback RPC: {}", fallback_rpc));
-
-            match
-                client
-                    .post(fallback_rpc)
-                    .header("Content-Type", "application/json")
-                    .json(&rpc_payload)
-                    .send().await
-            {
-                Ok(response) => {
-                    if response.status().is_success() {
-                        if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                            if let Some(result) = rpc_response.get("result") {
-                                if let Some(tx_sig) = result.as_str() {
-                                    log(
-                                        LogTag::Rpc,
-                                        "SUCCESS",
-                                        &format!("Transaction sent via fallback RPC: {}", tx_sig)
-                                    );
-                                    // Record successful fallback RPC call
-                                    self.record_call_for_url(fallback_rpc, "send_transaction");
-                                    return Ok(tx_sig.to_string());
-                                }
-                            }
-
-                            if let Some(error) = rpc_response.get("error") {
-                                let error_msg = error
-                                    .get("message")
-                                    .and_then(|m| m.as_str())
-                                    .unwrap_or("Unknown RPC error");
-                                log(
-                                    LogTag::Rpc,
-                                    "ERROR",
-                                    &format!("Fallback RPC {} error: {}", fallback_rpc, error_msg)
-                                );
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Rpc,
-                        "ERROR",
-                        &format!("Fallback RPC {} failed: {}", fallback_rpc, e)
-                    );
-                }
-            }
-        }
-
-        // Try main RPC as last resort
-        log(LogTag::Rpc, "SEND", "Trying main RPC as last resort");
-
-        match
-            client
-                .post(&configs.rpc_url)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send().await
-        {
-            Ok(response) => {
-                if response.status().is_success() {
-                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                        if let Some(result) = rpc_response.get("result") {
-                            if let Some(tx_sig) = result.as_str() {
-                                log(
-                                    LogTag::Rpc,
-                                    "SUCCESS",
-                                    &format!("Transaction sent via main RPC: {}", tx_sig)
-                                );
-                                // Record successful main RPC call
-                                self.record_call_for_url(&configs.rpc_url, "send_transaction");
-                                return Ok(tx_sig.to_string());
-                            }
-                        }
-
-                        if let Some(error) = rpc_response.get("error") {
-                            let error_msg = error
-                                .get("message")
-                                .and_then(|m| m.as_str())
-                                .unwrap_or("Unknown RPC error");
-                            return Err(
-                                SwapError::TransactionError(format!("RPC error: {}", error_msg))
-                            );
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                return Err(SwapError::NetworkError(e));
-            }
-        }
-
-        Err(SwapError::TransactionError("All RPC endpoints failed".to_string()))
+        return Err(last_err.unwrap_or_else(|| SwapError::TransactionError("Failed to send transaction after retries".to_string())));
     }
 
     /// Gets all token accounts for a wallet (both SPL Token and Token-2022)

@@ -641,7 +641,10 @@ impl PositionsManager {
         let mut verification_interval = interval(Duration::from_secs(10));
         let mut retry_interval = interval(Duration::from_secs(30));
         let mut cleanup_interval = interval(Duration::from_secs(60));
-        let mut reconciliation_interval = interval(Duration::from_secs(300)); // Reduced frequency: 5 minutes instead of 2
+        let mut reconciliation_interval = interval(Duration::from_secs(1800)); // Much less frequent: 30 minutes
+        
+        // Add reconciliation state tracking to prevent overlaps
+        let mut reconciliation_in_progress = false;
 
         loop {
             tokio::select! {
@@ -668,6 +671,16 @@ impl PositionsManager {
                     self.cleanup_phantom_positions().await; 
                 }
                 _ = reconciliation_interval.tick() => {
+                    // Skip if reconciliation is already in progress to prevent overlaps
+                    if reconciliation_in_progress {
+                        if is_debug_positions_enabled() {
+                            log(LogTag::Positions, "DEBUG", "⏭️ Skipping reconciliation - already in progress");
+                        }
+                        continue;
+                    }
+                    
+                    reconciliation_in_progress = true;
+                    
                     // Only run reconciliation on positions with missing fields or inconsistent state
                     let positions_needing_reconciliation: Vec<_> = self.positions.iter().enumerate()
                         .filter_map(|(index, p)| {
@@ -697,20 +710,25 @@ impl PositionsManager {
                         .collect();
                     
                     if !positions_needing_reconciliation.is_empty() {
+                        // Limit reconciliation to max 3 positions per cycle to prevent blocking
+                        let limited_positions: Vec<_> = positions_needing_reconciliation.into_iter().take(3).collect();
+                        
                         if is_debug_positions_enabled() {
                             log(LogTag::Positions, "DEBUG", &format!(
-                                "🩺 Running targeted reconciliation on {} positions with missing fields: {}",
-                                positions_needing_reconciliation.len(),
-                                positions_needing_reconciliation.iter()
+                                "🩺 Running targeted reconciliation on {} positions with missing fields: {} (limited from full list)",
+                                limited_positions.len(),
+                                limited_positions.iter()
                                     .map(|(_, _, symbol)| symbol.as_str())
                                     .collect::<Vec<_>>()
                                     .join(", ")
                             ));
                         }
-                        self.run_targeted_reconciliation(positions_needing_reconciliation).await;
+                        self.run_targeted_reconciliation(limited_positions).await;
                     } else if is_debug_positions_enabled() {
                         log(LogTag::Positions, "DEBUG", "🩺 Skipping reconciliation - no positions with missing fields");
                     }
+                    
+                    reconciliation_in_progress = false;
                 }
                 maybe_msg = rx.recv() => {
                     match maybe_msg {
@@ -931,8 +949,8 @@ impl PositionsManager {
         let mut failed_signatures_to_clear = Vec::new(); // Track failed transaction signatures to clear
         
         for (index, mint, symbol) in positions_to_check {
-            // Rate limiting: small delay between checks
-            tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+            // Longer delay between checks to respect rate limits (500ms instead of 150ms)
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
             
             let position = &self.positions[index];
             
@@ -948,8 +966,9 @@ impl PositionsManager {
                         get_signature_prefix(exit_sig), symbol
                     ));
                     
-                    match get_transaction(exit_sig).await {
-                        Ok(Some(tx)) => {
+                    // Add timeout to prevent hanging on slow RPC calls
+                    match tokio::time::timeout(Duration::from_secs(60), get_transaction(exit_sig)).await {
+                        Ok(Ok(Some(tx))) => {
                             // Check transaction status and success
                             match tx.status {
                                 TransactionStatus::Finalized | TransactionStatus::Confirmed => {
@@ -985,16 +1004,22 @@ impl PositionsManager {
                                 }
                             }
                         }
-                        Ok(None) => {
+                        Ok(Ok(None)) => {
                             log(LogTag::Positions, "RECONCILE_TX_NOT_FOUND", &format!(
                                 "📄 Exit transaction {} not found or still pending for {} - will retry",
                                 get_signature_prefix(exit_sig), symbol
                             ));
                         }
-                        Err(e) => {
+                        Ok(Err(e)) => {
                             log(LogTag::Positions, "RECONCILE_TX_ERROR", &format!(
                                 "⚠️ Error fetching exit transaction {} for {}: {}",
                                 get_signature_prefix(exit_sig), symbol, e
+                            ));
+                        }
+                        Err(_) => {
+                            log(LogTag::Positions, "RECONCILE_TX_TIMEOUT", &format!(
+                                "⏰ Timeout fetching exit transaction {} for {} - will retry later",
+                                get_signature_prefix(exit_sig), symbol
                             ));
                         }
                     }
@@ -1006,7 +1031,11 @@ impl PositionsManager {
                position.exit_transaction_signature.is_none() && 
                position.exit_price.is_none() 
             {
-                if let Ok(wallet_balance) = crate::utils::get_token_balance(&wallet_address, &mint).await {
+                // Add timeout to wallet balance check to prevent hanging
+                if let Ok(Ok(wallet_balance)) = tokio::time::timeout(
+                    Duration::from_secs(45), 
+                    crate::utils::get_token_balance(&wallet_address, &mint)
+                ).await {
                     if wallet_balance == 0 {
                         log(LogTag::Positions, "RECONCILE", &format!(
                             "👻 Confirmed phantom position {} - searching for missing exit transaction", symbol
@@ -1025,7 +1054,7 @@ impl PositionsManager {
                     }
                 } else {
                     log(LogTag::Positions, "RECONCILE_ERROR", &format!(
-                        "Failed to get wallet balance for {}", symbol
+                        "Failed to get wallet balance for {} (timeout or error)", symbol
                     ));
                 }
             }
@@ -1068,8 +1097,8 @@ impl PositionsManager {
         
         // Apply healing to identified positions
         for (index, exit_signature) in positions_to_heal {
-            // Rate limiting: small delay between healing operations
-            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            // Shorter delay between healing operations (100ms instead of 200ms)
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             
             log(LogTag::Positions, "RECONCILE_HEAL", &format!(
                 "✨ Auto-healing position with found exit tx {}",
@@ -1645,23 +1674,6 @@ impl PositionsManager {
         // Find the position to close
         let mut position_opt = None;
 
-        // Add debug information about available positions
-        log(LogTag::Positions, "DEBUG", &format!(
-            "🔍 Looking for position to close - mint: {}, total positions: {}",
-            mint, self.positions.len()
-        ));
-        
-        for (i, pos) in self.positions.iter().enumerate() {
-            log(LogTag::Positions, "DEBUG", &format!(
-                "📊 Position {}: mint={}, symbol={}, exit_sig={:?}, exit_verified={}",
-                i,
-                &pos.mint[..8],
-                pos.symbol,
-                pos.exit_transaction_signature.as_ref().map(|s| &s[..8]),
-                pos.transaction_exit_verified
-            ));
-        }
-
         if let Some(pos) = self
             .positions
             .iter_mut()
@@ -1830,10 +1842,17 @@ impl PositionsManager {
                     }
                 };
 
-                let actual_wallet_balance = match get_token_balance(&wallet_address, &token.mint).await {
-                    Ok(balance) => balance,
-                    Err(e) => {
+                let actual_wallet_balance = match tokio::time::timeout(
+                    Duration::from_secs(45), 
+                    get_token_balance(&wallet_address, &token.mint)
+                ).await {
+                    Ok(Ok(balance)) => balance,
+                    Ok(Err(e)) => {
                         last_error = Some(format!("Failed to get token balance: {}", e));
+                        continue;
+                    }
+                    Err(_) => {
+                        last_error = Some(format!("Timeout getting token balance for {}", token.symbol));
                         continue;
                     }
                 };

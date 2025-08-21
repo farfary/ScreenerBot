@@ -285,11 +285,13 @@ async fn update_position_tracking_in_service() {
 
     if !open_mints.is_empty() {
         update_open_positions_safe(open_mints).await;
-        log(
-            LogTag::Trader,
-            "TRACK",
-            "Updated open positions in price service",
-        );
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "TRACK",
+                "Updated open positions in price service",
+            );
+        }
     }
 }
 
@@ -382,12 +384,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             continue;
         }
 
-        log(
-            LogTag::Trader,
-            "DEBUG",
-            "📍 Starting new token monitoring cycle...",
-        );
-
         // Add a maximum processing time for the entire token checking cycle
         let cycle_start = std::time::Instant::now();
 
@@ -416,12 +412,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             break 'outer;
         }
 
-        // Ensure we have tokens to work with
-        log(
-            LogTag::Trader,
-            "DEBUG",
-            "📍 Ensuring tokens are populated...",
-        );
         if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
@@ -619,7 +609,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             );
         }
 
-    // Process tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
+        // Process tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
         // Note: tokens are still sorted by liquidity from highest to lowest
@@ -728,7 +718,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                         // Send open-position request to PositionsManager via handle
                         if let Some(h) = &positions_handle_opt {
-                            let _ = h.open_position(token.clone(), current_price, change, TRADE_SIZE_SOL).await;
+                            let _ = h
+                                .open_position(token.clone(), current_price, change, TRADE_SIZE_SOL)
+                                .await;
                         }
                     },
                 )
@@ -834,9 +826,12 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         }
 
         // First, collect all open position mints to fetch pool prices in parallel
-        let open_position_mints: Vec<String> = if let Some(h) = crate::positions::get_positions_handle().await {
-            h.get_open_mints().await
-        } else { Vec::new() };
+        let open_position_mints: Vec<String> =
+            if let Some(h) = crate::positions::get_positions_handle().await {
+                h.get_open_mints().await
+            } else {
+                Vec::new()
+            };
 
         // Request immediate pool price checks for open positions (non-blocking)
         if !open_position_mints.is_empty() {
@@ -850,12 +845,15 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             }
         }
 
-    let mut positions_to_close = Vec::new();
+        let mut positions_to_close = Vec::new();
 
         // First, collect open positions data (without holding mutex across await)
-        let open_positions_data_all: Vec<crate::positions::Position> = if let Some(h) = crate::positions::get_positions_handle().await {
-            h.get_open_positions().await
-        } else { Vec::new() };
+        let open_positions_data_all: Vec<crate::positions::Position> =
+            if let Some(h) = crate::positions::get_positions_handle().await {
+                h.get_open_positions().await
+            } else {
+                Vec::new()
+            };
 
         // Filter to only verified-entry, not yet exited positions (preserve previous behavior)
         let mut unverified_count = 0usize;
@@ -886,18 +884,24 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         // Now process each position with async calls (mutex is released)
         for position in open_positions_data.into_iter() {
             let mut position = position; // local mutable copy for calculations/logs
-            // Get current price from safe price service
+                                         // Get current price from safe price service
             if let Some(current_price) = get_token_price_blocking_safe(&position.mint).await {
                 if current_price > 0.0 && current_price.is_finite() {
                     // Update position tracking via PositionsManager actor
                     if let Some(h) = crate::positions::get_positions_handle().await {
-                        let _ = h.update_tracking(position.mint.clone(), current_price).await;
+                        let _ = h
+                            .update_tracking(position.mint.clone(), current_price)
+                            .await;
                     }
 
                     let now = Utc::now();
 
                     // Calculate P&L for logging and decision making
-                    let (pnl_sol, pnl_percent) = crate::positions::calculate_position_pnl_async(&position, Some(current_price)).await;
+                    let (pnl_sol, pnl_percent) = crate::positions::calculate_position_pnl_async(
+                        &position,
+                        Some(current_price),
+                    )
+                    .await;
 
                     // Calculate sell decision using the unified profit system
                     let should_exit = crate::profit::should_sell(&position, current_price).await;
@@ -976,11 +980,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             "SELL",
                             &format!(
                                 "Sell signal for {} ({}) - P&L: {:.2}% ({:.6} SOL) - SHOULD EXIT",
-                                position.symbol,
-                                position.mint,
-                                pnl_percent,
-                                pnl_sol
-                            )
+                                position.symbol, position.mint, pnl_percent, pnl_sol
+                            ),
                         );
 
                         positions_to_close.push((
@@ -1127,8 +1128,14 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         Duration::from_secs(SELL_OPERATION_SMART_TIMEOUT_SECS),
                         async {
                             if let Some(h) = &positions_handle_opt {
-                                h.close_position(position.mint.clone(), token.clone(), exit_price, exit_time).await
-                                    .map(|_| ())
+                                h.close_position(
+                                    position.mint.clone(),
+                                    token.clone(),
+                                    exit_price,
+                                    exit_time,
+                                )
+                                .await
+                                .map(|_| ())
                             } else {
                                 Err("PositionsManager unavailable".to_string())
                             }

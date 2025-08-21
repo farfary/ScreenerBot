@@ -4683,6 +4683,20 @@ impl Default for FeeBreakdown {
 pub static GLOBAL_TRANSACTION_MANAGER: once_cell::sync::Lazy<std::sync::Arc<tokio::sync::Mutex<Option<TransactionsManager>>>> = 
     once_cell::sync::Lazy::new(|| std::sync::Arc::new(tokio::sync::Mutex::new(None)));
 
+/// Execute a fast, non-async closure with a reference to the global TransactionsManager.
+/// The closure MUST NOT perform any async operations. Clone what you need and return it.
+/// Returns None if the global manager is uninitialized or lock acquisition times out.
+pub async fn with_global_tx_manager<F, R>(timeout_secs: u64, f: F) -> Option<R>
+where
+    F: FnOnce(&TransactionsManager) -> R,
+{
+    let lock_future = GLOBAL_TRANSACTION_MANAGER.lock();
+    let guard = match tokio::time::timeout(Duration::from_secs(timeout_secs), lock_future).await.ok()? {
+        g => g,
+    };
+    if let Some(ref manager) = *guard { Some(f(manager)) } else { None }
+}
+
 /// Initialize global transaction manager for monitoring
 pub async fn initialize_global_transaction_manager(wallet_pubkey: Pubkey) -> Result<(), String> {
     // Use try_lock to prevent deadlock with timeout
@@ -4914,29 +4928,29 @@ pub async fn get_transaction_stats() -> TransactionStats {
 /// Get recent successful buy transactions for recovery purposes
 pub async fn get_recent_successful_buy_transactions(hours: u32) -> Result<Vec<Transaction>, String> {
     let cutoff_time = Utc::now() - chrono::Duration::hours(hours as i64);
+    // Capture whether global manager exists; we don't call async methods while holding lock
+    let has_global = with_global_tx_manager(2, |_| ()).await.is_some();
+
     let mut successful_buys = Vec::new();
-    
-    // Get all cached transactions
-    let mut manager_lock = GLOBAL_TRANSACTION_MANAGER.lock().await;
-    if let Some(manager) = manager_lock.as_mut() {
-        let transactions = manager.fetch_limited_wallet_transactions(1000).await.unwrap_or_default();
-        
+    if has_global {
+        // Use a temporary manager to safely perform async fetching
+        let wallet_address = load_wallet_address_from_config().await?;
+        let mut temp_manager = TransactionsManager::new(wallet_address).await?;
+        let transactions = temp_manager.fetch_limited_wallet_transactions(1000).await.unwrap_or_default();
         for tx in transactions {
-            // Filter for successful buy transactions within time window
-            if tx.success 
-                && tx.timestamp >= cutoff_time 
-                && tx.swap_analysis.as_ref()
-                    .map(|s| s.input_token.starts_with("So11")) // SOL to token (buy)
-                    .unwrap_or(false) 
+            if tx.success
+                && tx.timestamp >= cutoff_time
+                && tx
+                    .swap_analysis
+                    .as_ref()
+                    .map(|s| s.input_token.starts_with("So11"))
+                    .unwrap_or(false)
             {
                 successful_buys.push(tx);
             }
         }
     }
-    
-    // Sort by timestamp (newest first)
     successful_buys.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-    
     Ok(successful_buys)
 }
 
@@ -5150,59 +5164,60 @@ pub async fn add_priority_transaction(signature: String, transaction_type: Strin
         &signature[..8], transaction_type
     ));
     
-    if let Some(manager_arc) = get_global_transaction_manager().await {
-        let mut manager_guard = manager_arc.lock().await;
-        if let Some(ref mut manager) = manager_guard.as_mut() {
-            // Check if transaction already exists
-            if manager.known_signatures().contains(&signature) {
-                log(LogTag::Transactions, "INFO", &format!(
-                    "✅ Priority transaction {} already in system", &signature[..8]
-                ));
-                return Ok(());
+    // Step 1: acquire lock briefly only to check existence of manager and transaction; clone wallet pubkey
+    let (wallet_pubkey_opt, already_known) = {
+        if let Some(manager_arc) = get_global_transaction_manager().await {
+            let guard = manager_arc.lock().await; // short critical section
+            if let Some(manager) = guard.as_ref() {
+                let known = manager.known_signatures().contains(&signature);
+                (Some(manager.wallet_pubkey), known)
+            } else {
+                (None, false)
             }
-            
-            // Process the priority transaction immediately
-            match manager.process_transaction(&signature).await {
-                Ok(transaction) => {
-                    log(LogTag::Transactions, "SUCCESS", &format!(
-                        "✅ Priority transaction {} processed successfully", &signature[..8]
+        } else { (None, false) }
+    };
+
+    if wallet_pubkey_opt.is_none() { return Err("TransactionManager not initialized".to_string()); }
+    if already_known {
+        log(LogTag::Transactions, "INFO", &format!(
+            "✅ Priority transaction {} already in system", &signature[..8]
+        ));
+        return Ok(());
+    }
+
+    // Step 2: create a temporary TransactionsManager instance to process just this transaction to avoid deadlock
+    let wallet_pubkey = wallet_pubkey_opt.unwrap();
+    let mut temp_manager = TransactionsManager::new(wallet_pubkey).await?;
+    match temp_manager.process_transaction(&signature).await {
+        Ok(transaction) => {
+            log(LogTag::Transactions, "SUCCESS", &format!(
+                "✅ Priority transaction {} processed (temp manager)", &signature[..8]
+            ));
+            match &transaction.transaction_type {
+                TransactionType::SwapSolToToken { token_mint, sol_amount, token_amount, router } => {
+                    log(LogTag::Transactions, "PRIORITY", &format!(
+                        "🔥 Priority BUY: {} SOL → {} tokens ({}) via {}", sol_amount, token_amount, &token_mint[..8], router
                     ));
-                    
-                    // Additional logging for priority transactions
-                    match &transaction.transaction_type {
-                        TransactionType::SwapSolToToken { token_mint, sol_amount, token_amount, router } => {
-                            log(LogTag::Transactions, "PRIORITY", &format!(
-                                "🔥 Priority BUY: {} SOL → {} tokens ({}) via {}", 
-                                sol_amount, token_amount, &token_mint[..8], router
-                            ));
-                        }
-                        TransactionType::SwapTokenToSol { token_mint, token_amount, sol_amount, router } => {
-                            log(LogTag::Transactions, "PRIORITY", &format!(
-                                "🔥 Priority SELL: {} tokens → {} SOL ({}) via {}", 
-                                token_amount, sol_amount, &token_mint[..8], router
-                            ));
-                        }
-                        _ => {
-                            log(LogTag::Transactions, "PRIORITY", &format!(
-                                "🔥 Priority transaction type: {:?}", transaction.transaction_type
-                            ));
-                        }
-                    }
-                    
-                    Ok(())
                 }
-                Err(e) => {
-                    log(LogTag::Transactions, "ERROR", &format!(
-                        "❌ Failed to process priority transaction {}: {}", &signature[..8], e
+                TransactionType::SwapTokenToSol { token_mint, token_amount, sol_amount, router } => {
+                    log(LogTag::Transactions, "PRIORITY", &format!(
+                        "🔥 Priority SELL: {} tokens → {} SOL ({}) via {}", token_amount, sol_amount, &token_mint[..8], router
                     ));
-                    Err(format!("Priority transaction processing failed: {}", e))
+                }
+                _ => {
+                    log(LogTag::Transactions, "PRIORITY", &format!(
+                        "🔥 Priority transaction type: {:?}", transaction.transaction_type
+                    ));
                 }
             }
-        } else {
-            Err("TransactionManager not initialized".to_string())
+            Ok(())
         }
-    } else {
-        Err("TransactionManager not available".to_string())
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!(
+                "❌ Failed to process priority transaction {}: {}", &signature[..8], e
+            ));
+            Err(format!("Priority transaction processing failed: {}", e))
+        }
     }
 }
 
