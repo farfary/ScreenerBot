@@ -388,7 +388,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let cycle_start = std::time::Instant::now();
 
         // Update position tracking in price service
-        log(LogTag::Trader, "DEBUG", "📍 Updating position tracking...");
         let position_update_start = std::time::Instant::now();
         update_position_tracking_in_service().await;
         if is_debug_trader_enabled() {
@@ -734,16 +733,18 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             handles.push(handle);
         }
 
-        log(
-            LogTag::Trader,
-            "INFO",
-            &format!(
-                "Successfully spawned {} token checking tasks",
-                handles.len()
-            )
-            .dimmed()
-            .to_string(),
-        );
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "INFO",
+                &format!(
+                    "Successfully spawned {} token checking tasks",
+                    handles.len()
+                )
+                .dimmed()
+                .to_string(),
+            );
+        }
 
         // Wait for tasks to finish with overall timeout (best-effort)
         let collection_result = tokio::time::timeout(
