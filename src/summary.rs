@@ -3,23 +3,139 @@ use crate::positions::*;
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
 use crate::utils::*;
-use crate::global::{STARTUP_TIME, is_debug_summary_enabled};
-use crate::arguments::{is_summary_enabled, is_dashboard_enabled};
+use crate::global::{ STARTUP_TIME, is_debug_summary_enabled };
+use crate::arguments::{
+    is_summary_enabled,
+    is_dashboard_enabled,
+    is_debug_summary_logging_enabled,
+};
 use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
 use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
-use crate::transactions::{TransactionsManager, SwapPnLInfo};
+use crate::transactions::{ TransactionsManager, SwapPnLInfo };
 use crate::utils::get_wallet_address;
 // New pool price system is now integrated via background services
 
 use chrono::{ Utc };
 use std::sync::Arc;
 use std::str::FromStr;
-use tokio::sync::Notify;
-use std::time::{Duration, Instant};
+use tokio::sync::{ Notify, Mutex };
+use std::time::{ Duration, Instant };
 use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
 use crate::tokens::discovery::get_discovery_stats;
+
+/// Cached wallet balance structure
+#[derive(Clone)]
+struct CachedWalletBalance {
+    balance: f64,
+    cached_at: Instant,
+    wallet_address: String,
+}
+
+impl CachedWalletBalance {
+    fn is_valid(&self, cache_duration_secs: u64) -> bool {
+        self.cached_at.elapsed().as_secs() < cache_duration_secs
+    }
+}
+
+/// Global wallet balance cache (30 second cache)
+static WALLET_BALANCE_CACHE: std::sync::LazyLock<Arc<Mutex<Option<CachedWalletBalance>>>> = std::sync::LazyLock::new(
+    || Arc::new(Mutex::new(None))
+);
+
+/// Get cached wallet balance with 30-second cache duration
+async fn get_cached_wallet_balance() -> String {
+    const CACHE_DURATION_SECS: u64 = 30;
+
+    // Try to get wallet address first
+    let wallet_pubkey = match crate::utils::get_wallet_address() {
+        Ok(addr) => addr,
+        Err(_) => {
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "WARN",
+                    "[get_cached_wallet_balance] Wallet pubkey unavailable"
+                );
+            }
+            return "N/A".to_string();
+        }
+    };
+
+    // Check cache first
+    {
+        let cache_guard = WALLET_BALANCE_CACHE.lock().await;
+        if let Some(cached) = cache_guard.as_ref() {
+            if cached.wallet_address == wallet_pubkey && cached.is_valid(CACHE_DURATION_SECS) {
+                if is_debug_summary_enabled() {
+                    log(
+                        LogTag::Summary,
+                        "DEBUG",
+                        &format!(
+                            "[get_cached_wallet_balance] Using cached balance: {:.6} SOL (cached {:.1}s ago)",
+                            cached.balance,
+                            cached.cached_at.elapsed().as_secs_f64()
+                        )
+                    );
+                }
+                return format!("{:.6} SOL", cached.balance);
+            }
+        }
+    }
+
+    // Cache miss or expired - fetch fresh balance
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            "[get_cached_wallet_balance] Cache miss/expired, fetching fresh balance via RPC"
+        );
+    }
+
+    let rpc_start = Instant::now();
+    match crate::utils::get_sol_balance(&wallet_pubkey).await {
+        Ok(balance) => {
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "DEBUG",
+                    &format!(
+                        "[get_cached_wallet_balance] Fresh RPC balance call successful in {} ms: {:.6} SOL",
+                        rpc_start.elapsed().as_millis(),
+                        balance
+                    )
+                );
+            }
+
+            // Update cache
+            {
+                let mut cache_guard = WALLET_BALANCE_CACHE.lock().await;
+                *cache_guard = Some(CachedWalletBalance {
+                    balance,
+                    cached_at: Instant::now(),
+                    wallet_address: wallet_pubkey,
+                });
+            }
+
+            format!("{:.6} SOL", balance)
+        }
+        Err(e) => {
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "WARN",
+                    &format!(
+                        "[get_cached_wallet_balance] RPC balance call failed in {} ms: {}",
+                        rpc_start.elapsed().as_millis(),
+                        e
+                    )
+                );
+            }
+            "Error".to_string()
+        }
+    }
+}
 
 /// Display structure for closed positions with specific "Exit" column
 #[derive(Tabled)]
@@ -287,7 +403,6 @@ pub struct RecentTransactionDisplay {
     status: String,
 }
 
-
 /// Display structure for wallet transaction statistics
 #[derive(Tabled)]
 pub struct WalletTransactionDisplay {
@@ -320,8 +435,6 @@ pub struct TransactionFinalizationDisplay {
     next_check_status: String,
 }
 
-
-
 /// Background task to display positions table every 10 seconds
 pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
     if is_debug_summary_enabled() && !is_dashboard_enabled() {
@@ -348,11 +461,7 @@ pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
             log(
                 LogTag::Summary,
                 "DEBUG",
-                &format!(
-                    "Summary tick #{} display complete in {} ms",
-                    tick,
-                    elapsed.as_millis()
-                )
+                &format!("Summary tick #{} display complete in {} ms", tick, elapsed.as_millis())
             );
             log(
                 LogTag::Summary,
@@ -393,22 +502,21 @@ pub async fn display_positions_table() {
     // Use existing safe functions instead of locking SAVED_POSITIONS directly
     // Add timeouts to prevent blocking when positions manager is busy
     let collect_start = Instant::now();
-    
-    let (open_positions, closed_positions) = match tokio::time::timeout(
-        Duration::from_secs(5), 
-        async {
+
+    let (open_positions, closed_positions) = match
+        tokio::time::timeout(Duration::from_secs(5), async {
             let open = get_open_positions().await;
             let closed = get_closed_positions().await;
             (open, closed)
-        }
-    ).await {
+        }).await
+    {
         Ok((open, closed)) => (open, closed),
         Err(_) => {
             log(LogTag::Summary, "WARN", "Timeout collecting positions data - using empty sets");
             (Vec::new(), Vec::new())
         }
     };
-    
+
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
@@ -455,6 +563,14 @@ pub async fn display_positions_table() {
 
     // Discovery section FIRST (less important but requested first)
     {
+        let discovery_stage_start = Instant::now();
+        if is_debug_summary_enabled() {
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                "[display_positions_table] Starting discovery stats stage"
+            );
+        }
         // Add timeout protection for discovery stats
         let ds = match tokio::time::timeout(Duration::from_secs(2), get_discovery_stats()).await {
             Ok(stats) => stats,
@@ -474,9 +590,9 @@ pub async fn display_positions_table() {
             ds.per_source.rug_new,
             ds.per_source.rug_viewed,
             ds.per_source.rug_trending,
-            ds.per_source.rug_verified,
+            ds.per_source.rug_verified
         );
-        let error = ds.last_error.unwrap_or_default();
+        let error = ds.last_error.clone().unwrap_or_default();
 
         let discovery_display = DiscoveryDisplay {
             cycles,
@@ -491,33 +607,47 @@ pub async fn display_positions_table() {
         discovery_table
             .with(Style::rounded())
             .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-        positions_output.push_str(&format!("{}\n", discovery_table));
+        let table_str = format!("{}\n", discovery_table);
+        positions_output.push_str(&table_str);
+        if is_debug_summary_enabled() {
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                &format!(
+                    "[display_positions_table] Discovery stage complete in {} ms (table bytes: {})",
+                    discovery_stage_start.elapsed().as_millis(),
+                    table_str.len()
+                )
+            );
+        }
     }
 
     // Display bot summary section (now with owned data)
     let closed_refs: Vec<&Position> = closed_positions.iter().collect();
     let summary_start = Instant::now();
-    
-    let bot_summary = match tokio::time::timeout(
-        Duration::from_secs(3),
-        build_bot_summary(&closed_refs)
-    ).await {
+
+    if is_debug_summary_enabled() {
+        log(LogTag::Summary, "DEBUG", "[display_positions_table] Starting bot summary stage");
+    }
+    let bot_summary = match
+        tokio::time::timeout(Duration::from_secs(3), build_bot_summary(&closed_refs)).await
+    {
         Ok(summary) => summary,
         Err(_) => {
             log(LogTag::Summary, "WARN", "Bot summary generation timeout - using fallback");
-            format!("\n💰 Bot Summary (timeout - showing basic info)\nTotal Positions: {}\n\n", closed_positions.len())
+            format!(
+                "\n💰 Bot Summary (timeout - showing basic info)\nTotal Positions: {}\n\n",
+                closed_positions.len()
+            )
         }
     };
-    
+
     positions_output.push_str(&bot_summary);
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",
-            &format!(
-                "Bot summary built in {} ms",
-                summary_start.elapsed().as_millis()
-            )
+            &format!("Bot summary built in {} ms", summary_start.elapsed().as_millis())
         );
     }
 
@@ -564,11 +694,24 @@ pub async fn display_positions_table() {
             }
 
             positions_output.push_str(&format!("\n📋 Recently Closed Positions (Last 10):\n"));
+            let table_start = Instant::now();
             let mut closed_table = Table::new(recent_closed);
             closed_table
                 .with(Style::rounded())
                 .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-            positions_output.push_str(&format!("{}\n\n", closed_table));
+            let table_str = format!("{}\n\n", closed_table);
+            positions_output.push_str(&table_str);
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "DEBUG",
+                    &format!(
+                        "[display_positions_table] Closed positions table built in {} ms (bytes: {})",
+                        table_start.elapsed().as_millis(),
+                        table_str.len()
+                    )
+                );
+            }
         }
     }
 
@@ -586,60 +729,30 @@ pub async fn display_positions_table() {
         sorted_open.sort_by_key(|p| p.entry_time);
 
         let open_position_displays: Vec<_> = {
-            // Collect all mints that need prices
-            let mints: Vec<String> = sorted_open
-                .iter()
-                .map(|position| position.mint.clone())
-                .collect();
-
             if is_debug_summary_enabled() {
-                log(
-                    LogTag::Summary,
-                    "DEBUG",
-                    &format!("Fetching current prices for {} tokens", mints.len())
-                );
-            }
-
-            // Fetch all prices in one batch call (much faster!) with timeout protection
-            let price_fetch_start = Instant::now();
-            let price_map = match tokio::time::timeout(
-                Duration::from_secs(4), 
-                crate::tokens::get_current_token_prices_batch(&mints)
-            ).await {
-                Ok(prices) => prices,
-                Err(_) => {
-                    log(LogTag::Summary, "WARN", "Token price batch fetch timeout - using empty map");
-                    std::collections::HashMap::new()
-                }
-            };
-
-            if is_debug_summary_enabled() {
-                let prices_found = price_map.values().filter(|p| p.is_some()).count();
                 log(
                     LogTag::Summary,
                     "DEBUG",
                     &format!(
-                        "Price fetching complete - Found prices for {}/{} tokens in {} ms",
-                        prices_found,
-                        mints.len(),
-                        price_fetch_start.elapsed().as_millis()
+                        "Using stored current_price from {} position objects",
+                        sorted_open.len()
                     )
                 );
             }
 
-            // Build displays with fetched prices
+            // Build displays using the current_price field stored in positions (no external fetch needed)
             let mut displays = Vec::new();
             let build_start = Instant::now();
             for position in &sorted_open {
-                let current_price = price_map.get(&position.mint).copied().flatten();
-                displays.push(OpenPositionDisplay::from_position(position, current_price));
+                // current_price is now read directly from position object inside from_position()
+                displays.push(OpenPositionDisplay::from_position(position, None));
             }
             if is_debug_summary_enabled() {
                 log(
                     LogTag::Summary,
                     "DEBUG",
                     &format!(
-                        "Built open positions display (n={}) in {} ms",
+                        "Built open positions display using stored prices (n={}) in {} ms",
                         displays.len(),
                         build_start.elapsed().as_millis()
                     )
@@ -649,11 +762,25 @@ pub async fn display_positions_table() {
         };
 
         positions_output.push_str(&format!("\n🔄 Open Positions ({}):\n", open_positions.len()));
+        let open_table_start = Instant::now();
         let mut open_table = Table::new(open_position_displays);
         open_table
             .with(Style::rounded())
             .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-        positions_output.push_str(&format!("{}\n\n", open_table));
+        let table_str = format!("{}\n\n", open_table);
+        positions_output.push_str(&table_str);
+
+        if is_debug_summary_enabled() {
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                &format!(
+                    "[display_positions_table] Open positions table built in {} ms (bytes: {})",
+                    open_table_start.elapsed().as_millis(),
+                    table_str.len()
+                )
+            );
+        }
 
         if is_debug_summary_enabled() && !is_dashboard_enabled() {
             log(LogTag::Summary, "DEBUG", "Open positions table built");
@@ -661,6 +788,16 @@ pub async fn display_positions_table() {
     }
 
     // Display everything in one shot
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[display_positions_table] Final aggregated output size: {} bytes",
+                positions_output.len()
+            )
+        );
+    }
     if is_summary_enabled() && !is_dashboard_enabled() {
         print!("{}", positions_output);
     }
@@ -691,7 +828,10 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         log(
             LogTag::Summary,
             "DEBUG",
-            &format!("Starting bot summary generation with {} closed positions", closed_positions.len())
+            &format!(
+                "Starting bot summary generation with {} closed positions",
+                closed_positions.len()
+            )
         );
     }
 
@@ -699,15 +839,14 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     let open_count = get_open_positions_count().await;
 
     if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            &format!("Found {} open positions for summary", open_count)
-        );
+        log(LogTag::Summary, "DEBUG", &format!("Found {} open positions for summary", open_count));
     }
 
     // Calculate comprehensive trading statistics
     let stats_start = Instant::now();
+    if is_debug_summary_enabled() {
+        log(LogTag::Summary, "DEBUG", "[build_bot_summary] Computing trading statistics");
+    }
     let total_trades = closed_positions.len();
     let profitable_trades = closed_positions
         .iter()
@@ -781,21 +920,17 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         log(
             LogTag::Summary,
             "DEBUG",
-            &format!("Computed P&L stats in {} ms", stats_start.elapsed().as_millis())
+            &format!(
+                "[build_bot_summary] Trading statistics computed in {} ms",
+                stats_start.elapsed().as_millis()
+            )
         );
     }
 
-    // Get wallet balance from wallet tracker
+    // Get wallet balance from cached source (30 second cache)
     let wallet_start = Instant::now();
     if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            &format!(
-                "Fetched wallet summary in {} ms",
-                wallet_start.elapsed().as_millis()
-            )
-        );
+        log(LogTag::Summary, "DEBUG", "[build_bot_summary] Fetching wallet balance");
     }
 
     if is_debug_summary_enabled() {
@@ -812,15 +947,18 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         );
     }
 
-    // Calculate wallet balance
-    let wallet_balance = if let Ok(wallet_pubkey) = crate::utils::get_wallet_address() {
-        match crate::utils::get_sol_balance(&wallet_pubkey).await {
-            Ok(balance) => format!("{:.6} SOL", balance),
-            Err(_) => "Error".to_string(),
-        }
-    } else {
-        "N/A".to_string()
-    };
+    // Calculate wallet balance using cached method (30-second cache)
+    let wallet_balance = get_cached_wallet_balance().await;
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_bot_summary] Wallet balance stage complete in {} ms",
+                wallet_start.elapsed().as_millis()
+            )
+        );
+    }
 
     // Calculate bot uptime
     let uptime = format_duration_compact(*STARTUP_TIME, Utc::now());
@@ -866,40 +1004,129 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     // Get pool service statistics with timeout protection
     let pool_service = get_pool_service();
     let pool_stats_start = Instant::now();
-    
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            "[build_bot_summary] Fetching pool service stats (cache, enhanced, disk)"
+        );
+    }
+
     // Add timeout protection for pool service calls
-    let (pool_cache_count, price_cache_count, _availability_cache_count) = 
-        match tokio::time::timeout(Duration::from_secs(3), pool_service.get_cache_stats()).await {
-            Ok(stats) => stats,
-            Err(_) => {
-                log(LogTag::Summary, "WARN", "Pool cache stats timeout - using default");
-                (0, 0, 0)
+    let cache_stats_start = Instant::now();
+    if is_debug_summary_enabled() {
+        log(LogTag::Summary, "DEBUG", "[build_bot_summary] Starting pool service cache stats call");
+    }
+    let (pool_cache_count, price_cache_count, _availability_cache_count) = match
+        tokio::time::timeout(Duration::from_secs(3), pool_service.get_cache_stats()).await
+    {
+        Ok(stats) => {
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "DEBUG",
+                    &format!(
+                        "[build_bot_summary] Pool cache stats obtained in {} ms",
+                        cache_stats_start.elapsed().as_millis()
+                    )
+                );
             }
-        };
-    
-    let enhanced_stats = match tokio::time::timeout(Duration::from_secs(3), pool_service.get_enhanced_stats()).await {
-        Ok(stats) => stats,
+            stats
+        }
         Err(_) => {
-            log(LogTag::Summary, "WARN", "Enhanced pool stats timeout - using default");
+            log(
+                LogTag::Summary,
+                "WARN",
+                &format!(
+                    "[build_bot_summary] Pool cache stats timeout after {} ms - using default",
+                    cache_stats_start.elapsed().as_millis()
+                )
+            );
+            (0, 0, 0)
+        }
+    };
+
+    let enhanced_stats_start = Instant::now();
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            "[build_bot_summary] Starting pool service enhanced stats call"
+        );
+    }
+    let enhanced_stats = match
+        tokio::time::timeout(Duration::from_secs(3), pool_service.get_enhanced_stats()).await
+    {
+        Ok(stats) => {
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "DEBUG",
+                    &format!(
+                        "[build_bot_summary] Pool enhanced stats obtained in {} ms",
+                        enhanced_stats_start.elapsed().as_millis()
+                    )
+                );
+            }
+            stats
+        }
+        Err(_) => {
+            log(
+                LogTag::Summary,
+                "WARN",
+                &format!(
+                    "[build_bot_summary] Pool enhanced stats timeout after {} ms - using default",
+                    enhanced_stats_start.elapsed().as_millis()
+                )
+            );
             crate::tokens::pool::PoolServiceStats::default()
         }
     };
-    
+
     // Get detailed disk cache statistics with timeout
-    let disk_cache_stats = match tokio::time::timeout(Duration::from_secs(2), pool_service.get_disk_cache_stats()).await {
-        Ok(Ok(stats)) => stats,
+    let disk_cache_start = Instant::now();
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            "[build_bot_summary] Starting pool service disk cache stats call"
+        );
+    }
+    let disk_cache_stats = match
+        tokio::time::timeout(Duration::from_secs(2), pool_service.get_disk_cache_stats()).await
+    {
+        Ok(Ok(stats)) => {
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "DEBUG",
+                    &format!(
+                        "[build_bot_summary] Pool disk cache stats obtained in {} ms",
+                        disk_cache_start.elapsed().as_millis()
+                    )
+                );
+            }
+            stats
+        }
         _ => {
-            log(LogTag::Summary, "WARN", "Disk cache stats timeout - using default");
+            log(
+                LogTag::Summary,
+                "WARN",
+                &format!(
+                    "[build_bot_summary] Pool disk cache stats timeout after {} ms - using default",
+                    disk_cache_start.elapsed().as_millis()
+                )
+            );
             crate::tokens::pool::PoolDiskCacheStats::default()
         }
     };
-    
+
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "Fetched pool service stats in {} ms",
+                "[build_bot_summary] Pool service stats fetched in {} ms",
                 pool_stats_start.elapsed().as_millis()
             )
         );
@@ -911,10 +1138,18 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         cycles: format!("{}", enhanced_stats.monitoring_cycles),
         avg_per_chunk: if enhanced_stats.monitoring_cycles > 0 {
             format!("{:.1}", enhanced_stats.avg_tokens_per_cycle)
-        } else { "N/A".to_string() },
+        } else {
+            "N/A".to_string()
+        },
         last_avg_ms: if enhanced_stats.monitoring_cycles > 0 {
-            format!("{:.0}/{:.0}", enhanced_stats.last_cycle_duration_ms, enhanced_stats.avg_cycle_duration_ms)
-        } else { "-".to_string() },
+            format!(
+                "{:.0}/{:.0}",
+                enhanced_stats.last_cycle_duration_ms,
+                enhanced_stats.avg_cycle_duration_ms
+            )
+        } else {
+            "-".to_string()
+        },
         total_requests: format!("{}", enhanced_stats.total_price_requests),
         success_rate: if enhanced_stats.total_price_requests > 0 {
             format!("{:.1}%", enhanced_stats.get_success_rate())
@@ -928,7 +1163,12 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         },
         blockchain_calcs: format!("{}", enhanced_stats.blockchain_calculations),
         memory_history: format!("{} tokens", enhanced_stats.tokens_with_price_history),
-        watch_snapshot: format!("{}/{}/{}", enhanced_stats.watch_total, enhanced_stats.watch_expired, enhanced_stats.watch_never_checked),
+        watch_snapshot: format!(
+            "{}/{}/{}",
+            enhanced_stats.watch_total,
+            enhanced_stats.watch_expired,
+            enhanced_stats.watch_never_checked
+        ),
     };
 
     // Build disk cache display
@@ -942,7 +1182,12 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         } else {
             "0 MB".to_string()
         },
-        data_range: if let (Some(oldest), Some(newest)) = (disk_cache_stats.oldest_entry, disk_cache_stats.newest_entry) {
+        data_range: if
+            let (Some(oldest), Some(newest)) = (
+                disk_cache_stats.oldest_entry,
+                disk_cache_stats.newest_entry,
+            )
+        {
             let duration = newest.signed_duration_since(oldest);
             if duration.num_hours() > 0 {
                 format!("{}h ago", duration.num_hours())
@@ -955,9 +1200,11 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
             "No data".to_string()
         },
         avg_per_token: if disk_cache_stats.total_tokens > 0 {
-            format!("{:.1} pools, {:.0} entries", 
+            format!(
+                "{:.1} pools, {:.0} entries",
                 disk_cache_stats.get_avg_pools_per_token(),
-                disk_cache_stats.get_avg_entries_per_token())
+                disk_cache_stats.get_avg_entries_per_token()
+            )
         } else {
             "N/A".to_string()
         },
@@ -965,18 +1212,35 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
 
     // Build all table strings first, then display in one shot
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "Building bot overview tables");
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            "[build_bot_summary] Starting static tables build (overview, stats, performance, ATA, pool, disk)"
+        );
     }
+    let tables_build_start = Instant::now();
 
     let mut summary_output = String::new();
 
     // Build Bot Overview table
+    let overview_start = Instant::now();
     summary_output.push_str("\n📊 Bot Overview\n");
     let mut overview_table = Table::new(vec![overview]);
     overview_table
         .with(Style::rounded())
         .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     summary_output.push_str(&format!("{}\n", overview_table));
+
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_bot_summary] Overview table built in {} ms",
+                overview_start.elapsed().as_millis()
+            )
+        );
+    }
 
     // Build Trading Statistics table
     summary_output.push_str("\n📈 Trading Statistics\n");
@@ -1007,7 +1271,9 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     // Build Pool Disk Cache Statistics table
     summary_output.push_str("\n💾 Pool Disk Cache Statistics\n");
     let mut disk_cache_table = Table::new(vec![disk_cache_display]);
-    disk_cache_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    disk_cache_table
+        .with(Style::rounded())
+        .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     summary_output.push_str(&format!("{}\n", disk_cache_table));
 
     // Build Recent Swaps table (last 20)
@@ -1015,6 +1281,9 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         log(LogTag::Summary, "DEBUG", "Fetching recent swaps for summary");
     }
     let swaps_start = Instant::now();
+    if is_debug_summary_enabled() {
+        log(LogTag::Summary, "DEBUG", "[build_bot_summary] Starting recent swaps table build");
+    }
     match build_recent_swaps_table().await {
         Ok(swaps_table) => {
             summary_output.push_str(&swaps_table);
@@ -1023,35 +1292,68 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                     LogTag::Summary,
                     "DEBUG",
                     &format!(
-                        "Recent swaps table built in {} ms",
-                        swaps_start.elapsed().as_millis()
+                        "[build_bot_summary] Recent swaps table built successfully in {} ms (bytes: {})",
+                        swaps_start.elapsed().as_millis(),
+                        swaps_table.len()
                     )
                 );
             }
         }
         Err(e) => {
             if is_debug_summary_enabled() {
-                log(LogTag::Summary, "DEBUG", &format!("Failed to build recent swaps table: {}", e));
+                log(
+                    LogTag::Summary,
+                    "DEBUG",
+                    &format!(
+                        "[build_bot_summary] Failed to build recent swaps table in {} ms: {}",
+                        swaps_start.elapsed().as_millis(),
+                        e
+                    )
+                );
             }
         }
     }
 
     // Build Recent Transactions table (last 20)
+    let tx_stage_start = Instant::now();
     match build_recent_transactions_table().await {
         Ok(tx_table) => {
             summary_output.push_str(&tx_table);
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "DEBUG",
+                    &format!(
+                        "[build_bot_summary] Recent transactions table built in {} ms",
+                        tx_stage_start.elapsed().as_millis()
+                    )
+                );
+            }
         }
         Err(e) => {
-            log(LogTag::Summary, "WARN", &format!("Failed to build recent transactions table: {}", e));
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "DEBUG",
+                    &format!(
+                        "[build_bot_summary] Failed to build recent transactions table in {} ms: {}",
+                        tx_stage_start.elapsed().as_millis(),
+                        e
+                    )
+                );
+            }
         }
     }
 
-    
-
     // Build RPC statistics tables if available
+    let rpc_stage_start = Instant::now();
     if let Some(rpc_stats) = get_global_rpc_stats() {
         if is_debug_summary_enabled() {
-            log(LogTag::Summary, "DEBUG", "Building RPC statistics tables");
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                "[build_bot_summary] Starting RPC statistics tables build"
+            );
         }
         let rpc_start = Instant::now();
         let rpc_tables = build_rpc_statistics_tables(&rpc_stats);
@@ -1061,13 +1363,21 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                 LogTag::Summary,
                 "DEBUG",
                 &format!(
-                    "RPC statistics tables built in {} ms",
-                    rpc_start.elapsed().as_millis()
+                    "[build_bot_summary] RPC statistics tables built in {} ms (bytes: {})",
+                    rpc_start.elapsed().as_millis(),
+                    rpc_tables.len()
+                )
+            );
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                &format!(
+                    "[build_bot_summary] RPC total stage elapsed {} ms",
+                    rpc_stage_start.elapsed().as_millis()
                 )
             );
         }
     }
-
 
     // Build frozen account cooldowns if any exist
     let active_cooldowns = crate::positions::get_active_frozen_cooldowns().await;
@@ -1075,13 +1385,23 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         summary_output.push_str("\n❄️ Frozen Account Cooldowns\n");
         for (mint, remaining_minutes) in active_cooldowns {
             let short_mint = format!("{}...", &mint[..8]);
-            summary_output.push_str(&format!("  {} - {} minutes remaining\n", short_mint, remaining_minutes));
+            summary_output.push_str(
+                &format!("  {} - {} minutes remaining\n", short_mint, remaining_minutes)
+            );
         }
     }
 
     summary_output.push_str("\n");
 
     if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_bot_summary] Table construction portion took {} ms",
+                tables_build_start.elapsed().as_millis()
+            )
+        );
         log(
             LogTag::Summary,
             "DEBUG",
@@ -1101,6 +1421,7 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     if is_summary_enabled() && !is_dashboard_enabled() {
         print!("{}", summary);
     }
+    // Note: logging is already handled in build_bot_summary
 }
 
 /// Convenience function to display bot summary using current positions (backwards compatibility)
@@ -1109,14 +1430,19 @@ pub async fn display_current_bot_summary() {
     if is_summary_enabled() && !is_dashboard_enabled() {
         print!("{}", summary);
     }
+    // Note: logging is already handled in build_current_bot_summary -> build_bot_summary
 }
-
 
 /// Display RPC usage statistics (backwards compatibility)
 pub fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
     let rpc_tables = build_rpc_statistics_tables(rpc_stats);
     if is_summary_enabled() && !is_dashboard_enabled() {
         print!("{}", rpc_tables);
+    }
+
+    // Write to log file if debug-summary-logging is enabled
+    if is_debug_summary_logging_enabled() {
+        log(LogTag::Summary, "RPC_STATS", &rpc_tables.replace('\n', " | "));
     }
 }
 
@@ -1152,78 +1478,245 @@ fn calculate_win_loss_streaks(pnl_values: &[f64]) -> (usize, usize) {
 
 /// Build recent swaps table and return as string
 async fn build_recent_swaps_table() -> Result<String, String> {
-    let wallet_address_str = get_wallet_address()
-        .map_err(|e| format!("Failed to get wallet address: {}", e))?;
-    let wallet_pubkey = solana_sdk::pubkey::Pubkey::from_str(&wallet_address_str)
+    let start_time = Instant::now();
+    if is_debug_summary_enabled() {
+        log(LogTag::Summary, "DEBUG", "[build_recent_swaps_table] Starting wallet address fetch");
+    }
+
+    let wallet_address_str = get_wallet_address().map_err(|e|
+        format!("Failed to get wallet address: {}", e)
+    )?;
+    let wallet_pubkey = solana_sdk::pubkey::Pubkey
+        ::from_str(&wallet_address_str)
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
+
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_recent_swaps_table] Creating TransactionsManager in {} ms",
+                start_time.elapsed().as_millis()
+            )
+        );
+    }
+    let manager_start = Instant::now();
     let mut manager = TransactionsManager::new(wallet_pubkey).await?;
-    
+
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_recent_swaps_table] TransactionsManager created in {} ms, fetching swaps",
+                manager_start.elapsed().as_millis()
+            )
+        );
+    }
+
     // Get last 20 swaps (already sorted newest-first by manager)
+    let swaps_fetch_start = Instant::now();
     let swaps = manager.get_all_swap_transactions_limited(Some(20)).await?;
-    
+
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_recent_swaps_table] Fetched {} swaps in {} ms",
+                swaps.len(),
+                swaps_fetch_start.elapsed().as_millis()
+            )
+        );
+    }
+
     if swaps.is_empty() {
         return Ok("\n📈 Recent Swaps (Last 20)\nNo swaps found\n\n".to_string());
     }
 
+    let conversion_start = Instant::now();
     let recent_swaps: Vec<RecentSwapDisplay> = swaps
         .into_iter()
         .map(|swap| RecentSwapDisplay::from_swap_pnl_info(&swap))
         .collect();
 
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_recent_swaps_table] Converted {} swaps to display format in {} ms",
+                recent_swaps.len(),
+                conversion_start.elapsed().as_millis()
+            )
+        );
+    }
+
+    let table_start = Instant::now();
     let mut output = String::new();
     output.push_str("\n📈 Recent Swaps (Last 20)\n");
     let mut swaps_table = Table::new(recent_swaps);
-    swaps_table
-        .with(Style::rounded())
-        .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    swaps_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     output.push_str(&format!("{}\n", swaps_table));
-    
+
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_recent_swaps_table] Table built in {} ms, total function time: {} ms",
+                table_start.elapsed().as_millis(),
+                start_time.elapsed().as_millis()
+            )
+        );
+    }
+
     Ok(output)
 }
 
 /// Build recent transactions table (last 20 by time) and return as string
 async fn build_recent_transactions_table() -> Result<String, String> {
-    let wallet_address_str = get_wallet_address()
-        .map_err(|e| format!("Failed to get wallet address: {}", e))?;
-    let wallet_pubkey = solana_sdk::pubkey::Pubkey::from_str(&wallet_address_str)
+    let start_time = Instant::now();
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            "[build_recent_transactions_table] Starting wallet address fetch"
+        );
+    }
+
+    let wallet_address_str = get_wallet_address().map_err(|e|
+        format!("Failed to get wallet address: {}", e)
+    )?;
+    let wallet_pubkey = solana_sdk::pubkey::Pubkey
+        ::from_str(&wallet_address_str)
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
+
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_recent_transactions_table] Creating TransactionsManager in {} ms",
+                start_time.elapsed().as_millis()
+            )
+        );
+    }
+    let manager_start = Instant::now();
     let mut manager = TransactionsManager::new(wallet_pubkey).await?;
 
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_recent_transactions_table] TransactionsManager created in {} ms, fetching transactions",
+                manager_start.elapsed().as_millis()
+            )
+        );
+    }
+
     // Pull a smaller window to reduce processing - get 25 and take best 20
+    let txs_fetch_start = Instant::now();
     let mut txs = manager
-        .get_recent_transactions(25)
-        .await
+        .get_recent_transactions(25).await
         .map_err(|e| format!("Failed to get recent transactions: {}", e))?;
 
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_recent_transactions_table] Fetched {} transactions in {} ms",
+                txs.len(),
+                txs_fetch_start.elapsed().as_millis()
+            )
+        );
+    }
+
     // Since get_recent_transactions already does hydration, only recalc if really needed
+    let recalc_start = Instant::now();
+    let mut recalc_count = 0;
     for tx in &mut txs {
         // Only recalc if hydration failed AND transaction is finalized (worth the cost)
-        if matches!(tx.transaction_type, crate::transactions::TransactionType::Unknown) && 
-           matches!(tx.status, crate::transactions::TransactionStatus::Finalized) {
+        if
+            matches!(tx.transaction_type, crate::transactions::TransactionType::Unknown) &&
+            matches!(tx.status, crate::transactions::TransactionStatus::Finalized)
+        {
             let _ = manager.recalculate_transaction_analysis(tx).await;
+            recalc_count += 1;
         }
     }
 
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_recent_transactions_table] Recalculated {} transactions in {} ms",
+                recalc_count,
+                recalc_start.elapsed().as_millis()
+            )
+        );
+    }
+
     // Sort by timestamp desc and take last 20
+    let sort_start = Instant::now();
     txs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
     txs.truncate(20);
+
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_recent_transactions_table] Sorted and truncated to {} transactions in {} ms",
+                txs.len(),
+                sort_start.elapsed().as_millis()
+            )
+        );
+    }
 
     if txs.is_empty() {
         return Ok("\n🧾 Recent Transactions (Last 20)\nNo transactions found\n\n".to_string());
     }
 
+    let conversion_start = Instant::now();
     let rows: Vec<RecentTransactionDisplay> = txs
         .into_iter()
         .map(RecentTransactionDisplay::from_transaction)
         .collect();
 
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_recent_transactions_table] Converted {} transactions to display format in {} ms",
+                rows.len(),
+                conversion_start.elapsed().as_millis()
+            )
+        );
+    }
+
+    let table_start = Instant::now();
     let mut output = String::new();
     output.push_str("\n🧾 Recent Transactions (Last 20)\n");
     let mut table = Table::new(rows);
-    table
-        .with(Style::rounded())
-        .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     output.push_str(&format!("{}\n", table));
+
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "[build_recent_transactions_table] Table built in {} ms, total function time: {} ms",
+                table_start.elapsed().as_millis(),
+                start_time.elapsed().as_millis()
+            )
+        );
+    }
 
     Ok(output)
 }
@@ -1329,7 +1822,6 @@ fn build_rpc_statistics_tables(rpc_stats: &crate::rpc::RpcStats) -> String {
     output
 }
 
-
 /// Calculate maximum drawdown percentage
 fn calculate_max_drawdown(pnl_values: &[f64]) -> f64 {
     if pnl_values.is_empty() {
@@ -1343,7 +1835,7 @@ fn calculate_max_drawdown(pnl_values: &[f64]) -> f64 {
         if value > peak {
             peak = value;
         }
-        let drawdown = (peak - value) / peak.abs().max(1.0) * 100.0;
+        let drawdown = ((peak - value) / peak.abs().max(1.0)) * 100.0;
         if drawdown > max_drawdown {
             max_drawdown = drawdown;
         }
@@ -1356,10 +1848,10 @@ impl ClosedPositionDisplay {
     pub fn from_position(position: &Position) -> Self {
         // Check if position is fully verified (both entry and exit must be verified for closed positions)
         let is_verified = position.transaction_entry_verified && position.transaction_exit_verified;
-        
+
         // Calculate total fees for the position including profit buffer for display
         let total_fees = calculate_position_total_fees(position) + PROFIT_EXTRA_NEEDED_SOL;
-        
+
         if !is_verified {
             // For unverified positions, hide sensitive data
             let duration = if let Some(exit_time) = position.exit_time {
@@ -1429,13 +1921,15 @@ impl ClosedPositionDisplay {
 }
 
 impl OpenPositionDisplay {
-    pub fn from_position(position: &Position, current_price: Option<f64>) -> Self {
+    pub fn from_position(position: &Position, _current_price: Option<f64>) -> Self {
+        // Use the stored current_price from position object (updated by monitor_open_positions)
+        let current_price = position.current_price;
         // Check if position entry is verified (for open positions, only entry needs to be verified)
         let is_verified = position.transaction_entry_verified;
-        
+
         // Calculate total fees for the position including profit buffer for display (for open positions, only entry fees + manual adjustment)
         let total_fees = calculate_position_total_fees(position) + PROFIT_EXTRA_NEEDED_SOL;
-        
+
         let duration = format_duration_compact(position.entry_time, Utc::now());
 
         if !is_verified {
@@ -1517,7 +2011,7 @@ impl RecentSwapDisplay {
             if signature.len() <= 16 {
                 signature.to_string()
             } else {
-                format!("{}...{}", &signature[..8], &signature[signature.len()-4..])
+                format!("{}...{}", &signature[..8], &signature[signature.len() - 4..])
             }
         };
 
@@ -1528,13 +2022,13 @@ impl RecentSwapDisplay {
             // Buy: SOL spent (negative), tokens received (positive)
             (-swap.sol_amount, swap.token_amount.abs())
         } else {
-            // Sell: SOL received (positive), tokens sold (negative)  
+            // Sell: SOL received (positive), tokens sold (negative)
             (swap.sol_amount, -swap.token_amount.abs())
         };
 
         // Color coding for better readability
         let type_display = if swap.swap_type == "Buy" {
-            "🟢 Buy".to_string()  // Green for buy
+            "🟢 Buy".to_string() // Green for buy
         } else {
             "🔴 Sell".to_string() // Red for sell
         };
@@ -1559,11 +2053,11 @@ impl RecentSwapDisplay {
             ago: format!("{} ago", format_duration_compact(swap.timestamp, Utc::now())),
             signature: shortened_signature,
             swap_type: type_display,
-            token: swap.token_symbol[..15.min(swap.token_symbol.len())].to_string(),
+            token: swap.token_symbol[..(15).min(swap.token_symbol.len())].to_string(),
             sol_amount: sol_formatted,
             token_amount: token_formatted,
             price: format!("{:.9}", swap.calculated_price_sol),
-            router: swap.router[..12.min(swap.router.len())].to_string(),
+            router: swap.router[..(12).min(swap.router.len())].to_string(),
             fee: format!("{:.6}", swap.fee_sol),
             status: swap.status.clone(),
         }
@@ -1576,16 +2070,18 @@ impl RecentTransactionDisplay {
         let signature = if tx.signature.len() <= 16 {
             tx.signature.clone()
         } else {
-            format!("{}...{}", &tx.signature[..8], &tx.signature[tx.signature.len()-4..])
+            format!("{}...{}", &tx.signature[..8], &tx.signature[tx.signature.len() - 4..])
         };
 
         // Type string
         let tx_type = match &tx.transaction_type {
             crate::transactions::TransactionType::SwapSolToToken { .. } => "Buy".to_string(),
             crate::transactions::TransactionType::SwapTokenToSol { .. } => "Sell".to_string(),
-            crate::transactions::TransactionType::SwapTokenToToken { .. } => "Token→Token".to_string(),
+            crate::transactions::TransactionType::SwapTokenToToken { .. } =>
+                "Token→Token".to_string(),
             crate::transactions::TransactionType::SolTransfer { .. } => "SOL Transfer".to_string(),
-            crate::transactions::TransactionType::TokenTransfer { .. } => "Token Transfer".to_string(),
+            crate::transactions::TransactionType::TokenTransfer { .. } =>
+                "Token Transfer".to_string(),
             crate::transactions::TransactionType::AtaClose { .. } => "ATA Close".to_string(),
             crate::transactions::TransactionType::Other { .. } => "Other".to_string(),
             crate::transactions::TransactionType::Unknown => "Unknown".to_string(),

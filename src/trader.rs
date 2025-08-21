@@ -39,19 +39,19 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 6;
+pub const MAX_OPEN_POSITIONS: usize = 10;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
 
-pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00001;
+pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding
 // -----------------------------------------------------------------------------
 
 /// Minimum hold time before considering sell (seconds) - reduced for flexibility
-pub const MIN_POSITION_HOLD_TIME_SECS: f64 = 30.0;
+pub const MIN_POSITION_HOLD_TIME_SECS: f64 = 45.0;
 
 /// Maximum hold time cap for open positions (reduced to 45 minutes for risk control)
 pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 45.0 * 60.0; // 45 minutes (2700 seconds)

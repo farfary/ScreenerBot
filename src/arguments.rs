@@ -1,8 +1,8 @@
 /// Centralized argument handling system for ScreenerBot
-/// 
+///
 /// This module consolidates all command-line argument parsing and debug flag checking
 /// functionality that was previously scattered across global.rs and binary files.
-/// 
+///
 /// Features:
 /// - Centralized CMD_ARGS storage with thread-safe access
 /// - Debug flag checking functions for all modules
@@ -15,9 +15,7 @@ use std::env;
 
 /// Global command-line arguments storage
 /// Thread-safe singleton that stores arguments for access throughout the application
-pub static CMD_ARGS: Lazy<Mutex<Vec<String>>> = Lazy::new(|| { 
-    Mutex::new(env::args().collect()) 
-});
+pub static CMD_ARGS: Lazy<Mutex<Vec<String>>> = Lazy::new(|| { Mutex::new(env::args().collect()) });
 
 /// Sets the global command-line arguments
 /// Used by binaries and tests to override the default env::args() collection
@@ -41,7 +39,9 @@ pub fn get_cmd_args() -> Vec<String> {
 
 /// Checks if a specific argument is present in the command line
 pub fn has_arg(arg: &str) -> bool {
-    get_cmd_args().iter().any(|a| a == arg)
+    get_cmd_args()
+        .iter()
+        .any(|a| a == arg)
 }
 
 /// Gets the value of a command-line argument that follows a flag
@@ -136,6 +136,11 @@ pub fn is_debug_summary_enabled() -> bool {
     has_arg("--debug-summary")
 }
 
+/// Summary logging debug mode - writes summary tables to log file
+pub fn is_debug_summary_logging_enabled() -> bool {
+    has_arg("--debug-summary-logging")
+}
+
 /// Transactions module debug mode
 pub fn is_debug_transactions_enabled() -> bool {
     has_arg("--debug-transactions")
@@ -166,7 +171,9 @@ pub fn get_max_exit_retries() -> u32 {
     let args = get_cmd_args();
     for i in 0..args.len() {
         if args[i] == "--max-exit-retries" && i + 1 < args.len() {
-            if let Ok(v) = args[i + 1].parse::<u32>() { return v.clamp(1, 10); }
+            if let Ok(v) = args[i + 1].parse::<u32>() {
+                return v.clamp(1, 10);
+            }
         }
     }
     3
@@ -222,6 +229,7 @@ pub fn print_help() {
     println!("    --debug-rpc               RPC operations debug mode");
     println!("    --debug-rugcheck          Rugcheck module debug mode");
     println!("    --debug-summary           Summary module debug mode");
+    println!("    --debug-summary-logging   Write summary tables to log file");
     println!("    --debug-swaps             Swap operations debug mode");
     println!("    --debug-trader            Trader module debug mode");
     println!("    --debug-transactions      Transactions module debug mode");
@@ -245,52 +253,98 @@ pub fn print_help() {
 /// Checks if any debug mode is enabled
 pub fn is_any_debug_enabled() -> bool {
     is_debug_filtering_enabled() ||
-    is_debug_profit_enabled() ||
-    is_debug_pool_prices_enabled() ||
-    is_debug_trader_enabled() ||
-    is_debug_api_enabled() ||
-    is_debug_monitor_enabled() ||
-    is_debug_discovery_enabled() ||
-    is_debug_price_service_enabled() ||
-    is_debug_rugcheck_enabled() ||
-    is_debug_entry_enabled() ||
-    is_debug_ohlcv_enabled() ||
-    is_debug_wallet_enabled() ||
-    is_debug_swaps_enabled() ||
-    is_debug_decimals_enabled() ||
-    is_debug_summary_enabled() ||
-    is_debug_transactions_enabled() ||
-    is_debug_rpc_enabled() ||
-    is_debug_positions_enabled() ||
-    is_debug_ata_enabled()
+        is_debug_profit_enabled() ||
+        is_debug_pool_prices_enabled() ||
+        is_debug_trader_enabled() ||
+        is_debug_api_enabled() ||
+        is_debug_monitor_enabled() ||
+        is_debug_discovery_enabled() ||
+        is_debug_price_service_enabled() ||
+        is_debug_rugcheck_enabled() ||
+        is_debug_entry_enabled() ||
+        is_debug_ohlcv_enabled() ||
+        is_debug_wallet_enabled() ||
+        is_debug_swaps_enabled() ||
+        is_debug_decimals_enabled() ||
+        is_debug_summary_enabled() ||
+        is_debug_summary_logging_enabled() ||
+        is_debug_transactions_enabled() ||
+        is_debug_rpc_enabled() ||
+        is_debug_positions_enabled() ||
+        is_debug_ata_enabled()
 }
 
 /// Gets a list of all enabled debug modes
 pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     let mut modes = Vec::new();
-    
-    if is_debug_filtering_enabled() { modes.push("filtering"); }
-    if is_debug_profit_enabled() { modes.push("profit"); }
-    if is_debug_pool_prices_enabled() { modes.push("pool-prices"); }
-    if is_debug_trader_enabled() { modes.push("trader"); }
-    if is_debug_api_enabled() { modes.push("api"); }
-    if is_debug_monitor_enabled() { modes.push("monitor"); }
-    if is_debug_discovery_enabled() { modes.push("discovery"); }
-    if is_debug_price_service_enabled() { modes.push("price-service"); }
-    if is_debug_rugcheck_enabled() { modes.push("rugcheck"); }
-    if is_debug_entry_enabled() { modes.push("entry"); }
-    if is_debug_ohlcv_enabled() { modes.push("ohlcv"); }
-    if is_debug_wallet_enabled() { modes.push("wallet"); }
-    if is_debug_swaps_enabled() { modes.push("swaps"); }
-    if is_debug_decimals_enabled() { modes.push("decimals"); }
-    if is_debug_summary_enabled() { modes.push("summary"); }
-    if is_debug_transactions_enabled() { modes.push("transactions"); }
-    if is_debug_rpc_enabled() { modes.push("rpc"); }
-    if is_debug_positions_enabled() { modes.push("positions"); }
-    if is_dry_run_enabled() { modes.push("dry-run"); }
-    if is_summary_enabled() { modes.push("summary"); }
-    if is_dashboard_enabled() { modes.push("dashboard"); }
-    
+
+    if is_debug_filtering_enabled() {
+        modes.push("filtering");
+    }
+    if is_debug_profit_enabled() {
+        modes.push("profit");
+    }
+    if is_debug_pool_prices_enabled() {
+        modes.push("pool-prices");
+    }
+    if is_debug_trader_enabled() {
+        modes.push("trader");
+    }
+    if is_debug_api_enabled() {
+        modes.push("api");
+    }
+    if is_debug_monitor_enabled() {
+        modes.push("monitor");
+    }
+    if is_debug_discovery_enabled() {
+        modes.push("discovery");
+    }
+    if is_debug_price_service_enabled() {
+        modes.push("price-service");
+    }
+    if is_debug_rugcheck_enabled() {
+        modes.push("rugcheck");
+    }
+    if is_debug_entry_enabled() {
+        modes.push("entry");
+    }
+    if is_debug_ohlcv_enabled() {
+        modes.push("ohlcv");
+    }
+    if is_debug_wallet_enabled() {
+        modes.push("wallet");
+    }
+    if is_debug_swaps_enabled() {
+        modes.push("swaps");
+    }
+    if is_debug_decimals_enabled() {
+        modes.push("decimals");
+    }
+    if is_debug_summary_enabled() {
+        modes.push("summary");
+    }
+    if is_debug_summary_logging_enabled() {
+        modes.push("summary-logging");
+    }
+    if is_debug_transactions_enabled() {
+        modes.push("transactions");
+    }
+    if is_debug_rpc_enabled() {
+        modes.push("rpc");
+    }
+    if is_debug_positions_enabled() {
+        modes.push("positions");
+    }
+    if is_dry_run_enabled() {
+        modes.push("dry-run");
+    }
+    if is_summary_enabled() {
+        modes.push("summary");
+    }
+    if is_dashboard_enabled() {
+        modes.push("dashboard");
+    }
+
     modes
 }
 
@@ -300,7 +354,7 @@ pub fn print_debug_info() {
     if !is_dashboard_enabled() {
         println!("Command-line arguments: {:?}", args);
     }
-    
+
     let enabled_modes = get_enabled_debug_modes();
     if !is_dashboard_enabled() {
         if enabled_modes.is_empty() {
@@ -318,38 +372,37 @@ pub fn print_debug_info() {
 /// Common argument parsing patterns used across binaries
 pub mod patterns {
     use super::*;
-    
+
     /// Checks for help flags
     pub fn is_help_requested() -> bool {
         has_arg("--help") || has_arg("-h")
     }
-    
+
     /// Checks for version flags
     pub fn is_version_requested() -> bool {
         has_arg("--version") || has_arg("-V")
     }
-    
+
     /// Gets duration argument (commonly used in monitoring tools)
     pub fn get_duration_seconds() -> Option<u64> {
-        get_arg_value("--duration")
-            .and_then(|s| s.parse().ok())
+        get_arg_value("--duration").and_then(|s| s.parse().ok())
     }
-    
+
     /// Gets mint address argument (commonly used in token tools)
     pub fn get_mint_address() -> Option<String> {
         get_arg_value("--mint")
     }
-    
+
     /// Gets symbol argument (commonly used in token tools)
     pub fn get_symbol() -> Option<String> {
         get_arg_value("--symbol")
     }
-    
+
     /// Checks for quiet/silent mode
     pub fn is_quiet_mode() -> bool {
         has_arg("--quiet") || has_arg("-q")
     }
-    
+
     /// Checks for verbose mode
     pub fn is_verbose_mode() -> bool {
         has_arg("--verbose") || has_arg("-v")
@@ -366,69 +419,71 @@ mod tests {
             "screenerbot".to_string(),
             "--debug-trader".to_string(),
             "--mint".to_string(),
-            "test_mint_address".to_string(),
+            "test_mint_address".to_string()
         ];
-        
+
         set_cmd_args(test_args.clone());
         let retrieved_args = get_cmd_args();
-        
+
         assert_eq!(retrieved_args, test_args);
     }
 
     #[test]
     fn test_has_arg() {
-        set_cmd_args(vec![
-            "screenerbot".to_string(),
-            "--debug-trader".to_string(),
-        ]);
-        
+        set_cmd_args(vec!["screenerbot".to_string(), "--debug-trader".to_string()]);
+
         assert!(has_arg("--debug-trader"));
         assert!(!has_arg("--debug-profit"));
     }
 
     #[test]
     fn test_get_arg_value() {
-        set_cmd_args(vec![
-            "screenerbot".to_string(),
-            "--mint".to_string(),
-            "test_mint_address".to_string(),
-        ]);
-        
+        set_cmd_args(
+            vec!["screenerbot".to_string(), "--mint".to_string(), "test_mint_address".to_string()]
+        );
+
         assert_eq!(get_arg_value("--mint"), Some("test_mint_address".to_string()));
         assert_eq!(get_arg_value("--symbol"), None);
     }
 
     #[test]
     fn test_debug_flags() {
-        set_cmd_args(vec![
-            "screenerbot".to_string(),
-            "--debug-trader".to_string(),
-            "--debug-profit".to_string(),
-            "--dry-run".to_string(),
-        ]);
-        
+        set_cmd_args(
+            vec![
+                "screenerbot".to_string(),
+                "--debug-trader".to_string(),
+                "--debug-profit".to_string(),
+                "--debug-summary-logging".to_string(),
+                "--dry-run".to_string()
+            ]
+        );
+
         assert!(is_debug_trader_enabled());
         assert!(is_debug_profit_enabled());
+        assert!(is_debug_summary_logging_enabled());
         assert!(!is_debug_filtering_enabled());
         assert!(is_dry_run_enabled());
         assert!(is_any_debug_enabled());
-        
+
         let enabled_modes = get_enabled_debug_modes();
         assert!(enabled_modes.contains(&"trader"));
         assert!(enabled_modes.contains(&"profit"));
+        assert!(enabled_modes.contains(&"summary-logging"));
         assert!(enabled_modes.contains(&"dry-run"));
         assert!(!enabled_modes.contains(&"filtering"));
     }
 
     #[test]
     fn test_patterns() {
-        set_cmd_args(vec![
-            "screenerbot".to_string(),
-            "--help".to_string(),
-            "--duration".to_string(),
-            "300".to_string(),
-        ]);
-        
+        set_cmd_args(
+            vec![
+                "screenerbot".to_string(),
+                "--help".to_string(),
+                "--duration".to_string(),
+                "300".to_string()
+            ]
+        );
+
         assert!(patterns::is_help_requested());
         assert_eq!(patterns::get_duration_seconds(), Some(300));
         assert!(!patterns::is_version_requested());

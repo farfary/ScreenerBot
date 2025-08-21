@@ -415,6 +415,9 @@ pub struct Position {
     // Actual transaction fees (in lamports)
     pub entry_fee_lamports: Option<u64>, // Actual entry transaction fee
     pub exit_fee_lamports: Option<u64>, // Actual exit transaction fee
+    // Current price tracking
+    pub current_price: Option<f64>, // Current market price (updated by monitoring system)
+    pub current_price_updated: Option<DateTime<Utc>>, // When current_price was last updated
     // Phantom position cleanup flag (temporary, not persisted)
     #[serde(skip)]
     pub phantom_remove: bool,
@@ -763,13 +766,26 @@ impl PositionsManager {
                         LogTag::Positions,
                         "DEBUG",
                         &format!(
-                            "📉 Received ClosePosition request for {} at price {}",
+                            "📉 Spawning background task for ClosePosition request for {} at price {}",
                             token.symbol,
                             exit_price
                         )
                     );
                 }
-                let _ = reply.send(self.close_position(&mint, &token, exit_price, exit_time).await);
+
+                // Spawn background task to prevent blocking the actor
+                let mint_clone = mint.clone();
+                let token_clone = token.clone();
+
+                tokio::spawn(async move {
+                    let result = execute_close_position_background(
+                        mint_clone,
+                        token_clone,
+                        exit_price,
+                        exit_time
+                    ).await;
+                    let _ = reply.send(result);
+                });
             }
             PositionsRequest::AddVerification { signature } => {
                 if is_debug_positions_enabled() {
@@ -1543,6 +1559,9 @@ impl PositionsManager {
         if current_price < position.price_lowest {
             position.price_lowest = current_price;
         }
+
+        // Update current price (always)
+        position.current_price = Some(current_price);
     }
 
     /// Open a new position
@@ -1862,6 +1881,8 @@ impl PositionsManager {
                     transaction_exit_verified: false,
                     entry_fee_lamports: None,
                     exit_fee_lamports: None,
+                    current_price: Some(price), // Initialize with entry price
+                    current_price_updated: Some(Utc::now()),
                     phantom_remove: false,
                 };
 
@@ -1951,17 +1972,19 @@ impl PositionsManager {
                     p.exit_transaction_signature.is_some() && !p.transaction_exit_verified;
                 let can_close = no_exit_sig || failed_exit;
 
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!(
-                        "🎯 Position check: mint_match={}, no_exit_sig={}, failed_exit={}, can_close={}",
-                        matches_mint,
-                        no_exit_sig,
-                        failed_exit,
-                        can_close
-                    )
-                );
+                if is_debug_positions_enabled() {
+                    log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!(
+                            "🎯 Position check: mint_match={}, no_exit_sig={}, failed_exit={}, can_close={}",
+                            matches_mint,
+                            no_exit_sig,
+                            failed_exit,
+                            can_close
+                        )
+                    );
+                }
 
                 matches_mint && can_close
             })
@@ -2494,6 +2517,23 @@ impl PositionsManager {
                         &format!("📉 New low for {}: {:.8} SOL", position.symbol, current_price)
                     );
                 }
+            }
+
+            // Update current price (always, regardless of high/low changes)
+            position.current_price = Some(current_price);
+
+            if is_debug_positions_enabled() {
+                log(
+                    LogTag::Positions,
+                    "TRACK",
+                    &format!(
+                        "📊 Updated current price for {}: {:.8} SOL (high: {:.8}, low: {:.8})",
+                        position.symbol,
+                        current_price,
+                        position.price_highest,
+                        position.price_lowest
+                    )
+                );
             }
 
             // in-memory only; no persistence
@@ -4204,6 +4244,359 @@ pub async fn close_position_global(
     } else {
         Err("PositionsManager not available".to_string())
     }
+}
+
+/// Background task execution for close position operations
+/// This prevents blocking the PositionsManager actor while processing expensive RPC operations
+pub async fn execute_close_position_background(
+    mint: String,
+    token: Token,
+    exit_price: f64,
+    exit_time: DateTime<Utc>
+) -> Result<(String, String), String> {
+    // Execute the close position logic without blocking the actor
+    // We'll use the existing global position management API to update positions
+
+    // Find the position to close by getting all open positions
+    let all_positions = get_open_positions().await;
+    let position_opt = all_positions
+        .iter()
+        .find(|pos| {
+            let matches_mint = pos.mint == mint;
+            let no_exit_sig = pos.exit_transaction_signature.is_none();
+            let failed_exit =
+                pos.exit_transaction_signature.is_some() && !pos.transaction_exit_verified;
+            let can_close = no_exit_sig || failed_exit;
+
+            if crate::arguments::is_debug_positions_enabled() {
+                log(
+                    LogTag::Positions,
+                    "DEBUG",
+                    &format!(
+                        "🎯 Position check: mint_match={}, no_exit_sig={}, failed_exit={}, can_close={}",
+                        matches_mint,
+                        no_exit_sig,
+                        failed_exit,
+                        can_close
+                    )
+                );
+            }
+
+            matches_mint && can_close
+        })
+        .cloned();
+
+    let mut position = match position_opt {
+        Some(pos) => {
+            // Handle retry case
+            if pos.exit_transaction_signature.is_some() && !pos.transaction_exit_verified {
+                log(
+                    LogTag::Positions,
+                    "RETRY_EXIT",
+                    &format!(
+                        "🔄 Previous exit transaction failed for {} - will clear failed exit data",
+                        pos.symbol
+                    )
+                );
+                // Note: We can't modify the position directly here since we're not in the actor
+                // The retry logic will be handled in the swap execution
+            }
+            pos
+        }
+        None => {
+            return Err("Position not found or already closed".to_string());
+        }
+    };
+
+    // DRY-RUN MODE CHECK
+    if crate::arguments::is_dry_run_enabled() {
+        log(
+            LogTag::Positions,
+            "DRY-RUN",
+            &format!(
+                "🚫 DRY-RUN: Would close position for {} at {:.6} SOL",
+                position.symbol,
+                exit_price
+            )
+        );
+        return Err("DRY-RUN: Position would be closed".to_string());
+    }
+
+    // Check wallet balance
+    let wallet_address = match crate::utils::get_wallet_address() {
+        Ok(addr) => addr,
+        Err(e) => {
+            return Err(format!("Failed to get wallet address: {}", e));
+        }
+    };
+
+    let wallet_balance = match
+        crate::utils::get_token_balance(&wallet_address, &position.mint).await
+    {
+        Ok(balance) => balance,
+        Err(e) => {
+            return Err(format!("Failed to get token balance: {}", e));
+        }
+    };
+
+    if wallet_balance == 0 {
+        // Handle phantom position - we'll need to signal this through the normal position update mechanism
+        log(
+            LogTag::Positions,
+            "PHANTOM",
+            &format!(
+                "👻 Phantom position detected for {} - marking as closed with 0 SOL received",
+                position.symbol
+            )
+        );
+
+        // This will need to be handled by the verification system
+        return Err("Phantom position detected - needs verification handling".to_string());
+    }
+
+    // Execute sell transaction with retry logic
+    execute_sell_with_retry_background(&mut position, &token, exit_price, exit_time).await
+}
+
+/// Execute sell with retry logic in background task
+async fn execute_sell_with_retry_background(
+    position: &mut Position,
+    token: &Token,
+    exit_price: f64,
+    exit_time: DateTime<Utc>
+) -> Result<(String, String), String> {
+    let _guard = crate::trader::CriticalOperationGuard::new(&format!("SELL {}", position.symbol));
+
+    let max_attempts = crate::arguments::get_max_exit_retries();
+    for attempt in 1..=max_attempts {
+        log(
+            LogTag::Positions,
+            "SELL_ATTEMPT",
+            &format!(
+                "💰 Attempting to sell {} (attempt {}/{}) at {:.6} SOL",
+                position.symbol,
+                attempt,
+                max_attempts,
+                exit_price
+            )
+        );
+
+        // Validate expected SOL output if provided
+        if let Some(expected_sol) = Some(exit_price) {
+            if expected_sol <= 0.0 || !expected_sol.is_finite() {
+                return Err(format!("Invalid expected SOL output: {:.10}", expected_sol));
+            }
+        }
+
+        // Auto-retry with progressive slippage from config
+        let slippages = &SELL_RETRY_SLIPPAGES;
+        let token_amount = position.token_amount.unwrap_or(0);
+
+        let mut last_error = None;
+
+        for (slippage_attempt, &slippage) in slippages.iter().enumerate() {
+            log(
+                LogTag::Swap,
+                "SELL_ATTEMPT",
+                &format!(
+                    "🔴 Sell attempt {} for {} with {:.1}% slippage",
+                    slippage_attempt + 1,
+                    token.symbol,
+                    slippage
+                )
+            );
+
+            // Execute sell_token_with_slippage logic inline
+            if crate::arguments::is_debug_swaps_enabled() {
+                log(
+                    LogTag::Swap,
+                    "SELL_START",
+                    &format!(
+                        "🔴 Starting SELL operation for {} ({}) - Expected amount: {} tokens, Slippage: {:.1}%",
+                        token.symbol,
+                        token.mint,
+                        token_amount,
+                        slippage
+                    )
+                );
+            }
+
+            let wallet_address = match get_wallet_address() {
+                Ok(addr) => addr,
+                Err(e) => {
+                    last_error = Some(format!("Failed to get wallet address: {}", e));
+                    continue;
+                }
+            };
+
+            let actual_wallet_balance = match
+                tokio::time::timeout(
+                    Duration::from_secs(45),
+                    get_token_balance(&wallet_address, &token.mint)
+                ).await
+            {
+                Ok(Ok(balance)) => balance,
+                Ok(Err(e)) => {
+                    last_error = Some(format!("Failed to get token balance: {}", e));
+                    continue;
+                }
+                Err(_) => {
+                    last_error = Some(
+                        format!("Timeout getting token balance for {}", token.symbol)
+                    );
+                    continue;
+                }
+            };
+
+            if actual_wallet_balance == 0 {
+                log(
+                    LogTag::Swap,
+                    "WARNING",
+                    &format!(
+                        "⚠️ No {} tokens in wallet to sell (expected: {}, actual: 0)",
+                        token.symbol,
+                        token_amount
+                    )
+                );
+                return Err(format!("No {} tokens in wallet", token.symbol));
+            }
+
+            let actual_sell_amount = actual_wallet_balance;
+
+            log(
+                LogTag::Swap,
+                "SELL_AMOUNT",
+                &format!(
+                    "💰 Selling {} {} tokens (position: {}, wallet: {})",
+                    actual_sell_amount,
+                    token.symbol,
+                    token_amount,
+                    actual_wallet_balance
+                )
+            );
+
+            // DUPLICATE SWAP PREVENTION: Check if similar sell was recently attempted
+            let expected_sol_amount = exit_price; // Use expected SOL from exit calculation
+            if is_duplicate_swap_attempt(&token.mint, expected_sol_amount, "SELL").await {
+                last_error = Some(
+                    format!(
+                        "Duplicate sell prevented for {} - similar sell attempted within last {}s",
+                        token.symbol,
+                        DUPLICATE_SWAP_PREVENTION_SECS
+                    )
+                );
+                continue;
+            }
+
+            let best_quote = match
+                get_best_quote(
+                    &token.mint,
+                    SOL_MINT,
+                    actual_sell_amount,
+                    &wallet_address,
+                    slippage
+                ).await
+            {
+                Ok(quote) => quote,
+                Err(e) => {
+                    last_error = Some(format!("Failed to get quote: {}", e));
+                    continue;
+                }
+            };
+
+            let swap_result = match
+                execute_best_swap(
+                    token,
+                    &token.mint,
+                    SOL_MINT,
+                    actual_sell_amount,
+                    best_quote
+                ).await
+            {
+                Ok(result) => {
+                    if let Some(ref signature) = result.transaction_signature {
+                        log(
+                            LogTag::Swap,
+                            "TRANSACTION",
+                            &format!(
+                                "Sell transaction {} will be monitored by positions manager",
+                                &signature[..8]
+                            )
+                        );
+                    }
+
+                    log(
+                        LogTag::Swap,
+                        "SELL_SUCCESS",
+                        &format!(
+                            "✅ Sell successful for {} on attempt {} with {:.1}% slippage",
+                            token.symbol,
+                            slippage_attempt + 1,
+                            slippage
+                        )
+                    );
+
+                    if crate::arguments::is_debug_swaps_enabled() {
+                        log(
+                            LogTag::Swap,
+                            "SELL_COMPLETE",
+                            &format!(
+                                "🔴 SELL operation completed for {} - Signature: {:?}",
+                                token.symbol,
+                                result.transaction_signature
+                            )
+                        );
+                    }
+
+                    result
+                }
+                Err(e) => {
+                    last_error = Some(format!("Swap execution failed: {}", e));
+                    continue;
+                }
+            };
+
+            // Process successful swap result
+            let transaction_signature = match swap_result.transaction_signature {
+                Some(sig) => sig,
+                None => {
+                    last_error = Some("Swap result missing signature".to_string());
+                    continue;
+                }
+            };
+
+            // The router type is available from swap_result.router_used
+            let quote_label = format!("{:?}", swap_result.router_used);
+
+            log(
+                LogTag::Positions,
+                "CLOSE_SUCCESS",
+                &format!(
+                    "✅ Position closed for {} with signature {} ({})",
+                    position.symbol,
+                    get_signature_prefix(&transaction_signature),
+                    quote_label
+                )
+            );
+
+            return Ok((transaction_signature, quote_label));
+        }
+
+        if let Some(error) = last_error {
+            log(
+                LogTag::Positions,
+                "ERROR",
+                &format!("❌ Sell attempt {} failed: {}", attempt, error)
+            );
+        }
+
+        // Small delay between main attempts
+        if attempt < max_attempts {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    }
+
+    Err(format!("Failed to sell {} after {} attempts", position.symbol, max_attempts))
 }
 
 // =============================================================================
