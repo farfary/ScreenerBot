@@ -28,7 +28,11 @@ async fn main() {
     // Check for dry-run mode and log it prominently
     if screenerbot::arguments::is_dry_run_enabled() {
         log(LogTag::System, "CRITICAL", "🚫 DRY-RUN MODE ENABLED - NO ACTUAL TRADING WILL OCCUR");
-        log(LogTag::System, "CRITICAL", "📊 All trading signals and analysis will be logged but not executed");
+        log(
+            LogTag::System,
+            "CRITICAL",
+            "📊 All trading signals and analysis will be logged but not executed"
+        );
     }
 
     // Create shared shutdown notification for all background tasks
@@ -45,26 +49,31 @@ async fn main() {
 
     if dashboard_mode {
         log(LogTag::System, "INFO", "🖥️ Dashboard mode enabled - Starting terminal UI");
-        
+
         // Create dashboard instance and set it globally for log forwarding
         let dashboard = std::sync::Arc::new(screenerbot::dashboard::Dashboard::new());
         screenerbot::dashboard::set_global_dashboard(dashboard.clone());
-        
+
         // Start dashboard in a separate task
-    let shutdown_dashboard = shutdown.clone();
+        let shutdown_dashboard = shutdown.clone();
         let dashboard_running = dashboard.running.clone();
         let services_completed_dashboard = services_completed.clone();
-        
-    let dashboard_handle = tokio::spawn(async move {
-            if let Err(e) = screenerbot::dashboard::run_dashboard(shutdown_dashboard, services_completed_dashboard).await {
+
+        let dashboard_handle = tokio::spawn(async move {
+            if
+                let Err(e) = screenerbot::dashboard::run_dashboard(
+                    shutdown_dashboard,
+                    services_completed_dashboard
+                ).await
+            {
                 // Avoid stderr prints in dashboard context; route to file logger
                 log(LogTag::System, "ERROR", &format!("Dashboard error: {}", e));
             }
             // Clear global dashboard on exit
             screenerbot::dashboard::clear_global_dashboard();
         });
-    dashboard_handle_opt = Some(dashboard_handle);
-        
+        dashboard_handle_opt = Some(dashboard_handle);
+
         // Monitor dashboard state and trigger main shutdown when dashboard exits
         let shutdown_monitor = shutdown.clone();
         let shutdown_trigger_for_monitor = shutdown_trigger.clone();
@@ -90,7 +99,7 @@ async fn main() {
                 shutdown_trigger_os.notify_waiters();
             }
         });
-        
+
         // In dashboard mode, we'll run a simplified background version
         log(LogTag::System, "INFO", "Running in dashboard mode with terminal UI");
     } else {
@@ -144,18 +153,17 @@ async fn main() {
     };
 
     let shutdown_rugcheck = shutdown.clone();
-    let rugcheck_handle = match screenerbot::tokens::initialize_global_rugcheck_service(
-        database,
-        shutdown_rugcheck
-    ).await {
+    let rugcheck_handle = match
+        screenerbot::tokens::initialize_global_rugcheck_service(database, shutdown_rugcheck).await
+    {
         Ok(handle) => handle,
         Err(e) => {
-        log(
-            LogTag::System,
-            "ERROR",
-            &format!("Failed to initialize global rugcheck service: {}", e)
-        );
-        std::process::exit(1);
+            log(
+                LogTag::System,
+                "ERROR",
+                &format!("Failed to initialize global rugcheck service: {}", e)
+            );
+            std::process::exit(1);
         }
     };
     log(LogTag::System, "INFO", "Global rugcheck service initialized successfully");
@@ -205,7 +213,7 @@ async fn main() {
     });
 
     // Start trader tasks (moved from trader() function for centralized management)
-    
+
     // Initialize global transaction manager FIRST (before reconciliation)
     // Load wallet address from config for transaction monitoring
     match screenerbot::global::read_configs() {
@@ -213,20 +221,41 @@ async fn main() {
             match screenerbot::global::load_wallet_from_config(&configs) {
                 Ok(keypair) => {
                     let wallet_pubkey = keypair.pubkey();
-                    if let Err(e) = screenerbot::transactions::initialize_global_transaction_manager(wallet_pubkey).await {
-                        log(LogTag::System, "ERROR", &format!("Failed to initialize global transaction manager: {}", e));
+                    if
+                        let Err(e) =
+                            screenerbot::transactions::initialize_global_transaction_manager(
+                                wallet_pubkey
+                            ).await
+                    {
+                        log(
+                            LogTag::System,
+                            "ERROR",
+                            &format!("Failed to initialize global transaction manager: {}", e)
+                        );
                         std::process::exit(1);
                     }
-                    log(LogTag::System, "INFO", "Global transaction manager initialized for swap monitoring");
+                    log(
+                        LogTag::System,
+                        "INFO",
+                        "Global transaction manager initialized for swap monitoring"
+                    );
                 }
                 Err(e) => {
-                    log(LogTag::System, "ERROR", &format!("Failed to load wallet keypair for transaction manager: {}", e));
+                    log(
+                        LogTag::System,
+                        "ERROR",
+                        &format!("Failed to load wallet keypair for transaction manager: {}", e)
+                    );
                     std::process::exit(1);
                 }
             }
         }
         Err(e) => {
-            log(LogTag::System, "ERROR", &format!("Failed to read configs for transaction manager: {}", e));
+            log(
+                LogTag::System,
+                "ERROR",
+                &format!("Failed to read configs for transaction manager: {}", e)
+            );
             std::process::exit(1);
         }
     }
@@ -235,7 +264,9 @@ async fn main() {
     let shutdown_positions_manager = shutdown.clone();
     let positions_manager_handle = tokio::spawn(async move {
         log(LogTag::System, "INFO", "PositionsManager service task started");
-        let _sender = screenerbot::positions::start_positions_manager_service(shutdown_positions_manager).await;
+        let _sender = screenerbot::positions::start_positions_manager_service(
+            shutdown_positions_manager
+        ).await;
         log(LogTag::System, "INFO", "PositionsManager service task ended");
     });
 
@@ -277,11 +308,7 @@ async fn main() {
         emergency_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
         log(LogTag::System, "INFO", "Shutdown requested, initiating graceful shutdown...");
     } else {
-        log(
-            LogTag::System,
-            "INFO",
-            "Waiting for Ctrl+C to shutdown"
-        );
+        log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
         // Set up Ctrl+C signal handler with better error handling
         match tokio::signal::ctrl_c().await {
             Ok(_) => {
@@ -293,7 +320,11 @@ async fn main() {
                 );
             }
             Err(e) => {
-                log(LogTag::System, "ERROR", &format!("Failed to listen for shutdown signal: {}", e));
+                log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to listen for shutdown signal: {}", e)
+                );
                 std::process::exit(1);
             }
         }
@@ -385,7 +416,11 @@ async fn main() {
         );
         120 // Extended timeout when critical operations are active
     } else {
-        if dashboard_mode { 20 } else { 10 } // More time in dashboard mode to drain logs/UI
+        if dashboard_mode {
+            20
+        } else {
+            10
+        } // More time in dashboard mode to drain logs/UI
     };
 
     // If in dashboard mode, ensure timeout is at least as long as dashboard's max wait window
@@ -404,7 +439,7 @@ async fn main() {
     let progress_task = tokio::spawn(async move {
         let mut progress_interval = tokio::time::interval(Duration::from_secs(2));
         let mut elapsed = 0u64;
-        
+
         loop {
             tokio::select! {
                 _ = progress_shutdown.notified() => break,
@@ -502,9 +537,20 @@ async fn main() {
             }
 
             // Wait for tokens system tasks (includes rugcheck-related tasks)
-            log(LogTag::System, "INFO", &format!("🔄 Waiting for {} tokens system tasks to shutdown...", tokens_handles.len()));
+            log(
+                LogTag::System,
+                "INFO",
+                &format!(
+                    "🔄 Waiting for {} tokens system tasks to shutdown...",
+                    tokens_handles.len()
+                )
+            );
             for (i, handle) in tokens_handles.into_iter().enumerate() {
-                log(LogTag::System, "INFO", &format!("🔄 Waiting for tokens task {} to shutdown...", i));
+                log(
+                    LogTag::System,
+                    "INFO",
+                    &format!("🔄 Waiting for tokens task {} to shutdown...", i)
+                );
                 if let Err(e) = handle.await {
                     log(
                         LogTag::System,
@@ -512,22 +558,38 @@ async fn main() {
                         &format!("Tokens task {} failed to shutdown cleanly: {}", i, e)
                     );
                 } else {
-                    log(LogTag::System, "INFO", &format!("✅ Tokens task {} shutdown completed", i));
+                    log(
+                        LogTag::System,
+                        "INFO",
+                        &format!("✅ Tokens task {} shutdown completed", i)
+                    );
                 }
             }
 
             // Wait for Rugcheck service task explicitly
             log(LogTag::System, "INFO", "🔄 Waiting for Rugcheck service task to shutdown...");
             if let Err(e) = rugcheck_handle.await {
-                log(LogTag::System, "WARN", &format!("Rugcheck task failed to shutdown cleanly: {}", e));
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Rugcheck task failed to shutdown cleanly: {}", e)
+                );
             } else {
                 log(LogTag::System, "INFO", "✅ Rugcheck service task shutdown completed");
             }
 
             // Wait for pricing tasks
-            log(LogTag::System, "INFO", &format!("🔄 Waiting for {} pricing tasks to shutdown...", pricing_handles.len()));
+            log(
+                LogTag::System,
+                "INFO",
+                &format!("🔄 Waiting for {} pricing tasks to shutdown...", pricing_handles.len())
+            );
             for (i, handle) in pricing_handles.into_iter().enumerate() {
-                log(LogTag::System, "INFO", &format!("🔄 Waiting for pricing task {} to shutdown...", i));
+                log(
+                    LogTag::System,
+                    "INFO",
+                    &format!("🔄 Waiting for pricing task {} to shutdown...", i)
+                );
                 if let Err(e) = handle.await {
                     log(
                         LogTag::System,
@@ -535,7 +597,11 @@ async fn main() {
                         &format!("Pricing task {} failed to shutdown cleanly: {}", i, e)
                     );
                 } else {
-                    log(LogTag::System, "INFO", &format!("✅ Pricing task {} shutdown completed", i));
+                    log(
+                        LogTag::System,
+                        "INFO",
+                        &format!("✅ Pricing task {} shutdown completed", i)
+                    );
                 }
             }
         }
@@ -547,7 +613,14 @@ async fn main() {
     match shutdown_timeout.await {
         Ok(_) => {
             let total_shutdown_time = shutdown_start_time.elapsed();
-            log(LogTag::System, "INFO", &format!("All background tasks finished gracefully in {:.2}s. Exiting.", total_shutdown_time.as_secs_f64()));
+            log(
+                LogTag::System,
+                "INFO",
+                &format!(
+                    "All background tasks finished gracefully in {:.2}s. Exiting.",
+                    total_shutdown_time.as_secs_f64()
+                )
+            );
             // Notify dashboard that all services have completed
             services_completed.notify_waiters();
         }
@@ -559,7 +632,11 @@ async fn main() {
                 log(
                     LogTag::System,
                     "EMERGENCY",
-                    &format!("🚨 CRITICAL: {} trading operations still active during forced shutdown after {:.2}s! This may cause data loss!", final_critical_check, total_shutdown_time.as_secs_f64())
+                    &format!(
+                        "🚨 CRITICAL: {} trading operations still active during forced shutdown after {:.2}s! This may cause data loss!",
+                        final_critical_check,
+                        total_shutdown_time.as_secs_f64()
+                    )
                 );
                 log(
                     LogTag::System,
@@ -600,14 +677,22 @@ async fn main() {
             log(
                 LogTag::System,
                 "WARN",
-                &format!("⚠️ Tasks did not finish within {} second timeout (total time: {:.2}s). Some tasks may still be running.", task_timeout_seconds, total_shutdown_time.as_secs_f64())
+                &format!(
+                    "⚠️ Tasks did not finish within {} second timeout (total time: {:.2}s). Some tasks may still be running.",
+                    task_timeout_seconds,
+                    total_shutdown_time.as_secs_f64()
+                )
             );
-            
+
             // Even on timeout, notify dashboard that we're done trying
             services_completed.notify_waiters();
-            
+
             if dashboard_mode {
-                log(LogTag::System, "WARN", "Exiting without abort to preserve terminal state (dashboard mode)");
+                log(
+                    LogTag::System,
+                    "WARN",
+                    "Exiting without abort to preserve terminal state (dashboard mode)"
+                );
                 // Prefer a normal exit code in dashboard mode to avoid 'zsh: abort'
                 std::process::exit(1);
             } else {
