@@ -632,7 +632,7 @@ pub async fn print_positions_snapshot() {
         log(LogTag::Summary, "DEBUG", "[print_positions_snapshot] Starting summary report stage");
     }
     let bot_summary = match
-        tokio::time::timeout(Duration::from_secs(10), build_summary_report(&closed_refs)).await
+        tokio::time::timeout(Duration::from_secs(15), build_summary_report(&closed_refs)).await
     {
         Ok(summary) => summary,
         Err(_) => {
