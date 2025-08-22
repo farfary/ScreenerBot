@@ -3,7 +3,6 @@
 /// This service runs independently from the trading logic and periodically
 /// scans for empty Associated Token Accounts (ATAs) to close and reclaim rent.
 /// This prevents blocking the main trading flow while ensuring optimal rent utilization.
-
 use crate::logger::{ log, LogTag };
 use crate::utils::get_wallet_address;
 use crate::global::ATA_FAILED_CACHE;
@@ -13,7 +12,6 @@ use std::collections::HashSet;
 use tokio::sync::Notify;
 use tokio::time::{ sleep, Duration, interval, MissedTickBehavior };
 use serde::{ Serialize, Deserialize };
-use std::fs;
 use std::path::Path;
 use chrono;
 

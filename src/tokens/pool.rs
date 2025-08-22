@@ -1,8 +1,9 @@
 /// Pool Price System
 ///
 /// This module provides a comprehensive pool-based price calculation system with caching,
-/// background monitoring, and API fallback. It fetches pool data from DexScreener API,
-/// calculates prices from pool reserves, and maintains a watch list for continuous monitoring.
+/// background monitoring, and API fallback. It fetches pool data from DexScreener API
+/// and calculates prices from pool reserves. Token selection for monitoring now relies
+/// on the centralized price service priority list (no internal pool watch list).
 
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_pool_prices_enabled, CACHE_POOL_DIR };
@@ -12,7 +13,7 @@ use crate::tokens::is_system_or_stable_token;
 use crate::rpc::get_rpc_client;
 use solana_client::rpc_client::RpcClient as SolanaRpcClient;
 use solana_sdk::{ account::Account, pubkey::Pubkey, commitment_config::CommitmentConfig };
-use std::collections::{HashMap, HashSet};
+use std::collections::{ HashMap, HashSet };
 use std::str::FromStr;
 use std::time::{ Duration, Instant };
 use tokio::sync::RwLock;
@@ -32,9 +33,6 @@ const POOL_CACHE_TTL_SECONDS: i64 = 600;
 
 /// Price cache TTL (1 second for real-time monitoring)
 const PRICE_CACHE_TTL_SECONDS: i64 = 2;
-
-/// Watch list timeout (5 minutes) - remove tokens that haven't had successful price updates
-const WATCH_LIST_TIMEOUT_SECONDS: i64 = 300;
 
 /// Pool price history cache settings
 const POOL_PRICE_HISTORY_CACHE_DIR: &str = CACHE_POOL_DIR;
@@ -240,15 +238,6 @@ impl TokenAvailability {
     }
 }
 
-/// Watch list entry for background monitoring
-#[derive(Debug, Clone)]
-pub struct WatchListEntry {
-    pub token_address: String,
-    pub added_at: DateTime<Utc>,
-    pub priority: i32,
-    pub last_price_check: Option<DateTime<Utc>>,
-}
-
 /// Pool-specific price history entry for persistent caching
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoolPriceHistoryEntry {
@@ -275,7 +264,12 @@ pub struct PoolPriceHistoryCache {
 }
 
 impl PoolPriceHistoryCache {
-    pub fn new(token_mint: String, pool_address: String, dex_id: String, pool_type: Option<String>) -> Self {
+    pub fn new(
+        token_mint: String,
+        pool_address: String,
+        dex_id: String,
+        pool_type: Option<String>
+    ) -> Self {
         let now = Utc::now();
         Self {
             token_mint,
@@ -357,7 +351,9 @@ impl PoolPriceHistoryCache {
     }
 
     /// Get detailed price history with all data
-    pub fn get_detailed_price_history(&self) -> Vec<(DateTime<Utc>, f64, Option<f64>, Option<f64>, Option<f64>, f64, Option<f64>)> {
+    pub fn get_detailed_price_history(
+        &self
+    ) -> Vec<(DateTime<Utc>, f64, Option<f64>, Option<f64>, Option<f64>, f64, Option<f64>)> {
         self.entries
             .iter()
             .map(|entry| (
@@ -367,7 +363,7 @@ impl PoolPriceHistoryCache {
                 entry.reserves_token,
                 entry.reserves_sol,
                 entry.liquidity_usd,
-                entry.volume_24h
+                entry.volume_24h,
             ))
             .collect()
     }
@@ -385,10 +381,22 @@ impl PoolPriceHistoryCache {
 
     /// Load pool price history from disk cache
     pub fn load_from_disk(token_mint: &str, pool_address: &str) -> Result<Self, String> {
-        let cache_file = format!("{}/{}/{}.json", POOL_PRICE_HISTORY_CACHE_DIR, token_mint, pool_address);
+        let cache_file = format!(
+            "{}/{}/{}.json",
+            POOL_PRICE_HISTORY_CACHE_DIR,
+            token_mint,
+            pool_address
+        );
 
         if !Path::new(&cache_file).exists() {
-            return Ok(Self::new(token_mint.to_string(), pool_address.to_string(), "unknown".to_string(), None));
+            return Ok(
+                Self::new(
+                    token_mint.to_string(),
+                    pool_address.to_string(),
+                    "unknown".to_string(),
+                    None
+                )
+            );
         }
 
         match fs::read_to_string(&cache_file) {
@@ -403,10 +411,22 @@ impl PoolPriceHistoryCache {
                         log(
                             LogTag::Pool,
                             "CACHE_LOAD_ERROR",
-                            &format!("Failed to parse pool cache for {}/{}: {}", token_mint, pool_address, e)
+                            &format!(
+                                "Failed to parse pool cache for {}/{}: {}",
+                                token_mint,
+                                pool_address,
+                                e
+                            )
                         );
                         // Return new cache if parsing fails
-                        Ok(Self::new(token_mint.to_string(), pool_address.to_string(), "unknown".to_string(), None))
+                        Ok(
+                            Self::new(
+                                token_mint.to_string(),
+                                pool_address.to_string(),
+                                "unknown".to_string(),
+                                None
+                            )
+                        )
                     }
                 }
             }
@@ -417,7 +437,14 @@ impl PoolPriceHistoryCache {
                     &format!("Failed to read pool cache for {}/{}: {}", token_mint, pool_address, e)
                 );
                 // Return new cache if read fails
-                Ok(Self::new(token_mint.to_string(), pool_address.to_string(), "unknown".to_string(), None))
+                Ok(
+                    Self::new(
+                        token_mint.to_string(),
+                        pool_address.to_string(),
+                        "unknown".to_string(),
+                        None
+                    )
+                )
             }
         }
     }
@@ -439,7 +466,15 @@ impl PoolPriceHistoryCache {
                     Err(e) => Err(format!("Failed to write pool cache file {}: {}", cache_file, e)),
                 }
             }
-            Err(e) => Err(format!("Failed to serialize pool cache for {}/{}: {}", self.token_mint, self.pool_address, e)),
+            Err(e) =>
+                Err(
+                    format!(
+                        "Failed to serialize pool cache for {}/{}: {}",
+                        self.token_mint,
+                        self.pool_address,
+                        e
+                    )
+                ),
         }
     }
 }
@@ -506,7 +541,8 @@ impl TokenAggregatedPriceHistoryCache {
             let last_entry_age = (Utc::now() - pool_cache.last_updated).num_seconds() as f64;
             let recency_score = 1.0 / (1.0 + last_entry_age / 3600.0); // Decay over hours
             let activity_score = pool_cache.entries.len() as f64;
-            let liquidity_score = pool_cache.entries.last()
+            let liquidity_score = pool_cache.entries
+                .last()
                 .map(|e| e.liquidity_usd.log10().max(0.0))
                 .unwrap_or(0.0);
 
@@ -530,7 +566,7 @@ impl TokenAggregatedPriceHistoryCache {
     /// Load all pool caches for a token from disk
     pub fn load_from_disk(token_mint: &str) -> Result<Self, String> {
         let mut cache = Self::new(token_mint.to_string());
-        
+
         let token_dir = format!("{}/{}", POOL_PRICE_HISTORY_CACHE_DIR, token_mint);
         if !Path::new(&token_dir).exists() {
             return Ok(cache);
@@ -543,15 +579,25 @@ impl TokenAggregatedPriceHistoryCache {
                         let path = entry.path();
                         if path.extension().and_then(|s| s.to_str()) == Some("json") {
                             if let Some(pool_address) = path.file_stem().and_then(|s| s.to_str()) {
-                                match PoolPriceHistoryCache::load_from_disk(token_mint, pool_address) {
+                                match
+                                    PoolPriceHistoryCache::load_from_disk(token_mint, pool_address)
+                                {
                                     Ok(pool_cache) => {
-                                        cache.pool_caches.insert(pool_address.to_string(), pool_cache);
+                                        cache.pool_caches.insert(
+                                            pool_address.to_string(),
+                                            pool_cache
+                                        );
                                     }
                                     Err(e) => {
                                         log(
                                             LogTag::Pool,
                                             "POOL_LOAD_ERROR",
-                                            &format!("Failed to load pool cache {}/{}: {}", token_mint, pool_address, e)
+                                            &format!(
+                                                "Failed to load pool cache {}/{}: {}",
+                                                token_mint,
+                                                pool_address,
+                                                e
+                                            )
                                         );
                                     }
                                 }
@@ -563,7 +609,7 @@ impl TokenAggregatedPriceHistoryCache {
             Err(e) => {
                 log(
                     LogTag::Pool,
-                    "TOKEN_DIR_ERROR", 
+                    "TOKEN_DIR_ERROR",
                     &format!("Failed to read token directory {}: {}", token_dir, e)
                 );
             }
@@ -579,46 +625,46 @@ impl TokenAggregatedPriceHistoryCache {
 
         for pool_cache in self.pool_caches.values() {
             match pool_cache.save_to_disk() {
-                Ok(_) => saved_count += 1,
+                Ok(_) => {
+                    saved_count += 1;
+                }
                 Err(e) => {
                     error_count += 1;
                     log(
                         LogTag::Pool,
                         "POOL_SAVE_ERROR",
-                        &format!("Failed to save pool cache {}/{}: {}", self.token_mint, pool_cache.pool_address, e)
+                        &format!(
+                            "Failed to save pool cache {}/{}: {}",
+                            self.token_mint,
+                            pool_cache.pool_address,
+                            e
+                        )
                     );
                 }
             }
         }
 
         if error_count > 0 {
-            Err(format!("Failed to save {} out of {} pool caches", error_count, self.pool_caches.len()))
+            Err(
+                format!(
+                    "Failed to save {} out of {} pool caches",
+                    error_count,
+                    self.pool_caches.len()
+                )
+            )
         } else {
             if is_debug_pool_prices_enabled() && saved_count > 0 {
                 log(
                     LogTag::Pool,
                     "SAVE_SUCCESS",
-                    &format!("Successfully saved {} pool caches for token {}", saved_count, self.token_mint)
+                    &format!(
+                        "Successfully saved {} pool caches for token {}",
+                        saved_count,
+                        self.token_mint
+                    )
                 );
             }
             Ok(())
-        }
-    }
-}
-
-impl WatchListEntry {
-    /// Check if this watch list entry has expired (no successful price check in 5 minutes)
-    pub fn is_expired(&self) -> bool {
-        match self.last_price_check {
-            Some(last_check) => {
-                let age = Utc::now() - last_check;
-                age.num_seconds() > WATCH_LIST_TIMEOUT_SECONDS
-            }
-            None => {
-                // No successful price check yet, check if added more than 5 minutes ago
-                let age = Utc::now() - self.added_at;
-                age.num_seconds() > WATCH_LIST_TIMEOUT_SECONDS
-            }
         }
     }
 }
@@ -631,7 +677,7 @@ pub struct PoolPriceService {
     pool_cache: Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>,
     price_cache: Arc<RwLock<HashMap<String, PoolPriceResult>>>,
     availability_cache: Arc<RwLock<HashMap<String, TokenAvailability>>>,
-    watch_list: Arc<RwLock<HashMap<String, WatchListEntry>>>,
+    // watch_list removed; pool service delegates token selection to price service
     price_history: Arc<RwLock<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>,
     // New pool-specific disk-based price history cache
     pool_price_history: Arc<RwLock<HashMap<String, TokenAggregatedPriceHistoryCache>>>,
@@ -661,7 +707,7 @@ pub struct PoolServiceStats {
     pub last_cycle_duration_ms: f64,
     pub total_cycle_duration_ms: f64,
     pub avg_cycle_duration_ms: f64,
-    // Watch list snapshot (updated in get_enhanced_stats)
+    // Watch list snapshot (sourced from price service)
     pub watch_total: u64,
     pub watch_expired: u64,
     pub watch_never_checked: u64,
@@ -769,7 +815,6 @@ impl PoolPriceService {
             pool_cache: Arc::new(RwLock::new(HashMap::new())),
             price_cache: Arc::new(RwLock::new(HashMap::new())),
             availability_cache: Arc::new(RwLock::new(HashMap::new())),
-            watch_list: Arc::new(RwLock::new(HashMap::new())),
             price_history: Arc::new(RwLock::new(HashMap::new())),
             pool_price_history: Arc::new(RwLock::new(HashMap::new())),
             monitoring_active: Arc::new(RwLock::new(false)),
@@ -813,7 +858,9 @@ impl PoolPriceService {
             // Respect service shutdown by observing the same monitoring_active flag
             let monitoring_active = service.monitoring_active.clone();
             async move {
-                let mut interval = tokio::time::interval(Duration::from_secs(POOLS_INFO_SAVE_INTERVAL_SECONDS));
+                let mut interval = tokio::time::interval(
+                    Duration::from_secs(POOLS_INFO_SAVE_INTERVAL_SECONDS)
+                );
                 loop {
                     interval.tick().await;
 
@@ -822,7 +869,11 @@ impl PoolPriceService {
                         let active = monitoring_active.read().await;
                         if !*active {
                             if is_debug_pool_prices_enabled() {
-                                log(LogTag::Pool, "POOLS_INFO_SAVE_STOP", "Pools infos auto-save loop stopping (monitoring inactive)");
+                                log(
+                                    LogTag::Pool,
+                                    "POOLS_INFO_SAVE_STOP",
+                                    "Pools infos auto-save loop stopping (monitoring inactive)"
+                                );
                             }
                             break;
                         }
@@ -854,7 +905,10 @@ impl PoolPriceService {
         tokio::spawn({
             let pool_price_history = service.pool_price_history.clone();
             async move {
-                if let Err(e) = Self::load_all_pool_price_history_from_disk(pool_price_history).await {
+                if
+                    let Err(e) =
+                        Self::load_all_pool_price_history_from_disk(pool_price_history).await
+                {
                     log(
                         LogTag::Pool,
                         "STARTUP_CACHE_ERROR",
@@ -910,7 +964,8 @@ impl PoolPriceService {
             return Ok(0);
         }
         let data = fs::read_to_string(path).map_err(|e| format!("Read error: {}", e))?;
-        let raw: HashMap<String, Vec<CachedPoolInfo>> = serde_json::from_str(&data)
+        let raw: HashMap<String, Vec<CachedPoolInfo>> = serde_json
+            ::from_str(&data)
             .map_err(|e| format!("Deserialize error: {}", e))?;
 
         // Filter out expired entries
@@ -951,7 +1006,8 @@ impl PoolPriceService {
             cache.clone()
         };
 
-        let json = serde_json::to_string_pretty(&snapshot)
+        let json = serde_json
+            ::to_string_pretty(&snapshot)
             .map_err(|e| format!("Serialize error: {}", e))?;
         fs::write(POOLS_INFO_CACHE_FILE, json).map_err(|e| format!("Write error: {}", e))?;
         Ok(())
@@ -965,7 +1021,9 @@ impl PoolPriceService {
         let now = Utc::now();
         let mut to_remove: Vec<String> = Vec::new();
         for (mint, pools) in cache.iter() {
-            let any_fresh = pools.iter().any(|p| (now - p.cached_at).num_seconds() <= POOL_CACHE_TTL_SECONDS);
+            let any_fresh = pools
+                .iter()
+                .any(|p| (now - p.cached_at).num_seconds() <= POOL_CACHE_TTL_SECONDS);
             if !any_fresh {
                 to_remove.push(mint.clone());
             }
@@ -991,14 +1049,24 @@ impl PoolPriceService {
         cache
             .iter()
             .filter_map(|(mint, pools)| {
-                let recent = pools.iter().any(|p| (now - p.cached_at).num_seconds() <= window_seconds);
-                if recent { Some(mint.clone()) } else { None }
+                let recent = pools
+                    .iter()
+                    .any(|p| (now - p.cached_at).num_seconds() <= window_seconds);
+                if recent {
+                    Some(mint.clone())
+                } else {
+                    None
+                }
             })
             .collect()
     }
 
     /// Refresh pools infos for tokens that are missing or expired; limit the number processed
-    pub async fn refresh_pools_infos_for_tokens(&self, mints: &[String], max_tokens: usize) -> usize {
+    pub async fn refresh_pools_infos_for_tokens(
+        &self,
+        mints: &[String],
+        max_tokens: usize
+    ) -> usize {
         let now = Utc::now();
         // Determine which tokens need refresh
         let mut to_refresh: Vec<String> = Vec::new();
@@ -1007,12 +1075,18 @@ impl PoolPriceService {
             for mint in mints {
                 match cache.get(mint) {
                     Some(pools) if !pools.is_empty() => {
-                        let fresh = pools.iter().any(|p| (now - p.cached_at).num_seconds() <= POOL_CACHE_TTL_SECONDS);
-                        if !fresh { to_refresh.push(mint.clone()); }
+                        let fresh = pools
+                            .iter()
+                            .any(|p| (now - p.cached_at).num_seconds() <= POOL_CACHE_TTL_SECONDS);
+                        if !fresh {
+                            to_refresh.push(mint.clone());
+                        }
                     }
                     _ => to_refresh.push(mint.clone()),
                 }
-                if to_refresh.len() >= max_tokens { break; }
+                if to_refresh.len() >= max_tokens {
+                    break;
+                }
             }
         }
 
@@ -1049,7 +1123,11 @@ impl PoolPriceService {
                     if let Ok(token_entry) = token_entry {
                         let token_path = token_entry.path();
                         if token_path.is_dir() {
-                            if let Some(token_mint) = token_path.file_name().and_then(|s| s.to_str()) {
+                            if
+                                let Some(token_mint) = token_path
+                                    .file_name()
+                                    .and_then(|s| s.to_str())
+                            {
                                 match TokenAggregatedPriceHistoryCache::load_from_disk(token_mint) {
                                     Ok(token_cache) => {
                                         if !token_cache.pool_caches.is_empty() {
@@ -1118,7 +1196,11 @@ impl PoolPriceService {
                     log(
                         LogTag::Pool,
                         "SAVE_ERROR",
-                        &format!("Failed to save pool cache for token {}: {}", token_cache.token_mint, e)
+                        &format!(
+                            "Failed to save pool cache for token {}: {}",
+                            token_cache.token_mint,
+                            e
+                        )
                     );
                 }
             }
@@ -1131,7 +1213,11 @@ impl PoolPriceService {
                 log(
                     LogTag::Pool,
                     "SAVE_SUCCESS",
-                    &format!("Successfully saved {} tokens with {} pool caches", saved_tokens, saved_pools)
+                    &format!(
+                        "Successfully saved {} tokens with {} pool caches",
+                        saved_tokens,
+                        saved_pools
+                    )
                 );
             }
             Ok(())
@@ -1152,10 +1238,10 @@ impl PoolPriceService {
 
         let pool_cache = self.pool_cache.clone();
         let price_cache = self.price_cache.clone();
-        let watch_list = self.watch_list.clone();
+        // watch_list removed
         let pool_price_history = self.pool_price_history.clone();
         let monitoring_active = self.monitoring_active.clone();
-    let stats_arc = self.stats.clone();
+        let stats_arc = self.stats.clone();
 
         // Start main monitoring loop
         tokio::spawn(async move {
@@ -1174,37 +1260,8 @@ impl PoolPriceService {
 
                 let cycle_start = Instant::now();
 
-                // Process watch list and clean up expired entries
-                let tokens_to_monitor = {
-                    let mut watch_list = watch_list.write().await;
-
-                    // First, remove expired entries
-                    let mut expired_tokens = Vec::new();
-                    for (token_address, entry) in watch_list.iter() {
-                        if entry.is_expired() {
-                            expired_tokens.push(token_address.clone());
-                        }
-                    }
-
-                    // Remove expired tokens
-                    for token_address in &expired_tokens {
-                        watch_list.remove(token_address);
-                        if is_debug_pool_prices_enabled() {
-                            log(
-                                LogTag::Pool,
-                                "WATCH_EXPIRED",
-                                &format!(
-                                    "⏰ Removed EXPIRED token {} from watch list (no successful price in {}s)",
-                                    token_address,
-                                    WATCH_LIST_TIMEOUT_SECONDS
-                                )
-                            );
-                        }
-                    }
-
-                    // Get remaining active tokens for monitoring
-                    watch_list.keys().cloned().collect::<Vec<_>>()
-                };
+                // Source tokens to monitor from price service priority list
+                let tokens_to_monitor = crate::tokens::price::get_priority_tokens_safe().await;
 
                 // Record last cycle token count early
                 {
@@ -1214,7 +1271,9 @@ impl PoolPriceService {
                     stats.monitoring_cycles += 1;
                     stats.avg_tokens_per_cycle = if stats.monitoring_cycles > 0 {
                         (stats.total_cycle_tokens as f64) / (stats.monitoring_cycles as f64)
-                    } else { 0.0 };
+                    } else {
+                        0.0
+                    };
                 }
 
                 if !tokens_to_monitor.is_empty() {
@@ -1232,24 +1291,11 @@ impl PoolPriceService {
                             Self::update_token_price_internal(
                                 &pool_cache,
                                 &price_cache,
-                                &watch_list,
                                 &token_address
                             ).await
                         {
                             Ok(success) => {
                                 if success {
-                                    // Update last_price_check timestamp on successful price retrieval
-                                    let mut watch_list = watch_list.write().await;
-                                    if let Some(entry) = watch_list.get_mut(&token_address) {
-                                        entry.last_price_check = Some(Utc::now());
-                                        if is_debug_pool_prices_enabled() {
-                                            log(
-                                                LogTag::Pool,
-                                                "WATCH_UPDATE",
-                                                &format!("✅ Updated price timestamp for {}", token_address)
-                                            );
-                                        }
-                                    }
                                 }
                             }
                             Err(e) => {
@@ -1277,7 +1323,9 @@ impl PoolPriceService {
                     stats.total_cycle_duration_ms += duration_ms;
                     stats.avg_cycle_duration_ms = if stats.monitoring_cycles > 0 {
                         stats.total_cycle_duration_ms / (stats.monitoring_cycles as f64)
-                    } else { 0.0 };
+                    } else {
+                        0.0
+                    };
                 }
             }
 
@@ -1304,7 +1352,11 @@ impl PoolPriceService {
 
                 if !active {
                     // Final save before shutdown
-                    if let Err(e) = Self::save_all_pool_price_history_caches(&pool_price_history_save).await {
+                    if
+                        let Err(e) = Self::save_all_pool_price_history_caches(
+                            &pool_price_history_save
+                        ).await
+                    {
                         log(
                             LogTag::Pool,
                             "FINAL_SAVE_ERROR",
@@ -1321,7 +1373,11 @@ impl PoolPriceService {
                 }
 
                 // Auto-save pool price history caches
-                if let Err(e) = Self::save_all_pool_price_history_caches(&pool_price_history_save).await {
+                if
+                    let Err(e) = Self::save_all_pool_price_history_caches(
+                        &pool_price_history_save
+                    ).await
+                {
                     log(
                         LogTag::Pool,
                         "AUTO_SAVE_ERROR",
@@ -1353,85 +1409,6 @@ impl PoolPriceService {
         log(LogTag::Pool, "STOP", "Stopping pool price monitoring service");
     }
 
-    /// Clean up expired watch list entries manually
-    pub async fn cleanup_expired_watch_list(&self) -> usize {
-        let mut watch_list = self.watch_list.write().await;
-        let mut expired_tokens = Vec::new();
-
-        for (token_address, entry) in watch_list.iter() {
-            if entry.is_expired() {
-                expired_tokens.push(token_address.clone());
-            }
-        }
-
-        let expired_count = expired_tokens.len();
-        for token_address in expired_tokens {
-            watch_list.remove(&token_address);
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "CLEANUP_EXPIRED",
-                    &format!(
-                        "🧹 Manually removed EXPIRED token {} from watch list (no successful price in {}s)",
-                        token_address,
-                        WATCH_LIST_TIMEOUT_SECONDS
-                    )
-                );
-            }
-        }
-
-        if expired_count > 0 {
-            log(
-                LogTag::Pool,
-                "CLEANUP_COMPLETE",
-                &format!("🧹 Cleaned up {} expired tokens from watch list", expired_count)
-            );
-        }
-
-        expired_count
-    }
-
-    /// Add token to watch list
-    pub async fn add_to_watch_list(&self, token_address: &str, priority: i32) {
-        // Skip system/stable tokens from watch list
-        if is_system_or_stable_token(token_address) {
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "SKIP_SYSTEM",
-                    &format!("Skipping system/stable token from watch list: {}", token_address)
-                );
-            }
-            return;
-        }
-
-        let mut watch_list = self.watch_list.write().await;
-        watch_list.insert(token_address.to_string(), WatchListEntry {
-            token_address: token_address.to_string(),
-            added_at: Utc::now(),
-            priority,
-            last_price_check: None,
-        });
-
-        if is_debug_pool_prices_enabled() {
-            log(
-                LogTag::Pool,
-                "WATCH_ADD",
-                &format!("Added {} to watch list (priority: {})", token_address, priority)
-            );
-        }
-    }
-
-    /// Remove token from watch list
-    pub async fn remove_from_watch_list(&self, token_address: &str) {
-        let mut watch_list = self.watch_list.write().await;
-        if watch_list.remove(token_address).is_some() {
-            log(LogTag::Pool, "UNWATCH", &format!("Removed {} from watch list", token_address));
-        }
-    }
-
-    /// Get recent price history for a token
-    /// Now returns disk-cached price history (2 hours of data)
     pub async fn get_recent_price_history(&self, token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
         // First try disk cache for comprehensive history
         {
@@ -1542,9 +1519,12 @@ impl PoolPriceService {
     pub async fn get_detailed_pool_price_history_for_token(
         &self,
         token_address: &str
-    ) -> HashMap<String, Vec<(DateTime<Utc>, f64, Option<f64>, Option<f64>, Option<f64>, f64, Option<f64>)>> {
+    ) -> HashMap<
+        String,
+        Vec<(DateTime<Utc>, f64, Option<f64>, Option<f64>, Option<f64>, f64, Option<f64>)>
+    > {
         let mut result = HashMap::new();
-        
+
         let cache = self.pool_price_history.read().await;
         if let Some(token_cache) = cache.get(token_address) {
             for (pool_address, pool_cache) in &token_cache.pool_caches {
@@ -1553,11 +1533,14 @@ impl PoolPriceService {
         } else {
             // Try to load from disk if not in memory
             drop(cache);
-            if let Ok(token_cache) = TokenAggregatedPriceHistoryCache::load_from_disk(token_address) {
+            if
+                let Ok(token_cache) =
+                    TokenAggregatedPriceHistoryCache::load_from_disk(token_address)
+            {
                 for (pool_address, pool_cache) in &token_cache.pool_caches {
                     result.insert(pool_address.clone(), pool_cache.get_detailed_price_history());
                 }
-                
+
                 // Cache it in memory for future use
                 let mut pool_cache = self.pool_price_history.write().await;
                 pool_cache.insert(token_address.to_string(), token_cache);
@@ -1575,13 +1558,16 @@ impl PoolPriceService {
         } else {
             // Try to load from disk if not in memory
             drop(cache);
-            if let Ok(token_cache) = TokenAggregatedPriceHistoryCache::load_from_disk(token_address) {
+            if
+                let Ok(token_cache) =
+                    TokenAggregatedPriceHistoryCache::load_from_disk(token_address)
+            {
                 let pools = token_cache.pool_caches.keys().cloned().collect();
-                
+
                 // Cache it in memory for future use
                 let mut pool_cache = self.pool_price_history.write().await;
                 pool_cache.insert(token_address.to_string(), token_cache);
-                
+
                 pools
             } else {
                 Vec::new()
@@ -1597,13 +1583,16 @@ impl PoolPriceService {
         } else {
             // Try to load from disk if not in memory
             drop(cache);
-            if let Ok(token_cache) = TokenAggregatedPriceHistoryCache::load_from_disk(token_address) {
+            if
+                let Ok(token_cache) =
+                    TokenAggregatedPriceHistoryCache::load_from_disk(token_address)
+            {
                 let best_pool = token_cache.get_best_pool_address();
-                
+
                 // Cache it in memory for future use
                 let mut pool_cache = self.pool_price_history.write().await;
                 pool_cache.insert(token_address.to_string(), token_cache);
-                
+
                 best_pool
             } else {
                 None
@@ -1614,8 +1603,8 @@ impl PoolPriceService {
     /// Add price to pool-specific history (called internally when prices are updated)
     /// Now uses pool-specific disk-based caching with detailed data
     async fn add_price_to_pool_history(
-        &self, 
-        token_address: &str, 
+        &self,
+        token_address: &str,
         pool_address: &str,
         dex_id: &str,
         pool_type: Option<String>,
@@ -1645,17 +1634,21 @@ impl PoolPriceService {
             let mut pool_cache = self.pool_price_history.write().await;
             let token_cache = pool_cache
                 .entry(token_address.to_string())
-                .or_insert_with(|| TokenAggregatedPriceHistoryCache::new(token_address.to_string()));
+                .or_insert_with(||
+                    TokenAggregatedPriceHistoryCache::new(token_address.to_string())
+                );
 
             // Get or create pool-specific cache
             let pool_specific_cache = token_cache.pool_caches
                 .entry(pool_address.to_string())
-                .or_insert_with(|| PoolPriceHistoryCache::new(
-                    token_address.to_string(),
-                    pool_address.to_string(),
-                    dex_id.to_string(),
-                    pool_type.clone()
-                ));
+                .or_insert_with(||
+                    PoolPriceHistoryCache::new(
+                        token_address.to_string(),
+                        pool_address.to_string(),
+                        dex_id.to_string(),
+                        pool_type.clone()
+                    )
+                );
 
             // Only add if price has changed significantly
             let price_added = pool_specific_cache.add_price_if_changed(
@@ -1670,7 +1663,7 @@ impl PoolPriceService {
 
             if price_added {
                 token_cache.last_updated = Utc::now();
-                
+
                 if is_debug_pool_prices_enabled() {
                     log(
                         LogTag::Pool,
@@ -1814,10 +1807,7 @@ impl PoolPriceService {
                         log(
                             LogTag::Pool,
                             "CACHE_EXPIRED",
-                            &format!(
-                                "❌ CACHE EXPIRED for {} and contains no price; proceeding to fresh calculation",
-                                token_address
-                            )
+                            &format!("❌ CACHE EXPIRED for {} and contains no price; proceeding to fresh calculation", token_address)
                         );
                     }
                 }
@@ -1986,31 +1976,6 @@ impl PoolPriceService {
                             &pool_result.source
                         ).await;
 
-                        // Automatically add frequently used tokens to watch list for monitoring
-                        // This helps populate the watch list with actively traded tokens
-                        let mut watch_list = self.watch_list.write().await;
-                        if !watch_list.contains_key(token_address) {
-                            watch_list.insert(token_address.to_string(), WatchListEntry {
-                                token_address: token_address.to_string(),
-                                added_at: Utc::now(),
-                                priority: 50, // Medium priority for automatically added tokens
-                                last_price_check: Some(Utc::now()),
-                            });
-
-                            if is_debug_pool_prices_enabled() {
-                                log(
-                                    LogTag::Pool,
-                                    "AUTO_WATCH",
-                                    &format!("📡 Auto-added {} to watch list (frequently requested)", token_address)
-                                );
-                            }
-                        } else {
-                            // Update existing watch list entry timestamp
-                            if let Some(entry) = watch_list.get_mut(token_address) {
-                                entry.last_price_check = Some(Utc::now());
-                            }
-                        }
-
                         if is_debug_pool_prices_enabled() {
                             log(
                                 LogTag::Pool,
@@ -2160,14 +2125,14 @@ impl PoolPriceService {
                     log(
                         LogTag::Pool,
                         "INFO",
-                        &format!("API timeout for {} (system may be shutting down): {}", token_address, e)
+                        &format!(
+                            "API timeout for {} (system may be shutting down): {}",
+                            token_address,
+                            e
+                        )
                     );
                 } else {
-                    log(
-                        LogTag::Pool,
-                        "ERROR",
-                        &format!("API error for {}: {}", token_address, e)
-                    );
+                    log(LogTag::Pool, "ERROR", &format!("API error for {}: {}", token_address, e));
                 }
                 return Err(format!("Failed to fetch pools from API: {}", e));
             }
@@ -2299,7 +2264,10 @@ impl PoolPriceService {
     }
 
     /// Force refresh pools infos for a token (honors rate-limits internally)
-    pub async fn refresh_pools_infos(&self, token_address: &str) -> Result<Vec<CachedPoolInfo>, String> {
+    pub async fn refresh_pools_infos(
+        &self,
+        token_address: &str
+    ) -> Result<Vec<CachedPoolInfo>, String> {
         let result = self.fetch_and_cache_pools(token_address).await?;
         // Persist best-effort
         let _ = Self::save_pools_info_cache_to_disk(&self.pool_cache).await;
@@ -2569,7 +2537,6 @@ impl PoolPriceService {
     async fn update_token_price_internal(
         pool_cache: &Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>,
         price_cache: &Arc<RwLock<HashMap<String, PoolPriceResult>>>,
-        watch_list: &Arc<RwLock<HashMap<String, WatchListEntry>>>,
         token_address: &str
     ) -> Result<bool, String> {
         // Check if we have cached pools available for this token
@@ -2602,31 +2569,6 @@ impl PoolPriceService {
         Ok(has_cached_pools)
     }
 
-    /// Get current watch list
-    pub async fn get_watch_list(&self) -> Vec<WatchListEntry> {
-        let watch_list = self.watch_list.read().await;
-        watch_list.values().cloned().collect()
-    }
-
-    /// Get watch list statistics
-    pub async fn get_watch_list_stats(&self) -> (usize, usize, usize) {
-        let watch_list = self.watch_list.read().await;
-        let total = watch_list.len();
-        let mut expired = 0;
-        let mut never_checked = 0;
-
-        for entry in watch_list.values() {
-            if entry.is_expired() {
-                expired += 1;
-            }
-            if entry.last_price_check.is_none() {
-                never_checked += 1;
-            }
-        }
-
-        (total, expired, never_checked)
-    }
-
     /// Get cache statistics
     pub async fn get_cache_stats(&self) -> (usize, usize, usize) {
         let pool_cache = self.pool_cache.read().await;
@@ -2648,21 +2590,12 @@ impl PoolPriceService {
             .map(|v| v.len() as u64)
             .sum();
 
-        // Watch list snapshot
-        let (watch_total, watch_expired, watch_never_checked) = {
-            let wl = self.watch_list.read().await;
-            let total = wl.len();
-            let mut expired = 0usize;
-            let mut never = 0usize;
-            for entry in wl.values() {
-                if entry.is_expired() { expired += 1; }
-                if entry.last_price_check.is_none() { never += 1; }
-            }
-            (total as u64, expired as u64, never as u64)
-        };
-        stats.watch_total = watch_total;
-        stats.watch_expired = watch_expired;
-        stats.watch_never_checked = watch_never_checked;
+        // Watch list stats now sourced from price service
+        let (wl_total, wl_expired, wl_never) =
+            crate::tokens::price::get_price_watch_list_stats_safe().await;
+        stats.watch_total = wl_total as u64;
+        stats.watch_expired = wl_expired as u64;
+        stats.watch_never_checked = wl_never as u64;
         stats.last_updated = Utc::now();
 
         stats.clone()
@@ -2671,7 +2604,7 @@ impl PoolPriceService {
     /// Get detailed disk cache statistics for pool price history
     pub async fn get_disk_cache_stats(&self) -> Result<PoolDiskCacheStats, String> {
         let cache_dir = Path::new(POOL_PRICE_HISTORY_CACHE_DIR);
-        
+
         if !cache_dir.exists() {
             return Ok(PoolDiskCacheStats::default());
         }
@@ -2688,38 +2621,64 @@ impl PoolPriceService {
             Ok(token_dirs) => {
                 for token_dir_entry in token_dirs {
                     if let Ok(token_dir) = token_dir_entry {
-                        if token_dir.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                        if
+                            token_dir
+                                .file_type()
+                                .map(|t| t.is_dir())
+                                .unwrap_or(false)
+                        {
                             total_tokens += 1;
                             let token_path = token_dir.path();
-                            
+
                             if let Ok(pool_files) = fs::read_dir(&token_path) {
                                 for pool_file_entry in pool_files {
                                     if let Ok(pool_file) = pool_file_entry {
-                                        if pool_file.file_name().to_string_lossy().ends_with(".json") {
+                                        if
+                                            pool_file
+                                                .file_name()
+                                                .to_string_lossy()
+                                                .ends_with(".json")
+                                        {
                                             total_pools += 1;
                                             total_files += 1;
-                                            
+
                                             // Get file size
                                             if let Ok(metadata) = pool_file.metadata() {
                                                 total_size_bytes += metadata.len();
                                             }
-                                            
+
                                             // Try to load and get entry statistics
-                                            let pool_address = pool_file.file_name()
+                                            let pool_address = pool_file
+                                                .file_name()
                                                 .to_string_lossy()
                                                 .trim_end_matches(".json")
                                                 .to_string();
-                                            let token_mint = token_dir.file_name().to_string_lossy().to_string();
-                                            
-                                            if let Ok(pool_cache) = PoolPriceHistoryCache::load_from_disk(&token_mint, &pool_address) {
+                                            let token_mint = token_dir
+                                                .file_name()
+                                                .to_string_lossy()
+                                                .to_string();
+
+                                            if
+                                                let Ok(pool_cache) =
+                                                    PoolPriceHistoryCache::load_from_disk(
+                                                        &token_mint,
+                                                        &pool_address
+                                                    )
+                                            {
                                                 total_entries += pool_cache.entries.len();
-                                                
+
                                                 // Track oldest and newest entries
                                                 for entry in &pool_cache.entries {
-                                                    if oldest_entry.is_none() || entry.timestamp < oldest_entry.unwrap() {
+                                                    if
+                                                        oldest_entry.is_none() ||
+                                                        entry.timestamp < oldest_entry.unwrap()
+                                                    {
                                                         oldest_entry = Some(entry.timestamp);
                                                     }
-                                                    if newest_entry.is_none() || entry.timestamp > newest_entry.unwrap() {
+                                                    if
+                                                        newest_entry.is_none() ||
+                                                        entry.timestamp > newest_entry.unwrap()
+                                                    {
                                                         newest_entry = Some(entry.timestamp);
                                                     }
                                                 }
@@ -2909,7 +2868,12 @@ pub async fn get_price_history_for_analysis(token_address: &str) -> Vec<(DateTim
 }
 
 /// Get detailed pool price history for a specific token (NEW FUNCTION)
-pub async fn get_detailed_pool_price_history(token_address: &str) -> HashMap<String, Vec<(DateTime<Utc>, f64, Option<f64>, Option<f64>, Option<f64>, f64, Option<f64>)>> {
+pub async fn get_detailed_pool_price_history(
+    token_address: &str
+) -> HashMap<
+    String,
+    Vec<(DateTime<Utc>, f64, Option<f64>, Option<f64>, Option<f64>, f64, Option<f64>)>
+> {
     let pool_service = get_pool_service();
     pool_service.get_detailed_pool_price_history_for_token(token_address).await
 }
@@ -2980,7 +2944,12 @@ pub async fn cleanup_old_price_history_caches() -> Result<usize, String> {
                                     for pool_address in &pools_to_remove {
                                         token_cache.pool_caches.remove(pool_address);
                                         // Also remove the file
-                                        let pool_file = format!("{}/{}/{}.json", POOL_PRICE_HISTORY_CACHE_DIR, token_mint, pool_address);
+                                        let pool_file = format!(
+                                            "{}/{}/{}.json",
+                                            POOL_PRICE_HISTORY_CACHE_DIR,
+                                            token_mint,
+                                            pool_address
+                                        );
                                         if let Err(e) = fs::remove_file(&pool_file) {
                                             log(
                                                 LogTag::Pool,
@@ -2996,7 +2965,11 @@ pub async fn cleanup_old_price_history_caches() -> Result<usize, String> {
                                             log(
                                                 LogTag::Pool,
                                                 "CLEANUP_REMOVED",
-                                                &format!("Removed empty pool cache file for {}/{}", token_mint, pool_address)
+                                                &format!(
+                                                    "Removed empty pool cache file for {}/{}",
+                                                    token_mint,
+                                                    pool_address
+                                                )
                                             );
                                         }
                                     }
@@ -3061,7 +3034,11 @@ pub async fn cleanup_old_price_history_caches() -> Result<usize, String> {
     log(
         LogTag::Pool,
         "CLEANUP_COMPLETE",
-        &format!("Pool price history cleanup complete: removed {} tokens and {} pools", cleaned_tokens, cleaned_pools)
+        &format!(
+            "Pool price history cleanup complete: removed {} tokens and {} pools",
+            cleaned_tokens,
+            cleaned_pools
+        )
     );
 
     Ok(cleaned_tokens + cleaned_pools)

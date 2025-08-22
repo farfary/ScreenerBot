@@ -39,10 +39,10 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 5;
+pub const MAX_OPEN_POSITIONS: usize = 2;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.01;
+pub const TRADE_SIZE_SOL: f64 = 0.005;
 
 pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 
@@ -627,12 +627,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     tokio::time::timeout(Duration::from_secs(TOKEN_CHECK_TASK_TIMEOUT_SECS), async {
                         let pool_service = get_pool_service();
 
-                        // Entry decision delegated to entry::should_buy
-                        let (approved, _confidence, _reason) = should_buy(&token).await;
-                        if !approved {
-                            return;
-                        }
-
                         // Get current pool price
                         let current_price = match
                             pool_service
@@ -644,6 +638,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 return;
                             }
                         };
+
+                        // Entry decision delegated to entry::should_buy
+                        let (approved, _confidence, _reason) = should_buy(&token).await;
+                        if !approved {
+                            return;
+                        }
 
                         // Compute percent change from recent history if available
                         let change = {

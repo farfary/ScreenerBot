@@ -2,8 +2,7 @@
 ///
 /// This module provides intelligent token monitoring that prioritizes:
 /// 1. Tokens with open positions (highest priority)
-/// 2. High liquidity tokens for new entry detection
-/// 3. Zero or stale price tokens that need updates
+/// 2. Zero or stale price tokens that need updates
 
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_monitor_enabled;
@@ -34,11 +33,8 @@ pub const ENHANCED_CYCLE_DURATION_SECONDS: u64 = 2;
 /// Database cleanup interval in seconds (1 minute)
 pub const CLEANUP_INTERVAL_SECONDS: u64 = 60;
 
-/// High liquidity threshold for monitoring prioritization (USD)
-pub const MONITOR_HIGH_LIQUIDITY_THRESHOLD: f64 = 50000.0;
-
 /// Maximum number of tokens to monitor per cycle (reduced for 2-second intervals)
-pub const MAX_TOKENS_PER_MONITOR_CYCLE: usize = 150;
+pub const MAX_TOKENS_PER_MONITOR_CYCLE: usize = 100;
 
 /// Window for "recent pools infos" refresh (seconds)
 pub const MONITOR_RECENT_POOLS_WINDOW_SECONDS: i64 = 600; // 10 minutes
@@ -72,8 +68,8 @@ impl TokenMonitor {
     pub async fn start_enhanced_monitoring_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
         log(LogTag::Monitor, "START", "Enhanced token monitor started with 2-second price updates");
 
-    // Create the shutdown future once to avoid missing notifications between ticks
-    let mut shutdown_fut = Box::pin(shutdown.notified());
+        // Create the shutdown future once to avoid missing notifications between ticks
+        let mut shutdown_fut = Box::pin(shutdown.notified());
 
         loop {
             tokio::select! {
@@ -85,7 +81,7 @@ impl TokenMonitor {
                     self.current_cycle += 1;
                     
                     if let Err(e) = self.enhanced_monitor_tokens().await {
-                        log(LogTag::System, "ERROR", 
+                        log(LogTag::Monitor, "ERROR", 
                             &format!("Enhanced monitoring cycle failed: {}", e));
                     }
                 }
@@ -104,13 +100,11 @@ impl TokenMonitor {
         let priority_mints = get_priority_tokens_safe().await;
 
         if priority_mints.is_empty() {
-            log(LogTag::System, "MONITOR", "No priority tokens to monitor");
-
-            // If no priority tokens, get some high liquidity tokens for new entry detection
-            self.monitor_for_new_entries().await?;
+            log(LogTag::Monitor, "MONITOR", "No priority tokens to monitor");
+            return Ok(());
         } else {
             log(
-                LogTag::System,
+                LogTag::Monitor,
                 "MONITOR",
                 &format!("Enhanced monitoring {} priority tokens", priority_mints.len())
             );
@@ -121,7 +115,10 @@ impl TokenMonitor {
             // Pre-warm/refresh pools infos for priority tokens without exceeding rate limits
             // Limit refreshes per cycle to avoid API rate caps; 2 API calls worth of tokens
             let refresh_budget = MAX_TOKENS_PER_API_CALL * 2;
-            let refreshed = refresh_pools_infos_for_tokens_safe(&priority_mints, refresh_budget).await;
+            let refreshed = refresh_pools_infos_for_tokens_safe(
+                &priority_mints,
+                refresh_budget
+            ).await;
             if refreshed > 0 && is_debug_monitor_enabled() {
                 log(
                     LogTag::Monitor,
@@ -131,10 +128,15 @@ impl TokenMonitor {
             }
 
             // Refresh pools infos for tokens seen in the last 10 minutes (bounded budget)
-            let recent_mints = get_tokens_with_recent_pools_infos_safe(MONITOR_RECENT_POOLS_WINDOW_SECONDS).await;
+            let recent_mints = get_tokens_with_recent_pools_infos_safe(
+                MONITOR_RECENT_POOLS_WINDOW_SECONDS
+            ).await;
             if !recent_mints.is_empty() {
                 let recent_budget = MAX_TOKENS_PER_API_CALL / 2; // keep it light per cycle
-                let refreshed_recent = refresh_pools_infos_for_tokens_safe(&recent_mints, recent_budget).await;
+                let refreshed_recent = refresh_pools_infos_for_tokens_safe(
+                    &recent_mints,
+                    recent_budget
+                ).await;
                 if refreshed_recent > 0 && is_debug_monitor_enabled() {
                     log(
                         LogTag::Monitor,
@@ -143,9 +145,6 @@ impl TokenMonitor {
                     );
                 }
             }
-
-            // Also check for new entry opportunities with remaining API budget
-            self.monitor_for_new_entries().await?;
         }
 
         // Perform database cleanup after token data has been updated
@@ -155,7 +154,7 @@ impl TokenMonitor {
         }
 
         log(
-            LogTag::System,
+            LogTag::Monitor,
             "MONITOR",
             &format!("Enhanced monitoring cycle #{} completed", self.current_cycle)
         );
@@ -234,7 +233,10 @@ impl TokenMonitor {
 
                             // Hint pool service with tokens we just updated so their pools infos stay hot
                             let mints: Vec<String> = chunk.iter().cloned().collect();
-                            let _ = refresh_pools_infos_for_tokens_safe(&mints, MAX_TOKENS_PER_API_CALL).await;
+                            let _ = refresh_pools_infos_for_tokens_safe(
+                                &mints,
+                                MAX_TOKENS_PER_API_CALL
+                            ).await;
                         }
                     }
                 }
@@ -273,149 +275,6 @@ impl TokenMonitor {
         Ok(())
     }
 
-    /// Monitor high liquidity tokens for new entry opportunities
-    async fn monitor_for_new_entries(&mut self) -> Result<(), String> {
-        // Get high liquidity tokens from database for new entry detection
-        let high_liquidity_tokens = self.database
-            .get_tokens_by_liquidity_threshold(MONITOR_HIGH_LIQUIDITY_THRESHOLD).await
-            .map_err(|e| format!("Failed to get high liquidity tokens: {}", e))?;
-
-        if high_liquidity_tokens.is_empty() {
-            log(LogTag::System, "MONITOR", "No high liquidity tokens for new entry detection");
-            return Ok(());
-        }
-
-        // Filter out blacklisted and prioritize by liquidity
-        let mut new_entry_candidates: Vec<ApiToken> = high_liquidity_tokens
-            .into_iter()
-            .filter(|token| !is_token_blacklisted(&token.mint))
-            .take(MAX_TOKENS_PER_MONITOR_CYCLE) // Use comprehensive monitoring limit
-            .collect();
-
-        if new_entry_candidates.is_empty() {
-            log(LogTag::System, "MONITOR", "No valid candidates for new entry detection");
-            return Ok(());
-        }
-
-        // Prioritize tokens with zero or stale prices
-        new_entry_candidates.sort_by(|a, b| {
-            let a_has_price = a.price_sol.is_some() && a.price_sol.unwrap() > 0.0;
-            let b_has_price = b.price_sol.is_some() && b.price_sol.unwrap() > 0.0;
-
-            match (a_has_price, b_has_price) {
-                (false, true) => std::cmp::Ordering::Less, // a needs update more
-                (true, false) => std::cmp::Ordering::Greater, // b needs update more
-                _ => {
-                    // Both have similar price status, sort by liquidity
-                    let a_liq = a.liquidity
-                        .as_ref()
-                        .and_then(|l| l.usd)
-                        .unwrap_or(0.0);
-                    let b_liq = b.liquidity
-                        .as_ref()
-                        .and_then(|l| l.usd)
-                        .unwrap_or(0.0);
-                    b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
-                }
-            }
-        });
-
-        log(
-            LogTag::System,
-            "NEW_ENTRY",
-            &format!(
-                "Monitoring {} high liquidity tokens for new entries",
-                new_entry_candidates.len()
-            )
-        );
-
-        // Process new entry candidates
-        let mut processed = 0;
-        let mut updated = 0;
-
-        for chunk in new_entry_candidates.chunks(MAX_TOKENS_PER_API_CALL) {
-            // Check if we still have rate limit budget
-            if self.rate_limiter.available_permits() == 0 {
-                log(
-                    LogTag::System,
-                    "RATE_LIMIT",
-                    "Rate limit reached, skipping remaining new entry checks"
-                );
-                break;
-            }
-
-            let _permit = self.rate_limiter.acquire().await.unwrap();
-
-            let mints: Vec<String> = chunk
-                .iter()
-                .map(|t| t.mint.clone())
-                .collect();
-
-            let tokens_result = {
-                let api = match get_global_dexscreener_api().await {
-                    Ok(api) => api,
-                    Err(e) => {
-                        log(
-                            LogTag::Monitor,
-                            "ERROR",
-                            &format!("Failed to get global API client: {}", e)
-                        );
-                        continue;
-                    }
-                };
-                let mut api_instance = api.lock().await;
-                // CRITICAL: Only hold the lock for the API call, then release immediately
-                api_instance.get_tokens_info(&mints).await
-            }; // Lock is released here automatically
-
-            match tokens_result {
-                Ok(updated_tokens) => {
-                    if !updated_tokens.is_empty() {
-                        if let Err(e) = self.database.update_tokens(&updated_tokens).await {
-                            log(
-                                LogTag::Monitor,
-                                "ERROR",
-                                &format!("Failed to update new entry tokens: {}", e)
-                            );
-                        } else {
-                            // Update price service cache
-                            update_tokens_prices_safe(&mints).await;
-                            // Warm pools infos cache for these tokens within budget
-                            let _ = refresh_pools_infos_for_tokens_safe(&mints, MAX_TOKENS_PER_API_CALL / 2).await;
-                            updated += updated_tokens.len();
-
-                            // Only log significant updates to reduce noise
-                            if updated_tokens.len() > 10 {
-                                log(
-                                    LogTag::Monitor,
-                                    "NEW_ENTRY",
-                                    &format!(
-                                        "Updated {} new entry candidates",
-                                        updated_tokens.len()
-                                    )
-                                );
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Monitor,
-                        "WARN",
-                        &format!("Failed to get new entry token info: {}", e)
-                    );
-                }
-            }
-
-            processed += chunk.len();
-
-            // Rate limiting delay (reduced for faster updates)
-            sleep(Duration::from_millis(100)).await;
-        }
-
-        Ok(())
-    }
-
     /// Calculate token age in hours
     fn calculate_token_age(&self, token: &ApiToken) -> i64 {
         if let Some(created_at) = token.pair_created_at {
@@ -431,26 +290,26 @@ impl TokenMonitor {
     /// Cleanup database tokens with zero liquidity
     /// This runs every minute after token data has been updated
     async fn cleanup_database(&mut self) -> Result<(), String> {
-        log(LogTag::System, "CLEANUP", "Starting database cleanup for zero liquidity tokens");
+        log(LogTag::Monitor, "CLEANUP", "Starting database cleanup for zero liquidity tokens");
 
         match self.database.cleanup_zero_liquidity_tokens().await {
             Ok(deleted_count) => {
                 if deleted_count > 0 {
                     log(
-                        LogTag::System,
+                        LogTag::Monitor,
                         "CLEANUP",
                         &format!("Database cleanup completed: {} tokens removed", deleted_count)
                     );
                 } else {
                     log(
-                        LogTag::System,
+                        LogTag::Monitor,
                         "CLEANUP",
                         "Database cleanup completed: No tokens to remove"
                     );
                 }
             }
             Err(e) => {
-                log(LogTag::System, "ERROR", &format!("Database cleanup failed: {}", e));
+                log(LogTag::Monitor, "ERROR", &format!("Database cleanup failed: {}", e));
                 return Err(format!("Database cleanup failed: {}", e));
             }
         }
@@ -474,7 +333,7 @@ pub async fn start_token_monitoring(
             Ok(monitor) => monitor,
             Err(e) => {
                 log(
-                    LogTag::System,
+                    LogTag::Monitor,
                     "ERROR",
                     &format!("Failed to initialize enhanced monitor: {}", e)
                 );

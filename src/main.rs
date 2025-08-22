@@ -114,7 +114,7 @@ async fn main() {
     // Emergency shutdown flag (used below after first Ctrl+C)
     let emergency_shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
-    // Initialize tokens system
+    // Initialize tokens system (includes price service initialization)
     let mut tokens_system = match screenerbot::tokens::initialize_tokens_system().await {
         Ok(system) => system,
         Err(e) => {
@@ -122,14 +122,6 @@ async fn main() {
             std::process::exit(1);
         }
     };
-
-    // Initialize price service for thread-safe price access
-    if let Err(e) = screenerbot::tokens::initialize_price_service().await {
-        log(LogTag::System, "ERROR", &format!("Failed to initialize price service: {}", e));
-        std::process::exit(1);
-    }
-
-    log(LogTag::System, "INFO", "Thread-safe price service initialized successfully");
 
     // Initialize and start pool service for real-time price calculations and history caching
     let pool_service = screenerbot::tokens::pool::init_pool_service();
@@ -176,21 +168,6 @@ async fn main() {
                 LogTag::System,
                 "WARN",
                 &format!("Some tokens system tasks failed to start: {}", e)
-            );
-            Vec::new()
-        }
-    };
-
-    // Start pricing background tasks
-    let pricing_handles = match
-        screenerbot::tokens::start_pricing_background_tasks(shutdown_pricing).await
-    {
-        Ok(handles) => handles,
-        Err(e) => {
-            log(
-                LogTag::System,
-                "WARN",
-                &format!("Pricing background tasks failed to start: {}", e)
             );
             Vec::new()
         }
@@ -576,33 +553,6 @@ async fn main() {
                 );
             } else {
                 log(LogTag::System, "INFO", "✅ Rugcheck service task shutdown completed");
-            }
-
-            // Wait for pricing tasks
-            log(
-                LogTag::System,
-                "INFO",
-                &format!("🔄 Waiting for {} pricing tasks to shutdown...", pricing_handles.len())
-            );
-            for (i, handle) in pricing_handles.into_iter().enumerate() {
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!("🔄 Waiting for pricing task {} to shutdown...", i)
-                );
-                if let Err(e) = handle.await {
-                    log(
-                        LogTag::System,
-                        "WARN",
-                        &format!("Pricing task {} failed to shutdown cleanly: {}", i, e)
-                    );
-                } else {
-                    log(
-                        LogTag::System,
-                        "INFO",
-                        &format!("✅ Pricing task {} shutdown completed", i)
-                    );
-                }
             }
         }
     );

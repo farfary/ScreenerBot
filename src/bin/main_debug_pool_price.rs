@@ -772,19 +772,11 @@ async fn test_monitoring_service(
     // Start monitoring
     pool_service.start_monitoring().await;
 
-    // Add some test tokens to watch list
-    let test_tokens = vec![
-        "So11111111111111111111111111111111111111112", // SOL
-        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
-        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" // USDT
-    ];
-
-    for (i, token) in test_tokens.iter().enumerate() {
-        pool_service.add_to_watch_list(token, 100 + (i as i32)).await;
-        log(LogTag::Pool, "WATCH", &format!("Added {} to watch list", token));
-    }
-
-    log(LogTag::Pool, "INFO", &format!("Monitoring for {} seconds...", duration));
+    log(
+        LogTag::Pool,
+        "INFO",
+        &format!("Monitoring for {} seconds (priority tokens sourced from price service)...", duration)
+    );
 
     // Monitor for specified duration
     let mut elapsed = 0u64;
@@ -792,8 +784,6 @@ async fn test_monitoring_service(
         sleep(Duration::from_secs(5)).await;
         elapsed += 5;
 
-        // Get watch list status
-        let watch_list = pool_service.get_watch_list().await;
         let (pool_cache_size, price_cache_size, availability_cache_size) =
             pool_service.get_cache_stats().await;
 
@@ -801,9 +791,8 @@ async fn test_monitoring_service(
             LogTag::Pool,
             "STATUS",
             &format!(
-                "Elapsed: {}s, Watch list: {}, Caches: pool={}, price={}, availability={}",
+                "Elapsed: {}s, Caches: pool={}, price={}, availability={}",
                 elapsed,
-                watch_list.len(),
                 pool_cache_size,
                 price_cache_size,
                 availability_cache_size
@@ -1071,7 +1060,9 @@ async fn test_token_availability_and_price(
                     // Get pairs for this token
                     if
                         let Ok(pairs) =
-                            screenerbot::tokens::dexscreener::get_token_pairs_from_api(token_address).await
+                            screenerbot::tokens::dexscreener::get_token_pairs_from_api(
+                                token_address
+                            ).await
                     {
                         for pair in pairs {
                             if pair.dex_id == "pumpswap" {

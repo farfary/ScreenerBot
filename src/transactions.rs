@@ -23,12 +23,7 @@ use once_cell::sync::Lazy;
 use rand;
 
 use crate::logger::{ log, LogTag };
-use crate::global::{
-    is_debug_transactions_enabled,
-    get_transactions_cache_dir,
-    read_configs,
-    load_wallet_from_config,
-};
+use crate::global::{ is_debug_transactions_enabled, read_configs, load_wallet_from_config };
 use crate::rpc::get_rpc_client;
 use crate::utils::get_wallet_address;
 use crate::tokens::{
@@ -38,6 +33,7 @@ use crate::tokens::{
     TokenDatabase,
     types::PriceSourceType,
 };
+use crate::transactions_db::TransactionDatabase;
 use crate::tokens::decimals::{ raw_to_ui_amount, lamports_to_sol, sol_to_lamports };
 use crate::tokens::price::get_token_price_blocking_safe;
 
@@ -79,11 +75,11 @@ fn get_mint_prefix(mint: &str) -> &str {
 
 // Main monitoring intervals
 
-const NORMAL_CHECK_INTERVAL_SECS: u64 = 10; // Normal transaction checking every 15 seconds
+const NORMAL_CHECK_INTERVAL_SECS: u64 = 60; // Normal transaction checking every 15 seconds
 
 // RPC and batch processing limits
 const RPC_BATCH_SIZE: usize = 1000; // Transaction signatures fetch batch size (increased for fewer pages)
-const TRANSACTION_DATA_BATCH_SIZE: usize = 20; // Transaction data fetch batch size (optimized for speed)
+const TRANSACTION_DATA_BATCH_SIZE: usize = 1; // Transaction data fetch batch size (optimized for speed)
 
 // Solana network constants
 const ATA_RENT_COST_SOL: f64 = 0.00203928; // Standard ATA creation/closure cost
@@ -92,7 +88,7 @@ const DEFAULT_COMPUTE_UNIT_PRICE: u64 = 1000; // Default compute unit price (mic
 const WSOL_MINT: &str = "So11111111111111111111111111111111111111112"; // Wrapped SOL mint address
 
 // Analysis cache versioning (bump when snapshot schema changes)
-const ANALYSIS_CACHE_VERSION: u32 = 1;
+const ANALYSIS_CACHE_VERSION: u32 = 2;
 
 // =============================================================================
 // CORE DATA STRUCTURES
@@ -174,9 +170,8 @@ pub struct Transaction {
     #[serde(skip_serializing, default)]
     pub token_decimals: Option<u8>,
 
-    // Cache file path and metadata
+    // Cache metadata
     pub last_updated: DateTime<Utc>,
-    pub cache_file_path: String,
 
     // Optional persisted analysis snapshot for finalized txs to avoid re-analysis on every load
     #[serde(default)]
@@ -425,6 +420,11 @@ pub struct CachedAnalysis {
     pub price_source: Option<PriceSourceType>,
     pub token_symbol: Option<String>,
     pub token_decimals: Option<u8>,
+    // Add missing critical fields for complete caching
+    pub swap_analysis: Option<SwapAnalysis>,
+    pub fee_breakdown: Option<FeeBreakdown>,
+    pub log_messages: Vec<String>,
+    pub instructions: Vec<InstructionInfo>,
 }
 
 impl CachedAnalysis {
@@ -446,6 +446,11 @@ impl CachedAnalysis {
             price_source: tx.price_source.clone(),
             token_symbol: tx.token_symbol.clone(),
             token_decimals: tx.token_decimals,
+            // Include the missing critical fields
+            swap_analysis: tx.swap_analysis.clone(),
+            fee_breakdown: tx.fee_breakdown.clone(),
+            log_messages: tx.log_messages.clone(),
+            instructions: tx.instructions.clone(),
         }
     }
 }
@@ -638,6 +643,9 @@ pub struct TransactionsManager {
     // Token database integration
     pub token_database: Option<TokenDatabase>,
 
+    // Transaction database for high-performance caching (replaces JSON files)
+    pub transaction_database: Option<TransactionDatabase>,
+
     // Deferred retries for transactions that failed to process
     // This helps avoid losing verifications due to temporary RPC lag or network issues
     pub deferred_retries: HashMap<String, DeferredRetry>,
@@ -668,6 +676,19 @@ impl TransactionsManager {
             );
         }
 
+        // Initialize transaction database
+        let transaction_database = match TransactionDatabase::new().await {
+            Ok(db) => Some(db),
+            Err(e) => {
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    &format!("Failed to initialize transaction database: {}", e)
+                );
+                None
+            }
+        };
+
         Ok(Self {
             wallet_pubkey,
             debug_enabled: is_debug_transactions_enabled(),
@@ -676,45 +697,194 @@ impl TransactionsManager {
             total_transactions: 0,
             new_transactions_count: 0,
             token_database,
+            transaction_database,
             deferred_retries: HashMap::new(),
         })
     }
 
     /// Load existing cached signatures to avoid re-processing
+    /// When database is available, this loads from database; otherwise falls back to JSON files
     pub async fn initialize_known_signatures(&mut self) -> Result<(), String> {
-        let cache_dir = get_transactions_cache_dir();
+        if let Some(ref db) = self.transaction_database {
+            // Load from database
+            let count = db.get_known_signatures_count().await?;
+            self.total_transactions = count;
 
-        if !Path::new(&cache_dir).exists() {
-            fs
-                ::create_dir_all(&cache_dir)
-                .map_err(|e| format!("Failed to create transactions cache dir: {}", e))?;
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "DB_INIT",
+                    &format!("Loaded {} existing cached transactions from database", count)
+                );
+            }
+
             return Ok(());
         }
 
-        let entries = fs
-            ::read_dir(&cache_dir)
-            .map_err(|e| format!("Failed to read cache dir: {}", e))?;
-
-        for entry in entries {
-            if let Ok(entry) = entry {
-                if let Some(file_name) = entry.file_name().to_str() {
-                    if file_name.ends_with(".json") {
-                        let signature = file_name.replace(".json", "");
-                        self.known_signatures.insert(signature);
-                        self.total_transactions += 1;
-                    }
-                }
-            }
-        }
-
+        // No database available - start with empty known signatures
         if self.debug_enabled {
             log(
                 LogTag::Transactions,
                 "INIT",
-                &format!("Loaded {} existing cached transactions", self.known_signatures.len())
+                "No database available - starting with empty transaction cache"
             );
         }
 
+        Ok(())
+    }
+
+    /// Check if signature is known using database (if available) or fallback to HashSet
+    pub async fn is_signature_known(&self, signature: &str) -> bool {
+        // Use database if available, otherwise fallback to in-memory HashSet
+        if let Some(ref db) = self.transaction_database {
+            db.is_signature_known(signature).await.unwrap_or(false)
+        } else {
+            self.known_signatures.contains(signature)
+        }
+    }
+
+    /// Add signature to known cache using database (if available) or fallback to HashSet
+    pub async fn add_known_signature(&mut self, signature: &str) -> Result<(), String> {
+        // Use database if available
+        if let Some(ref db) = self.transaction_database {
+            db.add_known_signature(signature).await?;
+        } else {
+            // Fallback to in-memory HashSet
+            self.known_signatures.insert(signature.to_string());
+        }
+        Ok(())
+    }
+
+    /// Get count of known signatures
+    pub async fn get_known_signatures_count(&self) -> u64 {
+        if let Some(ref db) = self.transaction_database {
+            db.get_known_signatures_count().await.unwrap_or(0)
+        } else {
+            self.known_signatures.len() as u64
+        }
+    }
+
+    /// Store deferred retry using database (if available) or fallback to HashMap
+    pub async fn store_deferred_retry(&mut self, retry: &DeferredRetry) -> Result<(), String> {
+        if let Some(ref db) = self.transaction_database {
+            db.store_deferred_retry(
+                &retry.signature,
+                &retry.next_retry_at,
+                retry.remaining_attempts,
+                retry.current_delay_secs,
+                retry.last_error.as_deref()
+            ).await?;
+        } else {
+            // Fallback to in-memory HashMap
+            self.deferred_retries.insert(retry.signature.clone(), retry.clone());
+        }
+        Ok(())
+    }
+
+    /// Get pending deferred retries using database (if available) or fallback to HashMap
+    pub async fn get_pending_deferred_retries(&self) -> Result<Vec<DeferredRetry>, String> {
+        if let Some(ref db) = self.transaction_database {
+            let db_retries = db.get_pending_deferred_retries().await?;
+
+            // Convert database format to our struct format
+            let mut retries = Vec::new();
+            for db_retry in db_retries {
+                let next_retry_at = DateTime::parse_from_rfc3339(&db_retry.next_retry_at)
+                    .map_err(|e| format!("Invalid date format: {}", e))?
+                    .with_timezone(&Utc);
+
+                retries.push(DeferredRetry {
+                    signature: db_retry.signature,
+                    next_retry_at,
+                    remaining_attempts: db_retry.remaining_attempts,
+                    current_delay_secs: db_retry.current_delay_secs,
+                    last_error: db_retry.last_error,
+                });
+            }
+            Ok(retries)
+        } else {
+            // Fallback to in-memory HashMap - filter for ready retries
+            let now = Utc::now();
+            let ready_retries: Vec<DeferredRetry> = self.deferred_retries
+                .values()
+                .filter(|retry| retry.next_retry_at <= now && retry.remaining_attempts > 0)
+                .cloned()
+                .collect();
+            Ok(ready_retries)
+        }
+    }
+
+    /// Remove deferred retry using database (if available) or fallback to HashMap
+    pub async fn remove_deferred_retry(&mut self, signature: &str) -> Result<(), String> {
+        if let Some(ref db) = self.transaction_database {
+            db.remove_deferred_retry(signature).await?;
+        } else {
+            // Fallback to in-memory HashMap
+            self.deferred_retries.remove(signature);
+        }
+        Ok(())
+    }
+
+    /// Store processed transaction analysis in database (if available)
+    async fn cache_processed_transaction(&self, transaction: &Transaction) -> Result<(), String> {
+        if let Some(ref db) = self.transaction_database {
+            // Serialize complex analysis data to JSON for storage
+            let transaction_type_json = serde_json
+                ::to_string(&transaction.transaction_type)
+                .map_err(|e| format!("Failed to serialize transaction type: {}", e))?;
+
+            let direction_string = match transaction.direction {
+                TransactionDirection::Incoming => "Incoming",
+                TransactionDirection::Outgoing => "Outgoing",
+                TransactionDirection::Internal => "Internal",
+            };
+
+            // Create ProcessedTransaction for database storage
+            // Note: we use our simplified database schema format rather than the full Transaction struct
+            let processed = crate::transactions_db::ProcessedTransaction {
+                id: None,
+                signature: transaction.signature.clone(),
+                swap_type: Some(transaction_type_json),
+                token_mint: transaction.token_symbol.clone(),
+                amount_in: None, // Could be extracted from swap_analysis if needed
+                amount_out: None, // Could be extracted from swap_analysis if needed
+                price_sol: transaction.calculated_token_price_sol,
+                price_usd: None, // Could be calculated if needed
+                market_cap: None, // Could be extracted from token_info if available
+                liquidity_sol: None, // Could be extracted from swap_analysis if available
+                liquidity_usd: None, // Could be extracted from swap_analysis if available
+                volume_24h: None, // Would need external data source
+                holder_count: None, // Would need external data source
+                is_buy: match &transaction.transaction_type {
+                    TransactionType::SwapSolToToken { .. } => Some(true),
+                    TransactionType::SwapTokenToSol { .. } => Some(false),
+                    _ => None,
+                },
+                wallet_address: Some(self.wallet_pubkey.to_string()),
+                dex_name: match &transaction.transaction_type {
+                    | TransactionType::SwapSolToToken { router, .. }
+                    | TransactionType::SwapTokenToSol { router, .. } => Some(router.clone()),
+                    _ => None,
+                },
+                pool_address: None, // Could be extracted from swap_analysis if needed
+                created_at: transaction.timestamp.timestamp(),
+                updated_at: Utc::now().timestamp(),
+            };
+
+            db.store_processed_transaction(&processed).await?;
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "DB_PROCESSED",
+                    &format!(
+                        "Cached processed transaction analysis {} to database",
+                        &transaction.signature[..8]
+                    )
+                );
+            }
+        }
+        // No fallback needed - processed data was never cached in JSON files before
         Ok(())
     }
 
@@ -728,7 +898,7 @@ impl TransactionsManager {
                 "RPC_CALL",
                 &format!(
                     "Checking for new transactions (known: {}, using latest 50)",
-                    self.known_signatures.len()
+                    self.get_known_signatures_count().await
                 )
             );
         }
@@ -745,12 +915,12 @@ impl TransactionsManager {
             let signature = sig_info.signature;
 
             // Skip if we already know this signature
-            if self.known_signatures.contains(&signature) {
+            if self.is_signature_known(&signature).await {
                 continue;
             }
 
-            // Add to known signatures
-            self.known_signatures.insert(signature.clone());
+            // Add to known signatures (database or HashSet fallback)
+            self.add_known_signature(&signature).await?;
             new_signatures.push(signature.clone());
 
             // Do not advance pagination cursor here; we always fetch the latest page
@@ -771,7 +941,9 @@ impl TransactionsManager {
         Ok(new_signatures)
     }
 
-    /// Process a single transaction (cache-first approach)
+    // Removed obsolete build_transaction_from_processed (old schema fields)
+
+    /// Process a single transaction (database-first approach)
     pub async fn process_transaction(&mut self, signature: &str) -> Result<Transaction, String> {
         if self.debug_enabled {
             log(
@@ -781,157 +953,129 @@ impl TransactionsManager {
             );
         }
 
-        // Check if we already have this transaction cached and can avoid RPC call
-        let cache_file = format!("{}/{}.json", get_transactions_cache_dir().display(), signature);
-        let use_cache = Path::new(&cache_file).exists();
+        // Try to load from database first
+        // (Processed transaction reconstruction removed - legacy schema)
 
-        let mut transaction = if use_cache {
-            // Load from cache and always recalculate
-            if self.debug_enabled {
+        // Not in database, fetch fresh data from RPC
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "RPC_FETCH",
+                &format!("Fetching new transaction: {}", &signature[..8])
+            );
+        }
+
+        let rpc_client = get_rpc_client();
+        let tx_data = match rpc_client.get_transaction_details_premium_rpc(signature).await {
+            Ok(data) => {
                 log(
-                    LogTag::Transactions,
-                    "CACHE_LOAD",
-                    &format!("Loading cached transaction: {}", &signature[..8])
+                    LogTag::Rpc,
+                    "SUCCESS",
+                    &format!(
+                        "Retrieved transaction details for {} from premium RPC",
+                        &signature[..8]
+                    )
                 );
+                data
             }
-            let mut transaction = self.load_transaction_from_cache(Path::new(&cache_file)).await?;
-
-            // Always recalculate transaction analysis
-            if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "RECALC",
-                    &format!("Recalculating transaction: {}", &signature[..8])
-                );
-            }
-            self.recalculate_transaction_analysis(&mut transaction).await?;
-            // Persist a snapshot for finalized transactions
-            if
-                matches!(transaction.status, TransactionStatus::Finalized) &&
-                transaction.raw_transaction_data.is_some()
-            {
-                transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
-            }
-
-            transaction
-        } else {
-            // Fetch fresh data from RPC
-            if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "RPC_FETCH",
-                    &format!("Fetching new transaction: {}", &signature[..8])
-                );
-            }
-
-            let rpc_client = get_rpc_client();
-            let tx_data = match rpc_client.get_transaction_details_premium_rpc(signature).await {
-                Ok(data) => {
+            Err(e) => {
+                let error_msg = e.to_string();
+                if error_msg.contains("not found") || error_msg.contains("no longer available") {
                     log(
                         LogTag::Rpc,
-                        "SUCCESS",
+                        "NOT_FOUND",
                         &format!(
-                            "Retrieved transaction details for {} from premium RPC",
+                            "Transaction {} not found on-chain (likely failed swap)",
                             &signature[..8]
                         )
                     );
-                    data
+                    return Err(format!("Transaction not found: {}", signature));
+                } else {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("RPC error fetching {}: {}", &signature[..8], error_msg)
+                    );
+                    return Err(format!("Failed to fetch transaction details: {}", e));
                 }
-                Err(e) => {
-                    let error_msg = e.to_string();
-                    if error_msg.contains("not found") || error_msg.contains("no longer available") {
-                        log(
-                            LogTag::Rpc,
-                            "NOT_FOUND",
-                            &format!(
-                                "Transaction {} not found on-chain (likely failed swap)",
-                                &signature[..8]
-                            )
-                        );
-                        return Err(format!("Transaction not found: {}", signature));
-                    } else {
-                        log(
-                            LogTag::Rpc,
-                            "ERROR",
-                            &format!("RPC error fetching {}: {}", &signature[..8], error_msg)
-                        );
-                        return Err(format!("Failed to fetch transaction details: {}", e));
-                    }
-                }
-            };
-
-            // Create Transaction structure
-            // Convert block_time to proper timestamp if available
-            let timestamp = if let Some(block_time) = tx_data.block_time {
-                DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or_else(|| Utc::now())
-            } else {
-                Utc::now()
-            };
-
-            let mut transaction = Transaction {
-                signature: signature.to_string(),
-                slot: Some(tx_data.slot),
-                block_time: tx_data.block_time,
-                timestamp,
-                status: TransactionStatus::Finalized, // Since we fetched it successfully
-                transaction_type: TransactionType::Unknown,
-                direction: TransactionDirection::Internal,
-                success: tx_data.transaction.meta.as_ref().map_or(false, |meta| meta.err.is_none()),
-                error_message: tx_data.transaction.meta
-                    .as_ref()
-                    .and_then(|meta| meta.err.as_ref())
-                    .map(|err| format!("{:?}", err)),
-                fee_sol: tx_data.transaction.meta
-                    .as_ref()
-                    .map_or(0.0, |meta| lamports_to_sol(meta.fee)),
-                sol_balance_change: 0.0,
-                token_transfers: Vec::new(),
-                raw_transaction_data: Some(serde_json::to_value(&tx_data).unwrap_or_default()),
-                log_messages: tx_data.transaction.meta
-                    .as_ref()
-                    .map(|meta| {
-                        match &meta.log_messages {
-                            solana_transaction_status::option_serializer::OptionSerializer::Some(
-                                logs,
-                            ) => logs.clone(),
-                            _ => Vec::new(),
-                        }
-                    })
-                    .unwrap_or_default(),
-                instructions: Vec::new(),
-                sol_balance_changes: Vec::new(),
-                token_balance_changes: Vec::new(),
-                swap_analysis: None,
-                position_impact: None,
-                profit_calculation: None,
-                fee_breakdown: None,
-                ata_analysis: None,
-                token_info: None,
-                calculated_token_price_sol: None,
-                price_source: None,
-                token_symbol: None,
-                token_decimals: None,
-                last_updated: Utc::now(),
-                cache_file_path: cache_file.clone(),
-                cached_analysis: None,
-            };
-
-            // Analyze transaction type and extract details
-            self.analyze_transaction(&mut transaction).await?;
-
-            // Persist a snapshot for finalized transactions to avoid future re-analysis
-            if
-                matches!(transaction.status, TransactionStatus::Finalized) &&
-                transaction.raw_transaction_data.is_some()
-            {
-                transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
             }
-
-            transaction
         };
 
-        // Always cache the result (updates existing cache with new analysis)
-        self.cache_transaction(&transaction).await?;
+        // Create Transaction structure
+        let timestamp = if let Some(block_time) = tx_data.block_time {
+            DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or_else(|| Utc::now())
+        } else {
+            Utc::now()
+        };
+
+        let mut transaction = Transaction {
+            signature: signature.to_string(),
+            slot: Some(tx_data.slot),
+            block_time: tx_data.block_time,
+            timestamp,
+            status: TransactionStatus::Finalized,
+            transaction_type: TransactionType::Unknown,
+            direction: TransactionDirection::Internal,
+            success: tx_data.transaction.meta.as_ref().map_or(false, |meta| meta.err.is_none()),
+            error_message: tx_data.transaction.meta
+                .as_ref()
+                .and_then(|meta| meta.err.as_ref())
+                .map(|err| format!("{:?}", err)),
+            fee_sol: tx_data.transaction.meta
+                .as_ref()
+                .map_or(0.0, |meta| lamports_to_sol(meta.fee)),
+            sol_balance_change: 0.0,
+            token_transfers: Vec::new(),
+            raw_transaction_data: Some(serde_json::to_value(&tx_data).unwrap_or_default()),
+            log_messages: tx_data.transaction.meta
+                .as_ref()
+                .map(|meta| {
+                    match &meta.log_messages {
+                        solana_transaction_status::option_serializer::OptionSerializer::Some(
+                            logs,
+                        ) => logs.clone(),
+                        _ => Vec::new(),
+                    }
+                })
+                .unwrap_or_default(),
+            instructions: Vec::new(),
+            sol_balance_changes: Vec::new(),
+            token_balance_changes: Vec::new(),
+            swap_analysis: None,
+            position_impact: None,
+            profit_calculation: None,
+            fee_breakdown: None,
+            ata_analysis: None,
+            token_info: None,
+            calculated_token_price_sol: None,
+            price_source: None,
+            token_symbol: None,
+            token_decimals: None,
+            last_updated: Utc::now(),
+            cached_analysis: None,
+        };
+
+        // Analyze transaction type and extract details
+        self.analyze_transaction(&mut transaction).await?;
+
+        // Persist a snapshot for finalized transactions to avoid future re-analysis
+        if
+            matches!(transaction.status, TransactionStatus::Finalized) &&
+            transaction.raw_transaction_data.is_some()
+        {
+            transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
+        }
+
+        // Store in database
+        if let Err(e) = self.cache_processed_transaction(&transaction).await {
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    &format!("Failed to cache processed transaction: {}", e)
+                );
+            }
+        }
 
         Ok(transaction)
     }
@@ -1002,93 +1146,63 @@ impl TransactionsManager {
                 transaction.price_source = snapshot.price_source.clone();
                 transaction.token_symbol = snapshot.token_symbol.clone();
                 transaction.token_decimals = snapshot.token_decimals;
+                // Restore the missing critical fields
+                transaction.swap_analysis = snapshot.swap_analysis.clone();
+                transaction.fee_breakdown = snapshot.fee_breakdown.clone();
+                transaction.log_messages = snapshot.log_messages.clone();
+                transaction.instructions = snapshot.instructions.clone();
                 return true;
             }
         }
         false
     }
 
-    /// Clean transaction for cache storage by removing all calculated fields
-    /// Clean transaction for caching - keeps ONLY raw blockchain data
-    /// CRITICAL: All calculated fields are removed and set to defaults
-    /// This ensures no calculated values are ever cached to disk
-    fn clean_transaction_for_cache(&self, transaction: &Transaction) -> Transaction {
-        Transaction {
-            // Keep ONLY essential metadata and raw blockchain data
-            signature: transaction.signature.clone(),
-            slot: transaction.slot,
-            block_time: transaction.block_time,
-            timestamp: transaction.timestamp,
-            status: transaction.status.clone(),
-            success: transaction.success,
-            error_message: transaction.error_message.clone(),
-            raw_transaction_data: transaction.raw_transaction_data.clone(),
-            last_updated: transaction.last_updated,
-            cache_file_path: transaction.cache_file_path.clone(),
-            // Keep snapshot only if transaction is finalized to avoid redundant recalcs
-            cached_analysis: match transaction.status {
-                TransactionStatus::Finalized => transaction.cached_analysis.clone(),
-                _ => None,
-            },
-
-            // ALL calculated/derived fields are set to defaults - NEVER CACHED
-            transaction_type: TransactionType::Unknown,
-            direction: TransactionDirection::Internal,
-            fee_sol: 0.0,
-            sol_balance_change: 0.0,
-            token_transfers: Vec::new(),
-            log_messages: Vec::new(),
-            instructions: Vec::new(),
-            sol_balance_changes: Vec::new(),
-            token_balance_changes: Vec::new(),
-            swap_analysis: None,
-            position_impact: None,
-            profit_calculation: None,
-            fee_breakdown: None,
-            ata_analysis: None,
-            token_info: None,
-            calculated_token_price_sol: None,
-            price_source: None,
-            token_symbol: None,
-            token_decimals: None,
-        }
-    }
-
-    /// Cache transaction to disk
+    /// Cache transaction to database only
     async fn cache_transaction(&self, transaction: &Transaction) -> Result<(), String> {
-        let cache_dir = get_transactions_cache_dir();
+        if let Some(ref db) = self.transaction_database {
+            // Store raw transaction data
+            let status_string = match &transaction.status {
+                TransactionStatus::Pending => "Pending",
+                TransactionStatus::Confirmed => "Confirmed",
+                TransactionStatus::Finalized => "Finalized",
+                TransactionStatus::Failed(_) => "Failed",
+            };
 
-        // Ensure cache directory exists
-        if !Path::new(&cache_dir).exists() {
-            fs
-                ::create_dir_all(&cache_dir)
-                .map_err(|e| format!("Failed to create cache directory: {}", e))?;
+            let raw_data_string = match &transaction.raw_transaction_data {
+                Some(value) =>
+                    Some(
+                        serde_json
+                            ::to_string(value)
+                            .map_err(|e|
+                                format!("Failed to serialize raw transaction data: {}", e)
+                            )?
+                    ),
+                None => None,
+            };
+
+            db.store_raw_transaction(
+                &transaction.signature,
+                transaction.slot,
+                transaction.block_time,
+                &transaction.timestamp,
+                status_string,
+                transaction.success,
+                transaction.error_message.as_deref(),
+                raw_data_string.as_deref()
+            ).await?;
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "DB_CACHE",
+                    &format!("Cached transaction {} to database", &transaction.signature[..8])
+                );
+            }
+
+            Ok(())
+        } else {
+            Err("Database not available for caching".to_string())
         }
-
-        // Clean transaction before caching to remove calculated fields
-        let cleaned_transaction = self.clean_transaction_for_cache(transaction);
-
-        let cache_file_path = format!("{}/{}.json", cache_dir.display(), transaction.signature);
-        let json_data = serde_json
-            ::to_string_pretty(&cleaned_transaction)
-            .map_err(|e| format!("Failed to serialize transaction: {}", e))?;
-
-        fs
-            ::write(&cache_file_path, json_data)
-            .map_err(|e| format!("Failed to write cache file: {}", e))?;
-
-        if self.debug_enabled {
-            log(
-                LogTag::Transactions,
-                "CACHE",
-                &format!(
-                    "Cached cleaned transaction {} to disk (calculated fields removed)",
-                    &transaction.signature[..8]
-                )
-            );
-        }
-
-        Ok(())
     }
 
     /// Fetch and analyze ALL wallet transactions from blockchain (unlimited)
@@ -1581,11 +1695,6 @@ impl TransactionsManager {
             token_symbol: None,
             token_decimals: None,
             last_updated: Utc::now(),
-            cache_file_path: format!(
-                "{}/{}.json",
-                get_transactions_cache_dir().display(),
-                signature
-            ),
             cached_analysis: None,
         };
 
@@ -1661,11 +1770,6 @@ impl TransactionsManager {
             token_symbol: None,
             token_decimals: None,
             last_updated: Utc::now(),
-            cache_file_path: format!(
-                "{}/{}.json",
-                get_transactions_cache_dir().display(),
-                signature
-            ),
             cached_analysis: None,
         };
 
@@ -1789,43 +1893,19 @@ impl TransactionsManager {
 
     /// Get recent transactions from cache (for orphaned position recovery)
     pub async fn get_recent_transactions(&self, limit: usize) -> Result<Vec<Transaction>, String> {
-        let cache_dir = get_transactions_cache_dir();
-
-        // Get all cached transaction files
-        let mut transaction_files = Vec::new();
-        let entries = std::fs
-            ::read_dir(&cache_dir)
-            .map_err(|e| format!("Failed to read transactions cache directory: {}", e))?;
-
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
-                    if let Some(metadata) = std::fs::metadata(&path).ok() {
-                        if let Ok(modified) = metadata.modified() {
-                            transaction_files.push((path, modified));
-                        }
-                    }
+        // Database-only implementation: pull most recent raw transactions and reconstruct
+        if let Some(db) = &self.transaction_database {
+            let signatures = db.get_all_signatures().await?; // ordered by slot DESC
+            let mut out = Vec::new();
+            for sig in signatures.into_iter().take(limit) {
+                if let Ok(Some(tx)) = get_transaction(&sig).await {
+                    out.push(tx);
                 }
             }
+            Ok(out)
+        } else {
+            Err("Transaction database unavailable".into())
         }
-
-        // Sort by modification time (newest first)
-        transaction_files.sort_by(|a, b| b.1.cmp(&a.1));
-
-        // Load up to 'limit' transactions
-        let mut transactions = Vec::new();
-        for (file_path, _) in transaction_files.into_iter().take(limit) {
-            if let Ok(content) = std::fs::read_to_string(&file_path) {
-                if let Ok(mut transaction) = serde_json::from_str::<Transaction>(&content) {
-                    // Best-effort hydration from snapshot
-                    let _ = self.try_hydrate_from_cached_analysis(&mut transaction);
-                    transactions.push(transaction);
-                }
-            }
-        }
-
-        Ok(transactions)
     }
 
     /// Get transaction data from cache first, fetch from blockchain only if needed
@@ -1833,38 +1913,21 @@ impl TransactionsManager {
         &self,
         signature: &str
     ) -> Result<serde_json::Value, String> {
-        // First, try to load from cache
-        let cache_file = format!("{}/{}.json", get_transactions_cache_dir().display(), signature);
-
-        if Path::new(&cache_file).exists() {
-            if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "CACHE_HIT",
-                    &format!("Using cached data for {}", &signature[..8])
-                );
-            }
-
-            let content = fs
-                ::read_to_string(&cache_file)
-                .map_err(|e| format!("Failed to read cache file: {}", e))?;
-
-            let cached_transaction: Transaction = serde_json
-                ::from_str(&content)
-                .map_err(|e| format!("Failed to parse cached transaction: {}", e))?;
-
-            if let Some(raw_data) = cached_transaction.raw_transaction_data {
-                return Ok(raw_data);
+        // Try database first
+        if let Some(db) = &self.transaction_database {
+            if let Some(raw) = db.get_raw_transaction(signature).await? {
+                if let Some(json_str) = raw.raw_transaction_data {
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "DB_HIT", &format!("Raw {}", &signature[..8]));
+                    }
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                        return Ok(val);
+                    }
+                }
             }
         }
-
-        // Cache miss or no raw data - fetch from blockchain
         if self.debug_enabled {
-            log(
-                LogTag::Transactions,
-                "CACHE_MISS",
-                &format!("Fetching from blockchain for {}", &signature[..8])
-            );
+            log(LogTag::Transactions, "DB_MISS", &format!("RPC fetch {}", &signature[..8]));
         }
 
         let rpc_client = get_rpc_client();
@@ -3797,486 +3860,132 @@ impl TransactionsManager {
         }
     }
 
-    /// Bulk recalculate all cached transactions (no RPC calls)
+    /// Bulk recalculate all cached transactions from database (no RPC calls)
     pub async fn recalculate_all_cached_transactions(
         &mut self,
         max_count: Option<usize>
     ) -> Result<Vec<Transaction>, String> {
-        let cache_dir = get_transactions_cache_dir();
-
-        if !cache_dir.exists() {
-            log(LogTag::Transactions, "WARN", "Transaction cache directory does not exist");
-            return Ok(Vec::new());
-        }
-
-        let entries = fs
-            ::read_dir(&cache_dir)
-            .map_err(|e| format!("Failed to read cache directory: {}", e))?;
-
-        let mut cache_entries = Vec::new();
-        for entry in entries {
-            let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
-            let path = entry.path();
-
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
-                cache_entries.push(path);
-            }
-        }
-
-        // Sort chronologically by loading transaction metadata (slot numbers)
-        let mut entries_with_metadata = Vec::new();
-        for entry in cache_entries {
-            // Load transaction metadata for sorting
-            match self.load_transaction_from_cache(&entry).await {
-                Ok(transaction) => {
-                    let slot = transaction.slot.unwrap_or(0);
-                    let block_time = transaction.block_time.unwrap_or(0);
-                    entries_with_metadata.push((entry, slot, block_time));
+        if let Some(ref db) = self.transaction_database {
+            let signatures = db.get_all_signatures().await?;
+            let total = max_count.map(|m| m.min(signatures.len())).unwrap_or(signatures.len());
+            let mut out = Vec::new();
+            for (i, sig) in signatures.iter().take(total).enumerate() {
+                if self.debug_enabled && (i + 1) % 250 == 0 {
+                    log(LogTag::Transactions, "PROGRESS", &format!("Recalc {}/{}", i + 1, total));
                 }
-                Err(_) => {
-                    // Skip files that can't be loaded
-                    continue;
+                if let Ok(Some(tx)) = get_transaction(sig).await {
+                    out.push(tx);
                 }
             }
+            log(LogTag::Transactions, "INFO", &format!("Recalculated {} transactions", out.len()));
+            Ok(out)
+        } else {
+            Err("Database not available for recalculation".into())
         }
-
-        // Sort by slot number (descending - newest first) for proper chronological order
-        entries_with_metadata.sort_by(|a, b| b.1.cmp(&a.1));
-
-        // Apply count limit after sorting
-        if let Some(max) = max_count {
-            entries_with_metadata.truncate(max);
-        }
-
-        let mut recalculated_transactions = Vec::new();
-        let total_files = entries_with_metadata.len();
-
-        log(
-            LogTag::Transactions,
-            "INFO",
-            &format!("Recalculating {} cached transactions (no RPC calls)", total_files)
-        );
-
-        for (index, (cache_file, _slot, _block_time)) in entries_with_metadata.iter().enumerate() {
-            if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "PROGRESS",
-                    &format!(
-                        "Processing transaction {}/{}: {}...",
-                        index + 1,
-                        total_files,
-                        cache_file
-                            .file_stem()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .chars()
-                            .take(8)
-                            .collect::<String>()
-                    )
-                );
-            }
-
-            match self.recalculate_cached_transaction(cache_file).await {
-                Ok(transaction) => {
-                    recalculated_transactions.push(transaction);
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Transactions,
-                        "WARN",
-                        &format!(
-                            "Failed to recalculate {}: {}",
-                            cache_file.file_stem().unwrap_or_default().to_string_lossy(),
-                            e
-                        )
-                    );
-                }
-            }
-        }
-
-        log(
-            LogTag::Transactions,
-            "INFO",
-            &format!("Recalculated {} transactions from cache", recalculated_transactions.len())
-        );
-
-        Ok(recalculated_transactions)
     }
 
     /// Get all swap transactions for comprehensive analysis with automatic calculation
     pub async fn get_all_swap_transactions(&mut self) -> Result<Vec<SwapPnLInfo>, String> {
-        self.get_all_swap_transactions_limited(None).await
+        self.get_all_swap_transactions_limited(None, None).await
     }
 
-    /// Get swap transactions with optional count limit and automatic calculation
+    /// Get swap transactions with optional count limit from database
     pub async fn get_all_swap_transactions_limited(
         &mut self,
-        count: Option<usize>
+        count: Option<usize>,
+        fast_recent: Option<bool> // When true, scan signatures from newest and stop early after collecting count swaps
     ) -> Result<Vec<SwapPnLInfo>, String> {
         let mut swap_transactions = Vec::new();
 
-        // Load all cached transactions
-        let cache_dir = get_transactions_cache_dir();
+        if self.transaction_database.is_some() {
+            let signatures = self.transaction_database
+                .as_ref()
+                .unwrap()
+                .get_all_signatures().await
+                .map_err(|e| format!("Failed to get signatures from database: {}", e))?;
+            let target = count.unwrap_or(signatures.len()).min(signatures.len());
+            let fast = fast_recent.unwrap_or(false);
+            let token_symbol_cache = std::collections::HashMap::new();
 
-        if !cache_dir.exists() {
-            log(LogTag::Transactions, "WARN", "Transaction cache directory does not exist");
-            return Ok(swap_transactions);
-        }
-
-        // Read all entries first
-        let entries: Vec<_> = fs
-            ::read_dir(&cache_dir)
-            .map_err(|e| format!("Failed to read cache directory: {}", e))?
-            .filter_map(Result::ok)
-            .filter(|entry| {
-                entry.path().is_file() &&
-                    entry
-                        .path()
-                        .extension()
-                        .map_or(false, |ext| ext == "json")
-            })
-            .collect();
-
-        // Load transaction metadata for proper chronological sorting
-        let mut transactions_with_metadata: Vec<(fs::DirEntry, Option<u64>, i64)> = Vec::new();
-
-        for entry in entries {
-            let path = entry.path();
-
-            // Quick load to get slot and block_time for sorting
-            match fs::read_to_string(&path) {
-                Ok(content) => {
-                    match serde_json::from_str::<serde_json::Value>(&content) {
-                        Ok(transaction_data) => {
-                            let slot = transaction_data.get("slot").and_then(|s| s.as_u64());
-                            let block_time = transaction_data
-                                .get("block_time")
-                                .and_then(|bt| bt.as_i64())
-                                .unwrap_or(0);
-                            transactions_with_metadata.push((entry, slot, block_time));
-                        }
-                        Err(_) => {
-                            // If we can't parse, add with default values (will sort to end)
-                            transactions_with_metadata.push((entry, None, 0));
+            if fast {
+                // Signatures already ordered newest-first (DESC by slot). Iterate until we collect target swaps.
+                for (index, signature) in signatures.iter().enumerate() {
+                    if swap_transactions.len() >= target {
+                        break;
+                    }
+                    if index % 500 == 0 && index > 0 {
+                        log(
+                            LogTag::Transactions,
+                            "INFO",
+                            &format!(
+                                "Fast scan touched {} signatures (collected {} swaps)",
+                                index,
+                                swap_transactions.len()
+                            )
+                        );
+                    }
+                    if let Ok(Some(tx)) = get_transaction(signature).await {
+                        if
+                            let Some(swap_info) = self.convert_to_swap_pnl_info(
+                                &tx,
+                                &token_symbol_cache,
+                                true
+                            )
+                        {
+                            swap_transactions.push(swap_info);
                         }
                     }
                 }
-                Err(_) => {
-                    // If we can't read/parse, add with default values (will sort to end)
-                    transactions_with_metadata.push((entry, None, 0));
-                }
-            }
-        }
-
-        // Sort by slot number (newest first) - this gives proper chronological order
-        transactions_with_metadata.sort_by(|a, b| {
-            match (b.1, a.1) {
-                (Some(b_slot), Some(a_slot)) => b_slot.cmp(&a_slot),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => b.2.cmp(&a.2), // Fallback to block_time
-            }
-        });
-
-        // Apply count limit if specified AFTER proper chronological sorting
-        if let Some(limit) = count {
-            transactions_with_metadata.truncate(limit);
-        }
-
-        // Pre-load token symbols for better display - collect all unique token mints first
-        let mut token_mint_set = std::collections::HashSet::new();
-        let mut token_symbol_cache = std::collections::HashMap::new();
-
-        // First pass: collect unique token mints from all transactions
-        for (entry, _, _) in &transactions_with_metadata {
-            let path = entry.path();
-            if let Ok(transaction) = self.load_transaction_from_cache(&path).await {
-                // Extract token mints from raw transaction data (available before analysis)
-                if let Some(ref raw_data) = transaction.raw_transaction_data {
-                    if let Some(ref meta) = raw_data.get("meta") {
-                        // Extract from postTokenBalances
-                        if let Some(post_balances) = meta.get("postTokenBalances") {
-                            if let Some(balances_array) = post_balances.as_array() {
-                                for balance in balances_array {
-                                    if
-                                        let Some(mint) = balance
-                                            .get("mint")
-                                            .and_then(|m| m.as_str())
-                                    {
-                                        if mint != "So11111111111111111111111111111111111111112" {
-                                            token_mint_set.insert(mint.to_string());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Extract from preTokenBalances
-                        if let Some(pre_balances) = meta.get("preTokenBalances") {
-                            if let Some(balances_array) = pre_balances.as_array() {
-                                for balance in balances_array {
-                                    if
-                                        let Some(mint) = balance
-                                            .get("mint")
-                                            .and_then(|m| m.as_str())
-                                    {
-                                        if mint != "So11111111111111111111111111111111111111112" {
-                                            token_mint_set.insert(mint.to_string());
-                                        }
-                                    }
-                                }
-                            }
+            } else {
+                for (index, signature) in signatures.iter().take(target).enumerate() {
+                    if index % 500 == 0 {
+                        log(LogTag::Transactions, "INFO", &format!("Scanned {} signatures", index));
+                    }
+                    if let Ok(Some(tx)) = get_transaction(signature).await {
+                        if
+                            let Some(swap_info) = self.convert_to_swap_pnl_info(
+                                &tx,
+                                &token_symbol_cache,
+                                true
+                            )
+                        {
+                            swap_transactions.push(swap_info);
                         }
                     }
-                }
 
-                // Secondary: Extract from analyzed transaction_type (only if already analyzed)
-                match &transaction.transaction_type {
-                    TransactionType::SwapSolToToken { token_mint, .. } => {
-                        token_mint_set.insert(token_mint.clone());
-                    }
-                    TransactionType::SwapTokenToSol { token_mint, .. } => {
-                        token_mint_set.insert(token_mint.clone());
-                    }
-                    _ => {
-                        // For unanalyzed transactions, also try token_info if it exists
-                        if let Some(ref token_info) = transaction.token_info {
-                            token_mint_set.insert(token_info.mint.clone());
-                        }
-
-                        // And token_balance_changes if they exist
-                        for balance_change in &transaction.token_balance_changes {
-                            if balance_change.mint != "So11111111111111111111111111111111111111112" {
-                                token_mint_set.insert(balance_change.mint.clone());
-                            }
-                        }
+                    if self.debug_enabled && (index + 1) % 100 == 0 {
+                        log(
+                            LogTag::Transactions,
+                            "PROGRESS",
+                            &format!("Processed {}/{} transactions", index + 1, target)
+                        );
                     }
                 }
             }
-        }
 
-        // Pre-load token symbols from database
-        for token_mint in token_mint_set {
-            if let Some(token) = crate::tokens::get_token_from_db(&token_mint).await {
-                token_symbol_cache.insert(token_mint.clone(), token.symbol);
-            }
-        }
-
-        if is_debug_transactions_enabled() {
             log(
                 LogTag::Transactions,
-                "INFO",
-                &format!("Pre-loaded symbols for {} unique tokens", token_symbol_cache.len())
+                "SUCCESS",
+                &format!("Found {} swap transactions", swap_transactions.len())
             );
+
+            // Sort by slot (newest first)
+            swap_transactions.sort_by(|a, b| {
+                match (b.slot, a.slot) {
+                    (Some(b_slot), Some(a_slot)) => b_slot.cmp(&a_slot),
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => std::cmp::Ordering::Equal,
+                }
+            });
+
+            Ok(swap_transactions)
+        } else {
+            Err("Database not available for transaction retrieval".to_string())
         }
-
-        let mut processed_count = 0;
-        let mut swap_count = 0;
-        let mut recalculated_count = 0;
-
-        for (entry, _, _) in transactions_with_metadata {
-            let path = entry.path();
-
-            if !path.is_file() || !path.extension().map_or(false, |ext| ext == "json") {
-                continue;
-            }
-
-            // Early exit if we've found enough swaps (optimization for summary calls)
-            if let Some(limit) = count {
-                if swap_count >= limit {
-                    break;
-                }
-            }
-
-            // Read and parse transaction
-            match self.load_transaction_from_cache(&path).await {
-                Ok(mut transaction) => {
-                    processed_count += 1;
-
-                    // Only recalculate if transaction analysis is missing or invalid
-                    let needs_recalculation =
-                        transaction.transaction_type == TransactionType::Unknown ||
-                        transaction.swap_analysis.is_none();
-
-                    if needs_recalculation {
-                        // Recalculate transaction analysis from raw data
-                        if
-                            let Err(e) = self.recalculate_transaction_analysis(
-                                &mut transaction
-                            ).await
-                        {
-                            log(
-                                LogTag::Transactions,
-                                "WARN",
-                                &format!(
-                                    "Failed to recalculate transaction {}: {}",
-                                    get_signature_prefix(&transaction.signature),
-                                    e
-                                )
-                            );
-                            continue;
-                        }
-
-                        // Persist a snapshot for finalized transactions
-                        if
-                            matches!(transaction.status, TransactionStatus::Finalized) &&
-                            transaction.raw_transaction_data.is_some()
-                        {
-                            transaction.cached_analysis = Some(
-                                CachedAnalysis::from_transaction(&transaction)
-                            );
-                        }
-
-                        // Save updated transaction back to cache
-                        if let Err(e) = self.cache_transaction(&transaction).await {
-                            log(
-                                LogTag::Transactions,
-                                "WARN",
-                                &format!(
-                                    "Failed to cache recalculated transaction {}: {}",
-                                    get_signature_prefix(&transaction.signature),
-                                    e
-                                )
-                            );
-                        }
-
-                        recalculated_count += 1;
-                    }
-
-                    // Convert to SwapPnLInfo if it's a swap transaction
-                    if
-                        let Some(swap_info) = self.convert_to_swap_pnl_info(
-                            &transaction,
-                            &token_symbol_cache,
-                            false
-                        )
-                    {
-                        swap_transactions.push(swap_info);
-                        swap_count += 1;
-                    }
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Transactions,
-                        "WARN",
-                        &format!("Failed to load transaction from {}: {}", path.display(), e)
-                    );
-                }
-            }
-        }
-
-        log(
-            LogTag::Transactions,
-            "SUCCESS",
-            &format!(
-                "Processed {} transactions, found {} swaps, recalculated {} transactions",
-                processed_count,
-                swap_count,
-                recalculated_count
-            )
-        );
-
-        // Sort by slot (newest first for proper chronological order)
-        // Handle Option<u64> slots properly - None slots go to end
-        swap_transactions.sort_by(|a, b| {
-            match (b.slot, a.slot) {
-                (Some(b_slot), Some(a_slot)) => b_slot.cmp(&a_slot),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => std::cmp::Ordering::Equal,
-            }
-        });
-
-        Ok(swap_transactions)
     }
 
-    /// Load transaction from cache file and recalculate with new analysis (no RPC calls)
-    pub async fn recalculate_cached_transaction(
-        &mut self,
-        cache_file_path: &Path
-    ) -> Result<Transaction, String> {
-        if self.debug_enabled {
-            log(
-                LogTag::Transactions,
-                "RECALC",
-                &format!(
-                    "Recalculating cached transaction: {}",
-                    cache_file_path.file_stem().unwrap_or_default().to_string_lossy()
-                )
-            );
-        }
-
-        // Load existing cached transaction
-        let mut transaction = self.load_transaction_from_cache(cache_file_path).await?;
-
-        // If we have a valid cached snapshot and transaction is finalized, hydrate and skip heavy work
-        if
-            self.try_hydrate_from_cached_analysis(&mut transaction) &&
-            matches!(transaction.status, TransactionStatus::Finalized)
-        {
-            if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "HYDRATE",
-                    &format!(
-                        "Recalc short-circuited by snapshot for {}",
-                        get_signature_prefix(&transaction.signature)
-                    )
-                );
-            }
-            return Ok(transaction);
-        }
-
-        // Update last_updated timestamp
-        transaction.last_updated = Utc::now();
-
-        // Reset analysis fields that will be recalculated
-        transaction.sol_balance_change = 0.0;
-        transaction.token_transfers.clear();
-        transaction.transaction_type = TransactionType::Unknown;
-        transaction.swap_analysis = None;
-        transaction.fee_breakdown = None;
-        transaction.ata_analysis = None; // CRITICAL: Reset ATA analysis for recalculation
-        transaction.token_info = None;
-        transaction.calculated_token_price_sol = None;
-        transaction.price_source = None;
-        transaction.token_symbol = None;
-        transaction.token_decimals = None;
-
-        // Recalculate using cached raw data (no RPC call)
-        // raw_transaction_data should already be present from cache
-        if transaction.raw_transaction_data.is_none() {
-            return Err("Cached transaction missing raw data".to_string());
-        }
-
-        // Run comprehensive analysis on cached data
-        self.analyze_transaction(&mut transaction).await?;
-
-        // Persist a snapshot for finalized transactions to avoid future re-analysis
-        if
-            matches!(transaction.status, TransactionStatus::Finalized) &&
-            transaction.raw_transaction_data.is_some()
-        {
-            transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
-        }
-
-        // Update cache with new analysis
-        self.cache_transaction(&transaction).await?;
-
-        Ok(transaction)
-    }
-
-    /// Load transaction from cache file
-    async fn load_transaction_from_cache(&self, path: &Path) -> Result<Transaction, String> {
-        let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
-
-        let transaction: Transaction = serde_json
-            ::from_str(&content)
-            .map_err(|e| format!("Failed to parse transaction: {}", e))?;
-
-        Ok(transaction)
-    }
+    // Legacy JSON cache loader removed.
 
     /// Convert transaction to SwapPnLInfo using precise ATA rent detection
     /// Set silent=true to skip detailed logging (for hydrated transactions)
@@ -5757,233 +5466,80 @@ async fn get_global_transaction_manager() -> Option<std::sync::Arc<tokio::sync::
 /// CRITICAL: Only returns transactions that are in Finalized or Confirmed status
 /// Pending/Failed transactions trigger fresh RPC fetch or return None
 pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, String> {
-    if is_debug_transactions_enabled() {
-        log(
-            LogTag::Transactions,
-            "GET_TX_START",
-            &format!("🔍 Getting transaction: {}", &signature[..8])
-        );
+    // Use global manager and database only
+    let debug = is_debug_transactions_enabled();
+    if debug {
+        log(LogTag::Transactions, "GET_TX", &format!("{}", &signature[..8]));
     }
-
-    let cache_file = format!("{}/{}.json", get_transactions_cache_dir().display(), signature);
-
-    // Check cache first
-    if Path::new(&cache_file).exists() {
-        if is_debug_transactions_enabled() {
-            log(
-                LogTag::Transactions,
-                "CACHE_CHECK",
-                &format!("� Checking cached transaction: {}", &signature[..8])
-            );
-        }
-
-        // Load from cache
-        let content = fs
-            ::read_to_string(&cache_file)
-            .map_err(|e| format!("Failed to read cache file: {}", e))?;
-
-        let mut cached_transaction: Transaction = serde_json
-            ::from_str(&content)
-            .map_err(|e| format!("Failed to parse cached transaction: {}", e))?;
-
-        // CRITICAL CACHE VALIDATION: Check if cached transaction is in valid final state
-        match cached_transaction.status {
-            TransactionStatus::Finalized | TransactionStatus::Confirmed => {
-                if is_debug_transactions_enabled() {
-                    log(
-                        LogTag::Transactions,
-                        "CACHE_VALID",
-                        &format!(
-                            "✅ Valid cached transaction {}: status={:?}, success={}",
-                            &signature[..8],
-                            cached_transaction.status,
-                            cached_transaction.success
-                        )
-                    );
-                }
-
-                // CRITICAL FIX: Cached transactions have calculated fields set to defaults
-                // We need to recalculate analysis for proper usage in convert_to_swap_pnl_info
-                if cached_transaction.transaction_type == TransactionType::Unknown {
-                    if is_debug_transactions_enabled() {
-                        log(
-                            LogTag::Transactions,
-                            "RECALC_NEEDED",
-                            &format!(
-                                "🔄 Transaction {} has Unknown type, recalculating analysis",
-                                &signature[..8]
-                            )
-                        );
-                    }
-
-                    // Create a temporary manager to recalculate the transaction
-                    let wallet_address = match load_wallet_address_from_config().await {
-                        Ok(addr) => addr,
-                        Err(e) => {
-                            if is_debug_transactions_enabled() {
-                                log(
-                                    LogTag::Transactions,
-                                    "WALLET_ERROR",
-                                    &format!("❌ Failed to load wallet address for recalc: {}", e)
-                                );
-                            }
-                            // Return cached transaction as-is if we can't recalculate
-                            return Ok(Some(cached_transaction));
-                        }
+    if let Some(global) = get_global_transaction_manager().await {
+        if let Some(manager) = global.lock().await.as_ref() {
+            if let Some(db) = &manager.transaction_database {
+                if let Some(raw) = db.get_raw_transaction(signature).await? {
+                    // Build Transaction skeleton and recalc analysis
+                    let mut tx = Transaction {
+                        signature: raw.signature.clone(),
+                        slot: raw.slot,
+                        block_time: raw.block_time,
+                        timestamp: DateTime::parse_from_rfc3339(&raw.timestamp)
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .unwrap_or_else(|_| Utc::now()),
+                        status: match raw.status.as_str() {
+                            "Finalized" => TransactionStatus::Finalized,
+                            "Confirmed" => TransactionStatus::Confirmed,
+                            "Pending" => TransactionStatus::Pending,
+                            s if s.starts_with("Failed") =>
+                                TransactionStatus::Failed(
+                                    raw.error_message.clone().unwrap_or_else(|| s.to_string())
+                                ),
+                            _ => TransactionStatus::Pending,
+                        },
+                        transaction_type: TransactionType::Unknown,
+                        direction: TransactionDirection::Internal,
+                        success: raw.success,
+                        error_message: raw.error_message.clone(),
+                        fee_sol: 0.0,
+                        sol_balance_change: 0.0,
+                        token_transfers: Vec::new(),
+                        raw_transaction_data: raw.raw_transaction_data
+                            .as_ref()
+                            .and_then(|s| serde_json::from_str(s).ok()),
+                        log_messages: Vec::new(),
+                        instructions: Vec::new(),
+                        sol_balance_changes: Vec::new(),
+                        token_balance_changes: Vec::new(),
+                        swap_analysis: None,
+                        position_impact: None,
+                        profit_calculation: None,
+                        fee_breakdown: None,
+                        ata_analysis: None,
+                        token_info: None,
+                        calculated_token_price_sol: None,
+                        price_source: None,
+                        token_symbol: None,
+                        token_decimals: None,
+                        last_updated: Utc::now(),
+                        cached_analysis: None,
                     };
-
-                    let mut manager = TransactionsManager::new(wallet_address).await.map_err(|e|
-                        format!("Failed to create manager for recalc: {}", e)
-                    )?;
-
-                    // Recalculate analysis on the cached transaction
-                    match manager.recalculate_transaction_analysis(&mut cached_transaction).await {
-                        Ok(_) => {
-                            if is_debug_transactions_enabled() {
-                                log(
-                                    LogTag::Transactions,
-                                    "RECALC_SUCCESS",
-                                    &format!(
-                                        "✅ Recalculated transaction {}: type={:?}",
-                                        &signature[..8],
-                                        cached_transaction.transaction_type
-                                    )
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            if is_debug_transactions_enabled() {
-                                log(
-                                    LogTag::Transactions,
-                                    "RECALC_ERROR",
-                                    &format!(
-                                        "⚠️ Failed to recalculate transaction {}: {} - returning cached version",
-                                        &signature[..8],
-                                        e
-                                    )
-                                );
-                            }
-                            // Continue with cached transaction even if recalculation fails
-                        }
+                    // Recalculate analysis (ignore errors)
+                    let mut guard = global.lock().await;
+                    if let Some(manager_mut) = guard.as_mut() {
+                        let _ = manager_mut.recalculate_transaction_analysis(&mut tx).await;
                     }
+                    return Ok(Some(tx));
                 }
-
-                return Ok(Some(cached_transaction));
-            }
-            TransactionStatus::Pending => {
-                if is_debug_transactions_enabled() {
-                    log(
-                        LogTag::Transactions,
-                        "CACHE_PENDING",
-                        &format!(
-                            "⏳ Cached transaction {} is still pending - will attempt fresh fetch",
-                            &signature[..8]
-                        )
-                    );
-                }
-                // Don't return pending cached transactions - try fresh fetch
-            }
-            TransactionStatus::Failed(ref error) => {
-                if is_debug_transactions_enabled() {
-                    log(
-                        LogTag::Transactions,
-                        "CACHE_FAILED",
-                        &format!(
-                            "❌ Cached transaction {} is failed: {} - will attempt fresh fetch",
-                            &signature[..8],
-                            error
-                        )
-                    );
-                }
-                // Don't return failed cached transactions - try fresh fetch to see if status changed
             }
         }
     }
-
-    // No valid cache or cache contains pending/failed transaction - fetch from RPC
-    if is_debug_transactions_enabled() {
-        log(
-            LogTag::Transactions,
-            "CACHE_MISS",
-            &format!("� No valid cache for {}, fetching from RPC", &signature[..8])
-        );
-    }
-
-    // Try to fetch and cache if not found or cache invalid
-    let wallet_address = match load_wallet_address_from_config().await {
-        Ok(addr) => addr,
-        Err(e) => {
-            if is_debug_transactions_enabled() {
-                log(
-                    LogTag::Transactions,
-                    "WALLET_ERROR",
-                    &format!("❌ Failed to load wallet address: {}", e)
-                );
-            }
-            return Ok(None); // Can't fetch without wallet
-        }
-    };
-
-    let mut manager = TransactionsManager::new(wallet_address).await.map_err(|e|
-        format!("Failed to create manager: {}", e)
-    )?;
-
+    // Fallback: fetch fresh with temporary manager
+    let wallet_address = load_wallet_address_from_config().await?;
+    let mut manager = TransactionsManager::new(wallet_address).await?;
     match manager.process_transaction(signature).await {
-        Ok(transaction) => {
-            if is_debug_transactions_enabled() {
-                log(
-                    LogTag::Transactions,
-                    "FETCH_SUCCESS",
-                    &format!(
-                        "✅ Fetched transaction {}: success={}, status={:?}",
-                        &signature[..8],
-                        transaction.success,
-                        transaction.status
-                    )
-                );
-            }
-
-            // Only return finalized or confirmed transactions
-            match transaction.status {
-                TransactionStatus::Finalized | TransactionStatus::Confirmed => {
-                    Ok(Some(transaction))
-                }
-                TransactionStatus::Pending => {
-                    if is_debug_transactions_enabled() {
-                        log(
-                            LogTag::Transactions,
-                            "FETCH_STILL_PENDING",
-                            &format!("⏳ Fresh fetch shows {} still pending", &signature[..8])
-                        );
-                    }
-                    Ok(None) // Don't return pending transactions
-                }
-                TransactionStatus::Failed(ref error) => {
-                    if is_debug_transactions_enabled() {
-                        log(
-                            LogTag::Transactions,
-                            "FETCH_CONFIRMED_FAILED",
-                            &format!(
-                                "❌ Fresh fetch confirms {} failed: {}",
-                                &signature[..8],
-                                error
-                            )
-                        );
-                    }
-                    // Return the failed transaction so callers can see the failure details
-                    Ok(Some(transaction))
-                }
-            }
-        }
+        Ok(t) => Ok(Some(t)),
         Err(e) => {
-            if is_debug_transactions_enabled() {
-                log(
-                    LogTag::Transactions,
-                    "FETCH_ERROR",
-                    &format!("❌ Failed to fetch transaction {}: {}", &signature[..8], e)
-                );
+            if debug {
+                log(LogTag::Transactions, "RPC_FAIL", &e);
             }
-            Ok(None) // Transaction not found or RPC error
+            Ok(None)
         }
     }
 }
@@ -6229,8 +5785,6 @@ pub async fn get_single_transaction_swap_info(
                     );
                 }
             }
-
-            // Convert to SwapPnLInfo if it's a swap
             let symbol_cache = std::collections::HashMap::new(); // Empty cache for single transaction
             if
                 let Some(swap_info) = temp_manager.convert_to_swap_pnl_info(
@@ -6273,113 +5827,7 @@ pub async fn get_single_transaction_swap_info(
     }
 }
 
-/// Clean all existing cache files by removing calculated fields
-/// This is useful during development when calculation logic changes frequently
-pub async fn clean_all_transaction_cache_files() -> Result<(usize, usize), String> {
-    let cache_dir = get_transactions_cache_dir();
-
-    if !cache_dir.exists() {
-        return Ok((0, 0));
-    }
-
-    let mut cleaned_count = 0;
-    let mut failed_count = 0;
-
-    // Read all JSON files in the cache directory
-    let entries = fs
-        ::read_dir(&cache_dir)
-        .map_err(|e| format!("Failed to read cache directory: {}", e))?;
-
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
-        let path = entry.path();
-
-        if path.extension().and_then(|s| s.to_str()) == Some("json") {
-            match clean_single_cache_file(&path).await {
-                Ok(()) => {
-                    cleaned_count += 1;
-                    log(
-                        LogTag::Transactions,
-                        "CLEAN",
-                        &format!(
-                            "Cleaned cache file: {}",
-                            path.file_name().unwrap_or_default().to_string_lossy()
-                        )
-                    );
-                }
-                Err(e) => {
-                    failed_count += 1;
-                    log(
-                        LogTag::Transactions,
-                        "WARN",
-                        &format!(
-                            "Failed to clean {}: {}",
-                            path.file_name().unwrap_or_default().to_string_lossy(),
-                            e
-                        )
-                    );
-                }
-            }
-        }
-    }
-
-    log(
-        LogTag::Transactions,
-        "SUCCESS",
-        &format!(
-            "Cache cleanup completed: {} files cleaned, {} failed",
-            cleaned_count,
-            failed_count
-        )
-    );
-
-    Ok((cleaned_count, failed_count))
-}
-
-/// Clean a single cache file by removing calculated fields
-async fn clean_single_cache_file(file_path: &Path) -> Result<(), String> {
-    // Load the existing transaction
-    let content = fs
-        ::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read cache file: {}", e))?;
-
-    let mut transaction: Transaction = serde_json
-        ::from_str(&content)
-        .map_err(|e| format!("Failed to parse transaction JSON: {}", e))?;
-
-    // Clean it by removing calculated fields - keep only raw blockchain data
-    transaction.transaction_type = TransactionType::Unknown;
-    transaction.direction = TransactionDirection::Internal;
-    transaction.fee_sol = 0.0;
-    transaction.sol_balance_change = 0.0;
-    transaction.token_transfers = Vec::new();
-    transaction.log_messages = Vec::new();
-    transaction.instructions = Vec::new();
-    transaction.sol_balance_changes = Vec::new();
-    transaction.token_balance_changes = Vec::new();
-    transaction.swap_analysis = None;
-    transaction.position_impact = None;
-    transaction.profit_calculation = None;
-    transaction.fee_breakdown = None;
-    transaction.ata_analysis = None;
-    transaction.token_info = None;
-    transaction.calculated_token_price_sol = None;
-    transaction.price_source = None;
-    transaction.token_symbol = None;
-    transaction.token_decimals = None;
-    transaction.last_updated = Utc::now();
-
-    // Write it back to the same file
-    let json_data = serde_json
-        ::to_string_pretty(&transaction)
-        .map_err(|e| format!("Failed to serialize cleaned transaction: {}", e))?;
-
-    fs
-        ::write(file_path, json_data)
-        .map_err(|e| format!("Failed to write cleaned cache file: {}", e))?;
-
-    Ok(())
-}
+// Legacy JSON cache cleaning functions removed.
 
 // =============================================================================
 // PRIORITY TRANSACTION FUNCTIONS

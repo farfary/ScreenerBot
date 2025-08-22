@@ -665,9 +665,7 @@ impl TokenPriceService {
             // Mark these as open positions in watch list
             drop(positions);
             self.add_to_watch_list(&mint, true).await;
-            // Also pin into pool service watch list with high priority
-            let pool = get_pool_service();
-            pool.add_to_watch_list(&mint, 100).await;
+            // (Removed) pool watch list pinning: pool service now derives tokens from price service priority list
             positions = self.open_positions.write().await;
         }
     }
@@ -690,6 +688,19 @@ impl TokenPriceService {
         drop(watch_list);
 
         priority_tokens
+    }
+
+    /// Get watch list statistics (total, expired, never_checked=not applicable here so always 0)
+    pub async fn get_watch_list_stats(&self) -> (usize, usize, usize) {
+        let watch_list = self.watch_list.read().await;
+        let total = watch_list.len();
+        let mut expired = 0usize;
+        for entry in watch_list.values() {
+            if entry.is_expired() {
+                expired += 1;
+            }
+        }
+        (total, expired, 0)
     }
 
     pub async fn update_tokens_from_api(&self, mints: &[String]) {
@@ -888,6 +899,14 @@ pub async fn get_priority_tokens_safe() -> Vec<String> {
         return service.get_priority_tokens().await;
     }
     Vec::new()
+}
+
+/// Get watch list statistics (total, expired, never_checked) from price service
+pub async fn get_price_watch_list_stats_safe() -> (usize, usize, usize) {
+    if let Some(service) = PRICE_SERVICE.get() {
+        return service.get_watch_list_stats().await;
+    }
+    (0, 0, 0)
 }
 
 /// Get multiple token prices in batch (for compatibility)

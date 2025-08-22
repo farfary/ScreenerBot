@@ -101,9 +101,7 @@ async fn test_price_history_cache(token_mint: &str) -> Result<(), Box<dyn std::e
 
     println!("✅ Pool service initialized and monitoring started");
 
-    // Add token to watch list for active monitoring
-    pool_service.add_to_watch_list(token_mint, 10).await;
-    println!("📋 Added {} to watch list", token_mint);
+    println!("📋 (Watch list deprecated) Relying on price service priority list for monitoring");
 
     // Try to get existing price history
     println!("\n📊 Checking existing price history...");
@@ -131,11 +129,7 @@ async fn test_price_history_cache(token_mint: &str) -> Result<(), Box<dyn std::e
     println!("🏊 Found {} pools with price history", detailed_history.len());
 
     for (pool_address, history) in &detailed_history {
-        println!(
-            "   📍 Pool {}: {} entries",
-            &pool_address[..8],
-            history.len()
-        );
+        println!("   📍 Pool {}: {} entries", &pool_address[..8], history.len());
         if let Some(latest) = history.last() {
             println!(
                 "       📅 Latest: {} (price: {:.12} SOL, liquidity: ${:.2})",
@@ -204,9 +198,12 @@ async fn test_price_history_cache(token_mint: &str) -> Result<(), Box<dyn std::e
     // Check updated detailed pool history
     println!("\n🏊 Checking updated detailed pool history...");
     let updated_detailed_history = get_detailed_pool_price_history(token_mint).await;
-    
+
     for (pool_address, history) in &updated_detailed_history {
-        let previous_count = detailed_history.get(pool_address).map(|h| h.len()).unwrap_or(0);
+        let previous_count = detailed_history
+            .get(pool_address)
+            .map(|h| h.len())
+            .unwrap_or(0);
         if history.len() > previous_count {
             let new_pool_entries = history.len() - previous_count;
             println!(
@@ -307,24 +304,40 @@ async fn show_cache_stats() -> Result<(), Box<dyn std::error::Error>> {
                                     for pool_entry in pool_entries {
                                         if let Ok(pool_entry) = pool_entry {
                                             let pool_path = pool_entry.path();
-                                            if pool_path.extension().and_then(|s| s.to_str()) == Some("json") {
-                                                if let Some(_pool_address) = pool_path.file_stem().and_then(|s| s.to_str()) {
+                                            if
+                                                pool_path.extension().and_then(|s| s.to_str()) ==
+                                                Some("json")
+                                            {
+                                                if
+                                                    let Some(_pool_address) = pool_path
+                                                        .file_stem()
+                                                        .and_then(|s| s.to_str())
+                                                {
                                                     token_pools += 1;
 
                                                     // Get file size
-                                                    if let Ok(metadata) = std::fs::metadata(&pool_path) {
+                                                    if
+                                                        let Ok(metadata) = std::fs::metadata(
+                                                            &pool_path
+                                                        )
+                                                    {
                                                         token_size += metadata.len();
                                                     }
 
                                                     // Try to load and count entries
-                                                    if let Ok(contents) = std::fs::read_to_string(&pool_path) {
+                                                    if
+                                                        let Ok(contents) = std::fs::read_to_string(
+                                                            &pool_path
+                                                        )
+                                                    {
                                                         if
                                                             let Ok(pool_cache) =
                                                                 serde_json::from_str::<screenerbot::tokens::pool::PoolPriceHistoryCache>(
                                                                     &contents
                                                                 )
                                                         {
-                                                            token_entries += pool_cache.entries.len();
+                                                            token_entries +=
+                                                                pool_cache.entries.len();
                                                         }
                                                     }
                                                 }
@@ -333,7 +346,11 @@ async fn show_cache_stats() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                 }
                                 Err(e) => {
-                                    println!("❌ Failed to read token directory {}: {}", token_mint, e);
+                                    println!(
+                                        "❌ Failed to read token directory {}: {}",
+                                        token_mint,
+                                        e
+                                    );
                                 }
                             }
 

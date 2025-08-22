@@ -27,7 +27,7 @@ const MAX_DATA_AGE_MINUTES: i64 = 10; // Extended from 5 to 10 minutes for maxim
 
 // LIQUIDITY TARGETING RANGES (Expanded: $5k to $1M)
 const TARGET_LIQUIDITY_MIN: f64 = 5000.0; // Reduced from 10k to 5k - catch smaller tokens
-const TARGET_LIQUIDITY_MAX: f64 = 1_000_000.0; // Increased from 500k to 1M - catch bigger opportunities
+const TARGET_LIQUIDITY_MAX: f64 = 10_000_000.0; // Increased from 500k to 1M - catch bigger opportunities
 
 // DROP PERCENTAGE RANGES (Ultra-aggressive - catch micro to deep drops)
 const DROP_PERCENT_MIN: f64 = 10.0; // Reduced from 3% to 1% - catch micro drops

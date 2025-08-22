@@ -8,7 +8,6 @@
 /// - Debug flag checking functions for all modules
 /// - Unified argument parsing utilities
 /// - Support for both binary-specific and main application arguments
-
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
 use std::env;

@@ -22,7 +22,7 @@
 ///
 /// WARNING: If premium RPC fails when this is enabled, operations will fail
 /// instead of falling back to other endpoints.
-const FORCE_PREMIUM_RPC_ONLY: bool = false;
+const FORCE_PREMIUM_RPC_ONLY: bool = true;
 
 use crate::logger::{ log, LogTag };
 use crate::global::{
@@ -660,6 +660,10 @@ impl RpcStats {
     }
 }
 
+/// RPC RATE LIMITING CONFIGURATION
+/// Maximum calls per second for main RPC (premium RPC has no limits)
+const MAX_RPC_CALLS_PER_SECOND: u64 = 1;
+
 /// Enhanced rate limiter for RPC calls with adaptive backoff and 429 prevention
 pub struct RpcRateLimiter {
     /// Base interval between calls for main RPC
@@ -700,7 +704,7 @@ impl RpcRateLimiter {
 
     /// Create a more conservative rate limiter to prevent 429 errors
     pub fn new_conservative() -> Self {
-        Self::new(5) // Start with 5 calls per second, very conservative
+        Self::new(MAX_RPC_CALLS_PER_SECOND) // Use hardcoded rate limit constant
     }
 
     /// Wait for rate limit before making a call to main RPC with adaptive backoff

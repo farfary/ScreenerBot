@@ -64,10 +64,10 @@ fn deserialize_int_or_string<'de, D>(deserializer: D) -> Result<Option<String>, 
 }
 
 // ===== RATE LIMITING CONSTANTS =====
-const RUGCHECK_RATE_LIMIT_DELAY_MS: u64 = 1000; // 5 seconds between requests (more conservative for 429 errors)
+const RUGCHECK_RATE_LIMIT_DELAY_MS: u64 = 3000; // 5 seconds between requests (more conservative for 429 errors)
 const RUGCHECK_REQUEST_TIMEOUT_SECS: u64 = 45; // Increased timeout
 const RUGCHECK_UPDATE_INTERVAL_SECS: u64 = 30; // 30 seconds - check for expired data and new tokens
-const RUGCHECK_PRIORITY_UPDATE_INTERVAL_SECS: u64 = 60; // 1 minute for open positions
+const RUGCHECK_PRIORITY_UPDATE_INTERVAL_SECS: u64 = 60 * 60; // 1 minute for open positions
 const RUGCHECK_DATA_EXPIRY_HOURS: u64 = 24; // 24 hours - when rugcheck data expires
 
 // ===== RUGCHECK API RESPONSE STRUCTURES =====

@@ -46,7 +46,7 @@ static WALLET_BALANCE_CACHE: std::sync::LazyLock<Arc<Mutex<Option<CachedWalletBa
 
 /// Get cached wallet balance with 30-second cache duration
 async fn get_cached_wallet_balance() -> String {
-    const CACHE_DURATION_SECS: u64 = 30;
+    const CACHE_DURATION_SECS: u64 = 60;
 
     // Try to get wallet address first
     let wallet_pubkey = match crate::utils::get_wallet_address() {
@@ -1293,64 +1293,76 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     if is_debug_summary_enabled() {
         log(LogTag::Summary, "DEBUG", "[build_bot_summary] Starting recent swaps table build");
     }
-    match build_recent_swaps_table().await {
-        Ok(swaps_table) => {
-            summary_output.push_str(&swaps_table);
-            if is_debug_summary_enabled() {
-                log(
-                    LogTag::Summary,
-                    "DEBUG",
-                    &format!(
-                        "[build_bot_summary] Recent swaps table built successfully in {} ms (bytes: {})",
-                        swaps_start.elapsed().as_millis(),
-                        swaps_table.len()
-                    )
-                );
+    match tokio::time::timeout(Duration::from_millis(900), build_recent_swaps_table()).await {
+        Ok(res) =>
+            match res {
+                Ok(swaps_table) => {
+                    summary_output.push_str(&swaps_table);
+                    if is_debug_summary_enabled() {
+                        log(
+                            LogTag::Summary,
+                            "DEBUG",
+                            &format!(
+                                "[build_bot_summary] Recent swaps table built successfully in {} ms (bytes: {})",
+                                swaps_start.elapsed().as_millis(),
+                                swaps_table.len()
+                            )
+                        );
+                    }
+                }
+                Err(e) => {
+                    if is_debug_summary_enabled() {
+                        log(
+                            LogTag::Summary,
+                            "DEBUG",
+                            &format!(
+                                "[build_bot_summary] Failed to build recent swaps table in {} ms: {}",
+                                swaps_start.elapsed().as_millis(),
+                                e
+                            )
+                        );
+                    }
+                }
             }
-        }
-        Err(e) => {
-            if is_debug_summary_enabled() {
-                log(
-                    LogTag::Summary,
-                    "DEBUG",
-                    &format!(
-                        "[build_bot_summary] Failed to build recent swaps table in {} ms: {}",
-                        swaps_start.elapsed().as_millis(),
-                        e
-                    )
-                );
-            }
+        Err(_) => {
+            log(LogTag::Summary, "WARN", "Recent swaps table timeout - skipping");
         }
     }
 
     // Build Recent Transactions table (last 20)
     let tx_stage_start = Instant::now();
-    match build_recent_transactions_table().await {
-        Ok(tx_table) => {
-            summary_output.push_str(&tx_table);
-            if is_debug_summary_enabled() {
-                log(
-                    LogTag::Summary,
-                    "DEBUG",
-                    &format!(
-                        "[build_bot_summary] Recent transactions table built in {} ms",
-                        tx_stage_start.elapsed().as_millis()
-                    )
-                );
+    match tokio::time::timeout(Duration::from_millis(900), build_recent_transactions_table()).await {
+        Ok(res) =>
+            match res {
+                Ok(tx_table) => {
+                    summary_output.push_str(&tx_table);
+                    if is_debug_summary_enabled() {
+                        log(
+                            LogTag::Summary,
+                            "DEBUG",
+                            &format!(
+                                "[build_bot_summary] Recent transactions table built in {} ms",
+                                tx_stage_start.elapsed().as_millis()
+                            )
+                        );
+                    }
+                }
+                Err(e) => {
+                    if is_debug_summary_enabled() {
+                        log(
+                            LogTag::Summary,
+                            "DEBUG",
+                            &format!(
+                                "[build_bot_summary] Failed to build recent transactions table in {} ms: {}",
+                                tx_stage_start.elapsed().as_millis(),
+                                e
+                            )
+                        );
+                    }
+                }
             }
-        }
-        Err(e) => {
-            if is_debug_summary_enabled() {
-                log(
-                    LogTag::Summary,
-                    "DEBUG",
-                    &format!(
-                        "[build_bot_summary] Failed to build recent transactions table in {} ms: {}",
-                        tx_stage_start.elapsed().as_millis(),
-                        e
-                    )
-                );
-            }
+        Err(_) => {
+            log(LogTag::Summary, "WARN", "Recent transactions table timeout - skipping");
         }
     }
 
@@ -1525,7 +1537,7 @@ async fn build_recent_swaps_table() -> Result<String, String> {
 
     // Get last 20 swaps (already sorted newest-first by manager)
     let swaps_fetch_start = Instant::now();
-    let swaps = manager.get_all_swap_transactions_limited(Some(20)).await?;
+    let swaps = manager.get_all_swap_transactions_limited(Some(20), Some(true)).await?;
 
     if is_debug_summary_enabled() {
         log(

@@ -14,6 +14,7 @@ pub mod filtering;
 pub mod rpc;
 pub mod ata_cleanup;
 pub mod transactions;
+pub mod transactions_db; // New database module
 pub mod entry;
 pub mod ohlcv_analysis;
 pub mod swaps;
