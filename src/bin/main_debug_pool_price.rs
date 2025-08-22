@@ -328,96 +328,87 @@ async fn test_pool_address_direct(pool_address: &str) {
     dump_pool_hex_data(pool_address).await;
 
     // Try to determine what type of pool this is by fetching the account
-    match screenerbot::tokens::pool::PoolPriceCalculator::new() {
-        Ok(mut calculator) => {
-            calculator.enable_debug();
+    {
+        let mut calculator = screenerbot::tokens::pool::PoolPriceCalculator::new();
+        calculator.enable_debug();
 
-            // Get raw pool data to analyze
-            match calculator.get_raw_pool_data(pool_address).await {
-                Ok(Some(data)) => {
-                    log(
-                        LogTag::Pool,
-                        "POOL_DATA",
-                        &format!("✅ Retrieved pool data: {} bytes", data.len())
-                    );
+        // Get raw pool data to analyze
+        match calculator.get_raw_pool_data(pool_address).await {
+            Ok(Some(data)) => {
+                log(
+                    LogTag::Pool,
+                    "POOL_DATA",
+                    &format!("✅ Retrieved pool data: {} bytes", data.len())
+                );
 
-                    // Try to identify the pool program type from the account owner
-                    match
-                        get_rpc_client().get_account(
-                            &solana_sdk::pubkey::Pubkey::from_str(pool_address).unwrap()
-                        ).await
-                    {
-                        Ok(account) => {
-                            let program_id = account.owner.to_string();
-                            log(
-                                LogTag::Pool,
-                                "PROGRAM_ID",
-                                &format!("Pool owned by program: {}", program_id)
-                            );
+                // Try to identify the pool program type from the account owner
+                match
+                    get_rpc_client().get_account(
+                        &solana_sdk::pubkey::Pubkey::from_str(pool_address).unwrap()
+                    ).await
+                {
+                    Ok(account) => {
+                        let program_id = account.owner.to_string();
+                        log(
+                            LogTag::Pool,
+                            "PROGRAM_ID",
+                            &format!("Pool owned by program: {}", program_id)
+                        );
 
-                            let pool_type = match program_id.as_str() {
-                                "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" =>
-                                    "Raydium Legacy AMM",
-                                "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => "Pump.fun AMM",
-                                "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => "Raydium CPMM",
-                                "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "Meteora DLMM",
-                                "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv" => "Meteora DAMM v2",
-                                "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "Orca CAMM",
-                                "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB" => "Moonshot",
-                                _ => &format!("Unknown ({})", program_id),
-                            };
+                        let pool_type = match program_id.as_str() {
+                            "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => "Raydium Legacy AMM",
+                            "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => "Pump.fun AMM",
+                            "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => "Raydium CPMM",
+                            "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "Meteora DLMM",
+                            "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv" => "Meteora DAMM v2",
+                            "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "Orca CAMM",
+                            "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB" => "Moonshot",
+                            _ => &format!("Unknown ({})", program_id),
+                        };
 
-                            log(
-                                LogTag::Pool,
-                                "POOL_TYPE",
-                                &format!("🏷️  Pool Type: {}", pool_type)
-                            );
+                        log(LogTag::Pool, "POOL_TYPE", &format!("🏷️  Pool Type: {}", pool_type));
 
-                            // Try to decode specific pool type
-                            match program_id.as_str() {
-                                "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => {
-                                    test_pump_fun_pool_direct(pool_address, &data).await;
-                                }
-                                "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => {
-                                    test_raydium_legacy_pool_direct(pool_address, &data).await;
-                                }
-                                "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => {
-                                    test_raydium_cpmm_pool_direct(pool_address, &data).await;
-                                }
-                                "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => {
-                                    test_meteora_dlmm_pool_direct(pool_address, &data).await;
-                                }
-                                "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv" => {
-                                    test_meteora_damm_pool_direct(pool_address, &data).await;
-                                }
-                                _ => {
-                                    log(
-                                        LogTag::Pool,
-                                        "UNSUPPORTED",
-                                        &format!("❌ Unsupported pool type: {}", pool_type)
-                                    );
-                                }
+                        // Try to decode specific pool type
+                        match program_id.as_str() {
+                            "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => {
+                                test_pump_fun_pool_direct(pool_address, &data).await;
+                            }
+                            "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => {
+                                test_raydium_legacy_pool_direct(pool_address, &data).await;
+                            }
+                            "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => {
+                                test_raydium_cpmm_pool_direct(pool_address, &data).await;
+                            }
+                            "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => {
+                                test_meteora_dlmm_pool_direct(pool_address, &data).await;
+                            }
+                            "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv" => {
+                                test_meteora_damm_pool_direct(pool_address, &data).await;
+                            }
+                            _ => {
+                                log(
+                                    LogTag::Pool,
+                                    "UNSUPPORTED",
+                                    &format!("❌ Unsupported pool type: {}", pool_type)
+                                );
                             }
                         }
-                        Err(e) => {
-                            log(
-                                LogTag::Pool,
-                                "ERROR",
-                                &format!("❌ Failed to get account info: {}", e)
-                            );
-                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Pool,
+                            "ERROR",
+                            &format!("❌ Failed to get account info: {}", e)
+                        );
                     }
                 }
-                Ok(None) => {
-                    log(LogTag::Pool, "NOT_FOUND", "❌ Pool account not found");
-                }
-                Err(e) => {
-                    log(LogTag::Pool, "ERROR", &format!("❌ Failed to fetch pool data: {}", e));
-                }
             }
-        }
-        Err(e) => {
-            log(LogTag::Pool, "ERROR", &format!("❌ Failed to create pool calculator: {}", e));
+            Ok(None) => {
+                log(LogTag::Pool, "NOT_FOUND", "❌ Pool account not found");
+            }
+            Err(e) => {
+                log(LogTag::Pool, "ERROR", &format!("❌ Failed to fetch pool data: {}", e));
+            }
         }
     }
 }
@@ -605,18 +596,10 @@ async fn test_raydium_cpmm_pool_direct(pool_address: &str, data: &[u8]) {
     // Raydium CPMM structure - we have working decoder for this
     log(LogTag::Pool, "CPMM_DATA", &format!("Pool data size: {} bytes", data.len()));
 
-    // Use our existing CPMM decoder
-    match screenerbot::tokens::pool::PoolPriceCalculator::new() {
-        Ok(mut calculator) => {
-            calculator.enable_debug();
-
-            // The CPMM decoder should work
-            log(LogTag::Pool, "CPMM_DECODE", "Using existing Raydium CPMM decoder...");
-        }
-        Err(e) => {
-            log(LogTag::Pool, "CPMM_ERROR", &format!("❌ Failed to create calculator: {}", e));
-        }
-    }
+    // Use our existing CPMM decoder (constructor now infallible)
+    let mut calculator = screenerbot::tokens::pool::PoolPriceCalculator::new();
+    calculator.enable_debug();
+    log(LogTag::Pool, "CPMM_DECODE", "Using existing Raydium CPMM decoder...");
 }
 
 /// Test Meteora DLMM pool directly
@@ -1046,76 +1029,60 @@ async fn test_token_availability_and_price(
             "DEBUG",
             "Pool price debugging enabled - will test with direct calculator"
         );
-
-        // Test with direct calculator to get debug output
-        match screenerbot::tokens::pool::PoolPriceCalculator::new() {
-            Ok(mut calculator) => {
-                calculator.enable_debug();
-
-                // First test if we can get pool info for this token
-                let has_pools = pool_service.check_token_availability(token_address).await;
-                log(LogTag::Pool, "AVAILABILITY", &format!("Has pools: {}", has_pools));
-
-                if has_pools {
-                    // Get pairs for this token
-                    if
-                        let Ok(pairs) =
-                            screenerbot::tokens::dexscreener::get_token_pairs_from_api(
+        let mut calculator = screenerbot::tokens::pool::PoolPriceCalculator::new();
+        calculator.enable_debug();
+        let has_pools = pool_service.check_token_availability(token_address).await;
+        log(LogTag::Pool, "AVAILABILITY", &format!("Has pools: {}", has_pools));
+        if has_pools {
+            if
+                let Ok(pairs) =
+                    screenerbot::tokens::dexscreener::get_token_pairs_from_api(token_address).await
+            {
+                for pair in pairs {
+                    if pair.dex_id == "pumpswap" {
+                        log(
+                            LogTag::Pool,
+                            "PUMP_TEST",
+                            &format!(
+                                "Testing pump.fun pool: {} ({})",
+                                pair.pair_address,
+                                pair.dex_id
+                            )
+                        );
+                        match
+                            calculator.calculate_token_price(
+                                &pair.pair_address,
                                 token_address
                             ).await
-                    {
-                        for pair in pairs {
-                            if pair.dex_id == "pumpswap" {
+                        {
+                            Ok(Some(price_info)) => {
                                 log(
                                     LogTag::Pool,
-                                    "PUMP_TEST",
+                                    "PUMP_SUCCESS",
                                     &format!(
-                                        "Testing pump.fun pool: {} ({})",
-                                        pair.pair_address,
-                                        pair.dex_id
+                                        "Pump.fun price calculated: {:.12} SOL",
+                                        price_info.price_sol
                                     )
                                 );
-
-                                // Test direct calculation with debug
-                                match
-                                    calculator.calculate_token_price(
-                                        &pair.pair_address,
-                                        token_address
-                                    ).await
-                                {
-                                    Ok(Some(price_info)) => {
-                                        log(
-                                            LogTag::Pool,
-                                            "PUMP_SUCCESS",
-                                            &format!(
-                                                "Pump.fun price calculated: {:.12} SOL",
-                                                price_info.price_sol
-                                            )
-                                        );
-                                    }
-                                    Ok(None) => {
-                                        log(
-                                            LogTag::Pool,
-                                            "PUMP_NONE",
-                                            "Pump.fun calculation returned None"
-                                        );
-                                    }
-                                    Err(e) => {
-                                        log(
-                                            LogTag::Pool,
-                                            "PUMP_ERROR",
-                                            &format!("Pump.fun calculation failed: {}", e)
-                                        );
-                                    }
-                                }
-                                break;
+                            }
+                            Ok(None) => {
+                                log(
+                                    LogTag::Pool,
+                                    "PUMP_NONE",
+                                    "Pump.fun calculation returned None"
+                                );
+                            }
+                            Err(e) => {
+                                log(
+                                    LogTag::Pool,
+                                    "PUMP_ERROR",
+                                    &format!("Pump.fun calculation failed: {}", e)
+                                );
                             }
                         }
+                        break;
                     }
                 }
-            }
-            Err(e) => {
-                log(LogTag::Pool, "ERROR", &format!("Failed to create calculator: {}", e));
             }
         }
     } else {
@@ -1389,54 +1356,50 @@ async fn dump_pool_hex_data(pool_address: &str) {
     );
 
     // Create calculator to get raw pool data
-    match screenerbot::tokens::pool::PoolPriceCalculator::new() {
-        Ok(mut calculator) => {
-            calculator.enable_debug();
+    {
+        let mut calculator = screenerbot::tokens::pool::PoolPriceCalculator::new();
+        calculator.enable_debug();
 
-            match calculator.get_raw_pool_data(pool_address).await {
-                Ok(Some(data)) => {
+        match calculator.get_raw_pool_data(pool_address).await {
+            Ok(Some(data)) => {
+                log(
+                    LogTag::Pool,
+                    "HEX_DATA",
+                    &format!("📊 Pool data length: {} bytes", data.len())
+                );
+
+                // Dump hex data in 16-byte rows with offset and ASCII
+                for (i, chunk) in data.chunks(16).enumerate() {
+                    let offset = i * 16;
+                    let hex_part: String = chunk
+                        .iter()
+                        .map(|byte| format!("{:02x}", byte))
+                        .collect::<Vec<String>>()
+                        .join(" ");
+
+                    let ascii_part: String = chunk
+                        .iter()
+                        .map(|&byte| {
+                            if byte >= 32 && byte <= 126 { byte as char } else { '.' }
+                        })
+                        .collect();
+
                     log(
                         LogTag::Pool,
-                        "HEX_DATA",
-                        &format!("📊 Pool data length: {} bytes", data.len())
+                        "HEX_ROW",
+                        &format!("{:04x}: {:<48} |{}|", offset, hex_part, ascii_part)
                     );
-
-                    // Dump hex data in 16-byte rows with offset and ASCII
-                    for (i, chunk) in data.chunks(16).enumerate() {
-                        let offset = i * 16;
-                        let hex_part: String = chunk
-                            .iter()
-                            .map(|byte| format!("{:02x}", byte))
-                            .collect::<Vec<String>>()
-                            .join(" ");
-
-                        let ascii_part: String = chunk
-                            .iter()
-                            .map(|&byte| {
-                                if byte >= 32 && byte <= 126 { byte as char } else { '.' }
-                            })
-                            .collect();
-
-                        log(
-                            LogTag::Pool,
-                            "HEX_ROW",
-                            &format!("{:04x}: {:<48} |{}|", offset, hex_part, ascii_part)
-                        );
-                    }
-
-                    // Look for the specific pubkeys in the data
-                    search_pubkeys_in_data(&data, pool_address).await;
                 }
-                Ok(None) => {
-                    log(LogTag::Pool, "HEX_ERROR", "❌ Pool account not found");
-                }
-                Err(e) => {
-                    log(LogTag::Pool, "HEX_ERROR", &format!("❌ Failed to fetch pool data: {}", e));
-                }
+
+                // Look for the specific pubkeys in the data
+                search_pubkeys_in_data(&data, pool_address).await;
             }
-        }
-        Err(e) => {
-            log(LogTag::Pool, "HEX_ERROR", &format!("❌ Failed to create pool calculator: {}", e));
+            Ok(None) => {
+                log(LogTag::Pool, "HEX_ERROR", "❌ Pool account not found");
+            }
+            Err(e) => {
+                log(LogTag::Pool, "HEX_ERROR", &format!("❌ Failed to fetch pool data: {}", e));
+            }
         }
     }
 }

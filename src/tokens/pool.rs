@@ -11,7 +11,6 @@ use crate::tokens::dexscreener::{ get_token_pairs_from_api, TokenPair };
 use crate::tokens::decimals::{ get_cached_decimals };
 use crate::tokens::is_system_or_stable_token;
 use crate::rpc::get_rpc_client;
-use solana_client::rpc_client::RpcClient as SolanaRpcClient;
 use solana_sdk::{ account::Account, pubkey::Pubkey, commitment_config::CommitmentConfig };
 use std::collections::{ HashMap, HashSet };
 use std::str::FromStr;
@@ -2470,17 +2469,10 @@ impl PoolPriceService {
             );
         }
 
-        // Create PoolPriceCalculator to get real-time reserves
-        let mut calculator = PoolPriceCalculator::new().map_err(|e|
-            format!("Failed to create pool calculator: {}", e)
-        )?;
+        // Reuse global calculator instance to benefit from cached pool & vault data
+        let calculator = get_global_pool_price_calculator();
+        // (Debug flag is managed elsewhere; no need to recreate calculator repeatedly)
 
-        // Enable debug for detailed logging if debug is enabled globally
-        if is_debug_pool_prices_enabled() {
-            calculator.enable_debug();
-        }
-
-        // Calculate price from actual blockchain reserves
         match calculator.calculate_token_price(pool_address, token_mint).await {
             Ok(Some(pool_price_info)) => {
                 if is_debug_pool_prices_enabled() {
@@ -2885,10 +2877,7 @@ pub async fn get_pools_with_price_history(token_address: &str) -> Vec<String> {
 }
 
 /// Get the best pool for a token based on activity and liquidity (NEW FUNCTION)
-pub async fn get_best_pool_for_token(token_address: &str) -> Option<String> {
-    let pool_service = get_pool_service();
-    pool_service.get_best_pool_for_token(token_address).await
-}
+// Removed duplicate free functions (get_best_pool_for_token, prefetch_best_pools_for_tokens) to enforce single API via PoolPriceService methods per consolidation rules.
 
 /// Clean up old pool price history caches (can be called manually)
 pub async fn cleanup_old_price_history_caches() -> Result<usize, String> {
@@ -3155,51 +3144,30 @@ impl std::fmt::Display for PoolStats {
 
 /// Advanced pool price calculator with multi-program support
 pub struct PoolPriceCalculator {
-    rpc_client: Arc<SolanaRpcClient>,
+    // Centralized RPC client (no direct SolanaRpcClient instantiation allowed)
+    rpc_client: &'static crate::rpc::RpcClient,
     pool_cache: Arc<RwLock<HashMap<String, PoolInfo>>>,
     price_cache: Arc<RwLock<HashMap<String, (f64, Instant)>>>,
+    // Short TTL cache for vault (token account) balances to avoid duplicate RPCs inside monitoring cycles
+    vault_balance_cache: Arc<RwLock<HashMap<String, (u64, Instant)>>>,
     stats: Arc<RwLock<PoolStats>>,
     debug_enabled: bool,
 }
 
 impl PoolPriceCalculator {
-    /// Create new pool price calculator using centralized RPC client
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let rpc_client = get_rpc_client().client();
-
-        Ok(Self {
+    /// Create new pool price calculator (always uses centralized RPC system).
+    pub fn new() -> Self {
+        let rpc_client = get_rpc_client();
+        Self {
             rpc_client,
             pool_cache: Arc::new(RwLock::new(HashMap::new())),
             price_cache: Arc::new(RwLock::new(HashMap::new())),
+            vault_balance_cache: Arc::new(RwLock::new(HashMap::new())),
             stats: Arc::new(RwLock::new(PoolStats::new())),
             debug_enabled: false,
-        })
-    }
-
-    /// Create new pool price calculator with custom RPC URL (legacy method for tools)
-    pub fn new_with_url(rpc_url: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let rpc_client = Arc::new(
-            SolanaRpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed())
-        );
-
-        Ok(Self {
-            rpc_client,
-            pool_cache: Arc::new(RwLock::new(HashMap::new())),
-            price_cache: Arc::new(RwLock::new(HashMap::new())),
-            stats: Arc::new(RwLock::new(PoolStats::new())),
-            debug_enabled: false,
-        })
-    }
-
-    /// Create with optional custom RPC URL (for tool usage)
-    pub async fn new_with_rpc(
-        rpc_url: Option<&String>
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        match rpc_url {
-            Some(url) => Self::new_with_url(url),
-            None => Self::new(),
         }
     }
+    // Removed legacy constructors (new_with_url / new_with_rpc) per centralized-systems instructions.
 
     /// Enable debug mode
     pub fn enable_debug(&mut self) {
@@ -3231,10 +3199,10 @@ impl PoolPriceCalculator {
             format!("Invalid pool address {}: {}", pool_address, e)
         )?;
 
-        // Get account data
+        // Get account data via centralized async RPC
         let account = self.rpc_client
-            .get_account(&pool_pubkey)
-            .map_err(|e| format!("Failed to get pool account {}: {}", pool_address, e))?;
+            .get_account(&pool_pubkey).await
+            .map_err(|e| { format!("Failed to get pool account {}: {}", pool_address, e) })?;
 
         // Determine pool type by owner (program ID)
         let program_id = account.owner.to_string();
@@ -3459,8 +3427,8 @@ impl PoolPriceCalculator {
         let pubkeys = pubkeys.map_err(|e| format!("Invalid pool address: {}", e))?;
 
         let accounts = self.rpc_client
-            .get_multiple_accounts(&pubkeys)
-            .map_err(|e| format!("Failed to get multiple accounts: {}", e))?;
+            .get_multiple_accounts(&pubkeys).await
+            .map_err(|e| { format!("Failed to get multiple accounts: {}", e) })?;
 
         let mut result = HashMap::new();
         for (i, account_opt) in accounts.into_iter().enumerate() {
@@ -3504,16 +3472,119 @@ impl PoolPriceCalculator {
             format!("Invalid pool address: {}", e)
         )?;
 
-        match self.rpc_client.get_account(&pool_pubkey) {
+        match self.rpc_client.get_account(&pool_pubkey).await {
             Ok(account) => Ok(Some(account.data)),
             Err(e) => {
-                if e.to_string().contains("not found") {
+                if e.contains("not found") {
                     Ok(None)
                 } else {
                     Err(format!("Failed to fetch account data: {}", e))
                 }
             }
         }
+    }
+
+    /// Batch prefetch raw pool accounts and (optionally) vault token accounts for a set of pool addresses.
+    /// Goal: minimize per-price call latency by front-loading a single get_multiple_accounts.
+    /// NOTE: This currently only caches raw pool accounts; vault extraction will be enhanced later.
+    pub async fn batch_prefetch_pools_and_vaults(
+        &self,
+        pool_addresses: &[String]
+    ) -> Result<(), String> {
+        if pool_addresses.is_empty() {
+            return Ok(());
+        }
+        // Identify pools missing from cache (PoolInfo has no embedded timestamp here)
+        let mut to_fetch: Vec<Pubkey> = Vec::new();
+        let mut map: HashMap<Pubkey, String> = HashMap::new();
+        {
+            let cache = self.pool_cache.read().await;
+            for addr in pool_addresses {
+                if cache.get(addr).is_none() {
+                    if let Ok(pk) = Pubkey::from_str(addr) {
+                        to_fetch.push(pk);
+                        map.insert(pk, addr.clone());
+                    }
+                }
+            }
+        }
+        if to_fetch.is_empty() {
+            if self.debug_enabled {
+                log(
+                    LogTag::Pool,
+                    "BATCH_PREFETCH",
+                    &format!("All {} pools fresh in cache", pool_addresses.len())
+                );
+            }
+            return Ok(());
+        }
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "BATCH_PREFETCH",
+                &format!(
+                    "Fetching {} / {} pools ({} cached)",
+                    to_fetch.len(),
+                    pool_addresses.len(),
+                    pool_addresses.len() - to_fetch.len()
+                )
+            );
+        }
+        let accounts = self.rpc_client
+            .get_multiple_accounts(&to_fetch).await
+            .map_err(|e| format!("Pool batch fetch failed: {}", e))?;
+        let mut inserted = 0usize;
+        {
+            let mut cache = self.pool_cache.write().await;
+            for (i, acct_opt) in accounts.into_iter().enumerate() {
+                if let Some(acct) = acct_opt {
+                    if let Some(addr) = map.get(&to_fetch[i]) {
+                        // Decode minimally to PoolInfo so downstream users have data ready
+                        let program = acct.owner.to_string();
+                        let decoded = match program.as_str() {
+                            id if id == RAYDIUM_CPMM_PROGRAM_ID =>
+                                self.decode_raydium_cpmm_pool(addr, &acct).await.ok(),
+                            id if id == RAYDIUM_LEGACY_AMM_PROGRAM_ID =>
+                                self.decode_raydium_legacy_amm_pool(addr, &acct).await.ok(),
+                            id if id == METEORA_DLMM_PROGRAM_ID =>
+                                self.decode_meteora_dlmm_pool(addr, &acct).await.ok(),
+                            id if id == METEORA_DAMM_V2_PROGRAM_ID =>
+                                self.decode_meteora_damm_v2_pool(addr, &acct).await.ok(),
+                            id if id == ORCA_WHIRLPOOL_PROGRAM_ID =>
+                                self.decode_orca_whirlpool_pool(addr, &acct).await.ok(),
+                            _ => None,
+                        };
+                        if let Some(info) = decoded {
+                            cache.insert(addr.clone(), info);
+                            inserted += 1;
+                        }
+                    }
+                }
+            }
+        }
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "BATCH_PREFETCH",
+                &format!("Decoded & cached {} pool accounts", inserted)
+            );
+        }
+        Ok(())
+    }
+}
+
+// =============================================================================
+// GLOBAL SHARED POOL PRICE CALCULATOR
+// =============================================================================
+static mut GLOBAL_POOL_PRICE_CALCULATOR: Option<PoolPriceCalculator> = None;
+static POOL_PRICE_CALCULATOR_INIT: std::sync::Once = std::sync::Once::new();
+
+pub fn get_global_pool_price_calculator() -> &'static PoolPriceCalculator {
+    unsafe {
+        POOL_PRICE_CALCULATOR_INIT.call_once(|| {
+            GLOBAL_POOL_PRICE_CALCULATOR = Some(PoolPriceCalculator::new());
+        });
+        GLOBAL_POOL_PRICE_CALCULATOR.as_ref().unwrap()
     }
 }
 
@@ -3852,20 +3923,55 @@ impl PoolPriceCalculator {
         let vault_1_pubkey = Pubkey::from_str(vault_1).map_err(|e|
             format!("Invalid vault 1 address {}: {}", vault_1, e)
         )?;
-
-        let accounts = self.rpc_client
-            .get_multiple_accounts(&[vault_0_pubkey, vault_1_pubkey])
-            .map_err(|e| format!("Failed to get vault accounts: {}", e))?;
-
-        let vault_0_account = accounts[0]
-            .as_ref()
+        const VAULT_TTL_SECS: u64 = 2; // short-lived cache horizon
+        let now = Instant::now();
+        let mut missing: Vec<&str> = Vec::new();
+        {
+            let cache = self.vault_balance_cache.read().await;
+            for &v in &[vault_0, vault_1] {
+                match cache.get(v) {
+                    Some((_, ts)) if now.duration_since(*ts).as_secs() < VAULT_TTL_SECS => {}
+                    _ => missing.push(v),
+                }
+            }
+        }
+        if !missing.is_empty() {
+            let mut pubkeys = Vec::new();
+            for v in &missing {
+                if let Ok(pk) = Pubkey::from_str(v) {
+                    pubkeys.push(pk);
+                }
+            }
+            if !pubkeys.is_empty() {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Pool,
+                        "VAULT_BATCH",
+                        &format!("Fetching {} vault accounts (cache miss)", pubkeys.len())
+                    );
+                }
+                let accounts = self.rpc_client
+                    .get_multiple_accounts(&pubkeys).await
+                    .map_err(|e| format!("Failed to get vault accounts: {}", e))?;
+                let mut cache = self.vault_balance_cache.write().await;
+                for (idx, acct_opt) in accounts.into_iter().enumerate() {
+                    if let Some(acct) = acct_opt {
+                        if let Ok(amount) = Self::decode_token_account_amount(&acct.data) {
+                            cache.insert(missing[idx].to_string(), (amount, now));
+                        }
+                    }
+                }
+            }
+        }
+        let cache = self.vault_balance_cache.read().await;
+        let balance_0 = cache
+            .get(vault_0)
+            .map(|(a, _)| *a)
             .ok_or_else(|| "Vault 0 account not found".to_string())?;
-        let vault_1_account = accounts[1]
-            .as_ref()
+        let balance_1 = cache
+            .get(vault_1)
+            .map(|(a, _)| *a)
             .ok_or_else(|| "Vault 1 account not found".to_string())?;
-
-        let balance_0 = Self::decode_token_account_amount(&vault_0_account.data)?;
-        let balance_1 = Self::decode_token_account_amount(&vault_1_account.data)?;
 
         if self.debug_enabled {
             log(
@@ -3890,27 +3996,53 @@ impl PoolPriceCalculator {
         reserve_0: &str,
         reserve_1: &str
     ) -> Result<(u64, u64), String> {
-        let reserve_0_pubkey = Pubkey::from_str(reserve_0).map_err(|e|
-            format!("Invalid reserve 0 address {}: {}", reserve_0, e)
-        )?;
-        let reserve_1_pubkey = Pubkey::from_str(reserve_1).map_err(|e|
-            format!("Invalid reserve 1 address {}: {}", reserve_1, e)
-        )?;
-
-        let accounts = self.rpc_client
-            .get_multiple_accounts(&[reserve_0_pubkey, reserve_1_pubkey])
-            .map_err(|e| format!("Failed to get DLMM reserve accounts: {}", e))?;
-
-        let reserve_0_account = accounts[0]
-            .as_ref()
+        const VAULT_TTL_SECS: u64 = 2;
+        let now = Instant::now();
+        let mut missing: Vec<&str> = Vec::new();
+        {
+            let cache = self.vault_balance_cache.read().await;
+            for &v in &[reserve_0, reserve_1] {
+                match cache.get(v) {
+                    Some((_, ts)) if now.duration_since(*ts).as_secs() < VAULT_TTL_SECS => {}
+                    _ => missing.push(v),
+                }
+            }
+        }
+        if !missing.is_empty() {
+            let pubkeys: Vec<Pubkey> = missing
+                .iter()
+                .filter_map(|v| Pubkey::from_str(v).ok())
+                .collect();
+            if !pubkeys.is_empty() {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Pool,
+                        "DLMM_VAULT_BATCH",
+                        &format!("Fetching {} DLMM reserve accounts", pubkeys.len())
+                    );
+                }
+                let accounts = self.rpc_client
+                    .get_multiple_accounts(&pubkeys).await
+                    .map_err(|e| format!("Failed to get DLMM reserve accounts: {}", e))?;
+                let mut cache = self.vault_balance_cache.write().await;
+                for (i, acct_opt) in accounts.into_iter().enumerate() {
+                    if let Some(acct) = acct_opt {
+                        if let Ok(amount) = Self::decode_token_account_amount(&acct.data) {
+                            cache.insert(missing[i].to_string(), (amount, now));
+                        }
+                    }
+                }
+            }
+        }
+        let cache = self.vault_balance_cache.read().await;
+        let balance_0 = cache
+            .get(reserve_0)
+            .map(|(a, _)| *a)
             .ok_or_else(|| format!("DLMM reserve 0 account {} not found", reserve_0))?;
-        let reserve_1_account = accounts[1]
-            .as_ref()
+        let balance_1 = cache
+            .get(reserve_1)
+            .map(|(a, _)| *a)
             .ok_or_else(|| format!("DLMM reserve 1 account {} not found", reserve_1))?;
-
-        // For DLMM, reserves are stored in SPL Token accounts
-        let balance_0 = Self::decode_token_account_amount(&reserve_0_account.data)?;
-        let balance_1 = Self::decode_token_account_amount(&reserve_1_account.data)?;
 
         if self.debug_enabled {
             log(

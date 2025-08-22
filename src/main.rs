@@ -266,7 +266,7 @@ async fn main() {
         // Add a small delay to ensure reconcile function completes first and avoid deadlock
         tokio::time::sleep(Duration::from_secs(2)).await;
         log(LogTag::Trader, "INFO", "Positions display task started");
-        screenerbot::summary::monitor_positions_display(shutdown_display).await;
+        screenerbot::summary::summary_loop(shutdown_display).await;
         log(LogTag::Trader, "INFO", "Positions display task ended");
     });
 

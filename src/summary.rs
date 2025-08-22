@@ -436,7 +436,8 @@ pub struct TransactionFinalizationDisplay {
 }
 
 /// Background task to display positions table every 10 seconds
-pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
+/// Periodic loop that renders the positions & summary snapshot
+pub async fn summary_loop(shutdown: Arc<Notify>) {
     if is_debug_summary_enabled() && !is_dashboard_enabled() {
         log(LogTag::Summary, "DEBUG", "Starting positions display monitor");
     }
@@ -454,7 +455,7 @@ pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
         }
 
         // Display the positions table
-        display_positions_table().await;
+        print_positions_snapshot().await;
 
         if is_debug_summary_enabled() {
             let elapsed = tick_start.elapsed();
@@ -490,7 +491,8 @@ pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
     }
 }
 
-pub async fn display_positions_table() {
+/// Collects data and assembles a full positions + discovery + summary snapshot, printing to stdout
+pub async fn print_positions_snapshot() {
     let fn_start = Instant::now();
     if is_debug_summary_enabled() && !is_dashboard_enabled() {
         log(LogTag::Summary, "DEBUG", "Starting positions table display generation");
@@ -568,7 +570,7 @@ pub async fn display_positions_table() {
             log(
                 LogTag::Summary,
                 "DEBUG",
-                "[display_positions_table] Starting discovery stats stage"
+                "[print_positions_snapshot] Starting discovery stats stage"
             );
         }
         // Add timeout protection for discovery stats
@@ -614,7 +616,7 @@ pub async fn display_positions_table() {
                 LogTag::Summary,
                 "DEBUG",
                 &format!(
-                    "[display_positions_table] Discovery stage complete in {} ms (table bytes: {})",
+                    "[print_positions_snapshot] Discovery stage complete in {} ms (table bytes: {})",
                     discovery_stage_start.elapsed().as_millis(),
                     table_str.len()
                 )
@@ -627,10 +629,10 @@ pub async fn display_positions_table() {
     let summary_start = Instant::now();
 
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "[display_positions_table] Starting bot summary stage");
+        log(LogTag::Summary, "DEBUG", "[print_positions_snapshot] Starting summary report stage");
     }
     let bot_summary = match
-        tokio::time::timeout(Duration::from_secs(3), build_bot_summary(&closed_refs)).await
+        tokio::time::timeout(Duration::from_secs(10), build_summary_report(&closed_refs)).await
     {
         Ok(summary) => summary,
         Err(_) => {
@@ -713,7 +715,7 @@ pub async fn display_positions_table() {
                     LogTag::Summary,
                     "DEBUG",
                     &format!(
-                        "[display_positions_table] Closed positions table built in {} ms (bytes: {})",
+                        "[print_positions_snapshot] Closed positions table built in {} ms (bytes: {})",
                         table_start.elapsed().as_millis(),
                         table_str.len()
                     )
@@ -791,7 +793,7 @@ pub async fn display_positions_table() {
                 LogTag::Summary,
                 "DEBUG",
                 &format!(
-                    "[display_positions_table] Open positions table built in {} ms (bytes: {})",
+                    "[print_positions_snapshot] Open positions table built in {} ms (bytes: {})",
                     open_table_start.elapsed().as_millis(),
                     table_str.len()
                 )
@@ -809,7 +811,7 @@ pub async fn display_positions_table() {
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "[display_positions_table] Final aggregated output size: {} bytes",
+                "[print_positions_snapshot] Final aggregated output size: {} bytes",
                 positions_output.len()
             )
         );
@@ -831,14 +833,8 @@ pub async fn display_positions_table() {
 }
 
 /// Convenience function to build bot summary using current positions and return as string
-pub async fn build_current_bot_summary() -> String {
-    let closed_positions = get_closed_positions().await;
-    let refs: Vec<&_> = closed_positions.iter().collect();
-    build_bot_summary(&refs).await
-}
-
 /// Builds comprehensive bot summary with detailed statistics and performance metrics and returns as string
-pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
+pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
     let fn_start = Instant::now();
     if is_debug_summary_enabled() {
         log(
@@ -861,7 +857,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     // Calculate comprehensive trading statistics
     let stats_start = Instant::now();
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "[build_bot_summary] Computing trading statistics");
+        log(LogTag::Summary, "DEBUG", "[build_summary_report] Computing trading statistics");
     }
     // Calculate P&L for all positions first (async)
     let mut pnl_values = Vec::new();
@@ -930,7 +926,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "[build_bot_summary] Trading statistics computed in {} ms",
+                "[build_summary_report] Trading statistics computed in {} ms",
                 stats_start.elapsed().as_millis()
             )
         );
@@ -939,7 +935,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     // Get wallet balance from cached source (30 second cache)
     let wallet_start = Instant::now();
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "[build_bot_summary] Fetching wallet balance");
+        log(LogTag::Summary, "DEBUG", "[build_summary_report] Fetching wallet balance");
     }
 
     if is_debug_summary_enabled() {
@@ -963,7 +959,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "[build_bot_summary] Wallet balance stage complete in {} ms",
+                "[build_summary_report] Wallet balance stage complete in {} ms",
                 wallet_start.elapsed().as_millis()
             )
         );
@@ -1017,14 +1013,18 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         log(
             LogTag::Summary,
             "DEBUG",
-            "[build_bot_summary] Fetching pool service stats (cache, enhanced, disk)"
+            "[build_summary_report] Fetching pool service stats (cache, enhanced, disk)"
         );
     }
 
     // Add timeout protection for pool service calls
     let cache_stats_start = Instant::now();
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "[build_bot_summary] Starting pool service cache stats call");
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            "[build_summary_report] Starting pool service cache stats call"
+        );
     }
     let (pool_cache_count, price_cache_count, _availability_cache_count) = match
         tokio::time::timeout(Duration::from_secs(3), pool_service.get_cache_stats()).await
@@ -1035,7 +1035,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                     LogTag::Summary,
                     "DEBUG",
                     &format!(
-                        "[build_bot_summary] Pool cache stats obtained in {} ms",
+                        "[build_summary_report] Pool cache stats obtained in {} ms",
                         cache_stats_start.elapsed().as_millis()
                     )
                 );
@@ -1047,7 +1047,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                 LogTag::Summary,
                 "WARN",
                 &format!(
-                    "[build_bot_summary] Pool cache stats timeout after {} ms - using default",
+                    "[build_summary_report] Pool cache stats timeout after {} ms - using default",
                     cache_stats_start.elapsed().as_millis()
                 )
             );
@@ -1060,7 +1060,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         log(
             LogTag::Summary,
             "DEBUG",
-            "[build_bot_summary] Starting pool service enhanced stats call"
+            "[build_summary_report] Starting pool service enhanced stats call"
         );
     }
     let enhanced_stats = match
@@ -1072,7 +1072,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                     LogTag::Summary,
                     "DEBUG",
                     &format!(
-                        "[build_bot_summary] Pool enhanced stats obtained in {} ms",
+                        "[build_summary_report] Pool enhanced stats obtained in {} ms",
                         enhanced_stats_start.elapsed().as_millis()
                     )
                 );
@@ -1084,7 +1084,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                 LogTag::Summary,
                 "WARN",
                 &format!(
-                    "[build_bot_summary] Pool enhanced stats timeout after {} ms - using default",
+                    "[build_summary_report] Pool enhanced stats timeout after {} ms - using default",
                     enhanced_stats_start.elapsed().as_millis()
                 )
             );
@@ -1098,7 +1098,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         log(
             LogTag::Summary,
             "DEBUG",
-            "[build_bot_summary] Starting pool service disk cache stats call"
+            "[build_summary_report] Starting pool service disk cache stats call"
         );
     }
     let disk_cache_stats = match
@@ -1110,7 +1110,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                     LogTag::Summary,
                     "DEBUG",
                     &format!(
-                        "[build_bot_summary] Pool disk cache stats obtained in {} ms",
+                        "[build_summary_report] Pool disk cache stats obtained in {} ms",
                         disk_cache_start.elapsed().as_millis()
                     )
                 );
@@ -1122,7 +1122,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                 LogTag::Summary,
                 "WARN",
                 &format!(
-                    "[build_bot_summary] Pool disk cache stats timeout after {} ms - using default",
+                    "[build_summary_report] Pool disk cache stats timeout after {} ms - using default",
                     disk_cache_start.elapsed().as_millis()
                 )
             );
@@ -1135,7 +1135,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "[build_bot_summary] Pool service stats fetched in {} ms",
+                "[build_summary_report] Pool service stats fetched in {} ms",
                 pool_stats_start.elapsed().as_millis()
             )
         );
@@ -1224,7 +1224,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         log(
             LogTag::Summary,
             "DEBUG",
-            "[build_bot_summary] Starting static tables build (overview, stats, performance, ATA, pool, disk)"
+            "[build_summary_report] Starting static tables build (overview, stats, performance, ATA, pool, disk)"
         );
     }
     let tables_build_start = Instant::now();
@@ -1245,7 +1245,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "[build_bot_summary] Overview table built in {} ms",
+                "[build_summary_report] Overview table built in {} ms",
                 overview_start.elapsed().as_millis()
             )
         );
@@ -1291,9 +1291,9 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     }
     let swaps_start = Instant::now();
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "[build_bot_summary] Starting recent swaps table build");
+        log(LogTag::Summary, "DEBUG", "[build_summary_report] Starting recent swaps section build");
     }
-    match tokio::time::timeout(Duration::from_millis(900), build_recent_swaps_table()).await {
+    match tokio::time::timeout(Duration::from_millis(900), build_recent_swaps_section()).await {
         Ok(res) =>
             match res {
                 Ok(swaps_table) => {
@@ -1303,7 +1303,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                             LogTag::Summary,
                             "DEBUG",
                             &format!(
-                                "[build_bot_summary] Recent swaps table built successfully in {} ms (bytes: {})",
+                                "[build_summary_report] Recent swaps section built successfully in {} ms (bytes: {})",
                                 swaps_start.elapsed().as_millis(),
                                 swaps_table.len()
                             )
@@ -1316,7 +1316,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                             LogTag::Summary,
                             "DEBUG",
                             &format!(
-                                "[build_bot_summary] Failed to build recent swaps table in {} ms: {}",
+                                "[build_summary_report] Failed to build recent swaps section in {} ms: {}",
                                 swaps_start.elapsed().as_millis(),
                                 e
                             )
@@ -1331,7 +1331,9 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
 
     // Build Recent Transactions table (last 20)
     let tx_stage_start = Instant::now();
-    match tokio::time::timeout(Duration::from_millis(900), build_recent_transactions_table()).await {
+    match
+        tokio::time::timeout(Duration::from_millis(900), build_recent_transactions_section()).await
+    {
         Ok(res) =>
             match res {
                 Ok(tx_table) => {
@@ -1341,7 +1343,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                             LogTag::Summary,
                             "DEBUG",
                             &format!(
-                                "[build_bot_summary] Recent transactions table built in {} ms",
+                                "[build_summary_report] Recent transactions section built in {} ms",
                                 tx_stage_start.elapsed().as_millis()
                             )
                         );
@@ -1353,7 +1355,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                             LogTag::Summary,
                             "DEBUG",
                             &format!(
-                                "[build_bot_summary] Failed to build recent transactions table in {} ms: {}",
+                                "[build_summary_report] Failed to build recent transactions section in {} ms: {}",
                                 tx_stage_start.elapsed().as_millis(),
                                 e
                             )
@@ -1373,18 +1375,18 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
             log(
                 LogTag::Summary,
                 "DEBUG",
-                "[build_bot_summary] Starting RPC statistics tables build"
+                "[build_summary_report] Starting RPC statistics section build"
             );
         }
         let rpc_start = Instant::now();
-        let rpc_tables = build_rpc_statistics_tables(&rpc_stats);
+        let rpc_tables = build_rpc_statistics_section(&rpc_stats);
         summary_output.push_str(&rpc_tables);
         if is_debug_summary_enabled() {
             log(
                 LogTag::Summary,
                 "DEBUG",
                 &format!(
-                    "[build_bot_summary] RPC statistics tables built in {} ms (bytes: {})",
+                    "[build_summary_report] RPC statistics section built in {} ms (bytes: {})",
                     rpc_start.elapsed().as_millis(),
                     rpc_tables.len()
                 )
@@ -1393,7 +1395,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
                 LogTag::Summary,
                 "DEBUG",
                 &format!(
-                    "[build_bot_summary] RPC total stage elapsed {} ms",
+                    "[build_summary_report] RPC total stage elapsed {} ms",
                     rpc_stage_start.elapsed().as_millis()
                 )
             );
@@ -1419,17 +1421,14 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "[build_bot_summary] Table construction portion took {} ms",
+                "[build_summary_report] Table construction portion took {} ms",
                 tables_build_start.elapsed().as_millis()
             )
         );
         log(
             LogTag::Summary,
             "DEBUG",
-            &format!(
-                "Bot summary build generation complete in {} ms",
-                fn_start.elapsed().as_millis()
-            )
+            &format!("Summary report generation complete in {} ms", fn_start.elapsed().as_millis())
         );
     }
 
@@ -1437,35 +1436,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
 }
 
 /// Display comprehensive bot summary with detailed statistics and performance metrics (backwards compatibility)
-pub async fn display_bot_summary(closed_positions: &[&Position]) {
-    let summary = build_bot_summary(closed_positions).await;
-    if is_summary_enabled() && !is_dashboard_enabled() {
-        print!("{}", summary);
-    }
-    // Note: logging is already handled in build_bot_summary
-}
-
-/// Convenience function to display bot summary using current positions (backwards compatibility)
-pub async fn display_current_bot_summary() {
-    let summary = build_current_bot_summary().await;
-    if is_summary_enabled() && !is_dashboard_enabled() {
-        print!("{}", summary);
-    }
-    // Note: logging is already handled in build_current_bot_summary -> build_bot_summary
-}
-
-/// Display RPC usage statistics (backwards compatibility)
-pub fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
-    let rpc_tables = build_rpc_statistics_tables(rpc_stats);
-    if is_summary_enabled() && !is_dashboard_enabled() {
-        print!("{}", rpc_tables);
-    }
-
-    // Write to log file if debug-summary-logging is enabled
-    if is_debug_summary_logging_enabled() {
-        log(LogTag::Summary, "RPC_STATS", &rpc_tables.replace('\n', " | "));
-    }
-}
+// Removed legacy display_* convenience wrappers for clearer API (call build_summary_report or print_positions_snapshot directly)
 
 /// Calculate consecutive win/loss streaks
 fn calculate_win_loss_streaks(pnl_values: &[f64]) -> (usize, usize) {
@@ -1498,7 +1469,7 @@ fn calculate_win_loss_streaks(pnl_values: &[f64]) -> (usize, usize) {
 }
 
 /// Build recent swaps table and return as string
-async fn build_recent_swaps_table() -> Result<String, String> {
+async fn build_recent_swaps_section() -> Result<String, String> {
     let start_time = Instant::now();
     if is_debug_summary_enabled() {
         log(LogTag::Summary, "DEBUG", "[build_recent_swaps_table] Starting wallet address fetch");
@@ -1596,7 +1567,7 @@ async fn build_recent_swaps_table() -> Result<String, String> {
 }
 
 /// Build recent transactions table (last 20 by time) and return as string
-async fn build_recent_transactions_table() -> Result<String, String> {
+async fn build_recent_transactions_section() -> Result<String, String> {
     let start_time = Instant::now();
     if is_debug_summary_enabled() {
         log(
@@ -1743,7 +1714,7 @@ async fn build_recent_transactions_table() -> Result<String, String> {
 }
 
 /// Build RPC usage statistics tables and return as string
-fn build_rpc_statistics_tables(rpc_stats: &crate::rpc::RpcStats) -> String {
+fn build_rpc_statistics_section(rpc_stats: &crate::rpc::RpcStats) -> String {
     let mut output = String::new();
     let total_calls = rpc_stats.total_calls();
     if total_calls == 0 {
@@ -1920,7 +1891,7 @@ impl ClosedPositionDisplay {
             format_duration_compact(position.entry_time, Utc::now())
         };
 
-        let status = get_profit_status_emoji(pnl_sol, pnl_percent, true);
+        let status = format_profit_status_label(pnl_sol, pnl_percent, true);
 
         Self {
             symbol: position.symbol.clone(),
@@ -2004,7 +1975,7 @@ impl OpenPositionDisplay {
         };
 
         let status = if let Some(price) = current_price {
-            get_profit_status_emoji(pnl_sol, pnl_percent, false)
+            format_profit_status_label(pnl_sol, pnl_percent, false)
         } else {
             "OPEN".to_string()
         };
@@ -2146,7 +2117,7 @@ impl RecentTransactionDisplay {
 }
 
 /// Generate profit-based status for positions
-fn get_profit_status_emoji(_pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> String {
+fn format_profit_status_label(_pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> String {
     let base_status = if is_closed { "CLOSED" } else { "OPEN" };
 
     if pnl_percent >= 15.0 {

@@ -1204,15 +1204,21 @@ impl RpcClient {
     pub async fn get_account(&self, pubkey: &Pubkey) -> Result<Account, String> {
         self.wait_for_rate_limit().await;
         self.record_call("get_account");
-
+        let url = self.url().to_string();
         tokio::task
             ::spawn_blocking({
                 let client = self.client.clone();
                 let pubkey = *pubkey;
+                let url = url.clone();
                 move || {
-                    client
-                        .get_account(&pubkey)
-                        .map_err(|e| format!("Failed to get account {}: {}", pubkey, e))
+                    client.get_account(&pubkey).map_err(|e| {
+                        let es = e.to_string();
+                        if es.contains("AccountNotFound") || es.contains("could not find account") {
+                            format!("account_not_found:{}:{}", pubkey, url)
+                        } else {
+                            format!("rpc_error:{}:{}:{}", pubkey, url, es)
+                        }
+                    })
                 }
             }).await
             .map_err(|e| format!("Task error: {}", e))?
@@ -1230,14 +1236,15 @@ impl RpcClient {
         self.wait_for_rate_limit().await;
         self.record_call("get_multiple_accounts");
 
+        let url = self.url().to_string();
         tokio::task
             ::spawn_blocking({
                 let client = self.client.clone();
-                let pubkeys = pubkeys.to_vec();
+                let keys = pubkeys.to_vec();
                 move || {
                     client
-                        .get_multiple_accounts(&pubkeys)
-                        .map_err(|e| format!("Failed to get multiple accounts: {}", e))
+                        .get_multiple_accounts(&keys)
+                        .map_err(|e| { format!("rpc_error:multi:{}:{}", url, e) })
                 }
             }).await
             .map_err(|e| format!("Task error: {}", e))?
