@@ -5,9 +5,27 @@ use crate::tokens::dexscreener::get_global_dexscreener_api;
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::is_token_excluded_from_trading;
 use tokio::time::{ sleep, Duration };
-use std::sync::{Arc, OnceLock};
+use std::sync::{ Arc, OnceLock };
 use tokio::sync::RwLock;
-use chrono::{Utc, DateTime};
+use chrono::{ Utc, DateTime };
+use reqwest::Client;
+use futures::FutureExt; // for now_or_never on shutdown future
+
+// =============================================================================
+// NETWORK CONSTANTS / HELPERS
+// =============================================================================
+/// Per-endpoint HTTP timeout for discovery API calls (seconds)
+/// Increased to 15s to accommodate RugCheck new_tokens endpoint (~10s response time)
+const DISCOVERY_HTTP_TIMEOUT_SECS: u64 = 15;
+
+/// Build a reqwest client with a short timeout suitable for discovery endpoints.
+fn build_discovery_client() -> Result<Client, String> {
+    reqwest::Client
+        ::builder()
+        .timeout(std::time::Duration::from_secs(DISCOVERY_HTTP_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))
+}
 
 // =============================================================================
 // API FUNCTIONS
@@ -15,16 +33,21 @@ use chrono::{Utc, DateTime};
 
 /// Fetch latest token profiles from DexScreener API and extract Solana mint addresses
 pub async fn fetch_dexscreener_latest_token_profiles() -> Result<Vec<String>, String> {
+    log(LogTag::Discovery, "DEBUG", "ENTERED fetch_dexscreener_latest_token_profiles function");
+
     if is_debug_discovery_enabled() {
         log(LogTag::Discovery, "API", "Fetching latest token profiles from DexScreener");
     }
 
-    let client = reqwest::Client::new();
+    log(LogTag::Discovery, "DEBUG", "Building HTTP client...");
+    let client = build_discovery_client()?;
+
+    log(LogTag::Discovery, "DEBUG", "Making HTTP request to profiles API...");
     let response = client
         .get("https://api.dexscreener.com/token-profiles/latest/v1")
         .header("Accept", "*/*")
         .send().await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
+        .map_err(|e| format!("HTTP request failed (profiles): {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!("API returned status: {}", response.status()));
@@ -65,12 +88,12 @@ pub async fn fetch_dexscreener_latest_boosted_tokens() -> Result<Vec<String>, St
         log(LogTag::Discovery, "API", "Fetching latest boosted tokens from DexScreener");
     }
 
-    let client = reqwest::Client::new();
+    let client = build_discovery_client()?;
     let response = client
         .get("https://api.dexscreener.com/token-boosts/latest/v1")
         .header("Accept", "*/*")
         .send().await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
+        .map_err(|e| format!("HTTP request failed (boosted): {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!("API returned status: {}", response.status()));
@@ -111,12 +134,12 @@ pub async fn fetch_dexscreener_tokens_with_most_active_boosts() -> Result<Vec<St
         log(LogTag::Discovery, "API", "Fetching tokens with most active boosts from DexScreener");
     }
 
-    let client = reqwest::Client::new();
+    let client = build_discovery_client()?;
     let response = client
         .get("https://api.dexscreener.com/token-boosts/top/v1")
         .header("Accept", "*/*")
         .send().await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
+        .map_err(|e| format!("HTTP request failed (top boosts): {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!("API returned status: {}", response.status()));
@@ -161,12 +184,12 @@ pub async fn fetch_rugcheck_new_tokens() -> Result<Vec<String>, String> {
         log(LogTag::Discovery, "API", "Fetching new tokens from RugCheck");
     }
 
-    let client = reqwest::Client::new();
+    let client = build_discovery_client()?;
     let response = client
         .get("https://api.rugcheck.xyz/v1/stats/new_tokens")
         .header("accept", "application/json")
         .send().await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
+        .map_err(|e| format!("HTTP request failed (rug_new): {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!("API returned status: {}", response.status()));
@@ -353,7 +376,7 @@ pub struct DiscoverySourceCounts {
 #[derive(Debug, Clone, Default)]
 pub struct DiscoveryStats {
     pub total_cycles: u64,
-    pub last_cycle_started: Option<DateTime<Utc>>, 
+    pub last_cycle_started: Option<DateTime<Utc>>,
     pub last_cycle_completed: Option<DateTime<Utc>>,
     pub last_processed: usize,
     pub last_added: usize,
@@ -368,9 +391,7 @@ pub struct DiscoveryStats {
 static DISCOVERY_STATS: OnceLock<Arc<RwLock<DiscoveryStats>>> = OnceLock::new();
 
 fn get_discovery_stats_handle() -> Arc<RwLock<DiscoveryStats>> {
-    DISCOVERY_STATS
-        .get_or_init(|| Arc::new(RwLock::new(DiscoveryStats::default())))
-        .clone()
+    DISCOVERY_STATS.get_or_init(|| Arc::new(RwLock::new(DiscoveryStats::default()))).clone()
 }
 
 pub struct TokenDiscovery {
@@ -394,231 +415,181 @@ impl TokenDiscovery {
     ) -> Result<(), String> {
         use crate::utils::check_shutdown_or_delay;
         use tokio::time::Duration;
-    // Hold a single shutdown future across the whole discovery to avoid missing notifications
-    let mut shutdown_fut_opt = shutdown.as_ref().map(|s| Box::pin(s.notified()));
 
-        if is_debug_discovery_enabled() {
-            log(LogTag::Discovery, "START", "Starting comprehensive discovery cycle");
-        }
+        // Always log cycle start (visibility even without --debug-discovery)
+        log(LogTag::Discovery, "START", "Starting comprehensive discovery cycle");
 
-        // Mark stats: cycle start
-        {
-            let stats_handle = get_discovery_stats_handle();
-            let mut stats = stats_handle.write().await;
-            stats.total_cycles = stats.total_cycles.saturating_add(1);
-            stats.last_cycle_started = Some(Utc::now());
-            stats.last_error = None; // reset at start
-            // reset per-source for this cycle; will be overwritten below
-            stats.per_source = DiscoverySourceCounts::default();
+        // Mark stats: cycle start (non-blocking)
+        if let Some(stats_handle) = DISCOVERY_STATS.get() {
+            if let Ok(mut stats) = stats_handle.try_write() {
+                stats.total_cycles = stats.total_cycles.saturating_add(1);
+                stats.last_cycle_started = Some(Utc::now());
+                stats.last_error = None; // reset at start
+                // reset per-source for this cycle; will be overwritten below
+                stats.per_source = DiscoverySourceCounts::default();
+            } else {
+                log(LogTag::Discovery, "WARN", "Stats lock busy, skipping stats update");
+            }
         }
 
         let mut all_mints = Vec::new();
         // Per-cycle source counters
         let mut cycle_counts = DiscoverySourceCounts::default();
 
-    // Check for shutdown before starting (non-blocking)
-    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { if is_debug_discovery_enabled() { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled before starting"); } return Ok(()); }, else => {} } }
+        log(LogTag::Discovery, "API_START", "About to fetch from profiles API");
+        log(
+            LogTag::Discovery,
+            "DEBUG",
+            "Calling fetch_dexscreener_latest_token_profiles() function..."
+        );
 
         // Fetch latest token profiles
-    match fetch_dexscreener_latest_token_profiles().await {
+        match fetch_dexscreener_latest_token_profiles().await {
             Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("DexScreener profiles: {} mints", mints.len())
-                    );
-                }
-        cycle_counts.profiles = mints.len();
+                log(LogTag::Discovery, "SUCCESS", &format!("Profiles fetched: {}", mints.len()));
+                cycle_counts.profiles = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
-                log(LogTag::Discovery, "ERROR", &format!("Failed to fetch token profiles: {}", e));
-        let stats_handle = get_discovery_stats_handle();
-        let mut stats = stats_handle.write().await;
-        stats.last_error = Some(format!("profiles: {}", e));
+                log(LogTag::Discovery, "ERROR", &format!("Profiles fetch failed: {}", e));
+                if let Some(stats_handle) = DISCOVERY_STATS.get() {
+                    if let Ok(mut stats) = stats_handle.try_write() {
+                        stats.last_error = Some(format!("profiles: {}", e));
+                    }
+                }
             }
         }
-
-    // Check for shutdown before next API call (non-blocking)
-    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after token profiles"); return Ok(()); }, else => {} } }
 
         // Fetch latest boosted tokens
-    match fetch_dexscreener_latest_boosted_tokens().await {
+        match fetch_dexscreener_latest_boosted_tokens().await {
             Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("DexScreener boosted: {} mints", mints.len())
-                    );
-                }
-        cycle_counts.boosted = mints.len();
+                log(LogTag::Discovery, "SUCCESS", &format!("Boosted fetched: {}", mints.len()));
+                cycle_counts.boosted = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
-                log(LogTag::Discovery, "ERROR", &format!("Failed to fetch boosted tokens: {}", e));
-        let stats_handle = get_discovery_stats_handle();
-        let mut stats = stats_handle.write().await;
-        stats.last_error = Some(format!("boosted: {}", e));
+                log(LogTag::Discovery, "ERROR", &format!("Boosted fetch failed: {}", e));
+                if let Some(stats_handle) = DISCOVERY_STATS.get() {
+                    if let Ok(mut stats) = stats_handle.try_write() {
+                        stats.last_error = Some(format!("boosted: {}", e));
+                    }
+                }
             }
         }
-
-    // Check for shutdown before next API call (non-blocking)
-    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after boosted tokens"); return Ok(()); }, else => {} } }
 
         // Fetch tokens with most active boosts
-    match fetch_dexscreener_tokens_with_most_active_boosts().await {
+        match fetch_dexscreener_tokens_with_most_active_boosts().await {
             Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("DexScreener top boosts: {} mints", mints.len())
-                    );
-                }
-        cycle_counts.top_boosts = mints.len();
+                log(LogTag::Discovery, "SUCCESS", &format!("Top boosts fetched: {}", mints.len()));
+                cycle_counts.top_boosts = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Failed to fetch top boosted tokens: {}", e)
-                );
-        let stats_handle = get_discovery_stats_handle();
-        let mut stats = stats_handle.write().await;
-        stats.last_error = Some(format!("top_boosts: {}", e));
+                log(LogTag::Discovery, "ERROR", &format!("Top boosts fetch failed: {}", e));
+                if let Some(stats_handle) = DISCOVERY_STATS.get() {
+                    if let Ok(mut stats) = stats_handle.try_write() {
+                        stats.last_error = Some(format!("top_boosts: {}", e));
+                    }
+                }
             }
         }
-
-    // Check for shutdown before next API call (non-blocking)
-    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after top boosts"); return Ok(()); }, else => {} } }
 
         // Fetch new tokens from RugCheck
-    match fetch_rugcheck_new_tokens().await {
+        match fetch_rugcheck_new_tokens().await {
             Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("RugCheck new: {} mints", mints.len())
-                    );
-                }
-        cycle_counts.rug_new = mints.len();
+                log(
+                    LogTag::Discovery,
+                    "SUCCESS",
+                    &format!("RugCheck new fetched: {}", mints.len())
+                );
+                cycle_counts.rug_new = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Failed to fetch new tokens from RugCheck: {}", e)
-                );
-        let stats_handle = get_discovery_stats_handle();
-        let mut stats = stats_handle.write().await;
-        stats.last_error = Some(format!("rug_new: {}", e));
+                log(LogTag::Discovery, "ERROR", &format!("RugCheck new fetch failed: {}", e));
+                if let Some(stats_handle) = DISCOVERY_STATS.get() {
+                    if let Ok(mut stats) = stats_handle.try_write() {
+                        stats.last_error = Some(format!("rug_new: {}", e));
+                    }
+                }
             }
         }
-
-    // Check for shutdown before next API call (non-blocking)
-    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck new"); return Ok(()); }, else => {} } }
 
         // Fetch most viewed tokens from RugCheck
-    match fetch_rugcheck_most_viewed().await {
+        match fetch_rugcheck_most_viewed().await {
             Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("RugCheck viewed: {} mints", mints.len())
-                    );
-                }
-        cycle_counts.rug_viewed = mints.len();
+                log(
+                    LogTag::Discovery,
+                    "SUCCESS",
+                    &format!("RugCheck viewed fetched: {}", mints.len())
+                );
+                cycle_counts.rug_viewed = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Failed to fetch most viewed tokens from RugCheck: {}", e)
-                );
-        let stats_handle = get_discovery_stats_handle();
-        let mut stats = stats_handle.write().await;
-        stats.last_error = Some(format!("rug_viewed: {}", e));
+                log(LogTag::Discovery, "ERROR", &format!("RugCheck viewed fetch failed: {}", e));
+                if let Some(stats_handle) = DISCOVERY_STATS.get() {
+                    if let Ok(mut stats) = stats_handle.try_write() {
+                        stats.last_error = Some(format!("rug_viewed: {}", e));
+                    }
+                }
             }
         }
-
-    // Check for shutdown before next API call (non-blocking)
-    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck viewed"); return Ok(()); }, else => {} } }
 
         // Fetch trending tokens from RugCheck
-    match fetch_rugcheck_trending().await {
+        match fetch_rugcheck_trending().await {
             Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("RugCheck trending: {} mints", mints.len())
-                    );
-                }
-        cycle_counts.rug_trending = mints.len();
+                log(
+                    LogTag::Discovery,
+                    "SUCCESS",
+                    &format!("RugCheck trending fetched: {}", mints.len())
+                );
+                cycle_counts.rug_trending = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Failed to fetch trending tokens from RugCheck: {}", e)
-                );
-        let stats_handle = get_discovery_stats_handle();
-        let mut stats = stats_handle.write().await;
-        stats.last_error = Some(format!("rug_trending: {}", e));
+                log(LogTag::Discovery, "ERROR", &format!("RugCheck trending fetch failed: {}", e));
+                if let Some(stats_handle) = DISCOVERY_STATS.get() {
+                    if let Ok(mut stats) = stats_handle.try_write() {
+                        stats.last_error = Some(format!("rug_trending: {}", e));
+                    }
+                }
             }
         }
-
-    // Check for shutdown before next API call (non-blocking)
-    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck trending"); return Ok(()); }, else => {} } }
 
         // Fetch verified tokens from RugCheck
-    match fetch_rugcheck_verified().await {
+        match fetch_rugcheck_verified().await {
             Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("RugCheck verified: {} mints", mints.len())
-                    );
-                }
-        cycle_counts.rug_verified = mints.len();
+                log(
+                    LogTag::Discovery,
+                    "SUCCESS",
+                    &format!("RugCheck verified fetched: {}", mints.len())
+                );
+                cycle_counts.rug_verified = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Failed to fetch verified tokens from RugCheck: {}", e)
-                );
-        let stats_handle = get_discovery_stats_handle();
-        let mut stats = stats_handle.write().await;
-        stats.last_error = Some(format!("rug_verified: {}", e));
+                log(LogTag::Discovery, "ERROR", &format!("RugCheck verified fetch failed: {}", e));
+                if let Some(stats_handle) = DISCOVERY_STATS.get() {
+                    if let Ok(mut stats) = stats_handle.try_write() {
+                        stats.last_error = Some(format!("rug_verified: {}", e));
+                    }
+                }
             }
         }
 
-    // Check for shutdown before processing mints (non-blocking)
-    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck verified"); return Ok(()); }, else => {} } }
-
-    // Deduplicate mints
+        // Deduplicate mints
         let original_count = all_mints.len();
         all_mints.sort();
         all_mints.dedup();
         let deduplicated_count = all_mints.len();
-    let dedup_removed = original_count.saturating_sub(deduplicated_count);
+        let dedup_removed = original_count.saturating_sub(deduplicated_count);
 
         // Filter out blacklisted/excluded tokens
         let before_blacklist_count = all_mints.len();
         all_mints.retain(|mint| !is_token_excluded_from_trading(mint));
         let after_blacklist_count = all_mints.len();
-    let blacklisted_count = before_blacklist_count - after_blacklist_count;
+        let blacklisted_count = before_blacklist_count - after_blacklist_count;
 
         log(
             LogTag::Discovery,
@@ -634,30 +605,26 @@ impl TokenDiscovery {
 
         if all_mints.is_empty() {
             log(LogTag::Discovery, "COMPLETE", "No tokens to process");
-            // Update stats and return
-            let stats_handle = get_discovery_stats_handle();
-            let mut stats = stats_handle.write().await;
-            stats.last_processed = 0;
-            stats.last_added = 0;
-            stats.last_deduplicated_removed = dedup_removed;
-            stats.last_blacklist_removed = blacklisted_count;
-            stats.per_source = cycle_counts;
-            stats.last_cycle_completed = Some(Utc::now());
+            // Update stats and return (non-blocking)
+            if let Some(stats_handle) = DISCOVERY_STATS.get() {
+                if let Ok(mut stats) = stats_handle.try_write() {
+                    stats.last_processed = 0;
+                    stats.last_added = 0;
+                    stats.last_deduplicated_removed = dedup_removed;
+                    stats.last_blacklist_removed = blacklisted_count;
+                    stats.per_source = cycle_counts;
+                    stats.last_cycle_completed = Some(Utc::now());
+                }
+            }
             return Ok(());
         }
 
-    // Check for shutdown before batch processing (non-blocking)
-    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled before batch processing"); return Ok(()); }, else => {} } }
-
         // Process tokens in batches to avoid overwhelming APIs
         let batch_size = 30; // DexScreener API limit
-    let mut total_processed = 0;
-    let mut total_added = 0;
+        let mut total_processed = 0;
+        let mut total_added = 0;
 
         for (batch_index, batch) in all_mints.chunks(batch_size).enumerate() {
-            // Check for shutdown before each batch (non-blocking)
-            if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", &format!("Discovery cancelled during batch {}", batch_index + 1)); return Ok(()); }, else => {} } }
-
             log(
                 LogTag::Discovery,
                 "BATCH",
@@ -856,49 +823,69 @@ impl TokenDiscovery {
 
             total_processed += batch.len();
 
-            // Small delay between batches to respect rate limits, but allow fast shutdown
+            // Small delay between batches to respect rate limits
             if batch_index < (all_mints.len() + batch_size - 1) / batch_size - 1 {
-                if let Some(fut) = &mut shutdown_fut_opt {
-                    tokio::select! {
-                        _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled during inter-batch delay"); return Ok(()); }
-                        _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {}
-                    }
-                } else {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                }
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
         }
 
-    log(
+        log(
             LogTag::Discovery,
             "COMPLETE",
             &format!(
-                "Discovery cycle completed: processed {} tokens, added {} to database",
+                "Discovery cycle completed: processed {} added {} | sources profiles={} boosted={} top_boosts={} rug_new={} rug_viewed={} rug_trending={} rug_verified={} dedup_removed={} blacklist_removed={}",
                 total_processed,
-                total_added
+                total_added,
+                cycle_counts.profiles,
+                cycle_counts.boosted,
+                cycle_counts.top_boosts,
+                cycle_counts.rug_new,
+                cycle_counts.rug_viewed,
+                cycle_counts.rug_trending,
+                cycle_counts.rug_verified,
+                dedup_removed,
+                blacklisted_count
             )
         );
 
-    // Persist stats
-    let stats_handle = get_discovery_stats_handle();
-    let mut stats = stats_handle.write().await;
-    stats.last_processed = total_processed;
-    stats.last_added = total_added;
-    stats.last_deduplicated_removed = dedup_removed;
-    stats.last_blacklist_removed = blacklisted_count;
-    stats.total_processed = stats.total_processed.saturating_add(total_processed as u64);
-    stats.total_added = stats.total_added.saturating_add(total_added as u64);
-    stats.per_source = cycle_counts;
-    stats.last_cycle_completed = Some(Utc::now());
+        // Persist stats (non-blocking)
+        if let Some(stats_handle) = DISCOVERY_STATS.get() {
+            if let Ok(mut stats) = stats_handle.try_write() {
+                stats.last_processed = total_processed;
+                stats.last_added = total_added;
+                stats.last_deduplicated_removed = dedup_removed;
+                stats.last_blacklist_removed = blacklisted_count;
+                stats.total_processed = stats.total_processed.saturating_add(
+                    total_processed as u64
+                );
+                stats.total_added = stats.total_added.saturating_add(total_added as u64);
+                stats.per_source = cycle_counts;
+                stats.last_cycle_completed = Some(Utc::now());
+            } else {
+                log(LogTag::Discovery, "WARN", "Stats lock busy, skipping final stats update");
+            }
+        }
 
-    Ok(())
+        Ok(())
     }
     /// Start continuous discovery loop in background
     pub async fn start_discovery_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
         log(LogTag::Discovery, "START", "Discovery loop started");
 
         // IMPORTANT: Create the shutdown future once to avoid missing notifications
-    let mut shutdown_fut = Box::pin(shutdown.notified());
+        let mut shutdown_fut = Box::pin(shutdown.notified());
+
+        // Immediate first cycle (non-blocking shutdown check first)
+        // Check for shutdown before starting (non-blocking)
+        if let Some(_) = shutdown_fut.as_mut().now_or_never() {
+            log(LogTag::Discovery, "SHUTDOWN", "Discovery loop stopping before first cycle");
+            return;
+        }
+
+        log(LogTag::Discovery, "START_FETCHING", "Beginning API data collection");
+        if let Err(e) = self.discover_new_tokens(Some(shutdown.clone())).await {
+            log(LogTag::Discovery, "ERROR", &format!("Discovery initial cycle failed: {}", e));
+        }
 
         loop {
             tokio::select! {
@@ -930,14 +917,19 @@ pub async fn start_token_discovery(
 
     let handle = tokio::spawn(async move {
         let mut discovery = match TokenDiscovery::new() {
-            Ok(discovery) => discovery,
+            Ok(discovery) => {
+                log(LogTag::Discovery, "INIT", "Discovery instance created successfully");
+                discovery
+            }
             Err(e) => {
-                log(LogTag::System, "ERROR", &format!("Failed to initialize discovery: {}", e));
+                log(LogTag::Discovery, "ERROR", &format!("Failed to initialize discovery: {}", e));
                 return;
             }
         };
 
+        log(LogTag::Discovery, "READY", "Starting discovery loop");
         discovery.start_discovery_loop(shutdown).await;
+        log(LogTag::Discovery, "EXIT", "Discovery task ended");
     });
 
     Ok(handle)
