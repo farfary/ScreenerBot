@@ -492,8 +492,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         );
 
         // ⚡ PERFORMANCE FIX: Limit token processing to prevent filtering bottleneck
-        const MAX_TOKENS_TO_PROCESS: usize = 500; // Process only top 500 tokens by liquidity
-        const FILTERING_TIMEOUT_SECS: u64 = 30; // 30 second timeout for filtering
+        const MAX_TOKENS_TO_PROCESS: usize = 100; // Reduced to 100 tokens to speed up filtering
+        const FILTERING_TIMEOUT_SECS: u64 = 120; // Increased to 120 second timeout for filtering to prevent timeouts
 
         let tokens_to_process = if tokens.len() > MAX_TOKENS_TO_PROCESS {
             log(

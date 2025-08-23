@@ -22,17 +22,17 @@ use tokio::sync::RwLock;
 // 🎯 TRADING PARAMETERS - HARDCODED CONFIGURATION
 // ============================================================================
 
-// DATA AGE LIMITS
-const MAX_DATA_AGE_MINUTES: i64 = 10; // Extended from 5 to 10 minutes for maximum opportunities
+// DATA AGE LIMITS (Less aggressive - allow older data)
+const MAX_DATA_AGE_MINUTES: i64 = 30; // Increased from 10 to 30 minutes - less restrictive
 
-// LIQUIDITY TARGETING RANGES (Expanded: $5k to $1M)
-const TARGET_LIQUIDITY_MIN: f64 = 5000.0; // Reduced from 10k to 5k - catch smaller tokens
-const TARGET_LIQUIDITY_MAX: f64 = 10_000_000.0; // Increased from 500k to 1M - catch bigger opportunities
+// LIQUIDITY TARGETING RANGES (Much more permissive)
+const TARGET_LIQUIDITY_MIN: f64 = 100.0; // Reduced from 1000 to 100 - catch very small tokens
+const TARGET_LIQUIDITY_MAX: f64 = 10_000_000.0; // Increased from 500k to 10M - allow big tokens
 
-// DROP PERCENTAGE RANGES (Ultra-aggressive - catch micro to deep drops)
-const DROP_PERCENT_MIN: f64 = 10.0; // Reduced from 3% to 1% - catch micro drops
-const DROP_PERCENT_MAX: f64 = 25.0; // Reduced from 20% to 15% - focus on smaller moves
-const DROP_PERCENT_ULTRA_MAX: f64 = 70.0; // Expanded up to 70% to allow deep capitulation entries dynamically
+// DROP PERCENTAGE RANGES (Less aggressive - catch smaller drops)
+const DROP_PERCENT_MIN: f64 = 1.0; // Reduced from 3% to 1% - catch micro drops
+const DROP_PERCENT_MAX: f64 = 15.0; // Increased from 9% to 15% - wider range
+const DROP_PERCENT_ULTRA_MAX: f64 = 50.0; // Increased from 30% to 50% - allow deeper drops
 
 // TIME WINDOWS FOR ANALYSIS (Multiple ultra-aggressive timeframes)
 const INSTANT_DROP_TIME_WINDOW_SEC: i64 = 5; // NEW: Ultra-fast detection (5 seconds)
@@ -50,16 +50,16 @@ const NEAR_TOP_THRESHOLD_MAX: f64 = 20.0; // never above 20%
 const TARGET_DROP_RATIO_MIN: f64 = 0.05; // Reduced from 0.08 (5% instead of 8%)
 const TARGET_DROP_RATIO_MAX: f64 = 0.12; // Reduced from 0.15 (12% instead of 15%)
 
-// STRATEGY-SPECIFIC PARAMETERS
-const ULTRA_FRESH_MIN_LIQUIDITY: f64 = 500.0; // Minimum liquidity for ultra-fresh entries
-const SMALL_TOKEN_MIN_DROP: f64 = 10.0; // Reduced from 15% to 10% - more small token entries
-const LARGE_TOKEN_MIN_DROP: f64 = 2.0; // Reduced from 5% to 2% - catch tiny moves in large tokens
-const LONG_TERM_MIN_LIQUIDITY: f64 = 10_000.0; // Reduced from 50k to 10k - more long-term entries
-const VOLUME_MULTIPLIER_HIGH: f64 = 1.5; // Reduced from 2.0x to 1.5x - easier volume requirements
-const VOLUME_MULTIPLIER_LARGE: f64 = 0.3; // Reduced from 0.5x to 0.3x - easier large token requirements
-const MIN_VOLUME_DROP: f64 = 0.2; // Reduced from 0.5% to 0.2% - catch micro volume moves
-const MICRO_DROP_THRESHOLD: f64 = 0.5; // NEW: Micro drops for mega liquidity tokens
-const VOLUME_SPIKE_MULTIPLIER: f64 = 3.0; // NEW: Volume spike detection (3x normal volume)
+// STRATEGY-SPECIFIC PARAMETERS (Less restrictive)
+const ULTRA_FRESH_MIN_LIQUIDITY: f64 = 50.0; // Reduced from 500 - allow micro liquidity
+const SMALL_TOKEN_MIN_DROP: f64 = 5.0; // Reduced from 10% to 5% - easier small token entries
+const LARGE_TOKEN_MIN_DROP: f64 = 1.0; // Reduced from 2% to 1% - catch tiny moves in large tokens
+const LONG_TERM_MIN_LIQUIDITY: f64 = 1_000.0; // Reduced from 10k to 1k - more long-term entries
+const VOLUME_MULTIPLIER_HIGH: f64 = 1.2; // Reduced from 1.5x to 1.2x - easier volume requirements
+const VOLUME_MULTIPLIER_LARGE: f64 = 0.2; // Reduced from 0.3x to 0.2x - easier large token requirements
+const MIN_VOLUME_DROP: f64 = 0.1; // Reduced from 0.2% to 0.1% - catch micro volume moves
+const MICRO_DROP_THRESHOLD: f64 = 0.3; // Reduced from 0.5% to 0.3% - easier micro drops
+const VOLUME_SPIKE_MULTIPLIER: f64 = 2.0; // Reduced from 3.0x to 2.0x - easier volume spikes
 
 // NEAR-TOP FILTER PARAMETERS (Prevent buying at recent peaks)
 const NEAR_TOP_THRESHOLD_PERCENT: f64 = 10.0; // Must be MORE than 10% below 15-min high to enter
@@ -428,37 +428,35 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
 
     // Ultra-flexible liquidity filtering - allow almost any token with meaningful volume
     if liquidity_usd < TARGET_LIQUIDITY_MIN {
-        // Allow micro tokens (even under $500) if they have volume or big drops
-        if liquidity_usd < 100.0 {
+        // Allow micro tokens (even under $50) if they have volume or big drops
+        if liquidity_usd < 10.0 {
             if is_debug_entry_enabled() {
                 log(
                     LogTag::Entry,
                     "NANO_LIQUIDITY_REJECT",
                     &format!(
-                        "❌ {} liquidity ${:.0} too small (under $100)",
+                        "❌ {} liquidity ${:.0} too small (under $10)",
                         token.symbol,
                         liquidity_usd
                     )
                 );
             }
-            return (false, 0.0, format!("Liquidity ${:.0} too small (under $100)", liquidity_usd));
+            return (false, 0.0, format!("Liquidity ${:.0} too small (under $10)", liquidity_usd));
         }
     } else if liquidity_usd > TARGET_LIQUIDITY_MAX {
-        // Allow mega tokens (even over $10M) - no upper limit rejection
-        if liquidity_usd > 50_000_000.0 {
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "GIGA_LIQUIDITY_NOTICE",
-                    &format!(
-                        "📈 {} mega liquidity ${:.0}M detected",
-                        token.symbol,
-                        liquidity_usd / 1_000_000.0
-                    )
-                );
-            }
-            // Don't reject, just log for visibility
+        // Allow ALL tokens regardless of liquidity - no upper limit rejection
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "GIGA_LIQUIDITY_NOTICE",
+                &format!(
+                    "📈 {} mega liquidity ${:.0}M detected - allowing",
+                    token.symbol,
+                    liquidity_usd / 1_000_000.0
+                )
+            );
         }
+        // Don't reject, just log for visibility
     }
 
     if
