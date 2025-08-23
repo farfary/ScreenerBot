@@ -1277,6 +1277,13 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
     pool_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     summary_output.push_str(&format!("{}\n", pool_table));
 
+    // Diagnostic hint: pools cached but no price requests counted (placed after table for visibility)
+    if enhanced_stats.total_price_requests == 0 && pool_cache_count > 0 {
+        summary_output.push_str(
+            "ℹ️ Pool diagnostics: Cached pools present but no price requests yet. Causes: no priority tokens, liquidity gate, or monitoring just started.\n"
+        );
+    }
+
     // Build Pool Disk Cache Statistics table
     summary_output.push_str("\n💾 Pool Disk Cache Statistics\n");
     let mut disk_cache_table = Table::new(vec![disk_cache_display]);

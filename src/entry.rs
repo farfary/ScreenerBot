@@ -112,8 +112,8 @@ const MINUTES_PER_SECOND: i64 = 60; // Time conversion
 // actually spanned hours). These guards ensure we only evaluate drop strategies when we have a
 // minimum density of recent points. Otherwise we skip dynamic drop entry to avoid false positives.
 const HISTORY_MAX_POINT_AGE_SEC: i64 = 900; // Discard points older than 15m (aligns with NEAR_TOP window)
-const HISTORY_MIN_POINTS_60S: usize = 3; // Need at least 3 points inside last 60s for short-term analysis
-const HISTORY_MIN_POINTS_300S: usize = 5; // Need at least 5 points inside last 5m for medium horizon
+const HISTORY_MIN_POINTS_60S: usize = 1; // Need at least 1 valid point in last 60s (reduced from 3 for better success rate)
+const HISTORY_MIN_POINTS_300S: usize = 2; // Need at least 2 valid points in last 5m (reduced from 5 for better success rate)
 const HISTORY_MAX_LARGEST_GAP_SEC: i64 = 180; // If largest gap between successive points > 180s treat as fragmented
 const STARTUP_STALE_GRACE_SEC: i64 = 30; // During first 30s after bot start, be stricter
 static BOT_START_INSTANT: once_cell::sync::OnceCell<Instant> = once_cell::sync::OnceCell::new();

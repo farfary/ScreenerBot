@@ -1641,6 +1641,18 @@ impl PositionsManager {
             )
         );
 
+        // ✅ CRITICAL: Add token to watch list before opening position
+        // This ensures the token is monitored for price updates during and after the swap
+        let _ = crate::tokens::price::get_token_price_safe(&token.mint).await;
+
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "WATCH_LIST",
+                &format!("✅ Added {} to price monitoring watch list before swap", token.symbol)
+            );
+        }
+
         let wallet_address = get_wallet_address().map_err(|e|
             format!("Failed to get wallet address: {}", e)
         )?;
@@ -1933,6 +1945,17 @@ impl PositionsManager {
         let _guard = crate::trader::CriticalOperationGuard::new(
             &format!("SELL {}", position.symbol)
         );
+
+        // ✅ ENSURE token remains in watch list during sell process
+        let _ = crate::tokens::price::get_token_price_safe(&token.mint).await;
+
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "WATCH_LIST",
+                &format!("✅ Refreshed {} in watch list before sell execution", token.symbol)
+            );
+        }
 
         // Active sell registry guard
         if !register_active_sell(&position.mint).await {

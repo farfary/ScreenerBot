@@ -33,11 +33,20 @@ const POOL_CACHE_TTL_SECONDS: i64 = 600;
 /// Price cache TTL (1 second for real-time monitoring)
 const PRICE_CACHE_TTL_SECONDS: i64 = 2;
 
+/// Minimum liquidity (USD) required to consider a pool usable for price calculation.
+/// Lower this for testing environments if you want stats to increment sooner.
+pub const MIN_POOL_LIQUIDITY_USD: f64 = 1000.0;
+
 /// Pool price history cache settings
 const POOL_PRICE_HISTORY_CACHE_DIR: &str = CACHE_POOL_DIR;
 const POOL_PRICE_HISTORY_MAX_AGE_HOURS: i64 = 24; // 24 hours maximum
 const POOL_PRICE_HISTORY_SAVE_INTERVAL_SECONDS: u64 = 5; // Save every 5 seconds
 const POOL_PRICE_HISTORY_MAX_ENTRIES: usize = 17280; // 24h * 60min * 12 entries/min = 17,280 entries
+
+// Monitoring concurrency & performance budgeting
+const POOL_MONITOR_CONCURRENCY: usize = 5; // Max concurrent token updates per cycle
+const POOL_MONITOR_CYCLE_BUDGET_MS: u128 = 2500; // Soft per-cycle time budget
+const POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS: u64 = 6; // Guard per token update future
 
 /// Pools infos disk cache file
 const POOLS_INFO_CACHE_FILE: &str = "data/pools_infos.json";
@@ -685,6 +694,10 @@ pub struct PoolPriceService {
     stats: Arc<RwLock<PoolServiceStats>>,
     // Track tokens currently being refreshed to deduplicate background updates
     in_flight_updates: Arc<RwLock<HashSet<String>>>,
+    // Unsupported program IDs encountered (log once per program)
+    unsupported_programs: Arc<RwLock<HashSet<String>>>,
+    // Per-token backoff after repeated timeouts
+    backoff_state: Arc<RwLock<HashMap<String, BackoffEntry>>>,
 }
 
 /// Pool service comprehensive statistics
@@ -711,6 +724,10 @@ pub struct PoolServiceStats {
     pub watch_expired: u64,
     pub watch_never_checked: u64,
     pub last_updated: DateTime<Utc>,
+    // Failure classification metrics
+    pub vault_timeouts: u64,
+    pub unsupported_programs_count: u64,
+    pub calc_skips_backoff: u64,
 }
 
 impl Default for PoolServiceStats {
@@ -735,6 +752,9 @@ impl Default for PoolServiceStats {
             watch_expired: 0,
             watch_never_checked: 0,
             last_updated: Utc::now(),
+            vault_timeouts: 0,
+            unsupported_programs_count: 0,
+            calc_skips_backoff: 0,
         }
     }
 }
@@ -753,6 +773,19 @@ impl PoolServiceStats {
             0.0
         } else {
             ((self.cache_hits as f64) / (self.total_price_requests as f64)) * 100.0
+        }
+    }
+
+    pub fn record_failure(&mut self) {
+        self.total_price_requests += 1;
+        self.failed_calculations += 1;
+    }
+
+    pub fn record_success(&mut self, cache_hit: bool) {
+        self.total_price_requests += 1;
+        self.successful_calculations += 1;
+        if cache_hit {
+            self.cache_hits += 1;
         }
     }
 }
@@ -819,6 +852,8 @@ impl PoolPriceService {
             monitoring_active: Arc::new(RwLock::new(false)),
             stats: Arc::new(RwLock::new(PoolServiceStats::default())),
             in_flight_updates: Arc::new(RwLock::new(HashSet::new())),
+            unsupported_programs: Arc::new(RwLock::new(HashSet::new())),
+            backoff_state: Arc::new(RwLock::new(HashMap::new())),
         };
 
         // Load existing pools infos cache from disk on startup
@@ -1241,6 +1276,7 @@ impl PoolPriceService {
         let pool_price_history = self.pool_price_history.clone();
         let monitoring_active = self.monitoring_active.clone();
         let stats_arc = self.stats.clone();
+        let service_for_monitor = get_pool_service();
 
         // Start main monitoring loop
         tokio::spawn(async move {
@@ -1285,32 +1321,171 @@ impl PoolPriceService {
                     }
 
                     // Update prices for watched tokens
-                    for token_address in tokens_to_monitor {
-                        match
-                            Self::update_token_price_internal(
-                                &pool_cache,
-                                &price_cache,
-                                &token_address
-                            ).await
+                    let mut idx = 0usize;
+                    let total = tokens_to_monitor.len();
+                    while idx < total {
+                        if
+                            (cycle_start.elapsed().as_millis() as u128) >
+                            POOL_MONITOR_CYCLE_BUDGET_MS
                         {
-                            Ok(success) => {
-                                if success {
-                                }
+                            if is_debug_pool_prices_enabled() {
+                                log(
+                                    LogTag::Pool,
+                                    "MONITOR_BUDGET_EXHAUSTED",
+                                    &format!(
+                                        "Exceeded cycle budget (>{} ms) after processing {} of {} tokens",
+                                        POOL_MONITOR_CYCLE_BUDGET_MS,
+                                        idx,
+                                        total
+                                    )
+                                );
                             }
-                            Err(e) => {
-                                if is_debug_pool_prices_enabled() {
-                                    log(
-                                        LogTag::Pool,
-                                        "WATCH_ERROR",
-                                        &format!(
-                                            "❌ Failed to update price for {}: {}",
-                                            token_address,
-                                            e
-                                        )
-                                    );
-                                }
-                            }
+                            break;
                         }
+                        let batch_end = (idx + POOL_MONITOR_CONCURRENCY).min(total);
+                        let batch = &tokens_to_monitor[idx..batch_end];
+                        if is_debug_pool_prices_enabled() {
+                            log(
+                                LogTag::Pool,
+                                "MONITOR_BATCH",
+                                &format!(
+                                    "Processing batch {}-{} (size {})",
+                                    idx,
+                                    batch_end - 1,
+                                    batch.len()
+                                )
+                            );
+                        }
+                        let mut handles = Vec::with_capacity(batch.len());
+                        for token_address in batch.iter().cloned() {
+                            // Backoff skip
+                            {
+                                let backoff = service_for_monitor.backoff_state.read().await;
+                                if let Some(entry) = backoff.get(&token_address) {
+                                    if entry.next_retry > Instant::now() {
+                                        let mut stats = stats_arc.write().await;
+                                        stats.calc_skips_backoff += 1;
+                                        if is_debug_pool_prices_enabled() {
+                                            log(
+                                                LogTag::Pool,
+                                                "BACKOFF_SKIP",
+                                                &format!("Skipping {} due to backoff", token_address)
+                                            );
+                                        }
+                                        continue;
+                                    }
+                                }
+                            }
+                            let pool_cache_c = pool_cache.clone();
+                            let price_cache_c = price_cache.clone();
+                            let stats_arc_c = stats_arc.clone();
+                            let service_for_monitor_c = service_for_monitor.clone();
+                            handles.push(
+                                tokio::spawn(async move {
+                                    let fut = Self::update_token_price_internal(
+                                        &pool_cache_c,
+                                        &price_cache_c,
+                                        &token_address
+                                    );
+                                    match
+                                        tokio::time::timeout(
+                                            Duration::from_secs(
+                                                POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS
+                                            ),
+                                            fut
+                                        ).await
+                                    {
+                                        Ok(Ok(success)) => {
+                                            if success {
+                                                let mut backoff =
+                                                    service_for_monitor_c.backoff_state.write().await;
+                                                if
+                                                    let Some(entry) = backoff.get_mut(
+                                                        &token_address
+                                                    )
+                                                {
+                                                    entry.reset();
+                                                }
+                                            }
+                                        }
+                                        Ok(Err(e)) => {
+                                            if is_debug_pool_prices_enabled() {
+                                                log(
+                                                    LogTag::Pool,
+                                                    "WATCH_ERROR",
+                                                    &format!("❌ Failed {}: {}", token_address, e)
+                                                );
+                                            }
+                                            if e.contains("timed out") {
+                                                let mut stats = stats_arc_c.write().await;
+                                                stats.vault_timeouts += 1;
+                                                let mut backoff =
+                                                    service_for_monitor_c.backoff_state.write().await;
+                                                let entry = backoff
+                                                    .entry(token_address.clone())
+                                                    .or_insert_with(BackoffEntry::new);
+                                                entry.register_failure();
+                                                // Count as failed calculation attempt
+                                                let mut calc_stats =
+                                                    service_for_monitor_c.stats.write().await;
+                                                calc_stats.record_failure();
+                                            } else if e.contains("Unsupported pool program ID") {
+                                                let mut unsupported =
+                                                    service_for_monitor_c.unsupported_programs.write().await;
+                                                if unsupported.insert(token_address.clone()) {
+                                                    let mut stats = stats_arc_c.write().await;
+                                                    stats.unsupported_programs_count += 1;
+                                                    if is_debug_pool_prices_enabled() {
+                                                        log(
+                                                            LogTag::Pool,
+                                                            "UNSUPPORTED_PROGRAM",
+                                                            &format!("Token {} unsupported", token_address)
+                                                        );
+                                                    }
+                                                    let mut calc_stats =
+                                                        service_for_monitor_c.stats.write().await;
+                                                    calc_stats.record_failure();
+                                                }
+                                            } else {
+                                                let mut calc_stats =
+                                                    service_for_monitor_c.stats.write().await;
+                                                calc_stats.record_failure();
+                                            }
+                                        }
+                                        Err(_) => {
+                                            // Timeout wrapper triggered
+                                            let mut stats = stats_arc_c.write().await;
+                                            stats.vault_timeouts += 1;
+                                            let mut backoff =
+                                                service_for_monitor_c.backoff_state.write().await;
+                                            let entry = backoff
+                                                .entry(token_address.clone())
+                                                .or_insert_with(BackoffEntry::new);
+                                            entry.register_failure();
+                                            if is_debug_pool_prices_enabled() {
+                                                log(
+                                                    LogTag::Pool,
+                                                    "TOKEN_TIMEOUT",
+                                                    &format!(
+                                                        "Timeout updating {} after {}s",
+                                                        token_address,
+                                                        POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS
+                                                    )
+                                                );
+                                            }
+                                            let mut calc_stats =
+                                                service_for_monitor_c.stats.write().await;
+                                            calc_stats.record_failure();
+                                        }
+                                    }
+                                })
+                            );
+                        }
+                        // Await batch completion
+                        for h in handles {
+                            let _ = h.await;
+                        }
+                        idx = batch_end;
                     }
                 }
 
@@ -1399,6 +1574,63 @@ impl PoolPriceService {
 
             log(LogTag::Pool, "DISK_SAVE_SERVICE_STOP", "Disk cache auto-save service stopped");
         });
+    }
+
+    /// Public wrapper for stats recording (used by monitoring loop to count cache hits / availability failures)
+    pub async fn record_stats_event(&self, success: bool, cache_hit: bool, blockchain: bool) {
+        self.record_price_request(success, cache_hit, blockchain).await;
+    }
+
+    /// Ensure stats reflect monitoring activity.
+    /// - Fresh cache hit: count success (cache_hit).
+    /// - No fresh cache but availability passes: delegate to full get_pool_price (which records internally).
+    /// - Availability fails: record failed attempt (no pools / liquidity gate) once per invocation.
+    pub async fn ensure_pool_price_for_monitor(&self, token_address: &str) {
+        // Check for fresh cached price
+        let mut fresh_cache_hit = false;
+        {
+            let price_cache = self.price_cache.read().await;
+            if let Some(cached_price) = price_cache.get(token_address) {
+                let age = Utc::now() - cached_price.calculated_at;
+                if age.num_seconds() <= PRICE_CACHE_TTL_SECONDS {
+                    fresh_cache_hit = true;
+                }
+            }
+        }
+        if fresh_cache_hit {
+            self.record_stats_event(true, true, false).await;
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "MONITOR_CACHE_HIT",
+                    &format!("🛰️ Monitor cache hit for {}", token_address)
+                );
+            }
+            return;
+        }
+
+        // Availability gate
+        if !self.check_token_availability(token_address).await {
+            self.record_stats_event(false, false, false).await;
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "MONITOR_UNAVAILABLE",
+                    &format!("🛰️ Monitor unavailable (liquidity gate) for {}", token_address)
+                );
+            }
+            return;
+        }
+
+        // Perform full calculation (stats recorded inside get_pool_price)
+        let _ = self.get_pool_price(token_address, None).await;
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "MONITOR_CALC",
+                &format!("🛰️ Monitor triggered calc for {}", token_address)
+            );
+        }
     }
 
     /// Stop background monitoring service
@@ -2035,7 +2267,7 @@ impl PoolPriceService {
                     best_pool_address: best_pool.map(|p| p.pair_address.clone()),
                     best_liquidity_usd: best_pool.map(|p| p.liquidity_usd).unwrap_or(0.0),
                     can_calculate_price: has_pools &&
-                    best_pool.map(|p| p.liquidity_usd > 1000.0).unwrap_or(false),
+                    best_pool.map(|p| p.liquidity_usd > MIN_POOL_LIQUIDITY_USD).unwrap_or(false),
                     last_checked: Utc::now(),
                 };
 
@@ -2044,6 +2276,20 @@ impl PoolPriceService {
                     availability_cache.insert(token_address.to_string(), availability.clone());
                 }
 
+                if !availability.can_calculate_price && is_debug_pool_prices_enabled() {
+                    if let Some(liq) = availability.best_liquidity_usd.into() {
+                    }
+                    log(
+                        LogTag::Pool,
+                        "LIQUIDITY_GATE",
+                        &format!(
+                            "⛔ Liquidity gate: {} best_liquidity=${:.2} < required ${:.2}",
+                            token_address,
+                            availability.best_liquidity_usd,
+                            MIN_POOL_LIQUIDITY_USD
+                        )
+                    );
+                }
                 availability.can_calculate_price
             }
             Err(e) => {
@@ -2826,6 +3072,29 @@ impl PoolPriceService {
     }
 }
 
+#[derive(Debug, Clone)]
+struct BackoffEntry {
+    consecutive_failures: u32,
+    next_retry: Instant,
+}
+
+impl BackoffEntry {
+    fn new() -> Self {
+        Self { consecutive_failures: 0, next_retry: Instant::now() }
+    }
+    fn register_failure(&mut self) {
+        self.consecutive_failures = self.consecutive_failures.saturating_add(1);
+        let base: u64 = 6; // seconds
+        let exp = self.consecutive_failures.min(5); // cap
+        let delay = (base * (2u64).saturating_pow(exp)).min(60);
+        self.next_retry = Instant::now() + Duration::from_secs(delay);
+    }
+    fn reset(&mut self) {
+        self.consecutive_failures = 0;
+        self.next_retry = Instant::now();
+    }
+}
+
 // =============================================================================
 // GLOBAL POOL PRICE SERVICE
 // =============================================================================
@@ -2833,24 +3102,30 @@ impl PoolPriceService {
 static mut GLOBAL_POOL_SERVICE: Option<PoolPriceService> = None;
 static POOL_INIT: std::sync::Once = std::sync::Once::new();
 
-/// Initialize global pool price service
+/// Initialize global pool price service (idempotent)
 pub fn init_pool_service() -> &'static PoolPriceService {
     unsafe {
         POOL_INIT.call_once(|| {
             GLOBAL_POOL_SERVICE = Some(PoolPriceService::new());
         });
-        GLOBAL_POOL_SERVICE.as_ref().unwrap()
+        match GLOBAL_POOL_SERVICE.as_ref() {
+            Some(svc) => svc,
+            None => {
+                log(LogTag::Pool, "INIT_ERROR", "PoolPriceService failed to initialize");
+                panic!("PoolPriceService failed to initialize");
+            }
+        }
     }
 }
 
-/// Get global pool price service
+/// Try to get global service without forcing initialization (may return None)
+pub fn try_get_pool_service() -> Option<&'static PoolPriceService> {
+    unsafe { GLOBAL_POOL_SERVICE.as_ref() }
+}
+
+/// Get or initialize service, logging on failure
 pub fn get_pool_service() -> &'static PoolPriceService {
-    unsafe {
-        if GLOBAL_POOL_SERVICE.is_none() {
-            return init_pool_service();
-        }
-        GLOBAL_POOL_SERVICE.as_ref().unwrap()
-    }
+    init_pool_service()
 }
 
 /// Get comprehensive price history for analysis (global function)
@@ -3270,6 +3545,15 @@ impl PoolPriceCalculator {
                 self.decode_pump_fun_amm_pool(pool_address, &account).await?
             }
             _ => {
+                // Record failure before returning
+                {
+                    let mut stats = self.stats.write().await;
+                    stats.record_calculation(
+                        false,
+                        start_time.elapsed().as_millis() as f64,
+                        &program_id
+                    );
+                }
                 return Err(format!("Unsupported pool program ID: {}", program_id));
             }
         };
@@ -3280,7 +3564,7 @@ impl PoolPriceCalculator {
             cache.insert(pool_address.to_string(), pool_info.clone());
         }
 
-        // Update stats
+        // Update stats (success)
         {
             let mut stats = self.stats.write().await;
             stats.record_calculation(true, start_time.elapsed().as_millis() as f64, &program_id);
@@ -3579,17 +3863,31 @@ impl PoolPriceCalculator {
 static mut GLOBAL_POOL_PRICE_CALCULATOR: Option<PoolPriceCalculator> = None;
 static POOL_PRICE_CALCULATOR_INIT: std::sync::Once = std::sync::Once::new();
 
-pub fn get_global_pool_price_calculator() -> &'static PoolPriceCalculator {
+pub fn init_global_pool_price_calculator() -> &'static PoolPriceCalculator {
     unsafe {
         POOL_PRICE_CALCULATOR_INIT.call_once(|| {
             GLOBAL_POOL_PRICE_CALCULATOR = Some(PoolPriceCalculator::new());
         });
-        GLOBAL_POOL_PRICE_CALCULATOR.as_ref().unwrap()
+        match GLOBAL_POOL_PRICE_CALCULATOR.as_ref() {
+            Some(calc) => calc,
+            None => {
+                log(LogTag::Pool, "INIT_ERROR", "PoolPriceCalculator failed to initialize");
+                panic!("PoolPriceCalculator failed to initialize");
+            }
+        }
     }
 }
 
+pub fn try_get_global_pool_price_calculator() -> Option<&'static PoolPriceCalculator> {
+    unsafe { GLOBAL_POOL_PRICE_CALCULATOR.as_ref() }
+}
+
+pub fn get_global_pool_price_calculator() -> &'static PoolPriceCalculator {
+    init_global_pool_price_calculator()
+}
+
 // =============================================================================
-// RAYDIUM CPMM POOL DECODER
+// POOL DECODERS
 // =============================================================================
 
 impl PoolPriceCalculator {

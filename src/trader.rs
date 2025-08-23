@@ -491,18 +491,110 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             )
         );
 
-        // Use centralized filtering system to get eligible tokens
+        // ⚡ PERFORMANCE FIX: Limit token processing to prevent filtering bottleneck
+        const MAX_TOKENS_TO_PROCESS: usize = 500; // Process only top 500 tokens by liquidity
+        const FILTERING_TIMEOUT_SECS: u64 = 30; // 30 second timeout for filtering
+
+        let tokens_to_process = if tokens.len() > MAX_TOKENS_TO_PROCESS {
+            log(
+                LogTag::Trader,
+                "PERF",
+                &format!(
+                    "🚀 PERFORMANCE: Limiting processing from {} to {} tokens (top by liquidity)",
+                    tokens.len(),
+                    MAX_TOKENS_TO_PROCESS
+                )
+            );
+            &tokens[..MAX_TOKENS_TO_PROCESS]
+        } else {
+            &tokens[..]
+        };
+
+        // Use centralized filtering system to get eligible tokens WITH TIMEOUT
         use crate::filtering::{ filter_tokens_with_reasons, get_filtering_stats };
 
-        let (eligible_tokens, _) = filter_tokens_with_reasons(&tokens);
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!(
+                    "🔍 About to start token filtering for {} tokens...",
+                    tokens_to_process.len()
+                )
+            );
+        }
+
+        // Apply timeout to prevent infinite hang on filtering
+        let filtering_result = tokio::time::timeout(
+            std::time::Duration::from_secs(FILTERING_TIMEOUT_SECS),
+            async {
+                // Run filtering in spawn_blocking to avoid blocking the async runtime
+                tokio::task::spawn_blocking({
+                    let tokens_copy = tokens_to_process.to_vec();
+                    move || filter_tokens_with_reasons(&tokens_copy)
+                }).await
+            }
+        ).await;
+
+        let (eligible_tokens, rejected_tokens) = match filtering_result {
+            Ok(Ok(result)) => result,
+            Ok(Err(e)) => {
+                log(LogTag::Trader, "ERROR", &format!("Token filtering task failed: {}", e));
+                continue; // Skip this cycle and try again
+            }
+            Err(_) => {
+                log(
+                    LogTag::Trader,
+                    "WARN",
+                    &format!("⏰ Token filtering timed out after {}s - skipping this cycle", FILTERING_TIMEOUT_SECS)
+                );
+                continue; // Skip this cycle and try again
+            }
+        };
+
+        if is_debug_trader_enabled() {
+            log(LogTag::Trader, "DEBUG", "✅ Token filtering completed successfully");
+        }
 
         // Log filtering statistics
-        let (total, passed, pass_rate) = get_filtering_stats(&tokens);
+        if is_debug_trader_enabled() {
+            log(LogTag::Trader, "DEBUG", "📊 About to calculate filtering statistics...");
+        }
+
+        let (total, passed, pass_rate) = get_filtering_stats(tokens_to_process);
         log(
             LogTag::Trader,
             "FILTER_STATS",
-            &format!("Token filtering: {}/{} passed ({:.1}% pass rate)", passed, total, pass_rate)
+            &format!(
+                "Token filtering: {}/{} passed ({:.1}% pass rate) - processed top {} tokens",
+                passed,
+                total,
+                pass_rate,
+                tokens_to_process.len()
+            )
         );
+
+        // Debug: Log some rejected tokens
+        if is_debug_trader_enabled() && !rejected_tokens.is_empty() {
+            let sample_size = std::cmp::min(5, rejected_tokens.len());
+            for (token, reason) in rejected_tokens.iter().take(sample_size) {
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!("🚫 {} filtered out: {:?}", token.symbol, reason)
+                );
+            }
+            if rejected_tokens.len() > sample_size {
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!(
+                        "... and {} more tokens filtered out",
+                        rejected_tokens.len() - sample_size
+                    )
+                );
+            }
+        }
 
         // Use eligible tokens for trading
         tokens = eligible_tokens;
@@ -607,7 +699,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             let token = token.clone();
             let shutdown_clone = shutdown.clone();
             // Spawn a new task for this token with overall timeout
-            let positions_handle_opt = crate::positions::get_positions_handle().await;
             let handle = tokio::spawn(async move {
                 // Keep the permit alive for the duration of this task
                 let _permit = permit; // This will be automatically dropped when the task completes
@@ -625,7 +716,23 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 // Wrap the entire task logic in a timeout to prevent hanging
                 match
                     tokio::time::timeout(Duration::from_secs(TOKEN_CHECK_TASK_TIMEOUT_SECS), async {
+                        if is_debug_trader_enabled() {
+                            log(
+                                LogTag::Trader,
+                                "DEBUG",
+                                &format!("🚀 Starting task for token {}", token.symbol)
+                            );
+                        }
+
                         let pool_service = get_pool_service();
+
+                        if is_debug_trader_enabled() {
+                            log(
+                                LogTag::Trader,
+                                "DEBUG",
+                                &format!("📡 Got pool service for {}", token.symbol)
+                            );
+                        }
 
                         // Get current pool price
                         let current_price = match
@@ -635,14 +742,51 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         {
                             Some(p) if p > 0.0 && p.is_finite() => p,
                             _ => {
+                                if is_debug_trader_enabled() {
+                                    log(
+                                        LogTag::Trader,
+                                        "DEBUG",
+                                        &format!(
+                                            "❌ {} pool price unavailable or invalid",
+                                            token.symbol
+                                        )
+                                    );
+                                }
                                 return;
                             }
                         };
 
                         // Entry decision delegated to entry::should_buy
-                        let (approved, _confidence, _reason) = should_buy(&token).await;
+                        if is_debug_trader_enabled() {
+                            log(
+                                LogTag::Trader,
+                                "DEBUG",
+                                &format!(
+                                    "🔍 Checking entry for {} at {:.12} SOL",
+                                    token.symbol,
+                                    current_price
+                                )
+                            );
+                        }
+                        let (approved, _confidence, reason) = should_buy(&token).await;
                         if !approved {
+                            if is_debug_trader_enabled() {
+                                log(
+                                    LogTag::Trader,
+                                    "DEBUG",
+                                    &format!("❌ {} rejected: {}", token.symbol, reason)
+                                );
+                            }
                             return;
+                        }
+
+                        // Token approved for entry!
+                        if is_debug_trader_enabled() {
+                            log(
+                                LogTag::Trader,
+                                "DEBUG",
+                                &format!("✅ {} approved for entry: {}", token.symbol, reason)
+                            );
                         }
 
                         // Compute percent change from recent history if available
@@ -661,6 +805,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         };
 
                         // Send open-position request to PositionsManager via handle
+                        let positions_handle_opt = crate::positions::get_positions_handle().await;
                         if let Some(h) = &positions_handle_opt {
                             let _ = h.open_position(
                                 token.clone(),
@@ -668,6 +813,14 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 change,
                                 TRADE_SIZE_SOL
                             ).await;
+                        } else {
+                            if is_debug_trader_enabled() {
+                                log(
+                                    LogTag::Trader,
+                                    "DEBUG",
+                                    &format!("⚠️ {} positions handle not available", token.symbol)
+                                );
+                            }
                         }
                     }).await
                 {
