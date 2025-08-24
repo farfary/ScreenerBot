@@ -1268,6 +1268,92 @@ impl TransactionDatabase {
         log(LogTag::Transactions, "ANALYZE", "Database analysis completed successfully");
         Ok(())
     }
+
+    /// Get swap transaction signatures for a specific token mint (optimized for phantom cleanup)
+    /// This filters efficiently at the database level instead of scanning all transactions
+    pub async fn get_swap_signatures_for_token(
+        &self,
+        token_mint: &str,
+        swap_type: Option<&str>, // "Sell", "Buy", or None for both
+        limit: Option<usize>
+    ) -> Result<Vec<String>, String> {
+        let conn = self.pool
+            .get()
+            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+
+        let mut query = String::from(
+            "SELECT DISTINCT pt.signature FROM processed_transactions pt 
+             INNER JOIN raw_transactions rt ON pt.signature = rt.signature 
+             WHERE pt.token_info IS NOT NULL 
+             AND pt.swap_analysis IS NOT NULL 
+             AND rt.success = 1"
+        );
+
+        let mut params: Vec<Box<dyn rusqlite::ToSql + Send>> = Vec::new();
+        let mut param_index = 1;
+
+        // Filter by token mint (check if token_info JSON contains the mint)
+        query.push_str(&format!(" AND pt.token_info LIKE '%{}%'", token_mint));
+
+        // Filter by swap type if specified
+        if let Some(swap_type) = swap_type {
+            query.push_str(&format!(" AND pt.transaction_type LIKE '%{}%'", swap_type));
+        }
+
+        // Order by timestamp DESC to get most recent first
+        query.push_str(" ORDER BY rt.block_time DESC, rt.timestamp DESC");
+
+        // Add limit if specified
+        if let Some(limit) = limit {
+            query.push_str(&format!(" LIMIT {}", limit));
+        }
+
+        log(
+            LogTag::Transactions,
+            "QUERY",
+            &format!(
+                "Filtering transactions for token {}: {}",
+                if token_mint.len() >= 8 {
+                    &token_mint[..8]
+                } else {
+                    token_mint
+                },
+                query
+            )
+        );
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| format!("Failed to prepare filtered query: {}", e))?;
+
+        let rows = stmt
+            .query_map([], |row| Ok(row.get::<_, String>(0)?))
+            .map_err(|e| format!("Failed to execute filtered query: {}", e))?;
+
+        let mut signatures = Vec::new();
+        for row in rows {
+            if let Ok(signature) = row {
+                signatures.push(signature);
+            }
+        }
+
+        log(
+            LogTag::Transactions,
+            "FILTER_RESULT",
+            &format!(
+                "Found {} filtered transactions for token {} (type: {:?})",
+                signatures.len(),
+                if token_mint.len() >= 8 {
+                    &token_mint[..8]
+                } else {
+                    token_mint
+                },
+                swap_type
+            )
+        );
+
+        Ok(signatures)
+    }
 }
 
 // =============================================================================

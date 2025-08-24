@@ -387,12 +387,6 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
                 )
                 .action(clap::ArgAction::SetTrue)
         )
-        .arg(
-            Arg::new("clean")
-                .long("clean")
-                .help("Remove all transaction JSON files from data/transactions/ directory")
-                .action(clap::ArgAction::SetTrue)
-        )
 
         // === TESTING & DEBUGGING ===
         .next_help_heading("Testing & Debugging")
@@ -615,8 +609,6 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
                 to_dt
             ).await;
         }
-    } else if matches.get_flag("clean") {
-        clean_all_transaction_files().await;
     } else if matches.get_flag("benchmark") {
         let count = *matches.get_one::<usize>("count").expect("count should have default value");
         run_benchmark_tests(wallet_pubkey, count).await;
@@ -767,7 +759,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
             &format!(
                 "Position test configuration validated:\n  • Token: {} ({})\n  • SOL Amount: {:.6}",
                 token_symbol,
-                &token_mint[..8],
+                screenerbot::utils::safe_truncate(&token_mint, 8),
                 sol_amount
             )
         );
@@ -932,7 +924,7 @@ impl SwapTestConfig {
                 "Swap test configuration validated:\n  • Type: {}\n  • Token: {} ({})\n  • SOL Amount: {:.6}\n  • Slippage: {:.1}%\n  • Router: {}\n  • Dry Run: {}",
                 self.swap_type,
                 self.token_symbol,
-                &self.token_mint[..8],
+                screenerbot::utils::safe_truncate(&self.token_mint, 8),
                 self.sol_amount,
                 self.slippage,
                 self.router,
@@ -980,7 +972,7 @@ async fn analyze_swaps(
         );
     }
     if let Some(ref mint) = filter_mint {
-        let short = if mint.len() > 8 { &mint[..8] } else { mint };
+        let short = screenerbot::utils::safe_truncate(mint, 8);
         log(
             LogTag::Transactions,
             "FILTER",
@@ -1296,7 +1288,7 @@ async fn analyze_all_transactions(
 
             // Optional filter by token mint (match any involvement in tx)
             let filtered: Vec<_> = if let Some(ref mint) = filter_mint {
-                let short = if mint.len() > 8 { &mint[..8] } else { mint };
+                let short = screenerbot::utils::safe_truncate(mint, 8);
                 log(
                     LogTag::Transactions,
                     "FILTER",
@@ -1378,8 +1370,8 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
                 ("Token->Token", format!("{:.0} -> {:.0} via {}", from_amount, to_amount, router))
             }
             screenerbot::transactions::TransactionType::SolTransfer { from, to, amount } => {
-                let from_short = if from.len() >= 8 { &from[..8] } else { from };
-                let to_short = if to.len() >= 8 { &to[..8] } else { to };
+                let from_short = screenerbot::utils::safe_truncate(from, 8);
+                let to_short = screenerbot::utils::safe_truncate(to, 8);
                 ("SOL Transfer", format!("{:.4} SOL: {}...->{}...", amount, from_short, to_short))
             }
             screenerbot::transactions::TransactionType::TokenTransfer {
@@ -1388,15 +1380,15 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
                 to,
                 amount,
             } => {
-                let from_short = if from.len() >= 8 { &from[..8] } else { from };
-                let to_short = if to.len() >= 8 { &to[..8] } else { to };
+                let from_short = screenerbot::utils::safe_truncate(from, 8);
+                let to_short = screenerbot::utils::safe_truncate(to, 8);
                 (
                     "Token Transfer",
                     format!("{:.0} tokens: {}...->{}...", amount, from_short, to_short),
                 )
             }
             screenerbot::transactions::TransactionType::AtaClose { token_mint, recovered_sol } => {
-                let mint_short = if token_mint.len() >= 8 { &token_mint[..8] } else { token_mint };
+                let mint_short = screenerbot::utils::safe_truncate(token_mint, 8);
                 ("ATA Close", format!("Recovered {:.6} SOL from {}...", recovered_sol, mint_short))
             }
             screenerbot::transactions::TransactionType::Other { description, details } => {
@@ -1416,7 +1408,7 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
                 slot,
                 tx_type,
                 if details.len() > 30 {
-                    format!("{}...", &details[..27])
+                    format!("{}...", screenerbot::utils::safe_truncate(&details, 27))
                 } else {
                     details
                 },
@@ -1660,15 +1652,15 @@ fn analyze_and_display_ata_operations(transactions: &[screenerbot::transactions:
                 let tx_type = match &transaction.transaction_type {
                     screenerbot::transactions::TransactionType::SwapSolToToken { router, .. } => {
                         swap_transactions_with_ata += 1;
-                        format!("Buy ({})", if router.len() > 12 { &router[..12] } else { router })
+                        format!("Buy ({})", screenerbot::utils::safe_truncate(router, 12))
                     }
                     screenerbot::transactions::TransactionType::SwapTokenToSol { router, .. } => {
                         swap_transactions_with_ata += 1;
-                        format!("Sell ({})", if router.len() > 12 { &router[..12] } else { router })
+                        format!("Sell ({})", screenerbot::utils::safe_truncate(router, 12))
                     }
                     screenerbot::transactions::TransactionType::SwapTokenToToken { router, .. } => {
                         swap_transactions_with_ata += 1;
-                        format!("Swap ({})", if router.len() > 12 { &router[..12] } else { router })
+                        format!("Swap ({})", screenerbot::utils::safe_truncate(router, 12))
                     }
                     _ => {
                         non_swap_transactions_with_ata += 1;
@@ -1711,11 +1703,7 @@ fn analyze_and_display_ata_operations(transactions: &[screenerbot::transactions:
                     &format!(
                         "{:<10} {:<11} {:>10.6} {:>11} {:>10} {:>10.6} {:>14.6} {:>10.6} {:>14.6}",
                         sig_short,
-                        if tx_type.len() > 11 {
-                            &tx_type[..11]
-                        } else {
-                            &tx_type
-                        },
+                        screenerbot::utils::safe_truncate(&tx_type, 11),
                         transaction.sol_balance_change,
                         ata_analysis.total_ata_creations,
                         ata_analysis.total_ata_closures,
@@ -1737,11 +1725,10 @@ fn analyze_and_display_ata_operations(transactions: &[screenerbot::transactions:
                         } else {
                             "CLOSE"
                         };
-                        let mint_short = if operation.token_mint.len() >= 8 {
-                            &operation.token_mint[..8]
-                        } else {
-                            &operation.token_mint
-                        };
+                        let mint_short = screenerbot::utils::safe_truncate(
+                            &operation.token_mint,
+                            8
+                        );
                         let wsol_flag = if operation.is_wsol { " (WSOL)" } else { "" };
 
                         log(
@@ -1750,7 +1737,7 @@ fn analyze_and_display_ata_operations(transactions: &[screenerbot::transactions:
                             &format!(
                                 "           └─ {} {} for {}...{} ({:.6} SOL)",
                                 op_type,
-                                &operation.account_address[..8],
+                                screenerbot::utils::safe_truncate(&operation.account_address, 8),
                                 mint_short,
                                 wsol_flag,
                                 operation.rent_amount
@@ -1857,7 +1844,7 @@ fn analyze_and_display_ata_operations(transactions: &[screenerbot::transactions:
                 "ATA_ANALYSIS",
                 &format!(
                     "  {}: {} - Actual: {:.6} SOL, Expected from ATA: {:.6} SOL, Difference: {:.6} SOL",
-                    &signature[..8],
+                    screenerbot::utils::safe_truncate(&signature, 8),
                     tx_type,
                     actual_sol,
                     expected_sol,
@@ -2847,11 +2834,6 @@ async fn debug_cache_system() {
 /// This keeps only raw blockchain data and is useful during development
 async fn clean_transaction_cache() {
     log(LogTag::Transactions, "INFO", "No JSON cache to clean (DB only)");
-}
-
-/// Remove all transaction JSON files from data/transactions/ directory
-async fn clean_all_transaction_files() {
-    log(LogTag::Transactions, "INFO", "No JSON cache files to remove (DB only)");
 }
 
 /// Update and re-analyze all cached transactions (now uses database)

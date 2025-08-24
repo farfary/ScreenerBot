@@ -12,6 +12,15 @@ pub fn safe_truncate(s: &str, len: usize) -> &str {
     if s.len() >= len { &s[..len] } else { s }
 }
 
+/// Safe signature formatting that shows first 8 and last 4 chars, or full string if short
+pub fn safe_format_signature(s: &str) -> String {
+    if s.len() > 12 {
+        format!("{}...{}", safe_truncate(s, 8), &s[s.len().saturating_sub(4)..])
+    } else {
+        s.to_string()
+    }
+}
+
 // Wallet-related imports
 use crate::global::read_configs;
 use crate::rpc::SwapError;

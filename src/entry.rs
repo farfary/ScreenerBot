@@ -291,7 +291,11 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         log(
             LogTag::Entry,
             "ENTRY_CHECK_START",
-            &format!("🔍 Analyzing {} ({})", token.symbol, &token.mint[..8])
+            &format!(
+                "🔍 Analyzing {} ({})",
+                token.symbol,
+                crate::utils::safe_truncate(&token.mint, 8)
+            )
         );
     }
 
@@ -1086,7 +1090,7 @@ async fn analyze_deep_drop_entry(
                     "ADAPT_TUNE",
                     &format!(
                         "🛠️ Tuner {}: vol {:.1}% vel {:.1}%/min liq ${:.0} → scale {:.2} (target {:.2})",
-                        &mint[..8],
+                        crate::utils::safe_truncate(mint, 8),
                         vol_percent,
                         velocity_per_minute,
                         liquidity_usd,

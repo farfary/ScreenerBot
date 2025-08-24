@@ -5,11 +5,11 @@
 //! that include InitializeMint, indicating new token mint initializations.
 
 use clap::Parser;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{ SinkExt, StreamExt };
 use tokio_tungstenite::connect_async;
 use url::Url;
 
-use screenerbot::logger::{log, LogTag};
+use screenerbot::logger::{ log, LogTag };
 use screenerbot::rpc::{
     build_logs_subscribe_payload,
     get_premium_websocket_url,
@@ -26,7 +26,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[derive(Debug, Parser)]
-#[command(name = "watch_token_program", about = "Watch SPL Token program for new mints")] 
+#[command(name = "watch_token_program", about = "Watch SPL Token program for new mints")]
 struct Args {
     /// Print full raw JSON for matching notifications
     #[arg(long)]
@@ -74,7 +74,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    log(LogTag::Rpc, "WS_LISTEN", "Listening for InitializeMint logs and watching for pool creation...");
+    log(
+        LogTag::Rpc,
+        "WS_LISTEN",
+        "Listening for InitializeMint logs and watching for pool creation..."
+    );
 
     let mut seen_signatures_mint: HashSet<String> = HashSet::new();
     let mut seen_mints: HashSet<String> = HashSet::new();
@@ -89,7 +93,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     if args.verbose {
                         println!("WS_MSG: {}", txt);
                     }
-                    
+
                     // Expected format: { method: "logsNotification", params: { result: { value: { logs: [...] } } } }
                     let logs = val
                         .get("params")
@@ -115,7 +119,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 .unwrap_or("")
                                 .to_string();
 
-                            if !signature.is_empty() && !seen_signatures_mint.insert(signature.clone()) {
+                            if
+                                !signature.is_empty() &&
+                                !seen_signatures_mint.insert(signature.clone())
+                            {
                                 continue; // already processed
                             }
 
@@ -129,13 +136,24 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                             if let Some(mint) = extract_mint_from_signature(&signature).await {
                                 if seen_mints.insert(mint.clone()) {
                                     // Fetch DexScreener token info
-                                    let token_info = get_token_from_mint_global_api(&mint).await.ok().flatten();
-                                    let (symbol, price_sol, liq_usd) = token_info
+                                    let token_info = get_token_from_mint_global_api(&mint).await
+                                        .ok()
+                                        .flatten();
+                                    let (symbol, price_sol, _liq_usd) = token_info
                                         .as_ref()
                                         .map(|t| {
-                                            let symbol = if !t.symbol.is_empty() { t.symbol.clone() } else { "?".to_string() };
-                                            let price = t.price_dexscreener_sol.or(t.price_pool_sol).unwrap_or(0.0);
-                                            let liq = t.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
+                                            let symbol = if !t.symbol.is_empty() {
+                                                t.symbol.clone()
+                                            } else {
+                                                "?".to_string()
+                                            };
+                                            let price = t.price_dexscreener_sol
+                                                .or(t.price_pool_sol)
+                                                .unwrap_or(0.0);
+                                            let liq = t.liquidity
+                                                .as_ref()
+                                                .and_then(|l| l.usd)
+                                                .unwrap_or(0.0);
                                             (symbol, price, liq)
                                         })
                                         .unwrap_or(("?".to_string(), 0.0, 0.0));
@@ -146,7 +164,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                                             let mut best_url = String::new();
                                             let mut best_liq = 0.0;
                                             for p in &pools {
-                                                if let Some(liq) = p.liquidity.as_ref().map(|l| l.usd) {
+                                                if
+                                                    let Some(liq) = p.liquidity
+                                                        .as_ref()
+                                                        .map(|l| l.usd)
+                                                {
                                                     if liq > best_liq {
                                                         best_liq = liq;
                                                         best_url = p.url.clone();
@@ -183,15 +205,27 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                                                 let max_attempts = 36; // ~3 minutes @5s
                                                 for _ in 0..max_attempts {
                                                     // stop if already announced
-                                                    if announced_pools_cl.lock().await.contains(&mint_cl) {
+                                                    if
+                                                        announced_pools_cl
+                                                            .lock().await
+                                                            .contains(&mint_cl)
+                                                    {
                                                         break;
                                                     }
-                                                    if let Ok(pools) = get_token_pairs_from_api(&mint_cl).await {
+                                                    if
+                                                        let Ok(pools) = get_token_pairs_from_api(
+                                                            &mint_cl
+                                                        ).await
+                                                    {
                                                         if !pools.is_empty() {
                                                             let mut best_url = String::new();
                                                             let mut best_liq = 0.0;
                                                             for p in &pools {
-                                                                if let Some(liq) = p.liquidity.as_ref().map(|l| l.usd) {
+                                                                if
+                                                                    let Some(liq) = p.liquidity
+                                                                        .as_ref()
+                                                                        .map(|l| l.usd)
+                                                                {
                                                                     if liq > best_liq {
                                                                         best_liq = liq;
                                                                         best_url = p.url.clone();
@@ -206,11 +240,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                                                                 pools.len(),
                                                                 best_url
                                                             );
-                                                            announced_pools_cl.lock().await.insert(mint_cl.clone());
+                                                            announced_pools_cl
+                                                                .lock().await
+                                                                .insert(mint_cl.clone());
                                                             break;
                                                         }
                                                     }
-                                                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                                                    tokio::time::sleep(
+                                                        std::time::Duration::from_secs(5)
+                                                    ).await;
                                                 }
                                                 // remove from polling set at end
                                                 polling_mints_cl.lock().await.remove(&mint_cl);
@@ -219,7 +257,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                 }
                             } else {
-                                println!("NEW MINT (mint: ?) sig:{}", &signature[..std::cmp::min(10, signature.len())]);
+                                println!(
+                                    "NEW MINT (mint: ?) sig:{}",
+                                    &signature[..std::cmp::min(10, signature.len())]
+                                );
                             }
                             log(LogTag::Rpc, "NEW_MINT", "InitializeMint detected");
                         }
@@ -228,10 +269,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             Ok(tokio_tungstenite::tungstenite::Message::Ping(p)) => {
                 // Respond to ping
-                write
-                    .send(tokio_tungstenite::tungstenite::Message::Pong(p))
-                    .await
-                    .ok();
+                write.send(tokio_tungstenite::tungstenite::Message::Pong(p)).await.ok();
             }
             Ok(_) => {}
             Err(e) => {
@@ -248,21 +286,26 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 async fn extract_mint_from_signature(signature: &str) -> Option<String> {
     use screenerbot::rpc::get_rpc_client;
     let rpc = get_rpc_client();
-    
+
     // Add small delay and retry logic to handle rate limits
     for attempt in 0..3 {
         match rpc.get_transaction_details_premium(signature).await {
             Ok(details) => {
                 // Resolve account keys list (strings)
-                let account_keys = details
-                    .transaction
-                    .message
+                let account_keys = details.transaction.message
                     .get("accountKeys")
                     .and_then(|v| v.as_array())
                     .map(|arr| {
                         arr.iter()
                             .map(|x| {
-                                if let Some(s) = x.as_str() { s.to_string() } else { x.get("pubkey").and_then(|p| p.as_str()).unwrap_or("") .to_string() }
+                                if let Some(s) = x.as_str() {
+                                    s.to_string()
+                                } else {
+                                    x.get("pubkey")
+                                        .and_then(|p| p.as_str())
+                                        .unwrap_or("")
+                                        .to_string()
+                                }
                             })
                             .collect::<Vec<String>>()
                     });
@@ -271,17 +314,34 @@ async fn extract_mint_from_signature(signature: &str) -> Option<String> {
                     let token_prog = spl_token_program_id();
 
                     // Find Token program instruction
-                    if let Some(instrs) = details.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+                    if
+                        let Some(instrs) = details.transaction.message
+                            .get("instructions")
+                            .and_then(|v| v.as_array())
+                    {
                         for ins in instrs {
-                            let pid_idx = ins.get("programIdIndex").and_then(|i| i.as_u64()).unwrap_or(u64::MAX) as usize;
+                            let pid_idx = ins
+                                .get("programIdIndex")
+                                .and_then(|i| i.as_u64())
+                                .unwrap_or(u64::MAX) as usize;
                             if let Some(prog) = account_keys.get(pid_idx) {
                                 if prog == token_prog {
                                     // First account index is mint
-                                    if let Some(accs) = ins.get("accounts").and_then(|a| a.as_array()) {
-                                        if let Some(first_idx) = accs.first().and_then(|i| i.as_u64()) {
+                                    if
+                                        let Some(accs) = ins
+                                            .get("accounts")
+                                            .and_then(|a| a.as_array())
+                                    {
+                                        if
+                                            let Some(first_idx) = accs
+                                                .first()
+                                                .and_then(|i| i.as_u64())
+                                        {
                                             let idx = first_idx as usize;
                                             if let Some(mint) = account_keys.get(idx) {
-                                                if mint.len() >= 32 { return Some(mint.clone()); }
+                                                if mint.len() >= 32 {
+                                                    return Some(mint.clone());
+                                                }
                                             }
                                         }
                                     }

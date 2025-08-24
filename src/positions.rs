@@ -10,6 +10,7 @@ use crate::trader::*;
 use crate::transactions::{
     get_transaction,
     is_transaction_verified,
+    get_global_swap_transactions,
     Transaction,
     SwapPnLInfo,
     TransactionStatus,
@@ -240,6 +241,205 @@ pub struct Position {
 // - Pre-calculate data before acquiring locks when possible
 //
 // =============================================================================
+
+// =============================================================================
+// ATOMIC POSITION STATE MANAGEMENT
+// =============================================================================
+
+/// Position operation locks for race condition prevention
+/// Each mint can only have one close or critical operation at a time
+static POSITION_LOCKS: Lazy<
+    Arc<AsyncMutex<std::collections::HashMap<String, Arc<AsyncMutex<()>>>>>
+> = Lazy::new(|| Arc::new(AsyncMutex::new(std::collections::HashMap::new())));
+
+/// Wrapper that holds both the lock Arc and the guard
+pub struct PositionLockGuard {
+    _lock_arc: Arc<AsyncMutex<()>>,
+    _guard: tokio::sync::MutexGuard<'static, ()>,
+}
+
+/// Acquire an exclusive lock for a specific position mint to prevent concurrent operations
+async fn acquire_position_lock(mint: &str) -> Result<PositionLockGuard, String> {
+    // Acquire the position locks registry
+    let position_lock_arc = {
+        let mut locks_registry = match
+            tokio::time::timeout(Duration::from_millis(500), POSITION_LOCKS.lock()).await
+        {
+            Ok(guard) => guard,
+            Err(_) => {
+                return Err("Timeout acquiring position locks registry".to_string());
+            }
+        };
+
+        // Get or create position-specific lock
+        locks_registry
+            .entry(mint.to_string())
+            .or_insert_with(|| Arc::new(AsyncMutex::new(())))
+            .clone()
+    };
+
+    // Clone the arc for the guard struct
+    let lock_arc_clone = position_lock_arc.clone();
+
+    // Acquire position-specific lock with timeout
+    let guard_result = tokio::time::timeout(Duration::from_secs(5), position_lock_arc.lock()).await;
+
+    match guard_result {
+        Ok(guard) => {
+            log(
+                LogTag::Positions,
+                "LOCK_ACQUIRED",
+                &format!("🔒 Acquired atomic lock for position {}", get_mint_prefix(mint))
+            );
+            // SAFETY: We're extending the lifetime by holding the Arc that owns the mutex
+            let guard = unsafe { std::mem::transmute(guard) };
+            Ok(PositionLockGuard {
+                _lock_arc: lock_arc_clone,
+                _guard: guard,
+            })
+        }
+        Err(_) => Err(format!("Timeout acquiring lock for position {}", get_mint_prefix(mint))),
+    }
+}
+
+/// Cleanup unused position locks periodically (prevents memory leak)
+async fn cleanup_unused_position_locks() {
+    if
+        let Ok(mut locks_registry) = tokio::time::timeout(
+            Duration::from_millis(200),
+            POSITION_LOCKS.lock()
+        ).await
+    {
+        let initial_count = locks_registry.len();
+
+        // Remove locks that have no waiters and are not currently held
+        locks_registry.retain(|_, lock| {
+            // Try to acquire lock immediately - if successful, it means no one is waiting
+            match lock.try_lock() {
+                Ok(_) => false, // Remove unused lock
+                Err(_) => true, // Keep active lock
+            }
+        });
+
+        let final_count = locks_registry.len();
+        if initial_count > final_count {
+            log(
+                LogTag::Positions,
+                "LOCK_CLEANUP",
+                &format!(
+                    "🧹 Cleaned up {} unused position locks ({} -> {})",
+                    initial_count - final_count,
+                    initial_count,
+                    final_count
+                )
+            );
+        }
+    }
+}
+
+// =============================================================================
+// BACKGROUND TASK RATE LIMITING & OVERLOAD PROTECTION
+// =============================================================================
+
+/// Background task statistics for monitoring overload
+#[derive(Debug, Clone)]
+struct BackgroundTaskStats {
+    verification_pending: usize,
+    cleanup_pending: usize,
+    retry_pending: usize,
+    reconciliation_pending: usize,
+    last_overload_warning: Option<DateTime<Utc>>,
+    consecutive_overloads: u32,
+}
+
+impl Default for BackgroundTaskStats {
+    fn default() -> Self {
+        Self {
+            verification_pending: 0,
+            cleanup_pending: 0,
+            retry_pending: 0,
+            reconciliation_pending: 0,
+            last_overload_warning: None,
+            consecutive_overloads: 0,
+        }
+    }
+}
+
+/// Global background task statistics
+static BACKGROUND_TASK_STATS: Lazy<Arc<AsyncMutex<BackgroundTaskStats>>> = Lazy::new(||
+    Arc::new(AsyncMutex::new(BackgroundTaskStats::default()))
+);
+
+/// Circuit breaker thresholds
+const MAX_PENDING_TASKS_PER_TYPE: usize = 5;
+const MAX_CONSECUTIVE_OVERLOADS: u32 = 3;
+const OVERLOAD_WARNING_COOLDOWN_MINS: i64 = 5;
+
+/// Check if background tasks are overloaded
+async fn is_background_tasks_overloaded() -> bool {
+    if
+        let Ok(stats) = tokio::time::timeout(
+            Duration::from_millis(100),
+            BACKGROUND_TASK_STATS.lock()
+        ).await
+    {
+        let total_pending =
+            stats.verification_pending +
+            stats.cleanup_pending +
+            stats.retry_pending +
+            stats.reconciliation_pending;
+
+        let is_overloaded =
+            stats.verification_pending > MAX_PENDING_TASKS_PER_TYPE ||
+            stats.cleanup_pending > MAX_PENDING_TASKS_PER_TYPE ||
+            stats.retry_pending > MAX_PENDING_TASKS_PER_TYPE ||
+            stats.reconciliation_pending > MAX_PENDING_TASKS_PER_TYPE ||
+            total_pending > MAX_PENDING_TASKS_PER_TYPE * 2;
+
+        if is_overloaded {
+            let should_warn = stats.last_overload_warning
+                .map(
+                    |last|
+                        Utc::now().signed_duration_since(last).num_minutes() >=
+                        OVERLOAD_WARNING_COOLDOWN_MINS
+                )
+                .unwrap_or(true);
+
+            if should_warn {
+                log(
+                    LogTag::Positions,
+                    "OVERLOAD_WARNING",
+                    &format!(
+                        "⚠️ Background tasks overloaded: total_pending={}, verification={}, cleanup={}, retry={}, reconciliation={}",
+                        total_pending,
+                        stats.verification_pending,
+                        stats.cleanup_pending,
+                        stats.retry_pending,
+                        stats.reconciliation_pending
+                    )
+                );
+            }
+        }
+
+        is_overloaded
+    } else {
+        false // If we can't check stats quickly, assume not overloaded
+    }
+}
+
+/// Update background task statistics
+async fn update_background_task_stats<F>(task_type: &str, operation: F)
+    where F: FnOnce(&mut BackgroundTaskStats)
+{
+    if
+        let Ok(mut stats) = tokio::time::timeout(
+            Duration::from_millis(50),
+            BACKGROUND_TASK_STATS.lock()
+        ).await
+    {
+        operation(&mut stats);
+    }
+}
 
 // =============================================================================
 // DUPLICATE SWAP PROTECTION
@@ -627,50 +827,90 @@ impl PositionsManager {
         log(LogTag::Positions, "INFO", "PositionsManager actor stopped");
     }
 
-    /// Handle background task messages (non-blocking with timeouts)
+    /// Handle background task messages (non-blocking with timeouts and overload protection)
     async fn handle_background_message(&mut self, msg: BackgroundTaskMessage) {
+        // Check for system overload before processing
+        if is_background_tasks_overloaded().await {
+            log(
+                LogTag::Positions,
+                "OVERLOAD_SKIP",
+                &format!("⚠️ Skipping background task {:?} due to system overload", msg)
+            );
+            return;
+        }
+
         match msg {
             BackgroundTaskMessage::VerificationNeeded => {
+                update_background_task_stats("verification", |stats| {
+                    stats.verification_pending += 1;
+                }).await;
+
                 if is_debug_positions_enabled() {
                     log(LogTag::Positions, "DEBUG", "⏰ Processing verification request");
                 }
-                // Add timeout to prevent blocking
-                if
-                    let Err(_) = tokio::time::timeout(
-                        Duration::from_secs(30),
-                        self.check_pending_verifications()
-                    ).await
-                {
+
+                let verification_result = tokio::time::timeout(
+                    Duration::from_secs(30),
+                    self.check_pending_verifications()
+                ).await;
+
+                update_background_task_stats("verification", |stats| {
+                    stats.verification_pending = stats.verification_pending.saturating_sub(1);
+                }).await;
+
+                if verification_result.is_err() {
                     log(LogTag::Positions, "WARN", "Verification check timed out after 30s");
                 }
             }
             BackgroundTaskMessage::RetryNeeded => {
+                update_background_task_stats("retry", |stats| {
+                    stats.retry_pending += 1;
+                }).await;
+
                 if is_debug_positions_enabled() {
                     log(LogTag::Positions, "DEBUG", "🔄 Processing retry request");
                 }
-                if
-                    let Err(_) = tokio::time::timeout(
-                        Duration::from_secs(30),
-                        self.process_retry_queue()
-                    ).await
-                {
+
+                let retry_result = tokio::time::timeout(
+                    Duration::from_secs(30),
+                    self.process_retry_queue()
+                ).await;
+
+                update_background_task_stats("retry", |stats| {
+                    stats.retry_pending = stats.retry_pending.saturating_sub(1);
+                }).await;
+
+                if retry_result.is_err() {
                     log(LogTag::Positions, "WARN", "Retry processing timed out after 30s");
                 }
             }
             BackgroundTaskMessage::CleanupNeeded => {
+                update_background_task_stats("cleanup", |stats| {
+                    stats.cleanup_pending += 1;
+                }).await;
+
                 if is_debug_positions_enabled() {
                     log(LogTag::Positions, "DEBUG", "🧹 Processing cleanup request");
                 }
-                if
-                    let Err(_) = tokio::time::timeout(
-                        Duration::from_secs(30),
-                        self.cleanup_phantom_positions()
-                    ).await
-                {
-                    log(LogTag::Positions, "WARN", "Cleanup timed out after 30s");
+
+                let cleanup_result = tokio::time::timeout(
+                    Duration::from_secs(60), // Increased from 30s to 60s for database filtering operations
+                    self.cleanup_phantom_positions()
+                ).await;
+
+                update_background_task_stats("cleanup", |stats| {
+                    stats.cleanup_pending = stats.cleanup_pending.saturating_sub(1);
+                }).await;
+
+                if cleanup_result.is_err() {
+                    log(LogTag::Positions, "WARN", "Cleanup timed out after 60s");
                 }
             }
             BackgroundTaskMessage::ReconciliationNeeded(positions_to_reconcile) => {
+                update_background_task_stats("reconciliation", |stats| {
+                    stats.reconciliation_pending += 1;
+                }).await;
+
                 if is_debug_positions_enabled() {
                     log(
                         LogTag::Positions,
@@ -681,13 +921,17 @@ impl PositionsManager {
                         )
                     );
                 }
-                // Longer timeout for reconciliation but still bounded
-                if
-                    let Err(_) = tokio::time::timeout(
-                        Duration::from_secs(120),
-                        self.run_targeted_reconciliation(positions_to_reconcile)
-                    ).await
-                {
+
+                let reconciliation_result = tokio::time::timeout(
+                    Duration::from_secs(120),
+                    self.run_targeted_reconciliation(positions_to_reconcile)
+                ).await;
+
+                update_background_task_stats("reconciliation", |stats| {
+                    stats.reconciliation_pending = stats.reconciliation_pending.saturating_sub(1);
+                }).await;
+
+                if reconciliation_result.is_err() {
                     log(LogTag::Positions, "WARN", "Reconciliation timed out after 120s");
                 }
             }
@@ -762,7 +1006,8 @@ impl PositionsManager {
                 self.add_retry_failed_sell(mint);
             }
             PositionsRequest::UpdateTracking { mint, current_price, reply } => {
-                let _ = reply.send(self.update_position_tracking(&mint, current_price));
+                let result = self.update_position_tracking(&mint, current_price).await;
+                let _ = reply.send(result);
             }
             PositionsRequest::GetOpenPositionsCount { reply } => {
                 let _ = reply.send(self.get_open_positions_count());
@@ -2052,7 +2297,20 @@ impl PositionsManager {
             );
         }
 
-        // Find the position to close with race condition prevention
+        // 🔒 ATOMIC LOCK: Acquire exclusive lock for this position to prevent race conditions
+        let _position_guard = match acquire_position_lock(mint).await {
+            Ok(guard) => guard,
+            Err(e) => {
+                log(
+                    LogTag::Positions,
+                    "LOCK_ERROR",
+                    &format!("❌ Failed to acquire position lock for {}: {}", token.symbol, e)
+                );
+                return Err(format!("Position is busy: {}", e));
+            }
+        };
+
+        // Find the position to close with enhanced state validation
         let mut position_opt = None;
 
         if
@@ -2061,9 +2319,6 @@ impl PositionsManager {
                 let no_exit_sig = p.exit_transaction_signature.is_none();
                 let failed_exit =
                     p.exit_transaction_signature.is_some() && !p.transaction_exit_verified;
-                let closing_in_progress =
-                    p.exit_transaction_signature.as_ref() ==
-                    Some(&"CLOSING_IN_PROGRESS".to_string());
                 let can_close = no_exit_sig || failed_exit;
 
                 if is_debug_positions_enabled() {
@@ -2071,67 +2326,38 @@ impl PositionsManager {
                         LogTag::Positions,
                         "DEBUG",
                         &format!(
-                            "🎯 Position check: mint_match={}, no_exit_sig={}, failed_exit={}, closing_in_progress={}, can_close={}",
+                            "🎯 Position check: mint_match={}, no_exit_sig={}, failed_exit={}, can_close={}",
                             matches_mint,
                             no_exit_sig,
                             failed_exit,
-                            closing_in_progress,
                             can_close
                         )
                     );
                 }
 
-                // Reject if already being closed by another thread
-                if matches_mint && closing_in_progress {
-                    log(
-                        LogTag::Positions,
-                        "CONCURRENT_CLOSE_BLOCKED",
-                        &format!(
-                            "🚫 Blocking concurrent close attempt for {} - already closing",
-                            get_mint_prefix(mint)
-                        )
-                    );
-                    return false;
-                }
-
+                // With atomic locks, we no longer need CLOSING_IN_PROGRESS placeholder
+                // The lock itself prevents concurrent access
                 matches_mint && can_close
             })
         {
-            // 🔒 RACE CONDITION PREVENTION: Immediately mark position as "closing" to prevent duplicate sells
-            if pos.exit_transaction_signature.is_none() {
-                // Set a temporary placeholder to prevent concurrent closes
-                pos.exit_transaction_signature = Some("CLOSING_IN_PROGRESS".to_string());
+            // Allow retry if previous exit transaction failed
+            if pos.exit_transaction_signature.is_some() && !pos.transaction_exit_verified {
                 log(
                     LogTag::Positions,
-                    "RACE_PROTECTION",
+                    "RETRY_EXIT",
                     &format!(
-                        "🔒 Position {} marked as closing-in-progress to prevent race conditions",
+                        "🔄 Previous exit transaction failed for {} - clearing failed exit data and retrying",
                         pos.symbol
                     )
                 );
-            }
-
-            // Allow retry if previous exit transaction failed
-            if pos.exit_transaction_signature.is_some() && !pos.transaction_exit_verified {
-                // Only retry if it's not our placeholder or if it's genuinely failed
-                if pos.exit_transaction_signature.as_ref().unwrap() != "CLOSING_IN_PROGRESS" {
-                    log(
-                        LogTag::Positions,
-                        "RETRY_EXIT",
-                        &format!(
-                            "🔄 Previous exit transaction failed for {} - clearing failed exit data and retrying",
-                            pos.symbol
-                        )
-                    );
-                    // Clear failed exit transaction data
-                    pos.exit_transaction_signature = Some("CLOSING_IN_PROGRESS".to_string()); // Keep race protection
-                }
+                // Clear failed exit transaction data
                 pos.exit_price = None;
                 pos.exit_time = None;
                 pos.transaction_exit_verified = false;
                 pos.sol_received = None;
                 pos.effective_exit_price = None;
                 pos.exit_fee_lamports = None;
+                pos.exit_transaction_signature = None; // Clear failed signature
             }
             position_opt = Some(pos.clone());
         }
@@ -2603,7 +2829,7 @@ impl PositionsManager {
     }
 
     /// Update position tracking
-    fn update_position_tracking(&mut self, mint: &str, current_price: f64) -> bool {
+    async fn update_position_tracking(&mut self, mint: &str, current_price: f64) -> bool {
         if current_price == 0.0 {
             log(
                 LogTag::Positions,
@@ -2620,20 +2846,6 @@ impl PositionsManager {
         }
 
         if let Some(position) = self.positions.iter_mut().find(|p| p.mint == mint) {
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!(
-                        "📊 Updating tracking for {} - price: {:.8} (prev high: {:.8}, low: {:.8})",
-                        position.symbol,
-                        current_price,
-                        position.price_highest,
-                        position.price_lowest
-                    )
-                );
-            }
-
             let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
             if position.price_highest == 0.0 {
                 position.price_highest = entry_price;
@@ -2666,20 +2878,10 @@ impl PositionsManager {
 
             // Update current price (always, regardless of high/low changes)
             position.current_price = Some(current_price);
+            position.current_price_updated = Some(Utc::now());
 
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "TRACK",
-                    &format!(
-                        "📊 Updated current price for {}: {:.8} SOL (high: {:.8}, low: {:.8})",
-                        position.symbol,
-                        current_price,
-                        position.price_highest,
-                        position.price_lowest
-                    )
-                );
-            }
+            // 🚀 IMMEDIATE CACHE REFRESH: Update cache so summary shows new prices within 7 seconds
+            self.refresh_positions_cache().await;
 
             // in-memory only; no persistence
             true
@@ -3418,6 +3620,13 @@ impl PositionsManager {
             )
         );
 
+        // Enhanced failure detection for immediate cleanup
+        let is_definitive_failure =
+            error.contains("propagation failed") ||
+            error.contains("likely failed") ||
+            error.contains("dropped by network") ||
+            error.contains("verification timeout");
+
         // Find the position with this signature
         if
             let Some(position) = self.positions
@@ -3428,17 +3637,85 @@ impl PositionsManager {
                 })
         {
             if position.entry_transaction_signature.as_ref() == Some(&signature.to_string()) {
-                // Entry transaction failed - remove phantom position
+                // Entry transaction verification failed - but be more conservative before removal
                 log(
                     LogTag::Positions,
-                    "REMOVE_PHANTOM",
+                    "ENTRY_VERIFICATION_FAILED",
                     &format!(
-                        "🗑️ Removing phantom position for {} due to failed entry transaction",
+                        "⚠️ Entry verification failed for {} - checking for successful exit before removal",
                         position.symbol
                     )
                 );
 
-                position.phantom_remove = true;
+                // Before immediately flagging for phantom removal, check if there are successful exits
+                let mut should_remove = true;
+                if
+                    let Ok(swap_transactions) =
+                        crate::transactions::get_global_swap_transactions().await
+                {
+                    for swap in swap_transactions.iter() {
+                        if
+                            swap.token_mint == position.mint &&
+                            swap.swap_type == "Sell" &&
+                            swap.timestamp >= position.entry_time
+                        {
+                            log(
+                                LogTag::Positions,
+                                "ENTRY_FAILED_BUT_EXIT_EXISTS",
+                                &format!(
+                                    "✅ Entry failed but found successful exit {} for {} - will close position instead",
+                                    get_signature_prefix(&swap.signature),
+                                    position.symbol
+                                )
+                            );
+                            should_remove = false;
+
+                            // Set the exit transaction data directly
+                            position.exit_transaction_signature = Some(swap.signature.clone());
+                            position.exit_time = Some(swap.timestamp);
+                            position.transaction_exit_verified = true;
+                            position.sol_received = Some(swap.sol_amount);
+
+                            // Calculate exit price
+                            if let Some(token_amt) = position.token_amount {
+                                if token_amt > 0 {
+                                    let token_amt_f64 = token_amt as f64;
+                                    position.exit_price = Some(swap.sol_amount / token_amt_f64);
+                                    position.effective_exit_price = Some(
+                                        swap.sol_amount / token_amt_f64
+                                    );
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if should_remove {
+                    log(
+                        LogTag::Positions,
+                        "REMOVE_PHANTOM",
+                        &format!(
+                            "🗑️ Flagging phantom position for {} due to failed entry transaction (no exits found)",
+                            position.symbol
+                        )
+                    );
+                    position.phantom_remove = true;
+
+                    // Enhanced logging for definitively failed transactions
+                    if is_definitive_failure {
+                        log(
+                            LogTag::Positions,
+                            "DEFINITIVE_FAILURE",
+                            &format!(
+                                "💥 Position {} marked for immediate phantom removal due to definitive transaction failure: {}",
+                                position.symbol,
+                                error
+                            )
+                        );
+                    }
+                }
+
                 position.transaction_entry_verified = false;
             } else if position.exit_transaction_signature.as_ref() == Some(&signature.to_string()) {
                 // Exit transaction failed - reset exit data and add to retry queue
@@ -3539,14 +3816,31 @@ impl PositionsManager {
     /// Clean up phantom positions
     async fn cleanup_phantom_positions(&mut self) {
         log(LogTag::Positions, "CLEANUP", "🧹 Checking for phantom positions to cleanup");
-        // Criteria for phantom removal:
-        // 1. Explicitly flagged with phantom_remove (set when entry tx failed)
-        // 2. Entry tx unverified for > 10 minutes AND transaction no longer found in cache
-        // 3. Entry tx unverified AND wallet holds zero tokens for mint
-        // Positions that meet criteria are removed to prevent inflated exposure accounting
+        // ENHANCED Criteria for phantom removal with exit transaction detection:
+        // 1. Explicitly flagged with phantom_remove (set when entry tx failed) - PRIORITY: Remove immediately but check exits
+        // 2. Entry tx unverified for > 10 minutes AND transaction no longer found in cache - BUT check for exits first
+        // 3. Entry tx unverified AND wallet holds zero tokens for mint - BUT check for exits first
+        // NEW: Before removing, always check if there are successful sell transactions for the token
 
         let now = Utc::now();
         let mut to_remove: Vec<usize> = Vec::new();
+        let mut to_close: Vec<(usize, String, f64)> = Vec::new(); // (index, exit_sig, sol_received)
+
+        let positions_count = self.positions.len();
+        let phantom_flagged_count = self.positions
+            .iter()
+            .filter(|p| p.phantom_remove)
+            .count();
+
+        log(
+            LogTag::Positions,
+            "CLEANUP_STATS",
+            &format!(
+                "📊 Cleanup scan: {} positions total, {} flagged for phantom removal",
+                positions_count,
+                phantom_flagged_count
+            )
+        );
 
         for (idx, position) in self.positions.iter_mut().enumerate() {
             // Skip already closed positions
@@ -3555,10 +3849,22 @@ impl PositionsManager {
             }
 
             let mut remove = false;
+            let mut removal_reason = String::new();
 
-            // Condition 1: Explicit phantom flag
+            // Condition 1: Explicit phantom flag - HIGHEST PRIORITY
             if position.phantom_remove {
                 remove = true;
+                removal_reason = "explicitly_flagged_phantom".to_string();
+
+                log(
+                    LogTag::Positions,
+                    "CLEANUP_PHANTOM_FLAGGED",
+                    &format!(
+                        "🚩 Position {} ({}) is flagged for phantom removal - checking for exits first",
+                        position.symbol,
+                        get_mint_prefix(&position.mint)
+                    )
+                );
             }
 
             // Condition 2: Aged unverified entry tx not found
@@ -3575,6 +3881,18 @@ impl PositionsManager {
                             Ok(Some(_)) => {/* exists - keep */}
                             _ => {
                                 remove = true;
+                                removal_reason = "aged_unverified_transaction".to_string();
+
+                                log(
+                                    LogTag::Positions,
+                                    "CLEANUP_AGED_UNVERIFIED",
+                                    &format!(
+                                        "⏰ Position {} ({}) has aged unverified transaction ({}min) - checking for exits",
+                                        position.symbol,
+                                        get_mint_prefix(&position.mint),
+                                        age_minutes
+                                    )
+                                );
                             }
                         }
                     }
@@ -3594,9 +3912,87 @@ impl PositionsManager {
                         {
                             if balance == 0 {
                                 remove = true;
+                                removal_reason = "zero_wallet_balance".to_string();
+
+                                log(
+                                    LogTag::Positions,
+                                    "CLEANUP_ZERO_BALANCE",
+                                    &format!(
+                                        "🔍 Position {} ({}) has zero wallet balance - checking for exits",
+                                        position.symbol,
+                                        get_mint_prefix(&position.mint)
+                                    )
+                                );
                             }
                         }
                     }
+                }
+            }
+
+            // CRITICAL FIX: Before removing as phantom, check for successful sell transactions
+            if remove {
+                log(
+                    LogTag::Positions,
+                    "PHANTOM_CHECK_EXIT",
+                    &format!(
+                        "🔍 Checking for exit transactions before removing phantom position {} ({}) [reason: {}]",
+                        position.symbol,
+                        get_mint_prefix(&position.mint),
+                        removal_reason
+                    )
+                );
+
+                // Search for sell transactions for this token using optimized filtering
+                if
+                    let Ok(swap_transactions) =
+                        crate::transactions::get_swap_transactions_for_token(
+                            &position.mint,
+                            Some("Sell"), // Only look for sell transactions
+                            Some(50) // Limit to recent 50 transactions for performance
+                        ).await
+                {
+                    let mut found_exit = false;
+                    for swap in swap_transactions.iter() {
+                        // Check if this sell happened after position entry
+                        if swap.timestamp >= position.entry_time {
+                            log(
+                                LogTag::Positions,
+                                "PHANTOM_FOUND_EXIT",
+                                &format!(
+                                    "✅ Found exit transaction {} for phantom position {} - closing instead of removing",
+                                    get_signature_prefix(&swap.signature),
+                                    position.symbol
+                                )
+                            );
+
+                            // Mark for proper closure instead of removal
+                            to_close.push((idx, swap.signature.clone(), swap.sol_amount));
+                            found_exit = true;
+                            break;
+                        }
+                    }
+
+                    if !found_exit {
+                        log(
+                            LogTag::Positions,
+                            "PHANTOM_NO_EXIT_CONFIRMED",
+                            &format!(
+                                "❌ No exit transactions found for phantom position {} - will remove",
+                                position.symbol
+                            )
+                        );
+                    } else {
+                        remove = false; // Don't remove, we'll close it properly
+                    }
+                } else {
+                    log(
+                        LogTag::Positions,
+                        "PHANTOM_EXIT_CHECK_ERROR",
+                        &format!(
+                            "⚠️ Failed to check swap transactions for {} - proceeding with removal",
+                            position.symbol
+                        )
+                    );
                 }
             }
 
@@ -3605,15 +4001,60 @@ impl PositionsManager {
             }
         }
 
+        // First, handle positions that should be closed instead of removed
+        if !to_close.is_empty() {
+            for (idx, exit_sig, sol_received) in to_close.iter().rev() {
+                if let Some(position) = self.positions.get_mut(*idx) {
+                    // Get exit transaction details for proper closure
+                    if let Ok(Some(exit_tx)) = crate::transactions::get_transaction(exit_sig).await {
+                        log(
+                            LogTag::Positions,
+                            "PHANTOM_CLOSE",
+                            &format!(
+                                "🎯 Properly closing phantom position {} with exit transaction {} (SOL received: {:.6})",
+                                position.symbol,
+                                get_signature_prefix(exit_sig),
+                                sol_received
+                            )
+                        );
+
+                        // Set exit transaction data
+                        position.exit_transaction_signature = Some(exit_sig.clone());
+                        position.exit_time = Some(exit_tx.timestamp);
+                        position.transaction_exit_verified = true;
+                        position.sol_received = Some(*sol_received);
+
+                        // Calculate exit price from transaction
+                        if let Some(token_amt) = position.token_amount {
+                            if token_amt > 0 {
+                                let token_amt_f64 = token_amt as f64;
+                                position.exit_price = Some(sol_received / token_amt_f64);
+                                position.effective_exit_price = Some(sol_received / token_amt_f64);
+                            }
+                        }
+
+                        // Clear phantom flag since we properly closed it
+                        position.phantom_remove = false;
+                    }
+                }
+            }
+        }
+
         // Remove in reverse order to keep indices valid
         if !to_remove.is_empty() {
+            log(
+                LogTag::Positions,
+                "CLEANUP_REMOVING",
+                &format!("🗑️ Removing {} phantom positions", to_remove.len())
+            );
+
             for idx in to_remove.iter().rev() {
                 if let Some(removed) = self.positions.get(*idx) {
                     log(
                         LogTag::Positions,
                         "PHANTOM_REMOVE",
                         &format!(
-                            "🗑️ Removing phantom position {} ({}) - unverified entry tx {}",
+                            "🗑️ Removing phantom position {} ({}) - unverified entry tx {} (no exit found)",
                             removed.symbol,
                             get_mint_prefix(&removed.mint),
                             removed.entry_transaction_signature
@@ -3625,7 +4066,25 @@ impl PositionsManager {
                 }
                 self.positions.remove(*idx);
             }
-            // Persist updated positions
+        } else {
+            log(
+                LogTag::Positions,
+                "CLEANUP_NO_PHANTOMS",
+                "✅ No phantom positions found for removal"
+            );
+        }
+
+        // Persist updated positions if any changes were made
+        if !to_remove.is_empty() || !to_close.is_empty() {
+            log(
+                LogTag::Positions,
+                "CLEANUP_PERSISTING",
+                &format!(
+                    "💾 Persisting position changes: {} removed, {} closed",
+                    to_remove.len(),
+                    to_close.len()
+                )
+            );
             self.save_positions_to_disk().await;
         }
     }
@@ -4336,9 +4795,6 @@ impl PositionsManager {
                                 POSITIONS_FILE
                             )
                         );
-
-                        // Update cache after saving
-                        self.refresh_positions_cache().await;
                     }
                     Err(e) => {
                         log(
@@ -4353,6 +4809,10 @@ impl PositionsManager {
                 log(LogTag::Positions, "ERROR", &format!("Failed to serialize positions: {}", e));
             }
         }
+
+        // Always update cache after position changes, regardless of serialization or disk save success
+        // This ensures cache consistency with in-memory state
+        self.refresh_positions_cache().await;
     }
 
     /// Refresh the position cache with current data
@@ -4597,9 +5057,10 @@ async fn run_background_tasks(shutdown: Arc<Notify>, bg_tx: mpsc::Sender<Backgro
 
     let mut verification_interval = interval(Duration::from_secs(10));
     let mut retry_interval = interval(Duration::from_secs(30));
-    let mut cleanup_interval = interval(Duration::from_secs(60));
+    let mut cleanup_interval = interval(Duration::from_secs(30)); // Reduced from 60s for faster phantom cleanup
     let mut reconciliation_interval = interval(Duration::from_secs(1800)); // 30 minutes
     let mut cache_refresh_interval = interval(Duration::from_secs(30)); // Refresh cache every 30s
+    let mut position_locks_cleanup_interval = interval(Duration::from_secs(300)); // Clean position locks every 5 minutes
 
     let mut reconciliation_in_progress = false;
 
@@ -4620,6 +5081,10 @@ async fn run_background_tasks(shutdown: Arc<Notify>, bg_tx: mpsc::Sender<Backgro
             }
             _ = cache_refresh_interval.tick() => {
                 let _ = bg_tx.send(BackgroundTaskMessage::CacheRefreshNeeded).await;
+            }
+            _ = position_locks_cleanup_interval.tick() => {
+                // Clean up unused position locks to prevent memory leaks
+                cleanup_unused_position_locks().await;
             }
             _ = reconciliation_interval.tick() => {
                 if reconciliation_in_progress {

@@ -659,7 +659,7 @@ pub async fn print_positions_snapshot() {
         log(LogTag::Summary, "DEBUG", "[print_positions_snapshot] Starting summary report stage");
     }
     let bot_summary = match
-        tokio::time::timeout(Duration::from_secs(15), build_summary_report(&closed_refs)).await
+        tokio::time::timeout(Duration::from_secs(20), build_summary_report(&closed_refs)).await
     {
         Ok(summary) => summary,
         Err(_) => {
@@ -916,13 +916,13 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
 
     let best_trade = pnl_values
         .iter()
-        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .copied()
         .unwrap_or(0.0);
 
     let worst_trade = pnl_values
         .iter()
-        .min_by(|a, b| a.partial_cmp(b).unwrap())
+        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .copied()
         .unwrap_or(0.0);
 
@@ -1441,7 +1441,7 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
     if !active_cooldowns.is_empty() {
         summary_output.push_str("\n❄️ Frozen Account Cooldowns\n");
         for (mint, remaining_minutes) in active_cooldowns {
-            let short_mint = format!("{}...", &mint[..8]);
+            let short_mint = format!("{}...", crate::utils::safe_truncate(&mint, 8));
             summary_output.push_str(
                 &format!("  {} - {} minutes remaining\n", short_mint, remaining_minutes)
             );
@@ -1761,7 +1761,7 @@ fn build_rpc_statistics_section(rpc_stats: &crate::rpc::RpcStats) -> String {
 
                 // Truncate long URLs for display
                 let display_url = if url.len() > 40 {
-                    format!("{}...", &url[..37])
+                    format!("{}...", crate::utils::safe_truncate(url, 37))
                 } else {
                     url.to_string()
                 };
@@ -2009,7 +2009,7 @@ impl RecentSwapDisplay {
             if signature.len() <= 16 {
                 signature.to_string()
             } else {
-                format!("{}...{}", &signature[..8], &signature[signature.len() - 4..])
+                crate::utils::safe_format_signature(signature)
             }
         };
 
@@ -2051,11 +2051,11 @@ impl RecentSwapDisplay {
             ago: format!("{} ago", format_duration_compact(swap.timestamp, Utc::now())),
             signature: shortened_signature,
             swap_type: type_display,
-            token: swap.token_symbol[..(15).min(swap.token_symbol.len())].to_string(),
+            token: crate::utils::safe_truncate(&swap.token_symbol, 15).to_string(),
             sol_amount: sol_formatted,
             token_amount: token_formatted,
             price: format!("{:.9}", swap.calculated_price_sol),
-            router: swap.router[..(12).min(swap.router.len())].to_string(),
+            router: crate::utils::safe_truncate(&swap.router, 12).to_string(),
             fee: format!("{:.6}", swap.fee_sol),
             status: swap.status.clone(),
         }
@@ -2068,7 +2068,7 @@ impl RecentTransactionDisplay {
         let signature = if tx.signature.len() <= 16 {
             tx.signature.clone()
         } else {
-            format!("{}...{}", &tx.signature[..8], &tx.signature[tx.signature.len() - 4..])
+            crate::utils::safe_format_signature(&tx.signature)
         };
 
         // Type string

@@ -820,15 +820,30 @@ impl TransactionsManager {
 
                     // Process the transaction to cache its data
                     if let Err(e) = self.process_transaction(signature).await {
-                        log(
-                            LogTag::Transactions,
-                            "WARN",
-                            &format!(
-                                "Failed to process startup transaction {}: {}",
-                                &signature[..8],
-                                e
-                            )
+                        let error_msg = format!(
+                            "Failed to process startup transaction {}: {}",
+                            &signature[..8],
+                            e
                         );
+                        log(LogTag::Transactions, "WARN", &error_msg);
+
+                        // Save failed state to database for startup processing
+                        if
+                            let Err(db_err) = self.save_failed_transaction_state(
+                                &signature,
+                                &e
+                            ).await
+                        {
+                            log(
+                                LogTag::Transactions,
+                                "ERROR",
+                                &format!(
+                                    "Failed to save startup transaction failure state for {}: {}",
+                                    &signature[..8],
+                                    db_err
+                                )
+                            );
+                        }
                     }
                 }
 
@@ -989,6 +1004,58 @@ impl TransactionsManager {
         Ok(())
     }
 
+    /// Cleanup expired deferred retries to prevent memory leaks
+    pub async fn cleanup_expired_deferred_retries(&mut self) -> Result<usize, String> {
+        let now = Utc::now();
+        let mut cleaned_count = 0;
+
+        if let Some(ref db) = self.transaction_database {
+            // Database handles cleanup automatically, but we can still remove very old entries by count
+            let pending_retries = db.get_pending_deferred_retries().await?;
+
+            // Simple cleanup: if we have more than 1000 deferred retries, remove the oldest ones with no attempts
+            if pending_retries.len() > 1000 {
+                let expired_signatures: Vec<String> = pending_retries
+                    .iter()
+                    .filter(|retry| retry.remaining_attempts <= 0)
+                    .take(100) // Remove up to 100 at a time
+                    .map(|retry| retry.signature.clone())
+                    .collect();
+
+                for signature in expired_signatures {
+                    db.remove_deferred_retry(&signature).await?;
+                    cleaned_count += 1;
+                }
+            }
+        } else {
+            // Cleanup in-memory HashMap - simple size-based cleanup
+            if self.deferred_retries.len() > 1000 {
+                let expired_signatures: Vec<String> = self.deferred_retries
+                    .iter()
+                    .filter_map(|(signature, retry)| {
+                        if retry.remaining_attempts <= 0 { Some(signature.clone()) } else { None }
+                    })
+                    .take(100) // Remove up to 100 at a time
+                    .collect();
+
+                for signature in expired_signatures {
+                    self.deferred_retries.remove(&signature);
+                    cleaned_count += 1;
+                }
+            }
+        }
+
+        if cleaned_count > 0 && self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "CLEANUP",
+                &format!("Cleaned up {} expired deferred retries", cleaned_count)
+            );
+        }
+
+        Ok(cleaned_count)
+    }
+
     /// Store processed transaction analysis in database (if available)
     async fn cache_processed_transaction(&self, transaction: &Transaction) -> Result<(), String> {
         if let Some(ref db) = self.transaction_database {
@@ -1036,6 +1103,48 @@ impl TransactionsManager {
                         "Updated transaction {} status to {} in database",
                         &signature[..8],
                         status_str
+                    )
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Save failed transaction state to database when processing fails
+    async fn save_failed_transaction_state(
+        &self,
+        signature: &str,
+        error: &str
+    ) -> Result<(), String> {
+        if let Some(ref db) = self.transaction_database {
+            // Store minimal raw transaction record with failed status
+            let now = Utc::now();
+
+            // Try to store raw transaction record if it doesn't exist
+            let raw_result = db.store_raw_transaction(
+                signature,
+                None, // no slot
+                None, // no block_time
+                &now,
+                "Failed",
+                false, // not successful
+                Some(error),
+                None // no raw data
+            ).await;
+
+            if raw_result.is_err() {
+                // Raw transaction might already exist, try to update status only
+                db.update_transaction_status(signature, "Failed", false, Some(error)).await?;
+            }
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "FAILED_STATE_SAVED",
+                    &format!(
+                        "Saved failed transaction state for {} to database: {}",
+                        get_signature_prefix(signature),
+                        error
                     )
                 );
             }
@@ -1161,15 +1270,30 @@ impl TransactionsManager {
 
                     // Process the transaction
                     if let Err(e) = self.process_transaction(signature).await {
-                        log(
-                            LogTag::Transactions,
-                            "WARN",
-                            &format!(
-                                "Failed to process gap-fill transaction {}: {}",
-                                &signature[..8],
-                                e
-                            )
+                        let error_msg = format!(
+                            "Failed to process gap-fill transaction {}: {}",
+                            &signature[..8],
+                            e
                         );
+                        log(LogTag::Transactions, "WARN", &error_msg);
+
+                        // Save failed state to database for gap-fill processing
+                        if
+                            let Err(db_err) = self.save_failed_transaction_state(
+                                &signature,
+                                &e
+                            ).await
+                        {
+                            log(
+                                LogTag::Transactions,
+                                "ERROR",
+                                &format!(
+                                    "Failed to save gap-fill transaction failure state for {}: {}",
+                                    &signature[..8],
+                                    db_err
+                                )
+                            );
+                        }
                     }
                 }
 
@@ -1709,7 +1833,17 @@ impl TransactionsManager {
             }
 
             // Set the before signature for the next batch
-            before_signature = Some(signatures.last().unwrap().signature.clone());
+            if let Some(last_sig) = signatures.last() {
+                before_signature = Some(last_sig.signature.clone());
+            } else {
+                // Empty signatures list - should not happen but handle safely
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    "Empty signatures list in startup discovery batch"
+                );
+                break;
+            }
 
             // Batch processing delay
             tokio::time::sleep(Duration::from_millis(500)).await; // Batch processing delay
@@ -1933,7 +2067,13 @@ impl TransactionsManager {
             }
 
             // Set the before signature for the next batch
-            before_signature = Some(signatures.last().unwrap().signature.clone());
+            if let Some(last_sig) = signatures.last() {
+                before_signature = Some(last_sig.signature.clone());
+            } else {
+                // Empty signatures list - should not happen but handle safely
+                log(LogTag::Transactions, "WARN", "Empty signatures list in gap backfill batch");
+                break;
+            }
 
             // Batch processing delay
             tokio::time::sleep(Duration::from_millis(500)).await;
@@ -3040,8 +3180,10 @@ impl TransactionsManager {
                                 if delta < 0 {
                                     total_creations += 1;
                                     total_rent_spent += rent_amount_sol;
-                                    if assoc_mint.is_empty() && token_mint_ctx.is_some() {
-                                        assoc_mint = token_mint_ctx.clone().unwrap();
+                                    if assoc_mint.is_empty() {
+                                        if let Some(ref tm) = token_mint_ctx {
+                                            assoc_mint = tm.clone();
+                                        }
                                     }
                                     let is_wsol = assoc_mint == wsol_mint;
                                     if let Some(tm) = &token_mint_ctx {
@@ -3064,8 +3206,10 @@ impl TransactionsManager {
                                 } else if delta > 0 {
                                     total_closures += 1;
                                     total_rent_recovered += rent_amount_sol;
-                                    if assoc_mint.is_empty() && token_mint_ctx.is_some() {
-                                        assoc_mint = token_mint_ctx.clone().unwrap();
+                                    if assoc_mint.is_empty() {
+                                        if let Some(ref tm) = token_mint_ctx {
+                                            assoc_mint = tm.clone();
+                                        }
                                     }
                                     let is_wsol = assoc_mint == wsol_mint;
                                     if let Some(tm) = &token_mint_ctx {
@@ -4372,9 +4516,10 @@ impl TransactionsManager {
         let mut swap_transactions = Vec::new();
 
         if self.transaction_database.is_some() {
-            let signatures = self.transaction_database
+            let db = self.transaction_database
                 .as_ref()
-                .unwrap()
+                .ok_or("Database reference unexpectedly became None")?;
+            let signatures = db
                 .get_all_signatures().await
                 .map_err(|e| format!("Failed to get signatures from database: {}", e))?;
             let target = count.unwrap_or(signatures.len()).min(signatures.len());
@@ -5513,7 +5658,11 @@ impl TransactionsManager {
                             first_buy_timestamp: None,
                             last_activity_timestamp: Some(swap.timestamp),
                             average_buy_price: 0.0,
-                            transactions: vec![position_state.transactions.last().unwrap().clone()],
+                            transactions: if let Some(last_tx) = position_state.transactions.last() {
+                                vec![last_tx.clone()]
+                            } else {
+                                Vec::new() // Handle empty transactions list safely
+                            },
                         };
                     }
                 }
@@ -5851,6 +6000,11 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                     }
                 }
                 next_gap_check = tokio::time::Instant::now() + Duration::from_secs(300);
+
+                // Periodic cleanup of expired deferred retries every 5 minutes (with gap detection)
+                if let Err(e) = manager.cleanup_expired_deferred_retries().await {
+                    log(LogTag::Transactions, "ERROR", &format!("Deferred retries cleanup error: {}", e));
+                }
             }
         }
     }
@@ -5866,12 +6020,51 @@ async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(usize
 
     // Process new transactions
     for signature in new_signatures {
-        if let Err(e) = manager.process_transaction(&signature).await {
-            log(
-                LogTag::Transactions,
-                "WARN",
-                &format!("Failed to process transaction {}: {}", &signature[..8], e)
-            );
+        match manager.process_transaction(&signature).await {
+            Ok(_) => {
+                // Successfully processed
+            }
+            Err(e) => {
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    &format!("Failed to process transaction {}: {}", &signature[..8], e)
+                );
+
+                // CRITICAL: Save failed transaction state to database
+                if let Err(db_err) = manager.save_failed_transaction_state(&signature, &e).await {
+                    log(
+                        LogTag::Transactions,
+                        "ERROR",
+                        &format!(
+                            "Failed to save failed transaction state for {}: {}",
+                            &signature[..8],
+                            db_err
+                        )
+                    );
+                }
+
+                // Create deferred retry for failed processing
+                let retry = DeferredRetry {
+                    signature: signature.clone(),
+                    next_retry_at: Utc::now() + chrono::Duration::minutes(5),
+                    remaining_attempts: 3,
+                    current_delay_secs: 300, // 5 minutes
+                    last_error: Some(e),
+                };
+
+                if let Err(retry_err) = manager.store_deferred_retry(&retry).await {
+                    log(
+                        LogTag::Transactions,
+                        "ERROR",
+                        &format!(
+                            "Failed to store deferred retry for {}: {}",
+                            &signature[..8],
+                            retry_err
+                        )
+                    );
+                }
+            }
         }
     }
 
@@ -6460,6 +6653,99 @@ pub async fn get_global_swap_transactions() -> Result<Vec<SwapPnLInfo>, String> 
     temp_manager.get_all_swap_transactions().await
 }
 
+/// Get swap transactions for a specific token mint (OPTIMIZED for phantom cleanup)
+/// This uses efficient database filtering instead of scanning all transactions
+pub async fn get_swap_transactions_for_token(
+    token_mint: &str,
+    swap_type: Option<&str>, // "Sell", "Buy", or None for both
+    limit: Option<usize>
+) -> Result<Vec<SwapPnLInfo>, String> {
+    log(
+        LogTag::Transactions,
+        "FILTER_START",
+        &format!(
+            "Getting swap transactions for token {} (type: {:?}, limit: {:?})",
+            get_mint_prefix(token_mint),
+            swap_type,
+            limit
+        )
+    );
+
+    // Create temporary manager for deadlock safety
+    let wallet_address = load_wallet_address_from_config().await?;
+    let temp_manager = TransactionsManager::new(wallet_address).await?;
+
+    // Get filtered signatures from database efficiently
+    let signatures = if let Some(ref db) = temp_manager.transaction_database {
+        db.get_swap_signatures_for_token(token_mint, swap_type, limit).await?
+    } else {
+        log(
+            LogTag::Transactions,
+            "WARN",
+            "No database available for filtering, falling back to empty result"
+        );
+        return Ok(Vec::new());
+    };
+
+    log(
+        LogTag::Transactions,
+        "FILTER_SIGNATURES",
+        &format!(
+            "Found {} filtered signatures for token {}",
+            signatures.len(),
+            get_mint_prefix(token_mint)
+        )
+    );
+
+    // Convert filtered signatures to SwapPnLInfo
+    let mut swap_transactions = Vec::new();
+    let token_symbol_cache = std::collections::HashMap::new();
+
+    for (index, signature) in signatures.iter().enumerate() {
+        if let Ok(Some(tx)) = get_transaction(signature).await {
+            if
+                let Some(swap_info) = temp_manager.convert_to_swap_pnl_info(
+                    &tx,
+                    &token_symbol_cache,
+                    true
+                )
+            {
+                // Double-check the token mint matches (in case database filtering wasn't exact)
+                if swap_info.token_mint == token_mint {
+                    swap_transactions.push(swap_info);
+                }
+            }
+        }
+
+        // Log progress for larger sets
+        if signatures.len() > 10 && (index + 1) % 5 == 0 {
+            log(
+                LogTag::Transactions,
+                "FILTER_PROGRESS",
+                &format!(
+                    "Processed {}/{} filtered signatures for {}",
+                    index + 1,
+                    signatures.len(),
+                    get_mint_prefix(token_mint)
+                )
+            );
+        }
+    }
+
+    log(
+        LogTag::Transactions,
+        "FILTER_COMPLETE",
+        &format!(
+            "Converted {} swap transactions for token {} (from {} signatures)",
+            swap_transactions.len(),
+            get_mint_prefix(token_mint),
+            signatures.len()
+        )
+    );
+
+    Ok(swap_transactions)
+}
+
 /// Get swap info for a specific transaction signature (OPTIMIZED for positions verification)
 /// This is much more efficient than loading all transactions when only one is needed
 pub async fn get_single_transaction_swap_info(
@@ -6644,7 +6930,7 @@ pub async fn add_priority_transaction(
     }
 
     // Step 2: create a temporary TransactionsManager instance to process just this transaction to avoid deadlock
-    let wallet_pubkey = wallet_pubkey_opt.unwrap();
+    let wallet_pubkey = wallet_pubkey_opt.ok_or("Failed to get wallet pubkey from global manager")?;
     let mut temp_manager = TransactionsManager::new(wallet_pubkey).await?;
     match temp_manager.process_transaction(&signature).await {
         Ok(transaction) => {
@@ -6735,20 +7021,40 @@ pub async fn wait_for_priority_transaction_verification(
     // Poll for verification with exponential backoff
     let mut check_interval = Duration::from_millis(500); // Start with 500ms
     let max_interval = Duration::from_secs(5); // Max 5 seconds between checks
+    let mut iteration_count = 0;
+    let max_iterations = timeout_seconds * 2 + 10; // Safety limit: roughly 2 checks per second + buffer
 
     loop {
-        // Check if we've exceeded timeout
+        iteration_count += 1;
+
+        // Double safety check: timeout AND iteration limit
         if start_time.elapsed() > timeout_duration {
             log(
                 LogTag::Transactions,
                 "ERROR",
                 &format!(
-                    "❌ Priority transaction verification timeout: {} ({}s)",
+                    "❌ Priority transaction verification timeout: {} ({}s, {} iterations)",
                     &signature[..8],
-                    timeout_seconds
+                    timeout_seconds,
+                    iteration_count
                 )
             );
             return Err(format!("Transaction verification timeout after {}s", timeout_seconds));
+        }
+
+        if iteration_count > max_iterations {
+            log(
+                LogTag::Transactions,
+                "ERROR",
+                &format!(
+                    "❌ Priority transaction verification iteration limit exceeded: {} ({} iterations)",
+                    &signature[..8],
+                    iteration_count
+                )
+            );
+            return Err(
+                format!("Transaction verification iteration limit exceeded: {}", iteration_count)
+            );
         }
 
         // Check if transaction exists and is verified

@@ -610,7 +610,7 @@ fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
 /// Validate rugcheck security risks (HIGHEST PRIORITY - RUNS FIRST)
 fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
     use crate::tokens::get_global_rugcheck_service;
-    
+
     // Get rugcheck data using global service if available, fallback to database
     let rugcheck_data = match get_global_rugcheck_service() {
         Some(service) => {
@@ -634,7 +634,11 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
                                 log(
                                     LogTag::Filtering,
                                     "ERROR",
-                                    &format!("Failed to get rugcheck data for {}: {}", token.symbol, e)
+                                    &format!(
+                                        "Failed to get rugcheck data for {}: {}",
+                                        token.symbol,
+                                        e
+                                    )
                                 );
                             }
                             None
@@ -687,7 +691,9 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
 
     let rugcheck_data = match rugcheck_data {
         Some(data) => data,
-        None => return None, // No rugcheck data available - let it pass
+        None => {
+            return None;
+        } // No rugcheck data available - let it pass
     };
 
     // CRITICAL: Hard-coded risk score check - HIGHER SCORES MEAN MORE RISK!
@@ -853,33 +859,6 @@ fn validate_basic_token_info(token: &Token) -> Option<FilterReason> {
         return Some(FilterReason::EmptyMint);
     }
 
-    // Check logo URL
-    // if
-    //     token.logo_url.is_none() ||
-    //     token.logo_url.as_ref().map_or(true, |url| url.trim().is_empty())
-    // {
-    //     if is_debug_filtering_enabled() {
-    //         log(LogTag::Filtering, "DEBUG_META", "❌ Logo URL is missing or empty");
-    //     }
-    //     return Some(FilterReason::EmptyLogoUrl);
-    // }
-
-    // // Check website - can be from direct field or from info.websites
-    // let has_website =
-    //     token.website.as_ref().map_or(false, |w| !w.trim().is_empty()) ||
-    //     token.info
-    //         .as_ref()
-    //         .map_or(false, |info| {
-    //             !info.websites.is_empty() && info.websites.iter().any(|w| !w.url.trim().is_empty())
-    //         });
-
-    // if !has_website {
-    //     if is_debug_filtering_enabled() {
-    //         log(LogTag::Filtering, "DEBUG_META", "❌ Website is missing or empty");
-    //     }
-    //     return Some(FilterReason::EmptyWebsite);
-    // }
-
     // Check description - Make this optional since DexScreener API doesn't provide it
     // Only warn about missing description but don't reject the token
     // if
@@ -894,10 +873,6 @@ fn validate_basic_token_info(token: &Token) -> Option<FilterReason> {
     //         );
     //     }
     //     // Don't return FilterReason::EmptyDescription - just log it
-    // }
-
-    // if is_debug_filtering_enabled() {
-    //     log(LogTag::Filtering, "DEBUG_META", "✅ All metadata checks passed");
     // }
 
     None
@@ -1145,7 +1120,7 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
 /// CRITICAL FOR MICRO-CAPS: Ensure no single holder can cause >20% loss
 fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
     use crate::tokens::get_global_rugcheck_service;
-    
+
     // Get rugcheck data using global service if available, fallback to database
     let rugcheck_data = match get_global_rugcheck_service() {
         Some(service) => {
@@ -1169,7 +1144,11 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
                                 log(
                                     LogTag::Filtering,
                                     "DEBUG_HOLDERS",
-                                    &format!("Failed to get holder data for {}: {}", token.symbol, e)
+                                    &format!(
+                                        "Failed to get holder data for {}: {}",
+                                        token.symbol,
+                                        e
+                                    )
                                 );
                             }
                             None
@@ -1222,7 +1201,9 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
 
     let rugcheck_data = match rugcheck_data {
         Some(data) => data,
-        None => return None, // No holder data - allow through (better than blocking)
+        None => {
+            return None;
+        } // No holder data - allow through (better than blocking)
     };
 
     // Check top holders for concentration risk
@@ -1477,7 +1458,7 @@ fn validate_position_constraints(_token: &Token) -> Option<FilterReason> {
     // Position constraints are now validated at trading decision point
     // to avoid "Cannot start a runtime from within a runtime" errors
     // when filtering large numbers of tokens in async context
-    
+
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
@@ -1485,7 +1466,7 @@ fn validate_position_constraints(_token: &Token) -> Option<FilterReason> {
             &format!("✅ {}: Position constraints deferred to trading decision", _token.symbol)
         );
     }
-    
+
     // Always pass at filtering stage - position checks happen during trading
     None
 }
