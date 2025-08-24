@@ -819,7 +819,7 @@ impl PositionsManager {
                     );
 
                     // Call reconciliation directly on this specific position
-                    let positions_to_reconcile = vec![(index, symbol.clone(), mint.clone())];
+                    let positions_to_reconcile = vec![(index, mint.clone(), symbol.clone())];
                     self.run_targeted_reconciliation(positions_to_reconcile).await;
                 } else {
                     log(
@@ -3955,65 +3955,218 @@ impl PositionsManager {
         }
     }
 
-    /// Get swap PnL info using the global TransactionsManager's convert_to_swap_pnl_info method
+    /// Get swap PnL info using priority transaction processing with retry logic
     pub async fn convert_to_swap_pnl_info(
         &self,
         transaction: &Transaction,
         token_symbol_cache: &std::collections::HashMap<String, String>,
         silent: bool
     ) -> Option<crate::transactions::SwapPnLInfo> {
-        // Access the global transaction manager with timeout to prevent deadlocks
-        use crate::transactions::GLOBAL_TRANSACTION_MANAGER;
+        // First try with global transaction manager
+        let global_result = self.try_convert_with_global_manager(
+            transaction,
+            token_symbol_cache,
+            silent
+        ).await;
+        if global_result.is_some() {
+            return global_result;
+        }
 
+        // If global manager fails, use priority transaction processing
         if !silent {
             log(
                 LogTag::Positions,
-                "DEBUG",
+                "CONVERT_PRIORITY_FALLBACK",
                 &format!(
-                    "🔍 Attempting to access global TransactionsManager for tx {}",
-                    &transaction.signature[..8]
+                    "🔄 Global manager failed, using priority transaction for {}",
+                    get_signature_prefix(&transaction.signature)
                 )
             );
         }
 
-        // Use timeout to prevent indefinite blocking
+        // Get fresh transaction data with guaranteed full analysis
+        match crate::transactions::get_priority_transaction(&transaction.signature).await {
+            Ok(Some(fresh_transaction)) => {
+                // Use the fresh transaction data for conversion
+                if
+                    let Some(result) = self.try_convert_with_global_manager(
+                        &fresh_transaction,
+                        token_symbol_cache,
+                        true
+                    ).await
+                {
+                    if !silent {
+                        log(
+                            LogTag::Positions,
+                            "CONVERT_PRIORITY_SUCCESS",
+                            &format!(
+                                "✅ Priority conversion successful for {}",
+                                get_signature_prefix(&transaction.signature)
+                            )
+                        );
+                    }
+                    return Some(result);
+                }
+
+                // If global manager still fails, create temporary manager
+                self.convert_with_temporary_manager(
+                    &fresh_transaction,
+                    token_symbol_cache,
+                    silent
+                ).await
+            }
+            Ok(None) => {
+                if !silent {
+                    log(
+                        LogTag::Positions,
+                        "CONVERT_PRIORITY_NOT_FOUND",
+                        &format!(
+                            "❌ Priority transaction not found for {}",
+                            get_signature_prefix(&transaction.signature)
+                        )
+                    );
+                }
+                None
+            }
+            Err(e) => {
+                if !silent {
+                    log(
+                        LogTag::Positions,
+                        "CONVERT_PRIORITY_ERROR",
+                        &format!(
+                            "❌ Priority transaction error for {}: {}",
+                            get_signature_prefix(&transaction.signature),
+                            e
+                        )
+                    );
+                }
+                None
+            }
+        }
+    }
+
+    /// Try conversion with global manager (helper method)
+    async fn try_convert_with_global_manager(
+        &self,
+        transaction: &Transaction,
+        token_symbol_cache: &std::collections::HashMap<String, String>,
+        silent: bool
+    ) -> Option<crate::transactions::SwapPnLInfo> {
+        use crate::transactions::GLOBAL_TRANSACTION_MANAGER;
+
+        // Use shorter timeout for global manager attempt
         let lock_result = tokio::time::timeout(
-            Duration::from_secs(5),
+            Duration::from_secs(2),
             GLOBAL_TRANSACTION_MANAGER.lock()
         ).await;
 
-        let manager_guard = match lock_result {
-            Ok(guard) => guard,
+        match lock_result {
+            Ok(manager_guard) => {
+                if let Some(ref manager) = *manager_guard {
+                    let result = manager.convert_to_swap_pnl_info(
+                        transaction,
+                        token_symbol_cache,
+                        silent
+                    );
+                    if result.is_some() && !silent {
+                        log(
+                            LogTag::Positions,
+                            "CONVERT_GLOBAL_SUCCESS",
+                            &format!(
+                                "✅ Global manager conversion successful for {}",
+                                get_signature_prefix(&transaction.signature)
+                            )
+                        );
+                    }
+                    result
+                } else {
+                    if !silent {
+                        log(
+                            LogTag::Positions,
+                            "CONVERT_GLOBAL_NOT_INITIALIZED",
+                            "❌ Global TransactionsManager not initialized"
+                        );
+                    }
+                    None
+                }
+            }
             Err(_) => {
                 if !silent {
                     log(
                         LogTag::Positions,
-                        "ERROR",
-                        "🔒 Timeout acquiring GLOBAL_TRANSACTION_MANAGER lock"
+                        "CONVERT_GLOBAL_TIMEOUT",
+                        &format!(
+                            "⏱️ Timeout acquiring global manager for {}",
+                            get_signature_prefix(&transaction.signature)
+                        )
                     );
                 }
-                return None;
+                None
             }
-        };
+        }
+    }
 
-        if let Some(ref manager) = *manager_guard {
-            if !silent {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    "✅ Global TransactionsManager found, calling convert_to_swap_pnl_info"
-                );
+    /// Convert using temporary manager (last resort)
+    async fn convert_with_temporary_manager(
+        &self,
+        transaction: &Transaction,
+        token_symbol_cache: &std::collections::HashMap<String, String>,
+        silent: bool
+    ) -> Option<crate::transactions::SwapPnLInfo> {
+        if !silent {
+            log(
+                LogTag::Positions,
+                "CONVERT_TEMPORARY",
+                &format!(
+                    "🔧 Creating temporary manager for {}",
+                    get_signature_prefix(&transaction.signature)
+                )
+            );
+        }
+
+        match crate::transactions::load_wallet_address_from_config().await {
+            Ok(wallet_pubkey) => {
+                match crate::transactions::TransactionsManager::new(wallet_pubkey).await {
+                    Ok(temp_manager) => {
+                        let result = temp_manager.convert_to_swap_pnl_info(
+                            transaction,
+                            token_symbol_cache,
+                            silent
+                        );
+                        if result.is_some() && !silent {
+                            log(
+                                LogTag::Positions,
+                                "CONVERT_TEMPORARY_SUCCESS",
+                                &format!(
+                                    "✅ Temporary manager conversion successful for {}",
+                                    get_signature_prefix(&transaction.signature)
+                                )
+                            );
+                        }
+                        result
+                    }
+                    Err(e) => {
+                        if !silent {
+                            log(
+                                LogTag::Positions,
+                                "CONVERT_TEMPORARY_ERROR",
+                                &format!("❌ Failed to create temporary manager: {}", e)
+                            );
+                        }
+                        None
+                    }
+                }
             }
-            manager.convert_to_swap_pnl_info(transaction, token_symbol_cache, silent)
-        } else {
-            if !silent {
-                log(
-                    LogTag::Positions,
-                    "ERROR",
-                    "❌ Global TransactionsManager not initialized - verification cannot proceed"
-                );
+            Err(e) => {
+                if !silent {
+                    log(
+                        LogTag::Positions,
+                        "CONVERT_WALLET_ERROR",
+                        &format!("❌ Failed to load wallet address: {}", e)
+                    );
+                }
+                None
             }
-            None
         }
     }
 

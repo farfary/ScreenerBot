@@ -1404,7 +1404,10 @@ impl RpcClient {
             log(
                 LogTag::Rpc,
                 "DEBUG",
-                &format!("Checking SOL balance for wallet: {}", &wallet_address[..8])
+                &format!(
+                    "Checking SOL balance for wallet: {}",
+                    crate::utils::safe_truncate(wallet_address, 8)
+                )
             );
         }
 
@@ -1621,8 +1624,8 @@ impl RpcClient {
                 "PREMIUM_ONLY",
                 &format!(
                     "Using premium RPC only for token balance (mint {} wallet {})",
-                    &mint[..8],
-                    &wallet_address[..8]
+                    crate::utils::safe_truncate(mint, 8),
+                    crate::utils::safe_truncate(wallet_address, 8)
                 )
             );
         }
