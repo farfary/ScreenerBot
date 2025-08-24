@@ -89,6 +89,9 @@ const PROFIT_LIQUIDITY_ADJUSTMENT_MAX: f64 = 100.0; // Liquidity adjustment for 
 const PROFIT_TARGET_MIN_FLOOR: f64 = 8.0; // Never go below 8% profit target
 const PROFIT_TARGET_MIN_RANGE: f64 = 10.0; // Always at least 10% range
 
+// TRANSACTION ACTIVITY FILTERING
+const MIN_TRANSACTIONS_5MIN: i64 = 10; // Minimum total transactions in last 5 minutes
+
 // FAST DROP MULTIPLIER
 const FAST_DROP_THRESHOLD_MULTIPLIER: f64 = 1.2; // Fast drop threshold = 1.2x the min threshold (was 1.5x)
 
@@ -106,16 +109,14 @@ const MILLION_DIVISOR: f64 = 1_000_000.0; // Convert to millions for display
 const MINUTES_PER_SECOND: i64 = 60; // Time conversion
 
 // ============================================================================
-// 📦 PRICE HISTORY FRESHNESS SAFEGUARDS
+// 📦 PRICE HISTORY FRESHNESS SAFEGUARDS (SIMPLIFIED FOR NEW TOKENS)
 // ============================================================================
-// We must NOT rely on arbitrarily old cached history on startup (could show a large "drop" that
-// actually spanned hours). These guards ensure we only evaluate drop strategies when we have a
-// minimum density of recent points. Otherwise we skip dynamic drop entry to avoid false positives.
-const HISTORY_MAX_POINT_AGE_SEC: i64 = 900; // Discard points older than 15m (aligns with NEAR_TOP window)
-const HISTORY_MIN_POINTS_60S: usize = 1; // Need at least 1 valid point in last 60s (reduced from 3 for better success rate)
-const HISTORY_MIN_POINTS_300S: usize = 2; // Need at least 2 valid points in last 5m (reduced from 5 for better success rate)
-const HISTORY_MAX_LARGEST_GAP_SEC: i64 = 180; // If largest gap between successive points > 180s treat as fragmented
-const STARTUP_STALE_GRACE_SEC: i64 = 30; // During first 30s after bot start, be stricter
+// Simplified to allow immediate buying of new tokens with minimal history
+const HISTORY_MAX_POINT_AGE_SEC: i64 = 1800; // Extended to 30m for more flexibility
+const HISTORY_MIN_POINTS_60S: usize = 0; // NO REQUIREMENT - allow fresh tokens
+const HISTORY_MIN_POINTS_300S: usize = 0; // NO REQUIREMENT - allow fresh tokens
+const HISTORY_MAX_LARGEST_GAP_SEC: i64 = 600; // Extended to 10min gaps (more lenient)
+const STARTUP_STALE_GRACE_SEC: i64 = 10; // Reduced grace period - be more aggressive
 static BOT_START_INSTANT: once_cell::sync::OnceCell<Instant> = once_cell::sync::OnceCell::new();
 
 // ============================================================================
@@ -300,6 +301,55 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             log(LogTag::Entry, "BLACKLIST_REJECT", &format!("❌ {} blacklisted", token.symbol));
         }
         return (false, 0.0, "Token blacklisted or excluded".to_string());
+    }
+
+    // Check minimum transaction activity in last 5 minutes
+    let txn_5min_count = if let Some(txns) = &token.txns {
+        if let Some(m5) = &txns.m5 {
+            let buys = m5.buys.unwrap_or(0);
+            let sells = m5.sells.unwrap_or(0);
+            buys + sells
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
+    if txn_5min_count < MIN_TRANSACTIONS_5MIN {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "TXN_ACTIVITY_REJECT",
+                &format!(
+                    "❌ {} insufficient transaction activity: {} txns in 5min (minimum {})",
+                    token.symbol,
+                    txn_5min_count,
+                    MIN_TRANSACTIONS_5MIN
+                )
+            );
+        }
+        return (
+            false,
+            0.0,
+            format!(
+                "Insufficient transaction activity: {} txns in 5min (minimum {})",
+                txn_5min_count,
+                MIN_TRANSACTIONS_5MIN
+            ),
+        );
+    }
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Entry,
+            "TXN_ACTIVITY_PASS",
+            &format!(
+                "✅ {} transaction activity sufficient: {} txns in 5min",
+                token.symbol,
+                txn_5min_count
+            )
+        );
     }
 
     // Position validation - moved here from filtering to avoid async runtime conflicts
@@ -531,77 +581,32 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     }
 
     // Gate dynamic drop strategies if insufficient fresh data
-    if count_60s < HISTORY_MIN_POINTS_60S || count_300s < HISTORY_MIN_POINTS_300S || fragmented {
-        // Allow a bypass for very large immediate drops if we have at least 2 points in last 60s
-        // We'll compute a provisional drop using oldest vs newest recent point (≤60s window)
-        let mut bypass = false;
-        if count_60s >= 2 && !price_history.is_empty() {
-            let mut recent: Vec<_> = price_history
-                .iter()
-                .filter(|(ts, _)| (now_chrono - *ts).num_seconds() <= 60)
-                .cloned()
-                .collect();
-            recent.sort_by(|a, b| a.0.cmp(&b.0));
-            if recent.len() >= 2 {
-                let first = recent.first().unwrap();
-                let last = recent.last().unwrap();
-                if first.1 > 0.0 && last.1 > 0.0 {
-                    let provisional_drop = ((first.1 - last.1) / first.1) * 100.0;
-                    if provisional_drop >= 15.0 {
-                        bypass = true;
-                        if is_debug_entry_enabled() {
-                            log(
-                                LogTag::Entry,
-                                "FRESHNESS_BYPASS",
-                                &format!(
-                                    "⚡ Bypass freshness due to provisional drop {:.1}% (points={}, gap={}s)",
-                                    provisional_drop,
-                                    recent.len(),
-                                    (last.0 - first.0).num_seconds()
-                                )
-                            );
-                        }
-                    }
-                }
-            }
+    // SIMPLIFIED: Only check for completely empty history during startup
+    if price_history.is_empty() && within_startup_grace {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "FRESHNESS_REJECT",
+                &format!("⏸️ {} no price history during startup grace", token.symbol)
+            );
         }
-        if !bypass {
-            if
-                within_startup_grace ||
-                (count_300s < HISTORY_MIN_POINTS_300S && count_60s < HISTORY_MIN_POINTS_60S)
-            {
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "FRESHNESS_REJECT",
-                        &format!(
-                            "⏸️ {} insufficient fresh history (60s={},300s={},gap={}s,fragmented={},bypass={})",
-                            token.symbol,
-                            count_60s,
-                            count_300s,
-                            largest_gap,
-                            fragmented,
-                            bypass
-                        )
-                    );
-                }
-                return (false, 0.0, "Insufficient fresh price history".to_string());
-            } else {
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "FRESHNESS_WARN",
-                        &format!(
-                            "⚠️ Proceeding with limited history (60s={},300s={},gap={}s,fragmented={})",
-                            count_60s,
-                            count_300s,
-                            largest_gap,
-                            fragmented
-                        )
-                    );
-                }
-                // Continue; dynamic logic will be more conservative naturally.
-            }
+        return (false, 0.0, "No price history during startup".to_string());
+    }
+
+    // Allow all tokens to proceed - even with minimal history
+    if is_debug_entry_enabled() {
+        if price_history.is_empty() {
+            log(
+                LogTag::Entry,
+                "FRESHNESS_ALLOW_EMPTY",
+                &format!("✅ {} proceeding without history (new token)", token.symbol)
+            );
+        } else {
+            log(
+                LogTag::Entry,
+                "FRESHNESS_ALLOW",
+                &format!("✅ {} proceeding with {} price points", token.symbol, price_history.len())
+            );
         }
     }
 
@@ -724,8 +729,31 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     }
 
     // VOLUME-BASED FALLBACK: If no drop signal, check for high volume activity
+    // ENHANCED: More aggressive thresholds for new tokens with minimal history
     if let Some(vol_24h) = token.volume.as_ref().and_then(|v| v.h24) {
-        // High volume (>$50k) with good liquidity suggests active trading
+        // Aggressive entry for new/fresh tokens with minimal history
+        if price_history.len() <= 2 {
+            // NEW TOKENS: Lower thresholds for volume and liquidity
+            if vol_24h > 10000.0 && liquidity_usd > 2000.0 {
+                // $10k vol + $2k liq
+                let confidence = 70.0; // Higher confidence for new tokens with volume
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Entry,
+                        "NEW_TOKEN_VOLUME_ENTRY",
+                        &format!(
+                            "🚀 New token volume entry: ${:.0}k vol, ${:.0}k liq (history: {})",
+                            vol_24h / 1000.0,
+                            liquidity_usd / 1000.0,
+                            price_history.len()
+                        )
+                    );
+                }
+                return (true, confidence, "New token high volume".to_string());
+            }
+        }
+
+        // Standard volume entry for tokens with more history
         if vol_24h > 50000.0 && liquidity_usd > 10000.0 {
             let confidence = 60.0; // Conservative confidence for volume-based entry
             if is_debug_entry_enabled() {
@@ -870,6 +898,7 @@ fn calculate_price_volatility(
 
 /// Dynamic drop analysis with liquidity-based entry decisions
 /// Returns Some((drop_percent, reason)) if dynamic drop detected, None otherwise
+/// ENHANCED: Handles new tokens with minimal or no price history
 async fn analyze_deep_drop_entry(
     mint: &str,
     current_price: f64,
@@ -880,6 +909,59 @@ async fn analyze_deep_drop_entry(
     history_bias: Option<HistoryBias>
 ) -> Option<(f64, String)> {
     use chrono::Utc;
+
+    // NEW TOKEN INSTANT ENTRY: If no price history, allow immediate entry for new tokens
+    if price_history.is_empty() {
+        // For new tokens with no history, check basic conditions
+        if liquidity_usd >= 1000.0 {
+            // Minimum $1k liquidity
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "NEW_TOKEN_INSTANT",
+                    &format!(
+                        "🚀 New token instant entry: ${:.0}k liquidity",
+                        liquidity_usd / 1000.0
+                    )
+                );
+            }
+            return Some((0.0, "new token instant entry".to_string()));
+        }
+
+        // Volume-based new token entry
+        if let Some(vol_24h) = volume_24h {
+            if vol_24h >= 10000.0 && liquidity_usd >= 500.0 {
+                // $10k volume + $500 liquidity
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Entry,
+                        "NEW_TOKEN_VOLUME",
+                        &format!(
+                            "🚀 New token volume entry: ${:.0}k vol, ${:.0}k liq",
+                            vol_24h / 1000.0,
+                            liquidity_usd / 1000.0
+                        )
+                    );
+                }
+                return Some((0.0, "new token high volume".to_string()));
+            }
+        }
+    }
+
+    // MINIMAL HISTORY ENTRY: If only 1 price point, allow entry based on current conditions
+    if price_history.len() == 1 {
+        if liquidity_usd >= 5000.0 {
+            // Higher bar for single-point tokens
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "MINIMAL_HISTORY_ENTRY",
+                    &format!("💎 Minimal history entry: ${:.0}k liquidity", liquidity_usd / 1000.0)
+                );
+            }
+            return Some((0.0, "minimal history entry".to_string()));
+        }
+    }
 
     // --- Adaptive tuner (runtime auto-tuning of min drop) -----------------
     // Lightweight, in-memory EMA-based scaler per token

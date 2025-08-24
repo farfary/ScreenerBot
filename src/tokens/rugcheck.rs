@@ -10,7 +10,7 @@ use reqwest::Client;
 use serde::{ Deserialize, Serialize, Deserializer };
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{ AtomicBool, Ordering };
 use std::time::{ Duration, Instant };
 use tokio::sync::{ Notify, RwLock };
 use tokio::time::interval;
@@ -345,7 +345,9 @@ impl RugcheckService {
 
     /// Helper: sleep that can be interrupted by shutdown. Returns true if slept fully, false if interrupted.
     async fn sleep_cancellable(&self, duration: Duration) -> bool {
-        if self.is_shutting_down() { return false; }
+        if self.is_shutting_down() {
+            return false;
+        }
         tokio::select! {
             _ = tokio_sleep(duration) => true,
             _ = self.shutdown_notify.notified() => false,
@@ -398,7 +400,9 @@ impl RugcheckService {
     /// These are updated more frequently regardless of expiry
     pub async fn update_priority_tokens(&self, priority_mints: Vec<String>) -> Result<(), String> {
         if self.is_shutting_down() {
-            if is_debug_rugcheck_enabled() { log(LogTag::Rugcheck, "SKIP_SHUTDOWN", "Skip priority update due to shutdown"); }
+            if is_debug_rugcheck_enabled() {
+                log(LogTag::Rugcheck, "SKIP_SHUTDOWN", "Skip priority update due to shutdown");
+            }
             return Ok(());
         }
         if priority_mints.is_empty() {
@@ -461,7 +465,9 @@ impl RugcheckService {
         let mut expired_mints = Vec::new();
 
         for token in tokens {
-            if self.is_shutting_down() { break; }
+            if self.is_shutting_down() {
+                break;
+            }
             let mint = token.mint.clone(); // Clone the mint to avoid ownership issues
 
             // Check if rugcheck data exists and if it's expired
@@ -514,11 +520,11 @@ impl RugcheckService {
 
     /// Update rugcheck data for expired tokens only (smart expiry-based updates)
     async fn update_all_rugcheck_data(&self) {
-        if self.is_shutting_down() { 
+        if self.is_shutting_down() {
             if is_debug_rugcheck_enabled() {
                 log(LogTag::Rugcheck, "SKIP_SHUTDOWN", "Skip periodic update due to shutdown");
             }
-            return; 
+            return;
         }
         if is_debug_rugcheck_enabled() {
             log(LogTag::Rugcheck, "UPDATE", "Starting periodic rugcheck data update");
@@ -533,7 +539,9 @@ impl RugcheckService {
             }
         };
 
-        if self.is_shutting_down() { return; }
+        if self.is_shutting_down() {
+            return;
+        }
         if expired_mints.is_empty() {
             if is_debug_rugcheck_enabled() {
                 log(
@@ -563,7 +571,8 @@ impl RugcheckService {
                 );
             }
         }
-    }    /// Update rugcheck data for specific list of mints
+    }
+    /// Update rugcheck data for specific list of mints
     pub async fn update_rugcheck_data_for_mints(&self, mints: Vec<String>) -> Result<(), String> {
         let total_mints = mints.len();
         if is_debug_rugcheck_enabled() {
@@ -579,7 +588,7 @@ impl RugcheckService {
 
         // Use global atomic flag; do not rely on awaiting Notify after it fired
 
-    // Process tokens sequentially with rate limiting
+        // Process tokens sequentially with rate limiting
         // Note: Individual fetch_rugcheck_data calls handle rate limiting internally
         for mint in mints {
             // Check for shutdown signal before each token
@@ -685,7 +694,9 @@ impl RugcheckService {
 
     /// Fetch rugcheck data for a single token and store in database and cache
     async fn fetch_and_store_rugcheck_data(&self, mint: String) -> Result<(), String> {
-    if self.is_shutting_down() { return Err("CANCELLED".to_string()); }
+        if self.is_shutting_down() {
+            return Err("CANCELLED".to_string());
+        }
         // Fetch data from rugcheck API
         match self.fetch_rugcheck_data(&mint).await {
             Ok(rugcheck_data) => {
@@ -725,13 +736,19 @@ impl RugcheckService {
 
     /// Fetch rugcheck data from API with 3 retry attempts and rate limiting
     async fn fetch_rugcheck_data(&self, mint: &str) -> Result<RugcheckResponse, String> {
-        if self.is_shutting_down() { return Err("CANCELLED".to_string()); }
+        if self.is_shutting_down() {
+            return Err("CANCELLED".to_string());
+        }
         // Apply rate limiting before making request (shutdown-aware)
         let rate_limit_delay = Duration::from_millis(RUGCHECK_RATE_LIMIT_DELAY_MS);
         let wait_time_opt = {
             let last_time = self.last_request_time.lock().await;
             let elapsed = last_time.elapsed();
-            if elapsed < rate_limit_delay { Some(rate_limit_delay - elapsed) } else { None }
+            if elapsed < rate_limit_delay {
+                Some(rate_limit_delay - elapsed)
+            } else {
+                None
+            }
         };
         if let Some(wait_time) = wait_time_opt {
             if is_debug_rugcheck_enabled() {
@@ -741,7 +758,9 @@ impl RugcheckService {
                     &format!("Rate limiting: waiting {:?} before fetching {}", wait_time, mint)
                 );
             }
-            if !self.sleep_cancellable(wait_time).await { return Err("CANCELLED".to_string()); }
+            if !self.sleep_cancellable(wait_time).await {
+                return Err("CANCELLED".to_string());
+            }
         }
         {
             let mut last_time = self.last_request_time.lock().await;
@@ -774,8 +793,11 @@ impl RugcheckService {
                 .timeout(Duration::from_secs(RUGCHECK_REQUEST_TIMEOUT_SECS))
                 .send();
 
-            if self.is_shutting_down() { return Err("CANCELLED".to_string()); }
-            let send_result = tokio::select! {
+            if self.is_shutting_down() {
+                return Err("CANCELLED".to_string());
+            }
+            let send_result =
+                tokio::select! {
                 res = send_fut => res,
                 _ = self.shutdown_notify.notified() => { return Err("CANCELLED".to_string()); }
             };
@@ -789,8 +811,12 @@ impl RugcheckService {
                         if status.as_u16() == 400 {
                             // Get the response body to check for "unable to generate report"
                             let text_fut = response.text();
-                            if self.is_shutting_down() { return Err("CANCELLED".to_string()); }
-                            match tokio::select! { body = text_fut => body, _ = self.shutdown_notify.notified() => { return Err("CANCELLED".to_string()); } } {
+                            if self.is_shutting_down() {
+                                return Err("CANCELLED".to_string());
+                            }
+                            match (
+                                tokio::select! { body = text_fut => body, _ = self.shutdown_notify.notified() => { return Err("CANCELLED".to_string()); } }
+                            ) {
                                 Ok(error_body) => {
                                     if
                                         error_body.contains("unable to generate report") ||
@@ -837,7 +863,7 @@ impl RugcheckService {
                         }
 
                         // Handle 429 (rate limit) with longer wait
-            if status.as_u16() == 429 {
+                        if status.as_u16() == 429 {
                             let wait_time = Duration::from_secs(10 * attempt); // Exponential backoff for 429
                             log(
                                 LogTag::Rugcheck,
@@ -850,7 +876,9 @@ impl RugcheckService {
                             );
 
                             if attempt < max_retries {
-                if !self.sleep_cancellable(wait_time).await { return Err("CANCELLED".to_string()); }
+                                if !self.sleep_cancellable(wait_time).await {
+                                    return Err("CANCELLED".to_string());
+                                }
                                 // Update last request time
                                 {
                                     let mut last_time = self.last_request_time.lock().await;
@@ -874,8 +902,12 @@ impl RugcheckService {
                     } else {
                         // Parse JSON with shutdown-aware cancellation
                         let json_fut = response.json::<RugcheckResponse>();
-                        if self.is_shutting_down() { return Err("CANCELLED".to_string()); }
-                        match tokio::select! { parsed = json_fut => parsed, _ = self.shutdown_notify.notified() => { return Err("CANCELLED".to_string()); } } {
+                        if self.is_shutting_down() {
+                            return Err("CANCELLED".to_string());
+                        }
+                        match (
+                            tokio::select! { parsed = json_fut => parsed, _ = self.shutdown_notify.notified() => { return Err("CANCELLED".to_string()); } }
+                        ) {
                             Ok(rugcheck_data) => {
                                 // Extract token information for detailed logging
                                 let symbol = rugcheck_data.token_meta
@@ -958,7 +990,7 @@ impl RugcheckService {
 
                                 return Ok(rugcheck_data);
                             }
-                Err(e) => {
+                            Err(e) => {
                                 last_error = format!("Failed to parse JSON response: {}", e);
                                 log(
                                     LogTag::Rugcheck,
@@ -985,7 +1017,9 @@ impl RugcheckService {
                                             last_error
                                         )
                                     );
-                                    if !self.sleep_cancellable(wait_time).await { return Err("CANCELLED".to_string()); }
+                                    if !self.sleep_cancellable(wait_time).await {
+                                        return Err("CANCELLED".to_string());
+                                    }
                                 }
                             }
                         }
@@ -1023,7 +1057,9 @@ impl RugcheckService {
                         attempt
                     )
                 );
-                if !self.sleep_cancellable(wait_time).await { return Err("CANCELLED".to_string()); }
+                if !self.sleep_cancellable(wait_time).await {
+                    return Err("CANCELLED".to_string());
+                }
 
                 // Update last request time after wait
                 {
@@ -1099,11 +1135,13 @@ impl RugcheckService {
                 // }
             }
             Ok(None) => {
-                log(
-                    LogTag::Rugcheck,
-                    "NOT_FOUND",
-                    &format!("No rugcheck data found in database for token: {}", mint)
-                );
+                if is_debug_rugcheck_enabled() {
+                    log(
+                        LogTag::Rugcheck,
+                        "NOT_FOUND",
+                        &format!("No rugcheck data found in database for token: {}", mint)
+                    );
+                }
                 // Data missing - fetch it now
             }
             Err(e) => {
@@ -1257,7 +1295,9 @@ pub async fn get_token_rugcheck_data(
     service: &RugcheckService
 ) -> Result<Option<RugcheckResponse>, String> {
     // Respect shutdown in synchronous callers too
-    if service.is_shutting_down() { return Ok(None); }
+    if service.is_shutting_down() {
+        return Ok(None);
+    }
     service.get_rugcheck_data(mint).await
 }
 
@@ -1266,7 +1306,9 @@ pub async fn update_new_token_rugcheck_data(
     mint: &str,
     service: &RugcheckService
 ) -> Result<(), String> {
-    if service.is_shutting_down() { return Ok(()); }
+    if service.is_shutting_down() {
+        return Ok(());
+    }
     service.update_token_rugcheck_data(mint).await
 }
 

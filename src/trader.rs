@@ -39,7 +39,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 2;
+pub const MAX_OPEN_POSITIONS: usize = 4;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
@@ -172,6 +172,8 @@ use crate::filtering::log_filtering_summary;
 use chrono::Utc;
 use colored::Colorize;
 use once_cell::sync::Lazy;
+use rand::seq::SliceRandom;
+use rand::SeedableRng;
 use std::sync::atomic::{ AtomicUsize, Ordering };
 use std::sync::Arc;
 use std::time::Duration;
@@ -459,19 +461,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             tokens_from_module
         };
 
-        // Sort tokens by liquidity in descending order (highest liquidity first)
-        tokens.sort_by(|a, b| {
-            let liquidity_a = a.liquidity
-                .as_ref()
-                .and_then(|l| l.usd)
-                .unwrap_or(0.0);
-            let liquidity_b = b.liquidity
-                .as_ref()
-                .and_then(|l| l.usd)
-                .unwrap_or(0.0);
-
-            liquidity_b.partial_cmp(&liquidity_a).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        // Randomize tokens order instead of sorting by liquidity
+        // More profitable tokens often have smaller liquidity, so we randomize to give all tokens equal chance
+        use rand::seq::SliceRandom;
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::StdRng::from_entropy();
+        tokens.shuffle(&mut rng);
 
         // Safety check - if processing is taking too long, log it
         if cycle_start.elapsed() > Duration::from_secs(ENTRY_CYCLE_TIMEOUT_WARNING_SECS) {
@@ -485,10 +480,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         log(
             LogTag::Trader,
             "INFO",
-            &format!(
-                "Checking {} tokens for entry opportunities (sorted by liquidity)",
-                tokens.len()
-            )
+            &format!("Checking {} tokens for entry opportunities (randomized order)", tokens.len())
         );
 
         // ⚡ PERFORMANCE FIX: Limit token processing to prevent filtering bottleneck
@@ -500,7 +492,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 LogTag::Trader,
                 "PERF",
                 &format!(
-                    "🚀 PERFORMANCE: Limiting processing from {} to {} tokens (top by liquidity)",
+                    "🚀 PERFORMANCE: Limiting processing from {} to {} tokens (randomized selection)",
                     tokens.len(),
                     MAX_TOKENS_TO_PROCESS
                 )
@@ -566,7 +558,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             LogTag::Trader,
             "FILTER_STATS",
             &format!(
-                "Token filtering: {}/{} passed ({:.1}% pass rate) - processed top {} tokens",
+                "Token filtering: {}/{} passed ({:.1}% pass rate) - processed {} randomized tokens",
                 passed,
                 total,
                 pass_rate,
@@ -922,14 +914,15 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             Vec::new()
         };
 
-        // Request immediate pool price checks for open positions (non-blocking)
+        // Force refresh and then request immediate cache reads for open positions (non-blocking)
         if !open_position_mints.is_empty() {
             for mint in &open_position_mints {
                 let mint_clone = mint.clone();
-                // Update prices for open positions using thread-safe price service
                 tokio::spawn(async move {
-                    // Use thread-safe price function for immediate price check
-                    let _price = crate::tokens::price::get_token_price_safe(&mint_clone).await;
+                    // Force a refresh to ensure latest pool/API fetch (triggers price change logging)
+                    crate::tokens::price::force_refresh_token_price_safe(&mint_clone).await;
+                    // Touch cache (optional) to record watch time
+                    let _ = crate::tokens::price::get_token_price_safe(&mint_clone).await;
                 });
             }
         }
@@ -1251,6 +1244,21 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                     e
                                 )
                             );
+
+                            // Check if this is a phantom position error and trigger immediate reconciliation
+                            if e.contains("Phantom position") {
+                                log(
+                                    LogTag::Trader,
+                                    "PHANTOM_DETECTED",
+                                    &format!("🔥 Phantom position detected for {} - triggering immediate reconciliation", token_symbol)
+                                );
+
+                                // Trigger immediate reconciliation for this phantom position
+                                if let Some(h) = &positions_handle_opt {
+                                    h.trigger_phantom_reconciliation(position.mint.clone()).await;
+                                }
+                            }
+
                             false
                         }
                         Err(_) => {

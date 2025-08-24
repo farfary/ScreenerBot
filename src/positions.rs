@@ -22,7 +22,7 @@ use once_cell::sync::Lazy;
 use serde::{ Deserialize, Serialize };
 use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;
-use tokio::sync::{ mpsc, oneshot, Notify, Mutex as AsyncMutex };
+use tokio::sync::{ mpsc, oneshot, Notify, Mutex as AsyncMutex, RwLock };
 use tokio::fs;
 use tokio::time::{ interval, Duration, Instant };
 
@@ -31,20 +31,6 @@ use tokio::time::{ interval, Duration, Instant };
 /// For closed positions with sol_received, uses actual SOL invested vs SOL received
 /// NOTE: sol_received should contain ONLY the SOL from token sale, excluding ATA rent reclaim
 pub async fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "DEBUG",
-            &format!(
-                "🧮 Calculating P&L for {} - entry: {:.8}, exit: {:?}, current: {:?}",
-                position.symbol,
-                position.effective_entry_price.unwrap_or(position.entry_price),
-                position.exit_price,
-                current_price
-            )
-        );
-    }
-
     // Safety check: validate position has valid entry price
     let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
     if entry_price <= 0.0 || !entry_price.is_finite() {
@@ -228,6 +214,11 @@ pub struct Position {
     // Phantom position cleanup flag (temporary, not persisted)
     #[serde(skip)]
     pub phantom_remove: bool,
+    // Phantom detection tracking (persisted)
+    pub phantom_confirmations: u32, // How many times we confirmed zero wallet balance while still open
+    pub phantom_first_seen: Option<DateTime<Utc>>, // When first confirmed phantom
+    pub synthetic_exit: bool, // True if we synthetically closed due to missing exit tx
+    pub closed_reason: Option<String>, // Optional reason for closure (e.g., "synthetic_phantom_closure")
 }
 
 // =============================================================================
@@ -274,6 +265,68 @@ static RECENT_SWAP_ATTEMPTS: Lazy<Arc<AsyncMutex<HashMap<String, SwapAttempt>>>>
 static ACTIVE_SELLS: Lazy<Arc<AsyncMutex<HashSet<String>>>> = Lazy::new(||
     Arc::new(AsyncMutex::new(HashSet::new()))
 );
+
+// =============================================================================
+// POSITION CACHE SYSTEM - Fast access for summary without blocking actor
+// =============================================================================
+
+#[derive(Debug, Clone)]
+pub struct PositionSnapshot {
+    pub open_positions: Vec<Position>,
+    pub closed_positions: Vec<Position>,
+    pub open_count: usize,
+    pub closed_count: usize,
+    pub total_invested_sol: f64,
+    pub total_pnl_sol: f64,
+    pub last_updated: DateTime<Utc>,
+}
+
+impl Default for PositionSnapshot {
+    fn default() -> Self {
+        Self {
+            open_positions: Vec::new(),
+            closed_positions: Vec::new(),
+            open_count: 0,
+            closed_count: 0,
+            total_invested_sol: 0.0,
+            total_pnl_sol: 0.0,
+            last_updated: Utc::now(),
+        }
+    }
+}
+
+/// Global cached position snapshot for fast summary access
+static POSITIONS_CACHE: Lazy<Arc<RwLock<PositionSnapshot>>> = Lazy::new(||
+    Arc::new(RwLock::new(PositionSnapshot::default()))
+);
+
+/// Update the position cache (called by PositionsManager after changes)
+async fn update_positions_cache(open: Vec<Position>, closed: Vec<Position>) {
+    let total_invested = open
+        .iter()
+        .map(|p| p.entry_size_sol)
+        .sum();
+
+    // Calculate total P&L for closed positions
+    let mut total_pnl = 0.0;
+    for position in &closed {
+        let (pnl_sol, _) = calculate_position_pnl(position, None).await;
+        total_pnl += pnl_sol;
+    }
+
+    let snapshot = PositionSnapshot {
+        open_count: open.len(),
+        closed_count: closed.len(),
+        total_invested_sol: total_invested,
+        total_pnl_sol: total_pnl,
+        open_positions: open,
+        closed_positions: closed,
+        last_updated: Utc::now(),
+    };
+
+    let mut cache = POSITIONS_CACHE.write().await;
+    *cache = snapshot;
+}
 
 // 2. BALANCE_CACHE: Short-lived cache for token balances to collapse bursts of identical RPC calls.
 // Key: wallet|mint  Value: (balance, Instant timestamp)
@@ -350,6 +403,9 @@ async fn clear_active_sell(mint: &str) {
 
 /// Duration to prevent duplicate swaps (30 seconds)
 const DUPLICATE_SWAP_PREVENTION_SECS: i64 = 30;
+// Phantom detection thresholds (for synthetic closure of sold-but-open positions)
+const PHANTOM_CONFIRMATION_THRESHOLD: u32 = 3; // need N reconciliation confirmations
+const PHANTOM_MIN_DURATION_SECS: i64 = 30; // minimum seconds since first phantom detection before synthetic close
 
 /// Check if a similar swap was recently attempted for the same token
 /// NOTE: This function must NOT call other functions that might acquire global locks
@@ -430,6 +486,16 @@ pub enum PositionState {
     ExitFailed, // Exit transaction failed and needs retry
     Phantom, // Position exists but wallet has zero tokens (needs reconciliation)
     Reconciling, // Auto-healing in progress for phantom positions
+}
+
+/// Messages from background tasks to the main actor
+#[derive(Debug, Clone)]
+enum BackgroundTaskMessage {
+    VerificationNeeded,
+    RetryNeeded,
+    CleanupNeeded,
+    ReconciliationNeeded(Vec<(usize, String, String)>), // positions needing reconciliation
+    CacheRefreshNeeded,
 }
 
 /// PositionsManager handles all position operations in a centralized service
@@ -518,13 +584,18 @@ impl PositionsManager {
             );
         }
 
-        let mut verification_interval = interval(Duration::from_secs(10));
-        let mut retry_interval = interval(Duration::from_secs(30));
-        let mut cleanup_interval = interval(Duration::from_secs(60));
-        let mut reconciliation_interval = interval(Duration::from_secs(1800)); // Much less frequent: 30 minutes
+        // Create a channel for background tasks to communicate with the actor
+        let (bg_task_tx, mut bg_task_rx) = mpsc::channel::<BackgroundTaskMessage>(100);
 
-        // Add reconciliation state tracking to prevent overlaps
-        let mut reconciliation_in_progress = false;
+        // Spawn separate background task manager
+        let shutdown_clone = self.shutdown.clone();
+        let bg_tx_clone = bg_task_tx.clone();
+        tokio::spawn(async move {
+            run_background_tasks(shutdown_clone, bg_tx_clone).await;
+        });
+
+        // Initialize cache on startup
+        self.refresh_positions_cache().await;
 
         loop {
             tokio::select! {
@@ -532,84 +603,13 @@ impl PositionsManager {
                     log(LogTag::Positions, "INFO", "PositionsManager shutting down gracefully");
                     break;
                 }
-                _ = verification_interval.tick() => { 
-                    if is_debug_positions_enabled() {
-                        log(LogTag::Positions, "DEBUG", "⏰ Running verification tick");
+                // Handle background task messages (non-blocking)
+                maybe_bg_msg = bg_task_rx.recv() => {
+                    if let Some(bg_msg) = maybe_bg_msg {
+                        self.handle_background_message(bg_msg).await;
                     }
-                    self.check_pending_verifications().await; 
                 }
-                _ = retry_interval.tick() => { 
-                    if is_debug_positions_enabled() {
-                        log(LogTag::Positions, "DEBUG", "🔄 Running retry tick");
-                    }
-                    self.process_retry_queue().await; 
-                }
-                _ = cleanup_interval.tick() => { 
-                    if is_debug_positions_enabled() {
-                        log(LogTag::Positions, "DEBUG", "🧹 Running cleanup tick");
-                    }
-                    self.cleanup_phantom_positions().await; 
-                }
-                _ = reconciliation_interval.tick() => {
-                    // Skip if reconciliation is already in progress to prevent overlaps
-                    if reconciliation_in_progress {
-                        if is_debug_positions_enabled() {
-                            log(LogTag::Positions, "DEBUG", "⏭️ Skipping reconciliation - already in progress");
-                        }
-                        continue;
-                    }
-                    
-                    reconciliation_in_progress = true;
-                    
-                    // Only run reconciliation on positions with missing fields or inconsistent state
-                    let positions_needing_reconciliation: Vec<_> = self.positions.iter().enumerate()
-                        .filter_map(|(index, p)| {
-                            // Check for specific missing field conditions that indicate reconciliation is needed
-                            let needs_reconciliation = 
-                                // Case 1: Has exit signature but not verified (failed verification)
-                                (p.exit_transaction_signature.is_some() && !p.transaction_exit_verified) ||
-                                
-                                // Case 2: Has token amount but missing exit data (potential phantom)
-                                (p.token_amount.unwrap_or(0) > 0 && 
-                                 p.exit_transaction_signature.is_none() && 
-                                 p.exit_price.is_none() && 
-                                 !p.phantom_remove) ||
-                                
-                                // Case 3: Marked for phantom removal but still has exit data inconsistency
-                                (p.phantom_remove && p.exit_transaction_signature.is_some() && !p.transaction_exit_verified) ||
-                                
-                                // Case 4: Has sol_received but no exit_price (incomplete exit data)
-                                (p.sol_received.is_some() && p.exit_price.is_none() && p.token_amount.unwrap_or(0) > 0);
-                                
-                            if needs_reconciliation {
-                                Some((index, p.mint.clone(), p.symbol.clone()))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    
-                    if !positions_needing_reconciliation.is_empty() {
-                        // Limit reconciliation to max 3 positions per cycle to prevent blocking
-                        let limited_positions: Vec<_> = positions_needing_reconciliation.into_iter().take(3).collect();
-                        
-                        if is_debug_positions_enabled() {
-                            log(LogTag::Positions, "DEBUG", &format!(
-                                "🩺 Running targeted reconciliation on {} positions with missing fields: {} (limited from full list)",
-                                limited_positions.len(),
-                                limited_positions.iter()
-                                    .map(|(_, _, symbol)| symbol.as_str())
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            ));
-                        }
-                        self.run_targeted_reconciliation(limited_positions).await;
-                    } else if is_debug_positions_enabled() {
-                        log(LogTag::Positions, "DEBUG", "🩺 Skipping reconciliation - no positions with missing fields");
-                    }
-                    
-                    reconciliation_in_progress = false;
-                }
+                // Prioritize user requests over background tasks
                 maybe_msg = rx.recv() => {
                     match maybe_msg {
                         Some(msg) => {
@@ -625,6 +625,77 @@ impl PositionsManager {
         }
 
         log(LogTag::Positions, "INFO", "PositionsManager actor stopped");
+    }
+
+    /// Handle background task messages (non-blocking with timeouts)
+    async fn handle_background_message(&mut self, msg: BackgroundTaskMessage) {
+        match msg {
+            BackgroundTaskMessage::VerificationNeeded => {
+                if is_debug_positions_enabled() {
+                    log(LogTag::Positions, "DEBUG", "⏰ Processing verification request");
+                }
+                // Add timeout to prevent blocking
+                if
+                    let Err(_) = tokio::time::timeout(
+                        Duration::from_secs(30),
+                        self.check_pending_verifications()
+                    ).await
+                {
+                    log(LogTag::Positions, "WARN", "Verification check timed out after 30s");
+                }
+            }
+            BackgroundTaskMessage::RetryNeeded => {
+                if is_debug_positions_enabled() {
+                    log(LogTag::Positions, "DEBUG", "🔄 Processing retry request");
+                }
+                if
+                    let Err(_) = tokio::time::timeout(
+                        Duration::from_secs(30),
+                        self.process_retry_queue()
+                    ).await
+                {
+                    log(LogTag::Positions, "WARN", "Retry processing timed out after 30s");
+                }
+            }
+            BackgroundTaskMessage::CleanupNeeded => {
+                if is_debug_positions_enabled() {
+                    log(LogTag::Positions, "DEBUG", "🧹 Processing cleanup request");
+                }
+                if
+                    let Err(_) = tokio::time::timeout(
+                        Duration::from_secs(30),
+                        self.cleanup_phantom_positions()
+                    ).await
+                {
+                    log(LogTag::Positions, "WARN", "Cleanup timed out after 30s");
+                }
+            }
+            BackgroundTaskMessage::ReconciliationNeeded(positions_to_reconcile) => {
+                if is_debug_positions_enabled() {
+                    log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!(
+                            "🩺 Processing reconciliation request for {} positions",
+                            positions_to_reconcile.len()
+                        )
+                    );
+                }
+                // Longer timeout for reconciliation but still bounded
+                if
+                    let Err(_) = tokio::time::timeout(
+                        Duration::from_secs(120),
+                        self.run_targeted_reconciliation(positions_to_reconcile)
+                    ).await
+                {
+                    log(LogTag::Positions, "WARN", "Reconciliation timed out after 120s");
+                }
+            }
+            BackgroundTaskMessage::CacheRefreshNeeded => {
+                // Cache refresh should always be fast
+                self.refresh_positions_cache().await;
+            }
+        }
     }
 
     async fn handle_request(&mut self, msg: PositionsRequest) {
@@ -724,6 +795,39 @@ impl PositionsManager {
                     log(LogTag::Positions, "DEBUG", "🔄 Received ForceReverifyAll request");
                 }
                 let _ = reply.send(self.force_reverify_all_positions());
+            }
+            PositionsRequest::UpdateExitSignature { mint, signature, router_used } => {
+                self.update_position_exit_signature(&mint, &signature, &router_used).await;
+            }
+            PositionsRequest::TriggerPhantomReconciliation { mint } => {
+                // Find the position and trigger immediate reconciliation
+                if
+                    let Some((index, symbol)) = self.positions
+                        .iter()
+                        .enumerate()
+                        .find(|(_, p)| p.mint == mint)
+                        .map(|(i, p)| (i, p.symbol.clone()))
+                {
+                    log(
+                        LogTag::Positions,
+                        "PHANTOM_TRIGGER",
+                        &format!(
+                            "🔥 Triggering immediate phantom reconciliation for {} ({})",
+                            symbol,
+                            mint
+                        )
+                    );
+
+                    // Call reconciliation directly on this specific position
+                    let positions_to_reconcile = vec![(index, symbol.clone(), mint.clone())];
+                    self.run_targeted_reconciliation(positions_to_reconcile).await;
+                } else {
+                    log(
+                        LogTag::Positions,
+                        "PHANTOM_TRIGGER",
+                        &format!("⚠️  No position found for mint {} during phantom reconciliation trigger", mint)
+                    );
+                }
             }
         }
     }
@@ -889,6 +993,8 @@ impl PositionsManager {
         let mut positions_to_heal = Vec::new();
         let mut failed_signatures_to_clear = Vec::new(); // Track failed transaction signatures to clear
 
+        let mut phantom_updates: Vec<usize> = Vec::new();
+        let mut phantom_ready_to_resolve: Vec<usize> = Vec::new();
         for (index, mint, symbol) in positions_to_check {
             // Longer delay between checks to respect rate limits (500ms instead of 150ms)
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -1036,10 +1142,18 @@ impl PositionsManager {
                     ).await
                 {
                     if wallet_balance == 0 {
+                        // Defer updates until after loop to avoid mutable borrow conflicts
+                        phantom_updates.push(index);
+
                         log(
                             LogTag::Positions,
                             "RECONCILE",
-                            &format!("👻 Confirmed phantom position {} - searching for missing exit transaction", symbol)
+                            &format!(
+                                "👻 Confirmed phantom position {} (confirmations={}, first_seen={:?}) - searching for missing exit transaction",
+                                symbol,
+                                position.phantom_confirmations,
+                                position.phantom_first_seen
+                            )
                         );
 
                         // Search for missing exit transaction
@@ -1049,6 +1163,20 @@ impl PositionsManager {
                         {
                             if !self.applied_exit_signatures.contains_key(&exit_signature) {
                                 positions_to_heal.push((index, exit_signature));
+                            }
+                        } else {
+                            // If we didn't find an exit and thresholds reached, attempt synthetic closure via resolver
+                            // Check if after increment it would meet thresholds (approximate since increment deferred)
+                            let projected_confirmations = position.phantom_confirmations + 1; // since we'll increment later
+                            let first_seen = position.phantom_first_seen.unwrap_or(Utc::now());
+                            let duration_secs = Utc::now()
+                                .signed_duration_since(first_seen)
+                                .num_seconds();
+                            if
+                                projected_confirmations >= PHANTOM_CONFIRMATION_THRESHOLD &&
+                                duration_secs >= PHANTOM_MIN_DURATION_SECS
+                            {
+                                phantom_ready_to_resolve.push(index);
                             }
                         }
                     } else {
@@ -1086,6 +1214,59 @@ impl PositionsManager {
                 // This will be handled in the healing phase if we have the necessary data
                 if let Some(ref exit_sig) = position.exit_transaction_signature {
                     positions_to_heal.push((index, exit_sig.clone()));
+                }
+            }
+        }
+
+        // Apply phantom updates
+        let now_ts = Utc::now();
+        let mut phantom_updates_made = false;
+        for idx in phantom_updates {
+            if let Some(p) = self.positions.get_mut(idx) {
+                if p.phantom_first_seen.is_none() {
+                    p.phantom_first_seen = Some(now_ts);
+                }
+                p.phantom_confirmations = p.phantom_confirmations.saturating_add(1);
+                phantom_updates_made = true;
+            }
+        }
+
+        // Resolve those already qualifying (avoid simultaneous mutable borrows by collecting first)
+        let mut phantom_resolutions_made = false;
+        for idx in phantom_ready_to_resolve {
+            if let Some(p_mut) = self.positions.get_mut(idx) {
+                // Double-check eligibility
+                let duration_ok = p_mut.phantom_first_seen
+                    .map(
+                        |t|
+                            Utc::now().signed_duration_since(t).num_seconds() >=
+                            PHANTOM_MIN_DURATION_SECS
+                    )
+                    .unwrap_or(false);
+                let confirmations_ok =
+                    p_mut.phantom_confirmations >= PHANTOM_CONFIRMATION_THRESHOLD;
+                if duration_ok && confirmations_ok && !p_mut.synthetic_exit {
+                    let synthetic_price = p_mut.current_price.unwrap_or(p_mut.entry_price);
+                    p_mut.exit_price = Some(synthetic_price);
+                    p_mut.exit_time = Some(Utc::now());
+                    p_mut.transaction_exit_verified = false;
+                    p_mut.effective_exit_price = None;
+                    p_mut.sol_received = None;
+                    p_mut.synthetic_exit = true;
+                    p_mut.closed_reason = Some("synthetic_phantom_closure".to_string());
+                    phantom_resolutions_made = true;
+                    log(
+                        LogTag::Positions,
+                        "PHANTOM_SYNTHETIC_CLOSED",
+                        &format!(
+                            "🧵 Synthetic closure applied to phantom {} at {:.9} (confirmations={}, duration_ok={}, confirmations_ok={})",
+                            p_mut.symbol,
+                            synthetic_price,
+                            p_mut.phantom_confirmations,
+                            duration_ok,
+                            confirmations_ok
+                        )
+                    );
                 }
             }
         }
@@ -1317,6 +1498,13 @@ impl PositionsManager {
                 &format!("🎯 Targeted reconciliation healed {} positions", healed_positions)
             );
             self.save_positions_to_disk().await;
+        } else if phantom_updates_made || phantom_resolutions_made {
+            log(
+                LogTag::Positions,
+                "RECONCILE_COMPLETE",
+                "🎯 Targeted reconciliation completed - phantom position updates saved"
+            );
+            self.save_positions_to_disk().await;
         } else {
             log(
                 LogTag::Positions,
@@ -1355,9 +1543,9 @@ impl PositionsManager {
 
         // Only hold the lock for the minimum time needed
         use crate::transactions::GLOBAL_TRANSACTION_MANAGER;
-        let manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+        let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
 
-        if let Some(ref manager) = *manager_guard {
+        if let Some(ref mut manager) = *manager_guard {
             // Targeted search: only look through recent transactions (limited scope)
             if let Ok(recent_transactions) = manager.get_recent_transactions(50).await {
                 // Even more limited for targeted search
@@ -1783,6 +1971,10 @@ impl PositionsManager {
                     current_price: Some(price), // Initialize with entry price
                     current_price_updated: Some(Utc::now()),
                     phantom_remove: false,
+                    phantom_confirmations: 0,
+                    phantom_first_seen: None,
+                    synthetic_exit: false,
+                    closed_reason: None,
                 };
 
                 // Add position to in-memory list
@@ -1860,7 +2052,7 @@ impl PositionsManager {
             );
         }
 
-        // Find the position to close
+        // Find the position to close with race condition prevention
         let mut position_opt = None;
 
         if
@@ -1869,6 +2061,9 @@ impl PositionsManager {
                 let no_exit_sig = p.exit_transaction_signature.is_none();
                 let failed_exit =
                     p.exit_transaction_signature.is_some() && !p.transaction_exit_verified;
+                let closing_in_progress =
+                    p.exit_transaction_signature.as_ref() ==
+                    Some(&"CLOSING_IN_PROGRESS".to_string());
                 let can_close = no_exit_sig || failed_exit;
 
                 if is_debug_positions_enabled() {
@@ -1876,30 +2071,61 @@ impl PositionsManager {
                         LogTag::Positions,
                         "DEBUG",
                         &format!(
-                            "🎯 Position check: mint_match={}, no_exit_sig={}, failed_exit={}, can_close={}",
+                            "🎯 Position check: mint_match={}, no_exit_sig={}, failed_exit={}, closing_in_progress={}, can_close={}",
                             matches_mint,
                             no_exit_sig,
                             failed_exit,
+                            closing_in_progress,
                             can_close
                         )
                     );
                 }
 
+                // Reject if already being closed by another thread
+                if matches_mint && closing_in_progress {
+                    log(
+                        LogTag::Positions,
+                        "CONCURRENT_CLOSE_BLOCKED",
+                        &format!(
+                            "🚫 Blocking concurrent close attempt for {} - already closing",
+                            get_mint_prefix(mint)
+                        )
+                    );
+                    return false;
+                }
+
                 matches_mint && can_close
             })
         {
-            // Allow retry if previous exit transaction failed
-            if pos.exit_transaction_signature.is_some() && !pos.transaction_exit_verified {
+            // 🔒 RACE CONDITION PREVENTION: Immediately mark position as "closing" to prevent duplicate sells
+            if pos.exit_transaction_signature.is_none() {
+                // Set a temporary placeholder to prevent concurrent closes
+                pos.exit_transaction_signature = Some("CLOSING_IN_PROGRESS".to_string());
                 log(
                     LogTag::Positions,
-                    "RETRY_EXIT",
+                    "RACE_PROTECTION",
                     &format!(
-                        "🔄 Previous exit transaction failed for {} - clearing failed exit data and retrying",
+                        "🔒 Position {} marked as closing-in-progress to prevent race conditions",
                         pos.symbol
                     )
                 );
-                // Clear failed exit transaction data
-                pos.exit_transaction_signature = None;
+            }
+
+            // Allow retry if previous exit transaction failed
+            if pos.exit_transaction_signature.is_some() && !pos.transaction_exit_verified {
+                // Only retry if it's not our placeholder or if it's genuinely failed
+                if pos.exit_transaction_signature.as_ref().unwrap() != "CLOSING_IN_PROGRESS" {
+                    log(
+                        LogTag::Positions,
+                        "RETRY_EXIT",
+                        &format!(
+                            "🔄 Previous exit transaction failed for {} - clearing failed exit data and retrying",
+                            pos.symbol
+                        )
+                    );
+                    // Clear failed exit transaction data
+                    pos.exit_transaction_signature = Some("CLOSING_IN_PROGRESS".to_string()); // Keep race protection
+                }
                 pos.exit_price = None;
                 pos.exit_time = None;
                 pos.transaction_exit_verified = false;
@@ -2462,6 +2688,66 @@ impl PositionsManager {
         }
     }
 
+    /// Update position with exit transaction signature (CRITICAL FIX for phantom positions)
+    /// This ensures that when a close position operation succeeds, the signature is immediately
+    /// saved to prevent phantom position scenarios where the transaction succeeds but isn't tracked
+    async fn update_position_exit_signature(
+        &mut self,
+        mint: &str,
+        signature: &str,
+        router_used: &str
+    ) {
+        let now = Utc::now();
+        let mut found_position = false;
+
+        // Find and update the position
+        {
+            if let Some(position) = self.positions.iter_mut().find(|p| p.mint == mint) {
+                log(
+                    LogTag::Positions,
+                    "EXIT_SIGNATURE_UPDATE",
+                    &format!(
+                        "💾 Updating position {} with exit signature {} ({})",
+                        position.symbol,
+                        get_signature_prefix(signature),
+                        router_used
+                    )
+                );
+
+                // Set the exit transaction signature
+                position.exit_transaction_signature = Some(signature.to_string());
+                found_position = true;
+
+                log(
+                    LogTag::Positions,
+                    "EXIT_SIGNATURE_SUCCESS",
+                    &format!(
+                        "✅ Position {} exit signature saved and queued for verification",
+                        position.symbol
+                    )
+                );
+            }
+        }
+
+        if found_position {
+            // Add to verification queue for proper completion
+            self.pending_verifications.insert(signature.to_string(), now);
+
+            // Save positions to disk immediately
+            self.save_positions_to_disk().await;
+        } else {
+            log(
+                LogTag::Positions,
+                "EXIT_SIGNATURE_ERROR",
+                &format!(
+                    "❌ Position not found for mint {} when updating exit signature {}",
+                    get_mint_prefix(mint),
+                    get_signature_prefix(signature)
+                )
+            );
+        }
+    }
+
     /// Remove position by entry signature
     async fn remove_position_by_entry_signature(&mut self, signature: &str, reason: &str) -> bool {
         let before = self.positions.len();
@@ -2649,7 +2935,6 @@ impl PositionsManager {
         if
             let Err(e) = self.verify_and_resolve_position_state(
                 position,
-                token,
                 exit_price,
                 exit_time
             ).await
@@ -3263,7 +3548,7 @@ impl PositionsManager {
         let now = Utc::now();
         let mut to_remove: Vec<usize> = Vec::new();
 
-        for (idx, position) in self.positions.iter().enumerate() {
+        for (idx, position) in self.positions.iter_mut().enumerate() {
             // Skip already closed positions
             if position.exit_transaction_signature.is_some() {
                 continue;
@@ -3349,7 +3634,6 @@ impl PositionsManager {
     async fn verify_and_resolve_position_state(
         &mut self,
         position: &mut Position,
-        token: &Token,
         exit_price: f64,
         exit_time: DateTime<Utc>
     ) -> Result<(), String> {
@@ -3357,14 +3641,71 @@ impl PositionsManager {
             LogTag::Positions,
             "VERIFY",
             &format!(
-                "🔍 Verifying position state for {} using transaction history",
-                position.symbol
+                "🔍 Verifying / resolving phantom state for {} (confirmations={}, first_seen={:?})",
+                position.symbol,
+                position.phantom_confirmations,
+                position.phantom_first_seen
             )
         );
 
-        // This would use the transactions manager to check for any untracked sell transactions
-        // For now, return an error to indicate phantom position
-        Err("Phantom position detected - requires manual investigation".to_string())
+        if position.synthetic_exit {
+            return Ok(());
+        }
+
+        // Attempt targeted search one more time
+        if position.exit_transaction_signature.is_none() {
+            if let Some(found_sig) = self.find_missing_exit_transaction_targeted(position).await {
+                position.exit_transaction_signature = Some(found_sig.clone());
+                log(
+                    LogTag::Positions,
+                    "PHANTOM_HEAL_FOUND_EXIT",
+                    &format!(
+                        "🎯 Found real exit transaction {} for phantom {} during verify step",
+                        get_signature_prefix(&found_sig),
+                        position.symbol
+                    )
+                );
+                return Ok(()); // regular verification path will finalize
+            }
+        }
+
+        let now = Utc::now();
+        let duration_ok = position.phantom_first_seen
+            .map(|t| now.signed_duration_since(t).num_seconds() >= PHANTOM_MIN_DURATION_SECS)
+            .unwrap_or(false);
+        let confirmations_ok = position.phantom_confirmations >= PHANTOM_CONFIRMATION_THRESHOLD;
+        if !(duration_ok && confirmations_ok) {
+            return Err("Phantom position not yet eligible for synthetic closure".to_string());
+        }
+
+        let synthetic_price = if exit_price > 0.0 {
+            exit_price
+        } else {
+            position.current_price.unwrap_or(position.entry_price)
+        };
+        position.exit_price = Some(synthetic_price);
+        position.exit_time = Some(exit_time);
+        position.transaction_exit_verified = false;
+        position.effective_exit_price = None;
+        position.sol_received = None;
+        position.synthetic_exit = true;
+        position.closed_reason = Some("synthetic_phantom_closure".to_string());
+
+        log(
+            LogTag::Positions,
+            "PHANTOM_SYNTHETIC_CLOSED",
+            &format!(
+                "🧵 Synthetic closure applied to phantom {} at {:.9} (confirmations={}, duration_ok={}, confirmations_ok={})",
+                position.symbol,
+                synthetic_price,
+                position.phantom_confirmations,
+                duration_ok,
+                confirmations_ok
+            )
+        );
+
+        self.save_positions_to_disk().await;
+        Ok(())
     }
 
     /// Apply entry verification data to position using analyze-swaps-exact logic
@@ -3842,6 +4183,9 @@ impl PositionsManager {
                                 POSITIONS_FILE
                             )
                         );
+
+                        // Update cache after saving
+                        self.refresh_positions_cache().await;
                     }
                     Err(e) => {
                         log(
@@ -3856,6 +4200,13 @@ impl PositionsManager {
                 log(LogTag::Positions, "ERROR", &format!("Failed to serialize positions: {}", e));
             }
         }
+    }
+
+    /// Refresh the position cache with current data
+    async fn refresh_positions_cache(&self) {
+        let open = self.get_open_positions();
+        let closed = self.get_closed_positions();
+        update_positions_cache(open, closed).await;
     }
 }
 
@@ -3920,6 +4271,14 @@ pub enum PositionsRequest {
     },
     ForceReverifyAll {
         reply: oneshot::Sender<usize>,
+    },
+    UpdateExitSignature {
+        mint: String,
+        signature: String,
+        router_used: String,
+    },
+    TriggerPhantomReconciliation {
+        mint: String,
     },
 }
 
@@ -4046,6 +4405,23 @@ impl PositionsHandle {
         let _ = self.tx.send(PositionsRequest::ForceReverifyAll { reply: txr }).await;
         rxr.await.unwrap_or(0)
     }
+
+    pub async fn update_exit_signature_direct(
+        &self,
+        mint: String,
+        signature: String,
+        router_used: String
+    ) {
+        let _ = self.tx.send(PositionsRequest::UpdateExitSignature {
+            mint,
+            signature,
+            router_used,
+        }).await;
+    }
+
+    pub async fn trigger_phantom_reconciliation(&self, mint: String) {
+        let _ = self.tx.send(PositionsRequest::TriggerPhantomReconciliation { mint }).await;
+    }
 }
 
 static GLOBAL_POSITIONS_HANDLE: Lazy<AsyncMutex<Option<PositionsHandle>>> = Lazy::new(||
@@ -4060,6 +4436,77 @@ pub async fn set_positions_handle(handle: PositionsHandle) {
 pub async fn get_positions_handle() -> Option<PositionsHandle> {
     let guard = GLOBAL_POSITIONS_HANDLE.lock().await;
     guard.clone()
+}
+
+/// Background task runner - handles heavy operations without blocking the main actor
+async fn run_background_tasks(shutdown: Arc<Notify>, bg_tx: mpsc::Sender<BackgroundTaskMessage>) {
+    log(LogTag::Positions, "INFO", "Background task manager starting...");
+
+    let mut verification_interval = interval(Duration::from_secs(10));
+    let mut retry_interval = interval(Duration::from_secs(30));
+    let mut cleanup_interval = interval(Duration::from_secs(60));
+    let mut reconciliation_interval = interval(Duration::from_secs(1800)); // 30 minutes
+    let mut cache_refresh_interval = interval(Duration::from_secs(30)); // Refresh cache every 30s
+
+    let mut reconciliation_in_progress = false;
+
+    loop {
+        tokio::select! {
+            _ = shutdown.notified() => {
+                log(LogTag::Positions, "INFO", "Background task manager shutting down");
+                break;
+            }
+            _ = verification_interval.tick() => {
+                let _ = bg_tx.send(BackgroundTaskMessage::VerificationNeeded).await;
+            }
+            _ = retry_interval.tick() => {
+                let _ = bg_tx.send(BackgroundTaskMessage::RetryNeeded).await;
+            }
+            _ = cleanup_interval.tick() => {
+                let _ = bg_tx.send(BackgroundTaskMessage::CleanupNeeded).await;
+            }
+            _ = cache_refresh_interval.tick() => {
+                let _ = bg_tx.send(BackgroundTaskMessage::CacheRefreshNeeded).await;
+            }
+            _ = reconciliation_interval.tick() => {
+                if reconciliation_in_progress {
+                    continue;
+                }
+                
+                reconciliation_in_progress = true;
+                
+                // Get positions that need reconciliation (using cached data to avoid blocking)
+                let cached_snapshot = get_cached_position_snapshot().await;
+                let positions_needing_reconciliation: Vec<_> = cached_snapshot.open_positions.iter().enumerate()
+                    .filter_map(|(index, p)| {
+                        let needs_reconciliation = 
+                            (p.exit_transaction_signature.is_some() && !p.transaction_exit_verified) ||
+                            (p.token_amount.unwrap_or(0) > 0 && 
+                             p.exit_transaction_signature.is_none() && 
+                             p.exit_price.is_none() && 
+                             !p.phantom_remove) ||
+                            (p.phantom_remove && p.exit_transaction_signature.is_some() && !p.transaction_exit_verified) ||
+                            (p.sol_received.is_some() && p.exit_price.is_none() && p.token_amount.unwrap_or(0) > 0);
+                            
+                        if needs_reconciliation {
+                            Some((index, p.mint.clone(), p.symbol.clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .take(3) // Limit to 3 positions per cycle
+                    .collect();
+                
+                if !positions_needing_reconciliation.is_empty() {
+                    let _ = bg_tx.send(BackgroundTaskMessage::ReconciliationNeeded(positions_needing_reconciliation)).await;
+                }
+                
+                reconciliation_in_progress = false;
+            }
+        }
+    }
+
+    log(LogTag::Positions, "INFO", "Background task manager stopped");
 }
 
 /// Start the PositionsManager service (actor) and expose a global handle
@@ -4097,8 +4544,32 @@ pub async fn get_closed_positions() -> Vec<Position> {
     }
 }
 
+/// Fast cache-based position retrieval for summary (non-blocking)
+pub async fn get_cached_open_positions() -> Vec<Position> {
+    let cache = POSITIONS_CACHE.read().await;
+    cache.open_positions.clone()
+}
+
+/// Fast cache-based position retrieval for summary (non-blocking)
+pub async fn get_cached_closed_positions() -> Vec<Position> {
+    let cache = POSITIONS_CACHE.read().await;
+    cache.closed_positions.clone()
+}
+
+/// Fast cache-based position snapshot for summary (non-blocking)
+pub async fn get_cached_position_snapshot() -> PositionSnapshot {
+    let cache = POSITIONS_CACHE.read().await;
+    cache.clone()
+}
+
 pub async fn get_open_positions_count() -> usize {
     if let Some(h) = get_positions_handle().await { h.get_open_positions_count().await } else { 0 }
+}
+
+/// Fast cache-based position count for summary (non-blocking)
+pub async fn get_cached_open_positions_count() -> usize {
+    let cache = POSITIONS_CACHE.read().await;
+    cache.open_count
 }
 
 pub async fn get_positions_by_state(state: PositionState) -> Vec<Position> {
@@ -4507,8 +4978,48 @@ async fn execute_sell_with_retry_background(
                 )
             );
 
+            // CRITICAL FIX: Immediately update the position with the exit signature
+            // This prevents phantom position scenarios where transaction succeeds but isn't tracked
+            if let Some(positions_handle) = get_positions_handle().await {
+                log(
+                    LogTag::Positions,
+                    "UPDATE_EXIT_SIGNATURE",
+                    &format!(
+                        "💾 Saving exit signature {} for {} to prevent phantom position",
+                        get_signature_prefix(&transaction_signature),
+                        position.symbol
+                    )
+                );
+
+                // Update the position directly through the positions manager
+                positions_handle.update_exit_signature_direct(
+                    position.mint.clone(),
+                    transaction_signature.clone(),
+                    quote_label.clone()
+                ).await;
+
+                log(
+                    LogTag::Positions,
+                    "INFO",
+                    &format!(
+                        "✅ Exit signature saved for {}: {}",
+                        position.symbol,
+                        get_signature_prefix(&transaction_signature)
+                    )
+                );
+            } else {
+                log(
+                    LogTag::Positions,
+                    "ERROR",
+                    &format!(
+                        "❌ PositionsManager not available to save exit signature for {}",
+                        position.symbol
+                    )
+                );
+            }
+
             return Ok((transaction_signature, quote_label));
-        }
+        } // Close the inner slippage loop
 
         if let Some(error) = last_error {
             log(

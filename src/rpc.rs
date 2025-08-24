@@ -713,16 +713,18 @@ impl RpcRateLimiter {
             let elapsed = last_call.elapsed();
             if elapsed < self.current_interval {
                 let wait_duration = self.current_interval - elapsed;
-                log(
-                    LogTag::Rpc,
-                    "RATE_LIMIT",
-                    &format!(
-                        "Rate limiting main RPC: waiting {:.2}ms (current interval: {:.2}ms, 429s: {})",
-                        wait_duration.as_millis(),
-                        self.current_interval.as_millis(),
-                        self.consecutive_429s
-                    )
-                );
+                if is_debug_rpc_enabled() {
+                    log(
+                        LogTag::Rpc,
+                        "RATE_LIMIT",
+                        &format!(
+                            "Rate limiting main RPC: waiting {:.2}ms (current interval: {:.2}ms, 429s: {})",
+                            wait_duration.as_millis(),
+                            self.current_interval.as_millis(),
+                            self.consecutive_429s
+                        )
+                    );
+                }
                 tokio::time::sleep(wait_duration).await;
             }
         }

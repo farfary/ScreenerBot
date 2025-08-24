@@ -175,7 +175,11 @@ impl FileLogger {
                         if modified_chrono < cutoff_time {
                             if let Err(e) = fs::remove_file(entry.path()) {
                                 // Avoid stderr spam in dashboard mode; log to file instead
-                                let msg = format!("Failed to remove old log file {:?}: {}", entry.path(), e);
+                                let msg = format!(
+                                    "Failed to remove old log file {:?}: {}",
+                                    entry.path(),
+                                    e
+                                );
                                 crate::logger::log(LogTag::System, "WARN", &msg);
                             }
                         }
@@ -193,7 +197,11 @@ impl FileLogger {
                 let files_to_remove = remaining_files.len() - MAX_LOG_FILES;
                 for entry in remaining_files.iter().take(files_to_remove) {
                     if let Err(e) = fs::remove_file(entry.path()) {
-                        let msg = format!("Failed to remove excess log file {:?}: {}", entry.path(), e);
+                        let msg = format!(
+                            "Failed to remove excess log file {:?}: {}",
+                            entry.path(),
+                            e
+                        );
                         crate::logger::log(LogTag::System, "WARN", &msg);
                     }
                 }
@@ -894,5 +902,5 @@ pub fn log_price_change(
     let combined_message = format!("{}\n{}", line1, line2);
 
     // Log both lines using a single logger call
-    log(LogTag::Other("Positions".to_string()), "PRICE", &combined_message);
+    log(LogTag::Positions, "PRICE", &combined_message);
 }

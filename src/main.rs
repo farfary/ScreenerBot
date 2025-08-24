@@ -133,7 +133,7 @@ async fn main() {
     );
 
     let shutdown_tokens = shutdown.clone();
-    let shutdown_pricing = shutdown.clone();
+    let _shutdown_pricing = shutdown.clone();
 
     // Initialize global rugcheck service
     let database = match screenerbot::tokens::TokenDatabase::new() {

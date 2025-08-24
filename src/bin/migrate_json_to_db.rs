@@ -11,11 +11,7 @@ use std::path::Path;
 use serde_json;
 use tokio::time::Instant;
 
-use screenerbot::{
-    transactions::Transaction,
-    transactions_db::TransactionDatabase,
-    global::get_transactions_cache_dir,
-};
+use screenerbot::{ transactions::Transaction, transactions_db::TransactionDatabase };
 
 #[derive(Default)]
 struct MigrationStats {

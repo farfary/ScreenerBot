@@ -479,17 +479,6 @@ impl OhlcvService {
                     )
                 );
             }
-
-            log(
-                LogTag::Ohlcv,
-                "WATCH_ADD",
-                &format!(
-                    "📈 Added {} to OHLCV watch list (priority: {}, open_position: {})",
-                    mint,
-                    priority,
-                    is_open_position
-                )
-            );
         }
 
         // Update stats

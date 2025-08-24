@@ -27,22 +27,22 @@ use std::collections::HashMap;
 // - Prevents profit reversal on fast-moving tokens
 // ================================================================================================
 
-// 🔒 STOP LOSS PROTECTION - INTELLIGENT LOSS MANAGEMENT
-pub const STOP_LOSS_PERCENT: f64 = -55.0; // Intelligent stop loss at -55%
+// 🔒 STOP LOSS PROTECTION - PATIENT LOSS MANAGEMENT
+pub const STOP_LOSS_PERCENT: f64 = -70.0; // More tolerant stop loss at -70% (was -55%)
 
-// ➕ Liquidity-tier soft stops (percent)
-const SOFT_STOP_LARGE: f64 = -40.0; // large/XLARGE liquidity: cut earlier at -40%
-const SOFT_STOP_MEDIUM: f64 = -50.0; // medium liquidity: -50%
-const SOFT_STOP_DEFAULT: f64 = -55.0; // small/unknown: -55%
+// ➕ Liquidity-tier soft stops (percent) - MORE PATIENT
+const SOFT_STOP_LARGE: f64 = -55.0; // large/XLARGE liquidity: more patient at -55% (was -40%)
+const SOFT_STOP_MEDIUM: f64 = -65.0; // medium liquidity: more patient at -65% (was -50%)
+const SOFT_STOP_DEFAULT: f64 = -70.0; // small/unknown: more patient at -70% (was -55%)
 
-// ⏳ Time caps (minutes) — earlier than 1 hour as requested
-const SOFT_TIME_CAP_MIN: f64 = 30.0; // begin time pressure at 30 minutes
-const HARD_TIME_CAP_MIN: f64 = 45.0; // must act by 45 minutes
+// ⏳ Time caps (minutes) — MORE PATIENT FOR PROFITS
+const SOFT_TIME_CAP_MIN: f64 = 45.0; // begin time pressure at 45 minutes (was 30)
+const HARD_TIME_CAP_MIN: f64 = 60.0; // must act by 60 minutes (was 45)
 
-// 📐 Risk-Reward minimums by liquidity tier (RR = current_gain% / |MAE%|)
-const REQUIRED_RR_LARGE: f64 = 1.2; // more tolerant for high-liquidity
-const REQUIRED_RR_MEDIUM: f64 = 1.4;
-const REQUIRED_RR_DEFAULT: f64 = 1.6; // tighter for small/unknown
+// 📐 Risk-Reward minimums by liquidity tier (RR = current_gain% / |MAE%|) - MORE TOLERANT
+const REQUIRED_RR_LARGE: f64 = 1.0; // more tolerant for high-liquidity (was 1.2)
+const REQUIRED_RR_MEDIUM: f64 = 1.2; // more tolerant (was 1.4)
+const REQUIRED_RR_DEFAULT: f64 = 1.4; // more tolerant for small/unknown (was 1.6)
 
 // ⏰ OPTIMIZED HOLD TIMES BY SAFETY LEVEL (MINUTES)
 // AGGRESSIVE FOR FAST PROFITS: 0.25 minutes to 45 minutes based on volatility
@@ -92,15 +92,15 @@ const MEGA_PUMP_PERCENT: f64 = 50.0; // 50%+ = mega pump
 const STRONG_MEGA_PERCENT: f64 = 30.0; // 30%+ = strong mega pump
 const MICRO_PUMP_PERCENT: f64 = 8.0; // 8%+ = micro pump (for volatile tokens)
 const PUMP_TIME_WINDOW: f64 = 5.0; // Minutes to analyze for pump detection
-const CONSERVATIVE_PROFIT_MIN: f64 = 5.0; // Don't sell below 5% profit easily
-const TREND_PROFIT_MIN: f64 = 12.0; // Minimum for trend-based exits
+const CONSERVATIVE_PROFIT_MIN: f64 = 8.0; // Don't sell below 8% profit easily (was 5%)
+const TREND_PROFIT_MIN: f64 = 15.0; // Minimum for trend-based exits (was 12%)
 
-// ⚡ ULTRA-FAST PROFIT-TAKING THRESHOLDS - ADJUSTED FOR PUMP DETECTION
-const LIGHTNING_PROFIT_THRESHOLD: f64 = 20.0; // Increased from 10% - only real pumps
+// ⚡ ULTRA-FAST PROFIT-TAKING THRESHOLDS - ADJUSTED TO REQUIRE DECENT PROFITS
+const LIGHTNING_PROFIT_THRESHOLD: f64 = 25.0; // Increased from 20% - only significant pumps
 const LIGHTNING_PROFIT_TIME_LIMIT: f64 = 0.5; // 30 seconds minimum (was 15s)
-const FAST_PROFIT_THRESHOLD: f64 = 15.0; // Increased from 5% - avoid false exits
+const FAST_PROFIT_THRESHOLD: f64 = 20.0; // Increased from 15% - avoid false exits
 const FAST_PROFIT_TIME_LIMIT: f64 = 1.0; // 1 minute minimum
-const SPEED_PROFIT_THRESHOLD: f64 = 8.0; // Increased from 3% - be more selective
+const SPEED_PROFIT_THRESHOLD: f64 = 12.0; // Increased from 8% - be more selective, align with CONSERVATIVE_PROFIT_MIN
 const SPEED_PROFIT_TIME_LIMIT: f64 = 2.0; // 2 minutes minimum (was 1 minute)
 const MOMENTUM_MIN_TIME_SECONDS: f64 = 5.0; // Minimum 5 seconds before momentum calculation
 
@@ -1215,8 +1215,19 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         return true;
     }
 
-    // Early soft stop for higher-liquidity tokens
-    if pnl_percent <= soft_stop && minutes_held > 1.0 {
+    // Early soft stop for higher-liquidity tokens - MORE PATIENT
+    if pnl_percent <= soft_stop && minutes_held > 5.0 {
+        // Give more time before soft stop (was 1.0 minute)
+        log(
+            LogTag::Profit,
+            "PATIENT_SOFT_STOP",
+            &format!(
+                "Patient soft stop triggered: {:.2}% loss, {:.1}min held (tier: {})",
+                pnl_percent,
+                minutes_held,
+                liquidity_tier
+            )
+        );
         return true;
     }
 
@@ -1256,6 +1267,18 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     if minutes_held >= SOFT_TIME_CAP_MIN {
         if pnl_percent < CONSERVATIVE_PROFIT_MIN || rr_now < required_rr {
+            log(
+                LogTag::Profit,
+                "TIME_PRESSURE_EXIT",
+                &format!(
+                    "Time pressure exit: {:.1}min held, {:.2}% profit < {:.1}% minimum or RR {:.2} < {:.2} required",
+                    minutes_held,
+                    pnl_percent,
+                    CONSERVATIVE_PROFIT_MIN,
+                    rr_now,
+                    required_rr
+                )
+            );
             return true;
         }
     }
@@ -1417,38 +1440,38 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🧠 INTELLIGENT LOSS MANAGEMENT - TIME-BASED APPROACH
+    // 🧠 PATIENT LOSS MANAGEMENT - MORE TOLERANT TIME-BASED APPROACH
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
-    // For positions at loss, apply time-based loss management
+    // For positions at loss, apply patient time-based loss management
     if pnl_percent < 0.0 {
         let loss_severity = pnl_percent.abs();
 
-        // 🕐 30+ MINUTE LOSS MANAGEMENT RULE
-        if minutes_held >= 30.0 {
+        // 🕐 60+ MINUTE PATIENT LOSS MANAGEMENT RULE (was 30+ minutes)
+        if minutes_held >= 60.0 {
             let hours_held = minutes_held / 60.0;
 
-            // Time-based exit criteria for losses
-            let should_exit = if loss_severity >= 30.0 {
-                // Severe losses: exit after 30 minutes
+            // More patient time-based exit criteria for losses
+            let should_exit = if loss_severity >= 50.0 {
+                // Severe losses: exit after 1 hour (was 30 minutes, was 30% threshold)
                 true
-            } else if loss_severity >= 20.0 {
-                // Moderate losses: exit after 1 hour
-                hours_held >= 1.0
-            } else if loss_severity >= 15.0 {
-                // Smaller losses: exit after 1.5 hours
-                hours_held >= 1.5
-            } else {
-                // Minor losses: exit after 2 hours
+            } else if loss_severity >= 35.0 {
+                // Moderate losses: exit after 2 hours (was 1 hour, was 20% threshold)
                 hours_held >= 2.0
+            } else if loss_severity >= 25.0 {
+                // Smaller losses: exit after 3 hours (was 1.5 hours, was 15% threshold)
+                hours_held >= 3.0
+            } else {
+                // Minor losses: exit after 4 hours (was 2 hours)
+                hours_held >= 4.0
             };
 
             if should_exit {
                 log(
                     LogTag::Profit,
-                    "TIME_BASED_LOSS_EXIT",
+                    "PATIENT_LOSS_EXIT",
                     &format!(
-                        "Time-based loss exit: {:.2}% loss, {:.1}min held, severity threshold reached",
+                        "Patient loss exit after extended hold: {:.2}% loss, {:.1}min held, severity threshold reached",
                         pnl_percent,
                         minutes_held
                     )
@@ -1457,13 +1480,13 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
             }
         }
 
-        // Emergency exit for severe early losses (under 30 minutes)
-        if minutes_held < 30.0 && loss_severity >= 35.0 {
+        // Emergency exit for severe early losses - MORE TOLERANT (under 60 minutes)
+        if minutes_held < 60.0 && loss_severity >= 50.0 {
             log(
                 LogTag::Profit,
                 "EMERGENCY_LOSS_EXIT",
                 &format!(
-                    "Emergency loss exit: {:.2}% loss in {:.1}min, severe decline detected",
+                    "Emergency loss exit: {:.2}% severe loss in {:.1}min, critical decline detected",
                     pnl_percent,
                     minutes_held
                 )
@@ -1474,9 +1497,9 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         if is_debug_profit_enabled() {
             log(
                 LogTag::Profit,
-                "HOLD_LOSS",
+                "PATIENT_HOLD_LOSS",
                 &format!(
-                    "Holding position with {:.2}% loss ({:.1}min held, above thresholds)",
+                    "Patiently holding position with {:.2}% loss ({:.1}min held, being patient for recovery)",
                     pnl_percent,
                     minutes_held
                 )
@@ -1559,24 +1582,27 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         // Calculate momentum factor: faster gains = higher urgency
         let momentum_factor = pnl_percent / time_seconds; // % per second
 
-        // Dynamic threshold based on momentum
-        let dynamic_threshold = if momentum_factor > 0.1 {
-            // Very high momentum (>0.1% per second) = lower threshold
-            1.5
+        // Dynamic threshold based on momentum - MORE CONSERVATIVE
+        let dynamic_threshold = if momentum_factor > 0.2 {
+            // Ultra high momentum (>0.2% per second) = reasonable threshold
+            CONSERVATIVE_PROFIT_MIN // Use our 8% minimum
+        } else if momentum_factor > 0.1 {
+            // Very high momentum (>0.1% per second) = higher threshold
+            10.0 // 10% minimum for fast momentum
         } else if momentum_factor > 0.05 {
-            // High momentum (>0.05% per second) = medium threshold
-            2.0
+            // High momentum (>0.05% per second) = even higher threshold
+            12.0 // 12% minimum for moderate momentum
         } else {
-            // Normal momentum = standard threshold
-            2.5
+            // Normal momentum = highest threshold (don't exit on small gains)
+            15.0 // 15% minimum for normal momentum
         };
 
         if pnl_percent >= dynamic_threshold {
             log(
                 LogTag::Profit,
-                "ADAPTIVE_FAST_PROFIT",
+                "ADAPTIVE_PATIENT_PROFIT",
                 &format!(
-                    "Adaptive fast profit: {:.2}% in {:.1}s (momentum: {:.4}%/s, threshold: {:.1}%)",
+                    "Patient adaptive profit: {:.2}% in {:.1}s (momentum: {:.4}%/s, threshold: {:.1}%)",
                     pnl_percent,
                     time_seconds,
                     momentum_factor,

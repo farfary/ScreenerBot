@@ -766,7 +766,6 @@ static GLOBAL_DEXSCREENER_API: OnceCell<Arc<Mutex<DexScreenerApi>>> = OnceCell::
 pub async fn init_dexscreener_api() -> Result<(), String> {
     // Check if already initialized
     if GLOBAL_DEXSCREENER_API.get().is_some() {
-        log(LogTag::Api, "INIT", "DexScreener API already initialized, skipping");
         return Ok(());
     }
 

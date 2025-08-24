@@ -18,6 +18,7 @@ use crate::utils::get_wallet_address;
 // New pool price system is now integrated via background services
 
 use chrono::{ Utc };
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::str::FromStr;
 use tokio::sync::{ Notify, Mutex };
@@ -501,21 +502,47 @@ pub async fn print_positions_snapshot() {
     // The new pool price system runs in background and continuously updates prices
     // for open positions, so we don't need to refresh them here
 
-    // Use existing safe functions instead of locking SAVED_POSITIONS directly
-    // Add timeouts to prevent blocking when positions manager is busy
+    // Use cached positions for fast access without blocking on actor
+    // This prevents timeouts when the positions manager is busy with background tasks
     let collect_start = Instant::now();
 
-    let (open_positions, closed_positions) = match
-        tokio::time::timeout(Duration::from_secs(5), async {
-            let open = get_open_positions().await;
-            let closed = get_closed_positions().await;
-            (open, closed)
-        }).await
-    {
-        Ok((open, closed)) => (open, closed),
-        Err(_) => {
-            log(LogTag::Summary, "WARN", "Timeout collecting positions data - using empty sets");
-            (Vec::new(), Vec::new())
+    // Try cached positions first (fast path)
+    let cached_snapshot = crate::positions::get_cached_position_snapshot().await;
+    let cache_age_minutes = (Utc::now() - cached_snapshot.last_updated).num_minutes();
+
+    let (open_positions, closed_positions) = if cache_age_minutes < 5 {
+        // Use cache if it's less than 5 minutes old
+        if is_debug_summary_enabled() {
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                &format!("Using cached positions (age: {} minutes)", cache_age_minutes)
+            );
+        }
+        (cached_snapshot.open_positions, cached_snapshot.closed_positions)
+    } else {
+        // Fallback to actor query with timeout for fresh data
+        match
+            tokio::time::timeout(Duration::from_secs(3), async {
+                let open = get_open_positions().await;
+                let closed = get_closed_positions().await;
+                (open, closed)
+            }).await
+        {
+            Ok((open, closed)) => {
+                if is_debug_summary_enabled() {
+                    log(LogTag::Summary, "DEBUG", "Using fresh positions from actor");
+                }
+                (open, closed)
+            }
+            Err(_) => {
+                log(
+                    LogTag::Summary,
+                    "WARN",
+                    "Timeout collecting fresh positions - using cached data"
+                );
+                (cached_snapshot.open_positions, cached_snapshot.closed_positions)
+            }
         }
     };
 
@@ -848,7 +875,7 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
     }
 
     // Get open positions count using existing function
-    let open_count = get_open_positions_count().await;
+    let open_count = get_cached_open_positions_count().await;
 
     if is_debug_summary_enabled() {
         log(LogTag::Summary, "DEBUG", &format!("Found {} open positions for summary", open_count));
@@ -1300,7 +1327,7 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
     if is_debug_summary_enabled() {
         log(LogTag::Summary, "DEBUG", "[build_summary_report] Starting recent swaps section build");
     }
-    match tokio::time::timeout(Duration::from_millis(900), build_recent_swaps_section()).await {
+    match tokio::time::timeout(Duration::from_millis(2000), build_recent_swaps_section()).await {
         Ok(res) =>
             match res {
                 Ok(swaps_table) => {
@@ -1332,14 +1359,14 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
                 }
             }
         Err(_) => {
-            log(LogTag::Summary, "WARN", "Recent swaps table timeout - skipping");
+            log(LogTag::Summary, "WARN", "Recent swaps table timeout (2000ms) - skipping");
         }
     }
 
     // Build Recent Transactions table (last 20)
     let tx_stage_start = Instant::now();
     match
-        tokio::time::timeout(Duration::from_millis(900), build_recent_transactions_section()).await
+        tokio::time::timeout(Duration::from_millis(2000), build_recent_transactions_section()).await
     {
         Ok(res) =>
             match res {
@@ -1371,7 +1398,7 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
                 }
             }
         Err(_) => {
-            log(LogTag::Summary, "WARN", "Recent transactions table timeout - skipping");
+            log(LogTag::Summary, "WARN", "Recent transactions table timeout (2000ms) - skipping");
         }
     }
 
@@ -1479,7 +1506,7 @@ fn calculate_win_loss_streaks(pnl_values: &[f64]) -> (usize, usize) {
 async fn build_recent_swaps_section() -> Result<String, String> {
     let start_time = Instant::now();
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "[build_recent_swaps_table] Starting wallet address fetch");
+        log(LogTag::Summary, "DEBUG", "[build_recent_swaps_table] Starting optimized swap fetch");
     }
 
     let wallet_address_str = get_wallet_address().map_err(|e|
@@ -1489,33 +1516,25 @@ async fn build_recent_swaps_section() -> Result<String, String> {
         ::from_str(&wallet_address_str)
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            &format!(
-                "[build_recent_swaps_table] Creating TransactionsManager in {} ms",
-                start_time.elapsed().as_millis()
-            )
-        );
-    }
-    let manager_start = Instant::now();
     let mut manager = TransactionsManager::new(wallet_pubkey).await?;
 
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            &format!(
-                "[build_recent_swaps_table] TransactionsManager created in {} ms, fetching swaps",
-                manager_start.elapsed().as_millis()
-            )
-        );
-    }
+    // Use the optimized batch retrieval (30 transactions, filter for swaps, take best 20)
+    let txs = manager
+        .get_recent_transactions(30).await
+        .map_err(|e| format!("Failed to get recent transactions: {}", e))?;
 
-    // Get last 20 swaps (already sorted newest-first by manager)
-    let swaps_fetch_start = Instant::now();
-    let swaps = manager.get_all_swap_transactions_limited(Some(20), Some(true)).await?;
+    // Convert transactions to swap info and filter for actual swaps only
+    let mut swaps = Vec::new();
+    for tx in txs {
+        if let Some(swap_pnl) = manager.convert_to_swap_pnl_info(&tx, &mut HashMap::new(), false) {
+            if swap_pnl.swap_type == "Buy" || swap_pnl.swap_type == "Sell" {
+                swaps.push(swap_pnl);
+                if swaps.len() >= 20 {
+                    break;
+                }
+            }
+        }
+    }
 
     if is_debug_summary_enabled() {
         log(
@@ -1524,7 +1543,7 @@ async fn build_recent_swaps_section() -> Result<String, String> {
             &format!(
                 "[build_recent_swaps_table] Fetched {} swaps in {} ms",
                 swaps.len(),
-                swaps_fetch_start.elapsed().as_millis()
+                start_time.elapsed().as_millis()
             )
         );
     }
@@ -1580,7 +1599,7 @@ async fn build_recent_transactions_section() -> Result<String, String> {
         log(
             LogTag::Summary,
             "DEBUG",
-            "[build_recent_transactions_table] Starting wallet address fetch"
+            "[build_recent_transactions_table] Starting optimized transaction fetch"
         );
     }
 
@@ -1591,32 +1610,9 @@ async fn build_recent_transactions_section() -> Result<String, String> {
         ::from_str(&wallet_address_str)
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            &format!(
-                "[build_recent_transactions_table] Creating TransactionsManager in {} ms",
-                start_time.elapsed().as_millis()
-            )
-        );
-    }
-    let manager_start = Instant::now();
     let mut manager = TransactionsManager::new(wallet_pubkey).await?;
 
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            &format!(
-                "[build_recent_transactions_table] TransactionsManager created in {} ms, fetching transactions",
-                manager_start.elapsed().as_millis()
-            )
-        );
-    }
-
-    // Pull a smaller window to reduce processing - get 25 and take best 20
-    let txs_fetch_start = Instant::now();
+    // Use the optimized batch retrieval (25 transactions, take best 20)
     let mut txs = manager
         .get_recent_transactions(25).await
         .map_err(|e| format!("Failed to get recent transactions: {}", e))?;
@@ -1628,7 +1624,7 @@ async fn build_recent_transactions_section() -> Result<String, String> {
             &format!(
                 "[build_recent_transactions_table] Fetched {} transactions in {} ms",
                 txs.len(),
-                txs_fetch_start.elapsed().as_millis()
+                start_time.elapsed().as_millis()
             )
         );
     }

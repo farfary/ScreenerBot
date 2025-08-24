@@ -75,7 +75,7 @@ fn get_mint_prefix(mint: &str) -> &str {
 
 // Main monitoring intervals
 
-const NORMAL_CHECK_INTERVAL_SECS: u64 = 60; // Normal transaction checking every 15 seconds
+const NORMAL_CHECK_INTERVAL_SECS: u64 = 10; // Normal transaction checking every 10 seconds (user requirement)
 
 // RPC and batch processing limits
 const RPC_BATCH_SIZE: usize = 1000; // Transaction signatures fetch batch size (increased for fewer pages)
@@ -706,15 +706,23 @@ impl TransactionsManager {
     /// When database is available, this loads from database; otherwise falls back to JSON files
     pub async fn initialize_known_signatures(&mut self) -> Result<(), String> {
         if let Some(ref db) = self.transaction_database {
-            // Load from database
-            let count = db.get_known_signatures_count().await?;
-            self.total_transactions = count;
+            // Load signatures from known_signatures table into memory for fast lookup
+            let signatures = db.get_all_known_signatures().await?;
+            let count = signatures.len();
+
+            // Clear and populate the known_signatures HashSet
+            self.known_signatures.clear();
+            for signature in signatures {
+                self.known_signatures.insert(signature);
+            }
+
+            self.total_transactions = count as u64;
 
             if self.debug_enabled {
                 log(
                     LogTag::Transactions,
                     "DB_INIT",
-                    &format!("Loaded {} existing cached transactions from database", count)
+                    &format!("Loaded {} existing known signatures from database into memory", count)
                 );
             }
 
@@ -729,6 +737,162 @@ impl TransactionsManager {
                 "No database available - starting with empty transaction cache"
             );
         }
+
+        Ok(())
+    }
+
+    /// Perform initial discovery and backfill of recent transactions on startup
+    /// This ensures we have a complete picture of recent wallet activity
+    pub async fn startup_transaction_discovery(&mut self) -> Result<(), String> {
+        log(
+            LogTag::Transactions,
+            "STARTUP_DISCOVERY",
+            "🔍 Starting comprehensive transaction discovery and backfill"
+        );
+
+        let rpc_client = get_rpc_client();
+        let mut total_processed = 0;
+        let mut total_cached = 0;
+        let mut batch_number = 0;
+        let mut before_signature: Option<String> = None;
+
+        // Step 1: Check last 1000 transactions in batches of 1000
+        loop {
+            batch_number += 1;
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "STARTUP_DISCOVERY",
+                    &format!("📦 Fetching batch {} (1000 signatures)", batch_number)
+                );
+            }
+
+            // Fetch batch of signatures using rate-limited RPC
+            let signatures = rpc_client
+                .get_wallet_signatures_main_rpc(
+                    &self.wallet_pubkey,
+                    1000, // Batch size as requested
+                    before_signature.as_deref()
+                ).await
+                .map_err(|e| format!("Failed to fetch signature batch {}: {}", batch_number, e))?;
+
+            if signatures.is_empty() {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "STARTUP_DISCOVERY",
+                        "📭 No more signatures found - discovery complete"
+                    );
+                }
+                break;
+            }
+
+            let mut new_in_batch = 0;
+            let mut known_found = false;
+
+            // Process each signature in the batch
+            for sig_info in &signatures {
+                let signature = &sig_info.signature;
+                total_processed += 1;
+
+                // If we find a known signature, we can potentially stop
+                if self.is_signature_known(signature).await {
+                    known_found = true;
+
+                    // If this is the first batch and we found known signatures early,
+                    // we might have recent gaps to fill
+                    if batch_number == 1 && new_in_batch > 0 {
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "STARTUP_DISCOVERY",
+                                &format!("🔗 Found known signature after {} new ones - continuing to fill gaps", new_in_batch)
+                            );
+                        }
+                        continue; // Continue processing this batch to fill gaps
+                    }
+                } else {
+                    // New signature - add it to known signatures and cache it
+                    self.add_known_signature(signature).await?;
+                    new_in_batch += 1;
+                    total_cached += 1;
+
+                    // Process the transaction to cache its data
+                    if let Err(e) = self.process_transaction(signature).await {
+                        log(
+                            LogTag::Transactions,
+                            "WARN",
+                            &format!(
+                                "Failed to process startup transaction {}: {}",
+                                &signature[..8],
+                                e
+                            )
+                        );
+                    }
+                }
+
+                // Update before_signature for next batch
+                before_signature = Some(signature.clone());
+            }
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "STARTUP_DISCOVERY",
+                    &format!(
+                        "📈 Batch {} complete: {} new, {} total processed",
+                        batch_number,
+                        new_in_batch,
+                        total_processed
+                    )
+                );
+            }
+
+            // Stopping conditions
+            if batch_number == 1 && new_in_batch == 0 {
+                // First batch had no new transactions - we're caught up
+                log(
+                    LogTag::Transactions,
+                    "STARTUP_DISCOVERY",
+                    "✅ All recent transactions already known - no backfill needed"
+                );
+                break;
+            } else if batch_number > 1 && new_in_batch == 0 && known_found {
+                // Later batch with no new transactions and known signatures found - we're done
+                log(
+                    LogTag::Transactions,
+                    "STARTUP_DISCOVERY",
+                    "✅ Reached known transaction boundary - backfill complete"
+                );
+                break;
+            } else if total_processed >= 10000 {
+                // Safety limit to prevent excessive API calls
+                log(
+                    LogTag::Transactions,
+                    "STARTUP_DISCOVERY",
+                    "⚠️ Reached safety limit of 10,000 transactions - stopping discovery"
+                );
+                break;
+            }
+
+            // Rate limiting between batches
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        log(
+            LogTag::Transactions,
+            "STARTUP_DISCOVERY",
+            &format!(
+                "🎯 Discovery complete: processed {} signatures, cached {} new transactions across {} batches",
+                total_processed,
+                total_cached,
+                batch_number
+            )
+        );
+
+        // Update statistics
+        self.new_transactions_count += total_cached as u64;
 
         Ok(())
     }
@@ -828,50 +992,8 @@ impl TransactionsManager {
     /// Store processed transaction analysis in database (if available)
     async fn cache_processed_transaction(&self, transaction: &Transaction) -> Result<(), String> {
         if let Some(ref db) = self.transaction_database {
-            // Serialize complex analysis data to JSON for storage
-            let transaction_type_json = serde_json
-                ::to_string(&transaction.transaction_type)
-                .map_err(|e| format!("Failed to serialize transaction type: {}", e))?;
-
-            let direction_string = match transaction.direction {
-                TransactionDirection::Incoming => "Incoming",
-                TransactionDirection::Outgoing => "Outgoing",
-                TransactionDirection::Internal => "Internal",
-            };
-
-            // Create ProcessedTransaction for database storage
-            // Note: we use our simplified database schema format rather than the full Transaction struct
-            let processed = crate::transactions_db::ProcessedTransaction {
-                id: None,
-                signature: transaction.signature.clone(),
-                swap_type: Some(transaction_type_json),
-                token_mint: transaction.token_symbol.clone(),
-                amount_in: None, // Could be extracted from swap_analysis if needed
-                amount_out: None, // Could be extracted from swap_analysis if needed
-                price_sol: transaction.calculated_token_price_sol,
-                price_usd: None, // Could be calculated if needed
-                market_cap: None, // Could be extracted from token_info if available
-                liquidity_sol: None, // Could be extracted from swap_analysis if available
-                liquidity_usd: None, // Could be extracted from swap_analysis if available
-                volume_24h: None, // Would need external data source
-                holder_count: None, // Would need external data source
-                is_buy: match &transaction.transaction_type {
-                    TransactionType::SwapSolToToken { .. } => Some(true),
-                    TransactionType::SwapTokenToSol { .. } => Some(false),
-                    _ => None,
-                },
-                wallet_address: Some(self.wallet_pubkey.to_string()),
-                dex_name: match &transaction.transaction_type {
-                    | TransactionType::SwapSolToToken { router, .. }
-                    | TransactionType::SwapTokenToSol { router, .. } => Some(router.clone()),
-                    _ => None,
-                },
-                pool_address: None, // Could be extracted from swap_analysis if needed
-                created_at: transaction.timestamp.timestamp(),
-                updated_at: Utc::now().timestamp(),
-            };
-
-            db.store_processed_transaction(&processed).await?;
+            // Use the new store_full_transaction_analysis method for complete data
+            db.store_full_transaction_analysis(transaction).await?;
 
             if self.debug_enabled {
                 log(
@@ -885,6 +1007,39 @@ impl TransactionsManager {
             }
         }
         // No fallback needed - processed data was never cached in JSON files before
+        Ok(())
+    }
+
+    /// Update transaction status in database when status changes
+    async fn update_transaction_status_in_db(
+        &self,
+        signature: &str,
+        status: &TransactionStatus,
+        success: bool,
+        error_message: Option<&str>
+    ) -> Result<(), String> {
+        if let Some(ref db) = self.transaction_database {
+            let status_str = match status {
+                TransactionStatus::Pending => "Pending",
+                TransactionStatus::Confirmed => "Confirmed",
+                TransactionStatus::Finalized => "Finalized",
+                TransactionStatus::Failed(ref msg) => "Failed",
+            };
+
+            db.update_transaction_status(signature, status_str, success, error_message).await?;
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "STATUS_UPDATE",
+                    &format!(
+                        "Updated transaction {} status to {} in database",
+                        &signature[..8],
+                        status_str
+                    )
+                );
+            }
+        }
         Ok(())
     }
 
@@ -939,6 +1094,138 @@ impl TransactionsManager {
         }
 
         Ok(new_signatures)
+    }
+
+    /// Periodic deep gap detection and backfill (called less frequently than regular monitoring)
+    /// This function checks for gaps in transaction history and fills them
+    pub async fn check_and_backfill_gaps(&mut self) -> Result<usize, String> {
+        log(
+            LogTag::Transactions,
+            "GAP_DETECTION",
+            "🕵️ Starting periodic gap detection and backfill"
+        );
+
+        let rpc_client = get_rpc_client();
+        let mut total_backfilled = 0;
+        let mut batch_number = 0;
+        let mut before_signature: Option<String> = None;
+
+        // Check deeper history in batches of 1000 to find gaps
+        loop {
+            batch_number += 1;
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "GAP_DETECTION",
+                    &format!("📦 Checking gap detection batch {} (1000 signatures)", batch_number)
+                );
+            }
+
+            // Fetch batch of signatures
+            let signatures = rpc_client
+                .get_wallet_signatures_main_rpc(
+                    &self.wallet_pubkey,
+                    1000,
+                    before_signature.as_deref()
+                ).await
+                .map_err(|e|
+                    format!("Failed to fetch gap detection batch {}: {}", batch_number, e)
+                )?;
+
+            if signatures.is_empty() {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "GAP_DETECTION",
+                        "📭 No more signatures found - gap detection complete"
+                    );
+                }
+                break;
+            }
+
+            let mut new_in_batch = 0;
+            let mut all_known = true;
+
+            // Check each signature for gaps
+            for sig_info in &signatures {
+                let signature = &sig_info.signature;
+
+                if !self.is_signature_known(signature).await {
+                    all_known = false;
+
+                    // Found a gap - fill it
+                    self.add_known_signature(signature).await?;
+                    new_in_batch += 1;
+                    total_backfilled += 1;
+
+                    // Process the transaction
+                    if let Err(e) = self.process_transaction(signature).await {
+                        log(
+                            LogTag::Transactions,
+                            "WARN",
+                            &format!(
+                                "Failed to process gap-fill transaction {}: {}",
+                                &signature[..8],
+                                e
+                            )
+                        );
+                    }
+                }
+
+                // Update pagination cursor
+                before_signature = Some(signature.clone());
+            }
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "GAP_DETECTION",
+                    &format!("📊 Batch {} complete: {} gaps filled", batch_number, new_in_batch)
+                );
+            }
+
+            // Stopping conditions
+            if new_in_batch == 0 && all_known {
+                // No gaps found in this batch - we're done
+                log(
+                    LogTag::Transactions,
+                    "GAP_DETECTION",
+                    "✅ No more gaps found - backfill complete"
+                );
+                break;
+            } else if batch_number >= 5 {
+                // Safety limit - don't check more than 5000 transactions at once
+                log(
+                    LogTag::Transactions,
+                    "GAP_DETECTION",
+                    "⚠️ Reached safety limit of 5 batches - stopping gap detection"
+                );
+                break;
+            }
+
+            // Rate limiting between batches
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+
+        if total_backfilled > 0 {
+            log(
+                LogTag::Transactions,
+                "GAP_DETECTION",
+                &format!("🔧 Gap detection complete: backfilled {} missing transactions", total_backfilled)
+            );
+
+            // Update statistics
+            self.new_transactions_count += total_backfilled as u64;
+        } else {
+            log(
+                LogTag::Transactions,
+                "GAP_DETECTION",
+                "✨ No gaps found - transaction history is complete"
+            );
+        }
+
+        Ok(total_backfilled)
     }
 
     // Removed obsolete build_transaction_from_processed (old schema fields)
@@ -1066,7 +1353,18 @@ impl TransactionsManager {
             transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
         }
 
-        // Store in database
+        // Store raw transaction in database first (required for foreign key)
+        if let Err(e) = self.cache_transaction(&transaction).await {
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    &format!("Failed to cache raw transaction: {}", e)
+                );
+            }
+        }
+
+        // Store processed transaction in database
         if let Err(e) = self.cache_processed_transaction(&transaction).await {
             if self.debug_enabled {
                 log(
@@ -1706,6 +2004,22 @@ impl TransactionsManager {
         // Defensive: if raw data has block_time and no error, treat as finalized
         if transaction.block_time.is_some() && transaction.success {
             transaction.status = TransactionStatus::Finalized;
+
+            // Update status in database
+            if
+                let Err(e) = self.update_transaction_status_in_db(
+                    &transaction.signature,
+                    &transaction.status,
+                    transaction.success,
+                    transaction.error_message.as_deref()
+                ).await
+            {
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    &format!("Failed to update transaction status in DB: {}", e)
+                );
+            }
         }
 
         // Persist a snapshot for finalized transactions to avoid future re-analysis
@@ -1785,6 +2099,22 @@ impl TransactionsManager {
         // Defensive: if raw data has block_time and no error, treat as finalized
         if transaction.block_time.is_some() && transaction.success {
             transaction.status = TransactionStatus::Finalized;
+
+            // Update status in database
+            if
+                let Err(e) = self.update_transaction_status_in_db(
+                    &transaction.signature,
+                    &transaction.status,
+                    transaction.success,
+                    transaction.error_message.as_deref()
+                ).await
+            {
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    &format!("Failed to update transaction status in DB: {}", e)
+                );
+            }
         }
 
         // Persist a snapshot for finalized transactions to avoid future re-analysis
@@ -1892,17 +2222,56 @@ impl TransactionsManager {
     }
 
     /// Get recent transactions from cache (for orphaned position recovery)
-    pub async fn get_recent_transactions(&self, limit: usize) -> Result<Vec<Transaction>, String> {
-        // Database-only implementation: pull most recent raw transactions and reconstruct
+    pub async fn get_recent_transactions(
+        &mut self,
+        limit: usize
+    ) -> Result<Vec<Transaction>, String> {
+        // Database-only implementation using optimized batch retrieval
         if let Some(db) = &self.transaction_database {
-            let signatures = db.get_all_signatures().await?; // ordered by slot DESC
-            let mut out = Vec::new();
-            for sig in signatures.into_iter().take(limit) {
-                if let Ok(Some(tx)) = get_transaction(&sig).await {
-                    out.push(tx);
+            // Use the new optimized batch function to avoid N+1 queries
+            let mut transactions = db.get_recent_transactions_batch(limit).await?;
+
+            // Hydrate transactions that need analysis but only if they have raw data
+            let mut hydrated_count = 0;
+            for tx in &mut transactions {
+                // Only try to hydrate if we have raw data and the transaction type is unknown
+                if
+                    matches!(tx.transaction_type, TransactionType::Unknown) &&
+                    tx.raw_transaction_data.is_some()
+                {
+                    // Try to hydrate from cached analysis first
+                    if !self.try_hydrate_from_cached_analysis(tx) {
+                        // If no cached analysis, recalculate (but don't fetch from RPC)
+                        if let Err(e) = self.recalculate_transaction_analysis(tx).await {
+                            if self.debug_enabled {
+                                log(
+                                    LogTag::Transactions,
+                                    "WARN",
+                                    &format!(
+                                        "Failed to recalculate analysis for {}: {}",
+                                        &tx.signature[..8],
+                                        e
+                                    )
+                                );
+                            }
+                        } else {
+                            hydrated_count += 1;
+                        }
+                    } else {
+                        hydrated_count += 1;
+                    }
                 }
             }
-            Ok(out)
+
+            if self.debug_enabled && hydrated_count > 0 {
+                log(
+                    LogTag::Transactions,
+                    "HYDRATE",
+                    &format!("Hydrated {} transactions from {} requested", hydrated_count, limit)
+                );
+            }
+
+            Ok(transactions)
         } else {
             Err("Transaction database unavailable".into())
         }
@@ -5264,6 +5633,12 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         )
     );
 
+    // Perform startup transaction discovery and backfill
+    if let Err(e) = manager.startup_transaction_discovery().await {
+        log(LogTag::Transactions, "ERROR", &format!("Failed to complete startup discovery: {}", e));
+        // Don't return here - continue with normal operation even if discovery fails
+    }
+
     // CRITICAL: Initialize global transaction manager for positions manager integration
     if let Err(e) = initialize_global_transaction_manager(wallet_address).await {
         log(
@@ -5289,10 +5664,10 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         "🟢 Position recalculation complete - traders can now operate"
     );
 
-    // Simplified dual-loop monitoring system (Phase 1 implementation)
+    // Enhanced dual-loop monitoring system with gap detection
     let mut next_normal_check =
         tokio::time::Instant::now() + Duration::from_secs(NORMAL_CHECK_INTERVAL_SECS);
-    let mut next_priority_check = tokio::time::Instant::now() + Duration::from_secs(60);
+    let mut next_gap_check = tokio::time::Instant::now() + Duration::from_secs(300); // Gap detection every 5 minutes
 
     loop {
         tokio::select! {
@@ -5301,12 +5676,12 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                 break;
             }
             _ = tokio::time::sleep_until(next_normal_check) => {
-                // Normal transaction monitoring every 15 seconds
+                // Normal transaction monitoring every 10 seconds
                 match do_monitoring_cycle(&mut manager).await {
                     Ok((new_transaction_count, _)) => {
                         if manager.debug_enabled {
-                            log(LogTag::Transactions, "NORMAL", &format!(
-                                "� Normal check complete - {} new transactions",
+                            log(LogTag::Transactions, "SUCCESS", &format!(
+                                "Found {} swap transactions",
                                 new_transaction_count
                             ));
                         }
@@ -5316,14 +5691,25 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                     }
                 }
                 next_normal_check = tokio::time::Instant::now() + Duration::from_secs(NORMAL_CHECK_INTERVAL_SECS);
-
-                // Normal transaction monitoring
-                next_normal_check = tokio::time::Instant::now() + Duration::from_secs(NORMAL_CHECK_INTERVAL_SECS);
             }
-            _ = tokio::time::sleep_until(next_priority_check) => {
-                // Priority transaction system disabled - positions handled by positions manager
-                log(LogTag::Transactions, "INFO", "Priority transaction checking disabled - using positions manager");
-                next_priority_check = tokio::time::Instant::now() + Duration::from_secs(60);
+            _ = tokio::time::sleep_until(next_gap_check) => {
+                // Periodic gap detection and backfill every 5 minutes
+                match manager.check_and_backfill_gaps().await {
+                    Ok(backfilled_count) => {
+                        if backfilled_count > 0 {
+                            log(LogTag::Transactions, "GAP_DETECTION", &format!(
+                                "✅ Gap detection complete - backfilled {} transactions",
+                                backfilled_count
+                            ));
+                        } else if manager.debug_enabled {
+                            log(LogTag::Transactions, "GAP_DETECTION", "✅ No gaps found");
+                        }
+                    }
+                    Err(e) => {
+                        log(LogTag::Transactions, "ERROR", &format!("Gap detection error: {}", e));
+                    }
+                }
+                next_gap_check = tokio::time::Instant::now() + Duration::from_secs(300);
             }
         }
     }
@@ -5431,11 +5817,6 @@ pub async fn initialize_global_transaction_manager(wallet_pubkey: Pubkey) -> Res
     match tokio::time::timeout(Duration::from_secs(5), GLOBAL_TRANSACTION_MANAGER.lock()).await {
         Ok(mut manager_guard) => {
             if manager_guard.is_some() {
-                log(
-                    LogTag::Transactions,
-                    "INIT_SKIP",
-                    "Global transaction manager already initialized"
-                );
                 return Ok(());
             }
 

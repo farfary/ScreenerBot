@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     token_decimals INTEGER,
     cached_analysis TEXT, -- JSON blob of CachedAnalysis
     analysis_version INTEGER NOT NULL DEFAULT 1,
-    processed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    processed_at TEXT NOT NULL DEFAULT (datetime('now')), -- When first processed
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')), -- When status changes or re-processed
     FOREIGN KEY (signature) REFERENCES raw_transactions(signature) ON DELETE CASCADE
 );
 "#;
@@ -364,6 +365,30 @@ impl TransactionDatabase {
         Ok(count as u64)
     }
 
+    /// Get all known signatures for initialization
+    pub async fn get_all_known_signatures(&self) -> Result<Vec<String>, String> {
+        let conn = self.pool
+            .get()
+            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+
+        let mut signatures = Vec::new();
+        let mut stmt = conn
+            .prepare("SELECT signature FROM known_signatures ORDER BY added_at DESC")
+            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+
+        let rows = stmt
+            .query_map([], |row| { Ok(row.get::<_, String>(0)?) })
+            .map_err(|e| format!("Failed to execute query: {}", e))?;
+
+        for row in rows {
+            if let Ok(signature) = row {
+                signatures.push(signature);
+            }
+        }
+
+        Ok(signatures)
+    }
+
     /// Store raw transaction data
     pub async fn store_raw_transaction(
         &self,
@@ -449,11 +474,13 @@ impl TransactionDatabase {
                 token_transfers, sol_balance_changes, token_balance_changes, log_messages,
                 instructions, swap_analysis, position_impact, profit_calculation, fee_breakdown,
                 ata_analysis, token_info, calculated_token_price_sol, price_source, token_symbol,
-                token_decimals, cached_analysis, updated_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, datetime('now'))"#,
+                token_decimals, cached_analysis, analysis_version, processed_at, updated_at)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, 
+                       COALESCE((SELECT processed_at FROM processed_transactions WHERE signature = ?1), datetime('now')),
+                       datetime('now'))"#,
                 params![
                     transaction.signature,
-                    transaction.swap_type,
+                    transaction.swap_type.as_deref().unwrap_or("Unknown"),
                     "Internal", // Default direction
                     0.0, // fee_sol - could be extracted from the transaction if needed
                     0.0, // sol_balance_change - could be extracted if needed
@@ -470,12 +497,208 @@ impl TransactionDatabase {
                     None::<String>, // token_info JSON
                     transaction.price_sol,
                     None::<String>, // price_source
-                    transaction.token_mint, // Using token_mint as symbol for now
+                    transaction.token_mint.as_deref(), // Using token_mint as symbol for now
                     None::<i32>, // token_decimals
-                    None::<String> // cached_analysis JSON
+                    None::<String>, // cached_analysis JSON
+                    1 // analysis_version
                 ]
             )
             .map_err(|e| format!("Failed to store processed transaction: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Store full transaction analysis (from Transaction struct)
+    /// This is the main method for storing complete transaction analysis
+    pub async fn store_full_transaction_analysis(
+        &self,
+        transaction: &crate::transactions::Transaction
+    ) -> Result<(), String> {
+        let conn = self.get_connection()?;
+
+        // Serialize complex structures to JSON
+        let transaction_type_json = serde_json
+            ::to_string(&transaction.transaction_type)
+            .map_err(|e| format!("Failed to serialize transaction type: {}", e))?;
+
+        let direction_str = match transaction.direction {
+            crate::transactions::TransactionDirection::Incoming => "Incoming",
+            crate::transactions::TransactionDirection::Outgoing => "Outgoing",
+            crate::transactions::TransactionDirection::Internal => "Internal",
+        };
+
+        let token_transfers_json = if !transaction.token_transfers.is_empty() {
+            Some(
+                serde_json
+                    ::to_string(&transaction.token_transfers)
+                    .map_err(|e| format!("Failed to serialize token transfers: {}", e))?
+            )
+        } else {
+            None
+        };
+
+        let sol_balance_changes_json = if !transaction.sol_balance_changes.is_empty() {
+            Some(
+                serde_json
+                    ::to_string(&transaction.sol_balance_changes)
+                    .map_err(|e| format!("Failed to serialize SOL balance changes: {}", e))?
+            )
+        } else {
+            None
+        };
+
+        let token_balance_changes_json = if !transaction.token_balance_changes.is_empty() {
+            Some(
+                serde_json
+                    ::to_string(&transaction.token_balance_changes)
+                    .map_err(|e| format!("Failed to serialize token balance changes: {}", e))?
+            )
+        } else {
+            None
+        };
+
+        let log_messages_json = if !transaction.log_messages.is_empty() {
+            Some(
+                serde_json
+                    ::to_string(&transaction.log_messages)
+                    .map_err(|e| format!("Failed to serialize log messages: {}", e))?
+            )
+        } else {
+            None
+        };
+
+        let instructions_json = if !transaction.instructions.is_empty() {
+            Some(
+                serde_json
+                    ::to_string(&transaction.instructions)
+                    .map_err(|e| format!("Failed to serialize instructions: {}", e))?
+            )
+        } else {
+            None
+        };
+
+        let swap_analysis_json = if let Some(ref swap_analysis) = transaction.swap_analysis {
+            Some(
+                serde_json
+                    ::to_string(swap_analysis)
+                    .map_err(|e| format!("Failed to serialize swap analysis: {}", e))?
+            )
+        } else {
+            None
+        };
+
+        let fee_breakdown_json = if let Some(ref fee_breakdown) = transaction.fee_breakdown {
+            Some(
+                serde_json
+                    ::to_string(fee_breakdown)
+                    .map_err(|e| format!("Failed to serialize fee breakdown: {}", e))?
+            )
+        } else {
+            None
+        };
+
+        let ata_analysis_json = if let Some(ref ata_analysis) = transaction.ata_analysis {
+            Some(
+                serde_json
+                    ::to_string(ata_analysis)
+                    .map_err(|e| format!("Failed to serialize ATA analysis: {}", e))?
+            )
+        } else {
+            None
+        };
+
+        let token_info_json = if let Some(ref token_info) = transaction.token_info {
+            Some(
+                serde_json
+                    ::to_string(token_info)
+                    .map_err(|e| format!("Failed to serialize token info: {}", e))?
+            )
+        } else {
+            None
+        };
+
+        let price_source_str = if let Some(ref price_source) = transaction.price_source {
+            Some(format!("{:?}", price_source)) // Convert enum to string
+        } else {
+            None
+        };
+
+        let cached_analysis_json = if let Some(ref cached_analysis) = transaction.cached_analysis {
+            Some(
+                serde_json
+                    ::to_string(cached_analysis)
+                    .map_err(|e| format!("Failed to serialize cached analysis: {}", e))?
+            )
+        } else {
+            None
+        };
+
+        conn
+            .execute(
+                r#"INSERT OR REPLACE INTO processed_transactions 
+               (signature, transaction_type, direction, fee_sol, sol_balance_change, 
+                token_transfers, sol_balance_changes, token_balance_changes, log_messages,
+                instructions, swap_analysis, position_impact, profit_calculation, fee_breakdown,
+                ata_analysis, token_info, calculated_token_price_sol, price_source, token_symbol,
+                token_decimals, cached_analysis, analysis_version, processed_at, updated_at)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, 
+                       COALESCE((SELECT processed_at FROM processed_transactions WHERE signature = ?1), datetime('now')),
+                       datetime('now'))"#,
+                params![
+                    transaction.signature,
+                    transaction_type_json,
+                    direction_str,
+                    transaction.fee_sol,
+                    transaction.sol_balance_change,
+                    token_transfers_json,
+                    sol_balance_changes_json,
+                    token_balance_changes_json,
+                    log_messages_json,
+                    instructions_json,
+                    swap_analysis_json,
+                    None::<String>, // position_impact JSON - not stored yet
+                    None::<String>, // profit_calculation JSON - not stored yet
+                    fee_breakdown_json,
+                    ata_analysis_json,
+                    token_info_json,
+                    transaction.calculated_token_price_sol,
+                    price_source_str,
+                    transaction.token_symbol.as_deref(),
+                    transaction.token_decimals.map(|d| d as i32),
+                    cached_analysis_json,
+                    2 // analysis_version - increment since we're storing more fields
+                ]
+            )
+            .map_err(|e| format!("Failed to store full transaction analysis: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Update transaction status in raw_transactions table
+    /// This only updates status and updated_at, preserving processed_at
+    pub async fn update_transaction_status(
+        &self,
+        signature: &str,
+        status: &str,
+        success: bool,
+        error_message: Option<&str>
+    ) -> Result<(), String> {
+        let conn = self.get_connection()?;
+
+        conn
+            .execute(
+                "UPDATE raw_transactions SET status = ?1, success = ?2, error_message = ?3, updated_at = datetime('now') WHERE signature = ?4",
+                params![status, success, error_message, signature]
+            )
+            .map_err(|e| format!("Failed to update transaction status: {}", e))?;
+
+        // Also update the processed_transactions updated_at if it exists
+        conn
+            .execute(
+                "UPDATE processed_transactions SET updated_at = datetime('now') WHERE signature = ?1",
+                params![signature]
+            )
+            .map_err(|e| format!("Failed to update processed transaction timestamp: {}", e))?;
 
         Ok(())
     }
@@ -489,7 +712,8 @@ impl TransactionDatabase {
 
         let result = conn
             .query_row(
-                r#"SELECT signature, transaction_type, calculated_token_price_sol, token_symbol, processed_at
+                r#"SELECT signature, transaction_type, calculated_token_price_sol, token_symbol, processed_at,
+                          direction, fee_sol, sol_balance_change, price_source, token_decimals, updated_at
                FROM processed_transactions WHERE signature = ?1"#,
                 params![signature],
                 |row| {
@@ -498,21 +722,21 @@ impl TransactionDatabase {
                         signature: row.get(0)?,
                         swap_type: row.get(1)?,
                         token_mint: row.get(3)?,
-                        amount_in: None,
-                        amount_out: None,
+                        amount_in: None, // Not stored in simple ProcessedTransaction
+                        amount_out: None, // Not stored in simple ProcessedTransaction
                         price_sol: row.get(2)?,
-                        price_usd: None,
-                        market_cap: None,
-                        liquidity_sol: None,
-                        liquidity_usd: None,
-                        volume_24h: None,
-                        holder_count: None,
-                        is_buy: None,
-                        wallet_address: None,
-                        dex_name: None,
-                        pool_address: None,
-                        created_at: 0,
-                        updated_at: 0,
+                        price_usd: None, // Could be calculated from price_sol if needed
+                        market_cap: None, // Not stored currently
+                        liquidity_sol: None, // Not stored currently
+                        liquidity_usd: None, // Not stored currently
+                        volume_24h: None, // Not stored currently
+                        holder_count: None, // Not stored currently
+                        is_buy: None, // Could be derived from transaction_type if needed
+                        wallet_address: None, // Not stored currently
+                        dex_name: None, // Could be extracted from transaction_type if needed
+                        pool_address: None, // Not stored currently
+                        created_at: 0, // Could parse processed_at if needed
+                        updated_at: 0, // Could parse updated_at if needed
                     })
                 }
             )
@@ -520,6 +744,178 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to get processed transaction: {}", e))?;
 
         Ok(result)
+    }
+
+    /// Get full transaction data by reconstructing from both raw and processed tables
+    /// This is more efficient than using get_transaction which may trigger RPC calls
+    pub async fn get_full_transaction_from_db(
+        &self,
+        signature: &str
+    ) -> Result<Option<crate::transactions::Transaction>, String> {
+        let conn = self.get_connection()?;
+
+        // First, get raw transaction data
+        let raw_result = conn
+            .query_row(
+                r#"SELECT signature, slot, block_time, timestamp, status, success, error_message, raw_transaction_data
+                   FROM raw_transactions WHERE signature = ?1"#,
+                params![signature],
+                |row| {
+                    let raw_data_str: Option<String> = row.get(7)?;
+                    let raw_data = if let Some(json_str) = raw_data_str {
+                        serde_json::from_str(&json_str).ok()
+                    } else {
+                        None
+                    };
+
+                    let status_str: String = row.get(4)?;
+                    let status = match status_str.as_str() {
+                        "Pending" => crate::transactions::TransactionStatus::Pending,
+                        "Confirmed" => crate::transactions::TransactionStatus::Confirmed,
+                        "Finalized" => crate::transactions::TransactionStatus::Finalized,
+                        _ => crate::transactions::TransactionStatus::Failed(status_str),
+                    };
+
+                    let timestamp_str: String = row.get(3)?;
+                    let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now());
+
+                    Ok((
+                        row.get::<_, String>(0)?, // signature
+                        row.get::<_, Option<i64>>(1)?.map(|s| s as u64), // slot
+                        row.get::<_, Option<i64>>(2)?, // block_time
+                        timestamp, // timestamp
+                        status, // status
+                        row.get::<_, bool>(5)?, // success
+                        row.get::<_, Option<String>>(6)?, // error_message
+                        raw_data, // raw_transaction_data
+                    ))
+                }
+            )
+            .optional()
+            .map_err(|e| format!("Failed to get raw transaction: {}", e))?;
+
+        if
+            let Some((sig, slot, block_time, timestamp, status, success, error_message, raw_data)) =
+                raw_result
+        {
+            // Now get processed transaction data if available
+            let processed_result = conn
+                .query_row(
+                    r#"SELECT transaction_type, direction, fee_sol, sol_balance_change,
+                              calculated_token_price_sol, price_source, token_symbol, token_decimals,
+                              cached_analysis
+                       FROM processed_transactions WHERE signature = ?1"#,
+                    params![signature],
+                    |row| {
+                        let transaction_type_str: String = row.get(0)?;
+                        let transaction_type = serde_json
+                            ::from_str(&transaction_type_str)
+                            .unwrap_or(crate::transactions::TransactionType::Unknown);
+
+                        let direction_str: String = row.get(1)?;
+                        let direction = match direction_str.as_str() {
+                            "Incoming" => crate::transactions::TransactionDirection::Incoming,
+                            "Outgoing" => crate::transactions::TransactionDirection::Outgoing,
+                            _ => crate::transactions::TransactionDirection::Internal,
+                        };
+
+                        let cached_analysis_str: Option<String> = row.get(8)?;
+                        let cached_analysis = if let Some(json_str) = cached_analysis_str {
+                            serde_json::from_str(&json_str).ok()
+                        } else {
+                            None
+                        };
+
+                        Ok((
+                            transaction_type,
+                            direction,
+                            row.get::<_, f64>(2)?, // fee_sol
+                            row.get::<_, f64>(3)?, // sol_balance_change
+                            row.get::<_, Option<f64>>(4)?, // calculated_token_price_sol
+                            row.get::<_, Option<String>>(5)?, // price_source
+                            row.get::<_, Option<String>>(6)?, // token_symbol
+                            row.get::<_, Option<i32>>(7)?.map(|d| d as u8), // token_decimals
+                            cached_analysis, // cached_analysis
+                        ))
+                    }
+                )
+                .optional()
+                .map_err(|e| format!("Failed to get processed transaction: {}", e))?;
+
+            // Construct the Transaction object
+            let mut transaction = crate::transactions::Transaction {
+                signature: sig,
+                slot,
+                block_time,
+                timestamp,
+                status,
+                success,
+                error_message,
+                raw_transaction_data: raw_data,
+                last_updated: Utc::now(),
+
+                // Initialize with defaults - will be populated from processed data if available
+                transaction_type: crate::transactions::TransactionType::Unknown,
+                direction: crate::transactions::TransactionDirection::Internal,
+                fee_sol: 0.0,
+                sol_balance_change: 0.0,
+                token_transfers: Vec::new(),
+                log_messages: Vec::new(),
+                instructions: Vec::new(),
+                sol_balance_changes: Vec::new(),
+                token_balance_changes: Vec::new(),
+                swap_analysis: None,
+                position_impact: None,
+                profit_calculation: None,
+                fee_breakdown: None,
+                ata_analysis: None,
+                token_info: None,
+                calculated_token_price_sol: None,
+                price_source: None,
+                token_symbol: None,
+                token_decimals: None,
+                cached_analysis: None,
+            };
+
+            // Populate from processed data if available
+            if
+                let Some(
+                    (
+                        tx_type,
+                        direction,
+                        fee_sol,
+                        sol_balance_change,
+                        price_sol,
+                        price_source_str,
+                        token_symbol,
+                        token_decimals,
+                        cached_analysis,
+                    ),
+                ) = processed_result
+            {
+                transaction.transaction_type = tx_type;
+                transaction.direction = direction;
+                transaction.fee_sol = fee_sol;
+                transaction.sol_balance_change = sol_balance_change;
+                transaction.calculated_token_price_sol = price_sol;
+                transaction.token_symbol = token_symbol;
+                transaction.token_decimals = token_decimals;
+                transaction.cached_analysis = cached_analysis;
+
+                if let Some(ps_str) = price_source_str {
+                    // Parse price_source if needed
+                    transaction.price_source = Some(
+                        crate::tokens::types::PriceSourceType::DexScreenerApi
+                    );
+                }
+            }
+
+            Ok(Some(transaction))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Store deferred retry
@@ -658,6 +1054,164 @@ impl TransactionDatabase {
         }
 
         Ok(signatures)
+    }
+
+    /// Get recent transactions efficiently in a single database operation
+    /// This avoids the N+1 query problem of calling get_transaction for each signature
+    pub async fn get_recent_transactions_batch(
+        &self,
+        limit: usize
+    ) -> Result<Vec<crate::transactions::Transaction>, String> {
+        let conn = self.get_connection()?;
+
+        let mut transactions = Vec::new();
+
+        // Get recent transactions with LEFT JOIN to get both raw and processed data in one query
+        let mut stmt = conn
+            .prepare(
+                r#"SELECT 
+                    r.signature, r.slot, r.block_time, r.timestamp, r.status, r.success, r.error_message, r.raw_transaction_data,
+                    p.transaction_type, p.direction, p.fee_sol, p.sol_balance_change,
+                    p.calculated_token_price_sol, p.price_source, p.token_symbol, p.token_decimals, p.cached_analysis
+                   FROM raw_transactions r
+                   LEFT JOIN processed_transactions p ON r.signature = p.signature
+                   ORDER BY r.slot DESC, r.timestamp DESC
+                   LIMIT ?1"#
+            )
+            .map_err(|e| format!("Failed to prepare batch query: {}", e))?;
+
+        let rows = stmt
+            .query_map(params![limit], |row| {
+                // Parse raw transaction data
+                let raw_data_str: Option<String> = row.get(7)?;
+                let raw_data = if let Some(json_str) = raw_data_str {
+                    serde_json::from_str(&json_str).ok()
+                } else {
+                    None
+                };
+
+                let status_str: String = row.get(4)?;
+                let status = match status_str.as_str() {
+                    "Pending" => crate::transactions::TransactionStatus::Pending,
+                    "Confirmed" => crate::transactions::TransactionStatus::Confirmed,
+                    "Finalized" => crate::transactions::TransactionStatus::Finalized,
+                    _ => crate::transactions::TransactionStatus::Failed(status_str),
+                };
+
+                let timestamp_str: String = row.get(3)?;
+                let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now());
+
+                // Parse processed transaction data (may be NULL if LEFT JOIN didn't match)
+                let (
+                    transaction_type,
+                    direction,
+                    fee_sol,
+                    sol_balance_change,
+                    price_sol,
+                    token_symbol,
+                    token_decimals,
+                    cached_analysis,
+                ) = if let Ok(Some(tx_type_str)) = row.get::<_, Option<String>>(8) {
+                    let tx_type = serde_json
+                        ::from_str(&tx_type_str)
+                        .unwrap_or(crate::transactions::TransactionType::Unknown);
+
+                    let direction_str: String = row.get(9).unwrap_or("Internal".to_string());
+                    let direction = match direction_str.as_str() {
+                        "Incoming" => crate::transactions::TransactionDirection::Incoming,
+                        "Outgoing" => crate::transactions::TransactionDirection::Outgoing,
+                        _ => crate::transactions::TransactionDirection::Internal,
+                    };
+
+                    let cached_analysis_str: Option<String> = row.get(16).unwrap_or(None);
+                    let cached_analysis = if let Some(json_str) = cached_analysis_str {
+                        serde_json::from_str(&json_str).ok()
+                    } else {
+                        None
+                    };
+
+                    (
+                        tx_type,
+                        direction,
+                        row.get(10).unwrap_or(0.0),
+                        row.get(11).unwrap_or(0.0),
+                        row.get(12).unwrap_or(None),
+                        row.get(14).unwrap_or(None),
+                        row
+                            .get::<_, Option<i32>>(15)
+                            .unwrap_or(None)
+                            .map(|d| d as u8),
+                        cached_analysis,
+                    )
+                } else {
+                    // No processed data available - use defaults
+                    (
+                        crate::transactions::TransactionType::Unknown,
+                        crate::transactions::TransactionDirection::Internal,
+                        0.0,
+                        0.0,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                };
+
+                Ok(crate::transactions::Transaction {
+                    signature: row.get(0)?,
+                    slot: row.get::<_, Option<i64>>(1)?.map(|s| s as u64),
+                    block_time: row.get(2)?,
+                    timestamp,
+                    status,
+                    success: row.get(5)?,
+                    error_message: row.get(6)?,
+                    raw_transaction_data: raw_data,
+
+                    transaction_type,
+                    direction,
+                    fee_sol,
+                    sol_balance_change,
+                    calculated_token_price_sol: price_sol,
+                    token_symbol,
+                    token_decimals,
+                    cached_analysis,
+
+                    last_updated: Utc::now(),
+
+                    // Initialize other fields with defaults
+                    token_transfers: Vec::new(),
+                    log_messages: Vec::new(),
+                    instructions: Vec::new(),
+                    sol_balance_changes: Vec::new(),
+                    token_balance_changes: Vec::new(),
+                    swap_analysis: None,
+                    position_impact: None,
+                    profit_calculation: None,
+                    fee_breakdown: None,
+                    ata_analysis: None,
+                    token_info: None,
+                    price_source: None,
+                })
+            })
+            .map_err(|e| format!("Failed to execute batch query: {}", e))?;
+
+        for row_result in rows {
+            match row_result {
+                Ok(transaction) => transactions.push(transaction),
+                Err(e) => {
+                    // Log error but continue processing other transactions
+                    log(
+                        crate::logger::LogTag::Transactions,
+                        "WARN",
+                        &format!("Failed to parse transaction in batch: {}", e)
+                    );
+                }
+            }
+        }
+
+        Ok(transactions)
     }
 
     /// Vacuum database to reclaim space and optimize performance
