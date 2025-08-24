@@ -810,9 +810,32 @@ impl TransactionDatabase {
                     params![signature],
                     |row| {
                         let transaction_type_str: String = row.get(0)?;
-                        let transaction_type = serde_json
-                            ::from_str(&transaction_type_str)
-                            .unwrap_or(crate::transactions::TransactionType::Unknown);
+                        let transaction_type = match serde_json::from_str(&transaction_type_str) {
+                            Ok(t) => t,
+                            Err(e) => {
+                                log(
+                                    crate::logger::LogTag::Transactions,
+                                    "DESERIALIZE_ERROR",
+                                    &format!(
+                                        "Failed to deserialize transaction_type for {}: {} - JSON: {}",
+                                        signature,
+                                        e,
+                                        &transaction_type_str
+                                    )
+                                );
+                                crate::transactions::TransactionType::Unknown
+                            }
+                        };
+
+                        log(
+                            crate::logger::LogTag::Transactions,
+                            "DB_LOAD_TYPE",
+                            &format!(
+                                "Loaded transaction {} with type: {:?}",
+                                &signature[..(8).min(signature.len())],
+                                transaction_type
+                            )
+                        );
 
                         let direction_str: String = row.get(1)?;
                         let direction = match direction_str.as_str() {
@@ -846,7 +869,7 @@ impl TransactionDatabase {
 
             // Construct the Transaction object
             let mut transaction = crate::transactions::Transaction {
-                signature: sig,
+                signature: sig.clone(),
                 slot,
                 block_time,
                 timestamp,
@@ -895,6 +918,16 @@ impl TransactionDatabase {
                     ),
                 ) = processed_result
             {
+                log(
+                    crate::logger::LogTag::Transactions,
+                    "DB_POPULATE",
+                    &format!(
+                        "Populating transaction {} with type: {:?}",
+                        &sig[..(8).min(sig.len())],
+                        tx_type
+                    )
+                );
+
                 transaction.transaction_type = tx_type;
                 transaction.direction = direction;
                 transaction.fee_sol = fee_sol;

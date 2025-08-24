@@ -4212,71 +4212,32 @@ impl TransactionsManager {
     /// Get transaction from database (for fallback processing)
     pub async fn get_transaction_from_db(&self, signature: &str) -> Option<Transaction> {
         if let Some(ref db) = self.transaction_database {
-            match db.get_raw_transaction(signature).await {
-                Ok(Some(raw)) => {
-                    // Build Transaction from raw data
-                    let mut transaction = Transaction {
-                        signature: raw.signature.clone(),
-                        slot: raw.slot,
-                        block_time: raw.block_time,
-                        timestamp: DateTime::parse_from_rfc3339(&raw.timestamp)
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .unwrap_or_else(|_| Utc::now()),
-                        status: match raw.status.as_str() {
-                            "Finalized" => TransactionStatus::Finalized,
-                            "Confirmed" => TransactionStatus::Confirmed,
-                            "Pending" => TransactionStatus::Pending,
-                            s if s.starts_with("Failed") =>
-                                TransactionStatus::Failed(
-                                    raw.error_message.clone().unwrap_or_else(|| s.to_string())
-                                ),
-                            _ => TransactionStatus::Pending,
-                        },
-                        transaction_type: TransactionType::Unknown,
-                        direction: TransactionDirection::Internal,
-                        success: raw.success,
-                        error_message: raw.error_message.clone(),
-                        fee_sol: 0.0,
-                        sol_balance_change: 0.0,
-                        token_transfers: Vec::new(),
-                        raw_transaction_data: raw.raw_transaction_data
-                            .as_ref()
-                            .and_then(|s| serde_json::from_str(s).ok()),
-                        log_messages: Vec::new(),
-                        instructions: Vec::new(),
-                        sol_balance_changes: Vec::new(),
-                        token_balance_changes: Vec::new(),
-                        swap_analysis: None,
-                        position_impact: None,
-                        profit_calculation: None,
-                        fee_breakdown: None,
-                        ata_analysis: None,
-                        token_info: None,
-                        calculated_token_price_sol: None,
-                        price_source: None,
-                        token_symbol: None,
-                        token_decimals: None,
-                        last_updated: Utc::now(),
-                        cached_analysis: None,
-                    };
-
-                    // Try to hydrate from cached analysis in database
-                    if let Ok(Some(processed)) = db.get_processed_transaction(signature).await {
-                        if self.try_hydrate_from_cached_analysis(&mut transaction) {
-                            log(
-                                LogTag::Transactions,
-                                "DB_HYDRATED",
-                                &format!(
-                                    "Hydrated {} from database cache",
-                                    get_signature_prefix(signature)
-                                )
-                            );
-                        }
-                    }
-
+            match db.get_full_transaction_from_db(signature).await {
+                Ok(Some(transaction)) => {
+                    log(
+                        LogTag::Transactions,
+                        "DB_FULL_LOAD",
+                        &format!(
+                            "Loaded full transaction {} with type: {:?}",
+                            get_signature_prefix(signature),
+                            transaction.transaction_type
+                        )
+                    );
                     Some(transaction)
                 }
-                _ => None,
+                Ok(None) => None,
+                Err(e) => {
+                    log(
+                        LogTag::Transactions,
+                        "DB_ERROR",
+                        &format!(
+                            "Error loading transaction {}: {}",
+                            get_signature_prefix(signature),
+                            e
+                        )
+                    );
+                    None
+                }
             }
         } else {
             None
