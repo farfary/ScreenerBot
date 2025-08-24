@@ -5852,77 +5852,208 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
     if debug {
         log(LogTag::Transactions, "GET_TX", &format!("{}", &signature[..8]));
     }
+
     if let Some(global) = get_global_transaction_manager().await {
-        if let Some(manager) = global.lock().await.as_ref() {
-            if let Some(db) = &manager.transaction_database {
-                if let Some(raw) = db.get_raw_transaction(signature).await? {
-                    // Build Transaction skeleton and recalc analysis
-                    let mut tx = Transaction {
-                        signature: raw.signature.clone(),
-                        slot: raw.slot,
-                        block_time: raw.block_time,
-                        timestamp: DateTime::parse_from_rfc3339(&raw.timestamp)
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .unwrap_or_else(|_| Utc::now()),
-                        status: match raw.status.as_str() {
-                            "Finalized" => TransactionStatus::Finalized,
-                            "Confirmed" => TransactionStatus::Confirmed,
-                            "Pending" => TransactionStatus::Pending,
-                            s if s.starts_with("Failed") =>
-                                TransactionStatus::Failed(
-                                    raw.error_message.clone().unwrap_or_else(|| s.to_string())
-                                ),
-                            _ => TransactionStatus::Pending,
-                        },
-                        transaction_type: TransactionType::Unknown,
-                        direction: TransactionDirection::Internal,
-                        success: raw.success,
-                        error_message: raw.error_message.clone(),
-                        fee_sol: 0.0,
-                        sol_balance_change: 0.0,
-                        token_transfers: Vec::new(),
-                        raw_transaction_data: raw.raw_transaction_data
-                            .as_ref()
-                            .and_then(|s| serde_json::from_str(s).ok()),
-                        log_messages: Vec::new(),
-                        instructions: Vec::new(),
-                        sol_balance_changes: Vec::new(),
-                        token_balance_changes: Vec::new(),
-                        swap_analysis: None,
-                        position_impact: None,
-                        profit_calculation: None,
-                        fee_breakdown: None,
-                        ata_analysis: None,
-                        token_info: None,
-                        calculated_token_price_sol: None,
-                        price_source: None,
-                        token_symbol: None,
-                        token_decimals: None,
-                        last_updated: Utc::now(),
-                        cached_analysis: None,
-                    };
-                    // Recalculate analysis (ignore errors)
-                    let mut guard = global.lock().await;
-                    if let Some(manager_mut) = guard.as_mut() {
-                        let _ = manager_mut.recalculate_transaction_analysis(&mut tx).await;
+        // Add timeout to prevent hanging on slow lock acquisition (similar to priority transactions)
+        match tokio::time::timeout(Duration::from_secs(10), global.lock()).await {
+            Ok(manager_guard) => {
+                if let Some(manager) = manager_guard.as_ref() {
+                    if let Some(db) = &manager.transaction_database {
+                        if let Some(raw) = db.get_raw_transaction(signature).await? {
+                            // Build Transaction skeleton and recalc analysis
+                            let mut tx = Transaction {
+                                signature: raw.signature.clone(),
+                                slot: raw.slot,
+                                block_time: raw.block_time,
+                                timestamp: DateTime::parse_from_rfc3339(&raw.timestamp)
+                                    .map(|dt| dt.with_timezone(&Utc))
+                                    .unwrap_or_else(|_| Utc::now()),
+                                status: match raw.status.as_str() {
+                                    "Finalized" => TransactionStatus::Finalized,
+                                    "Confirmed" => TransactionStatus::Confirmed,
+                                    "Pending" => TransactionStatus::Pending,
+                                    s if s.starts_with("Failed") =>
+                                        TransactionStatus::Failed(
+                                            raw.error_message
+                                                .clone()
+                                                .unwrap_or_else(|| s.to_string())
+                                        ),
+                                    _ => TransactionStatus::Pending,
+                                },
+                                transaction_type: TransactionType::Unknown,
+                                direction: TransactionDirection::Internal,
+                                success: raw.success,
+                                error_message: raw.error_message.clone(),
+                                fee_sol: 0.0,
+                                sol_balance_change: 0.0,
+                                token_transfers: Vec::new(),
+                                raw_transaction_data: raw.raw_transaction_data
+                                    .as_ref()
+                                    .and_then(|s| serde_json::from_str(s).ok()),
+                                log_messages: Vec::new(),
+                                instructions: Vec::new(),
+                                sol_balance_changes: Vec::new(),
+                                token_balance_changes: Vec::new(),
+                                swap_analysis: None,
+                                position_impact: None,
+                                profit_calculation: None,
+                                fee_breakdown: None,
+                                ata_analysis: None,
+                                token_info: None,
+                                calculated_token_price_sol: None,
+                                price_source: None,
+                                token_symbol: None,
+                                token_decimals: None,
+                                last_updated: Utc::now(),
+                                cached_analysis: None,
+                            };
+
+                            // Try to recalculate analysis with a short timeout (skip if busy)
+                            match tokio::time::timeout(Duration::from_secs(2), global.lock()).await {
+                                Ok(mut guard) => {
+                                    if let Some(manager_mut) = guard.as_mut() {
+                                        let _ = manager_mut.recalculate_transaction_analysis(
+                                            &mut tx
+                                        ).await;
+                                    }
+                                }
+                                Err(_) => {
+                                    // Skip analysis recalculation if manager is busy - return basic transaction
+                                    if debug {
+                                        log(
+                                            LogTag::Transactions,
+                                            "SKIP_ANALYSIS",
+                                            &format!(
+                                                "Skipping analysis recalculation for {} - manager busy",
+                                                &signature[..8]
+                                            )
+                                        );
+                                    }
+                                }
+                            }
+
+                            return Ok(Some(tx));
+                        }
                     }
-                    return Ok(Some(tx));
+                }
+            }
+            Err(_) => {
+                // Timeout occurred - use fallback approach with temporary manager
+                log(
+                    LogTag::Transactions,
+                    "LOCK_TIMEOUT",
+                    &format!(
+                        "Global transaction manager busy - using fallback for {}",
+                        &signature[..8]
+                    )
+                );
+
+                // Create temporary manager for read-only database access (similar to priority transactions)
+                let wallet_address = load_wallet_address_from_config().await?;
+                let mut temp_manager = TransactionsManager::new(wallet_address).await?;
+
+                if let Some(db) = &temp_manager.transaction_database {
+                    if let Some(raw) = db.get_raw_transaction(signature).await? {
+                        // Build basic transaction from database without complex analysis
+                        let mut tx = Transaction {
+                            signature: raw.signature.clone(),
+                            slot: raw.slot,
+                            block_time: raw.block_time,
+                            timestamp: DateTime::parse_from_rfc3339(&raw.timestamp)
+                                .map(|dt| dt.with_timezone(&Utc))
+                                .unwrap_or_else(|_| Utc::now()),
+                            status: match raw.status.as_str() {
+                                "Finalized" => TransactionStatus::Finalized,
+                                "Confirmed" => TransactionStatus::Confirmed,
+                                "Pending" => TransactionStatus::Pending,
+                                s if s.starts_with("Failed") =>
+                                    TransactionStatus::Failed(
+                                        raw.error_message.clone().unwrap_or_else(|| s.to_string())
+                                    ),
+                                _ => TransactionStatus::Pending,
+                            },
+                            transaction_type: TransactionType::Unknown,
+                            direction: TransactionDirection::Internal,
+                            success: raw.success,
+                            error_message: raw.error_message.clone(),
+                            fee_sol: 0.0,
+                            sol_balance_change: 0.0,
+                            token_transfers: Vec::new(),
+                            raw_transaction_data: raw.raw_transaction_data
+                                .as_ref()
+                                .and_then(|s| serde_json::from_str(s).ok()),
+                            log_messages: Vec::new(),
+                            instructions: Vec::new(),
+                            sol_balance_changes: Vec::new(),
+                            token_balance_changes: Vec::new(),
+                            swap_analysis: None,
+                            position_impact: None,
+                            profit_calculation: None,
+                            fee_breakdown: None,
+                            ata_analysis: None,
+                            token_info: None,
+                            calculated_token_price_sol: None,
+                            price_source: None,
+                            token_symbol: None,
+                            token_decimals: None,
+                            last_updated: Utc::now(),
+                            cached_analysis: None,
+                        };
+
+                        // CRITICAL: Always run analysis for transactions retrieved via fallback
+                        // This is especially important for position reconciliation
+                        let _ = temp_manager.recalculate_transaction_analysis(&mut tx).await;
+
+                        if debug {
+                            log(
+                                LogTag::Transactions,
+                                "FALLBACK_SUCCESS",
+                                &format!(
+                                    "Retrieved {} via fallback - status: {:?}, success: {}, has_analysis: {}",
+                                    &signature[..8],
+                                    tx.status,
+                                    tx.success,
+                                    tx.swap_analysis.is_some()
+                                )
+                            );
+                        }
+
+                        return Ok(Some(tx));
+                    }
+                }
+
+                // If not in database, try RPC fetch as final fallback
+                if debug {
+                    log(
+                        LogTag::Transactions,
+                        "FALLBACK_RPC",
+                        &format!(
+                            "Transaction {} not in database - trying RPC fetch",
+                            &signature[..8]
+                        )
+                    );
+                }
+
+                match temp_manager.process_transaction_direct(signature).await {
+                    Ok(tx) => {
+                        return Ok(Some(tx));
+                    }
+                    Err(e) => {
+                        if debug {
+                            log(
+                                LogTag::Transactions,
+                                "FALLBACK_FAIL",
+                                &format!("Fallback RPC failed for {}: {}", &signature[..8], e)
+                            );
+                        }
+                        return Ok(None);
+                    }
                 }
             }
         }
     }
-    // Fallback: fetch fresh with temporary manager
-    let wallet_address = load_wallet_address_from_config().await?;
-    let mut manager = TransactionsManager::new(wallet_address).await?;
-    match manager.process_transaction(signature).await {
-        Ok(t) => Ok(Some(t)),
-        Err(e) => {
-            if debug {
-                log(LogTag::Transactions, "RPC_FAIL", &e);
-            }
-            Ok(None)
-        }
-    }
+
+    Ok(None)
 }
 
 /// Check if transaction is verified/finalized with enhanced status reporting
