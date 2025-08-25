@@ -659,11 +659,11 @@ pub async fn print_positions_snapshot() {
         log(LogTag::Summary, "DEBUG", "[print_positions_snapshot] Starting summary report stage");
     }
     let bot_summary = match
-        tokio::time::timeout(Duration::from_secs(20), build_summary_report(&closed_refs)).await
+        tokio::time::timeout(Duration::from_secs(10), build_summary_report(&closed_refs)).await
     {
         Ok(summary) => summary,
         Err(_) => {
-            log(LogTag::Summary, "WARN", "Bot summary generation timeout - using fallback");
+            log(LogTag::Summary, "WARN", "Bot summary generation timeout (10s) - using fallback");
             format!(
                 "\n💰 Bot Summary (timeout - showing basic info)\nTotal Positions: {}\n\n",
                 closed_positions.len()
@@ -1327,7 +1327,7 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
     if is_debug_summary_enabled() {
         log(LogTag::Summary, "DEBUG", "[build_summary_report] Starting recent swaps section build");
     }
-    match tokio::time::timeout(Duration::from_millis(2000), build_recent_swaps_section()).await {
+    match tokio::time::timeout(Duration::from_millis(1500), build_recent_swaps_section()).await {
         Ok(res) =>
             match res {
                 Ok(swaps_table) => {
@@ -1359,14 +1359,14 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
                 }
             }
         Err(_) => {
-            log(LogTag::Summary, "WARN", "Recent swaps table timeout (2000ms) - skipping");
+            log(LogTag::Summary, "WARN", "Recent swaps table timeout (1500ms) - skipping");
         }
     }
 
     // Build Recent Transactions table (last 20)
     let tx_stage_start = Instant::now();
     match
-        tokio::time::timeout(Duration::from_millis(2000), build_recent_transactions_section()).await
+        tokio::time::timeout(Duration::from_millis(1500), build_recent_transactions_section()).await
     {
         Ok(res) =>
             match res {
@@ -1398,7 +1398,7 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
                 }
             }
         Err(_) => {
-            log(LogTag::Summary, "WARN", "Recent transactions table timeout (2000ms) - skipping");
+            log(LogTag::Summary, "WARN", "Recent transactions table timeout (1500ms) - skipping");
         }
     }
 
@@ -1518,23 +1518,53 @@ async fn build_recent_swaps_section() -> Result<String, String> {
 
     let mut manager = TransactionsManager::new(wallet_pubkey).await?;
 
-    // Use the optimized batch retrieval (30 transactions, filter for swaps, take best 20)
-    let txs = manager
-        .get_recent_transactions(30).await
-        .map_err(|e| format!("Failed to get recent transactions: {}", e))?;
+    // OPTIMIZATION: Use get_all_swap_transactions_limited with fast_recent=true
+    // This directly fetches only swap transactions from newest to oldest, avoiding
+    // the expensive conversion process for non-swap transactions
+    let swaps = match manager.get_all_swap_transactions_limited(Some(20), Some(true)).await {
+        Ok(swap_pnls) => swap_pnls,
+        Err(_) => {
+            // Fallback to old method but with early termination for performance
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                "[build_recent_swaps_table] Fallback: using filtered transaction approach"
+            );
 
-    // Convert transactions to swap info and filter for actual swaps only
-    let mut swaps = Vec::new();
-    for tx in txs {
-        if let Some(swap_pnl) = manager.convert_to_swap_pnl_info(&tx, &mut HashMap::new(), false) {
-            if swap_pnl.swap_type == "Buy" || swap_pnl.swap_type == "Sell" {
-                swaps.push(swap_pnl);
-                if swaps.len() >= 20 {
-                    break;
+            let txs = manager
+                .get_recent_transactions(50).await
+                .map_err(|e| format!("Failed to get recent transactions: {}", e))?;
+
+            let mut swaps = Vec::new();
+            for tx in txs {
+                // OPTIMIZATION: Quick type check before expensive conversion
+                match tx.transaction_type {
+                    | crate::transactions::TransactionType::SwapSolToToken { .. }
+                    | crate::transactions::TransactionType::SwapTokenToSol { .. } => {
+                        if
+                            let Some(swap_pnl) = manager.convert_to_swap_pnl_info(
+                                &tx,
+                                &mut HashMap::new(),
+                                false
+                            )
+                        {
+                            if swap_pnl.swap_type == "Buy" || swap_pnl.swap_type == "Sell" {
+                                swaps.push(swap_pnl);
+                                if swaps.len() >= 20 {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        // Skip non-swap transactions entirely
+                        continue;
+                    }
                 }
             }
+            swaps
         }
-    }
+    };
 
     if is_debug_summary_enabled() {
         log(
@@ -1612,9 +1642,9 @@ async fn build_recent_transactions_section() -> Result<String, String> {
 
     let mut manager = TransactionsManager::new(wallet_pubkey).await?;
 
-    // Use the optimized batch retrieval (25 transactions, take best 20)
+    // Use the optimized batch retrieval (20 transactions only - no need for extras)
     let mut txs = manager
-        .get_recent_transactions(25).await
+        .get_recent_transactions(20).await
         .map_err(|e| format!("Failed to get recent transactions: {}", e))?;
 
     if is_debug_summary_enabled() {
@@ -1629,29 +1659,13 @@ async fn build_recent_transactions_section() -> Result<String, String> {
         );
     }
 
-    // Since get_recent_transactions already does hydration, only recalc if really needed
-    let recalc_start = Instant::now();
-    let mut recalc_count = 0;
-    for tx in &mut txs {
-        // Only recalc if hydration failed AND transaction is finalized (worth the cost)
-        if
-            matches!(tx.transaction_type, crate::transactions::TransactionType::Unknown) &&
-            matches!(tx.status, crate::transactions::TransactionStatus::Finalized)
-        {
-            let _ = manager.recalculate_transaction_analysis(tx).await;
-            recalc_count += 1;
-        }
-    }
-
+    // OPTIMIZATION: Skip recalculation during summary generation to avoid timeouts
+    // The summary table doesn't need perfect accuracy, prioritize speed over completeness
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",
-            &format!(
-                "[build_recent_transactions_table] Recalculated {} transactions in {} ms",
-                recalc_count,
-                recalc_start.elapsed().as_millis()
-            )
+            "[build_recent_transactions_table] Skipping recalculation during summary for performance"
         );
     }
 

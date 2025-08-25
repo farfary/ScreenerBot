@@ -521,19 +521,6 @@ impl TokenPriceService {
         }
         drop(watch_list);
 
-        // DIAGNOSTIC: Log priority tokens breakdown for debugging price update issues
-        log(
-            LogTag::PriceService,
-            "PRIORITY_TOKENS_DEBUG",
-            &format!(
-                "🎯 Priority tokens breakdown: {} open positions, {} watched tokens, {} total. Tokens: {:?}",
-                open_count,
-                watched_count,
-                priority_tokens.len(),
-                priority_tokens
-            )
-        );
-
         priority_tokens
     }
 
