@@ -27,7 +27,16 @@
 /// - `ENABLE_FILE_LOGGING`: Enable/disable file logging (default: true)
 /// - `LOG_RETENTION_HOURS`: How long to keep log files (default: 24 hours)
 /// - `MAX_LOG_FILES`: Maximum number of log files to keep (default: 7)
-/// - Individual log tags and types can be enabled/disabled via constants
+/// - `FLUSH_INTERVAL_WRITES`: Flush buffer every N writes (default: 100 for performance)
+/// - `CLEANUP_INTERVAL_WRITES`: Run cleanup every N writes (default: 1000 for performance)
+/// - `FILE_BUFFER_SIZE`: Buffer size for file I/O (default: 64KB for better performance)
+///
+/// ## High-Volume Logging Safety:
+/// - **Non-blocking writes**: Uses `try_lock()` to avoid blocking when logger is busy
+/// - **Buffered I/O**: 64KB buffer with periodic flushing (every 100 writes) instead of per-message
+/// - **Async cleanup**: Background cleanup to avoid blocking write operations
+/// - **Drop protection**: Messages are dropped rather than blocking during high-volume periods
+/// - **Error throttling**: File write errors are reported every 1000 occurrences to prevent spam
 
 /// Set to false to hide date in logs
 const LOG_SHOW_DATE: bool = false;
@@ -39,43 +48,10 @@ const ENABLE_FILE_LOGGING: bool = true;
 const LOG_RETENTION_HOURS: u64 = 24; // Keep logs for 24 hours
 const MAX_LOG_FILES: usize = 7; // Keep maximum 7 days of logs as backup
 
-/// Log Tag Configuration - Set to false to disable specific tags
-const ENABLE_MONITOR_LOGS: bool = true;
-const ENABLE_TRADER_LOGS: bool = true;
-const ENABLE_WALLET_LOGS: bool = true;
-const ENABLE_SYSTEM_LOGS: bool = true;
-const ENABLE_POOL_LOGS: bool = true;
-const ENABLE_BLACKLIST_LOGS: bool = true;
-const ENABLE_DISCOVERY_LOGS: bool = true;
-const ENABLE_API_LOGS: bool = true;
-const ENABLE_PRICE_SERVICE_LOGS: bool = true;
-const ENABLE_FILTERING_LOGS: bool = true;
-const ENABLE_RUGCHECK_LOGS: bool = true;
-const ENABLE_PROFIT_TAG_LOGS: bool = true;
-const ENABLE_RPC_LOGS: bool = true;
-const ENABLE_OHLCV_LOGS: bool = true;
-const ENABLE_DECIMALS_LOGS: bool = true;
-const ENABLE_SWAP_LOGS: bool = true;
-const ENABLE_ENTRY_LOGS: bool = true;
-const ENABLE_RL_LEARN_LOGS: bool = true;
-const ENABLE_SUMMARY_LOGS: bool = true;
-const ENABLE_TRANSACTIONS_LOGS: bool = true;
-const ENABLE_OTHER_LOGS: bool = true;
-
-/// Log Type Configuration - Set to false to disable specific log types
-const ENABLE_ERROR_LOGS: bool = true;
-const ENABLE_FAILED_LOGS: bool = true;
-const ENABLE_WARN_LOGS: bool = true;
-const ENABLE_SUCCESS_LOGS: bool = true;
-const ENABLE_INFO_LOGS: bool = true;
-const ENABLE_DEBUG_LOGS: bool = true; // Enable debug logs to see monitoring activity
-const ENABLE_PROFIT_LOGS: bool = true;
-const ENABLE_LOSS_LOGS: bool = true;
-const ENABLE_BUY_LOGS: bool = true;
-const ENABLE_SELL_LOGS: bool = true;
-const ENABLE_BALANCE_LOGS: bool = true;
-const ENABLE_PRICE_LOGS: bool = true;
-const ENABLE_GENERAL_LOGS: bool = true; // For any log type not specifically listed above
+/// Buffer configuration for high-performance logging
+const FLUSH_INTERVAL_WRITES: u64 = 100; // Flush every 100 writes instead of every write
+const CLEANUP_INTERVAL_WRITES: u64 = 1000; // Cleanup every 1000 writes instead of 500
+const FILE_BUFFER_SIZE: usize = 64 * 1024; // 64KB buffer for better I/O performance
 
 /// Log format character widths (hardcoded for precise alignment)
 const TAG_WIDTH: usize = 10; // "[SYSTEM  ]" = 10 chars (8 + 2 brackets)
@@ -116,7 +92,8 @@ impl FileLogger {
 
         let file = OpenOptions::new().create(true).append(true).open(&log_file_path)?;
 
-        let file_writer = Some(BufWriter::new(file));
+        // Use larger buffer for better performance with high-volume logging
+        let file_writer = Some(BufWriter::with_capacity(FILE_BUFFER_SIZE, file));
 
         Ok(FileLogger {
             file_writer,
@@ -127,18 +104,25 @@ impl FileLogger {
     }
 
     fn write_to_file(&mut self, message: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // For per-start log files, we don't need daily rotation
-        // Just write to the current file and periodically clean up old files
+        // PERFORMANCE: Optimized for high-volume logging
 
         if let Some(ref mut writer) = self.file_writer {
             writeln!(writer, "{}", message)?;
-            writer.flush()?;
 
-            // Increment write counter and occasionally clean up old log files
             self.write_counter += 1;
-            if self.write_counter % 500 == 0 {
-                // Every 500 writes
-                let _ = self.cleanup_old_logs(); // Ignore cleanup errors
+
+            // OPTIMIZATION: Only flush periodically, not on every write
+            if self.write_counter % FLUSH_INTERVAL_WRITES == 0 {
+                writer.flush()?;
+            }
+
+            // OPTIMIZATION: Cleanup less frequently to avoid I/O blocking
+            if self.write_counter % CLEANUP_INTERVAL_WRITES == 0 {
+                // Spawn cleanup in background to avoid blocking current write
+                let log_dir = self.log_dir.clone();
+                tokio::spawn(async move {
+                    let _ = Self::cleanup_old_logs_static(&log_dir).await;
+                });
             }
         }
 
@@ -146,10 +130,32 @@ impl FileLogger {
     }
 
     fn cleanup_old_logs(&self) -> Result<(), Box<dyn std::error::Error>> {
+        // Use blocking version for sync cleanup
+        Self::cleanup_old_logs_blocking(&self.log_dir).map_err(|e| e.into())
+    }
+
+    // Static cleanup method that can be called from async context
+    async fn cleanup_old_logs_static(
+        log_dir: &std::path::Path
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Call blocking version in async context
+        match
+            tokio::task::spawn_blocking({
+                let log_dir = log_dir.to_path_buf();
+                move || Self::cleanup_old_logs_blocking(&log_dir)
+            }).await
+        {
+            Ok(result) => result.map_err(|e| format!("Cleanup error: {}", e).into()),
+            Err(e) => Err(format!("Cleanup task failed: {}", e).into()),
+        }
+    }
+
+    // Blocking cleanup implementation
+    fn cleanup_old_logs_blocking(log_dir: &std::path::Path) -> Result<(), String> {
         let now = Local::now();
         let cutoff_time = now - chrono::Duration::hours(LOG_RETENTION_HOURS as i64);
 
-        if let Ok(entries) = fs::read_dir(&self.log_dir) {
+        if let Ok(entries) = fs::read_dir(log_dir) {
             let mut log_files: Vec<_> = entries
                 .filter_map(|entry| entry.ok())
                 .filter(|entry| {
@@ -173,14 +179,9 @@ impl FileLogger {
                     if let Ok(modified) = metadata.modified() {
                         let modified_chrono = chrono::DateTime::<Local>::from(modified);
                         if modified_chrono < cutoff_time {
-                            if let Err(e) = fs::remove_file(entry.path()) {
-                                // Avoid stderr spam in dashboard mode; log to file instead
-                                let msg = format!(
-                                    "Failed to remove old log file {:?}: {}",
-                                    entry.path(),
-                                    e
-                                );
-                                crate::logger::log(LogTag::System, "WARN", &msg);
+                            if let Err(_) = fs::remove_file(entry.path()) {
+                                // Silently ignore cleanup errors to avoid recursion
+                                // (logging from cleanup could cause infinite loop)
                             }
                         }
                     }
@@ -196,13 +197,8 @@ impl FileLogger {
             if remaining_files.len() > MAX_LOG_FILES {
                 let files_to_remove = remaining_files.len() - MAX_LOG_FILES;
                 for entry in remaining_files.iter().take(files_to_remove) {
-                    if let Err(e) = fs::remove_file(entry.path()) {
-                        let msg = format!(
-                            "Failed to remove excess log file {:?}: {}",
-                            entry.path(),
-                            e
-                        );
-                        crate::logger::log(LogTag::System, "WARN", &msg);
+                    if let Err(_) = fs::remove_file(entry.path()) {
+                        // Silently ignore excess file removal errors
                     }
                 }
             }
@@ -261,17 +257,54 @@ pub fn init_file_logging() {
     }
 }
 
-/// Write message to log file (stripped of color codes)
-fn write_to_file(message: &str) {
+/// Force flush all pending log writes (call during shutdown)
+pub fn flush_file_logging() {
     if !ENABLE_FILE_LOGGING {
         return;
     }
 
     if let Ok(mut logger_guard) = FILE_LOGGER.lock() {
         if let Some(ref mut logger) = logger_guard.as_mut() {
-            let clean_message = strip_ansi_codes(message);
-            if let Err(e) = logger.write_to_file(&clean_message) {
-                eprintln!("Failed to write to log file: {}", e);
+            if let Some(ref mut writer) = logger.file_writer {
+                let _ = writer.flush(); // Ensure all writes are flushed to disk
+            }
+        }
+    }
+}
+
+/// Write message to log file (stripped of color codes) - PERFORMANCE OPTIMIZED
+fn write_to_file(message: &str) {
+    if !ENABLE_FILE_LOGGING {
+        return;
+    }
+
+    // OPTIMIZATION: Use try_lock to avoid blocking if logger is busy
+    match FILE_LOGGER.try_lock() {
+        Ok(mut logger_guard) => {
+            if let Some(ref mut logger) = logger_guard.as_mut() {
+                let clean_message = strip_ansi_codes(message);
+                if let Err(_) = logger.write_to_file(&clean_message) {
+                    // SAFETY: Don't spam stderr with file write errors during high-volume logging
+                    // Only print error once per 1000 failures to avoid log spam
+                    static ERROR_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(
+                        0
+                    );
+                    let count = ERROR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if count % 1000 == 0 {
+                        eprintln!("File logging errors (shown every 1000): count = {}", count + 1);
+                    }
+                }
+            }
+        }
+        Err(_) => {
+            // PERFORMANCE: If lock is busy, drop the message rather than blocking
+            // This prevents logging from becoming a bottleneck during high-volume periods
+            static DROP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(
+                0
+            );
+            let count = DROP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if count % 1000 == 0 && count > 0 {
+                eprintln!("Dropped {} log messages due to busy file logger", count + 1);
             }
         }
     }
@@ -338,58 +371,6 @@ impl std::fmt::Display for LogTag {
 
 /// Logs a message with date, time, tag, log type, and message.
 pub fn log(tag: LogTag, log_type: &str, message: &str) {
-    // Check if the tag is enabled
-    let tag_enabled = match &tag {
-        LogTag::Monitor => ENABLE_MONITOR_LOGS,
-        LogTag::Trader => ENABLE_TRADER_LOGS,
-        LogTag::Wallet => ENABLE_WALLET_LOGS,
-        LogTag::System => ENABLE_SYSTEM_LOGS,
-        LogTag::Pool => ENABLE_POOL_LOGS,
-        LogTag::Blacklist => ENABLE_BLACKLIST_LOGS,
-        LogTag::Discovery => ENABLE_DISCOVERY_LOGS,
-        LogTag::Filtering => ENABLE_FILTERING_LOGS,
-        LogTag::Api => ENABLE_API_LOGS,
-        LogTag::Rugcheck => ENABLE_RUGCHECK_LOGS,
-        LogTag::Profit => ENABLE_PROFIT_TAG_LOGS,
-        LogTag::PriceService => ENABLE_PRICE_SERVICE_LOGS,
-        LogTag::Rpc => ENABLE_RPC_LOGS,
-        LogTag::Ohlcv => ENABLE_OHLCV_LOGS,
-        LogTag::Decimals => ENABLE_DECIMALS_LOGS,
-        LogTag::Swap => ENABLE_SWAP_LOGS,
-        LogTag::Entry => ENABLE_ENTRY_LOGS,
-        LogTag::RlLearn => ENABLE_RL_LEARN_LOGS,
-        LogTag::Summary => ENABLE_SUMMARY_LOGS,
-        LogTag::Transactions => ENABLE_TRANSACTIONS_LOGS,
-        LogTag::Positions => true, // Always enable Positions logs (critical for trading)
-        LogTag::Other(_) => ENABLE_OTHER_LOGS,
-        LogTag::Test => true, // Always enable test logs
-    };
-
-    if !tag_enabled {
-        return; // Skip logging if tag is disabled
-    }
-
-    // Check if the log type is enabled
-    let log_type_enabled = match log_type.to_uppercase().as_str() {
-        "ERROR" => ENABLE_ERROR_LOGS,
-        "FAILED" => ENABLE_FAILED_LOGS,
-        "WARN" | "WARNING" => ENABLE_WARN_LOGS,
-        "SUCCESS" => ENABLE_SUCCESS_LOGS,
-        "INFO" => ENABLE_INFO_LOGS,
-        "DEBUG" => ENABLE_DEBUG_LOGS,
-        "PROFIT" => ENABLE_PROFIT_LOGS,
-        "LOSS" => ENABLE_LOSS_LOGS,
-        "BUY" => ENABLE_BUY_LOGS,
-        "SELL" => ENABLE_SELL_LOGS,
-        "BALANCE" => ENABLE_BALANCE_LOGS,
-        "PRICE" => ENABLE_PRICE_LOGS,
-        _ => ENABLE_GENERAL_LOGS,
-    };
-
-    if !log_type_enabled {
-        return; // Skip logging if log type is disabled
-    }
-
     let now = Local::now();
     let date = now.format("%Y-%m-%d").to_string();
     let time = now.format("%H:%M:%S").to_string();
