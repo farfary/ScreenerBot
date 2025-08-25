@@ -4429,10 +4429,11 @@ impl TransactionsManager {
             LogTag::Transactions,
             "FORCE_ANALYSIS_COMPLETE",
             &format!(
-                "Completed force analysis for {} - type: {:?}, has_swap: {}",
+                "Completed force analysis for {} - type: {:?}, has_swap: {}, sol_change: {:.9}",
                 get_signature_prefix(&transaction.signature),
                 transaction.transaction_type,
-                transaction.swap_analysis.is_some()
+                transaction.swap_analysis.is_some(),
+                transaction.sol_balance_change
             )
         );
 
@@ -4445,8 +4446,47 @@ impl TransactionsManager {
         transaction: &mut Transaction,
         raw_data: &serde_json::Value
     ) -> Result<(), String> {
-        // This is a simplified version that uses the existing recalculate_transaction_analysis
-        // The force_recalculate_analysis method already calls this
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "FORCE_CLASSIFY",
+                &format!("Force classifying transaction type for {}", &transaction.signature[..8])
+            );
+        }
+
+        // Use the existing transaction classification logic
+        self.analyze_transaction_type(transaction).await?;
+
+        // If still unknown, try more aggressive classification based on patterns
+        if matches!(transaction.transaction_type, TransactionType::Unknown) {
+            // Check for GMGN patterns more aggressively in force analysis
+            let log_text = transaction.log_messages.join(" ");
+
+            // Force GMGN detection if we have token operations and SOL changes
+            if
+                transaction.sol_balance_change.abs() > 0.001 &&
+                (log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") ||
+                    log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") ||
+                    transaction.instructions
+                        .iter()
+                        .any(
+                            |i|
+                                i.program_id.starts_with("ATokenGP") ||
+                                i.program_id.starts_with("Tokenkeg")
+                        ))
+            {
+                log(
+                    LogTag::Transactions,
+                    "FORCE_GMGN_DETECT",
+                    &format!("{} - Force detecting GMGN swap pattern", &transaction.signature[..8])
+                );
+
+                if let Ok(swap_type) = self.analyze_gmgn_swap(transaction).await {
+                    transaction.transaction_type = swap_type;
+                }
+            }
+        }
+
         Ok(())
     }
 

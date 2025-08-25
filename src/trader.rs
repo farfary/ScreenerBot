@@ -288,13 +288,28 @@ async fn update_position_tracking_in_service() {
     let open_mints = if let Some(h) = crate::positions::get_positions_handle().await {
         h.get_open_mints().await
     } else {
+        log(LogTag::Trader, "WARN", "⚠️ No positions handle available for tracking update");
         Vec::new()
     };
 
     if !open_mints.is_empty() {
+        log(
+            LogTag::Trader,
+            "TRACK_START",
+            &format!(
+                "🔄 Updating open positions tracking for {} tokens: {:?}",
+                open_mints.len(),
+                open_mints
+            )
+        );
         update_open_positions_safe(open_mints).await;
+        log(LogTag::Trader, "TRACK_COMPLETE", "✅ Open positions tracking update completed");
         if is_debug_trader_enabled() {
             log(LogTag::Trader, "TRACK", "Updated open positions in price service");
+        }
+    } else {
+        if is_debug_trader_enabled() {
+            log(LogTag::Trader, "TRACK", "⚠️ No open positions found for tracking update");
         }
     }
 }

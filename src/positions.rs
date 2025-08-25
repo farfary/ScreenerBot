@@ -3851,8 +3851,34 @@ impl PositionsManager {
             let mut remove = false;
             let mut removal_reason = String::new();
 
-            // Condition 1: Explicit phantom flag - HIGHEST PRIORITY
+            // Condition 1: Explicit phantom flag - BUT check if it's a recent GMGN transaction first
             if position.phantom_remove {
+                let age_minutes = now.signed_duration_since(position.entry_time).num_minutes();
+
+                // SPECIAL HANDLING: For very recent positions (< 5 minutes), check if it might be a GMGN swap
+                // that failed force analysis. Give it more time to be properly verified.
+                if age_minutes < 5 {
+                    if let Some(sig) = &position.entry_transaction_signature {
+                        // Check if this transaction exists and might be a GMGN swap
+                        if let Ok(Some(tx)) = crate::transactions::get_transaction(sig).await {
+                            let log_text = tx.log_messages.join(" ");
+                            if log_text.contains("ATokenGP") || log_text.contains("Tokenkeg") {
+                                log(
+                                    LogTag::Positions,
+                                    "GMGN_GRACE_PERIOD",
+                                    &format!(
+                                        "🕒 Giving {} more time for verification - recent GMGN-like transaction ({}min old)",
+                                        position.symbol,
+                                        age_minutes
+                                    )
+                                );
+                                // Don't remove yet, give it more time
+                                continue;
+                            }
+                        }
+                    }
+                }
+
                 remove = true;
                 removal_reason = "explicitly_flagged_phantom".to_string();
 
@@ -3867,14 +3893,15 @@ impl PositionsManager {
                 );
             }
 
-            // Condition 2: Aged unverified entry tx not found
+            // Condition 2: Aged unverified entry tx not found (increased grace period)
             if
                 !remove &&
                 position.entry_transaction_signature.is_some() &&
                 !position.transaction_entry_verified
             {
                 let age_minutes = now.signed_duration_since(position.entry_time).num_minutes();
-                if age_minutes > 10 {
+                // INCREASED: Give 30 minutes instead of 10 for busy periods with slow verification
+                if age_minutes > 30 {
                     // Try quick lookup of transaction; if still missing, mark remove
                     if let Some(sig) = &position.entry_transaction_signature {
                         match crate::transactions::get_transaction(sig).await {
@@ -5057,7 +5084,7 @@ async fn run_background_tasks(shutdown: Arc<Notify>, bg_tx: mpsc::Sender<Backgro
 
     let mut verification_interval = interval(Duration::from_secs(10));
     let mut retry_interval = interval(Duration::from_secs(30));
-    let mut cleanup_interval = interval(Duration::from_secs(30)); // Reduced from 60s for faster phantom cleanup
+    let mut cleanup_interval = interval(Duration::from_secs(120)); // Increased from 30s to 120s to allow more time for transaction verification during busy periods
     let mut reconciliation_interval = interval(Duration::from_secs(1800)); // 30 minutes
     let mut cache_refresh_interval = interval(Duration::from_secs(30)); // Refresh cache every 30s
     let mut position_locks_cleanup_interval = interval(Duration::from_secs(300)); // Clean position locks every 5 minutes

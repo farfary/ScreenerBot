@@ -99,18 +99,74 @@ impl TokenMonitor {
         // Get priority tokens from price service (includes open positions + high liquidity)
         let priority_mints = get_priority_tokens_safe().await;
 
+        // DIAGNOSTIC: Always log priority tokens status for debugging
         if priority_mints.is_empty() {
-            log(LogTag::Monitor, "MONITOR", "No priority tokens to monitor");
+            log(
+                LogTag::Monitor,
+                "MONITOR",
+                "⚠️ No priority tokens to monitor - checking open positions"
+            );
+
+            // DIAGNOSTIC: Check if there are actual open positions
+            if let Some(positions_handle) = crate::positions::get_positions_handle().await {
+                let open_mints = positions_handle.get_open_mints().await;
+                if !open_mints.is_empty() {
+                    log(
+                        LogTag::Monitor,
+                        "DIAGNOSTIC",
+                        &format!(
+                            "🔍 Found {} open positions but no priority tokens: {:?}",
+                            open_mints.len(),
+                            open_mints
+                        )
+                    );
+
+                    // FORCE: Manually update price service with open positions
+                    crate::tokens::price::update_open_positions_safe(open_mints.clone()).await;
+                    log(
+                        LogTag::Monitor,
+                        "DIAGNOSTIC",
+                        "🔄 Force-updated price service with open positions"
+                    );
+
+                    // Try again to get priority tokens
+                    let priority_mints_retry = get_priority_tokens_safe().await;
+                    if priority_mints_retry.is_empty() {
+                        log(
+                            LogTag::Monitor,
+                            "DIAGNOSTIC",
+                            "❌ Still no priority tokens after force update"
+                        );
+                    } else {
+                        log(
+                            LogTag::Monitor,
+                            "DIAGNOSTIC",
+                            &format!(
+                                "✅ Now have {} priority tokens after force update",
+                                priority_mints_retry.len()
+                            )
+                        );
+                        // Continue processing with the retry result
+                        return self.process_priority_tokens_with_diagnostics(
+                            priority_mints_retry
+                        ).await;
+                    }
+                }
+            }
             return Ok(());
         } else {
             log(
                 LogTag::Monitor,
                 "MONITOR",
-                &format!("Enhanced monitoring {} priority tokens", priority_mints.len())
+                &format!(
+                    "🔄 Enhanced monitoring {} priority tokens: {:?}",
+                    priority_mints.len(),
+                    priority_mints
+                )
             );
 
             // Process priority tokens first
-            self.process_priority_tokens(priority_mints.clone()).await?;
+            self.process_priority_tokens_with_diagnostics(priority_mints.clone()).await?;
 
             // Pre-warm/refresh pools infos for priority tokens without exceeding rate limits
             // Limit refreshes per cycle to avoid API rate caps; 2 API calls worth of tokens
@@ -162,14 +218,29 @@ impl TokenMonitor {
         Ok(())
     }
 
-    /// Process priority tokens (open positions + high priority)
-    async fn process_priority_tokens(&mut self, priority_mints: Vec<String>) -> Result<(), String> {
+    /// Process priority tokens with enhanced diagnostics (open positions + high priority)
+    async fn process_priority_tokens_with_diagnostics(
+        &mut self,
+        priority_mints: Vec<String>
+    ) -> Result<(), String> {
         let mut processed = 0;
         let mut updated = 0;
         let mut errors = 0;
 
+        log(
+            LogTag::Monitor,
+            "PROCESS_START",
+            &format!("🚀 Starting to process {} priority tokens", priority_mints.len())
+        );
+
         // Process in batches
-        for chunk in priority_mints.chunks(MAX_TOKENS_PER_API_CALL) {
+        for (batch_idx, chunk) in priority_mints.chunks(MAX_TOKENS_PER_API_CALL).enumerate() {
+            log(
+                LogTag::Monitor,
+                "BATCH_START",
+                &format!("📦 Processing batch {}: {} tokens", batch_idx + 1, chunk.len())
+            );
+
             // Acquire rate limit permit
             let _permit = self.rate_limiter.acquire().await.unwrap();
 
@@ -193,6 +264,16 @@ impl TokenMonitor {
 
             match tokens_result {
                 Ok(updated_tokens) => {
+                    log(
+                        LogTag::Monitor,
+                        "API_SUCCESS",
+                        &format!(
+                            "✅ Got {} token updates from API for batch {}",
+                            updated_tokens.len(),
+                            batch_idx + 1
+                        )
+                    );
+
                     // Update database
                     if !updated_tokens.is_empty() {
                         if let Err(e) = self.database.update_tokens(&updated_tokens).await {
@@ -203,8 +284,27 @@ impl TokenMonitor {
                             );
                             errors += 1;
                         } else {
+                            log(
+                                LogTag::Monitor,
+                                "DB_SUCCESS",
+                                &format!("💾 Updated {} tokens in database", updated_tokens.len())
+                            );
+
                             // Update price service cache
+                            log(
+                                LogTag::Monitor,
+                                "PRICE_UPDATE_START",
+                                &format!("🔄 Updating price service for {} tokens", chunk.len())
+                            );
                             update_tokens_prices_safe(chunk).await;
+                            log(
+                                LogTag::Monitor,
+                                "PRICE_UPDATE_DONE",
+                                &format!(
+                                    "✅ Price service update completed for batch {}",
+                                    batch_idx + 1
+                                )
+                            );
 
                             // Track liquidity for blacklisting
                             for token in &updated_tokens {

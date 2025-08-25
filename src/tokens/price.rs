@@ -474,7 +474,14 @@ impl TokenPriceService {
     }
 
     pub async fn update_open_positions(&self, mints: Vec<String>) {
+        log(
+            LogTag::PriceService,
+            "UPDATE_OPEN_POSITIONS",
+            &format!("🔄 Updating open positions with {} mints: {:?}", mints.len(), mints)
+        );
+
         let mut positions = self.open_positions.write().await;
+        let old_count = positions.len();
         positions.clear();
         for mint in mints {
             positions.insert(mint.clone());
@@ -484,6 +491,14 @@ impl TokenPriceService {
             // (Removed) pool watch list pinning: pool service now derives tokens from price service priority list
             positions = self.open_positions.write().await;
         }
+        let new_count = positions.len();
+        drop(positions);
+
+        log(
+            LogTag::PriceService,
+            "UPDATE_OPEN_POSITIONS_COMPLETE",
+            &format!("✅ Open positions updated: {} -> {} positions", old_count, new_count)
+        );
     }
 
     pub async fn get_priority_tokens(&self) -> Vec<String> {
@@ -491,17 +506,33 @@ impl TokenPriceService {
 
         // Add open positions first (highest priority)
         let positions = self.open_positions.read().await;
+        let open_count = positions.len();
         priority_tokens.extend(positions.iter().cloned());
         drop(positions);
 
         // Add watched tokens that are not expired
         let watch_list = self.watch_list.read().await;
+        let mut watched_count = 0;
         for (mint, entry) in watch_list.iter() {
             if !entry.is_expired() && !priority_tokens.contains(mint) {
                 priority_tokens.push(mint.clone());
+                watched_count += 1;
             }
         }
         drop(watch_list);
+
+        // DIAGNOSTIC: Log priority tokens breakdown for debugging price update issues
+        log(
+            LogTag::PriceService,
+            "PRIORITY_TOKENS_DEBUG",
+            &format!(
+                "🎯 Priority tokens breakdown: {} open positions, {} watched tokens, {} total. Tokens: {:?}",
+                open_count,
+                watched_count,
+                priority_tokens.len(),
+                priority_tokens
+            )
+        );
 
         priority_tokens
     }
