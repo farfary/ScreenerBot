@@ -30,8 +30,8 @@ use std::path::Path;
 /// Requirement: cache all tokens pools addresses and infos for maximum 10 minutes
 const POOL_CACHE_TTL_SECONDS: i64 = 600;
 
-/// Price cache TTL (1 second for real-time monitoring)
-const PRICE_CACHE_TTL_SECONDS: i64 = 2;
+/// Price cache TTL - aligned with 5s global monitoring cadence
+const PRICE_CACHE_TTL_SECONDS: i64 = 5;
 
 /// Minimum liquidity (USD) required to consider a pool usable for price calculation.
 /// Lower this for testing environments if you want stats to increment sooner.
@@ -1278,9 +1278,9 @@ impl PoolPriceService {
         let stats_arc = self.stats.clone();
         let service_for_monitor = get_pool_service();
 
-        // Start main monitoring loop
+        // Start main monitoring loop (aligned to 5s system cadence)
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(3));
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
 
             loop {
                 interval.tick().await;

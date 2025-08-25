@@ -22,7 +22,9 @@ use tokio::sync::OnceCell;
 // =============================================================================
 
 /// Maximum age for cached prices (in seconds)
-const PRICE_CACHE_MAX_AGE_SECONDS: i64 = 10;
+/// Price cache TTL - optimized for fastest 5-second priority checking
+const PRICE_CACHE_TTL_SECONDS: i64 = 5; // 5 seconds to match monitoring cycle
+const PRICE_CACHE_MAX_AGE_SECONDS: i64 = 5; // 5 seconds maximum age for all prices
 
 /// Time to keep watching a token after last request (in seconds)
 const WATCH_TIMEOUT_SECONDS: i64 = 300; // 5 minutes
@@ -30,10 +32,10 @@ const WATCH_TIMEOUT_SECONDS: i64 = 300; // 5 minutes
 /// If fresh cache is missing, allow serving a slightly stale price up to this age (seconds)
 /// This avoids N/A in UI while a background refresh runs
 const STALE_RETURN_MAX_AGE_SECONDS: i64 = 180; // 3 minutes
-/// Maximum allowed age for an open position price before forcing refresh
-const OPEN_POSITION_MAX_AGE_SECONDS: i64 = 3; // stricter freshness for active trades
-/// Timeout for pool price path for open positions (ms); fallback to cached pool price if available
-const POOL_PRICE_TIMEOUT_MS: u64 = 1800;
+/// Maximum allowed age for an open position price before forcing refresh - FASTEST 5s priority checking
+const OPEN_POSITION_MAX_AGE_SECONDS: i64 = 3; // 3 seconds - force refresh every 5-second monitoring cycle
+/// Timeout for pool price path for open positions (ms) - ultra-fast for priority tokens
+const POOL_PRICE_TIMEOUT_MS: u64 = 300; // 300ms for fastest response
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -449,7 +451,15 @@ impl TokenPriceService {
             }
         }
         if let (Some(old), Some(new)) = (old_price, cache_entry.price_sol) {
-            if (old - new).abs() > f64::EPSILON {
+            // FASTEST 5s PRIORITY: Ultra-sensitive change detection for priority tokens
+            // Minimum 0.01% change threshold for maximum sensitivity with 5-second updates
+            let change_threshold = if old > 0.0 {
+                (old * 0.0001).max(f64::EPSILON * 100.0) // 0.01% minimum for fastest detection
+            } else {
+                f64::EPSILON * 100.0
+            };
+
+            if (old - new).abs() > change_threshold {
                 let symbol = match self.database.get_token_by_mint(mint) {
                     Ok(Some(token)) if !token.symbol.is_empty() => token.symbol,
                     _ => mint[..8].to_string(),

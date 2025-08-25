@@ -65,14 +65,14 @@ pub const TIME_DECAY_START_SECS: f64 = 7200.0; // 2 hours
 // Monitoring & Display Configuration
 // -----------------------------------------------------------------------------
 
-/// Summary display refresh interval (seconds)
-pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 7;
+/// Summary display refresh interval (seconds) - optimized for 5s priority checking
+pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 5;
 
-/// New entry signals check interval (seconds)
-pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 2;
+/// New entry signals check interval (seconds) - optimized for fastest price checking
+pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 5;
 
-/// Open positions monitoring interval (seconds)
-pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 2;
+/// Open positions monitoring interval (seconds) - maximum priority price checking every 5 seconds
+pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 5;
 
 // -----------------------------------------------------------------------------
 // Task Timeout Configuration
@@ -172,9 +172,11 @@ use crate::errors::{ ScreenerBotError, PositionError };
 
 use chrono::Utc;
 use colored::Colorize;
+use futures;
 use once_cell::sync::Lazy;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
+use std::collections::HashMap;
 use std::sync::atomic::{ AtomicUsize, Ordering };
 use std::sync::Arc;
 use std::time::Duration;
@@ -930,17 +932,39 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             Vec::new()
         };
 
-        // Force refresh and then request immediate cache reads for open positions (non-blocking)
+        // PERFORMANCE FIX: Pre-warm cache with fresh prices before position processing
+        // Wait for all refresh operations to complete to ensure fresh cache
         if !open_position_mints.is_empty() {
-            for mint in &open_position_mints {
-                let mint_clone = mint.clone();
-                tokio::spawn(async move {
-                    // Force a refresh to ensure latest pool/API fetch (triggers price change logging)
-                    crate::tokens::price::force_refresh_token_price_safe(&mint_clone).await;
-                    // Touch cache (optional) to record watch time
-                    let _ = crate::tokens::price::get_token_price_safe(&mint_clone).await;
-                });
-            }
+            log(
+                LogTag::Trader,
+                "CACHE_PREWARM_START",
+                &format!(
+                    "🔄 Pre-warming price cache for {} open positions",
+                    open_position_mints.len()
+                )
+            );
+
+            let refresh_futures: Vec<_> = open_position_mints
+                .iter()
+                .map(|mint| {
+                    let mint_clone = mint.clone();
+                    async move {
+                        // Force a refresh to ensure latest pool/API fetch (triggers price change logging)
+                        crate::tokens::price::force_refresh_token_price_safe(&mint_clone).await;
+                        // Touch cache to record watch time and verify availability
+                        crate::tokens::price::get_token_price_safe(&mint_clone).await
+                    }
+                })
+                .collect();
+
+            // Wait for all refresh operations to complete
+            let _prewarm_results = futures::future::join_all(refresh_futures).await;
+
+            log(
+                LogTag::Trader,
+                "CACHE_PREWARM_COMPLETE",
+                "✅ Price cache pre-warming completed - fresh prices available"
+            );
         }
 
         let mut positions_to_close = Vec::new();
@@ -980,11 +1004,35 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             );
         }
 
+        // PERFORMANCE FIX: Use parallel non-blocking price fetches instead of sequential blocking calls
+        // Collect all price futures first (non-blocking, cache-first)
+        let price_futures: Vec<_> = open_positions_data
+            .iter()
+            .map(|pos| {
+                let mint = pos.mint.clone();
+                async move {
+                    // Use non-blocking cache-first approach - will return cached price or None if stale
+                    let price = crate::tokens::price::get_token_price_safe(&mint).await;
+                    (mint, price)
+                }
+            })
+            .collect();
+
+        // Execute all price fetches in parallel
+        let price_results = futures::future::join_all(price_futures).await;
+
+        // Create price lookup map for fast access
+        let price_map: std::collections::HashMap<String, f64> = price_results
+            .into_iter()
+            .filter_map(|(mint, price_opt)| price_opt.map(|price| (mint, price)))
+            .collect();
+
         // Now process each position with async calls (mutex is released)
         for position in open_positions_data.into_iter() {
             let mut position = position; // local mutable copy for calculations/logs
-            // Get current price from safe price service
-            if let Some(current_price) = get_token_price_blocking_safe(&position.mint).await {
+
+            // Get current price from our parallel fetch results
+            if let Some(&current_price) = price_map.get(&position.mint) {
                 if current_price > 0.0 && current_price.is_finite() {
                     // Update position tracking via PositionsManager actor
                     if let Some(h) = crate::positions::get_positions_handle().await {

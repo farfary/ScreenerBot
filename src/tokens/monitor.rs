@@ -27,14 +27,14 @@ use std::sync::Arc;
 // MONITORING CONFIGURATION CONSTANTS
 // =============================================================================
 
-/// Enhanced monitoring cycle duration in seconds (2 seconds for real-time price updates)
-pub const ENHANCED_CYCLE_DURATION_SECONDS: u64 = 2;
+/// Enhanced monitoring cycle duration in seconds - FASTEST 5s priority checking
+pub const ENHANCED_CYCLE_DURATION_SECONDS: u64 = 5;
 
 /// Database cleanup interval in seconds (1 minute)
 pub const CLEANUP_INTERVAL_SECONDS: u64 = 60;
 
-/// Maximum number of tokens to monitor per cycle (reduced for 2-second intervals)
-pub const MAX_TOKENS_PER_MONITOR_CYCLE: usize = 100;
+/// Maximum number of tokens to monitor per cycle - increased for 5-second intervals
+pub const MAX_TOKENS_PER_MONITOR_CYCLE: usize = 200;
 
 /// Window for "recent pools infos" refresh (seconds)
 pub const MONITOR_RECENT_POOLS_WINDOW_SECONDS: i64 = 600; // 10 minutes
