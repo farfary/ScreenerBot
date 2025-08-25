@@ -18,11 +18,11 @@ use crate::utils::get_wallet_address;
 // New pool price system is now integrated via background services
 
 use chrono::{ Utc };
+use std::time::{ Duration, Instant };
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::str::FromStr;
 use tokio::sync::{ Notify, Mutex };
-use std::time::{ Duration, Instant };
 use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
 use crate::tokens::discovery::get_discovery_stats;
 
@@ -1516,54 +1516,47 @@ async fn build_recent_swaps_section() -> Result<String, String> {
         ::from_str(&wallet_address_str)
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
-    let mut manager = TransactionsManager::new(wallet_pubkey).await?;
-
-    // OPTIMIZATION: Use get_all_swap_transactions_limited with fast_recent=true
-    // This directly fetches only swap transactions from newest to oldest, avoiding
-    // the expensive conversion process for non-swap transactions
-    let swaps = match manager.get_all_swap_transactions_limited(Some(20), Some(true)).await {
-        Ok(swap_pnls) => swap_pnls,
-        Err(_) => {
-            // Fallback to old method but with early termination for performance
-            log(
-                LogTag::Summary,
-                "DEBUG",
-                "[build_recent_swaps_table] Fallback: using filtered transaction approach"
-            );
-
-            let txs = manager
-                .get_recent_transactions(50).await
-                .map_err(|e| format!("Failed to get recent transactions: {}", e))?;
-
-            let mut swaps = Vec::new();
-            for tx in txs {
-                // OPTIMIZATION: Quick type check before expensive conversion
-                match tx.transaction_type {
-                    | crate::transactions::TransactionType::SwapSolToToken { .. }
-                    | crate::transactions::TransactionType::SwapTokenToSol { .. } => {
-                        if
-                            let Some(swap_pnl) = manager.convert_to_swap_pnl_info(
-                                &tx,
-                                &mut HashMap::new(),
-                                false
-                            )
-                        {
-                            if swap_pnl.swap_type == "Buy" || swap_pnl.swap_type == "Sell" {
-                                swaps.push(swap_pnl);
-                                if swaps.len() >= 20 {
-                                    break;
-                                }
-                            }
+    // Use global transaction manager instead of creating new instance
+    let swaps = if let Some(manager_guard) = crate::transactions::get_global_transaction_manager().await {
+        match tokio::time::timeout(Duration::from_secs(5), manager_guard.lock()).await {
+            Ok(mut guard) => {
+                if let Some(ref mut manager) = *guard {
+                    match manager.get_all_swap_transactions_limited(Some(20), Some(true)).await {
+                        Ok(swap_pnls) => swap_pnls,
+                        Err(_) => {
+                            log(
+                                LogTag::Summary,
+                                "DEBUG",
+                                "Failed to get limited swaps from global manager, using empty list"
+                            );
+                            Vec::new()
                         }
                     }
-                    _ => {
-                        // Skip non-swap transactions entirely
-                        continue;
-                    }
+                } else {
+                    log(
+                        LogTag::Summary,
+                        "ERROR",
+                        "Global transaction manager not initialized"
+                    );
+                    Vec::new()
                 }
             }
-            swaps
+            Err(_) => {
+                log(
+                    LogTag::Summary,
+                    "ERROR",
+                    "Global transaction manager busy - timeout"
+                );
+                Vec::new()
+            }
         }
+    } else {
+        log(
+            LogTag::Summary,
+            "ERROR",
+            "Global transaction manager not available for recent swaps"
+        );
+        Vec::new()
     };
 
     if is_debug_summary_enabled() {
@@ -1640,12 +1633,48 @@ async fn build_recent_transactions_section() -> Result<String, String> {
         ::from_str(&wallet_address_str)
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
-    let mut manager = TransactionsManager::new(wallet_pubkey).await?;
-
-    // Use the optimized batch retrieval (20 transactions only - no need for extras)
-    let mut txs = manager
-        .get_recent_transactions(20).await
-        .map_err(|e| format!("Failed to get recent transactions: {}", e))?;
+    // Use global transaction manager instead of creating new instance
+    let mut txs = if let Some(manager_guard) = crate::transactions::get_global_transaction_manager().await {
+        match tokio::time::timeout(Duration::from_secs(5), manager_guard.lock()).await {
+            Ok(mut guard) => {
+                if let Some(ref mut manager) = *guard {
+                    match manager.get_recent_transactions(20).await {
+                        Ok(tx_list) => tx_list,
+                        Err(e) => {
+                            log(
+                                LogTag::Summary,
+                                "ERROR", 
+                                &format!("Failed to get recent transactions from global manager: {}", e)
+                            );
+                            Vec::new()
+                        }
+                    }
+                } else {
+                    log(
+                        LogTag::Summary,
+                        "ERROR",
+                        "Global transaction manager not initialized"
+                    );
+                    Vec::new()
+                }
+            }
+            Err(_) => {
+                log(
+                    LogTag::Summary,
+                    "ERROR",
+                    "Global transaction manager busy - timeout"
+                );
+                Vec::new()
+            }
+        }
+    } else {
+        log(
+            LogTag::Summary,
+            "ERROR",
+            "Global transaction manager not available for recent transactions"
+        );
+        Vec::new()
+    };
 
     if is_debug_summary_enabled() {
         log(

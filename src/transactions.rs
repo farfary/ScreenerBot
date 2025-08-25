@@ -4393,12 +4393,36 @@ impl TransactionsManager {
         &mut self,
         transaction: &mut Transaction
     ) -> Result<(), String> {
+        // Validate transaction is ready for analysis
+        if !matches!(transaction.status, TransactionStatus::Confirmed | TransactionStatus::Finalized) {
+            return Err(format!(
+                "Transaction {} not confirmed - status: {:?}",
+                get_signature_prefix(&transaction.signature),
+                transaction.status
+            ));
+        }
+
+        if !transaction.success {
+            return Err(format!(
+                "Transaction {} failed - cannot analyze",
+                get_signature_prefix(&transaction.signature)
+            ));
+        }
+
+        if transaction.log_messages.is_empty() {
+            return Err(format!(
+                "Transaction {} has no log messages - cannot analyze",
+                get_signature_prefix(&transaction.signature)
+            ));
+        }
+
         log(
             LogTag::Transactions,
             "FORCE_ANALYSIS",
             &format!(
-                "Force recalculating analysis for {}",
-                get_signature_prefix(&transaction.signature)
+                "Force recalculating analysis for {} (confirmed, successful, {} logs)",
+                get_signature_prefix(&transaction.signature),
+                transaction.log_messages.len()
             )
         );
 
@@ -6213,7 +6237,7 @@ pub async fn initialize_global_transaction_manager(wallet_pubkey: Pubkey) -> Res
 }
 
 /// Get global transaction manager instance
-async fn get_global_transaction_manager() -> Option<std::sync::Arc<tokio::sync::Mutex<Option<TransactionsManager>>>> {
+pub async fn get_global_transaction_manager() -> Option<std::sync::Arc<tokio::sync::Mutex<Option<TransactionsManager>>>> {
     Some(GLOBAL_TRANSACTION_MANAGER.clone())
 }
 
@@ -6303,23 +6327,21 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                     }
                                 }
                                 Err(_) => {
-                                    // If manager is busy, use force analysis on current transaction
+                                    // Manager is busy - return transaction without forced analysis
+                                    // Creating new instances violates architecture - never do this!
                                     if debug {
                                         log(
                                             LogTag::Transactions,
-                                            "MANAGER_BUSY_FORCE_ANALYSIS",
+                                            "MANAGER_BUSY_SKIP",
                                             &format!(
-                                                "Manager busy - using force analysis for {}",
+                                                "Manager busy - returning transaction {} without force analysis to avoid creating unauthorized instance",
                                                 &signature[..8]
                                             )
                                         );
                                     }
-
-                                    // Create temporary manager for analysis
-                                    let wallet_addr = load_wallet_address_from_config().await?;
-                                    let mut temp_analyzer =
-                                        TransactionsManager::new(wallet_addr).await?;
-                                    let _ = temp_analyzer.force_recalculate_analysis(&mut tx).await;
+                                    
+                                    // Transaction will be analyzed later when manager becomes available
+                                    // This preserves architectural integrity
                                 }
                             }
 
@@ -6329,132 +6351,27 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                 }
             }
             Err(_) => {
-                // Timeout occurred - use fallback approach with temporary manager
+                // Timeout occurred - DO NOT create temporary manager (architecture violation)
                 log(
                     LogTag::Transactions,
                     "LOCK_TIMEOUT",
                     &format!(
-                        "Global transaction manager busy - using fallback for {}",
+                        "Global transaction manager busy - returning None for {} to preserve architecture",
                         &signature[..8]
                     )
                 );
 
-                // Create temporary manager for read-only database access (similar to priority transactions)
-                let wallet_address = load_wallet_address_from_config().await?;
-                let mut temp_manager = TransactionsManager::new(wallet_address).await?;
-
-                if let Some(db) = &temp_manager.transaction_database {
-                    if let Some(raw) = db.get_raw_transaction(signature).await? {
-                        // Build basic transaction from database without complex analysis
-                        let mut tx = Transaction {
-                            signature: raw.signature.clone(),
-                            slot: raw.slot,
-                            block_time: raw.block_time,
-                            timestamp: DateTime::parse_from_rfc3339(&raw.timestamp)
-                                .map(|dt| dt.with_timezone(&Utc))
-                                .unwrap_or_else(|_| Utc::now()),
-                            status: match raw.status.as_str() {
-                                "Finalized" => TransactionStatus::Finalized,
-                                "Confirmed" => TransactionStatus::Confirmed,
-                                "Pending" => TransactionStatus::Pending,
-                                s if s.starts_with("Failed") =>
-                                    TransactionStatus::Failed(
-                                        raw.error_message.clone().unwrap_or_else(|| s.to_string())
-                                    ),
-                                _ => TransactionStatus::Pending,
-                            },
-                            transaction_type: TransactionType::Unknown,
-                            direction: TransactionDirection::Internal,
-                            success: raw.success,
-                            error_message: raw.error_message.clone(),
-                            fee_sol: 0.0,
-                            sol_balance_change: 0.0,
-                            token_transfers: Vec::new(),
-                            raw_transaction_data: raw.raw_transaction_data
-                                .as_ref()
-                                .and_then(|s| serde_json::from_str(s).ok()),
-                            log_messages: Vec::new(),
-                            instructions: Vec::new(),
-                            sol_balance_changes: Vec::new(),
-                            token_balance_changes: Vec::new(),
-                            swap_analysis: None,
-                            position_impact: None,
-                            profit_calculation: None,
-                            fee_breakdown: None,
-                            ata_analysis: None,
-                            token_info: None,
-                            calculated_token_price_sol: None,
-                            price_source: None,
-                            token_symbol: None,
-                            token_decimals: None,
-                            last_updated: Utc::now(),
-                            cached_analysis: None,
-                        };
-
-                        // CRITICAL: Always run analysis for transactions retrieved via fallback
-                        // This ensures position verification gets fully analyzed transactions
-                        let _ = temp_manager.force_recalculate_analysis(&mut tx).await;
-
-                        if debug {
-                            log(
-                                LogTag::Transactions,
-                                "FALLBACK_ANALYSIS_COMPLETE",
-                                &format!(
-                                    "Completed fallback analysis for {} - type: {:?}, has_swap: {}",
-                                    &signature[..8],
-                                    tx.transaction_type,
-                                    tx.swap_analysis.is_some()
-                                )
-                            );
-                        }
-
-                        if debug {
-                            log(
-                                LogTag::Transactions,
-                                "FALLBACK_SUCCESS",
-                                &format!(
-                                    "Retrieved {} via fallback - status: {:?}, success: {}, has_analysis: {}",
-                                    &signature[..8],
-                                    tx.status,
-                                    tx.success,
-                                    tx.swap_analysis.is_some()
-                                )
-                            );
-                        }
-
-                        return Ok(Some(tx));
-                    }
-                }
-
-                // If not in database, try RPC fetch as final fallback
-                if debug {
-                    log(
-                        LogTag::Transactions,
-                        "FALLBACK_RPC",
-                        &format!(
-                            "Transaction {} not in database - trying RPC fetch",
-                            &signature[..8]
-                        )
-                    );
-                }
-
-                match temp_manager.process_transaction_direct(signature).await {
-                    Ok(tx) => {
-                        return Ok(Some(tx));
-                    }
-                    Err(e) => {
-                        if debug {
-                            log(
-                                LogTag::Transactions,
-                                "FALLBACK_FAIL",
-                                &format!("Fallback RPC failed for {}: {}", &signature[..8], e)
-                            );
-                        }
-                        return Ok(None);
-                    }
-                }
+                // Return None instead of creating unauthorized instance
+                // The caller should retry later when the global manager is available
+                return Ok(None);
             }
         }
+    } else {
+        log(
+            LogTag::Transactions,
+            "NO_GLOBAL_MANAGER",
+            &format!("No global transaction manager available for {}", &signature[..8])
+        );
     }
 
     Ok(None)
@@ -6495,58 +6412,48 @@ pub async fn get_priority_transaction(signature: &str) -> Result<Option<Transact
     // Create dedicated priority manager with forced analysis
     log(
         LogTag::Transactions,
-        "PRIORITY_DEDICATED",
-        &format!("Creating dedicated priority manager for {}", get_signature_prefix(signature))
+        "PRIORITY_GLOBAL_MANAGER",
+        &format!("Using global manager for priority request {}", get_signature_prefix(signature))
     );
 
-    let wallet_pubkey = load_wallet_address_from_config().await?;
-    let mut priority_manager = TransactionsManager::new(wallet_pubkey).await?;
-
-    if let Some(mut transaction) = priority_manager.get_transaction_from_db(signature).await {
-        if
-            transaction.success &&
-            matches!(
-                transaction.status,
-                TransactionStatus::Finalized | TransactionStatus::Confirmed
-            )
-        {
-            // Force complete analysis recalculation
-            priority_manager.force_recalculate_analysis(&mut transaction).await?;
-
-            log(
-                LogTag::Transactions,
-                "PRIORITY_SUCCESS",
-                &format!(
-                    "Priority request completed for {} with full analysis - type: {:?}, has_swap: {}",
-                    get_signature_prefix(signature),
-                    transaction.transaction_type,
-                    transaction.swap_analysis.is_some()
-                )
-            );
-
-            Ok(Some(transaction))
-        } else {
-            log(
-                LogTag::Transactions,
-                "PRIORITY_NOT_SUCCESS",
-                &format!(
-                    "Priority request found transaction {} but not successful/finalized",
-                    get_signature_prefix(signature)
-                )
-            );
-            Ok(None)
+    // Use global manager instead of creating unauthorized instance
+    if let Some(manager_guard) = get_global_transaction_manager().await {
+        match tokio::time::timeout(Duration::from_secs(10), manager_guard.lock()).await {
+            Ok(guard) => {
+                if let Some(ref manager) = *guard {
+                    if let Some(transaction) = manager.get_transaction_from_db(signature).await {
+                        if transaction.success &&
+                           matches!(transaction.status, TransactionStatus::Finalized | TransactionStatus::Confirmed)
+                        {
+                            log(
+                                LogTag::Transactions,
+                                "PRIORITY_SUCCESS",
+                                &format!(
+                                    "Priority transaction {} retrieved from global manager",
+                                    get_signature_prefix(signature)
+                                )
+                            );
+                            return Ok(Some(transaction));
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                log(
+                    LogTag::Transactions,
+                    "PRIORITY_TIMEOUT",
+                    &format!("Priority request timeout for {}", get_signature_prefix(signature))
+                );
+            }
         }
-    } else {
-        log(
-            LogTag::Transactions,
-            "PRIORITY_NOT_FOUND",
-            &format!(
-                "Priority request could not find transaction {}",
-                get_signature_prefix(signature)
-            )
-        );
-        Ok(None)
     }
+
+    log(
+        LogTag::Transactions,
+        "PRIORITY_UNAVAILABLE",
+        &format!("Priority transaction {} not available from global manager", get_signature_prefix(signature))
+    );
+    Ok(None)
 }
 
 /// Check if transaction is verified/finalized with enhanced status reporting

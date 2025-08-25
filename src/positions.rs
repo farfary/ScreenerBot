@@ -3256,8 +3256,8 @@ impl PositionsManager {
                                     )
                                 );
 
-                                if elapsed_seconds > 15 {
-                                    // 15 seconds timeout - swaps should be fast!
+                                if elapsed_seconds > 60 {
+                                    // 60 seconds timeout - account for Solana network propagation delays
                                     log(
                                         LogTag::Positions,
                                         "TIMEOUT",
@@ -3692,27 +3692,49 @@ impl PositionsManager {
                 }
 
                 if should_remove {
-                    log(
-                        LogTag::Positions,
-                        "REMOVE_PHANTOM",
-                        &format!(
-                            "🗑️ Flagging phantom position for {} due to failed entry transaction (no exits found)",
-                            position.symbol
-                        )
-                    );
-                    position.phantom_remove = true;
-
-                    // Enhanced logging for definitively failed transactions
+                    // Only flag as phantom for definitively failed transactions or after multiple retries
                     if is_definitive_failure {
                         log(
                             LogTag::Positions,
-                            "DEFINITIVE_FAILURE",
+                            "DEFINITIVE_FAILURE_PHANTOM",
                             &format!(
-                                "💥 Position {} marked for immediate phantom removal due to definitive transaction failure: {}",
+                                "� Position {} flagged for phantom removal due to definitive failure: {}",
                                 position.symbol,
                                 error
                             )
                         );
+                        position.phantom_remove = true;
+                    } else {
+                        // For timeout or network issues, be more conservative
+                        let age_minutes = chrono::Utc::now()
+                            .signed_duration_since(position.entry_time)
+                            .num_minutes();
+                        
+                        if age_minutes > 5 {
+                            // Only flag as phantom after 10+ minutes for non-definitive failures
+                            log(
+                                LogTag::Positions,
+                                "CONSERVATIVE_PHANTOM",
+                                &format!(
+                                    "�️ Position {} flagged for phantom removal after {}m (conservative timeout): {}",
+                                    position.symbol,
+                                    age_minutes,
+                                    error
+                                )
+                            );
+                            position.phantom_remove = true;
+                        } else {
+                            log(
+                                LogTag::Positions,
+                                "PHANTOM_DELAYED",
+                                &format!(
+                                    "⏳ Delaying phantom flag for {} - only {}m old, waiting for network propagation",
+                                    position.symbol,
+                                    age_minutes
+                                )
+                            );
+                            // Don't flag as phantom yet - wait for more time
+                        }
                     }
                 }
 
@@ -3809,8 +3831,37 @@ impl PositionsManager {
             &format!("⏰ Handling transaction timeout for {}", get_signature_prefix(signature))
         );
 
-        // Treat timeout as failure for safety
-        self.handle_failed_transaction(signature, "Transaction verification timeout").await
+        // Check if transaction exists now before marking as failed
+        match crate::transactions::get_transaction(signature).await {
+            Ok(Some(tx)) => {
+                if matches!(tx.status, crate::transactions::TransactionStatus::Confirmed | crate::transactions::TransactionStatus::Finalized) 
+                    && tx.success {
+                    log(
+                        LogTag::Positions,
+                        "TIMEOUT_RECOVERY",
+                        &format!(
+                            "✅ Transaction {} appeared after timeout - will process normally",
+                            get_signature_prefix(signature)
+                        )
+                    );
+                    // Don't mark as failed - transaction is actually successful
+                    return Ok(());
+                }
+            }
+            _ => {
+                log(
+                    LogTag::Positions,
+                    "TIMEOUT_CONFIRMED",
+                    &format!(
+                        "❌ Transaction {} still not found after timeout - marking as failed",
+                        get_signature_prefix(signature)
+                    )
+                );
+            }
+        }
+
+        // Only treat as failure if transaction is definitively not found or failed
+        self.handle_failed_transaction(signature, "Transaction verification timeout after retry").await
     }
 
     /// Clean up phantom positions
@@ -3851,32 +3902,24 @@ impl PositionsManager {
             let mut remove = false;
             let mut removal_reason = String::new();
 
-            // Condition 1: Explicit phantom flag - BUT check if it's a recent GMGN transaction first
+            // Condition 1: Explicit phantom flag - BUT apply universal grace period for recent transactions
             if position.phantom_remove {
                 let age_minutes = now.signed_duration_since(position.entry_time).num_minutes();
 
-                // SPECIAL HANDLING: For very recent positions (< 5 minutes), check if it might be a GMGN swap
-                // that failed force analysis. Give it more time to be properly verified.
+                // UNIVERSAL GRACE PERIOD: For very recent positions (< 5 minutes), give more time
+                // to handle normal network propagation delays regardless of router/DEX
                 if age_minutes < 5 {
-                    if let Some(sig) = &position.entry_transaction_signature {
-                        // Check if this transaction exists and might be a GMGN swap
-                        if let Ok(Some(tx)) = crate::transactions::get_transaction(sig).await {
-                            let log_text = tx.log_messages.join(" ");
-                            if log_text.contains("ATokenGP") || log_text.contains("Tokenkeg") {
-                                log(
-                                    LogTag::Positions,
-                                    "GMGN_GRACE_PERIOD",
-                                    &format!(
-                                        "🕒 Giving {} more time for verification - recent GMGN-like transaction ({}min old)",
-                                        position.symbol,
-                                        age_minutes
-                                    )
-                                );
-                                // Don't remove yet, give it more time
-                                continue;
-                            }
-                        }
-                    }
+                    log(
+                        LogTag::Positions,
+                        "UNIVERSAL_GRACE_PERIOD",
+                        &format!(
+                            "🕒 Giving {} more time for verification - recent transaction ({}min old)",
+                            position.symbol,
+                            age_minutes
+                        )
+                    );
+                    // Don't remove yet, give it more time for network propagation
+                    continue;
                 }
 
                 remove = true;
@@ -4610,45 +4653,34 @@ impl PositionsManager {
             );
         }
 
-        match crate::transactions::load_wallet_address_from_config().await {
-            Ok(wallet_pubkey) => {
-                match crate::transactions::TransactionsManager::new(wallet_pubkey).await {
-                    Ok(temp_manager) => {
-                        let result = temp_manager.convert_to_swap_pnl_info(
-                            transaction,
-                            token_symbol_cache,
-                            silent
-                        );
-                        if result.is_some() && !silent {
-                            log(
-                                LogTag::Positions,
-                                "CONVERT_TEMPORARY_SUCCESS",
-                                &format!(
-                                    "✅ Temporary manager conversion successful for {}",
-                                    get_signature_prefix(&transaction.signature)
-                                )
-                            );
-                        }
-                        result
-                    }
-                    Err(e) => {
-                        if !silent {
-                            log(
-                                LogTag::Positions,
-                                "CONVERT_TEMPORARY_ERROR",
-                                &format!("❌ Failed to create temporary manager: {}", e)
-                            );
-                        }
-                        None
-                    }
+        // Use global transaction manager instead of creating new instance
+        let result = crate::transactions::with_global_tx_manager(3, |manager| {
+            manager.convert_to_swap_pnl_info(transaction, token_symbol_cache, silent)
+        }).await;
+
+        match result {
+            Some(conversion_result) => {
+                if conversion_result.is_some() && !silent {
+                    log(
+                        LogTag::Positions,
+                        "CONVERT_SUCCESS",
+                        &format!(
+                            "✅ Global manager conversion successful for {}",
+                            get_signature_prefix(&transaction.signature)
+                        )
+                    );
                 }
+                conversion_result
             }
-            Err(e) => {
+            None => {
                 if !silent {
                     log(
                         LogTag::Positions,
-                        "CONVERT_WALLET_ERROR",
-                        &format!("❌ Failed to load wallet address: {}", e)
+                        "CONVERT_UNAVAILABLE",
+                        &format!(
+                            "⚠️ Global transaction manager unavailable for conversion of {}",
+                            get_signature_prefix(&transaction.signature)
+                        )
                     );
                 }
                 None
