@@ -4225,6 +4225,39 @@ impl PositionsManager {
                 continue;
             }
 
+            // GLOBAL GRACE PERIOD: Don't cleanup positions created within last 2 minutes
+            // This prevents race conditions between position creation and verification
+            let age_seconds = now.signed_duration_since(position.entry_time).num_seconds();
+            if age_seconds < 120 {
+                // 2 minutes grace period
+                log(
+                    LogTag::Positions,
+                    "GLOBAL_GRACE_PERIOD",
+                    &format!(
+                        "🕒 Skipping cleanup for {} - within 2-minute grace period ({}s old)",
+                        position.symbol,
+                        age_seconds
+                    )
+                );
+                continue;
+            }
+
+            // VERIFICATION STATE PROTECTION: Don't cleanup positions still in verification queue
+            if let Some(entry_sig) = &position.entry_transaction_signature {
+                if self.pending_verifications.contains_key(entry_sig) {
+                    log(
+                        LogTag::Positions,
+                        "PENDING_VERIFICATION_PROTECTION",
+                        &format!(
+                            "🔍 Skipping cleanup for {} - transaction {} still in verification queue",
+                            position.symbol,
+                            crate::transactions::get_signature_prefix(entry_sig)
+                        )
+                    );
+                    continue;
+                }
+            }
+
             let mut remove = false;
             let mut removal_reason = String::new();
 
@@ -4232,9 +4265,10 @@ impl PositionsManager {
             if position.phantom_remove {
                 let age_minutes = now.signed_duration_since(position.entry_time).num_minutes();
 
-                // UNIVERSAL GRACE PERIOD: For very recent positions (< 5 minutes), give more time
+                // UNIVERSAL GRACE PERIOD: For very recent positions (< 2 minutes), give more time
                 // to handle normal network propagation delays regardless of router/DEX
-                if age_minutes < 5 {
+                // INCREASED FROM 5 to 2 minutes to be more aggressive but still safe
+                if age_minutes < 2 {
                     log(
                         LogTag::Positions,
                         "UNIVERSAL_GRACE_PERIOD",
@@ -4296,9 +4330,25 @@ impl PositionsManager {
             }
 
             // Condition 3: No tokens in wallet for this mint (best-effort, ignore errors)
+            // ENHANCED: Add additional checks to prevent premature removal
             if !remove && position.token_amount.unwrap_or(0) == 0 {
                 // Only check wallet balance if entry still unverified to avoid RPC load
                 if !position.transaction_entry_verified {
+                    // ADDITIONAL PROTECTION: Wait longer for recent positions before balance check
+                    let age_minutes = now.signed_duration_since(position.entry_time).num_minutes();
+                    if age_minutes < 5 {
+                        log(
+                            LogTag::Positions,
+                            "BALANCE_CHECK_DELAY",
+                            &format!(
+                                "⏳ Delaying balance check for {} - position too recent ({}min old)",
+                                position.symbol,
+                                age_minutes
+                            )
+                        );
+                        continue; // Skip balance check for recent positions
+                    }
+
                     if let Ok(wallet) = crate::utils::get_wallet_address() {
                         if
                             let Ok(balance) = crate::utils::get_token_balance(
@@ -4307,18 +4357,92 @@ impl PositionsManager {
                             ).await
                         {
                             if balance == 0 {
-                                remove = true;
-                                removal_reason = "zero_wallet_balance".to_string();
+                                // TRANSACTION VALIDATION: Check if entry transaction actually failed
+                                let mut transaction_confirmed_failed = false;
+                                if let Some(entry_sig) = &position.entry_transaction_signature {
+                                    match crate::transactions::get_transaction(entry_sig).await {
+                                        Ok(Some(tx)) => {
+                                            // Transaction exists, check if it was successful
+                                            if !tx.success {
+                                                transaction_confirmed_failed = true;
+                                                log(
+                                                    LogTag::Positions,
+                                                    "TRANSACTION_CONFIRMED_FAILED",
+                                                    &format!(
+                                                        "❌ Entry transaction {} confirmed failed for {}",
+                                                        crate::transactions::get_signature_prefix(
+                                                            entry_sig
+                                                        ),
+                                                        position.symbol
+                                                    )
+                                                );
+                                            }
+                                        }
+                                        Ok(None) => {
+                                            // Transaction not found - could be failed or still processing
+                                            if age_minutes > 10 {
+                                                transaction_confirmed_failed = true;
+                                                log(
+                                                    LogTag::Positions,
+                                                    "TRANSACTION_NOT_FOUND_AGED",
+                                                    &format!(
+                                                        "❓ Entry transaction {} not found after {}min for {}",
+                                                        crate::transactions::get_signature_prefix(
+                                                            entry_sig
+                                                        ),
+                                                        age_minutes,
+                                                        position.symbol
+                                                    )
+                                                );
+                                            }
+                                        }
+                                        Err(_) => {
+                                            // Error checking transaction - be conservative
+                                            log(
+                                                LogTag::Positions,
+                                                "TRANSACTION_CHECK_ERROR",
+                                                &format!(
+                                                    "⚠️ Failed to check transaction {} for {} - skipping cleanup",
+                                                    crate::transactions::get_signature_prefix(
+                                                        entry_sig
+                                                    ),
+                                                    position.symbol
+                                                )
+                                            );
+                                            continue; // Skip cleanup on error
+                                        }
+                                    }
+                                }
 
-                                log(
-                                    LogTag::Positions,
-                                    "CLEANUP_ZERO_BALANCE",
-                                    &format!(
-                                        "🔍 Position {} ({}) has zero wallet balance - checking for exits",
-                                        position.symbol,
-                                        get_mint_prefix(&position.mint)
-                                    )
-                                );
+                                // Only mark for removal if transaction is confirmed failed or very old
+                                if transaction_confirmed_failed || age_minutes > 15 {
+                                    remove = true;
+                                    removal_reason = "zero_wallet_balance_validated".to_string();
+
+                                    log(
+                                        LogTag::Positions,
+                                        "CLEANUP_ZERO_BALANCE_VALIDATED",
+                                        &format!(
+                                            "🔍 Position {} ({}) has zero wallet balance and {} - checking for exits",
+                                            position.symbol,
+                                            get_mint_prefix(&position.mint),
+                                            if transaction_confirmed_failed {
+                                                "confirmed failed transaction"
+                                            } else {
+                                                "aged transaction"
+                                            }
+                                        )
+                                    );
+                                } else {
+                                    log(
+                                        LogTag::Positions,
+                                        "CLEANUP_ZERO_BALANCE_WAITING",
+                                        &format!(
+                                            "⏳ Position {} has zero balance but transaction not confirmed failed - waiting longer",
+                                            position.symbol
+                                        )
+                                    );
+                                }
                             }
                         }
                     }

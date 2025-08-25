@@ -58,7 +58,7 @@ fn is_direction_internal(direction: &TransactionDirection) -> bool {
 }
 
 /// Helper function to safely get signature prefix for logging
-fn get_signature_prefix(signature: &str) -> &str {
+pub fn get_signature_prefix(signature: &str) -> &str {
     if signature.len() >= 8 { &signature[..8] } else { signature }
 }
 
