@@ -191,7 +191,7 @@ pub async fn get_raydium_quote(
     }
 
     // Return an error indicating that Raydium API is no longer available
-    Err(SwapError::ApiError(
+    Err(ScreenerBotError::api_error(
         "Raydium direct API is deprecated and no longer available. Use Jupiter aggregator instead which includes Raydium routes.".to_string()
     ))
 }
@@ -250,13 +250,13 @@ pub async fn get_raydium_swap_transaction(
             if is_debug_swaps_enabled() {
                 log(LogTag::Swap, "RAYDIUM_BUILD_TIMEOUT", "⏰ Raydium swap build timeout");
             }
-            SwapError::ApiError("Raydium swap build timeout".to_string())
+            ScreenerBotError::api_error("Raydium swap build timeout".to_string())
         })?
         .map_err(|e| {
             if is_debug_swaps_enabled() {
                 log(LogTag::Swap, "RAYDIUM_BUILD_ERROR", &format!("❌ Raydium swap build error: {}", e));
             }
-            SwapError::NetworkError(e)
+            ScreenerBotError::NetworkError(NetworkError::ConnectionError { message: e.to_string( }))
         })?;
 
     if is_debug_swaps_enabled() {
@@ -268,18 +268,18 @@ pub async fn get_raydium_swap_transaction(
     }
 
     if !response.status().is_success() {
-        return Err(SwapError::ApiError(
+        return Err(ScreenerBotError::api_error(
             format!("Raydium swap build error: {}", response.status())
         ));
     }
 
     let swap_response: RaydiumSwapResponse = response.json().await
-        .map_err(|e| SwapError::InvalidResponse(
+        .map_err(|e| ScreenerBotError::invalid_response(
             format!("Failed to parse Raydium swap response: {}", e)
         ))?;
 
     if !swap_response.success {
-        return Err(SwapError::ApiError(
+        return Err(ScreenerBotError::api_error(
             format!("Raydium swap build failed: id={}", swap_response.id)
         ));
     }
@@ -374,7 +374,7 @@ fn convert_raydium_quote_to_swap_data(quote_response: RaydiumQuoteResponse) -> R
 fn convert_swap_data_to_raydium_quote(swap_data: &SwapData) -> Result<RaydiumQuoteData, SwapError> {
     // Parse route plan back from JSON
     let route_plan: Vec<RaydiumRoutePlan> = serde_json::from_value(swap_data.quote.route_plan.clone())
-        .map_err(|e| SwapError::InvalidResponse(format!("Failed to parse route plan: {}", e)))?;
+        .map_err(|e| ScreenerBotError::invalid_response(format!("Failed to parse route plan: {}", e)))?;
 
     Ok(RaydiumQuoteData {
         input_mint: swap_data.quote.input_mint.clone(),
@@ -452,7 +452,7 @@ pub fn validate_raydium_quote_price(
     );
 
     if price_difference > slippage_tolerance {
-        return Err(SwapError::SlippageExceeded(
+        return Err(ScreenerBotError::slippage_exceeded(
             format!(
                 "Raydium price difference {:.2}% exceeds tolerance {:.2}%",
                 price_difference,

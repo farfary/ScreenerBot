@@ -1,6 +1,7 @@
 use screenerbot::global::*;
 use screenerbot::logger::{ log, LogTag, init_file_logging };
 use screenerbot::rpc::{ SwapError, get_rpc_client, init_rpc_client };
+use screenerbot::errors::ScreenerBotError;
 use screenerbot::utils::{ get_wallet_address };
 use std::str::FromStr;
 use solana_sdk::{
@@ -308,7 +309,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Check which program owns a token account (corrected detection logic)
 async fn check_token_account_program(token_account: &str) -> Result<bool, SwapError> {
-    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| ScreenerBotError::config_error(e.to_string()))?;
 
     let rpc_payload =
         serde_json::json!({
@@ -355,7 +356,7 @@ async fn check_token_account_program(token_account: &str) -> Result<bool, SwapEr
 
                                     if !is_token_2022 && !is_spl_token {
                                         return Err(
-                                            SwapError::TransactionError(
+                                            ScreenerBotError::transaction_error(
                                                 format!(
                                                     "Token account {} has unexpected owner: {}",
                                                     token_account,
@@ -378,7 +379,7 @@ async fn check_token_account_program(token_account: &str) -> Result<bool, SwapEr
         }
     }
 
-    Err(SwapError::TransactionError("Failed to check token account program".to_string()))
+    Err(ScreenerBotError::transaction_error("Failed to check token account program".to_string()))
 }
 
 /// Fixed version of close_ata that uses correct program detection
@@ -398,25 +399,31 @@ async fn build_and_send_close_instruction_fixed(
     token_account: &str,
     is_token_2022: bool
 ) -> Result<String, SwapError> {
-    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| ScreenerBotError::config_error(e.to_string()))?;
 
     // Parse addresses
     let owner_pubkey = Pubkey::from_str(wallet_address).map_err(|e|
-        SwapError::InvalidAmount(format!("Invalid wallet address: {}", e))
+        ScreenerBotError::invalid_amount(
+            format!("Invalid wallet address: {}", e),
+            "Wallet address parsing failed".to_string()
+        )
     )?;
 
     let token_account_pubkey = Pubkey::from_str(token_account).map_err(|e|
-        SwapError::InvalidAmount(format!("Invalid token account: {}", e))
+        ScreenerBotError::invalid_amount(
+            format!("Invalid token account: {}", e),
+            "Token account parsing failed".to_string()
+        )
     )?;
 
     // Decode private key
     let private_key_bytes = bs58
         ::decode(&configs.main_wallet_private)
         .into_vec()
-        .map_err(|e| SwapError::ConfigError(format!("Invalid private key: {}", e)))?;
+        .map_err(|e| ScreenerBotError::config_error(format!("Invalid private key: {}", e)))?;
 
     let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e|
-        SwapError::ConfigError(format!("Failed to create keypair: {}", e))
+        ScreenerBotError::config_error(format!("Failed to create keypair: {}", e))
     )?;
 
     // Build close account instruction with correct program ID
@@ -425,7 +432,7 @@ async fn build_and_send_close_instruction_fixed(
         let token_2022_program_id = Pubkey::from_str(
             "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         ).map_err(|e|
-            SwapError::TransactionError(format!("Invalid Token-2022 program ID: {}", e))
+            ScreenerBotError::transaction_error(format!("Invalid Token-2022 program ID: {}", e))
         )?;
 
         // Close account instruction data: [9] (close account instruction discriminator)
@@ -449,7 +456,7 @@ async fn build_and_send_close_instruction_fixed(
             &owner_pubkey,
             &[]
         ).map_err(|e|
-            SwapError::TransactionError(
+            ScreenerBotError::transaction_error(
                 format!("Failed to build SPL Token close instruction: {}", e)
             )
         )?

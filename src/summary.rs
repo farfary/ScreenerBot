@@ -40,14 +40,14 @@ impl CachedWalletBalance {
     }
 }
 
-/// Global wallet balance cache (30 second cache)
+/// Global wallet balance cache (5 minute cache)
 static WALLET_BALANCE_CACHE: std::sync::LazyLock<Arc<Mutex<Option<CachedWalletBalance>>>> = std::sync::LazyLock::new(
     || Arc::new(Mutex::new(None))
 );
 
-/// Get cached wallet balance with 30-second cache duration
+/// Get cached wallet balance with 5-minute cache duration
 async fn get_cached_wallet_balance() -> String {
-    const CACHE_DURATION_SECS: u64 = 60;
+    const CACHE_DURATION_SECS: u64 = 300; // Increased from 60s to 5 minutes for better performance
 
     // Try to get wallet address first
     let wallet_pubkey = match crate::utils::get_wallet_address() {
@@ -68,7 +68,25 @@ async fn get_cached_wallet_balance() -> String {
     {
         let cache_guard = WALLET_BALANCE_CACHE.lock().await;
         if let Some(cached) = cache_guard.as_ref() {
-            if cached.wallet_address == wallet_pubkey && cached.is_valid(CACHE_DURATION_SECS) {
+            let age_secs = cached.cached_at.elapsed().as_secs();
+            let addresses_match = cached.wallet_address == wallet_pubkey;
+
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "DEBUG",
+                    &format!(
+                        "[get_cached_wallet_balance] Cache check - Age: {}s, Valid: {}, Addresses match: {}, Cached addr: {}, Current addr: {}",
+                        age_secs,
+                        age_secs < CACHE_DURATION_SECS,
+                        addresses_match,
+                        &cached.wallet_address[..8],
+                        &wallet_pubkey[..8]
+                    )
+                );
+            }
+
+            if addresses_match && cached.is_valid(CACHE_DURATION_SECS) {
                 if is_debug_summary_enabled() {
                     log(
                         LogTag::Summary,
@@ -82,6 +100,8 @@ async fn get_cached_wallet_balance() -> String {
                 }
                 return format!("{:.6} SOL", cached.balance);
             }
+        } else if is_debug_summary_enabled() {
+            log(LogTag::Summary, "DEBUG", "[get_cached_wallet_balance] No cache entry exists");
         }
     }
 
@@ -1517,7 +1537,9 @@ async fn build_recent_swaps_section() -> Result<String, String> {
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
     // Use global transaction manager instead of creating new instance
-    let swaps = if let Some(manager_guard) = crate::transactions::get_global_transaction_manager().await {
+    let swaps = if
+        let Some(manager_guard) = crate::transactions::get_global_transaction_manager().await
+    {
         match tokio::time::timeout(Duration::from_secs(5), manager_guard.lock()).await {
             Ok(mut guard) => {
                 if let Some(ref mut manager) = *guard {
@@ -1533,29 +1555,17 @@ async fn build_recent_swaps_section() -> Result<String, String> {
                         }
                     }
                 } else {
-                    log(
-                        LogTag::Summary,
-                        "ERROR",
-                        "Global transaction manager not initialized"
-                    );
+                    log(LogTag::Summary, "ERROR", "Global transaction manager not initialized");
                     Vec::new()
                 }
             }
             Err(_) => {
-                log(
-                    LogTag::Summary,
-                    "ERROR",
-                    "Global transaction manager busy - timeout"
-                );
+                log(LogTag::Summary, "ERROR", "Global transaction manager busy - timeout");
                 Vec::new()
             }
         }
     } else {
-        log(
-            LogTag::Summary,
-            "ERROR",
-            "Global transaction manager not available for recent swaps"
-        );
+        log(LogTag::Summary, "ERROR", "Global transaction manager not available for recent swaps");
         Vec::new()
     };
 
@@ -1634,7 +1644,9 @@ async fn build_recent_transactions_section() -> Result<String, String> {
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
     // Use global transaction manager instead of creating new instance
-    let mut txs = if let Some(manager_guard) = crate::transactions::get_global_transaction_manager().await {
+    let mut txs = if
+        let Some(manager_guard) = crate::transactions::get_global_transaction_manager().await
+    {
         match tokio::time::timeout(Duration::from_secs(5), manager_guard.lock()).await {
             Ok(mut guard) => {
                 if let Some(ref mut manager) = *guard {
@@ -1643,27 +1655,19 @@ async fn build_recent_transactions_section() -> Result<String, String> {
                         Err(e) => {
                             log(
                                 LogTag::Summary,
-                                "ERROR", 
+                                "ERROR",
                                 &format!("Failed to get recent transactions from global manager: {}", e)
                             );
                             Vec::new()
                         }
                     }
                 } else {
-                    log(
-                        LogTag::Summary,
-                        "ERROR",
-                        "Global transaction manager not initialized"
-                    );
+                    log(LogTag::Summary, "ERROR", "Global transaction manager not initialized");
                     Vec::new()
                 }
             }
             Err(_) => {
-                log(
-                    LogTag::Summary,
-                    "ERROR",
-                    "Global transaction manager busy - timeout"
-                );
+                log(LogTag::Summary, "ERROR", "Global transaction manager busy - timeout");
                 Vec::new()
             }
         }

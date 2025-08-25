@@ -18,4 +18,5 @@ pub mod transactions_db; // New database module
 pub mod entry;
 pub mod ohlcv_analysis;
 pub mod swaps;
+pub mod errors; // New structured error handling
 pub mod dashboard;

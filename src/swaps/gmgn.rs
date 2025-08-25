@@ -1,12 +1,20 @@
 use super::config::{
-    GMGN_PARTNER, GMGN_QUOTE_API, QUOTE_TIMEOUT_SECS, RETRY_ATTEMPTS, SOL_MINT,
-    TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS,
-    GMGN_DEFAULT_SWAP_MODE, GMGN_FEE_SOL, GMGN_ANTI_MEV,
+    GMGN_PARTNER,
+    GMGN_QUOTE_API,
+    QUOTE_TIMEOUT_SECS,
+    RETRY_ATTEMPTS,
+    SOL_MINT,
+    TRANSACTION_CONFIRMATION_MAX_ATTEMPTS,
+    TRANSACTION_CONFIRMATION_RETRY_DELAY_MS,
+    GMGN_DEFAULT_SWAP_MODE,
+    GMGN_FEE_SOL,
+    GMGN_ANTI_MEV,
 };
-use super::types::{GMGNApiResponse, SwapData};
+use super::types::{ GMGNApiResponse, SwapData };
 use crate::global::is_debug_swaps_enabled;
-use crate::logger::{log, LogTag};
-use crate::rpc::{lamports_to_sol, SwapError};
+use crate::logger::{ log, LogTag };
+use crate::rpc::{ lamports_to_sol, SwapError };
+use crate::errors::ScreenerBotError;
 /// GMGN swap router implementation
 /// Handles GMGN-specific API calls and swap execution
 use crate::tokens::Token;
@@ -24,14 +32,14 @@ pub struct GMGNSwapResult {
     pub fee_lamports: u64,
     pub execution_time: f64,
     pub effective_price: Option<f64>, // Price per token in SOL
-    pub swap_data: Option<SwapData>,  // Complete swap data for reference
+    pub swap_data: Option<SwapData>, // Complete swap data for reference
     pub error: Option<String>,
 }
 
 /// GMGN-specific transaction signing and sending
 /// Uses GMGN swap transaction format and premium RPC endpoints
 pub async fn gmgn_sign_and_send_transaction(
-    swap_transaction_base64: &str,
+    swap_transaction_base64: &str
 ) -> Result<String, SwapError> {
     if is_debug_swaps_enabled() {
         log(
@@ -40,32 +48,22 @@ pub async fn gmgn_sign_and_send_transaction(
             &format!(
                 "🔵 GMGN: Signing and sending transaction (length: {} chars)",
                 swap_transaction_base64.len()
-            ),
+            )
         );
     }
 
     if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "GMGN_RPC_SELECTED",
-            "📡 GMGN: Using centralized RPC client",
-        );
+        log(LogTag::Swap, "GMGN_RPC_SELECTED", "📡 GMGN: Using centralized RPC client");
     }
 
     // Get RPC client and sign transaction
     let rpc_client = crate::rpc::get_rpc_client();
 
     if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "GMGN_SIGNING",
-            "✍️ GMGN: Signing transaction with wallet keypair...",
-        );
+        log(LogTag::Swap, "GMGN_SIGNING", "✍️ GMGN: Signing transaction with wallet keypair...");
     }
 
-    let signature = rpc_client
-        .sign_and_send_transaction(swap_transaction_base64)
-        .await?;
+    let signature = rpc_client.sign_and_send_transaction(swap_transaction_base64).await?;
 
     if is_debug_swaps_enabled() {
         log(
@@ -86,17 +84,17 @@ pub async fn gmgn_sign_and_send_transaction(
     log(
         LogTag::Swap,
         "GMGN_PROPAGATION_SKIP",
-        &format!("⏭️ GMGN: Skipping propagation check for {} - will verify via background service", &signature[..8])
+        &format!(
+            "⏭️ GMGN: Skipping propagation check for {} - will verify via background service",
+            &signature[..8]
+        )
     );
 
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "GMGN_TRANSACTION_SENT",
-            &format!(
-                "📤 GMGN: Transaction sent to blockchain - Signature: {}",
-                signature
-            ),
+            &format!("📤 GMGN: Transaction sent to blockchain - Signature: {}", signature)
         );
     }
 
@@ -107,7 +105,7 @@ pub async fn gmgn_sign_and_send_transaction(
         &format!(
             "📤 GMGN: Transaction submitted: {} — verification will run in background",
             &signature[..8]
-        ),
+        )
     );
 
     Ok(signature)
@@ -119,7 +117,7 @@ pub async fn get_gmgn_quote(
     output_mint: &str,
     input_amount: u64,
     from_address: &str,
-    slippage: f64,
+    slippage: f64
 ) -> Result<SwapData, SwapError> {
     if is_debug_swaps_enabled() {
         log(
@@ -150,7 +148,7 @@ pub async fn get_gmgn_quote(
                 GMGN_DEFAULT_SWAP_MODE,
                 GMGN_FEE_SOL,
                 GMGN_ANTI_MEV
-            ),
+            )
         );
     }
 
@@ -169,11 +167,7 @@ pub async fn get_gmgn_quote(
     );
 
     if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "GMGN_URL",
-            &format!("🌐 GMGN API URL: {}", url),
-        );
+        log(LogTag::Swap, "GMGN_URL", &format!("🌐 GMGN API URL: {}", url));
     }
 
     if is_debug_swaps_enabled() {
@@ -190,7 +184,7 @@ pub async fn get_gmgn_quote(
                 input_amount,
                 (slippage * 100.0) as u16,
                 GMGN_PARTNER
-            ),
+            )
         );
 
         log(
@@ -209,7 +203,7 @@ pub async fn get_gmgn_quote(
                 slippage,
                 (slippage * 100.0) as u16,
                 from_address
-            ),
+            )
         );
     }
 
@@ -229,7 +223,7 @@ pub async fn get_gmgn_quote(
             } else {
                 &output_mint[..8]
             }
-        ),
+        )
     );
 
     let client = reqwest::Client::new();
@@ -241,15 +235,15 @@ pub async fn get_gmgn_quote(
             log(
                 LogTag::Swap,
                 "GMGN_QUOTE_ATTEMPT",
-                &format!("🔄 GMGN Quote attempt {}/3", attempt),
+                &format!("🔄 GMGN Quote attempt {}/3", attempt)
             );
         }
 
-        match client
-            .get(&url)
-            .timeout(tokio::time::Duration::from_secs(QUOTE_TIMEOUT_SECS))
-            .send()
-            .await
+        match
+            client
+                .get(&url)
+                .timeout(tokio::time::Duration::from_secs(QUOTE_TIMEOUT_SECS))
+                .send().await
         {
             Ok(response) => {
                 if is_debug_swaps_enabled() {
@@ -260,15 +254,19 @@ pub async fn get_gmgn_quote(
                             "📡 GMGN API Response - Status: {}, Headers: {:?}",
                             response.status(),
                             response.headers()
-                        ),
+                        )
                     );
                 }
 
                 if response.status().is_success() {
                     // First get the raw response text for debugging
-                    let response_text = response.text().await.map_err(|e| {
-                        SwapError::InvalidResponse(format!("Failed to get response text: {}", e))
-                    })?;
+                    let response_text = response
+                        .text().await
+                        .map_err(|e| {
+                            ScreenerBotError::invalid_response(
+                                format!("Failed to get response text: {}", e)
+                            )
+                        })?;
 
                     if is_debug_swaps_enabled() {
                         log(
@@ -277,7 +275,7 @@ pub async fn get_gmgn_quote(
                             &format!(
                                 "📄 GMGN Raw Response: {}",
                                 &response_text[..response_text.len().min(500)]
-                            ),
+                            )
                         );
                     }
 
@@ -289,8 +287,10 @@ pub async fn get_gmgn_quote(
                                     "GMGN_RESPONSE_PARSED",
                                     &format!(
                                         "✅ GMGN Response - Code: {}, Msg: {}, TID: {:?}",
-                                        api_response.code, api_response.msg, api_response.tid
-                                    ),
+                                        api_response.code,
+                                        api_response.msg,
+                                        api_response.tid
+                                    )
                                 );
                             }
                             if api_response.code == 0 {
@@ -302,10 +302,18 @@ pub async fn get_gmgn_quote(
                                             &format!(
                                                 "🎯 GMGN Quote Success:\n  In: {} {} ({})\n  Out: {} {} ({})\n  Price Impact: {}%\n  Slippage: {} BPS\n  Time: {:.3}s",
                                                 data.quote.in_amount,
-                                                if data.quote.input_mint == SOL_MINT { "SOL" } else { &data.quote.input_mint[..8] },
+                                                if data.quote.input_mint == SOL_MINT {
+                                                    "SOL"
+                                                } else {
+                                                    &data.quote.input_mint[..8]
+                                                },
                                                 data.quote.in_decimals,
                                                 data.quote.out_amount,
-                                                if data.quote.output_mint == SOL_MINT { "SOL" } else { &data.quote.output_mint[..8] },
+                                                if data.quote.output_mint == SOL_MINT {
+                                                    "SOL"
+                                                } else {
+                                                    &data.quote.output_mint[..8]
+                                                },
                                                 data.quote.out_decimals,
                                                 data.quote.price_impact_pct,
                                                 data.quote.slippage_bps,
@@ -331,12 +339,14 @@ pub async fn get_gmgn_quote(
                                         log(
                                             LogTag::Swap,
                                             "GMGN_EMPTY_DATA",
-                                            "❌ GMGN API returned empty data field",
+                                            "❌ GMGN API returned empty data field"
                                         );
                                     }
-                                    last_error = Some(SwapError::InvalidResponse(
-                                        "GMGN API returned empty data".to_string(),
-                                    ));
+                                    last_error = Some(
+                                        ScreenerBotError::invalid_response(
+                                            "GMGN API returned empty data".to_string()
+                                        )
+                                    );
                                 }
                             } else {
                                 if is_debug_swaps_enabled() {
@@ -345,14 +355,20 @@ pub async fn get_gmgn_quote(
                                         "GMGN_API_ERROR",
                                         &format!(
                                             "❌ GMGN API Error - Code: {}, Message: {}",
-                                            api_response.code, api_response.msg
-                                        ),
+                                            api_response.code,
+                                            api_response.msg
+                                        )
                                     );
                                 }
-                                last_error = Some(SwapError::ApiError(format!(
-                                    "GMGN API error: {} - {}",
-                                    api_response.code, api_response.msg
-                                )));
+                                last_error = Some(
+                                    ScreenerBotError::api_error(
+                                        format!(
+                                            "GMGN API error: {} - {}",
+                                            api_response.code,
+                                            api_response.msg
+                                        )
+                                    )
+                                );
                             }
                         }
                         Err(e) => {
@@ -360,13 +376,14 @@ pub async fn get_gmgn_quote(
                                 log(
                                     LogTag::Swap,
                                     "GMGN_PARSE_ERROR",
-                                    &format!("❌ GMGN Response parsing failed: {}", e),
+                                    &format!("❌ GMGN Response parsing failed: {}", e)
                                 );
                             }
-                            last_error = Some(SwapError::InvalidResponse(format!(
-                                "GMGN API JSON parse error: {}",
-                                e
-                            )));
+                            last_error = Some(
+                                ScreenerBotError::invalid_response(
+                                    format!("GMGN API JSON parse error: {}", e)
+                                )
+                            );
                         }
                     }
                 } else {
@@ -378,13 +395,14 @@ pub async fn get_gmgn_quote(
                                 "❌ GMGN HTTP Error: {} - {}",
                                 response.status(),
                                 response.status().canonical_reason().unwrap_or("Unknown")
-                            ),
+                            )
                         );
                     }
-                    last_error = Some(SwapError::ApiError(format!(
-                        "GMGN API HTTP error: {}",
-                        response.status()
-                    )));
+                    last_error = Some(
+                        ScreenerBotError::api_error(
+                            format!("GMGN API HTTP error: {}", response.status())
+                        )
+                    );
                 }
             }
             Err(e) => {
@@ -392,16 +410,16 @@ pub async fn get_gmgn_quote(
                     log(
                         LogTag::Swap,
                         "GMGN_NETWORK_ERROR",
-                        &format!("❌ GMGN Network error on attempt {}: {}", attempt, e),
+                        &format!("❌ GMGN Network error on attempt {}: {}", attempt, e)
                     );
                 }
-                last_error = Some(SwapError::NetworkError(e));
+                last_error = Some(ScreenerBotError::network_error(e.to_string()));
             }
         }
 
         // Wait before retry (except on last attempt)
         if attempt < 3 {
-            let delay = tokio::time::Duration::from_millis(1000 * attempt as u64);
+            let delay = tokio::time::Duration::from_millis(1000 * (attempt as u64));
             if is_debug_swaps_enabled() {
                 log(
                     LogTag::Swap,
@@ -410,17 +428,13 @@ pub async fn get_gmgn_quote(
                         "⏳ GMGN Retry delay: {}ms before attempt {}",
                         delay.as_millis(),
                         attempt + 1
-                    ),
+                    )
                 );
             }
             log(
                 LogTag::Swap,
                 "RETRY",
-                &format!(
-                    "GMGN attempt {} failed, retrying in {}ms...",
-                    attempt,
-                    delay.as_millis()
-                ),
+                &format!("GMGN attempt {} failed, retrying in {}ms...", attempt, delay.as_millis())
             );
             tokio::time::sleep(delay).await;
         }
@@ -428,14 +442,13 @@ pub async fn get_gmgn_quote(
 
     // If we get here, all retries failed
     if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "GMGN_ALL_RETRIES_FAILED",
-            "❌ All GMGN retry attempts failed",
-        );
+        log(LogTag::Swap, "GMGN_ALL_RETRIES_FAILED", "❌ All GMGN retry attempts failed");
     }
-    Err(last_error
-        .unwrap_or_else(|| SwapError::ApiError("All GMGN retry attempts failed".to_string())))
+    Err(
+        last_error.unwrap_or_else(||
+            ScreenerBotError::api_error("All GMGN retry attempts failed".to_string())
+        )
+    )
 }
 
 /// Executes a GMGN swap operation with a pre-fetched quote
@@ -444,7 +457,7 @@ pub async fn execute_gmgn_swap(
     input_mint: &str,
     output_mint: &str,
     input_amount: u64,
-    swap_data: SwapData,
+    swap_data: SwapData
 ) -> Result<GMGNSwapResult, SwapError> {
     // Determine if this is SOL to token or token to SOL
     let is_sol_to_token = input_mint == SOL_MINT;
@@ -472,22 +485,20 @@ pub async fn execute_gmgn_swap(
             } else {
                 &output_mint[..8]
             }
-        ),
+        )
     );
 
     let start_time = std::time::Instant::now();
 
     // Sign and send the transaction using GMGN-specific method
-    let transaction_signature =
-        gmgn_sign_and_send_transaction(&swap_data.raw_tx.swap_transaction).await?;
+    let transaction_signature = gmgn_sign_and_send_transaction(
+        &swap_data.raw_tx.swap_transaction
+    ).await?;
 
     log(
         LogTag::Swap,
         "GMGN_PENDING",
-        &format!(
-            "🔵 GMGN transaction submitted! TX: {} - Now adding to monitoring service...",
-            transaction_signature
-        ),
+        &format!("🔵 GMGN transaction submitted! TX: {} - Now adding to monitoring service...", transaction_signature)
     );
 
     // Return success result - verification handled by signature-only analysis
@@ -513,16 +524,13 @@ pub fn validate_gmgn_quote_price(
     input_amount: u64,
     expected_price: f64,
     is_sol_to_token: bool,
-    slippage_tolerance: f64,
+    slippage_tolerance: f64
 ) -> Result<(), SwapError> {
     let output_amount_str = &swap_data.quote.out_amount;
     log(
         LogTag::Swap,
         "GMGN_DEBUG",
-        &format!(
-            "GMGN quote validation - Raw out_amount string: '{}'",
-            output_amount_str
-        ),
+        &format!("GMGN quote validation - Raw out_amount string: '{}'", output_amount_str)
     );
 
     let output_amount_raw = output_amount_str.parse::<f64>().unwrap_or_else(|e| {
@@ -531,8 +539,9 @@ pub fn validate_gmgn_quote_price(
             "GMGN_ERROR",
             &format!(
                 "GMGN quote validation - Failed to parse out_amount '{}': {}",
-                output_amount_str, e
-            ),
+                output_amount_str,
+                e
+            )
         );
         0.0
     });
@@ -561,8 +570,10 @@ pub fn validate_gmgn_quote_price(
         }
     };
 
-    let price_difference =
-        (((actual_price_per_token - expected_price) / expected_price) * 100.0).abs();
+    let price_difference = (
+        ((actual_price_per_token - expected_price) / expected_price) *
+        100.0
+    ).abs();
 
     log(
         LogTag::Swap,
@@ -576,10 +587,15 @@ pub fn validate_gmgn_quote_price(
     );
 
     if price_difference > slippage_tolerance {
-        return Err(SwapError::SlippageExceeded(format!(
-            "GMGN price difference {:.2}% exceeds tolerance {:.2}%",
-            price_difference, slippage_tolerance
-        )));
+        return Err(
+            ScreenerBotError::slippage_exceeded(
+                format!(
+                    "GMGN price difference {:.2}% exceeds tolerance {:.2}%",
+                    price_difference,
+                    slippage_tolerance
+                )
+            )
+        );
     }
 
     Ok(())

@@ -26,6 +26,7 @@ use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_transactions_enabled, read_configs, load_wallet_from_config };
 use crate::rpc::get_rpc_client;
 use crate::utils::get_wallet_address;
+use crate::errors::blockchain::{ BlockchainError, parse_solana_error };
 use crate::tokens::{
     get_token_decimals,
     get_token_decimals_safe,
@@ -2524,7 +2525,13 @@ impl TransactionsManager {
                 transaction.success = meta.get("err").map_or(true, |v| v.is_null());
 
                 if let Some(err) = meta.get("err") {
-                    transaction.error_message = Some(err.to_string());
+                    // Parse structured blockchain error instead of raw string
+                    let blockchain_error = parse_solana_error(
+                        &err.to_string(),
+                        None,
+                        "transaction_meta"
+                    );
+                    transaction.error_message = Some(blockchain_error.to_string());
                 }
 
                 // Extract log messages for analysis - THIS IS CRITICAL FOR SWAP DETECTION
@@ -4394,26 +4401,37 @@ impl TransactionsManager {
         transaction: &mut Transaction
     ) -> Result<(), String> {
         // Validate transaction is ready for analysis
-        if !matches!(transaction.status, TransactionStatus::Confirmed | TransactionStatus::Finalized) {
-            return Err(format!(
-                "Transaction {} not confirmed - status: {:?}",
-                get_signature_prefix(&transaction.signature),
-                transaction.status
-            ));
+        if
+            !matches!(
+                transaction.status,
+                TransactionStatus::Confirmed | TransactionStatus::Finalized
+            )
+        {
+            return Err(
+                format!(
+                    "Transaction {} not confirmed - status: {:?}",
+                    get_signature_prefix(&transaction.signature),
+                    transaction.status
+                )
+            );
         }
 
         if !transaction.success {
-            return Err(format!(
-                "Transaction {} failed - cannot analyze",
-                get_signature_prefix(&transaction.signature)
-            ));
+            return Err(
+                format!(
+                    "Transaction {} failed - cannot analyze",
+                    get_signature_prefix(&transaction.signature)
+                )
+            );
         }
 
         if transaction.log_messages.is_empty() {
-            return Err(format!(
-                "Transaction {} has no log messages - cannot analyze",
-                get_signature_prefix(&transaction.signature)
-            ));
+            return Err(
+                format!(
+                    "Transaction {} has no log messages - cannot analyze",
+                    get_signature_prefix(&transaction.signature)
+                )
+            );
         }
 
         log(
@@ -6339,7 +6357,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                             )
                                         );
                                     }
-                                    
+
                                     // Transaction will be analyzed later when manager becomes available
                                     // This preserves architectural integrity
                                 }
@@ -6422,8 +6440,12 @@ pub async fn get_priority_transaction(signature: &str) -> Result<Option<Transact
             Ok(guard) => {
                 if let Some(ref manager) = *guard {
                     if let Some(transaction) = manager.get_transaction_from_db(signature).await {
-                        if transaction.success &&
-                           matches!(transaction.status, TransactionStatus::Finalized | TransactionStatus::Confirmed)
+                        if
+                            transaction.success &&
+                            matches!(
+                                transaction.status,
+                                TransactionStatus::Finalized | TransactionStatus::Confirmed
+                            )
                         {
                             log(
                                 LogTag::Transactions,
@@ -6451,7 +6473,10 @@ pub async fn get_priority_transaction(signature: &str) -> Result<Option<Transact
     log(
         LogTag::Transactions,
         "PRIORITY_UNAVAILABLE",
-        &format!("Priority transaction {} not available from global manager", get_signature_prefix(signature))
+        &format!(
+            "Priority transaction {} not available from global manager",
+            get_signature_prefix(signature)
+        )
     );
     Ok(None)
 }

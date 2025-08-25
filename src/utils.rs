@@ -6,6 +6,8 @@ use serde_json;
 use crate::positions::*;
 use crate::logger::{ log, LogTag };
 use crate::global::POSITIONS_FILE;
+use crate::errors::blockchain::{ BlockchainError, parse_solana_error };
+use crate::errors::ScreenerBotError;
 
 /// Safe string truncation helper to prevent panic on out-of-bounds slicing
 pub fn safe_truncate(s: &str, len: usize) -> &str {
@@ -43,17 +45,17 @@ use std::str::FromStr;
 /// Get the wallet address from the main wallet private key in configs
 /// This replaces the swaps::get_wallet_address dependency
 pub fn get_wallet_address() -> Result<String, SwapError> {
-    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| ScreenerBotError::config_error(e.to_string()))?;
 
     // Decode the private key from base58
     let private_key_bytes = bs58
         ::decode(&configs.main_wallet_private)
         .into_vec()
-        .map_err(|e| SwapError::ConfigError(format!("Invalid private key format: {}", e)))?;
+        .map_err(|e| ScreenerBotError::config_error(format!("Invalid private key format: {}", e)))?;
 
     // Create keypair from private key
     let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e|
-        SwapError::ConfigError(format!("Failed to create keypair: {}", e))
+        ScreenerBotError::config_error(format!("Failed to create keypair: {}", e))
     )?;
 
     Ok(keypair.pubkey().to_string())
@@ -247,11 +249,12 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
             Ok(balance)
         }
         Err(e) => {
+            let blockchain_error = parse_solana_error(&e.to_string(), None, "get_token_balance");
             if is_debug_ata_enabled() {
                 log(
                     LogTag::Wallet,
                     "DEBUG",
-                    &format!("❌ TOKEN_BALANCE_ERROR: RPC error for mint {}: {}", &mint[..8], e)
+                    &format!("❌ TOKEN_BALANCE_ERROR: {} for mint {}", blockchain_error, &mint[..8])
                 );
             }
             log(
@@ -326,7 +329,12 @@ pub async fn close_single_ata(wallet_address: &str, mint: &str) -> Result<String
         None => {
             let error_msg = format!("No empty ATA found for mint {}", &mint[..8]);
             log(LogTag::Wallet, "WARNING", &error_msg);
-            Err(SwapError::InvalidAmount(error_msg))
+            Err(
+                ScreenerBotError::invalid_amount(
+                    error_msg.clone(),
+                    "No empty ATA found".to_string()
+                )
+            )
         }
     }
 }
@@ -539,7 +547,8 @@ pub async fn close_token_account_with_context(
                             );
                         }
                         return Err(
-                            SwapError::InvalidAmount(
+                            ScreenerBotError::invalid_amount(
+                                balance.to_string(),
                                 format!(
                                     "Cannot close token account - still has {} tokens after {} balance checks",
                                     balance,
@@ -866,7 +875,7 @@ async fn build_and_send_close_instruction(
         );
     }
 
-    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| ScreenerBotError::config_error(e.to_string()))?;
 
     // Parse addresses
     if is_debug_ata_enabled() {
@@ -882,11 +891,17 @@ async fn build_and_send_close_instruction(
     }
 
     let owner_pubkey = Pubkey::from_str(wallet_address).map_err(|e|
-        SwapError::InvalidAmount(format!("Invalid wallet address: {}", e))
+        ScreenerBotError::invalid_amount(
+            format!("Invalid wallet address: {}", e),
+            "Wallet validation failed".to_string()
+        )
     )?;
 
     let token_account_pubkey = Pubkey::from_str(token_account).map_err(|e|
-        SwapError::InvalidAmount(format!("Invalid token account: {}", e))
+        ScreenerBotError::invalid_amount(
+            format!("Invalid token account: {}", e),
+            "Token account validation failed".to_string()
+        )
     )?;
 
     // Decode private key
@@ -897,10 +912,10 @@ async fn build_and_send_close_instruction(
     let private_key_bytes = bs58
         ::decode(&configs.main_wallet_private)
         .into_vec()
-        .map_err(|e| SwapError::ConfigError(format!("Invalid private key: {}", e)))?;
+        .map_err(|e| ScreenerBotError::config_error(format!("Invalid private key: {}", e)))?;
 
     let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e|
-        SwapError::ConfigError(format!("Failed to create keypair: {}", e))
+        ScreenerBotError::config_error(format!("Failed to create keypair: {}", e))
     )?;
 
     // Build close account instruction
@@ -928,7 +943,7 @@ async fn build_and_send_close_instruction(
             &owner_pubkey,
             &[]
         ).map_err(|e|
-            SwapError::TransactionError(format!("Failed to build close instruction: {}", e))
+            ScreenerBotError::transaction_error(format!("Failed to build close instruction: {}", e))
         )?
     };
 
@@ -1026,10 +1041,15 @@ async fn build_and_send_close_instruction(
                 );
             }
             Err(e) => {
+                let blockchain_error = parse_solana_error(
+                    &e.to_string(),
+                    None,
+                    "create_ata_transaction"
+                );
                 log(
                     LogTag::Wallet,
                     "DEBUG",
-                    &format!("❌ ATA_TRANSACTION_FAILED: submission failed: {}", e)
+                    &format!("❌ ATA_TRANSACTION_FAILED: {}", blockchain_error)
                 );
             }
         }
@@ -1047,7 +1067,9 @@ fn build_token_2022_close_instruction(
     // but with different program ID
     let token_2022_program_id = Pubkey::from_str(
         "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-    ).map_err(|e| SwapError::TransactionError(format!("Invalid Token-2022 program ID: {}", e)))?;
+    ).map_err(|e|
+        ScreenerBotError::transaction_error(format!("Invalid Token-2022 program ID: {}", e))
+    )?;
 
     // Manually build the close account instruction for Token-2022
     // CloseAccount instruction: [9] (instruction discriminator)

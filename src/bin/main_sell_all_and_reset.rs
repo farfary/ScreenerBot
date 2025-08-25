@@ -30,6 +30,7 @@
 use screenerbot::global::{ read_configs, is_debug_swaps_enabled };
 use screenerbot::tokens::{ Token };
 use screenerbot::logger::{ log, LogTag };
+use screenerbot::errors::ScreenerBotError;
 use screenerbot::utils::{
     get_wallet_address,
     close_token_account_with_context,
@@ -363,7 +364,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         if actual_wallet_balance == 0 {
                             return Err(
-                                SwapError::InsufficientBalance(
+                                ScreenerBotError::insufficient_balance(
                                     format!("No {} tokens in wallet", token.symbol)
                                 )
                             );
@@ -1149,7 +1150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Gets all token accounts for the given wallet address
 async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccount>, SwapError> {
-    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| ScreenerBotError::config_error(e.to_string()))?;
 
     let rpc_payload =
         serde_json::json!({
@@ -1262,7 +1263,7 @@ async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccount
     }
 
     Err(
-        SwapError::TransactionError(
+        ScreenerBotError::transaction_error(
             "Failed to fetch token accounts from all RPC endpoints".to_string()
         )
     )
@@ -1270,7 +1271,7 @@ async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccount
 
 /// Also get Token-2022 accounts (Token Extensions Program)
 async fn get_token_2022_accounts(wallet_address: &str) -> Result<Vec<TokenAccount>, SwapError> {
-    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| ScreenerBotError::config_error(e.to_string()))?;
 
     let rpc_payload =
         serde_json::json!({

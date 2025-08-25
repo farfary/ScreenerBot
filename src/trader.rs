@@ -164,6 +164,7 @@ use crate::utils::*;
 
 use crate::entry::should_buy;
 use crate::filtering::log_filtering_summary;
+use crate::errors::{ ScreenerBotError, PositionError };
 
 // =============================================================================
 // IMPORTS AND DEPENDENCIES
@@ -1236,7 +1237,11 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                         exit_time
                                     ).await.map(|_| ())
                                 } else {
-                                    Err("PositionsManager unavailable".to_string())
+                                    Err(
+                                        ScreenerBotError::Position(PositionError::Generic {
+                                            message: "PositionsManager unavailable".to_string(),
+                                        })
+                                    )
                                 }
                             }
                         ).await
@@ -1261,7 +1266,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             );
 
                             // Check if this is a phantom position error and trigger immediate reconciliation
-                            if e.contains("Phantom position") {
+                            if e.to_string().contains("Phantom position") {
                                 log(
                                     LogTag::Trader,
                                     "PHANTOM_DETECTED",

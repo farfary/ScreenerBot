@@ -1,6 +1,14 @@
 use crate::global::*;
 use crate::logger::{ log, LogTag };
-use crate::rpc::{ lamports_to_sol, get_rpc_client, SwapError, sol_to_lamports };
+use crate::rpc::{ lamports_to_sol, get_rpc_client, sol_to_lamports };
+use crate::errors::{
+    ScreenerBotError,
+    blockchain::{ BlockchainError, parse_solana_error },
+    PositionError,
+    DataError,
+    ConfigurationError,
+    NetworkError,
+};
 use crate::swaps::{ get_best_quote, execute_best_swap, RouterType, SwapResult };
 use crate::swaps::types::SwapData;
 use crate::swaps::config::{ SOL_MINT, QUOTE_SLIPPAGE_PERCENT, SELL_RETRY_SLIPPAGES };
@@ -259,7 +267,7 @@ pub struct PositionLockGuard {
 }
 
 /// Acquire an exclusive lock for a specific position mint to prevent concurrent operations
-async fn acquire_position_lock(mint: &str) -> Result<PositionLockGuard, String> {
+async fn acquire_position_lock(mint: &str) -> Result<PositionLockGuard, ScreenerBotError> {
     // Acquire the position locks registry
     let position_lock_arc = {
         let mut locks_registry = match
@@ -267,7 +275,11 @@ async fn acquire_position_lock(mint: &str) -> Result<PositionLockGuard, String> 
         {
             Ok(guard) => guard,
             Err(_) => {
-                return Err("Timeout acquiring position locks registry".to_string());
+                return Err(
+                    ScreenerBotError::Position(PositionError::Generic {
+                        message: "Timeout acquiring position locks registry".to_string(),
+                    })
+                );
             }
         };
 
@@ -298,7 +310,15 @@ async fn acquire_position_lock(mint: &str) -> Result<PositionLockGuard, String> 
                 _guard: guard,
             })
         }
-        Err(_) => Err(format!("Timeout acquiring lock for position {}", get_mint_prefix(mint))),
+        Err(_) =>
+            Err(
+                ScreenerBotError::Position(PositionError::Generic {
+                    message: format!(
+                        "Timeout acquiring lock for position {}",
+                        get_mint_prefix(mint)
+                    ),
+                })
+            ),
     }
 }
 
@@ -314,10 +334,18 @@ async fn cleanup_unused_position_locks() {
 
         // Remove locks that have no waiters and are not currently held
         locks_registry.retain(|_, lock| {
-            // Try to acquire lock immediately - if successful, it means no one is waiting
+            // Try to acquire lock immediately - if successful, it means no one is using it
             match lock.try_lock() {
-                Ok(_) => false, // Remove unused lock
-                Err(_) => true, // Keep active lock
+                Ok(_guard) => {
+                    // Successfully acquired lock immediately = no one waiting = unused
+                    // Drop the guard and remove this lock
+                    drop(_guard);
+                    false // Remove unused lock
+                }
+                Err(_) => {
+                    // Could not acquire = someone is using it or waiting
+                    true // Keep active/busy lock
+                }
             }
         });
 
@@ -540,7 +568,7 @@ static BALANCE_CACHE: Lazy<Arc<AsyncMutex<HashMap<String, CachedBalance>>>> = La
 const BALANCE_CACHE_TTL_MS: u64 = 1200; // 1.2s window
 
 /// Fetch token balance with short-lived in-memory cache.
-async fn get_cached_token_balance(wallet: &str, mint: &str) -> Result<u64, String> {
+async fn get_cached_token_balance(wallet: &str, mint: &str) -> Result<u64, ScreenerBotError> {
     let key = format!("{}|{}", wallet, mint);
     // Try fast path
     if
@@ -558,7 +586,7 @@ async fn get_cached_token_balance(wallet: &str, mint: &str) -> Result<u64, Strin
     }
 
     // Fetch fresh
-    let balance = get_token_balance(wallet, mint).await.map_err(|e| format!("{}", e))?;
+    let balance = get_token_balance(wallet, mint).await.map_err(|e| e)?;
     if
         let Ok(mut guard) = tokio::time::timeout(
             Duration::from_millis(100),
@@ -1788,7 +1816,19 @@ impl PositionsManager {
 
         // Only hold the lock for the minimum time needed
         use crate::transactions::GLOBAL_TRANSACTION_MANAGER;
-        let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+        let mut manager_guard = match
+            tokio::time::timeout(Duration::from_secs(2), GLOBAL_TRANSACTION_MANAGER.lock()).await
+        {
+            Ok(guard) => guard,
+            Err(_) => {
+                log(
+                    LogTag::Positions,
+                    "WARN",
+                    "⏰ Timeout acquiring GLOBAL_TRANSACTION_MANAGER lock for missing exit transaction search"
+                );
+                return None;
+            }
+        };
 
         if let Some(ref mut manager) = *manager_guard {
             // Targeted search: only look through recent transactions (limited scope)
@@ -1891,7 +1931,7 @@ impl PositionsManager {
         price: f64,
         percent_change: f64,
         size_sol: f64
-    ) -> Result<(String, String), String> {
+    ) -> Result<(String, String), ScreenerBotError> {
         if is_debug_positions_enabled() {
             log(
                 LogTag::Positions,
@@ -1915,7 +1955,13 @@ impl PositionsManager {
                     &format!("❌ Invalid price validation failed: {}", price)
                 );
             }
-            return Err(format!("Invalid price: {}", price));
+            return Err(
+                ScreenerBotError::Data(DataError::ValidationError {
+                    field: "price".to_string(),
+                    value: price.to_string(),
+                    reason: "Price must be positive and finite".to_string(),
+                })
+            );
         }
 
         // DRY-RUN MODE CHECK
@@ -1931,7 +1977,11 @@ impl PositionsManager {
                     percent_change
                 )
             );
-            return Err("DRY-RUN: Position would be opened".to_string());
+            return Err(
+                ScreenerBotError::Position(PositionError::Generic {
+                    message: "DRY-RUN: Position would be opened".to_string(),
+                })
+            );
         }
 
         // RE-ENTRY COOLDOWN CHECK
@@ -1948,12 +1998,14 @@ impl PositionsManager {
                 );
             }
             return Err(
-                format!(
-                    "Re-entry cooldown active for {} ({}): wait {}m",
-                    token.symbol,
-                    get_mint_prefix(&token.mint),
-                    remaining
-                )
+                ScreenerBotError::Position(PositionError::Generic {
+                    message: format!(
+                        "Re-entry cooldown active for {} ({}): wait {}m",
+                        token.symbol,
+                        get_mint_prefix(&token.mint),
+                        remaining
+                    ),
+                })
             );
         }
 
@@ -1966,7 +2018,11 @@ impl PositionsManager {
                     &format!("⏳ Global open cooldown active - {} seconds remaining", remaining)
                 );
             }
-            return Err(format!("Opening positions cooldown active: wait {}s", remaining));
+            return Err(
+                ScreenerBotError::Position(PositionError::Generic {
+                    message: format!("Opening positions cooldown active: wait {}s", remaining),
+                })
+            );
         }
 
         // CHECK EXISTING POSITION
@@ -2006,16 +2062,22 @@ impl PositionsManager {
         };
 
         if already_has_position {
-            return Err("Already have open position for this token".to_string());
+            return Err(
+                ScreenerBotError::Position(PositionError::Generic {
+                    message: "Already have open position for this token".to_string(),
+                })
+            );
         }
 
         if open_positions_count >= MAX_OPEN_POSITIONS {
             return Err(
-                format!(
-                    "Maximum open positions reached ({}/{})",
-                    open_positions_count,
-                    MAX_OPEN_POSITIONS
-                )
+                ScreenerBotError::Position(PositionError::Generic {
+                    message: format!(
+                        "Maximum open positions reached ({}/{})",
+                        open_positions_count,
+                        MAX_OPEN_POSITIONS
+                    ),
+                })
             );
         }
 
@@ -2025,11 +2087,13 @@ impl PositionsManager {
         // DUPLICATE SWAP PREVENTION: Check if similar swap was recently attempted
         if is_duplicate_swap_attempt(&token.mint, size_sol, "BUY").await {
             return Err(
-                format!(
-                    "Duplicate swap prevented for {} - similar buy attempted within last {}s",
-                    token.symbol,
-                    DUPLICATE_SWAP_PREVENTION_SECS
-                )
+                ScreenerBotError::Position(PositionError::Generic {
+                    message: format!(
+                        "Duplicate swap prevented for {} - similar buy attempted within last {}s",
+                        token.symbol,
+                        DUPLICATE_SWAP_PREVENTION_SECS
+                    ),
+                })
             );
         }
 
@@ -2047,20 +2111,24 @@ impl PositionsManager {
         }
 
         // Validate expected price if provided
-        if let Some(price) = Some(price) {
-            if price <= 0.0 || !price.is_finite() {
-                log(
-                    LogTag::Swap,
-                    "ERROR",
-                    &format!(
-                        "❌ REFUSING TO BUY: Invalid expected_price for {} ({}). Price = {:.10}",
-                        token.symbol,
-                        token.mint,
-                        price
-                    )
-                );
-                return Err(format!("Invalid expected price: {:.10}", price));
-            }
+        if price <= 0.0 || !price.is_finite() {
+            log(
+                LogTag::Swap,
+                "ERROR",
+                &format!(
+                    "❌ REFUSING TO BUY: Invalid expected_price for {} ({}). Price = {:.10}",
+                    token.symbol,
+                    token.mint,
+                    price
+                )
+            );
+            return Err(
+                ScreenerBotError::Data(DataError::ValidationError {
+                    field: "expected_price".to_string(),
+                    value: format!("{:.10}", price),
+                    reason: "Invalid expected price".to_string(),
+                })
+            );
         }
 
         log(
@@ -2076,7 +2144,26 @@ impl PositionsManager {
 
         // ✅ CRITICAL: Add token to watch list before opening position
         // This ensures the token is monitored for price updates during and after the swap
-        let _ = crate::tokens::price::get_token_price_safe(&token.mint).await;
+        let price_service_result = match
+            tokio::time::timeout(
+                tokio::time::Duration::from_secs(10), // 10s timeout for price service
+                crate::tokens::price::get_token_price_safe(&token.mint)
+            ).await
+        {
+            Ok(result) => result,
+            Err(_) => {
+                log(
+                    LogTag::Positions,
+                    "TIMEOUT",
+                    &format!(
+                        "⏰ Price service timeout for {} after 10s - continuing without price check",
+                        token.symbol
+                    )
+                );
+                Some(0.0) // Default price, will continue with swap
+            }
+        };
+        let _ = price_service_result;
 
         if is_debug_positions_enabled() {
             log(
@@ -2086,17 +2173,62 @@ impl PositionsManager {
             );
         }
 
-        let wallet_address = get_wallet_address().map_err(|e|
-            format!("Failed to get wallet address: {}", e)
-        )?;
+        let wallet_address = match
+            tokio::time::timeout(
+                tokio::time::Duration::from_secs(5), // 5s timeout for wallet address
+                async {
+                    get_wallet_address()
+                }
+            ).await
+        {
+            Ok(Ok(addr)) => addr,
+            Ok(Err(e)) => {
+                log(LogTag::Positions, "ERROR", &format!("❌ Failed to get wallet address: {}", e));
+                return Err(e);
+            }
+            Err(_) => {
+                log(
+                    LogTag::Positions,
+                    "TIMEOUT",
+                    &format!(
+                        "⏰ Wallet address timeout for {} after 5s - critical operation will be released",
+                        token.symbol
+                    )
+                );
+                return Err(ScreenerBotError::api_error("Wallet address timeout".to_string()));
+            }
+        };
 
-        let best_quote = get_best_quote(
-            SOL_MINT,
-            &token.mint,
-            sol_to_lamports(size_sol),
-            &wallet_address,
-            QUOTE_SLIPPAGE_PERCENT
-        ).await.map_err(|e| format!("Failed to get quote: {}", e))?;
+        // Add timeout wrapper to prevent hanging in quote requests
+        let best_quote = match
+            tokio::time::timeout(
+                tokio::time::Duration::from_secs(20), // 20s total timeout for quote requests
+                get_best_quote(
+                    SOL_MINT,
+                    &token.mint,
+                    sol_to_lamports(size_sol),
+                    &wallet_address,
+                    QUOTE_SLIPPAGE_PERCENT
+                )
+            ).await
+        {
+            Ok(quote_result) => quote_result?,
+            Err(_) => {
+                log(
+                    LogTag::Swap,
+                    "QUOTE_TIMEOUT",
+                    &format!(
+                        "⏰ Quote request timeout for {} after 20s - critical operation will be released",
+                        token.symbol
+                    )
+                );
+                return Err(
+                    ScreenerBotError::api_error(
+                        format!("Quote request timeout for {}", token.symbol)
+                    )
+                );
+            }
+        };
 
         if is_debug_swaps_enabled() {
             log(
@@ -2123,7 +2255,7 @@ impl PositionsManager {
             &token.mint,
             sol_to_lamports(size_sol),
             best_quote
-        ).await.map_err(|e| format!("Failed to execute swap: {}", e))?;
+        ).await?;
 
         if let Some(ref signature) = swap_result.transaction_signature {
             log(
@@ -2154,16 +2286,23 @@ impl PositionsManager {
 
                 // CRITICAL VALIDATION: Verify transaction signature is valid before creating position
                 if transaction_signature.is_empty() || transaction_signature.len() < 32 {
-                    return Err("Invalid transaction signature - swap may have failed".to_string());
+                    return Err(
+                        ScreenerBotError::Data(DataError::ValidationError {
+                            field: "transaction_signature".to_string(),
+                            value: transaction_signature.clone(),
+                            reason: "Transaction signature is invalid or empty".to_string(),
+                        })
+                    );
                 }
 
                 // Additional validation: Check if signature is valid base58
                 if bs58::decode(&transaction_signature).into_vec().is_err() {
                     return Err(
-                        format!(
-                            "Invalid base58 transaction signature: {}",
-                            get_signature_prefix(&transaction_signature)
-                        )
+                        ScreenerBotError::Data(DataError::ValidationError {
+                            field: "transaction_signature".to_string(),
+                            value: get_signature_prefix(&transaction_signature),
+                            reason: "Invalid base58 format".to_string(),
+                        })
                     );
                 }
 
@@ -2284,7 +2423,7 @@ impl PositionsManager {
         token: &Token,
         exit_price: f64,
         exit_time: DateTime<Utc>
-    ) -> Result<(String, String), String> {
+    ) -> Result<(String, String), ScreenerBotError> {
         if is_debug_positions_enabled() {
             log(
                 LogTag::Positions,
@@ -2306,7 +2445,11 @@ impl PositionsManager {
                     "LOCK_ERROR",
                     &format!("❌ Failed to acquire position lock for {}: {}", token.symbol, e)
                 );
-                return Err(format!("Position is busy: {}", e));
+                return Err(
+                    ScreenerBotError::Position(PositionError::Generic {
+                        message: format!("Position is busy: {}", e),
+                    })
+                );
             }
         };
 
@@ -2365,7 +2508,12 @@ impl PositionsManager {
         let mut position = match position_opt {
             Some(pos) => pos,
             None => {
-                return Err("Position not found or already closed".to_string());
+                return Err(
+                    ScreenerBotError::Position(PositionError::PositionNotFound {
+                        token_mint: mint.to_string(),
+                        signature: "".to_string(),
+                    })
+                );
             }
         };
 
@@ -2380,7 +2528,11 @@ impl PositionsManager {
                     exit_price
                 )
             );
-            return Err("DRY-RUN: Position would be closed".to_string());
+            return Err(
+                ScreenerBotError::Position(PositionError::Generic {
+                    message: "DRY-RUN: Position would be closed".to_string(),
+                })
+            );
         }
 
         // Execute sell transaction with retry logic (balance check happens in retry function)
@@ -2393,13 +2545,32 @@ impl PositionsManager {
         token: &Token,
         exit_price: f64,
         exit_time: DateTime<Utc>
-    ) -> Result<(String, String), String> {
+    ) -> Result<(String, String), ScreenerBotError> {
         let _guard = crate::trader::CriticalOperationGuard::new(
             &format!("SELL {}", position.symbol)
         );
 
         // ✅ ENSURE token remains in watch list during sell process
-        let _ = crate::tokens::price::get_token_price_safe(&token.mint).await;
+        let price_service_result = match
+            tokio::time::timeout(
+                tokio::time::Duration::from_secs(10), // 10s timeout for price service
+                crate::tokens::price::get_token_price_safe(&token.mint)
+            ).await
+        {
+            Ok(result) => result,
+            Err(_) => {
+                log(
+                    LogTag::Positions,
+                    "TIMEOUT",
+                    &format!(
+                        "⏰ Price service timeout for {} during sell after 10s - continuing without price check",
+                        token.symbol
+                    )
+                );
+                Some(0.0) // Default price, will continue with swap
+            }
+        };
+        let _ = price_service_result;
 
         if is_debug_positions_enabled() {
             log(
@@ -2420,7 +2591,11 @@ impl PositionsManager {
                     get_mint_prefix(&position.mint)
                 )
             );
-            return Err("Active sell already in progress".to_string());
+            return Err(
+                ScreenerBotError::Position(PositionError::Generic {
+                    message: "Active sell already in progress".to_string(),
+                })
+            );
         }
         // Ensure cleanup at end of function scope
         struct ActiveSellCleanup {
@@ -2453,7 +2628,13 @@ impl PositionsManager {
             // Validate expected SOL output if provided
             if let Some(expected_sol) = Some(exit_price) {
                 if expected_sol <= 0.0 || !expected_sol.is_finite() {
-                    return Err(format!("Invalid expected SOL output: {:.10}", expected_sol));
+                    return Err(
+                        ScreenerBotError::Data(DataError::ValidationError {
+                            field: "expected_sol_output".to_string(),
+                            value: format!("{:.10}", expected_sol),
+                            reason: "Invalid expected SOL output".to_string(),
+                        })
+                    );
                 }
             }
 
@@ -2462,7 +2643,7 @@ impl PositionsManager {
             let shutdown = Some(self.shutdown.clone());
             let token_amount = position.token_amount.unwrap_or(0);
 
-            let mut last_error = None;
+            let mut last_error: Option<ScreenerBotError> = None;
 
             for (slippage_attempt, &slippage) in slippages.iter().enumerate() {
                 // Abort before starting a new attempt if shutdown is in progress
@@ -2478,7 +2659,11 @@ impl PositionsManager {
                                 slippage
                             )
                         );
-                        return Err("Shutdown in progress - aborting sell".to_string());
+                        return Err(
+                            ScreenerBotError::Position(PositionError::Generic {
+                                message: "Shutdown in progress - aborting sell".to_string(),
+                            })
+                        );
                     }
                 }
 
@@ -2509,10 +2694,33 @@ impl PositionsManager {
                 }
 
                 // Get wallet balance (actual amount to sell)
-                let wallet_address = match get_wallet_address() {
-                    Ok(addr) => addr,
-                    Err(e) => {
-                        last_error = Some(format!("Failed to get wallet address: {}", e));
+                let wallet_address = match
+                    tokio::time::timeout(
+                        tokio::time::Duration::from_secs(5), // 5s timeout for wallet address
+                        async {
+                            get_wallet_address()
+                        }
+                    ).await
+                {
+                    Ok(Ok(addr)) => addr,
+                    Ok(Err(e)) => {
+                        last_error = Some(e);
+                        continue;
+                    }
+                    Err(_) => {
+                        log(
+                            LogTag::Positions,
+                            "TIMEOUT",
+                            &format!(
+                                "⏰ Wallet address timeout during sell for {} after 5s",
+                                token.symbol
+                            )
+                        );
+                        last_error = Some(
+                            ScreenerBotError::api_error(
+                                "Wallet address timeout during sell".to_string()
+                            )
+                        );
                         continue;
                     }
                 };
@@ -2525,12 +2733,17 @@ impl PositionsManager {
                 {
                     Ok(Ok(balance)) => balance,
                     Ok(Err(e)) => {
-                        last_error = Some(format!("Failed to get token balance: {}", e));
+                        last_error = Some(e);
                         continue;
                     }
                     Err(_) => {
                         last_error = Some(
-                            format!("Timeout getting token balance for {}", token.symbol)
+                            ScreenerBotError::Network(NetworkError::Generic {
+                                message: format!(
+                                    "Timeout getting token balance for {}",
+                                    token.symbol
+                                ),
+                            })
                         );
                         continue;
                     }
@@ -2560,11 +2773,13 @@ impl PositionsManager {
                 if !full_position_intact {
                     if is_duplicate_swap_attempt(&token.mint, expected_sol_amount, "SELL").await {
                         last_error = Some(
-                            format!(
-                                "Duplicate sell prevented for {} - similar sell attempted within last {}s (wallet balance changed)",
-                                token.symbol,
-                                DUPLICATE_SWAP_PREVENTION_SECS
-                            )
+                            ScreenerBotError::Position(PositionError::Generic {
+                                message: format!(
+                                    "Duplicate sell prevented for {} - similar sell attempted within last {}s (wallet balance changed)",
+                                    token.symbol,
+                                    DUPLICATE_SWAP_PREVENTION_SECS
+                                ),
+                            })
                         );
                         continue;
                     }
@@ -2581,17 +2796,37 @@ impl PositionsManager {
                 }
 
                 let best_quote = match
-                    get_best_quote(
-                        &token.mint,
-                        SOL_MINT,
-                        actual_sell_amount,
-                        &wallet_address,
-                        slippage
+                    tokio::time::timeout(
+                        tokio::time::Duration::from_secs(20), // 20s total timeout for quote requests
+                        get_best_quote(
+                            &token.mint,
+                            SOL_MINT,
+                            actual_sell_amount,
+                            &wallet_address,
+                            slippage
+                        )
                     ).await
                 {
-                    Ok(quote) => quote,
-                    Err(e) => {
-                        last_error = Some(format!("Failed to get quote: {}", e));
+                    Ok(Ok(quote)) => quote,
+                    Ok(Err(e)) => {
+                        last_error = Some(e);
+                        continue;
+                    }
+                    Err(_) => {
+                        log(
+                            LogTag::Swap,
+                            "QUOTE_TIMEOUT",
+                            &format!(
+                                "⏰ Sell quote request timeout for {} after 20s (slippage: {:.1}%)",
+                                token.symbol,
+                                slippage
+                            )
+                        );
+                        last_error = Some(
+                            ScreenerBotError::api_error(
+                                format!("Quote request timeout for {}", token.symbol)
+                            )
+                        );
                         continue;
                     }
                 };
@@ -2660,12 +2895,10 @@ impl PositionsManager {
                         );
 
                         // Check for error types that should not be retried
-                        if
-                            error_str.contains("insufficient balance") ||
-                            error_str.contains("InvalidAmount") ||
-                            error_str.contains("ConfigError")
-                        {
-                            if error_str.contains("insufficient balance") {
+                        let should_not_retry = match &e {
+                            ScreenerBotError::Blockchain(
+                                BlockchainError::InsufficientBalance { .. },
+                            ) => {
                                 log(
                                     LogTag::Swap,
                                     "SELL_FAILED_NO_RETRY",
@@ -2674,21 +2907,44 @@ impl PositionsManager {
                                         token.symbol
                                     )
                                 );
-                            } else {
+                                true
+                            }
+                            ScreenerBotError::Data(DataError::InvalidAmount { .. }) => {
                                 log(
                                     LogTag::Swap,
                                     "SELL_FAILED_NO_RETRY",
                                     &format!(
-                                        "❌ Stopping retries for {} - unretryable error: {}",
-                                        token.symbol,
-                                        error_str
+                                        "❌ Stopping retries for {} - invalid amount error",
+                                        token.symbol
                                     )
                                 );
+                                true
                             }
-                            return Err(error_str);
+                            ScreenerBotError::Configuration(_) => {
+                                log(
+                                    LogTag::Swap,
+                                    "SELL_FAILED_NO_RETRY",
+                                    &format!(
+                                        "❌ Stopping retries for {} - configuration error",
+                                        token.symbol
+                                    )
+                                );
+                                true
+                            }
+                            _ => {
+                                // Check legacy string patterns for backward compatibility
+                                let error_str = format!("{}", e);
+                                error_str.contains("insufficient balance") ||
+                                    error_str.contains("InvalidAmount") ||
+                                    error_str.contains("ConfigError")
+                            }
+                        };
+
+                        if should_not_retry {
+                            return Err(e);
                         }
 
-                        last_error = Some(error_str);
+                        last_error = Some(e);
 
                         // If this isn't the last attempt, wait and continue
                         if slippage_attempt < slippages.len() - 1 {
@@ -2710,7 +2966,9 @@ impl PositionsManager {
                                         )
                                     );
                                     return Err(
-                                        "Shutdown in progress - aborting sell retries".to_string()
+                                        ScreenerBotError::Position(PositionError::Generic {
+                                            message: "Shutdown in progress - aborting sell retries".to_string(),
+                                        })
                                     );
                                 }
                             }
@@ -2786,7 +3044,11 @@ impl PositionsManager {
                 )
             );
 
-            let final_error = last_error.unwrap_or_else(|| "Unknown error".to_string());
+            let final_error = last_error.unwrap_or_else(||
+                ScreenerBotError::Position(PositionError::Generic {
+                    message: "Unknown error".to_string(),
+                })
+            );
 
             match attempt {
                 _ if attempt < max_attempts => {
@@ -2803,9 +3065,13 @@ impl PositionsManager {
                     );
 
                     // Check if it's a frozen account error
-                    if is_frozen_account_error(&final_error) {
+                    if is_frozen_account_error(&format!("{}", final_error)) {
                         self.add_mint_to_frozen_cooldown(&position.mint);
-                        return Err(format!("Token frozen, added to cooldown: {}", final_error));
+                        return Err(
+                            ScreenerBotError::Position(PositionError::Generic {
+                                message: format!("Token frozen, added to cooldown: {}", final_error),
+                            })
+                        );
                     }
 
                     // Wait before retry
@@ -2819,13 +3085,19 @@ impl PositionsManager {
                         1,
                     ));
                     return Err(
-                        format!("All sell attempts failed, added to retry queue: {}", final_error)
+                        ScreenerBotError::Position(PositionError::Generic {
+                            message: format!("All sell attempts failed, added to retry queue: {}", final_error),
+                        })
                     );
                 }
             }
         }
 
-        Err("Unexpected end of sell retry loop".to_string())
+        Err(
+            ScreenerBotError::Position(PositionError::Generic {
+                message: "Unexpected end of sell retry loop".to_string(),
+            })
+        )
     }
 
     /// Update position tracking
@@ -3357,12 +3629,27 @@ impl PositionsManager {
     }
 
     /// Update position data from verified transaction with proper status handling
-    async fn update_position_from_transaction(&mut self, signature: &str) -> Result<(), String> {
+    async fn update_position_from_transaction(
+        &mut self,
+        signature: &str
+    ) -> Result<(), ScreenerBotError> {
         // Get transaction from transactions manager
-        let transaction = match get_transaction(signature).await? {
-            Some(tx) => tx,
-            None => {
-                return Err("Transaction not found or still pending".to_string());
+        let transaction = match get_transaction(signature).await {
+            Ok(Some(tx)) => tx,
+            Ok(None) => {
+                return Err(
+                    ScreenerBotError::Position(PositionError::VerificationFailed {
+                        signature: signature.to_string(),
+                        reason: "Transaction not found or still pending".to_string(),
+                    })
+                );
+            }
+            Err(e) => {
+                return Err(
+                    ScreenerBotError::Data(DataError::Generic {
+                        message: e,
+                    })
+                );
             }
         };
 
@@ -3372,10 +3659,20 @@ impl PositionsManager {
                 // Transaction is confirmed - proceed with update
             }
             TransactionStatus::Pending => {
-                return Err("Transaction still pending verification".to_string());
+                return Err(
+                    ScreenerBotError::Position(PositionError::VerificationTimeout {
+                        signature: signature.to_string(),
+                        timeout_seconds: 300, // 5 minutes
+                    })
+                );
             }
             TransactionStatus::Failed(ref error) => {
-                return Err(format!("Transaction failed: {}", error));
+                return Err(
+                    ScreenerBotError::Position(PositionError::VerificationFailed {
+                        signature: signature.to_string(),
+                        reason: format!("Transaction failed: {}", error),
+                    })
+                );
             }
         }
 
@@ -3455,7 +3752,7 @@ impl PositionsManager {
     async fn verify_transaction_comprehensively(
         &self,
         signature: &str
-    ) -> Result<Option<Transaction>, String> {
+    ) -> Result<Option<Transaction>, ScreenerBotError> {
         log(
             LogTag::Positions,
             "VERIFY",
@@ -3485,10 +3782,17 @@ impl PositionsManager {
                             return Ok(Some(transaction));
                         } else {
                             return Err(
-                                format!(
-                                    "Transaction failed on-chain: {}",
-                                    transaction.error_message.unwrap_or("Unknown error".to_string())
-                                )
+                                ScreenerBotError::Blockchain(BlockchainError::TransactionDropped {
+                                    signature: signature.to_string(),
+                                    reason: format!(
+                                        "Transaction failed on-chain: {}",
+                                        transaction.error_message.unwrap_or(
+                                            "Unknown error".to_string()
+                                        )
+                                    ),
+                                    fee_paid: None,
+                                    attempts: 1,
+                                })
                             );
                         }
                     }
@@ -3504,7 +3808,14 @@ impl PositionsManager {
                         return Ok(None);
                     }
                     TransactionStatus::Failed(error) => {
-                        return Err(format!("Transaction failed: {}", error));
+                        return Err(
+                            ScreenerBotError::Blockchain(BlockchainError::TransactionDropped {
+                                signature: signature.to_string(),
+                                reason: format!("Transaction failed: {}", error),
+                                fee_paid: None,
+                                attempts: 1,
+                            })
+                        );
                     }
                 }
             }
@@ -3575,11 +3886,10 @@ impl PositionsManager {
                         }
                         Ok(false) | Err(_) => {
                             return Err(
-                                format!(
-                                    "Transaction not found in system after {}s ({}m) - likely failed",
-                                    verification_age_seconds,
-                                    verification_age_minutes
-                                )
+                                ScreenerBotError::Position(PositionError::VerificationTimeout {
+                                    signature: signature.to_string(),
+                                    timeout_seconds: verification_age_seconds as u64,
+                                })
                             );
                         }
                     }
@@ -3599,7 +3909,11 @@ impl PositionsManager {
                 }
             }
             Err(e) => {
-                return Err(format!("Error getting transaction: {}", e));
+                return Err(
+                    ScreenerBotError::Data(DataError::Generic {
+                        message: format!("Error getting transaction: {}", e),
+                    })
+                );
             }
         }
     }
@@ -3608,7 +3922,7 @@ impl PositionsManager {
     async fn handle_failed_transaction(
         &mut self,
         signature: &str,
-        error: &str
+        error: &ScreenerBotError
     ) -> Result<(), String> {
         log(
             LogTag::Positions,
@@ -3621,11 +3935,12 @@ impl PositionsManager {
         );
 
         // Enhanced failure detection for immediate cleanup
+        let error_str = error.to_string();
         let is_definitive_failure =
-            error.contains("propagation failed") ||
-            error.contains("likely failed") ||
-            error.contains("dropped by network") ||
-            error.contains("verification timeout");
+            error_str.contains("propagation failed") ||
+            error_str.contains("likely failed") ||
+            error_str.contains("dropped by network") ||
+            error_str.contains("verification timeout");
 
         // Find the position with this signature
         if
@@ -3706,10 +4021,11 @@ impl PositionsManager {
                         position.phantom_remove = true;
                     } else {
                         // For timeout or network issues, be more conservative
-                        let age_minutes = chrono::Utc::now()
+                        let age_minutes = chrono::Utc
+                            ::now()
                             .signed_duration_since(position.entry_time)
                             .num_minutes();
-                        
+
                         if age_minutes > 5 {
                             // Only flag as phantom after 10+ minutes for non-definitive failures
                             log(
@@ -3834,8 +4150,14 @@ impl PositionsManager {
         // Check if transaction exists now before marking as failed
         match crate::transactions::get_transaction(signature).await {
             Ok(Some(tx)) => {
-                if matches!(tx.status, crate::transactions::TransactionStatus::Confirmed | crate::transactions::TransactionStatus::Finalized) 
-                    && tx.success {
+                if
+                    matches!(
+                        tx.status,
+                        crate::transactions::TransactionStatus::Confirmed |
+                            crate::transactions::TransactionStatus::Finalized
+                    ) &&
+                    tx.success
+                {
                     log(
                         LogTag::Positions,
                         "TIMEOUT_RECOVERY",
@@ -3861,7 +4183,11 @@ impl PositionsManager {
         }
 
         // Only treat as failure if transaction is definitively not found or failed
-        self.handle_failed_transaction(signature, "Transaction verification timeout after retry").await
+        let timeout_error = ScreenerBotError::Position(PositionError::VerificationTimeout {
+            signature: signature.to_string(),
+            timeout_seconds: 300,
+        });
+        self.handle_failed_transaction(signature, &timeout_error).await
     }
 
     /// Clean up phantom positions
@@ -4893,14 +5219,14 @@ pub enum PositionsRequest {
         price: f64,
         percent_change: f64,
         size_sol: f64,
-        reply: oneshot::Sender<Result<(String, String), String>>,
+        reply: oneshot::Sender<Result<(String, String), ScreenerBotError>>,
     },
     ClosePosition {
         mint: String,
         token: Token,
         exit_price: f64,
         exit_time: DateTime<Utc>,
-        reply: oneshot::Sender<Result<(String, String), String>>,
+        reply: oneshot::Sender<Result<(String, String), ScreenerBotError>>,
     },
     AddVerification {
         signature: String,
@@ -4970,7 +5296,7 @@ impl PositionsHandle {
         price: f64,
         percent_change: f64,
         size_sol: f64
-    ) -> Result<(String, String), String> {
+    ) -> Result<(String, String), ScreenerBotError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         let msg = PositionsRequest::OpenPosition {
             token,
@@ -4979,8 +5305,16 @@ impl PositionsHandle {
             size_sol,
             reply: reply_tx,
         };
-        self.tx.send(msg).await.map_err(|_| "PositionsManager unavailable".to_string())?;
-        reply_rx.await.map_err(|_| "PositionsManager dropped".to_string())?
+        self.tx.send(msg).await.map_err(|_|
+            ScreenerBotError::Position(PositionError::Generic {
+                message: "PositionsManager unavailable".to_string(),
+            })
+        )?;
+        reply_rx.await.map_err(|_|
+            ScreenerBotError::Position(PositionError::Generic {
+                message: "PositionsManager dropped".to_string(),
+            })
+        )?
     }
 
     pub async fn close_position(
@@ -4989,7 +5323,7 @@ impl PositionsHandle {
         token: Token,
         exit_price: f64,
         exit_time: DateTime<Utc>
-    ) -> Result<(String, String), String> {
+    ) -> Result<(String, String), ScreenerBotError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         let msg = PositionsRequest::ClosePosition {
             mint,
@@ -4998,8 +5332,16 @@ impl PositionsHandle {
             exit_time,
             reply: reply_tx,
         };
-        self.tx.send(msg).await.map_err(|_| "PositionsManager unavailable".to_string())?;
-        reply_rx.await.map_err(|_| "PositionsManager dropped".to_string())?
+        self.tx.send(msg).await.map_err(|_|
+            ScreenerBotError::Position(PositionError::Generic {
+                message: "PositionsManager unavailable".to_string(),
+            })
+        )?;
+        reply_rx.await.map_err(|_|
+            ScreenerBotError::Position(PositionError::Generic {
+                message: "PositionsManager dropped".to_string(),
+            })
+        )?
     }
 
     pub async fn add_verification(&self, signature: String) {
@@ -5101,12 +5443,28 @@ static GLOBAL_POSITIONS_HANDLE: Lazy<AsyncMutex<Option<PositionsHandle>>> = Lazy
 );
 
 pub async fn set_positions_handle(handle: PositionsHandle) {
-    let mut guard = GLOBAL_POSITIONS_HANDLE.lock().await;
+    let mut guard = match
+        tokio::time::timeout(Duration::from_secs(1), GLOBAL_POSITIONS_HANDLE.lock()).await
+    {
+        Ok(guard) => guard,
+        Err(_) => {
+            log(LogTag::Positions, "ERROR", "⏰ Timeout setting positions handle");
+            return;
+        }
+    };
     *guard = Some(handle);
 }
 
 pub async fn get_positions_handle() -> Option<PositionsHandle> {
-    let guard = GLOBAL_POSITIONS_HANDLE.lock().await;
+    let guard = match
+        tokio::time::timeout(Duration::from_secs(1), GLOBAL_POSITIONS_HANDLE.lock()).await
+    {
+        Ok(guard) => guard,
+        Err(_) => {
+            log(LogTag::Positions, "WARN", "⏰ Timeout getting positions handle");
+            return None;
+        }
+    };
     guard.clone()
 }
 
@@ -5292,11 +5650,15 @@ pub async fn open_position_global(
     price: f64,
     percent_change: f64,
     size_sol: f64
-) -> Result<(String, String), String> {
+) -> Result<(String, String), ScreenerBotError> {
     if let Some(h) = get_positions_handle().await {
         h.open_position(token, price, percent_change, size_sol).await
     } else {
-        Err("PositionsManager not available".to_string())
+        Err(
+            ScreenerBotError::Position(PositionError::Generic {
+                message: "PositionsManager not available".to_string(),
+            })
+        )
     }
 }
 
@@ -5305,11 +5667,15 @@ pub async fn close_position_global(
     token: Token,
     exit_price: f64,
     exit_time: DateTime<Utc>
-) -> Result<(String, String), String> {
+) -> Result<(String, String), ScreenerBotError> {
     if let Some(h) = get_positions_handle().await {
         h.close_position(mint, token, exit_price, exit_time).await
     } else {
-        Err("PositionsManager not available".to_string())
+        Err(
+            ScreenerBotError::Position(PositionError::Generic {
+                message: "PositionsManager not available".to_string(),
+            })
+        )
     }
 }
 
@@ -5320,7 +5686,7 @@ pub async fn execute_close_position_background(
     token: Token,
     exit_price: f64,
     exit_time: DateTime<Utc>
-) -> Result<(String, String), String> {
+) -> Result<(String, String), ScreenerBotError> {
     // Execute the close position logic without blocking the actor
     // We'll use the existing global position management API to update positions
 
@@ -5371,7 +5737,12 @@ pub async fn execute_close_position_background(
             pos
         }
         None => {
-            return Err("Position not found or already closed".to_string());
+            return Err(
+                ScreenerBotError::Position(PositionError::PositionNotFound {
+                    token_mint: mint,
+                    signature: "".to_string(),
+                })
+            );
         }
     };
 
@@ -5386,7 +5757,11 @@ pub async fn execute_close_position_background(
                 exit_price
             )
         );
-        return Err("DRY-RUN: Position would be closed".to_string());
+        return Err(
+            ScreenerBotError::Position(PositionError::Generic {
+                message: "DRY-RUN: Position would be closed".to_string(),
+            })
+        );
     }
 
     // Balance check and phantom detection happens in execute_sell_with_retry_background()
@@ -5401,7 +5776,7 @@ async fn execute_sell_with_retry_background(
     token: &Token,
     exit_price: f64,
     exit_time: DateTime<Utc>
-) -> Result<(String, String), String> {
+) -> Result<(String, String), ScreenerBotError> {
     let _guard = crate::trader::CriticalOperationGuard::new(&format!("SELL {}", position.symbol));
 
     // Active sell registry guard (background context)
@@ -5415,7 +5790,11 @@ async fn execute_sell_with_retry_background(
                 get_mint_prefix(&position.mint)
             )
         );
-        return Err("Active sell already in progress".to_string());
+        return Err(
+            ScreenerBotError::Position(PositionError::Generic {
+                message: "Active sell already in progress".to_string(),
+            })
+        );
     }
     struct ActiveSellCleanupBg {
         mint: String,
@@ -5447,7 +5826,13 @@ async fn execute_sell_with_retry_background(
         // Validate expected SOL output if provided
         if let Some(expected_sol) = Some(exit_price) {
             if expected_sol <= 0.0 || !expected_sol.is_finite() {
-                return Err(format!("Invalid expected SOL output: {:.10}", expected_sol));
+                return Err(
+                    ScreenerBotError::Data(DataError::ValidationError {
+                        field: "expected_sol_output".to_string(),
+                        value: expected_sol.to_string(),
+                        reason: "Expected SOL output must be positive and finite".to_string(),
+                    })
+                );
             }
         }
 
@@ -5455,7 +5840,7 @@ async fn execute_sell_with_retry_background(
         let slippages = &SELL_RETRY_SLIPPAGES;
         let token_amount = position.token_amount.unwrap_or(0);
 
-        let mut last_error = None;
+        let mut last_error: Option<ScreenerBotError> = None;
 
         for (slippage_attempt, &slippage) in slippages.iter().enumerate() {
             log(
@@ -5484,10 +5869,33 @@ async fn execute_sell_with_retry_background(
                 );
             }
 
-            let wallet_address = match get_wallet_address() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    last_error = Some(format!("Failed to get wallet address: {}", e));
+            let wallet_address = match
+                tokio::time::timeout(
+                    tokio::time::Duration::from_secs(5), // 5s timeout for wallet address
+                    async {
+                        get_wallet_address()
+                    }
+                ).await
+            {
+                Ok(Ok(addr)) => addr,
+                Ok(Err(e)) => {
+                    last_error = Some(e);
+                    continue;
+                }
+                Err(_) => {
+                    log(
+                        LogTag::Positions,
+                        "TIMEOUT",
+                        &format!(
+                            "⏰ Wallet address timeout during background sell for {} after 5s",
+                            token.symbol
+                        )
+                    );
+                    last_error = Some(
+                        ScreenerBotError::api_error(
+                            "Wallet address timeout during background sell".to_string()
+                        )
+                    );
                     continue;
                 }
             };
@@ -5500,12 +5908,14 @@ async fn execute_sell_with_retry_background(
             {
                 Ok(Ok(balance)) => balance,
                 Ok(Err(e)) => {
-                    last_error = Some(format!("Failed to get token balance: {}", e));
+                    last_error = Some(e);
                     continue;
                 }
                 Err(_) => {
                     last_error = Some(
-                        format!("Timeout getting token balance for {}", token.symbol)
+                        ScreenerBotError::Network(NetworkError::Generic {
+                            message: format!("Timeout getting token balance for {}", token.symbol),
+                        })
                     );
                     continue;
                 }
@@ -5521,7 +5931,12 @@ async fn execute_sell_with_retry_background(
                         token_amount
                     )
                 );
-                return Err("Phantom position - zero balance".to_string());
+                return Err(
+                    ScreenerBotError::Position(PositionError::PhantomPositionDetected {
+                        token_mint: token.mint.clone(),
+                        signature: "unknown".to_string(),
+                    })
+                );
             }
 
             let actual_sell_amount = actual_wallet_balance; // may be partial
@@ -5544,11 +5959,13 @@ async fn execute_sell_with_retry_background(
             if !full_position_intact {
                 if is_duplicate_swap_attempt(&token.mint, expected_sol_amount, "SELL").await {
                     last_error = Some(
-                        format!(
-                            "Duplicate sell prevented for {} (background) - similar sell attempted within last {}s (wallet balance changed)",
-                            token.symbol,
-                            DUPLICATE_SWAP_PREVENTION_SECS
-                        )
+                        ScreenerBotError::Position(PositionError::Generic {
+                            message: format!(
+                                "Duplicate sell prevented for {} (background) - similar sell attempted within last {}s (wallet balance changed)",
+                                token.symbol,
+                                DUPLICATE_SWAP_PREVENTION_SECS
+                            ),
+                        })
                     );
                     continue;
                 }
@@ -5565,17 +5982,37 @@ async fn execute_sell_with_retry_background(
             }
 
             let best_quote = match
-                get_best_quote(
-                    &token.mint,
-                    SOL_MINT,
-                    actual_sell_amount,
-                    &wallet_address,
-                    slippage
+                tokio::time::timeout(
+                    tokio::time::Duration::from_secs(20), // 20s total timeout for quote requests
+                    get_best_quote(
+                        &token.mint,
+                        SOL_MINT,
+                        actual_sell_amount,
+                        &wallet_address,
+                        slippage
+                    )
                 ).await
             {
-                Ok(quote) => quote,
-                Err(e) => {
-                    last_error = Some(format!("Failed to get quote: {}", e));
+                Ok(Ok(quote)) => quote,
+                Ok(Err(e)) => {
+                    last_error = Some(e);
+                    continue;
+                }
+                Err(_) => {
+                    log(
+                        LogTag::Swap,
+                        "QUOTE_TIMEOUT",
+                        &format!(
+                            "⏰ Sell quote request timeout for {} after 20s (slippage: {:.1}%)",
+                            token.symbol,
+                            slippage
+                        )
+                    );
+                    last_error = Some(
+                        ScreenerBotError::api_error(
+                            format!("Quote request timeout for {}", token.symbol)
+                        )
+                    );
                     continue;
                 }
             };
@@ -5627,7 +6064,7 @@ async fn execute_sell_with_retry_background(
                     result
                 }
                 Err(e) => {
-                    last_error = Some(format!("Swap execution failed: {}", e));
+                    last_error = Some(e);
                     continue;
                 }
             };
@@ -5636,7 +6073,11 @@ async fn execute_sell_with_retry_background(
             let transaction_signature = match swap_result.transaction_signature {
                 Some(sig) => sig,
                 None => {
-                    last_error = Some("Swap result missing signature".to_string());
+                    last_error = Some(
+                        ScreenerBotError::Data(DataError::Generic {
+                            message: "Swap result missing signature".to_string(),
+                        })
+                    );
                     continue;
                 }
             };
@@ -5698,7 +6139,7 @@ async fn execute_sell_with_retry_background(
             return Ok((transaction_signature, quote_label));
         } // Close the inner slippage loop
 
-        if let Some(error) = last_error {
+        if let Some(ref error) = last_error {
             log(
                 LogTag::Positions,
                 "ERROR",
@@ -5712,7 +6153,11 @@ async fn execute_sell_with_retry_background(
         }
     }
 
-    Err(format!("Failed to sell {} after {} attempts", position.symbol, max_attempts))
+    Err(
+        ScreenerBotError::Position(PositionError::Generic {
+            message: format!("Failed to sell {} after {} attempts", position.symbol, max_attempts),
+        })
+    )
 }
 
 // =============================================================================

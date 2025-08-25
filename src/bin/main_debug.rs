@@ -62,6 +62,7 @@ use screenerbot::logger::{ log, LogTag, init_file_logging };
 use screenerbot::global::{ set_cmd_args };
 use screenerbot::arguments::{ get_cmd_args, set_cmd_args as args_set_cmd_args };
 use screenerbot::rpc::{ get_rpc_client, SwapError, sol_to_lamports, TokenBalance };
+use screenerbot::errors::ScreenerBotError;
 use screenerbot::utils::get_wallet_address;
 use solana_transaction_status::{
     UiInstruction,
@@ -4503,7 +4504,7 @@ async fn execute_raydium_cpmm_swap_test(
 ) -> Result<JupiterSwapResult, SwapError> {
     // Raydium direct API is deprecated - use Jupiter aggregator which includes Raydium routes
     Err(
-        SwapError::ConfigError(
+        ScreenerBotError::config_error(
             "Raydium CPMM direct test is deprecated. Use Jupiter aggregator which includes Raydium routes.".to_string()
         )
     )
