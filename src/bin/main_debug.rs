@@ -4504,9 +4504,9 @@ async fn execute_raydium_cpmm_swap_test(
 ) -> Result<JupiterSwapResult, SwapError> {
     // Raydium direct API is deprecated - use Jupiter aggregator which includes Raydium routes
     Err(
-        ScreenerBotError::config_error(
-            "Raydium CPMM direct test is deprecated. Use Jupiter aggregator which includes Raydium routes.".to_string()
-        )
+        ScreenerBotError::Configuration(screenerbot::errors::ConfigurationError::Generic {
+            message: "Raydium CPMM direct test is deprecated. Use Jupiter aggregator which includes Raydium routes.".to_string(),
+        })
     )
 }
 

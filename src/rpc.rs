@@ -3415,9 +3415,11 @@ impl RpcClient {
 
         let client = reqwest::Client::new();
         let rpc_url = if is_premium_rpc_only() {
-            &self.premium_url
-                .as_ref()
-                .ok_or(ScreenerBotError::config_error("No premium RPC available".to_string()))?
+            &self.premium_url.as_ref().ok_or(
+                ScreenerBotError::Configuration(crate::errors::ConfigurationError::MissingConfig {
+                    field: "premium_url".to_string(),
+                })
+            )?
         } else {
             &self.rpc_url
         };
@@ -3831,8 +3833,11 @@ impl RpcClient {
                 return Ok(signatures);
             } else {
                 return Err(
-                    ScreenerBotError::config_error(
-                        "Premium RPC URL not configured but premium-only mode is active".to_string()
+                    ScreenerBotError::Configuration(
+                        crate::errors::ConfigurationError::InvalidConfig {
+                            field: "premium_url".to_string(),
+                            reason: "Premium RPC URL not configured but premium-only mode is active".to_string(),
+                        }
                     )
                 );
             }

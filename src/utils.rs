@@ -45,17 +45,27 @@ use std::str::FromStr;
 /// Get the wallet address from the main wallet private key in configs
 /// This replaces the swaps::get_wallet_address dependency
 pub fn get_wallet_address() -> Result<String, SwapError> {
-    let configs = read_configs().map_err(|e| ScreenerBotError::config_error(e.to_string()))?;
+    let configs = read_configs().map_err(|e|
+        ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
+            message: format!("Failed to read config file: {}", e),
+        })
+    )?;
 
     // Decode the private key from base58
     let private_key_bytes = bs58
         ::decode(&configs.main_wallet_private)
         .into_vec()
-        .map_err(|e| ScreenerBotError::config_error(format!("Invalid private key format: {}", e)))?;
+        .map_err(|e|
+            ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
+                error: format!("Invalid private key format: {}", e),
+            })
+        )?;
 
     // Create keypair from private key
     let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e|
-        ScreenerBotError::config_error(format!("Failed to create keypair: {}", e))
+        ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
+            error: format!("Failed to create keypair: {}", e),
+        })
     )?;
 
     Ok(keypair.pubkey().to_string())
@@ -875,7 +885,11 @@ async fn build_and_send_close_instruction(
         );
     }
 
-    let configs = read_configs().map_err(|e| ScreenerBotError::config_error(e.to_string()))?;
+    let configs = read_configs().map_err(|e|
+        ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
+            message: format!("Failed to read config file: {}", e),
+        })
+    )?;
 
     // Parse addresses
     if is_debug_ata_enabled() {
@@ -912,10 +926,16 @@ async fn build_and_send_close_instruction(
     let private_key_bytes = bs58
         ::decode(&configs.main_wallet_private)
         .into_vec()
-        .map_err(|e| ScreenerBotError::config_error(format!("Invalid private key: {}", e)))?;
+        .map_err(|e|
+            ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
+                error: format!("Invalid private key: {}", e),
+            })
+        )?;
 
     let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e|
-        ScreenerBotError::config_error(format!("Failed to create keypair: {}", e))
+        ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
+            error: format!("Failed to create keypair: {}", e),
+        })
     )?;
 
     // Build close account instruction
@@ -943,7 +963,11 @@ async fn build_and_send_close_instruction(
             &owner_pubkey,
             &[]
         ).map_err(|e|
-            ScreenerBotError::transaction_error(format!("Failed to build close instruction: {}", e))
+            ScreenerBotError::Blockchain(crate::errors::BlockchainError::InvalidInstruction {
+                signature: "unknown".to_string(),
+                instruction_index: 0,
+                reason: format!("Failed to build close instruction: {}", e),
+            })
         )?
     };
 
@@ -1068,7 +1092,12 @@ fn build_token_2022_close_instruction(
     let token_2022_program_id = Pubkey::from_str(
         "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
     ).map_err(|e|
-        ScreenerBotError::transaction_error(format!("Invalid Token-2022 program ID: {}", e))
+        ScreenerBotError::Blockchain(crate::errors::BlockchainError::InvalidAccountData {
+            signature: "unknown".to_string(),
+            account: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb".to_string(),
+            expected_owner: "Program ID".to_string(),
+            actual_owner: None,
+        })
     )?;
 
     // Manually build the close account instruction for Token-2022

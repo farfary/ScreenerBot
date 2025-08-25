@@ -1150,7 +1150,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Gets all token accounts for the given wallet address
 async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccount>, SwapError> {
-    let configs = read_configs().map_err(|e| ScreenerBotError::config_error(e.to_string()))?;
+    let configs = read_configs().map_err(|e|
+        ScreenerBotError::Configuration(screenerbot::errors::ConfigurationError::Generic {
+            message: format!("Failed to read config file: {}", e),
+        })
+    )?;
 
     let rpc_payload =
         serde_json::json!({
@@ -1263,15 +1267,22 @@ async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccount
     }
 
     Err(
-        ScreenerBotError::transaction_error(
-            "Failed to fetch token accounts from all RPC endpoints".to_string()
-        )
+        ScreenerBotError::Blockchain(screenerbot::errors::BlockchainError::TransactionDropped {
+            signature: "unknown".to_string(),
+            reason: "Failed to fetch token accounts from all RPC endpoints".to_string(),
+            fee_paid: None,
+            attempts: 1,
+        })
     )
 }
 
 /// Also get Token-2022 accounts (Token Extensions Program)
 async fn get_token_2022_accounts(wallet_address: &str) -> Result<Vec<TokenAccount>, SwapError> {
-    let configs = read_configs().map_err(|e| ScreenerBotError::config_error(e.to_string()))?;
+    let configs = read_configs().map_err(|e|
+        ScreenerBotError::Configuration(screenerbot::errors::ConfigurationError::Generic {
+            message: format!("Failed to read config file: {}", e),
+        })
+    )?;
 
     let rpc_payload =
         serde_json::json!({

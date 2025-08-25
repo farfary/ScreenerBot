@@ -343,23 +343,6 @@ impl From<serde_json::Error> for ScreenerBotError {
 // =============================================================================
 
 impl ScreenerBotError {
-    /// Create a configuration error (replaces SwapError::ConfigError)
-    pub fn config_error(message: impl Into<String>) -> Self {
-        ScreenerBotError::Configuration(ConfigurationError::Generic {
-            message: message.into(),
-        })
-    }
-
-    /// Create a transaction error (replaces SwapError::TransactionError)
-    pub fn transaction_error(message: impl Into<String>) -> Self {
-        ScreenerBotError::Blockchain(BlockchainError::TransactionDropped {
-            signature: "unknown".to_string(),
-            reason: message.into(),
-            fee_paid: None,
-            attempts: 1,
-        })
-    }
-
     /// Create an invalid amount error (replaces SwapError::InvalidAmount)
     pub fn invalid_amount(amount: impl Into<String>, reason: impl Into<String>) -> Self {
         ScreenerBotError::Data(DataError::InvalidAmount {
