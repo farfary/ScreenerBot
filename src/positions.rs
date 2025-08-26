@@ -8,6 +8,7 @@ use crate::{
     },
     transactions::{
         get_transaction,
+        get_priority_transaction,
         Transaction,
         TransactionStatus,
         get_global_transaction_manager,
@@ -620,26 +621,18 @@ pub async fn open_position_direct(
         // Track for comprehensive verification
         state.pending_verifications.insert(transaction_signature.clone(), Utc::now());
 
-        // Add position to in-memory list
-        state.positions.push(new_position.clone());
-
-        if is_debug_positions_enabled() {
-            log(
-                LogTag::Positions,
-                "DEBUG",
-                &format!(
-                    "✅ Position created for {} with signature {} - profit targets: {:.2}%-{:.2}%",
-                    token.symbol,
-                    get_signature_prefix(&transaction_signature),
-                    profit_target_min,
-                    profit_target_max
-                )
-            );
-        }
-
-        // Save to database
-        match save_position(&new_position).await {
+        // Save to database first to get the ID
+        let position_id = match save_position(&new_position).await {
             Ok(id) => {
+                log(
+                    LogTag::Positions,
+                    "INSERT",
+                    &format!(
+                        "Inserted new position ID {} for mint {}",
+                        id,
+                        get_mint_prefix(&token.mint)
+                    )
+                );
                 log(
                     LogTag::Positions,
                     "DB_SAVE",
@@ -656,7 +649,32 @@ pub async fn open_position_direct(
                 // Continue without database ID - position is still in memory
                 -1
             }
+        };
+
+        // Update position with database ID if successful
+        let mut position_with_id = new_position.clone();
+        if position_id > 0 {
+            position_with_id.id = Some(position_id);
         }
+
+        // Add position to in-memory list with correct ID
+        state.positions.push(position_with_id);
+
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!(
+                    "✅ Position created for {} with signature {} - profit targets: {:.2}%-{:.2}%",
+                    token.symbol,
+                    get_signature_prefix(&transaction_signature),
+                    profit_target_min,
+                    profit_target_max
+                )
+            );
+        }
+
+        position_id
     };
 
     // Log entry transaction with comprehensive verification
@@ -1323,8 +1341,9 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
         );
     }
 
-    // Get the transaction with comprehensive verification
-    let transaction = match get_transaction(signature).await {
+    // Get the transaction with comprehensive verification using priority processing
+    // This ensures we get a fully analyzed transaction even when the manager is busy
+    let transaction = match get_priority_transaction(signature).await {
         Ok(Some(transaction)) => {
             // Check transaction status and success
             match transaction.status {
@@ -1486,7 +1505,35 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
         if let Some(ref manager) = *manager {
             let empty_cache = std::collections::HashMap::new();
             // Use the same method as backup system - works with transaction_type and balance changes
-            manager.convert_to_swap_pnl_info(&transaction, &empty_cache, false)
+            let swap_info = manager.convert_to_swap_pnl_info(&transaction, &empty_cache, false);
+
+            if is_debug_positions_enabled() {
+                if let Some(ref info) = swap_info {
+                    log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!(
+                            "🔍 Swap analysis result: type={}, token_mint={}, sol_amount={}, token_amount={}, price={:.9}",
+                            info.swap_type,
+                            get_mint_prefix(&info.token_mint),
+                            info.sol_amount,
+                            info.token_amount,
+                            info.calculated_price_sol
+                        )
+                    );
+                } else {
+                    log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!(
+                            "⚠️ No swap analysis result for transaction {}",
+                            get_signature_prefix(signature)
+                        )
+                    );
+                }
+            }
+
+            swap_info
         } else {
             if is_debug_positions_enabled() {
                 log(LogTag::Positions, "ERROR", "❌ Transaction manager not initialized");
@@ -1497,8 +1544,20 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
 
     // Update position verification status and populate fields from transaction data
     let mut verified = false;
+    let mut position_for_db_update: Option<Position> = None;
     {
         let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!(
+                    "🔍 Starting position search for verification - {} positions in memory",
+                    state.positions.len()
+                )
+            );
+        }
 
         // Find and update the position
         for position in &mut state.positions {
@@ -1507,6 +1566,26 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                 Some(signature);
             let is_exit =
                 position.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature);
+
+            log(
+                LogTag::Positions,
+                "VERIFY_CHECK",
+                &format!(
+                    "🔍 Checking position {} (ID: {}): entry_sig={}, exit_sig={}, is_entry={}, is_exit={}",
+                    position.symbol,
+                    position.id.unwrap_or(0),
+                    position.entry_transaction_signature
+                        .as_ref()
+                        .map(|s| get_signature_prefix(s))
+                        .unwrap_or("None".to_string()),
+                    position.exit_transaction_signature
+                        .as_ref()
+                        .map(|s| get_signature_prefix(s))
+                        .unwrap_or("None".to_string()),
+                    is_entry,
+                    is_exit
+                )
+            );
 
             if is_entry {
                 // Entry transaction verification
@@ -1582,6 +1661,30 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                                 )
                             );
                         }
+
+                        // Store position for database update (after releasing lock)
+                        if position.id.is_some() {
+                            position_for_db_update = Some(position.clone());
+                            log(
+                                LogTag::Positions,
+                                "DB_PREP",
+                                &format!(
+                                    "🔄 Position {} (ID: {}) prepared for database update with entry_verified={}",
+                                    position.symbol,
+                                    position.id.unwrap(),
+                                    position.transaction_entry_verified
+                                )
+                            );
+                        } else {
+                            log(
+                                LogTag::Positions,
+                                "DB_PREP_ERROR",
+                                &format!(
+                                    "⚠️ Position {} has no ID - cannot update database",
+                                    position.symbol
+                                )
+                            );
+                        }
                     } else {
                         // Type/token mismatch (same as backup system)
                         position.transaction_entry_verified = false;
@@ -1612,20 +1715,6 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                     );
                     // Don't mark as failed - let it retry (same as backup)
                     return Err("No valid swap analysis - will retry".to_string());
-                }
-
-                // Update in database
-                if let Some(_position_id) = position.id {
-                    let position_clone = position.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = update_position(&position_clone).await {
-                            log(
-                                LogTag::Positions,
-                                "DB_ERROR",
-                                &format!("Failed to update entry verification in database: {}", e)
-                            );
-                        }
-                    });
                 }
                 break;
             } else if is_exit {
@@ -1672,6 +1761,33 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                                 )
                             );
                         }
+
+                        // Store position for database update (after releasing lock)
+                        if position.id.is_some() {
+                            position_for_db_update = Some(position.clone());
+                            if is_debug_positions_enabled() {
+                                log(
+                                    LogTag::Positions,
+                                    "DEBUG",
+                                    &format!(
+                                        "🔄 Exit position {} (ID: {}) prepared for database update",
+                                        position.symbol,
+                                        position.id.unwrap()
+                                    )
+                                );
+                            }
+                        } else {
+                            if is_debug_positions_enabled() {
+                                log(
+                                    LogTag::Positions,
+                                    "WARNING",
+                                    &format!(
+                                        "⚠️ Exit position {} has no ID - cannot update database",
+                                        position.symbol
+                                    )
+                                );
+                            }
+                        }
                     } else {
                         // Type/token mismatch (same as backup system)
                         position.transaction_exit_verified = false;
@@ -1703,29 +1819,128 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                     // Don't mark as failed - let it retry (same as backup)
                     return Err("No valid swap analysis - will retry".to_string());
                 }
-
-                // Update in database
-                if let Some(_position_id) = position.id {
-                    let position_clone = position.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = update_position(&position_clone).await {
-                            log(
-                                LogTag::Positions,
-                                "DB_ERROR",
-                                &format!("Failed to update exit verification in database: {}", e)
-                            );
-                        }
-                    });
-                }
                 break;
             }
         }
 
-        // Remove from pending verifications
-        state.pending_verifications.remove(signature);
+        // NOTE: Do NOT remove from pending verifications yet - only after successful database update
+
+        log(
+            LogTag::Positions,
+            "VERIFY_RESULT",
+            &format!(
+                "� Position search completed for {}: verified={}, position_for_db_update={}, positions_checked={}",
+                get_signature_prefix(signature),
+                verified,
+                position_for_db_update.is_some(),
+                state.positions.len()
+            )
+        );
+    }
+
+    // Update database AFTER releasing the state lock to prevent deadlock/contention
+    if let Some(position) = position_for_db_update {
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!(
+                    "🔄 Attempting database update for position {} (ID: {}) - entry_verified={}, exit_verified={}",
+                    position.symbol,
+                    position.id.unwrap_or(0),
+                    position.transaction_entry_verified,
+                    position.transaction_exit_verified
+                )
+            );
+        }
+
+        // Log the update_position call explicitly
+        log(
+            LogTag::Positions,
+            "DB_UPDATE_CALL",
+            &format!(
+                "📝 Calling update_position for {} with verification status: entry={}, exit={}",
+                position.symbol,
+                position.transaction_entry_verified,
+                position.transaction_exit_verified
+            )
+        );
+
+        match update_position(&position).await {
+            Err(e) => {
+                log(
+                    LogTag::Positions,
+                    "DB_ERROR",
+                    &format!(
+                        "❌ Failed to update verification in database for {}: {}",
+                        position.symbol,
+                        e
+                    )
+                );
+                // Return error to prevent marking as verified if database update failed
+                return Err(format!("Database update failed: {}", e));
+            }
+            Ok(_) => {
+                log(
+                    LogTag::Positions,
+                    "DB_UPDATE_SUCCESS",
+                    &format!(
+                        "✅ Verification status saved to database for {} - entry_verified={}, exit_verified={}",
+                        position.symbol,
+                        position.transaction_entry_verified,
+                        position.transaction_exit_verified
+                    )
+                );
+
+                // Only remove from pending verifications AFTER successful database update
+                {
+                    let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+                    state.pending_verifications.remove(signature);
+
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG",
+                            &format!(
+                                "🗑️ Removed {} from pending verifications after successful DB update",
+                                get_signature_prefix(signature)
+                            )
+                        );
+                    }
+                }
+            }
+        }
+    } else {
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("⚠️ No position prepared for database update - verified={}, will not update DB", verified)
+            );
+        }
     }
 
     if verified {
+        // Reload positions from database to ensure perfect sync after verification update
+        if let Err(e) = reload_positions_from_database().await {
+            log(
+                LogTag::Positions,
+                "WARNING",
+                &format!("Failed to reload positions after verification: {}", e)
+            );
+        } else {
+            if is_debug_positions_enabled() {
+                log(
+                    LogTag::Positions,
+                    "SYNC_SUCCESS",
+                    &format!(
+                        "✅ Positions reloaded from database after verification of {}",
+                        get_signature_prefix(signature)
+                    )
+                );
+            }
+        }
+
         if is_debug_positions_enabled() {
             log(
                 LogTag::Positions,
@@ -2061,6 +2276,35 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                 break;
             }
             _ = sleep(Duration::from_secs(30)) => {
+                // First, cleanup stale pending verifications
+                let now = Utc::now();
+                let stale_sigs: Vec<String> = {
+                    let state = GLOBAL_POSITIONS_STATE.lock().await;
+                    state.pending_verifications
+                        .iter()
+                        .filter_map(|(sig, added_at)| {
+                            let age_seconds = now.signed_duration_since(*added_at).num_seconds();
+                            if age_seconds > ENTRY_VERIFICATION_MAX_SECS * 2 { // 180 seconds = 3 minutes
+                                Some(sig.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                };
+
+                if !stale_sigs.is_empty() {
+                    let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+                    for sig in &stale_sigs {
+                        state.pending_verifications.remove(sig);
+                    }
+                    log(
+                        LogTag::Positions,
+                        "CLEANUP",
+                        &format!("🧹 Cleaned up {} stale pending verifications (age > {}s)", stale_sigs.len(), ENTRY_VERIFICATION_MAX_SECS * 2)
+                    );
+                }
+
                 // Get batch of pending verifications
                 let pending_sigs: Vec<String> = {
                     let state = GLOBAL_POSITIONS_STATE.lock().await;
@@ -2194,9 +2438,9 @@ async fn cleanup_phantom_positions_parallel(shutdown: Arc<Notify>) {
                             let pos = position.clone();
                             let age = *age_minutes;
                             async move {
-                                // Check if entry transaction actually failed
+                                // Check if entry transaction actually failed using priority processing
                                 if let Some(entry_sig) = &pos.entry_transaction_signature {
-                                    match get_transaction(entry_sig).await {
+                                    match get_priority_transaction(entry_sig).await {
                                         Ok(transaction) => {
                                             if let Some(tx) = transaction {
                                                 if !tx.success || !matches!(tx.status, TransactionStatus::Confirmed | TransactionStatus::Finalized) {
