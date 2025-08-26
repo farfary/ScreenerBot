@@ -39,8 +39,11 @@ use screenerbot::positions::{
     Position,
     calculate_position_pnl,
 };
-use screenerbot::tokens::{ get_token_from_db };
-use screenerbot::tokens::price::{ initialize_price_service, get_token_price_blocking_safe };
+use screenerbot::tokens::{
+    get_token_from_db,
+    initialize_price_service,
+    get_token_price_blocking_safe,
+};
 use screenerbot::tokens::init_dexscreener_api;
 use screenerbot::logger::{ log, LogTag, init_file_logging };
 use screenerbot::configs::{ read_configs, validate_configs };
@@ -969,20 +972,8 @@ async fn list_closed_positions(config: &PositionsManagerArgs) -> Result<(), Stri
 
 /// Display a single position row in the table
 async fn display_position_row(position: &Position, config: &PositionsManagerArgs) {
-    // Cache price service access to avoid repeated calls
-    static PRICE_SERVICE_CACHE: std::sync::OnceLock<Option<std::sync::Arc<screenerbot::tokens::price::TokenPriceService>>> = std::sync::OnceLock::new();
-
-    // Get current price for P&L calculation (with caching to reduce API calls)
-    let current_price = PRICE_SERVICE_CACHE.get_or_init(|| {
-        screenerbot::tokens::price::PRICE_SERVICE.get().cloned()
-    });
-
-    let price = if let Some(price_service) = current_price {
-        price_service.get_token_price(&position.mint).await
-    } else {
-        // Fallback to DexScreener API only if price service is not available
-        None // Skip expensive fallback for table display
-    };
+    // Get current price for P&L calculation using unified price service
+    let price = screenerbot::tokens::get_token_price_safe(&position.mint).await;
 
     let (pnl_sol, pnl_percent) = calculate_position_pnl(position, price).await;
 
@@ -1371,19 +1362,21 @@ async fn show_positions_summary(config: &PositionsManagerArgs) -> Result<(), Str
     let mut price_lookups = 0;
 
     for position in open_positions.iter().take(max_price_lookups) {
-        if let Some(price_service) = screenerbot::tokens::price::PRICE_SERVICE.get() {
-            if let Some(current_price) = price_service.get_token_price(&position.mint).await {
-                let (pnl_sol, _pnl_percent) = calculate_position_pnl(
-                    position,
-                    Some(current_price)
-                ).await;
-                total_unrealized_pnl += pnl_sol;
-                unrealized_positions_count += 1;
-                price_lookups += 1;
+        if
+            let Some(current_price) = screenerbot::tokens::get_token_price_safe(
+                &position.mint
+            ).await
+        {
+            let (pnl_sol, _pnl_percent) = calculate_position_pnl(
+                position,
+                Some(current_price)
+            ).await;
+            total_unrealized_pnl += pnl_sol;
+            unrealized_positions_count += 1;
+            price_lookups += 1;
 
-                // Small delay to avoid overwhelming price service
-                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-            }
+            // Small delay to avoid overwhelming price service
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         }
     }
 

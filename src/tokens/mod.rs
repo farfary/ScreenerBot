@@ -32,7 +32,6 @@ pub mod discovery;
 pub mod cache;
 pub mod types;
 pub mod blacklist;
-pub mod price;
 pub mod decimals;
 pub mod rugcheck;
 pub mod ohlcvs;
@@ -90,12 +89,12 @@ pub use ohlcvs::{
     is_ohlcv_data_available,
     get_latest_ohlcv,
 };
-pub use price::{
+pub use pool::{
     initialize_price_service,
     get_token_price_safe,
     get_token_price_blocking_safe,
     update_tokens_prices_safe,
-    TokenPriceService,
+    force_refresh_token_price_safe,
     PriceCacheEntry,
 };
 

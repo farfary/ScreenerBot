@@ -940,9 +940,9 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     let mint_clone = mint.clone();
                     async move {
                         // Force a refresh to ensure latest pool/API fetch (triggers price change logging)
-                        crate::tokens::price::force_refresh_token_price_safe(&mint_clone).await;
+                        crate::tokens::force_refresh_token_price_safe(&mint_clone).await;
                         // Touch cache to record watch time and verify availability
-                        crate::tokens::price::get_token_price_safe(&mint_clone).await
+                        crate::tokens::get_token_price_safe(&mint_clone).await
                     }
                 })
                 .collect();
@@ -1002,7 +1002,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 let mint = pos.mint.clone();
                 async move {
                     // Use non-blocking cache-first approach - will return cached price or None if stale
-                    let price = crate::tokens::price::get_token_price_safe(&mint).await;
+                    let price = crate::tokens::get_token_price_safe(&mint).await;
                     (mint, price)
                 }
             })

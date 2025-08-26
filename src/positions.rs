@@ -2159,7 +2159,7 @@ impl PositionsManager {
         let price_service_result = match
             tokio::time::timeout(
                 tokio::time::Duration::from_secs(10), // 10s timeout for price service
-                crate::tokens::price::get_token_price_safe(&token.mint)
+                crate::tokens::get_token_price_safe(&token.mint)
             ).await
         {
             Ok(result) => result,
@@ -2566,7 +2566,7 @@ impl PositionsManager {
         let price_service_result = match
             tokio::time::timeout(
                 tokio::time::Duration::from_secs(10), // 10s timeout for price service
-                crate::tokens::price::get_token_price_safe(&token.mint)
+                crate::tokens::get_token_price_safe(&token.mint)
             ).await
         {
             Ok(result) => result,
@@ -3130,7 +3130,7 @@ impl PositionsManager {
                 }
 
                 // Try to get API price from price service
-                if let Some(api_price) = crate::tokens::price::get_token_price_safe(mint).await {
+                if let Some(api_price) = crate::tokens::get_token_price_safe(mint).await {
                     return PositionPriceInfo {
                         price_source: "api".to_string(),
                         pool_type: None,
@@ -5074,7 +5074,6 @@ impl PositionsManager {
                             position.symbol
                         )
                     );
-
                 }
             } else {
                 position.transaction_exit_verified = false;

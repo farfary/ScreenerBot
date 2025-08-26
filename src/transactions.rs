@@ -31,12 +31,12 @@ use crate::tokens::{
     get_token_decimals,
     get_token_decimals_safe,
     initialize_price_service,
+    get_token_price_blocking_safe,
     TokenDatabase,
     types::PriceSourceType,
 };
 use crate::transactions_db::TransactionDatabase;
 use crate::tokens::decimals::{ raw_to_ui_amount, lamports_to_sol, sol_to_lamports };
-use crate::tokens::price::get_token_price_blocking_safe;
 
 // =============================================================================
 // SERDE HELPER FUNCTIONS

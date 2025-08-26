@@ -4922,3 +4922,193 @@ fn extract_pubkey_at_offset(data: &[u8], offset: usize) -> Result<Pubkey, String
 
     Ok(Pubkey::new_from_array(pubkey_bytes))
 }
+
+// =============================================================================
+// UNIFIED PRICE SERVICE FUNCTIONS (REPLACING price.rs)
+// =============================================================================
+
+/// Price cache entry structure for compatibility with existing code
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PriceCacheEntry {
+    pub price_sol: Option<f64>,
+    pub price_usd: Option<f64>,
+    pub liquidity_usd: Option<f64>,
+    pub last_updated: DateTime<Utc>,
+    pub source: String, // "api", "pool"
+}
+
+impl PriceCacheEntry {
+    pub fn is_expired(&self) -> bool {
+        let age = Utc::now() - self.last_updated;
+        age > chrono::Duration::seconds(5) // 5 second TTL
+    }
+
+    pub fn from_pool_result(pool_result: &PoolPriceResult) -> Self {
+        Self {
+            price_sol: pool_result.price_sol,
+            price_usd: pool_result.price_usd,
+            liquidity_usd: Some(pool_result.liquidity_usd),
+            last_updated: pool_result.calculated_at,
+            source: "pool".to_string(),
+        }
+    }
+}
+
+/// Initialize the unified price service (now handled by pool service)
+pub async fn initialize_price_service() -> Result<(), Box<dyn std::error::Error>> {
+    // Pool service is already initialized via init_pool_service
+    let pool_service = get_pool_service();
+    log(LogTag::Pool, "INIT", "✅ Unified price service initialized (using pool service)");
+    Ok(())
+}
+
+/// Get token price using pool service - instant response for cached prices
+pub async fn get_token_price_safe(mint: &str) -> Option<f64> {
+    if is_debug_pool_prices_enabled() {
+        log(LogTag::Pool, "PRICE_REQUEST", &format!("🌐 Price request for {}", mint));
+    }
+
+    let pool_service = get_pool_service();
+
+    // Try to get pool price with fast cache lookup
+    if let Some(pool_result) = pool_service.get_pool_price(mint, None).await {
+        if let Some(price) = pool_result.price_sol {
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "PRICE_SUCCESS",
+                    &format!(
+                        "✅ Got price for {}: ${:.12} SOL from {}",
+                        mint,
+                        price,
+                        pool_result.source
+                    )
+                );
+            }
+            return Some(price);
+        }
+    }
+
+    if is_debug_pool_prices_enabled() {
+        log(LogTag::Pool, "PRICE_MISS", &format!("❌ No price available for {}", mint));
+    }
+
+    None
+}
+
+/// Get token price using pool service - waits for update on cache miss (blocking version)
+pub async fn get_token_price_blocking_safe(mint: &str) -> Option<f64> {
+    if is_debug_pool_prices_enabled() {
+        log(
+            LogTag::Pool,
+            "PRICE_BLOCKING_REQUEST",
+            &format!("🌐 Blocking price request for {}", mint)
+        );
+    }
+
+    let pool_service = get_pool_service();
+
+    // Force availability check and calculation
+    if !pool_service.check_token_availability(mint).await {
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "PRICE_BLOCKING_UNAVAILABLE",
+                &format!("❌ Token {} not available for pool pricing", mint)
+            );
+        }
+        return None;
+    }
+
+    // Get pool price (this will calculate if needed)
+    if let Some(pool_result) = pool_service.get_pool_price(mint, None).await {
+        if let Some(price) = pool_result.price_sol {
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "PRICE_BLOCKING_SUCCESS",
+                    &format!(
+                        "✅ Got blocking price for {}: ${:.12} SOL from {}",
+                        mint,
+                        price,
+                        pool_result.source
+                    )
+                );
+            }
+            return Some(price);
+        }
+    }
+
+    if is_debug_pool_prices_enabled() {
+        log(
+            LogTag::Pool,
+            "PRICE_BLOCKING_FAILED",
+            &format!("❌ Failed to get blocking price for {}", mint)
+        );
+    }
+
+    None
+}
+
+/// Force an immediate price refresh for a token (bypass cache freshness)
+pub async fn force_refresh_token_price_safe(mint: &str) {
+    if is_debug_pool_prices_enabled() {
+        log(LogTag::Pool, "FORCE_REFRESH", &format!("🔄 Force refreshing price for {}", mint));
+    }
+
+    let pool_service = get_pool_service();
+
+    // Force refresh by calling get_pool_price with no cache consideration
+    let _ = pool_service.get_pool_price(mint, None).await;
+
+    if is_debug_pool_prices_enabled() {
+        log(
+            LogTag::Pool,
+            "FORCE_REFRESH_COMPLETE",
+            &format!("✅ Force refresh completed for {}", mint)
+        );
+    }
+}
+
+/// Update multiple token prices (called from monitor) - now uses pool service
+pub async fn update_tokens_prices_safe(mints: &[String]) {
+    if is_debug_pool_prices_enabled() {
+        log(
+            LogTag::Pool,
+            "BATCH_UPDATE_REQUEST",
+            &format!("🔧 Batch price update for {} tokens: {:?}", mints.len(), mints)
+        );
+    }
+
+    let pool_service = get_pool_service();
+    let mut success_count = 0;
+    let mut error_count = 0;
+
+    for mint in mints {
+        match pool_service.get_pool_price(mint, None).await {
+            Some(pool_result) => {
+                if pool_result.price_sol.is_some() {
+                    success_count += 1;
+                } else {
+                    error_count += 1;
+                }
+            }
+            None => {
+                error_count += 1;
+            }
+        }
+    }
+
+    if is_debug_pool_prices_enabled() {
+        log(
+            LogTag::Pool,
+            "BATCH_UPDATE_COMPLETE",
+            &format!(
+                "✅ Batch update complete: {}/{} successful, {} errors",
+                success_count,
+                mints.len(),
+                error_count
+            )
+        );
+    }
+}
