@@ -115,7 +115,13 @@ impl Drop for PositionLockGuard {
     fn drop(&mut self) {
         // Lock will be automatically cleaned up when the guard is dropped
         // The Arc<Mutex<()>> will be removed from POSITION_LOCKS when no longer referenced
-        println!("🔓 Released position lock for mint: {}", &self.mint[..8]);
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("🔓 Released position lock for mint: {}", &self.mint[..8])
+            );
+        }
     }
 }
 
@@ -206,7 +212,13 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
     // Acquire the lock
     let _guard = lock.lock().await;
 
-    println!("🔒 Acquired position lock for mint: {}", &mint_key[..8]);
+    if is_debug_positions_enabled() {
+        log(
+            LogTag::Positions,
+            "DEBUG",
+            &format!("🔒 Acquired position lock for mint: {}", &mint_key[..8])
+        );
+    }
 
     PositionLockGuard { mint: mint_key }
 }
@@ -399,7 +411,7 @@ pub async fn open_position_direct(
     // Validate expected price
     if entry_price <= 0.0 || !entry_price.is_finite() {
         log(
-            LogTag::Swap,
+            LogTag::Positions,
             "ERROR",
             &format!(
                 "❌ REFUSING TO BUY: Invalid expected_price for {} ({}). Price = {:.10}",
@@ -412,7 +424,7 @@ pub async fn open_position_direct(
     }
 
     log(
-        LogTag::Swap,
+        LogTag::Positions,
         "BUY_START",
         &format!(
             "🟢 BUYING {} SOL worth of {} tokens (mint: {})",
@@ -476,8 +488,8 @@ pub async fn open_position_direct(
         }
         Err(_) => {
             log(
-                LogTag::Swap,
-                "QUOTE_TIMEOUT",
+                LogTag::Positions,
+                "TIMEOUT",
                 &format!("⏰ Quote request timeout for {} after 20s", token.symbol)
             );
             return Err(format!("Quote request timeout for {}", token.symbol));
@@ -486,8 +498,8 @@ pub async fn open_position_direct(
 
     if is_debug_swaps_enabled() {
         log(
-            LogTag::Swap,
-            "QUOTE",
+            LogTag::Positions,
+            "DEBUG",
             &format!(
                 "📊 Best quote from {:?}: {} SOL -> {} tokens",
                 best_quote.router,
@@ -498,7 +510,7 @@ pub async fn open_position_direct(
     }
 
     log(
-        LogTag::Swap,
+        LogTag::Positions,
         "SWAP",
         &format!("🚀 Executing swap with best quote via {:?}...", best_quote.router)
     );
@@ -514,7 +526,7 @@ pub async fn open_position_direct(
 
     if let Some(ref signature) = swap_result.transaction_signature {
         log(
-            LogTag::Swap,
+            LogTag::Positions,
             "TRANSACTION",
             &format!("Transaction {} will be monitored by positions manager", &signature[..8])
         );
@@ -522,8 +534,8 @@ pub async fn open_position_direct(
 
     if is_debug_swaps_enabled() {
         log(
-            LogTag::Swap,
-            "BUY_COMPLETE",
+            LogTag::Positions,
+            "DEBUG",
             &format!(
                 "🟢 BUY operation completed for {} - Success: {} | TX: {}",
                 token.symbol,
@@ -862,7 +874,7 @@ pub async fn close_position_direct(
     }
 
     log(
-        LogTag::Swap,
+        LogTag::Positions,
         "SELL_START",
         &format!("🔴 SELLING all {} tokens (mint: {}) for SOL", symbol, mint)
     );
@@ -892,8 +904,8 @@ pub async fn close_position_direct(
 
     if is_debug_swaps_enabled() {
         log(
-            LogTag::Swap,
-            "BALANCE",
+            LogTag::Positions,
+            "DEBUG",
             &format!("📊 Token balance for {}: {} tokens", symbol, token_balance)
         );
     }
@@ -906,8 +918,8 @@ pub async fn close_position_direct(
     for &slippage in SELL_RETRY_SLIPPAGES.iter() {
         if is_debug_swaps_enabled() {
             log(
-                LogTag::Swap,
-                "RETRY",
+                LogTag::Positions,
+                "DEBUG",
                 &format!("🔄 Attempting sell with {:.1}% slippage for {}", slippage, symbol)
             );
         }
@@ -924,8 +936,8 @@ pub async fn close_position_direct(
                 quote_slippage_used = slippage;
                 if is_debug_swaps_enabled() {
                     log(
-                        LogTag::Swap,
-                        "QUOTE_SUCCESS",
+                        LogTag::Positions,
+                        "DEBUG",
                         &format!(
                             "✅ Quote obtained with {:.1}% slippage: {} tokens -> {} SOL",
                             slippage,
@@ -940,8 +952,8 @@ pub async fn close_position_direct(
                 last_error = e.to_string();
                 if is_debug_swaps_enabled() {
                     log(
-                        LogTag::Swap,
-                        "QUOTE_FAIL",
+                        LogTag::Positions,
+                        "DEBUG",
                         &format!("❌ Quote failed with {:.1}% slippage: {}", slippage, last_error)
                     );
                 }
@@ -951,8 +963,8 @@ pub async fn close_position_direct(
                 last_error = format!("Quote timeout with {:.1}% slippage", slippage);
                 if is_debug_swaps_enabled() {
                     log(
-                        LogTag::Swap,
-                        "QUOTE_TIMEOUT",
+                        LogTag::Positions,
+                        "DEBUG",
                         &format!("⏰ Quote timeout with {:.1}% slippage", slippage)
                     );
                 }
@@ -970,7 +982,7 @@ pub async fn close_position_direct(
     };
 
     log(
-        LogTag::Swap,
+        LogTag::Positions,
         "SWAP",
         &format!(
             "🚀 Executing sell with {:.1}% slippage via {:?}...",
@@ -986,7 +998,7 @@ pub async fn close_position_direct(
         Ok(result) => {
             if let Some(ref signature) = result.transaction_signature {
                 log(
-                    LogTag::Swap,
+                    LogTag::Positions,
                     "TRANSACTION",
                     &format!(
                         "Sell transaction {} will be monitored by positions manager",
@@ -1007,8 +1019,8 @@ pub async fn close_position_direct(
 
     if is_debug_swaps_enabled() {
         log(
-            LogTag::Swap,
-            "SELL_COMPLETE",
+            LogTag::Positions,
+            "DEBUG",
             &format!(
                 "🔴 SELL operation completed for {} - TX: {}",
                 symbol,
@@ -2011,7 +2023,7 @@ pub fn calculate_position_total_fees(position: &Position) -> f64 {
 
 /// Start background position management tasks
 pub async fn run_background_position_tasks(shutdown: Arc<Notify>) {
-    println!("🚀 Starting background position tasks");
+    log(LogTag::Positions, "STARTUP", "🚀 Starting background position tasks");
 
     // Spawn independent background tasks
     let shutdown_clone1 = shutdown.clone();
@@ -2036,12 +2048,12 @@ pub async fn run_background_position_tasks(shutdown: Arc<Notify>) {
 
 /// Verify pending transactions with parallel processing
 async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
-    println!("🔍 Starting parallel transaction verification task");
+    log(LogTag::Positions, "STARTUP", "🔍 Starting parallel transaction verification task");
 
     loop {
         tokio::select! {
             _ = shutdown.notified() => {
-                println!("🛑 Stopping transaction verification task");
+                log(LogTag::Positions, "SHUTDOWN", "🛑 Stopping transaction verification task");
                 break;
             }
             _ = sleep(Duration::from_secs(30)) => {
@@ -2053,7 +2065,11 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
 
                 if !pending_sigs.is_empty() {
                     if is_debug_positions_enabled() {
-                        println!("🔍 Processing {} pending verifications", pending_sigs.len());
+                        log(
+                            LogTag::Positions,
+                            "DEBUG",
+                            &format!("🔍 Processing {} pending verifications", pending_sigs.len())
+                        );
                     }
 
                     // Process verifications in batches
@@ -2101,7 +2117,9 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                         }
                     }
                 } else {
-                    println!("🔍 No pending verifications to process");
+                    if is_debug_positions_enabled() {
+                        log(LogTag::Positions, "DEBUG", "🔍 No pending verifications to process");
+                    }
                 }
             }
         }
@@ -2110,12 +2128,12 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
 
 /// Cleanup phantom positions with parallel processing
 async fn cleanup_phantom_positions_parallel(shutdown: Arc<Notify>) {
-    println!("🧹 Starting parallel phantom cleanup task");
+    log(LogTag::Positions, "STARTUP", "🧹 Starting parallel phantom cleanup task");
 
     loop {
         tokio::select! {
             _ = shutdown.notified() => {
-                println!("🛑 Stopping phantom cleanup task");
+                log(LogTag::Positions, "SHUTDOWN", "🛑 Stopping phantom cleanup task");
                 break;
             }
             _ = sleep(Duration::from_secs(60)) => {
@@ -2242,7 +2260,9 @@ async fn cleanup_phantom_positions_parallel(shutdown: Arc<Notify>) {
                         }
                     }
                 } else {
-                    println!("🧹 No phantom positions detected");
+                    if is_debug_positions_enabled() {
+                        log(LogTag::Positions, "DEBUG", "🧹 No phantom positions detected");
+                    }
                 }
             }
         }
@@ -2251,12 +2271,12 @@ async fn cleanup_phantom_positions_parallel(shutdown: Arc<Notify>) {
 
 /// Retry failed operations with parallel processing
 async fn retry_failed_operations_parallel(shutdown: Arc<Notify>) {
-    println!("🔄 Starting parallel retry task");
+    log(LogTag::Positions, "STARTUP", "🔄 Starting parallel retry task");
 
     loop {
         tokio::select! {
             _ = shutdown.notified() => {
-                println!("🛑 Stopping retry task");
+                log(LogTag::Positions, "SHUTDOWN", "🛑 Stopping retry task");
                 break;
             }
             _ = sleep(Duration::from_secs(120)) => {
@@ -2401,7 +2421,9 @@ async fn retry_failed_operations_parallel(shutdown: Arc<Notify>) {
                         }
                     }
                 } else {
-                    println!("🔄 No retry operations ready");
+                    if is_debug_positions_enabled() {
+                        log(LogTag::Positions, "DEBUG", "🔄 No retry operations ready");
+                    }
                 }
             }
         }
@@ -2466,7 +2488,7 @@ async fn get_token_balance_safe(mint: &str, wallet_address: &str) -> Option<u64>
 
 /// Initialize the positions manager system
 pub async fn initialize_positions_system() -> Result<(), String> {
-    println!("🚀 Initializing positions system");
+    log(LogTag::Positions, "STARTUP", "🚀 Initializing positions system");
 
     // Initialize database first
     initialize_positions_database().await.map_err(|e| {
@@ -2478,7 +2500,11 @@ pub async fn initialize_positions_system() -> Result<(), String> {
         Ok(positions) => {
             let mut state = GLOBAL_POSITIONS_STATE.lock().await;
             state.positions = positions;
-            println!("✅ Loaded {} positions from database", state.positions.len());
+            log(
+                LogTag::Positions,
+                "STARTUP",
+                &format!("✅ Loaded {} positions from database", state.positions.len())
+            );
         }
         Err(e) => {
             log(
@@ -2492,13 +2518,13 @@ pub async fn initialize_positions_system() -> Result<(), String> {
 
     // Global state is already initialized by LazyLock
 
-    println!("✅ Positions system initialized");
+    log(LogTag::Positions, "STARTUP", "✅ Positions system initialized");
     Ok(())
 }
 
 /// Start the positions manager service (replaces actor spawn)
 pub async fn start_positions_manager_service(shutdown: Arc<Notify>) -> Result<(), String> {
-    println!("🚀 Starting positions manager service");
+    log(LogTag::Positions, "STARTUP", "🚀 Starting positions manager service");
 
     // Initialize the system first
     initialize_positions_system().await?;
