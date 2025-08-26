@@ -4,7 +4,7 @@
 /// and background monitoring. No timeouts on cache hits, automatic watch list management,
 /// and prioritized pool price integration for open positions.
 
-use crate::logger::{ log, LogTag, log_price_change };
+use crate::logger::{ log, LogTag };
 use crate::global::is_debug_price_service_enabled;
 use crate::tokens::types::ApiToken;
 use crate::tokens::cache::TokenDatabase;
@@ -414,6 +414,15 @@ impl TokenPriceService {
 
         let mut cache = self.price_cache.write().await;
         let old_price = cache.get(mint).and_then(|e| e.price_sol);
+        let new_price = cache_entry.price_sol;
+
+        // Only update cache if price actually changed or this is first time
+        let price_changed = match (old_price, new_price) {
+            (Some(old), Some(new)) => (old - new).abs() > f64::EPSILON * 1000.0, // Different prices
+            (None, Some(_)) => true, // First time getting price
+            _ => false, // No valid new price
+        };
+
         cache.insert(mint.to_string(), cache_entry.clone());
         drop(cache);
 
@@ -428,8 +437,37 @@ impl TokenPriceService {
         };
         if is_really_open {
             if let Some(cp) = cache_entry.price_sol {
-                if let Some(h) = crate::positions::get_positions_handle().await {
-                    let _ = h.update_tracking(mint.to_string(), cp).await;
+                // Only call position tracking if price actually changed or this is first time
+                if price_changed {
+                    // Debug logging to see if same prices are being sent to position tracking
+                    if crate::arguments::is_debug_price_service_enabled() {
+                        log(
+                            LogTag::PriceService,
+                            "DEBUG",
+                            &format!(
+                                "📈 CALLING update_tracking for {} | Price: {:.10} SOL | Old Price: {:.10} SOL | Source: {} | Changed: {}",
+                                mint,
+                                cp,
+                                old_price.unwrap_or(0.0),
+                                cache_entry.source,
+                                price_changed
+                            )
+                        );
+                    }
+
+                    if let Some(h) = crate::positions::get_positions_handle().await {
+                        let _ = h.update_tracking(mint.to_string(), cp).await;
+                    }
+                } else if crate::arguments::is_debug_price_service_enabled() {
+                    log(
+                        LogTag::PriceService,
+                        "DEBUG",
+                        &format!(
+                            "⏭️ SKIPPING update_tracking for {} | Price unchanged: {:.10} SOL",
+                            mint,
+                            cp
+                        )
+                    );
                 }
             }
         }
@@ -464,19 +502,22 @@ impl TokenPriceService {
                     Ok(Some(token)) if !token.symbol.is_empty() => token.symbol,
                     _ => mint[..8].to_string(),
                 };
-                // Log price change only for open positions to reduce noise, but rely on real-time check
+                // Price change detection and logging now handled in position tracking
+                // to avoid duplicate logs and ensure comprehensive P&L information
                 if is_really_open {
-                    log_price_change(
-                        mint,
-                        &symbol,
-                        old,
-                        new,
-                        &cache_entry.source,
-                        pool_info.0.as_deref(),
-                        pool_info.1.as_deref(),
-                        None,
-                        None
-                    );
+                    if is_debug_price_service_enabled() {
+                        log(
+                            LogTag::PriceService,
+                            "PRICE_CHANGE_DETECTED",
+                            &format!(
+                                "🔄 Price change detected for {}: {:.10} -> {:.10} SOL ({:.2}%)",
+                                symbol,
+                                old,
+                                new,
+                                ((new - old) / old) * 100.0
+                            )
+                        );
+                    }
                 }
             }
         }

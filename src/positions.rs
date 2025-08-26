@@ -1,5 +1,5 @@
 use crate::global::*;
-use crate::logger::{ log, LogTag };
+use crate::logger::{ log, LogTag, log_price_change };
 use crate::rpc::{ lamports_to_sol, get_rpc_client, sol_to_lamports };
 use crate::errors::{
     ScreenerBotError,
@@ -701,6 +701,30 @@ async fn is_duplicate_swap_attempt(mint: &str, amount_sol: f64, operation: &str)
 }
 
 // =============================================================================
+// PRICE INFO STRUCTURE FOR COMPREHENSIVE LOGGING
+// =============================================================================
+
+/// Additional price information for comprehensive position price logging
+#[derive(Debug, Clone)]
+pub struct PositionPriceInfo {
+    pub price_source: String, // "pool", "api", "cache"
+    pub pool_type: Option<String>, // e.g., "RAYDIUM CPMM"
+    pub pool_address: Option<String>,
+    pub api_price: Option<f64>,
+}
+
+impl Default for PositionPriceInfo {
+    fn default() -> Self {
+        Self {
+            price_source: "unknown".to_string(),
+            pool_type: None,
+            pool_address: None,
+            api_price: None,
+        }
+    }
+}
+
+// =============================================================================
 // POSITIONS MANAGER - CENTRALIZED POSITION HANDLING
 // =============================================================================
 
@@ -1034,7 +1058,9 @@ impl PositionsManager {
                 self.add_retry_failed_sell(mint);
             }
             PositionsRequest::UpdateTracking { mint, current_price, reply } => {
-                let result = self.update_position_tracking(&mint, current_price).await;
+                // Get additional price information for comprehensive logging
+                let price_info = self.get_price_info_safe(&mint).await;
+                let result = self.update_position_tracking(&mint, current_price, price_info).await;
                 let _ = reply.send(result);
             }
             PositionsRequest::GetOpenPositionsCount { reply } => {
@@ -1887,41 +1913,6 @@ impl PositionsManager {
         }
 
         None
-    }
-
-    pub fn update_position_tracking_direct(&mut self, position: &mut Position, current_price: f64) {
-        if current_price == 0.0 {
-            log(
-                LogTag::Positions,
-                "WARN",
-                &format!(
-                    "Skipping position tracking update for {}: current_price is zero",
-                    position.symbol
-                )
-                    .yellow()
-                    .dimmed()
-                    .to_string()
-            );
-            return;
-        }
-
-        // On first update, set both high/low to the actual entry price
-        let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
-        if position.price_highest == 0.0 {
-            position.price_highest = entry_price;
-            position.price_lowest = entry_price;
-        }
-
-        // Update running extremes
-        if current_price > position.price_highest {
-            position.price_highest = current_price;
-        }
-        if current_price < position.price_lowest {
-            position.price_lowest = current_price;
-        }
-
-        // Update current price (always)
-        position.current_price = Some(current_price);
     }
 
     /// Open a new position
@@ -3100,8 +3091,55 @@ impl PositionsManager {
         )
     }
 
+    /// Get price information safely for comprehensive logging (non-blocking)
+    async fn get_price_info_safe(&self, mint: &str) -> PositionPriceInfo {
+        // Use timeout to prevent blocking
+        let result = tokio::time::timeout(
+            Duration::from_millis(200), // 200ms timeout for non-blocking
+            async {
+                // Try to get pool price information first
+                let pool_service = crate::tokens::pool::get_pool_service();
+                if let Some(pool_result) = pool_service.get_pool_price(mint, None).await {
+                    return PositionPriceInfo {
+                        price_source: "pool".to_string(),
+                        pool_type: pool_result.pool_type,
+                        pool_address: Some(pool_result.pool_address),
+                        api_price: pool_result.price_usd,
+                    };
+                }
+
+                // Try to get API price from price service
+                if let Some(api_price) = crate::tokens::price::get_token_price_safe(mint).await {
+                    return PositionPriceInfo {
+                        price_source: "api".to_string(),
+                        pool_type: None,
+                        pool_address: None,
+                        api_price: Some(api_price),
+                    };
+                }
+
+                PositionPriceInfo::default()
+            }
+        ).await;
+
+        result.unwrap_or_else(|_| {
+            // Timeout occurred, return minimal info
+            PositionPriceInfo {
+                price_source: "timeout".to_string(),
+                pool_type: None,
+                pool_address: None,
+                api_price: None,
+            }
+        })
+    }
+
     /// Update position tracking
-    async fn update_position_tracking(&mut self, mint: &str, current_price: f64) -> bool {
+    async fn update_position_tracking(
+        &mut self,
+        mint: &str,
+        current_price: f64,
+        price_info: PositionPriceInfo
+    ) -> bool {
         if current_price == 0.0 {
             log(
                 LogTag::Positions,
@@ -3122,6 +3160,70 @@ impl PositionsManager {
             if position.price_highest == 0.0 {
                 position.price_highest = entry_price;
                 position.price_lowest = entry_price;
+            }
+
+            // Check for price change and log it BEFORE updating position
+            let old_price = position.current_price.unwrap_or(entry_price);
+            let price_change = current_price - old_price;
+            let price_change_percent = if old_price != 0.0 {
+                (price_change / old_price) * 100.0
+            } else {
+                0.0
+            };
+
+            // Log price change if significant (0.01% threshold for high sensitivity)
+            let change_threshold = if old_price > 0.0 {
+                (old_price * 0.0001).max(f64::EPSILON * 100.0) // 0.01% minimum
+            } else {
+                f64::EPSILON * 100.0
+            };
+
+            let price_diff = (old_price - current_price).abs();
+
+            // Check if enough time has passed since last log (fallback logging every 30 seconds)
+            let time_since_last_log = position.current_price_updated
+                .map(|last| (Utc::now() - last).num_seconds())
+                .unwrap_or(999); // Force log if no previous update
+            let should_log_periodic = time_since_last_log >= 30; // Log every 30 seconds regardless
+
+            // Debug logging to understand why price changes aren't being logged
+            if crate::arguments::is_debug_positions_enabled() {
+                log(
+                    LogTag::Positions,
+                    "DEBUG",
+                    &format!(
+                        "🔍 PRICE TRACKING: {} | Old: {:.10} | New: {:.10} | Diff: {:.10} | Threshold: {:.10} | Time: {}s | Will Log: {} (diff: {} | periodic: {})",
+                        position.symbol,
+                        old_price,
+                        current_price,
+                        price_diff,
+                        change_threshold,
+                        time_since_last_log,
+                        price_diff > change_threshold || should_log_periodic,
+                        price_diff > change_threshold,
+                        should_log_periodic
+                    )
+                );
+            }
+
+            if price_diff > change_threshold || should_log_periodic {
+                // Calculate current P&L for logging
+                let (pnl_sol, pnl_percent) = crate::positions::calculate_position_pnl(
+                    position,
+                    Some(current_price)
+                ).await;
+
+                crate::logger::log_price_change(
+                    mint,
+                    &position.symbol,
+                    old_price,
+                    current_price,
+                    &price_info.price_source,
+                    price_info.pool_type.as_deref(),
+                    price_info.pool_address.as_deref(),
+                    price_info.api_price,
+                    Some((pnl_sol, pnl_percent))
+                );
             }
 
             let mut updated = false;
