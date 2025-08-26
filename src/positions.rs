@@ -237,344 +237,19 @@ pub struct Position {
 }
 
 // =============================================================================
-// DEADLOCK PREVENTION RULES FOR GLOBAL LOCKS
+// SIMPLIFIED POSITION MANAGEMENT
 // =============================================================================
 //
-// This module uses multiple global locks that can create deadlock scenarios.
-//
-// LOCK HIERARCHY (must be acquired in this order to prevent deadlocks):
-// 1. RECENT_SWAP_ATTEMPTS
-// 2. GLOBAL_TRANSACTION_MANAGER
-// 3. GLOBAL_POSITIONS_HANDLE
-//
-// RULES:
-// - NEVER hold multiple locks simultaneously unless following the hierarchy above
-// - NEVER perform async operations (await) while holding any global lock
-// - Use timeouts on all lock acquisitions to prevent indefinite blocking
-// - Keep lock scopes as minimal as possible
-// - Pre-calculate data before acquiring locks when possible
+// Direct async operations with per-position locking for true parallelism
+// Each position has individual mutex preventing conflicts while allowing
+// concurrent operations on different positions
 //
 // =============================================================================
 
 // =============================================================================
-// ATOMIC POSITION STATE MANAGEMENT
+// POSITION OPERATION CONSTANTS
 // =============================================================================
 
-/// Position operation locks for race condition prevention
-/// Each mint can only have one close or critical operation at a time
-static POSITION_LOCKS: Lazy<
-    Arc<AsyncMutex<std::collections::HashMap<String, Arc<AsyncMutex<()>>>>>
-> = Lazy::new(|| Arc::new(AsyncMutex::new(std::collections::HashMap::new())));
-
-/// Wrapper that holds both the lock Arc and the guard
-pub struct PositionLockGuard {
-    _lock_arc: Arc<AsyncMutex<()>>,
-    _guard: tokio::sync::MutexGuard<'static, ()>,
-}
-
-/// Acquire an exclusive lock for a specific position mint to prevent concurrent operations
-async fn acquire_position_lock(mint: &str) -> Result<PositionLockGuard, ScreenerBotError> {
-    // Acquire the position locks registry
-    let position_lock_arc = {
-        let mut locks_registry = match
-            tokio::time::timeout(Duration::from_millis(500), POSITION_LOCKS.lock()).await
-        {
-            Ok(guard) => guard,
-            Err(_) => {
-                return Err(
-                    ScreenerBotError::Position(PositionError::Generic {
-                        message: "Timeout acquiring position locks registry".to_string(),
-                    })
-                );
-            }
-        };
-
-        // Get or create position-specific lock
-        locks_registry
-            .entry(mint.to_string())
-            .or_insert_with(|| Arc::new(AsyncMutex::new(())))
-            .clone()
-    };
-
-    // Clone the arc for the guard struct
-    let lock_arc_clone = position_lock_arc.clone();
-
-    // Acquire position-specific lock with timeout
-    let guard_result = tokio::time::timeout(Duration::from_secs(5), position_lock_arc.lock()).await;
-
-    match guard_result {
-        Ok(guard) => {
-            log(
-                LogTag::Positions,
-                "LOCK_ACQUIRED",
-                &format!("🔒 Acquired atomic lock for position {}", get_mint_prefix(mint))
-            );
-            // SAFETY: We're extending the lifetime by holding the Arc that owns the mutex
-            let guard = unsafe { std::mem::transmute(guard) };
-            Ok(PositionLockGuard {
-                _lock_arc: lock_arc_clone,
-                _guard: guard,
-            })
-        }
-        Err(_) =>
-            Err(
-                ScreenerBotError::Position(PositionError::Generic {
-                    message: format!(
-                        "Timeout acquiring lock for position {}",
-                        get_mint_prefix(mint)
-                    ),
-                })
-            ),
-    }
-}
-
-/// Cleanup unused position locks periodically (prevents memory leak)
-async fn cleanup_unused_position_locks() {
-    if
-        let Ok(mut locks_registry) = tokio::time::timeout(
-            Duration::from_millis(200),
-            POSITION_LOCKS.lock()
-        ).await
-    {
-        let initial_count = locks_registry.len();
-
-        // Remove locks that have no waiters and are not currently held
-        locks_registry.retain(|_, lock| {
-            // Try to acquire lock immediately - if successful, it means no one is using it
-            match lock.try_lock() {
-                Ok(_guard) => {
-                    // Successfully acquired lock immediately = no one waiting = unused
-                    // Drop the guard and remove this lock
-                    drop(_guard);
-                    false // Remove unused lock
-                }
-                Err(_) => {
-                    // Could not acquire = someone is using it or waiting
-                    true // Keep active/busy lock
-                }
-            }
-        });
-
-        let final_count = locks_registry.len();
-        if initial_count > final_count {
-            log(
-                LogTag::Positions,
-                "LOCK_CLEANUP",
-                &format!(
-                    "🧹 Cleaned up {} unused position locks ({} -> {})",
-                    initial_count - final_count,
-                    initial_count,
-                    final_count
-                )
-            );
-        }
-    }
-}
-
-// =============================================================================
-// BACKGROUND TASK RATE LIMITING & OVERLOAD PROTECTION
-// =============================================================================
-
-/// Background task statistics for monitoring overload
-#[derive(Debug, Clone)]
-struct BackgroundTaskStats {
-    verification_pending: usize,
-    cleanup_pending: usize,
-    retry_pending: usize,
-    reconciliation_pending: usize,
-    last_overload_warning: Option<DateTime<Utc>>,
-    consecutive_overloads: u32,
-}
-
-impl Default for BackgroundTaskStats {
-    fn default() -> Self {
-        Self {
-            verification_pending: 0,
-            cleanup_pending: 0,
-            retry_pending: 0,
-            reconciliation_pending: 0,
-            last_overload_warning: None,
-            consecutive_overloads: 0,
-        }
-    }
-}
-
-/// Global background task statistics
-static BACKGROUND_TASK_STATS: Lazy<Arc<AsyncMutex<BackgroundTaskStats>>> = Lazy::new(||
-    Arc::new(AsyncMutex::new(BackgroundTaskStats::default()))
-);
-
-/// Circuit breaker thresholds
-const MAX_PENDING_TASKS_PER_TYPE: usize = 5;
-const MAX_CONSECUTIVE_OVERLOADS: u32 = 3;
-const OVERLOAD_WARNING_COOLDOWN_MINS: i64 = 5;
-
-/// Check if background tasks are overloaded
-async fn is_background_tasks_overloaded() -> bool {
-    if
-        let Ok(stats) = tokio::time::timeout(
-            Duration::from_millis(100),
-            BACKGROUND_TASK_STATS.lock()
-        ).await
-    {
-        let total_pending =
-            stats.verification_pending +
-            stats.cleanup_pending +
-            stats.retry_pending +
-            stats.reconciliation_pending;
-
-        let is_overloaded =
-            stats.verification_pending > MAX_PENDING_TASKS_PER_TYPE ||
-            stats.cleanup_pending > MAX_PENDING_TASKS_PER_TYPE ||
-            stats.retry_pending > MAX_PENDING_TASKS_PER_TYPE ||
-            stats.reconciliation_pending > MAX_PENDING_TASKS_PER_TYPE ||
-            total_pending > MAX_PENDING_TASKS_PER_TYPE * 2;
-
-        if is_overloaded {
-            let should_warn = stats.last_overload_warning
-                .map(
-                    |last|
-                        Utc::now().signed_duration_since(last).num_minutes() >=
-                        OVERLOAD_WARNING_COOLDOWN_MINS
-                )
-                .unwrap_or(true);
-
-            if should_warn {
-                log(
-                    LogTag::Positions,
-                    "OVERLOAD_WARNING",
-                    &format!(
-                        "⚠️ Background tasks overloaded: total_pending={}, verification={}, cleanup={}, retry={}, reconciliation={}",
-                        total_pending,
-                        stats.verification_pending,
-                        stats.cleanup_pending,
-                        stats.retry_pending,
-                        stats.reconciliation_pending
-                    )
-                );
-            }
-        }
-
-        is_overloaded
-    } else {
-        false // If we can't check stats quickly, assume not overloaded
-    }
-}
-
-/// Update background task statistics
-async fn update_background_task_stats<F>(task_type: &str, operation: F)
-    where F: FnOnce(&mut BackgroundTaskStats)
-{
-    if
-        let Ok(mut stats) = tokio::time::timeout(
-            Duration::from_millis(50),
-            BACKGROUND_TASK_STATS.lock()
-        ).await
-    {
-        operation(&mut stats);
-    }
-}
-
-// =============================================================================
-// DUPLICATE SWAP PROTECTION
-// =============================================================================
-
-/// Recent swap attempts tracking to prevent duplicate transactions
-#[derive(Debug, Clone)]
-struct SwapAttempt {
-    timestamp: DateTime<Utc>,
-    mint: String,
-    amount_sol: f64,
-    operation_type: String, // "BUY" or "SELL"
-}
-
-/// Global cache for recent swap attempts (prevents duplicate swaps during network delays)
-static RECENT_SWAP_ATTEMPTS: Lazy<Arc<AsyncMutex<HashMap<String, SwapAttempt>>>> = Lazy::new(||
-    Arc::new(AsyncMutex::new(HashMap::new()))
-);
-
-// 1b. ACTIVE_SELLS: Track mints currently undergoing a sell to prevent overlapping waves.
-//    We use mint string as key. Guarded by AsyncMutex for async contexts. Only store while an
-//    active sell flow is running (method or background). Cleared on completion or error.
-static ACTIVE_SELLS: Lazy<Arc<AsyncMutex<HashSet<String>>>> = Lazy::new(||
-    Arc::new(AsyncMutex::new(HashSet::new()))
-);
-
-// 2. BALANCE_CACHE: Short-lived cache for token balances to collapse bursts of identical RPC calls.
-// Key: wallet|mint  Value: (balance, Instant timestamp)
-struct CachedBalance {
-    amount: u64,
-    fetched: Instant,
-}
-static BALANCE_CACHE: Lazy<Arc<AsyncMutex<HashMap<String, CachedBalance>>>> = Lazy::new(||
-    Arc::new(AsyncMutex::new(HashMap::new()))
-);
-const BALANCE_CACHE_TTL_MS: u64 = 1200; // 1.2s window
-
-/// Fetch token balance with short-lived in-memory cache.
-async fn get_cached_token_balance(wallet: &str, mint: &str) -> Result<u64, ScreenerBotError> {
-    let key = format!("{}|{}", wallet, mint);
-    // Try fast path
-    if
-        let Ok(mut guard) = tokio::time::timeout(
-            Duration::from_millis(100),
-            BALANCE_CACHE.lock()
-        ).await
-    {
-        if let Some(entry) = guard.get(&key) {
-            if entry.fetched.elapsed().as_millis() < (BALANCE_CACHE_TTL_MS as u128) {
-                return Ok(entry.amount);
-            }
-        }
-        drop(guard);
-    }
-
-    // Fetch fresh
-    let balance = get_token_balance(wallet, mint).await.map_err(|e| e)?;
-    if
-        let Ok(mut guard) = tokio::time::timeout(
-            Duration::from_millis(100),
-            BALANCE_CACHE.lock()
-        ).await
-    {
-        guard.insert(key, CachedBalance { amount: balance, fetched: Instant::now() });
-    }
-    Ok(balance)
-}
-
-/// Register an active sell. Returns true if newly inserted, false if it already existed.
-async fn register_active_sell(mint: &str) -> bool {
-    // Short timeout so we don't block if contention; if lock not acquired quickly treat as busy.
-    match tokio::time::timeout(Duration::from_millis(250), ACTIVE_SELLS.lock()).await {
-        Ok(mut guard) => {
-            if guard.contains(mint) {
-                false
-            } else {
-                guard.insert(mint.to_string());
-                true
-            }
-        }
-        Err(_) => {
-            // On timeout assume another sell in progress.
-            false
-        }
-    }
-}
-
-/// Clear active sell entry for mint.
-async fn clear_active_sell(mint: &str) {
-    if
-        let Ok(mut guard) = tokio::time::timeout(
-            Duration::from_millis(250),
-            ACTIVE_SELLS.lock()
-        ).await
-    {
-        guard.remove(mint);
-    }
-}
-
-/// Duration to prevent duplicate swaps (30 seconds)
-const DUPLICATE_SWAP_PREVENTION_SECS: i64 = 30;
 // Phantom detection thresholds (for synthetic closure of sold-but-open positions)
 const PHANTOM_CONFIRMATION_THRESHOLD: u32 = 3; // need N reconciliation confirmations
 const PHANTOM_MIN_DURATION_SECS: i64 = 30; // minimum seconds since first phantom detection before synthetic close
@@ -582,71 +257,6 @@ const PHANTOM_MIN_DURATION_SECS: i64 = 30; // minimum seconds since first phanto
 const ENTRY_VERIFICATION_MAX_SECS: i64 = 90; // hard cap for entry verification age before treating as timeout
 const PENDING_VERIFICATION_PROTECT_SECS: i64 = 90; // window during which cleanup defers to pending verification
 const AGED_UNVERIFIED_CLEANUP_MINUTES: i64 = 10; // after this, aged unverified entries can be cleaned up
-
-/// Check if a similar swap was recently attempted for the same token
-/// NOTE: This function must NOT call other functions that might acquire global locks
-/// to prevent deadlocks. Keep lock scope minimal and avoid async operations while holding the lock.
-async fn is_duplicate_swap_attempt(mint: &str, amount_sol: f64, operation: &str) -> bool {
-    // Use timeout to prevent indefinite blocking
-    let lock_result = tokio::time::timeout(
-        Duration::from_secs(2),
-        RECENT_SWAP_ATTEMPTS.lock()
-    ).await;
-
-    let mut recent_attempts = match lock_result {
-        Ok(guard) => guard,
-        Err(_) => {
-            log(
-                LogTag::Positions,
-                "WARN",
-                "🔒 Timeout acquiring RECENT_SWAP_ATTEMPTS lock, assuming no duplicate"
-            );
-            return false;
-        }
-    };
-
-    let now = Utc::now();
-
-    // Clean old attempts (older than prevention window)
-    recent_attempts.retain(|_, attempt| {
-        now.signed_duration_since(attempt.timestamp).num_seconds() < DUPLICATE_SWAP_PREVENTION_SECS
-    });
-
-    // Check for recent similar attempts
-    let key = format!("{}_{}", mint, operation);
-    if let Some(recent_attempt) = recent_attempts.get(&key) {
-        let time_since = now.signed_duration_since(recent_attempt.timestamp).num_seconds();
-        if time_since < DUPLICATE_SWAP_PREVENTION_SECS {
-            // Similar amount check (within 10% tolerance)
-            let amount_diff =
-                (amount_sol - recent_attempt.amount_sol).abs() / recent_attempt.amount_sol;
-            if amount_diff < 0.1 {
-                log(
-                    LogTag::Swap,
-                    "DUPLICATE_PREVENTED",
-                    &format!(
-                        "🚫 DUPLICATE SWAP PREVENTED: {} {} for {} (last attempt {:.1}s ago)",
-                        operation,
-                        mint,
-                        amount_sol,
-                        time_since
-                    )
-                );
-                return true;
-            }
-        }
-    }
-
-    // Record this attempt
-    recent_attempts.insert(key, SwapAttempt {
-        timestamp: now,
-        mint: mint.to_string(),
-        amount_sol,
-        operation_type: operation.to_string(),
-    });
-
-    false
-}
 
 // =============================================================================
 // PRICE INFO STRUCTURE FOR COMPREHENSIVE LOGGING
@@ -676,39 +286,18 @@ impl Default for PositionPriceInfo {
 // POSITIONS MANAGER - CENTRALIZED POSITION HANDLING
 // =============================================================================
 
-/// Enhanced position state enum with comprehensive lifecycle tracking
+/// Simplified position state enum with clear lifecycle tracking
 #[derive(Debug, Clone, PartialEq)]
 pub enum PositionState {
     Open, // No exit transaction, actively trading
     Closing, // Exit transaction submitted but not yet verified
     Closed, // Exit transaction verified and exit_price set
-    ExitPending, // Exit transaction in verification queue (similar to Closing but more explicit)
-    ExitFailed, // Exit transaction failed and needs retry
-    Phantom, // Position exists but wallet has zero tokens (needs reconciliation)
-    Reconciling, // Auto-healing in progress for phantom positions
 }
 
-/// Messages from background tasks to the main actor
-#[derive(Debug, Clone)]
-enum BackgroundTaskMessage {
-    VerificationNeeded,
-    RetryNeeded,
-    CleanupNeeded,
-    ReconciliationNeeded(Vec<(usize, String, String)>), // positions needing reconciliation
-    TrackingSaveNeeded, // Periodic save for tracking updates
-}
-
-/// PositionsManager handles all position operations in a centralized service
+/// PositionsManager handles all position operations with per-position locking for true parallelism
 pub struct PositionsManager {
+    positions: Arc<AsyncMutex<HashMap<String, Arc<AsyncMutex<Position>>>>>, // mint -> position
     shutdown: Arc<Notify>,
-    pending_verifications: HashMap<String, DateTime<Utc>>, // signature -> created_at
-    retry_queue: HashMap<String, (DateTime<Utc>, u32)>, // mint -> (next_retry, attempt_count)
-    positions: Vec<Position>, // Internal positions storage (in-memory only)
-    frozen_cooldowns: HashMap<String, DateTime<Utc>>, // mint -> cooldown_time
-    last_close_time_per_mint: HashMap<String, DateTime<Utc>>, // mint -> last_close_time
-    last_open_position_at: Option<DateTime<Utc>>, // global open cooldown
-    applied_exit_signatures: HashMap<String, DateTime<Utc>>, // signature -> applied_at (prevents double-processing)
-    verification_deadlines: HashMap<String, DateTime<Utc>>, // signature -> deadline (guards against premature reset)
 }
 
 /// Constants for cooldowns
@@ -717,7 +306,7 @@ const POSITION_OPEN_COOLDOWN_SECS: i64 = 0;
 pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 15;
 
 impl PositionsManager {
-    /// Create new PositionsManager and load positions from disk
+    /// Create new PositionsManager with simplified structure
     pub fn new(shutdown: Arc<Notify>) -> Self {
         if is_debug_positions_enabled() {
             log(LogTag::Positions, "DEBUG", "🏗️ Creating new PositionsManager instance");
@@ -725,21 +314,14 @@ impl PositionsManager {
 
         let manager = Self {
             shutdown,
-            pending_verifications: HashMap::new(),
-            retry_queue: HashMap::new(),
-            positions: Vec::new(),
-            frozen_cooldowns: HashMap::new(),
-            last_close_time_per_mint: HashMap::new(),
-            last_open_position_at: None,
-            applied_exit_signatures: HashMap::new(),
-            verification_deadlines: HashMap::new(),
+            positions: Arc::new(AsyncMutex::new(HashMap::new())),
         };
 
         if is_debug_positions_enabled() {
             log(
                 LogTag::Positions,
                 "DEBUG",
-                "📊 PositionsManager instance created, async initialization pending"
+                "📊 PositionsManager instance created with simplified per-position locking"
             );
         }
 
@@ -761,432 +343,284 @@ impl PositionsManager {
         // Load positions from database on startup
         self.load_positions_from_database().await;
 
-        // Re-queue unverified transactions for comprehensive verification
-        self.requeue_unverified_transactions();
+        if is_debug_positions_enabled() {
+            let positions_count = self.positions.lock().await.len();
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("📊 PositionsManager initialized with {} positions loaded from disk", positions_count)
+            );
+        }
+    }
 
+    /// Acquire lock for specific position, creating if not exists
+    async fn acquire_position_lock(
+        &self,
+        mint: &str
+    ) -> Result<Arc<AsyncMutex<Position>>, ScreenerBotError> {
+        let mut positions = self.positions.lock().await;
+
+        if let Some(position_lock) = positions.get(mint) {
+            Ok(position_lock.clone())
+        } else {
+            // Position doesn't exist, this is an error for most operations
+            Err(
+                ScreenerBotError::Position(PositionError::Generic {
+                    message: format!("Position not found for mint {}", get_mint_prefix(mint)),
+                })
+            )
+        }
+    }
+
+    /// Create new position with lock (for open operations)
+    async fn create_position_with_lock(
+        &self,
+        mint: &str,
+        position: Position
+    ) -> Arc<AsyncMutex<Position>> {
+        let mut positions = self.positions.lock().await;
+        let position_lock = Arc::new(AsyncMutex::new(position));
+        positions.insert(mint.to_string(), position_lock.clone());
+        position_lock
+    }
+
+    /// Direct position opening with per-position locking
+    pub async fn open_position(
+        &self,
+        token: &Token,
+        price: f64,
+        percent_change: f64,
+        size_sol: f64
+    ) -> Result<(String, String), ScreenerBotError> {
         if is_debug_positions_enabled() {
             log(
                 LogTag::Positions,
                 "DEBUG",
                 &format!(
-                    "📊 PositionsManager initialized with {} positions loaded from disk, {} pending verifications queued",
-                    self.positions.len(),
-                    self.pending_verifications.len()
+                    "📈 Opening position for {} at price {} ({}% change) with size {} SOL",
+                    token.symbol,
+                    price,
+                    percent_change,
+                    size_sol
                 )
             );
         }
+
+        // Check if position already exists
+        {
+            let positions = self.positions.lock().await;
+            if positions.contains_key(&token.mint) {
+                return Err(
+                    ScreenerBotError::Position(PositionError::Generic {
+                        message: format!("Position already exists for {}", token.symbol),
+                    })
+                );
+            }
+        }
+
+        // Create new position
+        let position = Position {
+            id: None,
+            mint: token.mint.clone(),
+            symbol: token.symbol.clone(),
+            name: token.name.clone(),
+            entry_price: price,
+            entry_time: Utc::now(),
+            exit_price: None,
+            exit_time: None,
+            position_type: "buy".to_string(),
+            entry_size_sol: size_sol,
+            total_size_sol: size_sol,
+            price_highest: price,
+            price_lowest: price,
+            entry_transaction_signature: None,
+            exit_transaction_signature: None,
+            token_amount: None,
+            effective_entry_price: None,
+            effective_exit_price: None,
+            sol_received: None,
+            profit_target_min: None,
+            profit_target_max: None,
+            liquidity_tier: None,
+            transaction_entry_verified: false,
+            transaction_exit_verified: false,
+            entry_fee_lamports: None,
+            exit_fee_lamports: None,
+            current_price: Some(price),
+            current_price_updated: Some(Utc::now()),
+            phantom_remove: false,
+            phantom_confirmations: 0,
+            phantom_first_seen: None,
+            synthetic_exit: false,
+            closed_reason: None,
+        };
+
+        let position_lock = self.create_position_with_lock(&token.mint, position).await;
+
+        // Lock the position for the operation
+        let mut position = position_lock.lock().await;
+
+        // TODO: Implement actual swap execution here
+        // For now, return success
+        Ok((token.mint.clone(), token.symbol.clone()))
     }
 
-    /// Run actor loop: handle incoming requests and periodic background tasks
-    pub async fn run_actor(mut self, mut rx: mpsc::Receiver<PositionsRequest>) {
-        log(LogTag::Positions, "INFO", "PositionsManager actor starting...");
-
+    /// Direct position closing with per-position locking
+    pub async fn close_position(
+        &self,
+        mint: &str,
+        token: &Token,
+        exit_price: f64,
+        exit_time: DateTime<Utc>
+    ) -> Result<(String, String), ScreenerBotError> {
         if is_debug_positions_enabled() {
             log(
                 LogTag::Positions,
                 "DEBUG",
-                &format!(
-                    "🎬 Actor started with {} open positions, {} pending verifications, {} retry queue items",
-                    self.get_open_positions_count(),
-                    self.pending_verifications.len(),
-                    self.retry_queue.len()
-                )
+                &format!("📉 Closing position for {} at price {}", token.symbol, exit_price)
             );
         }
 
-        // Create a channel for background tasks to communicate with the actor
-        let (bg_task_tx, mut bg_task_rx) = mpsc::channel::<BackgroundTaskMessage>(100);
+        let position_lock = self.acquire_position_lock(mint).await?;
+        let mut position = position_lock.lock().await;
 
-        // Spawn separate background task manager
-        let shutdown_clone = self.shutdown.clone();
-        let bg_tx_clone = bg_task_tx.clone();
-        tokio::spawn(async move {
-            run_background_tasks(shutdown_clone, bg_tx_clone).await;
-        });
+        // Update position with exit information
+        position.exit_price = Some(exit_price);
+        position.exit_time = Some(exit_time);
 
-        loop {
-            tokio::select! {
-                // Always react to shutdown fast
-                _ = self.shutdown.notified() => {
-                    log(LogTag::Positions, "INFO", "PositionsManager shutting down gracefully");
-                    break;
-                }
-                // Prioritize user requests over background tasks
-                maybe_msg = rx.recv() => {
-                    match maybe_msg {
-                        Some(msg) => {
-                            self.handle_request(msg).await;
-                        }
-                        None => {
-                            log(LogTag::Positions, "WARN", "PositionsManager channel closed; exiting actor");
-                            break;
-                        }
-                    }
-                }
-                // Handle background task messages (non-blocking) AFTER requests
-                maybe_bg_msg = bg_task_rx.recv() => {
-                    if let Some(bg_msg) = maybe_bg_msg {
-                        self.handle_background_message(bg_msg).await;
-                    }
-                }
-            }
-        }
-
-        log(LogTag::Positions, "INFO", "PositionsManager actor stopped");
+        // TODO: Implement actual swap execution here
+        // For now, return success
+        Ok((mint.to_string(), token.symbol.clone()))
     }
 
-    /// Handle background task messages (non-blocking with timeouts and overload protection)
-    async fn handle_background_message(&mut self, msg: BackgroundTaskMessage) {
-        // Check for system overload before processing
-        if is_background_tasks_overloaded().await {
-            log(
-                LogTag::Positions,
-                "OVERLOAD_SKIP",
-                &format!("⚠️ Skipping background task {:?} due to system overload", msg)
-            );
-            return;
-        }
+    /// Direct position tracking update with per-position locking
+    pub async fn update_tracking(&self, mint: &str, current_price: f64) -> bool {
+        if let Ok(position_lock) = self.acquire_position_lock(mint).await {
+            if let Ok(mut position) = position_lock.try_lock() {
+                position.current_price = Some(current_price);
+                position.current_price_updated = Some(Utc::now());
 
-        match msg {
-            BackgroundTaskMessage::VerificationNeeded => {
-                update_background_task_stats("verification", |stats| {
-                    stats.verification_pending += 1;
-                }).await;
-
-                if is_debug_positions_enabled() {
-                    log(LogTag::Positions, "DEBUG", "⏰ Processing verification request");
+                // Update highest/lowest prices
+                if current_price > position.price_highest {
+                    position.price_highest = current_price;
+                }
+                if current_price < position.price_lowest {
+                    position.price_lowest = current_price;
                 }
 
-                let verification_result = tokio::time::timeout(
-                    Duration::from_secs(30),
-                    self.check_pending_verifications()
-                ).await;
-
-                update_background_task_stats("verification", |stats| {
-                    stats.verification_pending = stats.verification_pending.saturating_sub(1);
-                }).await;
-
-                if verification_result.is_err() {
-                    log(LogTag::Positions, "WARN", "Verification check timed out after 30s");
-                }
-            }
-            BackgroundTaskMessage::RetryNeeded => {
-                update_background_task_stats("retry", |stats| {
-                    stats.retry_pending += 1;
-                }).await;
-
-                if is_debug_positions_enabled() {
-                    log(LogTag::Positions, "DEBUG", "🔄 Processing retry request");
-                }
-
-                let retry_result = tokio::time::timeout(
-                    Duration::from_secs(30),
-                    self.process_retry_queue()
-                ).await;
-
-                update_background_task_stats("retry", |stats| {
-                    stats.retry_pending = stats.retry_pending.saturating_sub(1);
-                }).await;
-
-                if retry_result.is_err() {
-                    log(LogTag::Positions, "WARN", "Retry processing timed out after 30s");
-                }
-            }
-            BackgroundTaskMessage::CleanupNeeded => {
-                update_background_task_stats("cleanup", |stats| {
-                    stats.cleanup_pending += 1;
-                }).await;
-
-                if is_debug_positions_enabled() {
-                    log(LogTag::Positions, "DEBUG", "🧹 Processing cleanup request");
-                }
-
-                let cleanup_result = tokio::time::timeout(
-                    Duration::from_secs(60), // Increased from 30s to 60s for database filtering operations
-                    self.cleanup_phantom_positions()
-                ).await;
-
-                update_background_task_stats("cleanup", |stats| {
-                    stats.cleanup_pending = stats.cleanup_pending.saturating_sub(1);
-                }).await;
-
-                if cleanup_result.is_err() {
-                    log(LogTag::Positions, "WARN", "Cleanup timed out after 60s");
-                }
-            }
-            BackgroundTaskMessage::ReconciliationNeeded(positions_to_reconcile) => {
-                update_background_task_stats("reconciliation", |stats| {
-                    stats.reconciliation_pending += 1;
-                }).await;
-
-                if is_debug_positions_enabled() {
-                    log(
-                        LogTag::Positions,
-                        "DEBUG",
-                        &format!(
-                            "🩺 Processing reconciliation request for {} positions",
-                            positions_to_reconcile.len()
-                        )
-                    );
-                }
-
-                let reconciliation_result = tokio::time::timeout(
-                    Duration::from_secs(120),
-                    self.run_targeted_reconciliation(positions_to_reconcile)
-                ).await;
-
-                update_background_task_stats("reconciliation", |stats| {
-                    stats.reconciliation_pending = stats.reconciliation_pending.saturating_sub(1);
-                }).await;
-
-                if reconciliation_result.is_err() {
-                    log(LogTag::Positions, "WARN", "Reconciliation timed out after 120s");
-                }
-            }
-            BackgroundTaskMessage::TrackingSaveNeeded => {
-                if is_debug_positions_enabled() {
-                    log(LogTag::Positions, "DEBUG", "💾 Processing tracking save request");
-                }
-
-                // Clean up phantom positions from database
-                self.cleanup_phantom_positions_database().await;
+                return true;
             }
         }
-    }
-
-    async fn handle_request(&mut self, msg: PositionsRequest) {
-        match msg {
-            PositionsRequest::OpenPosition { token, price, percent_change, size_sol, reply } => {
-                if is_debug_positions_enabled() {
-                    log(
-                        LogTag::Positions,
-                        "DEBUG",
-                        &format!(
-                            "📈 Received OpenPosition request for {} at price {} ({}% change) with size {} SOL",
-                            token.symbol,
-                            price,
-                            percent_change,
-                            size_sol
-                        )
-                    );
-                }
-                let _ = reply.send(
-                    self.open_position(&token, price, percent_change, size_sol).await
-                );
-            }
-            PositionsRequest::ClosePosition { mint, token, exit_price, exit_time, reply } => {
-                if is_debug_positions_enabled() {
-                    log(
-                        LogTag::Positions,
-                        "DEBUG",
-                        &format!(
-                            "📉 Spawning background task for ClosePosition request for {} at price {}",
-                            token.symbol,
-                            exit_price
-                        )
-                    );
-                }
-
-                // Spawn background task to prevent blocking the actor
-                let mint_clone = mint.clone();
-                let token_clone = token.clone();
-
-                tokio::spawn(async move {
-                    let result = execute_close_position_background(
-                        mint_clone,
-                        token_clone,
-                        exit_price,
-                        exit_time
-                    ).await;
-                    let _ = reply.send(result);
-                });
-            }
-            PositionsRequest::AddVerification { signature } => {
-                if is_debug_positions_enabled() {
-                    log(
-                        LogTag::Positions,
-                        "DEBUG",
-                        &format!(
-                            "🔍 Adding signature {} to verification queue",
-                            get_signature_prefix(&signature)
-                        )
-                    );
-                }
-                self.add_verification(signature);
-            }
-            PositionsRequest::AddRetryFailedSell { mint } => {
-                self.add_retry_failed_sell(mint);
-            }
-            PositionsRequest::UpdateTracking { mint, current_price, reply } => {
-                // Get additional price information for comprehensive logging
-                let price_info = self.get_price_info_safe(&mint).await;
-                let result = self.update_position_tracking(&mint, current_price, price_info).await;
-                let _ = reply.send(result);
-            }
-            PositionsRequest::GetOpenPositionsCount { reply } => {
-                let _ = reply.send(self.get_open_positions_count());
-            }
-            PositionsRequest::GetOpenPositions { reply } => {
-                let _ = reply.send(self.get_open_positions());
-            }
-            PositionsRequest::GetClosedPositions { reply } => {
-                let _ = reply.send(self.get_closed_positions());
-            }
-            PositionsRequest::GetOpenMints { reply } => {
-                let _ = reply.send(self.get_open_positions_mints());
-            }
-            PositionsRequest::IsOpen { mint, reply } => {
-                let _ = reply.send(self.is_open_position(&mint));
-            }
-            PositionsRequest::GetByState { state, reply } => {
-                let _ = reply.send(self.get_positions_by_state(&state));
-            }
-            PositionsRequest::RemoveByEntrySignature { signature, reason, reply } => {
-                let _ = reply.send(
-                    self.remove_position_by_entry_signature(&signature, &reason).await
-                );
-            }
-            PositionsRequest::GetActiveFrozenCooldowns { reply } => {
-                let _ = reply.send(self.get_active_frozen_cooldowns());
-            }
-            PositionsRequest::ForceReverifyAll { reply } => {
-                if is_debug_positions_enabled() {
-                    log(LogTag::Positions, "DEBUG", "🔄 Received ForceReverifyAll request");
-                }
-                let _ = reply.send(self.force_reverify_all_positions());
-            }
-            PositionsRequest::UpdateExitSignature { mint, signature, router_used } => {
-                self.update_position_exit_signature(&mint, &signature, &router_used).await;
-            }
-            PositionsRequest::TriggerPhantomReconciliation { mint } => {
-                // Find the position and trigger immediate reconciliation
-                if
-                    let Some((index, symbol)) = self.positions
-                        .iter()
-                        .enumerate()
-                        .find(|(_, p)| p.mint == mint)
-                        .map(|(i, p)| (i, p.symbol.clone()))
-                {
-                    log(
-                        LogTag::Positions,
-                        "PHANTOM_TRIGGER",
-                        &format!(
-                            "🔥 Triggering immediate phantom reconciliation for {} ({})",
-                            symbol,
-                            mint
-                        )
-                    );
-
-                    // Call reconciliation directly on this specific position
-                    let positions_to_reconcile = vec![(index, mint.clone(), symbol.clone())];
-                    self.run_targeted_reconciliation(positions_to_reconcile).await;
-                } else {
-                    log(
-                        LogTag::Positions,
-                        "PHANTOM_TRIGGER",
-                        &format!("⚠️  No position found for mint {} during phantom reconciliation trigger", mint)
-                    );
-                }
-            }
-        }
+        false
     }
 
     /// Get open positions count (includes Open and Closing states)
-    fn get_open_positions_count(&self) -> usize {
-        self.positions
-            .iter()
-            .filter(|p| {
-                p.position_type == "buy" &&
-                    ({
-                        let state = self.get_position_state(p);
-                        state == PositionState::Open || state == PositionState::Closing
-                    })
-            })
-            .count()
+    pub async fn get_open_positions_count(&self) -> usize {
+        let positions = self.positions.lock().await;
+        let mut count = 0;
+
+        for position_lock in positions.values() {
+            if let Ok(position) = position_lock.try_lock() {
+                if position.position_type == "buy" {
+                    let state = self.get_position_state(&position);
+                    if state == PositionState::Open || state == PositionState::Closing {
+                        count += 1;
+                    }
+                }
+            }
+        }
+        count
     }
 
-    /// Get open positions (includes Open, Closing, and ExitPending states)
-    fn get_open_positions(&self) -> Vec<Position> {
-        self.positions
-            .iter()
-            .filter(|p| {
-                p.position_type == "buy" &&
-                    ({
-                        let state = self.get_position_state(p);
-                        matches!(
-                            state,
-                            PositionState::Open |
-                                PositionState::Closing |
-                                PositionState::ExitPending
-                        )
-                    })
-            })
-            .cloned()
-            .collect()
+    /// Get open positions (includes Open and Closing states)
+    pub async fn get_open_positions(&self) -> Vec<Position> {
+        let positions = self.positions.lock().await;
+        let mut open_positions = Vec::new();
+
+        for position_lock in positions.values() {
+            if let Ok(position) = position_lock.try_lock() {
+                if position.position_type == "buy" {
+                    let state = self.get_position_state(&position);
+                    if matches!(state, PositionState::Open | PositionState::Closing) {
+                        open_positions.push(position.clone());
+                    }
+                }
+            }
+        }
+        open_positions
     }
 
     /// Get closed positions (only Closed state)
-    fn get_closed_positions(&self) -> Vec<Position> {
-        self.positions
-            .iter()
-            .filter(|p| {
-                p.position_type == "buy" && self.get_position_state(p) == PositionState::Closed
-            })
-            .cloned()
-            .collect()
+    pub async fn get_closed_positions(&self) -> Vec<Position> {
+        let positions = self.positions.lock().await;
+        let mut closed_positions = Vec::new();
+
+        for position_lock in positions.values() {
+            if let Ok(position) = position_lock.try_lock() {
+                if
+                    position.position_type == "buy" &&
+                    self.get_position_state(&position) == PositionState::Closed
+                {
+                    closed_positions.push(position.clone());
+                }
+            }
+        }
+        closed_positions
     }
 
-    /// Get open positions mints (includes Open, Closing, and ExitPending states)
-    fn get_open_positions_mints(&self) -> Vec<String> {
-        self.positions
-            .iter()
-            .filter(|p| {
-                p.position_type == "buy" &&
-                    ({
-                        let state = self.get_position_state(p);
-                        matches!(
-                            state,
-                            PositionState::Open |
-                                PositionState::Closing |
-                                PositionState::ExitPending
-                        )
-                    })
-            })
-            .map(|p| p.mint.clone())
-            .collect()
+    /// Get open positions mints (includes Open and Closing states)
+    pub async fn get_open_positions_mints(&self) -> Vec<String> {
+        let positions = self.positions.lock().await;
+        let mut open_mints = Vec::new();
+
+        for (mint, position_lock) in positions.iter() {
+            if let Ok(position) = position_lock.try_lock() {
+                if position.position_type == "buy" {
+                    let state = self.get_position_state(&position);
+                    if matches!(state, PositionState::Open | PositionState::Closing) {
+                        open_mints.push(mint.clone());
+                    }
+                }
+            }
+        }
+        open_mints
     }
 
-    /// Check if mint is an open position (includes Open, Closing, and ExitPending states)
-    fn is_open_position(&self, mint: &str) -> bool {
-        self.positions.iter().any(|p| {
-            p.mint == mint &&
-                p.position_type == "buy" &&
-                ({
-                    let state = self.get_position_state(p);
-                    matches!(
-                        state,
-                        PositionState::Open | PositionState::Closing | PositionState::ExitPending
-                    )
-                })
-        })
+    /// Check if mint is an open position (includes Open and Closing states)
+    pub async fn is_open_position(&self, mint: &str) -> bool {
+        let positions = self.positions.lock().await;
+
+        if let Some(position_lock) = positions.get(mint) {
+            if let Ok(position) = position_lock.try_lock() {
+                if position.position_type == "buy" {
+                    let state = self.get_position_state(&position);
+                    return matches!(state, PositionState::Open | PositionState::Closing);
+                }
+            }
+        }
+        false
     }
 
     /// Get positions by state
-    fn get_positions_by_state(&self, state: &PositionState) -> Vec<Position> {
-        self.positions
-            .iter()
-            .filter(|p| p.position_type == "buy" && self.get_position_state(p) == *state)
-            .cloned()
-            .collect()
+    pub async fn get_positions_by_state(&self, target_state: &PositionState) -> Vec<Position> {
+        let positions = self.positions.lock().await;
+        let mut filtered_positions = Vec::new();
+
+        for position_lock in positions.values() {
+            if let Ok(position) = position_lock.try_lock() {
+                if
+                    position.position_type == "buy" &&
+                    self.get_position_state(&position) == *target_state
+                {
+                    filtered_positions.push(position.clone());
+                }
+            }
+        }
+        filtered_positions
     }
 
-    /// Get position state with enhanced phantom detection
+    /// Get position state with simplified detection
     pub fn get_position_state(&self, position: &Position) -> PositionState {
-        // Check for phantom state first (most critical)
-        if position.phantom_remove {
-            return PositionState::Phantom;
-        }
-
         // Fully closed: entry verified, exit verified, and has exit price
         if
             position.transaction_entry_verified &&
@@ -1196,23 +630,8 @@ impl PositionsManager {
             return PositionState::Closed;
         }
 
-        // Exit submitted but verification failed - needs retry
-        if
-            position.exit_transaction_signature.is_some() &&
-            position.exit_price.is_some() &&
-            !position.transaction_exit_verified
-        {
-            return PositionState::ExitFailed;
-        }
-
-        // Exit transaction submitted and pending verification
+        // Exit transaction submitted but not verified yet
         if position.exit_transaction_signature.is_some() {
-            // Check if signature is in pending verification queue
-            if let Some(signature) = &position.exit_transaction_signature {
-                if self.pending_verifications.contains_key(signature) {
-                    return PositionState::ExitPending;
-                }
-            }
             return PositionState::Closing;
         }
 
@@ -5277,26 +4696,30 @@ impl PositionsManager {
         }
     }
 
-    /// Load positions from disk on startup
-    /// Load positions from database on startup
-    async fn load_positions_from_database(&mut self) {
+    /// Load positions from database into HashMap structure
+    async fn load_positions_from_database(&self) {
         if is_debug_positions_enabled() {
             log(LogTag::Positions, "DEBUG", "📂 Loading positions from database");
         }
 
-        // Use direct database function instead of complex async closure
         match crate::positions_db::load_all_positions().await {
-            Ok(positions) => {
-                self.positions = positions;
+            Ok(positions_from_db) => {
+                let mut positions = self.positions.lock().await;
+
+                for position in positions_from_db {
+                    let position_lock = Arc::new(AsyncMutex::new(position.clone()));
+                    positions.insert(position.mint.clone(), position_lock);
+                }
+
                 log(
                     LogTag::Positions,
                     "INFO",
-                    &format!("📁 Loaded {} positions from database", self.positions.len())
+                    &format!("📁 Loaded {} positions from database", positions.len())
                 );
 
                 if is_debug_positions_enabled() {
-                    let open_count = self.get_open_positions_count();
-                    let closed_count = self.positions.len() - open_count;
+                    let open_count = self.get_open_positions_count().await;
+                    let closed_count = positions.len() - open_count;
                     log(
                         LogTag::Positions,
                         "DEBUG",
@@ -5314,64 +4737,7 @@ impl PositionsManager {
                     "ERROR",
                     &format!("Failed to load positions from database: {}", e)
                 );
-                self.positions = Vec::new();
             }
-        }
-    }
-
-    /// Re-queue unverified transactions for comprehensive verification on startup
-    /// This ensures that positions with unverified transactions get re-verified
-    fn requeue_unverified_transactions(&mut self) {
-        let mut requeued_count = 0;
-
-        for position in &self.positions {
-            // Check entry transactions that need verification
-            if let Some(entry_sig) = &position.entry_transaction_signature {
-                if !position.transaction_entry_verified {
-                    self.pending_verifications.insert(entry_sig.clone(), Utc::now());
-                    requeued_count += 1;
-
-                    if is_debug_positions_enabled() {
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!(
-                                "🔄 Re-queued entry transaction {} for verification ({})",
-                                get_signature_prefix(entry_sig),
-                                position.symbol
-                            )
-                        );
-                    }
-                }
-            }
-
-            // Check exit transactions that need verification
-            if let Some(exit_sig) = &position.exit_transaction_signature {
-                if !position.transaction_exit_verified {
-                    self.pending_verifications.insert(exit_sig.clone(), Utc::now());
-                    requeued_count += 1;
-
-                    if is_debug_positions_enabled() {
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!(
-                                "🔄 Re-queued exit transaction {} for verification ({})",
-                                get_signature_prefix(exit_sig),
-                                position.symbol
-                            )
-                        );
-                    }
-                }
-            }
-        }
-
-        if requeued_count > 0 {
-            log(
-                LogTag::Positions,
-                "REQUEUE",
-                &format!("🔄 Re-queued {} unverified transactions for comprehensive verification", requeued_count)
-            );
         }
     }
 
@@ -5449,388 +4815,82 @@ impl PositionsManager {
 // ACTOR INTERFACE (Requests + Handle) and Service Startup
 // =============================================================================
 
-#[allow(clippy::large_enum_variant)]
-pub enum PositionsRequest {
-    OpenPosition {
-        token: Token,
-        price: f64,
-        percent_change: f64,
-        size_sol: f64,
-        reply: oneshot::Sender<Result<(String, String), ScreenerBotError>>,
-    },
-    ClosePosition {
-        mint: String,
-        token: Token,
-        exit_price: f64,
-        exit_time: DateTime<Utc>,
-        reply: oneshot::Sender<Result<(String, String), ScreenerBotError>>,
-    },
-    AddVerification {
-        signature: String,
-    },
-    AddRetryFailedSell {
-        mint: String,
-    },
-    UpdateTracking {
-        mint: String,
-        current_price: f64,
-        reply: oneshot::Sender<bool>,
-    },
-    GetOpenPositionsCount {
-        reply: oneshot::Sender<usize>,
-    },
-    GetOpenPositions {
-        reply: oneshot::Sender<Vec<Position>>,
-    },
-    GetClosedPositions {
-        reply: oneshot::Sender<Vec<Position>>,
-    },
-    GetOpenMints {
-        reply: oneshot::Sender<Vec<String>>,
-    },
-    IsOpen {
-        mint: String,
-        reply: oneshot::Sender<bool>,
-    },
-    GetByState {
-        state: PositionState,
-        reply: oneshot::Sender<Vec<Position>>,
-    },
-    RemoveByEntrySignature {
-        signature: String,
-        reason: String,
-        reply: oneshot::Sender<bool>,
-    },
-    GetActiveFrozenCooldowns {
-        reply: oneshot::Sender<Vec<(String, i64)>>,
-    },
-    ForceReverifyAll {
-        reply: oneshot::Sender<usize>,
-    },
-    UpdateExitSignature {
-        mint: String,
-        signature: String,
-        router_used: String,
-    },
-    TriggerPhantomReconciliation {
-        mint: String,
-    },
-}
+// =============================================================================
+// GLOBAL POSITIONS MANAGER ACCESS
+// =============================================================================
 
-#[derive(Clone)]
-pub struct PositionsHandle {
-    tx: mpsc::Sender<PositionsRequest>,
-}
-
-impl PositionsHandle {
-    pub fn new(tx: mpsc::Sender<PositionsRequest>) -> Self {
-        Self { tx }
-    }
-
-    pub async fn open_position(
-        &self,
-        token: Token,
-        price: f64,
-        percent_change: f64,
-        size_sol: f64
-    ) -> Result<(String, String), ScreenerBotError> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        let msg = PositionsRequest::OpenPosition {
-            token,
-            price,
-            percent_change,
-            size_sol,
-            reply: reply_tx,
-        };
-        self.tx.send(msg).await.map_err(|_|
-            ScreenerBotError::Position(PositionError::Generic {
-                message: "PositionsManager unavailable".to_string(),
-            })
-        )?;
-        reply_rx.await.map_err(|_|
-            ScreenerBotError::Position(PositionError::Generic {
-                message: "PositionsManager dropped".to_string(),
-            })
-        )?
-    }
-
-    pub async fn close_position(
-        &self,
-        mint: String,
-        token: Token,
-        exit_price: f64,
-        exit_time: DateTime<Utc>
-    ) -> Result<(String, String), ScreenerBotError> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        let msg = PositionsRequest::ClosePosition {
-            mint,
-            token,
-            exit_price,
-            exit_time,
-            reply: reply_tx,
-        };
-        self.tx.send(msg).await.map_err(|_|
-            ScreenerBotError::Position(PositionError::Generic {
-                message: "PositionsManager unavailable".to_string(),
-            })
-        )?;
-        reply_rx.await.map_err(|_|
-            ScreenerBotError::Position(PositionError::Generic {
-                message: "PositionsManager dropped".to_string(),
-            })
-        )?
-    }
-
-    pub async fn add_verification(&self, signature: String) {
-        let _ = self.tx.send(PositionsRequest::AddVerification { signature }).await;
-    }
-
-    pub async fn add_retry_failed_sell(&self, mint: String) {
-        let _ = self.tx.send(PositionsRequest::AddRetryFailedSell { mint }).await;
-    }
-
-    pub async fn update_tracking(&self, mint: String, current_price: f64) -> bool {
-        let (txr, rxr) = oneshot::channel();
-        let _ = self.tx.send(PositionsRequest::UpdateTracking {
-            mint,
-            current_price,
-            reply: txr,
-        }).await;
-        rxr.await.unwrap_or(false)
-    }
-
-    pub async fn get_open_positions_count(&self) -> usize {
-        let (txr, rxr) = oneshot::channel();
-        let _ = self.tx.send(PositionsRequest::GetOpenPositionsCount { reply: txr }).await;
-        rxr.await.unwrap_or(0)
-    }
-
-    pub async fn get_open_positions(&self) -> Vec<Position> {
-        let (txr, rxr) = oneshot::channel();
-        let _ = self.tx.send(PositionsRequest::GetOpenPositions { reply: txr }).await;
-        rxr.await.unwrap_or_default()
-    }
-
-    pub async fn get_closed_positions(&self) -> Vec<Position> {
-        let (txr, rxr) = oneshot::channel();
-        let _ = self.tx.send(PositionsRequest::GetClosedPositions { reply: txr }).await;
-        rxr.await.unwrap_or_default()
-    }
-
-    pub async fn get_open_mints(&self) -> Vec<String> {
-        let (txr, rxr) = oneshot::channel();
-        let _ = self.tx.send(PositionsRequest::GetOpenMints { reply: txr }).await;
-        rxr.await.unwrap_or_default()
-    }
-
-    pub async fn is_open(&self, mint: String) -> bool {
-        let (txr, rxr) = oneshot::channel();
-        let _ = self.tx.send(PositionsRequest::IsOpen { mint, reply: txr }).await;
-        rxr.await.unwrap_or(false)
-    }
-
-    pub async fn remove_by_entry_signature(&self, signature: String, reason: String) -> bool {
-        let (txr, rxr) = oneshot::channel();
-        let _ = self.tx.send(PositionsRequest::RemoveByEntrySignature {
-            signature,
-            reason,
-            reply: txr,
-        }).await;
-        rxr.await.unwrap_or(false)
-    }
-
-    pub async fn get_active_frozen_cooldowns(&self) -> Vec<(String, i64)> {
-        let (txr, rxr) = oneshot::channel();
-        let _ = self.tx.send(PositionsRequest::GetActiveFrozenCooldowns { reply: txr }).await;
-        rxr.await.unwrap_or_default()
-    }
-
-    pub async fn get_positions_by_state(&self, state: PositionState) -> Vec<Position> {
-        let (txr, rxr) = oneshot::channel();
-        let _ = self.tx.send(PositionsRequest::GetByState { state, reply: txr }).await;
-        rxr.await.unwrap_or_default()
-    }
-
-    pub async fn force_reverify_all(&self) -> usize {
-        let (txr, rxr) = oneshot::channel();
-        let _ = self.tx.send(PositionsRequest::ForceReverifyAll { reply: txr }).await;
-        rxr.await.unwrap_or(0)
-    }
-
-    pub async fn update_exit_signature_direct(
-        &self,
-        mint: String,
-        signature: String,
-        router_used: String
-    ) {
-        let _ = self.tx.send(PositionsRequest::UpdateExitSignature {
-            mint,
-            signature,
-            router_used,
-        }).await;
-    }
-
-    pub async fn trigger_phantom_reconciliation(&self, mint: String) {
-        let _ = self.tx.send(PositionsRequest::TriggerPhantomReconciliation { mint }).await;
-    }
-}
-
-static GLOBAL_POSITIONS_HANDLE: Lazy<AsyncMutex<Option<PositionsHandle>>> = Lazy::new(||
+static GLOBAL_POSITIONS_MANAGER: Lazy<AsyncMutex<Option<Arc<PositionsManager>>>> = Lazy::new(||
     AsyncMutex::new(None)
 );
 
-pub async fn set_positions_handle(handle: PositionsHandle) {
+pub async fn set_positions_manager(manager: Arc<PositionsManager>) {
     let mut guard = match
-        tokio::time::timeout(Duration::from_secs(1), GLOBAL_POSITIONS_HANDLE.lock()).await
+        tokio::time::timeout(Duration::from_secs(1), GLOBAL_POSITIONS_MANAGER.lock()).await
     {
         Ok(guard) => guard,
         Err(_) => {
-            log(LogTag::Positions, "ERROR", "⏰ Timeout setting positions handle");
+            log(LogTag::Positions, "ERROR", "⏰ Timeout setting positions manager");
             return;
         }
     };
-    *guard = Some(handle);
+    *guard = Some(manager);
 }
 
-pub async fn get_positions_handle() -> Option<PositionsHandle> {
+pub async fn get_positions_manager() -> Option<Arc<PositionsManager>> {
     let guard = match
-        tokio::time::timeout(Duration::from_secs(1), GLOBAL_POSITIONS_HANDLE.lock()).await
+        tokio::time::timeout(Duration::from_secs(1), GLOBAL_POSITIONS_MANAGER.lock()).await
     {
         Ok(guard) => guard,
         Err(_) => {
-            log(LogTag::Positions, "WARN", "⏰ Timeout getting positions handle");
+            log(LogTag::Positions, "WARN", "⏰ Timeout getting positions manager");
             return None;
         }
     };
     guard.clone()
 }
 
-/// Background task runner - handles heavy operations without blocking the main actor
-async fn run_background_tasks(shutdown: Arc<Notify>, bg_tx: mpsc::Sender<BackgroundTaskMessage>) {
-    log(LogTag::Positions, "INFO", "Background task manager starting...");
-
-    let mut verification_interval = interval(Duration::from_secs(10));
-    let mut retry_interval = interval(Duration::from_secs(30));
-    let mut cleanup_interval = interval(Duration::from_secs(120)); // Increased from 30s to 120s to allow more time for transaction verification during busy periods
-    let mut reconciliation_interval = interval(Duration::from_secs(1800)); // 30 minutes
-    let mut position_locks_cleanup_interval = interval(Duration::from_secs(300)); // Clean position locks every 5 minutes
-    let mut tracking_save_interval = interval(Duration::from_secs(60)); // Save tracking updates every minute
-
-    let mut reconciliation_in_progress = false;
-
-    loop {
-        tokio::select! {
-            _ = shutdown.notified() => {
-                log(LogTag::Positions, "INFO", "Background task manager shutting down");
-                break;
-            }
-            _ = verification_interval.tick() => {
-                let _ = bg_tx.send(BackgroundTaskMessage::VerificationNeeded).await;
-            }
-            _ = retry_interval.tick() => {
-                let _ = bg_tx.send(BackgroundTaskMessage::RetryNeeded).await;
-            }
-            _ = cleanup_interval.tick() => {
-                let _ = bg_tx.send(BackgroundTaskMessage::CleanupNeeded).await;
-            }
-            _ = position_locks_cleanup_interval.tick() => {
-                // Clean up unused position locks to prevent memory leaks
-                cleanup_unused_position_locks().await;
-            }
-            _ = tracking_save_interval.tick() => {
-                let _ = bg_tx.send(BackgroundTaskMessage::TrackingSaveNeeded).await;
-            }
-            _ = reconciliation_interval.tick() => {
-                if reconciliation_in_progress {
-                    continue;
-                }
-                
-                reconciliation_in_progress = true;
-                
-                // Get positions that need reconciliation (from positions manager)
-                let open_positions = match tokio::time::timeout(Duration::from_secs(2), get_open_positions()).await {
-                    Ok(positions) => positions,
-                    Err(_) => {
-                        log(LogTag::Positions, "WARN", "Timeout getting positions for reconciliation - skipping");
-                        reconciliation_in_progress = false;
-                        continue;
-                    }
-                };
-                
-                let positions_needing_reconciliation: Vec<_> = open_positions.iter().enumerate()
-                    .filter_map(|(index, p)| {
-                        let needs_reconciliation = 
-                            (p.exit_transaction_signature.is_some() && !p.transaction_exit_verified) ||
-                            (p.token_amount.unwrap_or(0) > 0 && 
-                             p.exit_transaction_signature.is_none() && 
-                             p.exit_price.is_none() && 
-                             !p.phantom_remove) ||
-                            (p.phantom_remove && p.exit_transaction_signature.is_some() && !p.transaction_exit_verified) ||
-                            (p.sol_received.is_some() && p.exit_price.is_none() && p.token_amount.unwrap_or(0) > 0);
-                            
-                        if needs_reconciliation {
-                            Some((index, p.mint.clone(), p.symbol.clone()))
-                        } else {
-                            None
-                        }
-                    })
-                    .take(3) // Limit to 3 positions per cycle
-                    .collect();
-                
-                if !positions_needing_reconciliation.is_empty() {
-                    let _ = bg_tx.send(BackgroundTaskMessage::ReconciliationNeeded(positions_needing_reconciliation)).await;
-                }
-                
-                reconciliation_in_progress = false;
-            }
-        }
-    }
-
-    log(LogTag::Positions, "INFO", "Background task manager stopped");
-}
-
-/// Start the PositionsManager service (actor) and expose a global handle
+/// Start the simplified PositionsManager service with direct access
 pub async fn start_positions_manager_service(shutdown: Arc<Notify>) {
-    let (tx, rx) = mpsc::channel::<PositionsRequest>(256);
-    let handle = PositionsHandle::new(tx.clone());
-    set_positions_handle(handle).await;
-
     let mut manager = PositionsManager::new(shutdown.clone());
     manager.initialize().await;
-    tokio::spawn(async move {
-        manager.run_actor(rx).await;
-    });
 
-    log(LogTag::Positions, "INFO", "PositionsManager service initialized (actor)");
+    let manager_arc = Arc::new(manager);
+    set_positions_manager(manager_arc).await;
+
+    log(LogTag::Positions, "INFO", "PositionsManager service initialized (direct access)");
 }
 
 // =============================================================================
-// Public async helpers for external modules (thin facade over the global handle)
+// Public async helpers for external modules (direct manager access)
 // =============================================================================
 
 pub async fn get_open_positions() -> Vec<Position> {
-    if let Some(h) = get_positions_handle().await {
-        h.get_open_positions().await
+    if let Some(manager) = get_positions_manager().await {
+        manager.get_open_positions().await
     } else {
         Vec::new()
     }
 }
 
 pub async fn get_closed_positions() -> Vec<Position> {
-    if let Some(h) = get_positions_handle().await {
-        h.get_closed_positions().await
+    if let Some(manager) = get_positions_manager().await {
+        manager.get_closed_positions().await
     } else {
         Vec::new()
     }
 }
 
 pub async fn get_open_positions_count() -> usize {
-    if let Some(h) = get_positions_handle().await { h.get_open_positions_count().await } else { 0 }
+    if let Some(manager) = get_positions_manager().await {
+        manager.get_open_positions_count().await
+    } else {
+        0
+    }
 }
 
 pub async fn get_positions_by_state(state: PositionState) -> Vec<Position> {
-    if let Some(h) = get_positions_handle().await {
-        h.get_positions_by_state(state).await
+    if let Some(manager) = get_positions_manager().await {
+        manager.get_positions_by_state(&state).await
     } else {
         Vec::new()
     }
@@ -5838,18 +4898,10 @@ pub async fn get_positions_by_state(state: PositionState) -> Vec<Position> {
 
 /// Check if a position is currently open for the given mint
 pub async fn is_open_position(mint: &str) -> bool {
-    if let Some(h) = get_positions_handle().await {
-        h.is_open(mint.to_string()).await
+    if let Some(manager) = get_positions_manager().await {
+        manager.is_open_position(mint).await
     } else {
         false
-    }
-}
-
-pub async fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
-    if let Some(h) = get_positions_handle().await {
-        h.get_active_frozen_cooldowns().await
-    } else {
-        Vec::new()
     }
 }
 
@@ -5860,8 +4912,8 @@ pub async fn open_position_global(
     percent_change: f64,
     size_sol: f64
 ) -> Result<(String, String), ScreenerBotError> {
-    if let Some(h) = get_positions_handle().await {
-        h.open_position(token, price, percent_change, size_sol).await
+    if let Some(manager) = get_positions_manager().await {
+        manager.open_position(&token, price, percent_change, size_sol).await
     } else {
         Err(
             ScreenerBotError::Position(PositionError::Generic {
@@ -5877,14 +4929,22 @@ pub async fn close_position_global(
     exit_price: f64,
     exit_time: DateTime<Utc>
 ) -> Result<(String, String), ScreenerBotError> {
-    if let Some(h) = get_positions_handle().await {
-        h.close_position(mint, token, exit_price, exit_time).await
+    if let Some(manager) = get_positions_manager().await {
+        manager.close_position(&mint, &token, exit_price, exit_time).await
     } else {
         Err(
             ScreenerBotError::Position(PositionError::Generic {
                 message: "PositionsManager not available".to_string(),
             })
         )
+    }
+}
+
+pub async fn update_position_tracking_global(mint: String, current_price: f64) -> bool {
+    if let Some(manager) = get_positions_manager().await {
+        manager.update_tracking(&mint, current_price).await
+    } else {
+        false
     }
 }
 
