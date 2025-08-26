@@ -1833,7 +1833,7 @@ struct ReentryProfile {
 }
 
 async fn get_reentry_profile(mint: &str) -> Option<ReentryProfile> {
-    use crate::positions::{ get_closed_positions, PositionState };
+    use crate::positions::{ get_closed_positions };
 
     // Get all closed positions from the async positions manager
     let all_closed = get_closed_positions().await;

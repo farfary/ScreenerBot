@@ -4937,8 +4937,8 @@ async fn test_real_position_management(
 
     // Open position using the PositionsManager
     if
-        let Err(e) = positions::open_position_global(
-            test_token.clone(),
+        let Err(e) = positions::open_position_direct(
+            &test_token,
             current_price,
             -5.0,
             sol_amount
@@ -4992,11 +4992,10 @@ async fn test_real_position_management(
             let exit_time = chrono::Utc::now();
 
             match
-                positions::close_position_global(
-                    position.mint.clone(),
-                    test_token.clone(),
+                positions::close_position_direct(
+                    &position.mint,
                     exit_price,
-                    exit_time
+                    "Debug test".to_string()
                 ).await
             {
                 Ok(_) => {

@@ -1251,3 +1251,39 @@ pub async fn delete_position_by_id(id: i64) -> Result<bool, String> {
         None => Err("Positions database not initialized".to_string()),
     }
 }
+
+/// Update position in database
+pub async fn update_position(position: &Position) -> Result<(), String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.update_position(position).await,
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
+/// Get open positions from database
+pub async fn get_open_positions() -> Result<Vec<Position>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_open_positions().await,
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
+/// Get closed positions from database
+pub async fn get_closed_positions() -> Result<Vec<Position>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_closed_positions().await,
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
+/// Get position by mint from database
+pub async fn get_position_by_mint(mint: &str) -> Result<Option<Position>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_position_by_mint(mint).await,
+        None => Err("Positions database not initialized".to_string()),
+    }
+}

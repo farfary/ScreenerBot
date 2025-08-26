@@ -799,24 +799,13 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             }
                         };
 
-                        // Send open-position request to PositionsManager via handle
-                        let positions_handle_opt = crate::positions::get_positions_handle().await;
-                        if let Some(h) = &positions_handle_opt {
-                            let _ = h.open_position(
-                                token.clone(),
-                                current_price,
-                                change,
-                                TRADE_SIZE_SOL
-                            ).await;
-                        } else {
-                            if is_debug_trader_enabled() {
-                                log(
-                                    LogTag::Trader,
-                                    "DEBUG",
-                                    &format!("⚠️ {} positions handle not available", token.symbol)
-                                );
-                            }
-                        }
+                        // Open position directly
+                        let _ = crate::positions::open_position_direct(
+                            &token,
+                            current_price,
+                            change,
+                            TRADE_SIZE_SOL
+                        ).await;
                     }).await
                 {
                     Ok(_) => {}
@@ -909,13 +898,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         }
 
         // First, collect all open position mints to fetch pool prices in parallel
-        let open_position_mints: Vec<String> = if
-            let Some(h) = crate::positions::get_positions_handle().await
-        {
-            h.get_open_mints().await
-        } else {
-            Vec::new()
-        };
+        let open_position_mints: Vec<String> = crate::positions::get_open_mints().await;
 
         // PERFORMANCE FIX: Pre-warm cache with fresh prices before position processing
         // Wait for all refresh operations to complete to ensure fresh cache
@@ -955,13 +938,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         let mut positions_to_close = Vec::new();
 
         // First, collect open positions data (without holding mutex across await)
-        let open_positions_data_all: Vec<crate::positions::Position> = if
-            let Some(h) = crate::positions::get_positions_handle().await
-        {
-            h.get_open_positions().await
-        } else {
-            Vec::new()
-        };
+        let open_positions_data_all: Vec<crate::positions::Position> =
+            crate::positions::get_open_positions().await;
 
         // Filter to only verified-entry, not yet exited positions (preserve previous behavior)
         let mut unverified_count = 0usize;
@@ -1020,22 +998,22 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             if let Some(&current_price) = price_map.get(&position.mint) {
                 if current_price > 0.0 && current_price.is_finite() {
                     // Send price update to positions manager for tracking
-                    if let Some(positions_handle) = crate::positions::get_positions_handle().await {
-                        let tracking_result = positions_handle.update_tracking(
-                            position.mint.clone(),
-                            current_price
-                        ).await;
-                        if is_debug_trader_enabled() && !tracking_result {
-                            log(
-                                LogTag::Trader,
-                                "WARN",
-                                &format!(
-                                    "Failed to update tracking for {} at price {:.8}",
-                                    position.symbol,
-                                    current_price
-                                )
-                            );
-                        }
+                    let tracking_result = crate::positions::update_position_tracking(
+                        &position.mint,
+                        current_price,
+                        None, // market_cap
+                        None // liquidity_tier
+                    ).await;
+                    if is_debug_trader_enabled() && tracking_result.is_err() {
+                        log(
+                            LogTag::Trader,
+                            "WARN",
+                            &format!(
+                                "Failed to update tracking for {} at price {:.8}",
+                                position.symbol,
+                                current_price
+                            )
+                        );
                     }
 
                     let now = Utc::now();
@@ -1247,7 +1225,6 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 // Clone shutdown for use in the spawned sell task
                 let shutdown_for_task = shutdown.clone();
                 // We already have the position from the analysis phase for logging only
-                let positions_handle_opt = crate::positions::get_positions_handle().await;
                 let handle = tokio::spawn(async move {
                     let _permit = permit; // Keep permit alive for duration of task
 
@@ -1276,20 +1253,13 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         tokio::time::timeout(
                             Duration::from_secs(SELL_OPERATION_SMART_TIMEOUT_SECS),
                             async {
-                                if let Some(h) = &positions_handle_opt {
-                                    h.close_position(
-                                        position.mint.clone(),
-                                        token.clone(),
+                                crate::positions
+                                    ::close_position_direct(
+                                        &position.mint,
                                         exit_price,
-                                        exit_time
-                                    ).await.map(|_| ())
-                                } else {
-                                    Err(
-                                        ScreenerBotError::Position(PositionError::Generic {
-                                            message: "PositionsManager unavailable".to_string(),
-                                        })
-                                    )
-                                }
+                                        "Trading decision".to_string()
+                                    ).await
+                                    .map(|_| ())
                             }
                         ).await
                     {
@@ -1320,10 +1290,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                     &format!("🔥 Phantom position detected for {} - triggering immediate reconciliation", token_symbol)
                                 );
 
-                                // Trigger immediate reconciliation for this phantom position
-                                if let Some(h) = &positions_handle_opt {
-                                    h.trigger_phantom_reconciliation(position.mint.clone()).await;
-                                }
+                                // TODO: Trigger immediate reconciliation for this phantom position
+                                // crate::positions::trigger_phantom_reconciliation(&position.mint).await;
                             }
 
                             false
