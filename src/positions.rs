@@ -6,7 +6,12 @@ use crate::{
         UnifiedQuote,
         config::{ SOL_MINT, QUOTE_SLIPPAGE_PERCENT },
     },
-    transactions::{ get_transaction, Transaction, TransactionStatus },
+    transactions::{
+        get_transaction,
+        Transaction,
+        TransactionStatus,
+        get_global_transaction_manager,
+    },
     rpc::{ lamports_to_sol, sol_to_lamports },
     errors::{ ScreenerBotError, PositionError, DataError, BlockchainError, NetworkError },
     logger::{ log, LogTag },
@@ -16,7 +21,7 @@ use crate::{
         is_debug_swaps_enabled,
         get_max_exit_retries,
     },
-    trader::{ CriticalOperationGuard },
+    trader::{ CriticalOperationGuard, PROFIT_EXTRA_NEEDED_SOL },
     utils::{ get_wallet_address, get_token_balance, safe_truncate },
     configs::{ read_configs },
     positions_db::{
@@ -157,6 +162,9 @@ const MAX_OPEN_POSITIONS: usize = 10;
 const POSITION_OPEN_COOLDOWN_SECS: i64 = 0; // No global cooldown (from backup)
 const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 15; // Re-entry cooldown after closing (from backup)
 
+// Verification safety windows
+const ENTRY_VERIFICATION_MAX_SECS: i64 = 90; // hard cap for entry verification age before treating as timeout
+
 // Sell retry slippages (progressive)
 const SELL_RETRY_SLIPPAGES: &[f64] = &[3.0, 5.0, 8.0, 12.0, 20.0];
 
@@ -190,7 +198,10 @@ pub async fn open_position_direct(
     token: &Token,
     entry_price: f64,
     percent_change: f64,
-    size_sol: f64
+    size_sol: f64,
+    liquidity_tier: Option<String>,
+    profit_target_min: f64,
+    profit_target_max: f64
 ) -> Result<String, String> {
     let _lock = acquire_position_lock(&token.mint).await;
 
@@ -534,8 +545,6 @@ pub async fn open_position_direct(
     }
 
     // Create position optimistically
-    let (profit_min, profit_max) = get_profit_target(token).await;
-
     let new_position = Position {
         id: None, // Will be set by database after insertion
         mint: token.mint.clone(),
@@ -556,9 +565,9 @@ pub async fn open_position_direct(
         effective_entry_price: None,
         effective_exit_price: None,
         sol_received: None,
-        profit_target_min: Some(profit_min),
-        profit_target_max: Some(profit_max),
-        liquidity_tier: determine_liquidity_tier(&token.mint).await.ok(),
+        profit_target_min: Some(profit_target_min),
+        profit_target_max: Some(profit_target_max),
+        liquidity_tier,
         transaction_entry_verified: false,
         transaction_exit_verified: false,
         entry_fee_lamports: None,
@@ -590,8 +599,8 @@ pub async fn open_position_direct(
                     "✅ Position created for {} with signature {} - profit targets: {:.2}%-{:.2}%",
                     token.symbol,
                     get_signature_prefix(&transaction_signature),
-                    profit_min,
-                    profit_max
+                    profit_target_min,
+                    profit_target_max
                 )
             );
         }
@@ -1183,131 +1192,309 @@ pub async fn update_position_tracking(
     Ok(())
 }
 
-/// Verify a position transaction independently
+/// Verify a position transaction with comprehensive analysis and field population
 pub async fn verify_position_transaction(signature: &str) -> Result<bool, String> {
     if is_debug_positions_enabled() {
         log(
             LogTag::Positions,
-            "DEBUG",
+            "VERIFY",
             &format!(
-                "🔍 Starting comprehensive verification for transaction {}",
+                "🔍 Performing comprehensive verification for transaction {}",
                 get_signature_prefix(signature)
             )
         );
     }
 
-    // Get the transaction with timeout
-    let transaction = match
-        tokio::time::timeout(tokio::time::Duration::from_secs(30), get_transaction(signature)).await
-    {
-        Ok(Ok(Some(tx))) => tx,
-        Ok(Ok(None)) => {
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!("❌ Transaction {} not found via RPC", get_signature_prefix(signature))
-                );
+    // Get the transaction with comprehensive verification
+    let transaction = match get_transaction(signature).await {
+        Ok(Some(transaction)) => {
+            // Check transaction status and success
+            match transaction.status {
+                TransactionStatus::Finalized | TransactionStatus::Confirmed => {
+                    if transaction.success {
+                        if is_debug_positions_enabled() {
+                            log(
+                                LogTag::Positions,
+                                "VERIFY_SUCCESS",
+                                &format!(
+                                    "✅ Transaction {} verified successfully: fee={:.6} SOL, sol_change={:.6} SOL",
+                                    get_signature_prefix(signature),
+                                    transaction.fee_sol,
+                                    transaction.sol_balance_change
+                                )
+                            );
+                        }
+                        transaction
+                    } else {
+                        let error_msg = transaction.error_message.unwrap_or(
+                            "Unknown error".to_string()
+                        );
+                        if is_debug_positions_enabled() {
+                            log(
+                                LogTag::Positions,
+                                "VERIFY_FAILED",
+                                &format!(
+                                    "❌ Transaction {} failed on-chain: {}",
+                                    get_signature_prefix(signature),
+                                    error_msg
+                                )
+                            );
+                        }
+                        return Err(format!("Transaction failed on-chain: {}", error_msg));
+                    }
+                }
+                TransactionStatus::Pending => {
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "VERIFY_PENDING",
+                            &format!(
+                                "⏳ Transaction {} still pending verification",
+                                get_signature_prefix(signature)
+                            )
+                        );
+                    }
+                    return Err("Transaction still pending".to_string());
+                }
+                TransactionStatus::Failed(error) => {
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "VERIFY_FAILED",
+                            &format!(
+                                "❌ Transaction {} failed: {}",
+                                get_signature_prefix(signature),
+                                error
+                            )
+                        );
+                    }
+                    return Err(format!("Transaction failed: {}", error));
+                }
             }
-            return Err("Transaction not found".to_string());
         }
-        Ok(Err(e)) => {
+        Ok(None) => {
+            // Transaction not found - check verification age
+            let verification_age_seconds = {
+                let state = GLOBAL_POSITIONS_STATE.lock().await;
+                if let Some(added_at) = state.pending_verifications.get(signature) {
+                    Utc::now().signed_duration_since(*added_at).num_seconds()
+                } else {
+                    0
+                }
+            };
+
             if is_debug_positions_enabled() {
                 log(
                     LogTag::Positions,
                     "DEBUG",
                     &format!(
-                        "❌ RPC error for transaction {}: {}",
+                        "🔍 Transaction {} not found in system - age: {}s",
+                        get_signature_prefix(signature),
+                        verification_age_seconds
+                    )
+                );
+            }
+
+            // Extended propagation grace: allow up to 15s for propagation
+            if verification_age_seconds <= 15 {
+                if is_debug_positions_enabled() {
+                    log(
+                        LogTag::Positions,
+                        "VERIFY_PENDING",
+                        &format!(
+                            "⏳ Transaction {} still within propagation grace ({}s <= 15s)",
+                            get_signature_prefix(signature),
+                            verification_age_seconds
+                        )
+                    );
+                }
+                return Err("Transaction within propagation grace".to_string());
+            }
+
+            // Check if we've exceeded maximum verification time
+            if verification_age_seconds > ENTRY_VERIFICATION_MAX_SECS {
+                if is_debug_positions_enabled() {
+                    log(
+                        LogTag::Positions,
+                        "VERIFY_TIMEOUT",
+                        &format!(
+                            "⏰ Transaction {} verification timeout ({}s > {}s)",
+                            get_signature_prefix(signature),
+                            verification_age_seconds,
+                            ENTRY_VERIFICATION_MAX_SECS
+                        )
+                    );
+                }
+                return Err(format!("Verification timeout: {}s", verification_age_seconds));
+            }
+
+            return Err("Transaction not found in system".to_string());
+        }
+        Err(e) => {
+            if is_debug_positions_enabled() {
+                log(
+                    LogTag::Positions,
+                    "VERIFY_ERROR",
+                    &format!(
+                        "❌ Error getting transaction {}: {}",
                         get_signature_prefix(signature),
                         e
                     )
                 );
             }
-            return Err(format!("RPC error: {}", e));
-        }
-        Err(_) => {
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!("⏰ RPC timeout for transaction {}", get_signature_prefix(signature))
-                );
-            }
-            return Err("RPC timeout".to_string());
+            return Err(format!("Error getting transaction: {}", e));
         }
     };
 
-    // Check transaction status
-    if !transaction.success {
-        if let Some(ref error_msg) = transaction.error_message {
+    // Get transaction manager for swap analysis
+    let transaction_manager = match get_global_transaction_manager().await {
+        Some(manager_guard) => manager_guard,
+        None => {
             if is_debug_positions_enabled() {
                 log(
                     LogTag::Positions,
-                    "DEBUG",
-                    &format!(
-                        "❌ Transaction {} failed with error: {}",
-                        get_signature_prefix(signature),
-                        error_msg
-                    )
+                    "ERROR",
+                    "❌ Transaction manager not available for verification"
                 );
             }
-            return Err(format!("Transaction failed: {}", error_msg));
+            return Err("Transaction manager not available".to_string());
+        }
+    };
+
+    // Perform swap analysis using transaction manager
+    let swap_pnl_info = {
+        let manager = transaction_manager.lock().await;
+        if let Some(ref manager) = *manager {
+            let empty_cache = std::collections::HashMap::new();
+            manager.convert_to_swap_pnl_info(&transaction, &empty_cache, false)
         } else {
             if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!(
-                        "❌ Transaction {} failed with unknown error",
-                        get_signature_prefix(signature)
-                    )
-                );
+                log(LogTag::Positions, "ERROR", "❌ Transaction manager not initialized");
             }
-            return Err("Transaction failed with unknown error".to_string());
+            return Err("Transaction manager not initialized".to_string());
         }
-    }
+    };
 
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "DEBUG",
-            &format!(
-                "✅ RPC verification successful for transaction {}",
-                get_signature_prefix(signature)
-            )
-        );
-    }
-
-    // Process transaction through transaction system for swap analysis
-    // Note: Transaction processing happens automatically through the background service
-    // We mainly need RPC verification which was already completed above
-
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "DEBUG",
-            &format!("✅ Transaction processing completed for {}", get_signature_prefix(signature))
-        );
-    }
-
-    // Update position verification status
+    // Update position verification status and populate fields from transaction data
+    let mut verified = false;
     {
         let mut state = GLOBAL_POSITIONS_STATE.lock().await;
 
-        // Mark position as verified
+        // Find and update the position
         for position in &mut state.positions {
-            if position.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature) {
-                position.transaction_entry_verified = true;
-                if is_debug_positions_enabled() {
-                    log(
-                        LogTag::Positions,
-                        "DEBUG",
-                        &format!("✅ Entry transaction verified for position {}", position.symbol)
-                    );
+            let is_entry =
+                position.entry_transaction_signature.as_ref().map(|s| s.as_str()) ==
+                Some(signature);
+            let is_exit =
+                position.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature);
+
+            if is_entry {
+                // Entry transaction verification
+                if let Some(ref swap_info) = swap_pnl_info {
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "POSITION_ENTRY_SWAP_INFO",
+                            &format!(
+                                "📊 Entry swap info for {}: type={}, token_mint={}, sol_amount={}, token_amount={}, price={:.9}",
+                                position.symbol,
+                                swap_info.swap_type,
+                                &swap_info.token_mint[..8],
+                                swap_info.sol_amount,
+                                swap_info.token_amount,
+                                swap_info.calculated_price_sol
+                            )
+                        );
+                    }
+
+                    if swap_info.swap_type == "Buy" && swap_info.token_mint == position.mint {
+                        // Update position with actual transaction data
+                        position.transaction_entry_verified = true;
+
+                        // Calculate effective entry price using effective SOL spent (excludes ATA rent)
+                        let effective_price = if
+                            swap_info.token_amount.abs() > 0.0 &&
+                            swap_info.effective_sol_spent > 0.0
+                        {
+                            swap_info.effective_sol_spent / swap_info.token_amount.abs()
+                        } else {
+                            swap_info.calculated_price_sol // Fallback to regular price
+                        };
+
+                        position.effective_entry_price = Some(effective_price);
+                        position.total_size_sol = swap_info.sol_amount;
+
+                        // Convert token amount from float to units (with decimals)
+                        if let Some(token_decimals) = get_token_decimals(&position.mint).await {
+                            let token_amount_units = (swap_info.token_amount.abs() *
+                                (10_f64).powi(token_decimals as i32)) as u64;
+                            position.token_amount = Some(token_amount_units);
+
+                            if is_debug_positions_enabled() {
+                                log(
+                                    LogTag::Positions,
+                                    "POSITION_ENTRY_TOKEN_AMOUNT",
+                                    &format!(
+                                        "🔢 Token amount for {}: {} tokens ({} units with {} decimals)",
+                                        position.symbol,
+                                        swap_info.token_amount,
+                                        token_amount_units,
+                                        token_decimals
+                                    )
+                                );
+                            }
+                        }
+
+                        // Convert fee from SOL to lamports
+                        position.entry_fee_lamports = Some(sol_to_lamports(swap_info.fee_sol));
+
+                        verified = true;
+
+                        if is_debug_positions_enabled() {
+                            log(
+                                LogTag::Positions,
+                                "POSITION_ENTRY_VERIFIED",
+                                &format!(
+                                    "✅ Entry transaction verified for {}: price={:.9} SOL, effective_price={:.9} SOL",
+                                    position.symbol,
+                                    swap_info.calculated_price_sol,
+                                    effective_price
+                                )
+                            );
+                        }
+                    } else {
+                        if is_debug_positions_enabled() {
+                            log(
+                                LogTag::Positions,
+                                "POSITION_ENTRY_MISMATCH",
+                                &format!(
+                                    "⚠️ Entry transaction type/token mismatch for {}: expected Buy {}, got {} {}",
+                                    position.symbol,
+                                    get_mint_prefix(&position.mint),
+                                    swap_info.swap_type,
+                                    get_mint_prefix(&swap_info.token_mint)
+                                )
+                            );
+                        }
+                        return Err("Transaction type/token mismatch".to_string());
+                    }
+                } else {
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "POSITION_ENTRY_NO_SWAP",
+                            &format!(
+                                "⚠️ Entry transaction {} has no valid swap analysis for {}",
+                                get_signature_prefix(signature),
+                                position.symbol
+                            )
+                        );
+                    }
+                    return Err("No valid swap analysis for entry transaction".to_string());
                 }
 
                 // Update in database
-                if let Some(position_id) = position.id {
+                if let Some(_position_id) = position.id {
                     let position_clone = position.clone();
                     tokio::spawn(async move {
                         if let Err(e) = update_position(&position_clone).await {
@@ -1320,20 +1507,83 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                     });
                 }
                 break;
-            } else if
-                position.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
-            {
-                position.transaction_exit_verified = true;
-                if is_debug_positions_enabled() {
-                    log(
-                        LogTag::Positions,
-                        "DEBUG",
-                        &format!("✅ Exit transaction verified for position {}", position.symbol)
-                    );
+            } else if is_exit {
+                // Exit transaction verification
+                if let Some(ref swap_info) = swap_pnl_info {
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "POSITION_EXIT_SWAP_INFO",
+                            &format!(
+                                "📊 Exit swap info for {}: type={}, token_mint={}, sol_amount={}, token_amount={}, price={:.9}",
+                                position.symbol,
+                                swap_info.swap_type,
+                                &swap_info.token_mint[..8],
+                                swap_info.sol_amount,
+                                swap_info.token_amount,
+                                swap_info.calculated_price_sol
+                            )
+                        );
+                    }
+
+                    if swap_info.swap_type == "Sell" && swap_info.token_mint == position.mint {
+                        // Update position with actual exit transaction data
+                        position.transaction_exit_verified = true;
+
+                        // Use actual SOL received from swap analysis
+                        position.sol_received = Some(swap_info.effective_sol_spent.abs()); // For sell, this is SOL received
+                        position.effective_exit_price = Some(swap_info.calculated_price_sol);
+
+                        // Convert fee from SOL to lamports
+                        position.exit_fee_lamports = Some(sol_to_lamports(swap_info.fee_sol));
+
+                        verified = true;
+
+                        if is_debug_positions_enabled() {
+                            log(
+                                LogTag::Positions,
+                                "POSITION_EXIT_VERIFIED",
+                                &format!(
+                                    "✅ Exit transaction verified for {}: price={:.9} SOL, sol_received={:.6} SOL",
+                                    position.symbol,
+                                    swap_info.calculated_price_sol,
+                                    swap_info.effective_sol_spent.abs()
+                                )
+                            );
+                        }
+                    } else {
+                        if is_debug_positions_enabled() {
+                            log(
+                                LogTag::Positions,
+                                "POSITION_EXIT_MISMATCH",
+                                &format!(
+                                    "⚠️ Exit transaction type/token mismatch for {}: expected Sell {}, got {} {}",
+                                    position.symbol,
+                                    get_mint_prefix(&position.mint),
+                                    swap_info.swap_type,
+                                    get_mint_prefix(&swap_info.token_mint)
+                                )
+                            );
+                        }
+                        return Err("Transaction type/token mismatch".to_string());
+                    }
+                } else {
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "POSITION_EXIT_NO_SWAP",
+                            &format!(
+                                "⚠️ Exit transaction {} has no valid swap analysis for {}",
+                                get_signature_prefix(signature),
+                                position.symbol
+                            )
+                        );
+                    }
+                    return Err("No valid swap analysis for exit transaction".to_string());
                 }
 
                 // Update in database
-                if let Some(position_id) = position.id {
+                if let Some(_position_id) = position.id {
                     let position_clone = position.clone();
                     tokio::spawn(async move {
                         if let Err(e) = update_position(&position_clone).await {
@@ -1353,18 +1603,31 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
         state.pending_verifications.remove(signature);
     }
 
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "SUCCESS",
-            &format!(
-                "✅ Comprehensive verification completed for transaction {}",
-                get_signature_prefix(signature)
-            )
-        );
+    if verified {
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "SUCCESS",
+                &format!(
+                    "✅ Comprehensive verification completed for transaction {}",
+                    get_signature_prefix(signature)
+                )
+            );
+        }
+        Ok(true)
+    } else {
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "WARNING",
+                &format!(
+                    "⚠️ No matching position found for transaction {}",
+                    get_signature_prefix(signature)
+                )
+            );
+        }
+        Err("No matching position found for transaction".to_string())
     }
-
-    Ok(true)
 }
 
 // ==================== POSITION QUERIES ====================
@@ -1479,91 +1742,155 @@ pub async fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
 
 // ==================== P&L CALCULATION ====================
 
-/// Calculate position P&L with optional current price
+/// Unified profit/loss calculation for both open and closed positions
+/// Uses effective prices and actual token amounts when available
+/// For closed positions with sol_received, uses actual SOL invested vs SOL received
+/// NOTE: sol_received should contain ONLY the SOL from token sale, excluding ATA rent reclaim
 pub async fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "DEBUG",
-            &format!(
-                "📊 Calculating P&L for position {} ({})",
-                position.symbol,
-                get_mint_prefix(&position.mint)
-            )
-        );
+    // Safety check: validate position has valid entry price
+    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+    if entry_price <= 0.0 || !entry_price.is_finite() {
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("❌ Invalid entry price for {}: {}", position.symbol, entry_price)
+            );
+        }
+        // Invalid entry price - return neutral P&L to avoid triggering emergency exits
+        return (0.0, 0.0);
     }
 
-    // Determine price to use (exit_price, provided current_price, or fetch current price)
-    let price_to_use = if let Some(exit_price) = position.exit_price {
-        // Use effective exit price if available, otherwise signal exit price
-        position.effective_exit_price.unwrap_or(exit_price)
-    } else if let Some(provided_price) = current_price {
-        provided_price
-    } else {
-        // Fetch current price for open position
-        match get_token_price_safe(&position.mint).await {
-            Some(price) if price > 0.0 => price,
-            _ => {
-                // Fallback to entry price if current price unavailable
-                if is_debug_positions_enabled() {
+    // For open positions, validate current price if provided
+    if let Some(current) = current_price {
+        if current <= 0.0 || !current.is_finite() {
+            // Invalid current price - return neutral P&L to avoid false emergency signals
+            return (0.0, 0.0);
+        }
+    }
+
+    // For closed positions, prioritize sol_received for most accurate P&L
+    if let (Some(exit_price), Some(sol_received)) = (position.exit_price, position.sol_received) {
+        // Use actual SOL invested vs SOL received for closed positions
+        let sol_invested = position.entry_size_sol;
+
+        // Use actual transaction fees plus profit buffer for P&L calculation
+        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer in P&L calculation
+
+        let net_pnl_sol = sol_received - sol_invested - total_fees;
+        let safe_invested = if sol_invested < 0.00001 { 0.00001 } else { sol_invested };
+        let net_pnl_percent = (net_pnl_sol / safe_invested) * 100.0;
+
+        return (net_pnl_sol, net_pnl_percent);
+    }
+
+    // Fallback for closed positions without sol_received (backward compatibility)
+    if let Some(exit_price) = position.exit_price {
+        let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+        let effective_exit = position.effective_exit_price.unwrap_or(exit_price);
+
+        // For closed positions: actual transaction-based calculation
+        if let Some(token_amount) = position.token_amount {
+            // Get token decimals from cache (async)
+            let token_decimals_opt = get_token_decimals(&position.mint).await;
+
+            // CRITICAL: Skip P&L calculation if decimals are not available
+            let token_decimals = match token_decimals_opt {
+                Some(decimals) => decimals,
+                None => {
                     log(
                         LogTag::Positions,
-                        "WARNING",
+                        "ERROR",
                         &format!(
-                            "⚠️ Could not get current price for {} - using entry price for P&L calculation",
-                            position.symbol
+                            "Cannot calculate P&L for {} - decimals not available, skipping calculation",
+                            position.mint
                         )
                     );
+                    return (0.0, 0.0); // Return zero P&L instead of wrong calculation
                 }
-                position.entry_price
-            }
+            };
+
+            let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+            let entry_cost = position.entry_size_sol;
+            let exit_value = ui_token_amount * effective_exit;
+
+            // Account for actual buy + sell fees plus profit buffer
+            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+            let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+            let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
+            let net_pnl_sol = exit_value - entry_cost - total_fees;
+            let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
+
+            return (net_pnl_sol, net_pnl_percent);
         }
-    };
 
-    // Use effective entry price if available, otherwise signal entry price
-    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+        // Fallback for closed positions without token amount
+        let price_change = (effective_exit - entry_price) / entry_price;
+        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
+        let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
+        let net_pnl_percent = price_change * 100.0 - fee_percent;
+        let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
 
-    // Calculate gross P&L based on price movement
-    let price_change_ratio = if entry_price > 0.0 {
-        price_to_use / entry_price
-    } else {
-        1.0 // No change if entry price is invalid
-    };
-
-    // Gross P&L is the change in position value
-    let gross_pnl_sol = position.entry_size_sol * (price_change_ratio - 1.0);
-
-    // Calculate total fees (excluding ATA rent from trading costs)
-    let total_fees_sol = calculate_position_total_fees(position);
-
-    // Net P&L subtracts fees from gross P&L
-    let net_pnl_sol = gross_pnl_sol - total_fees_sol;
-
-    // Calculate percentage return
-    let pnl_percent = if position.entry_size_sol > 0.0 {
-        (net_pnl_sol / position.entry_size_sol) * 100.0
-    } else {
-        0.0
-    };
-
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "DEBUG",
-            &format!(
-                "📊 P&L calculated for {} - Entry: {:.8}, Current/Exit: {:.8}, Gross: {:.4} SOL, Fees: {:.4} SOL, Net: {:.4} SOL ({:.2}%)",
-                position.symbol,
-                entry_price,
-                price_to_use,
-                gross_pnl_sol,
-                total_fees_sol,
-                net_pnl_sol,
-                pnl_percent
-            )
-        );
+        return (net_pnl_sol, net_pnl_percent);
     }
 
-    (net_pnl_sol, pnl_percent)
+    // For open positions, use current price
+    if let Some(current) = current_price {
+        let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+
+        // For open positions: current value vs entry cost
+        if let Some(token_amount) = position.token_amount {
+            // Get token decimals from cache (async)
+            let token_decimals_opt = get_token_decimals(&position.mint).await;
+
+            // CRITICAL: Skip P&L calculation if decimals are not available
+            let token_decimals = match token_decimals_opt {
+                Some(decimals) => decimals,
+                None => {
+                    log(
+                        LogTag::Positions,
+                        "ERROR",
+                        &format!(
+                            "Cannot calculate P&L for {} - decimals not available, skipping calculation",
+                            position.mint
+                        )
+                    );
+                    return (0.0, 0.0); // Return zero P&L instead of wrong calculation
+                }
+            };
+
+            let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+            let current_value = ui_token_amount * current;
+            let entry_cost = position.entry_size_sol;
+
+            // Account for actual buy fee (already paid) + estimated sell fee + profit buffer
+            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+            let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
+            let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
+            let net_pnl_sol = current_value - entry_cost - total_fees;
+            let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
+
+            return (net_pnl_sol, net_pnl_percent);
+        }
+
+        // Fallback for open positions without token amount
+        let price_change = (current - entry_price) / entry_price;
+        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
+        let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
+        let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
+        let net_pnl_percent = price_change * 100.0 - fee_percent;
+        let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
+
+        return (net_pnl_sol, net_pnl_percent);
+    }
+
+    // No price available
+    (0.0, 0.0)
 }
 
 /// Calculate total fees for a position
@@ -1572,39 +1899,6 @@ pub fn calculate_position_total_fees(position: &Position) -> f64 {
     let entry_fees_sol = (position.entry_fee_lamports.unwrap_or(0) as f64) / 1_000_000_000.0;
     let exit_fees_sol = (position.exit_fee_lamports.unwrap_or(0) as f64) / 1_000_000_000.0;
     entry_fees_sol + exit_fees_sol
-}
-
-// ==================== LIQUIDITY TIER ====================
-
-/// Determine liquidity tier for a token
-pub async fn determine_liquidity_tier(mint: &str) -> Result<String, String> {
-    use crate::tokens::get_pool_service;
-
-    // Get pool service to fetch liquidity information
-    let pool_service = get_pool_service();
-
-    // Try to get pool data for the token
-    let liquidity_usd = if let Some(pool_result) = pool_service.get_pool_price(mint, None).await {
-        pool_result.liquidity_usd
-    } else {
-        return Ok("UNKNOWN".to_string());
-    };
-
-    if liquidity_usd < 0.0 {
-        return Ok("INVALID".to_string());
-    }
-
-    // Liquidity tier classification based on USD value (same as backup file)
-    let tier = match liquidity_usd {
-        x if x < 1_000.0 => "MICRO", // < $1K
-        x if x < 10_000.0 => "SMALL", // $1K - $10K
-        x if x < 50_000.0 => "MEDIUM", // $10K - $50K
-        x if x < 250_000.0 => "LARGE", // $50K - $250K
-        x if x < 1_000_000.0 => "XLARGE", // $250K - $1M
-        _ => "MEGA", // > $1M
-    };
-
-    Ok(tier.to_string())
 }
 
 // ==================== BACKGROUND TASKS ====================
@@ -2012,17 +2306,6 @@ async fn is_duplicate_swap_attempt(mint: &str, size_sol: f64, swap_type: &str) -
     }
 
     false
-}
-
-/// Get profit targets for a token based on its characteristics
-async fn get_profit_target(token: &Token) -> (f64, f64) {
-    // Default profit targets - could be made configurable or dynamic
-    let base_min = 10.0; // 10% minimum
-    let base_max = 50.0; // 50% maximum
-
-    // Could adjust based on token liquidity, market cap, etc.
-    // For now, return defaults
-    (base_min, base_max)
 }
 
 /// Get token balance safely with error handling

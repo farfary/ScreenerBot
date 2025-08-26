@@ -80,6 +80,7 @@ use screenerbot::swaps::{
     JupiterSwapResult,
 };
 use screenerbot::positions;
+use screenerbot::entry::get_profit_target;
 
 use spl_associated_token_account::get_associated_token_address;
 use clap::{ Arg, Command };
@@ -4935,13 +4936,20 @@ async fn test_real_position_management(
         "🟢 STEP 1: Opening position with transaction verification..."
     );
 
+    // Get profit targets and liquidity tier for test
+    let (profit_min, profit_max) = get_profit_target(&test_token).await;
+    let liquidity_tier = Some("TEST".to_string()); // Test tier for debug
+
     // Open position using the PositionsManager
     if
         let Err(e) = positions::open_position_direct(
             &test_token,
             current_price,
             -5.0,
-            sol_amount
+            sol_amount,
+            liquidity_tier,
+            profit_min,
+            profit_max
         ).await
     {
         log(LogTag::Transactions, "ERROR", &format!("Failed to open position: {}", e));

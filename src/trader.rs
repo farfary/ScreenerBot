@@ -161,6 +161,7 @@ use crate::utils::check_shutdown_or_delay;
 use crate::utils::*;
 
 use crate::entry::should_buy;
+use crate::entry::get_profit_target;
 use crate::filtering::log_filtering_summary;
 use crate::errors::{ ScreenerBotError, PositionError };
 
@@ -799,12 +800,43 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             }
                         };
 
+                        // Get profit targets and liquidity tier
+                        let (profit_min, profit_max) = get_profit_target(&token).await;
+
+                        // Get liquidity tier from pool data
+                        let liquidity_tier = if
+                            let Some(pool_result) = pool_service.get_pool_price(
+                                &token.mint,
+                                None
+                            ).await
+                        {
+                            let liquidity_usd = pool_result.liquidity_usd;
+                            if liquidity_usd < 0.0 {
+                                Some("INVALID".to_string())
+                            } else {
+                                let tier = match liquidity_usd {
+                                    x if x < 1_000.0 => "MICRO", // < $1K
+                                    x if x < 10_000.0 => "SMALL", // $1K - $10K
+                                    x if x < 50_000.0 => "MEDIUM", // $10K - $50K
+                                    x if x < 250_000.0 => "LARGE", // $50K - $250K
+                                    x if x < 1_000_000.0 => "XLARGE", // $250K - $1M
+                                    _ => "MEGA", // > $1M
+                                };
+                                Some(tier.to_string())
+                            }
+                        } else {
+                            Some("UNKNOWN".to_string())
+                        };
+
                         // Open position directly
                         let _ = crate::positions::open_position_direct(
                             &token,
                             current_price,
                             change,
-                            TRADE_SIZE_SOL
+                            TRADE_SIZE_SOL,
+                            liquidity_tier,
+                            profit_min,
+                            profit_max
                         ).await;
                     }).await
                 {
