@@ -1024,7 +1024,25 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             // Get current price from our parallel fetch results
             if let Some(&current_price) = price_map.get(&position.mint) {
                 if current_price > 0.0 && current_price.is_finite() {
-                    // Position tracking is handled by price service when prices are updated
+                    // Send price update to positions manager for tracking
+                    if let Some(positions_handle) = crate::positions::get_positions_handle().await {
+                        let tracking_result = positions_handle.update_tracking(
+                            position.mint.clone(),
+                            current_price
+                        ).await;
+                        if is_debug_trader_enabled() && !tracking_result {
+                            log(
+                                LogTag::Trader,
+                                "WARN",
+                                &format!(
+                                    "Failed to update tracking for {} at price {:.8}",
+                                    position.symbol,
+                                    current_price
+                                )
+                            );
+                        }
+                    }
+
                     let now = Utc::now();
 
                     // Calculate P&L for logging and decision making

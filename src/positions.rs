@@ -689,6 +689,7 @@ enum BackgroundTaskMessage {
     RetryNeeded,
     CleanupNeeded,
     ReconciliationNeeded(Vec<(usize, String, String)>), // positions needing reconciliation
+    TrackingSaveNeeded, // Periodic save for tracking updates
 }
 
 /// PositionsManager handles all position operations in a centralized service
@@ -925,6 +926,14 @@ impl PositionsManager {
                 if reconciliation_result.is_err() {
                     log(LogTag::Positions, "WARN", "Reconciliation timed out after 120s");
                 }
+            }
+            BackgroundTaskMessage::TrackingSaveNeeded => {
+                if is_debug_positions_enabled() {
+                    log(LogTag::Positions, "DEBUG", "💾 Processing tracking save request");
+                }
+
+                // Save position tracking updates to disk
+                self.save_positions_to_disk().await;
             }
         }
     }
@@ -3185,8 +3194,8 @@ impl PositionsManager {
             position.current_price = Some(current_price);
             position.current_price_updated = Some(Utc::now());
 
-            // in-memory only; no persistence
-            true
+            // Return whether any tracking data was updated (for potential save to disk)
+            updated || true // Always return true since current_price was updated
         } else {
             false
         }
@@ -5687,6 +5696,7 @@ async fn run_background_tasks(shutdown: Arc<Notify>, bg_tx: mpsc::Sender<Backgro
     let mut cleanup_interval = interval(Duration::from_secs(120)); // Increased from 30s to 120s to allow more time for transaction verification during busy periods
     let mut reconciliation_interval = interval(Duration::from_secs(1800)); // 30 minutes
     let mut position_locks_cleanup_interval = interval(Duration::from_secs(300)); // Clean position locks every 5 minutes
+    let mut tracking_save_interval = interval(Duration::from_secs(60)); // Save tracking updates every minute
 
     let mut reconciliation_in_progress = false;
 
@@ -5708,6 +5718,9 @@ async fn run_background_tasks(shutdown: Arc<Notify>, bg_tx: mpsc::Sender<Backgro
             _ = position_locks_cleanup_interval.tick() => {
                 // Clean up unused position locks to prevent memory leaks
                 cleanup_unused_position_locks().await;
+            }
+            _ = tracking_save_interval.tick() => {
+                let _ = bg_tx.send(BackgroundTaskMessage::TrackingSaveNeeded).await;
             }
             _ = reconciliation_interval.tick() => {
                 if reconciliation_in_progress {
