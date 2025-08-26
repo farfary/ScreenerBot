@@ -286,7 +286,7 @@ pub async fn get_tokens_from_safe_system() -> Vec<Token> {
 
 /// Update open positions tracking - now handled by positions manager
 async fn update_position_tracking_in_service() {
-    let open_mints = if let Some(h) = crate::positions::get_positions_manager().await {
+    let open_mints = if let Some(h) = crate::positions::get_positions_handle().await {
         h.get_open_mints().await
     } else {
         log(LogTag::Trader, "WARN", "⚠️ No positions handle available for tracking update");
@@ -805,7 +805,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         };
 
                         // Send open-position request to PositionsManager via handle
-                        let positions_handle_opt = crate::positions::get_positions_manager().await;
+                        let positions_handle_opt = crate::positions::get_positions_handle().await;
                         if let Some(h) = &positions_handle_opt {
                             let _ = h.open_position(
                                 token.clone(),
@@ -915,7 +915,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
         // First, collect all open position mints to fetch pool prices in parallel
         let open_position_mints: Vec<String> = if
-            let Some(h) = crate::positions::get_positions_manager().await
+            let Some(h) = crate::positions::get_positions_handle().await
         {
             h.get_open_mints().await
         } else {
@@ -961,7 +961,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
         // First, collect open positions data (without holding mutex across await)
         let open_positions_data_all: Vec<crate::positions::Position> = if
-            let Some(h) = crate::positions::get_positions_manager().await
+            let Some(h) = crate::positions::get_positions_handle().await
         {
             h.get_open_positions().await
         } else {
@@ -1025,7 +1025,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             if let Some(&current_price) = price_map.get(&position.mint) {
                 if current_price > 0.0 && current_price.is_finite() {
                     // Send price update to positions manager for tracking
-                    if let Some(positions_handle) = crate::positions::get_positions_manager().await {
+                    if let Some(positions_handle) = crate::positions::get_positions_handle().await {
                         let tracking_result = positions_handle.update_tracking(
                             position.mint.clone(),
                             current_price
@@ -1252,7 +1252,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 // Clone shutdown for use in the spawned sell task
                 let shutdown_for_task = shutdown.clone();
                 // We already have the position from the analysis phase for logging only
-                let positions_handle_opt = crate::positions::get_positions_manager().await;
+                let positions_handle_opt = crate::positions::get_positions_handle().await;
                 let handle = tokio::spawn(async move {
                     let _permit = permit; // Keep permit alive for duration of task
 
