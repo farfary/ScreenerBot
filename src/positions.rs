@@ -31,7 +31,7 @@ use once_cell::sync::Lazy;
 use serde::{ Deserialize, Serialize };
 use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;
-use tokio::sync::{ mpsc, oneshot, Notify, Mutex as AsyncMutex, RwLock };
+use tokio::sync::{ mpsc, oneshot, Notify, Mutex as AsyncMutex };
 use tokio::fs;
 use tokio::time::{ interval, Duration, Instant };
 
@@ -494,68 +494,6 @@ static ACTIVE_SELLS: Lazy<Arc<AsyncMutex<HashSet<String>>>> = Lazy::new(||
     Arc::new(AsyncMutex::new(HashSet::new()))
 );
 
-// =============================================================================
-// POSITION CACHE SYSTEM - Fast access for summary without blocking actor
-// =============================================================================
-
-#[derive(Debug, Clone)]
-pub struct PositionSnapshot {
-    pub open_positions: Vec<Position>,
-    pub closed_positions: Vec<Position>,
-    pub open_count: usize,
-    pub closed_count: usize,
-    pub total_invested_sol: f64,
-    pub total_pnl_sol: f64,
-    pub last_updated: DateTime<Utc>,
-}
-
-impl Default for PositionSnapshot {
-    fn default() -> Self {
-        Self {
-            open_positions: Vec::new(),
-            closed_positions: Vec::new(),
-            open_count: 0,
-            closed_count: 0,
-            total_invested_sol: 0.0,
-            total_pnl_sol: 0.0,
-            last_updated: Utc::now(),
-        }
-    }
-}
-
-/// Global cached position snapshot for fast summary access
-static POSITIONS_CACHE: Lazy<Arc<RwLock<PositionSnapshot>>> = Lazy::new(||
-    Arc::new(RwLock::new(PositionSnapshot::default()))
-);
-
-/// Update the position cache (called by PositionsManager after changes)
-async fn update_positions_cache(open: Vec<Position>, closed: Vec<Position>) {
-    let total_invested = open
-        .iter()
-        .map(|p| p.entry_size_sol)
-        .sum();
-
-    // Calculate total P&L for closed positions
-    let mut total_pnl = 0.0;
-    for position in &closed {
-        let (pnl_sol, _) = calculate_position_pnl(position, None).await;
-        total_pnl += pnl_sol;
-    }
-
-    let snapshot = PositionSnapshot {
-        open_count: open.len(),
-        closed_count: closed.len(),
-        total_invested_sol: total_invested,
-        total_pnl_sol: total_pnl,
-        open_positions: open,
-        closed_positions: closed,
-        last_updated: Utc::now(),
-    };
-
-    let mut cache = POSITIONS_CACHE.write().await;
-    *cache = snapshot;
-}
-
 // 2. BALANCE_CACHE: Short-lived cache for token balances to collapse bursts of identical RPC calls.
 // Key: wallet|mint  Value: (balance, Instant timestamp)
 struct CachedBalance {
@@ -751,7 +689,6 @@ enum BackgroundTaskMessage {
     RetryNeeded,
     CleanupNeeded,
     ReconciliationNeeded(Vec<(usize, String, String)>), // positions needing reconciliation
-    CacheRefreshNeeded,
 }
 
 /// PositionsManager handles all position operations in a centralized service
@@ -849,9 +786,6 @@ impl PositionsManager {
         tokio::spawn(async move {
             run_background_tasks(shutdown_clone, bg_tx_clone).await;
         });
-
-        // Initialize cache on startup
-        self.refresh_positions_cache().await;
 
         loop {
             tokio::select! {
@@ -991,10 +925,6 @@ impl PositionsManager {
                 if reconciliation_result.is_err() {
                     log(LogTag::Positions, "WARN", "Reconciliation timed out after 120s");
                 }
-            }
-            BackgroundTaskMessage::CacheRefreshNeeded => {
-                // Cache refresh should always be fast
-                self.refresh_positions_cache().await;
             }
         }
     }
@@ -3255,9 +3185,6 @@ impl PositionsManager {
             position.current_price = Some(current_price);
             position.current_price_updated = Some(Utc::now());
 
-            // 🚀 IMMEDIATE CACHE REFRESH: Update cache so summary shows new prices within 7 seconds
-            self.refresh_positions_cache().await;
-
             // in-memory only; no persistence
             true
         } else {
@@ -5488,17 +5415,6 @@ impl PositionsManager {
                 log(LogTag::Positions, "ERROR", &format!("Failed to serialize positions: {}", e));
             }
         }
-
-        // Always update cache after position changes, regardless of serialization or disk save success
-        // This ensures cache consistency with in-memory state
-        self.refresh_positions_cache().await;
-    }
-
-    /// Refresh the position cache with current data
-    async fn refresh_positions_cache(&self) {
-        let open = self.get_open_positions();
-        let closed = self.get_closed_positions();
-        update_positions_cache(open, closed).await;
     }
 }
 
@@ -5770,7 +5686,6 @@ async fn run_background_tasks(shutdown: Arc<Notify>, bg_tx: mpsc::Sender<Backgro
     let mut retry_interval = interval(Duration::from_secs(30));
     let mut cleanup_interval = interval(Duration::from_secs(120)); // Increased from 30s to 120s to allow more time for transaction verification during busy periods
     let mut reconciliation_interval = interval(Duration::from_secs(1800)); // 30 minutes
-    let mut cache_refresh_interval = interval(Duration::from_secs(10)); // Refresh cache every 10s for fresher summary
     let mut position_locks_cleanup_interval = interval(Duration::from_secs(300)); // Clean position locks every 5 minutes
 
     let mut reconciliation_in_progress = false;
@@ -5790,9 +5705,6 @@ async fn run_background_tasks(shutdown: Arc<Notify>, bg_tx: mpsc::Sender<Backgro
             _ = cleanup_interval.tick() => {
                 let _ = bg_tx.send(BackgroundTaskMessage::CleanupNeeded).await;
             }
-            _ = cache_refresh_interval.tick() => {
-                let _ = bg_tx.send(BackgroundTaskMessage::CacheRefreshNeeded).await;
-            }
             _ = position_locks_cleanup_interval.tick() => {
                 // Clean up unused position locks to prevent memory leaks
                 cleanup_unused_position_locks().await;
@@ -5804,9 +5716,17 @@ async fn run_background_tasks(shutdown: Arc<Notify>, bg_tx: mpsc::Sender<Backgro
                 
                 reconciliation_in_progress = true;
                 
-                // Get positions that need reconciliation (using cached data to avoid blocking)
-                let cached_snapshot = get_cached_position_snapshot().await;
-                let positions_needing_reconciliation: Vec<_> = cached_snapshot.open_positions.iter().enumerate()
+                // Get positions that need reconciliation (from positions manager)
+                let open_positions = match tokio::time::timeout(Duration::from_secs(2), get_open_positions()).await {
+                    Ok(positions) => positions,
+                    Err(_) => {
+                        log(LogTag::Positions, "WARN", "Timeout getting positions for reconciliation - skipping");
+                        reconciliation_in_progress = false;
+                        continue;
+                    }
+                };
+                
+                let positions_needing_reconciliation: Vec<_> = open_positions.iter().enumerate()
                     .filter_map(|(index, p)| {
                         let needs_reconciliation = 
                             (p.exit_transaction_signature.is_some() && !p.transaction_exit_verified) ||
@@ -5873,32 +5793,8 @@ pub async fn get_closed_positions() -> Vec<Position> {
     }
 }
 
-/// Fast cache-based position retrieval for summary (non-blocking)
-pub async fn get_cached_open_positions() -> Vec<Position> {
-    let cache = POSITIONS_CACHE.read().await;
-    cache.open_positions.clone()
-}
-
-/// Fast cache-based position retrieval for summary (non-blocking)
-pub async fn get_cached_closed_positions() -> Vec<Position> {
-    let cache = POSITIONS_CACHE.read().await;
-    cache.closed_positions.clone()
-}
-
-/// Fast cache-based position snapshot for summary (non-blocking)
-pub async fn get_cached_position_snapshot() -> PositionSnapshot {
-    let cache = POSITIONS_CACHE.read().await;
-    cache.clone()
-}
-
 pub async fn get_open_positions_count() -> usize {
     if let Some(h) = get_positions_handle().await { h.get_open_positions_count().await } else { 0 }
-}
-
-/// Fast cache-based position count for summary (non-blocking)
-pub async fn get_cached_open_positions_count() -> usize {
-    let cache = POSITIONS_CACHE.read().await;
-    cache.open_count
 }
 
 pub async fn get_positions_by_state(state: PositionState) -> Vec<Position> {

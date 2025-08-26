@@ -522,47 +522,29 @@ pub async fn print_positions_snapshot() {
     // The new pool price system runs in background and continuously updates prices
     // for open positions, so we don't need to refresh them here
 
-    // Use cached positions for fast access without blocking on actor
-    // This prevents timeouts when the positions manager is busy with background tasks
+    // Get positions directly from positions manager
     let collect_start = Instant::now();
 
-    // Try cached positions first (fast path)
-    let cached_snapshot = crate::positions::get_cached_position_snapshot().await;
-    let cache_age_minutes = (Utc::now() - cached_snapshot.last_updated).num_minutes();
-
-    let (open_positions, closed_positions) = if cache_age_minutes < 5 {
-        // Use cache if it's less than 5 minutes old
-        if is_debug_summary_enabled() {
+    let (open_positions, closed_positions) = match
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let open = get_open_positions().await;
+            let closed = get_closed_positions().await;
+            (open, closed)
+        }).await
+    {
+        Ok((open, closed)) => {
+            if is_debug_summary_enabled() {
+                log(LogTag::Summary, "DEBUG", "Retrieved positions from positions manager");
+            }
+            (open, closed)
+        }
+        Err(_) => {
             log(
                 LogTag::Summary,
-                "DEBUG",
-                &format!("Using cached positions (age: {} minutes)", cache_age_minutes)
+                "WARN",
+                "Timeout retrieving positions from manager - returning empty data"
             );
-        }
-        (cached_snapshot.open_positions, cached_snapshot.closed_positions)
-    } else {
-        // Fallback to actor query with timeout for fresh data
-        match
-            tokio::time::timeout(Duration::from_secs(3), async {
-                let open = get_open_positions().await;
-                let closed = get_closed_positions().await;
-                (open, closed)
-            }).await
-        {
-            Ok((open, closed)) => {
-                if is_debug_summary_enabled() {
-                    log(LogTag::Summary, "DEBUG", "Using fresh positions from actor");
-                }
-                (open, closed)
-            }
-            Err(_) => {
-                log(
-                    LogTag::Summary,
-                    "WARN",
-                    "Timeout collecting fresh positions - using cached data"
-                );
-                (cached_snapshot.open_positions, cached_snapshot.closed_positions)
-            }
+            (Vec::new(), Vec::new())
         }
     };
 
@@ -894,8 +876,8 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
         );
     }
 
-    // Get open positions count using existing function
-    let open_count = get_cached_open_positions_count().await;
+    // Get open positions count using positions manager
+    let open_count = get_open_positions_count().await;
 
     if is_debug_summary_enabled() {
         log(LogTag::Summary, "DEBUG", &format!("Found {} open positions for summary", open_count));

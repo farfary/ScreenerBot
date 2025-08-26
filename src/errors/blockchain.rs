@@ -6,6 +6,7 @@ use chrono::{ DateTime, Utc };
 use serde::{ Deserialize, Serialize };
 use std::fmt;
 use tokio::time::Duration;
+use crate::utils::safe_truncate;
 
 /// Primary Solana blockchain error classification
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -338,12 +339,16 @@ impl BlockchainError {
                     Some(age) if *age > 300 =>
                         format!(
                             "Transaction {} not found after {} minutes - likely failed",
-                            &signature[..8],
+                            safe_truncate(signature, 8),
                             age / 60
                         ),
                     Some(age) =>
-                        format!("Transaction {} still processing ({}s)", &signature[..8], age),
-                    None => format!("Transaction {} not yet indexed", &signature[..8]),
+                        format!(
+                            "Transaction {} still processing ({}s)",
+                            safe_truncate(signature, 8),
+                            age
+                        ),
+                    None => format!("Transaction {} not yet indexed", safe_truncate(signature, 8)),
                 }
             }
             BlockchainError::BlockhashExpired { signature, age_seconds, .. } => {
@@ -351,7 +356,7 @@ impl BlockchainError {
                     "Transaction {} failed: blockhash expired ({}s old)",
                     signature
                         .as_ref()
-                        .map(|s| &s[..8])
+                        .map(|s| safe_truncate(s, 8))
                         .unwrap_or("unknown"),
                     age_seconds
                 )
@@ -366,13 +371,13 @@ impl BlockchainError {
             BlockchainError::InsufficientFunds { signature, required, available } => {
                 format!(
                     "Transaction {} failed: insufficient funds (need {} lamports, have {})",
-                    &signature[..8],
+                    safe_truncate(signature, 8),
                     required,
                     available
                 )
             }
             BlockchainError::AccountNotFound { pubkey, context, .. } => {
-                format!("Account {} not found ({})", &pubkey[..8], context)
+                format!("Account {} not found ({})", safe_truncate(pubkey, 8), context)
             }
             _ => format!("{:?}", self), // Fallback to debug format
         }
