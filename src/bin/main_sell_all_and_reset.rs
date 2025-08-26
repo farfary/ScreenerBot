@@ -92,8 +92,8 @@ fn print_help() {
     println!("");
     println!("DATA FILES THAT WILL BE DELETED:");
     println!("    • data/rpc_stats.json (RPC statistics)");
-    println!("    • data/positions.json (trading positions)");
     println!("    • data/ata_failed_cache.json (failed ATA cache)");
+    println!("    • data/positions.db (trading positions database)");
     println!("    • logs/screenerbot_*.log (all bot log files)");
     println!("");
     println!("FILES THAT WILL BE PRESERVED:");
@@ -132,8 +132,8 @@ fn print_help() {
 /// Data files to be removed during reset
 const DATA_FILES_TO_REMOVE: &[&str] = &[
     "data/rpc_stats.json",
-    "data/positions.json",
     "data/ata_failed_cache.json",
+    "data/positions.db",
 ];
 
 /// Token account information from Solana RPC

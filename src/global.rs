@@ -73,7 +73,6 @@ pub const TOKEN_BLACKLIST: &str = "data/token_blacklist.json";
 pub const RPC_STATS: &str = "data/rpc_stats.json";
 
 /// Position and trading data
-pub const POSITIONS_FILE: &str = "data/positions.json";
 pub const ENTRY_ANALYSIS: &str = "data/entry_analysis.json";
 
 /// Cache directories

@@ -261,6 +261,7 @@ pub enum PositionError {
     Generic {
         message: String,
     },
+    DatabaseError(String),
 }
 
 impl std::fmt::Display for PositionError {
@@ -275,6 +276,7 @@ impl std::fmt::Display for PositionError {
                 )
             }
             PositionError::Generic { message } => write!(f, "{}", message),
+            PositionError::DatabaseError(msg) => write!(f, "Database error: {}", msg),
             _ => write!(f, "{:?}", self),
         }
     }

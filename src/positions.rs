@@ -1,6 +1,11 @@
 use crate::global::*;
 use crate::logger::{ log, LogTag, log_price_change };
 use crate::rpc::{ lamports_to_sol, get_rpc_client, sol_to_lamports };
+use crate::positions_db::{
+    PositionsDatabase,
+    with_positions_database_async,
+    initialize_positions_database,
+};
 use crate::errors::{
     ScreenerBotError,
     blockchain::{ BlockchainError, parse_solana_error },
@@ -188,6 +193,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Position {
+    pub id: Option<i64>, // Database ID - None for new positions
     pub mint: String,
     pub symbol: String,
     pub name: String,
@@ -742,8 +748,18 @@ impl PositionsManager {
 
     /// Async initialization after construction
     pub async fn initialize(&mut self) {
-        // Load positions from disk on startup
-        self.load_positions_from_disk().await;
+        // Initialize database first
+        if let Err(e) = initialize_positions_database().await {
+            log(
+                LogTag::Positions,
+                "ERROR",
+                &format!("Failed to initialize positions database: {}", e)
+            );
+            return;
+        }
+
+        // Load positions from database on startup
+        self.load_positions_from_database().await;
 
         // Re-queue unverified transactions for comprehensive verification
         self.requeue_unverified_transactions();
@@ -932,8 +948,8 @@ impl PositionsManager {
                     log(LogTag::Positions, "DEBUG", "💾 Processing tracking save request");
                 }
 
-                // Save position tracking updates to disk
-                self.save_positions_to_disk().await;
+                // Clean up phantom positions from database
+                self.cleanup_phantom_positions_database().await;
             }
         }
     }
@@ -1756,14 +1772,14 @@ impl PositionsManager {
                 "RECONCILE_COMPLETE",
                 &format!("🎯 Targeted reconciliation healed {} positions", healed_positions)
             );
-            self.save_positions_to_disk().await;
+            self.cleanup_phantom_positions_database().await;
         } else if phantom_updates_made || phantom_resolutions_made {
             log(
                 LogTag::Positions,
                 "RECONCILE_COMPLETE",
                 "🎯 Targeted reconciliation completed - phantom position updates saved"
             );
-            self.save_positions_to_disk().await;
+            self.cleanup_phantom_positions_database().await;
         } else {
             log(
                 LogTag::Positions,
@@ -2278,6 +2294,7 @@ impl PositionsManager {
                 let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
 
                 let new_position = Position {
+                    id: None, // Will be set by database after insertion
                     mint: token.mint.clone(),
                     symbol: token.symbol.clone(),
                     name: token.name.clone(),
@@ -2312,24 +2329,34 @@ impl PositionsManager {
                     closed_reason: None,
                 };
 
-                // Add position to in-memory list
-                self.positions.push(new_position);
+                // Save position to database first
+                match self.save_position_to_database(&new_position).await {
+                    Ok(_) => {
+                        // Add position to in-memory list
+                        self.positions.push(new_position);
 
-                // Save positions to disk after adding new position
-                self.save_positions_to_disk().await;
-
-                if is_debug_positions_enabled() {
-                    log(
-                        LogTag::Positions,
-                        "DEBUG",
-                        &format!(
-                            "✅ Position created for {} with signature {} - profit targets: {:.2}%-{:.2}%",
-                            token.symbol,
-                            get_signature_prefix(&transaction_signature),
-                            profit_min,
-                            profit_max
-                        )
-                    );
+                        if is_debug_positions_enabled() {
+                            log(
+                                LogTag::Positions,
+                                "DEBUG",
+                                &format!(
+                                    "✅ Position created for {} with signature {} - profit targets: {:.2}%-{:.2}%",
+                                    token.symbol,
+                                    get_signature_prefix(&transaction_signature),
+                                    profit_min,
+                                    profit_max
+                                )
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Positions,
+                            "ERROR",
+                            &format!("Failed to save position to database: {}", e)
+                        );
+                        return Err(ScreenerBotError::Position(PositionError::DatabaseError(e)));
+                    }
                 }
 
                 // Log entry transaction with comprehensive verification
@@ -2947,8 +2974,14 @@ impl PositionsManager {
                 if let Some(pos) = self.positions.iter_mut().find(|p| p.mint == position.mint) {
                     *pos = position.clone();
 
-                    // Save positions to disk after updating position
-                    self.save_positions_to_disk().await;
+                    // Save updated position to database
+                    if let Err(e) = self.save_position_to_database(&position).await {
+                        log(
+                            LogTag::Positions,
+                            "ERROR",
+                            &format!("Failed to save position {} to database: {}", position.mint, e)
+                        );
+                    }
                 }
 
                 // Log exit transaction with comprehensive verification
@@ -3246,8 +3279,8 @@ impl PositionsManager {
             // Add to verification queue for proper completion
             self.pending_verifications.insert(signature.to_string(), now);
 
-            // Save positions to disk immediately
-            self.save_positions_to_disk().await;
+            // Clean up phantom positions from database
+            self.cleanup_phantom_positions_database().await;
         } else {
             log(
                 LogTag::Positions,
@@ -3283,9 +3316,9 @@ impl PositionsManager {
         });
         let removed = before != self.positions.len();
 
-        // Save positions to disk after removal
+        // Clean up phantom positions from database after removal
         if removed {
-            self.save_positions_to_disk().await;
+            self.cleanup_phantom_positions_database().await;
         }
 
         removed
@@ -3572,8 +3605,8 @@ impl PositionsManager {
                             }
 
                             if verification_success {
-                                // Save positions to disk after verification update
-                                self.save_positions_to_disk().await;
+                                // Clean up phantom positions after verification update
+                                self.cleanup_phantom_positions_database().await;
                             }
 
                             // Remove from pending
@@ -3812,8 +3845,8 @@ impl PositionsManager {
                 )
             );
 
-            // Save positions to disk after verification update
-            self.save_positions_to_disk().await;
+            // Clean up phantom positions after verification update
+            self.cleanup_phantom_positions_database().await;
         }
 
         Ok(())
@@ -4152,8 +4185,8 @@ impl PositionsManager {
                 ));
             }
 
-            // Save positions to disk after handling failure
-            self.save_positions_to_disk().await;
+            // Clean up phantom positions after handling failure
+            self.cleanup_phantom_positions_database().await;
         }
 
         Ok(())
@@ -4695,7 +4728,7 @@ impl PositionsManager {
                     to_close.len()
                 )
             );
-            self.save_positions_to_disk().await;
+            self.cleanup_phantom_positions_database().await;
         }
     }
 
@@ -4773,7 +4806,7 @@ impl PositionsManager {
             )
         );
 
-        self.save_positions_to_disk().await;
+        self.cleanup_phantom_positions_database().await;
         Ok(())
     }
 
@@ -5245,68 +5278,42 @@ impl PositionsManager {
     }
 
     /// Load positions from disk on startup
-    async fn load_positions_from_disk(&mut self) {
+    /// Load positions from database on startup
+    async fn load_positions_from_database(&mut self) {
         if is_debug_positions_enabled() {
-            log(
-                LogTag::Positions,
-                "DEBUG",
-                &format!("📂 Loading positions from disk: {}", POSITIONS_FILE)
-            );
+            log(LogTag::Positions, "DEBUG", "📂 Loading positions from database");
         }
 
-        match tokio::fs::read_to_string(POSITIONS_FILE).await {
-            Ok(content) => {
-                match serde_json::from_str::<Vec<Position>>(&content) {
-                    Ok(positions) => {
-                        self.positions = positions;
-                        log(
-                            LogTag::Positions,
-                            "INFO",
-                            &format!(
-                                "📁 Loaded {} positions from disk ({})",
-                                self.positions.len(),
-                                POSITIONS_FILE
-                            )
-                        );
+        // Use direct database function instead of complex async closure
+        match crate::positions_db::load_all_positions().await {
+            Ok(positions) => {
+                self.positions = positions;
+                log(
+                    LogTag::Positions,
+                    "INFO",
+                    &format!("📁 Loaded {} positions from database", self.positions.len())
+                );
 
-                        if is_debug_positions_enabled() {
-                            let open_count = self.get_open_positions_count();
-                            let closed_count = self.positions.len() - open_count;
-                            log(
-                                LogTag::Positions,
-                                "DEBUG",
-                                &format!(
-                                    "📊 Position breakdown - Open: {}, Closed: {}",
-                                    open_count,
-                                    closed_count
-                                )
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        log(
-                            LogTag::Positions,
-                            "ERROR",
-                            &format!("Failed to parse positions file {}: {}", POSITIONS_FILE, e)
-                        );
-                        self.positions = Vec::new();
-                    }
+                if is_debug_positions_enabled() {
+                    let open_count = self.get_open_positions_count();
+                    let closed_count = self.positions.len() - open_count;
+                    log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!(
+                            "📊 Position breakdown - Open: {}, Closed: {}",
+                            open_count,
+                            closed_count
+                        )
+                    );
                 }
             }
             Err(e) => {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    log(
-                        LogTag::Positions,
-                        "INFO",
-                        &format!("📁 No existing positions file found ({}), starting with empty positions", POSITIONS_FILE)
-                    );
-                } else {
-                    log(
-                        LogTag::Positions,
-                        "ERROR",
-                        &format!("Failed to read positions file {}: {}", POSITIONS_FILE, e)
-                    );
-                }
+                log(
+                    LogTag::Positions,
+                    "ERROR",
+                    &format!("Failed to load positions from database: {}", e)
+                );
                 self.positions = Vec::new();
             }
         }
@@ -5369,8 +5376,61 @@ impl PositionsManager {
     }
 
     /// Save positions to disk after changes
-    async fn save_positions_to_disk(&mut self) {
-        // First, remove phantom positions marked for deletion
+    /// Save position to database (individual position)
+    async fn save_position_to_database(&mut self, position: &Position) -> Result<(), String> {
+        match crate::positions_db::save_position(position).await {
+            Ok(new_id) => {
+                // Update position in memory with new ID if it was newly inserted
+                if position.id.is_none() {
+                    for pos in &mut self.positions {
+                        if
+                            pos.mint == position.mint &&
+                            pos.entry_time == position.entry_time &&
+                            pos.id.is_none()
+                        {
+                            pos.id = Some(new_id);
+                            break;
+                        }
+                    }
+                }
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Save all positions to database (batch operation)
+    /// Remove phantom positions marked for deletion from database
+    async fn cleanup_phantom_positions_database(&mut self) {
+        // Find positions marked for removal
+        let positions_to_remove: Vec<_> = self.positions
+            .iter()
+            .filter(|p| p.phantom_remove)
+            .filter_map(|p| p.id)
+            .collect();
+
+        if !positions_to_remove.is_empty() {
+            log(
+                LogTag::Positions,
+                "CLEANUP",
+                &format!(
+                    "�️ Removing {} phantom positions from database",
+                    positions_to_remove.len()
+                )
+            );
+
+            for position_id in positions_to_remove {
+                if let Err(e) = crate::positions_db::delete_position_by_id(position_id).await {
+                    log(
+                        LogTag::Positions,
+                        "ERROR",
+                        &format!("Failed to delete phantom position {}: {}", position_id, e)
+                    );
+                }
+            }
+        }
+
+        // Remove from memory
         let initial_count = self.positions.len();
         self.positions.retain(|p| !p.phantom_remove);
         let final_count = self.positions.len();
@@ -5379,50 +5439,8 @@ impl PositionsManager {
             log(
                 LogTag::Positions,
                 "CLEANUP",
-                &format!("🗑️ Removed {} phantom positions during save", initial_count - final_count)
+                &format!("🗑️ Removed {} phantom positions from memory", initial_count - final_count)
             );
-        }
-
-        if is_debug_positions_enabled() {
-            log(
-                LogTag::Positions,
-                "DEBUG",
-                &format!("💾 Saving {} positions to disk: {}", final_count, POSITIONS_FILE)
-            );
-        }
-
-        // Ensure data directory exists
-        if let Err(e) = ensure_data_directories() {
-            log(LogTag::Positions, "ERROR", &format!("Failed to create data directories: {}", e));
-            return;
-        }
-
-        match serde_json::to_string_pretty(&self.positions) {
-            Ok(json_content) => {
-                match tokio::fs::write(POSITIONS_FILE, json_content).await {
-                    Ok(_) => {
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!(
-                                "💾 Saved {} positions to disk ({})",
-                                self.positions.len(),
-                                POSITIONS_FILE
-                            )
-                        );
-                    }
-                    Err(e) => {
-                        log(
-                            LogTag::Positions,
-                            "ERROR",
-                            &format!("Failed to write positions file {}: {}", POSITIONS_FILE, e)
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                log(LogTag::Positions, "ERROR", &format!("Failed to serialize positions: {}", e));
-            }
         }
     }
 }
@@ -5824,18 +5842,6 @@ pub async fn is_open_position(mint: &str) -> bool {
         h.is_open(mint.to_string()).await
     } else {
         false
-    }
-}
-
-/// Compatibility function for old SAVED_POSITIONS usage - returns all positions (open + closed)
-/// This replaces the old SAVED_POSITIONS.lock() pattern
-pub async fn get_all_positions() -> Vec<Position> {
-    if let Some(h) = get_positions_handle().await {
-        let mut all_positions = h.get_open_positions().await;
-        all_positions.extend(h.get_closed_positions().await);
-        all_positions
-    } else {
-        Vec::new()
     }
 }
 

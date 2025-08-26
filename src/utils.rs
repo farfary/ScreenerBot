@@ -2,10 +2,7 @@ use chrono::{ DateTime, Utc };
 use tokio::sync::Notify;
 use std::time::Duration;
 use std::fs;
-use serde_json;
-use crate::positions::*;
 use crate::logger::{ log, LogTag };
-use crate::global::POSITIONS_FILE;
 use crate::errors::blockchain::{ BlockchainError, parse_solana_error };
 use crate::errors::ScreenerBotError;
 
