@@ -1464,7 +1464,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
         }
     };
 
-    // Get transaction manager for swap analysis
+    // Get transaction manager for swap analysis (same as backup system)
     let transaction_manager = match get_global_transaction_manager().await {
         Some(manager_guard) => manager_guard,
         None => {
@@ -1479,11 +1479,13 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
         }
     };
 
-    // Perform swap analysis using transaction manager
+    // Perform swap analysis using transaction manager (BACKUP SYSTEM APPROACH)
+    // Use convert_to_swap_pnl_info directly without requiring swap_analysis field
     let swap_pnl_info = {
         let manager = transaction_manager.lock().await;
         if let Some(ref manager) = *manager {
             let empty_cache = std::collections::HashMap::new();
+            // Use the same method as backup system - works with transaction_type and balance changes
             manager.convert_to_swap_pnl_info(&transaction, &empty_cache, false)
         } else {
             if is_debug_positions_enabled() {
@@ -1581,34 +1583,35 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                             );
                         }
                     } else {
-                        if is_debug_positions_enabled() {
-                            log(
-                                LogTag::Positions,
-                                "POSITION_ENTRY_MISMATCH",
-                                &format!(
-                                    "⚠️ Entry transaction type/token mismatch for {}: expected Buy {}, got {} {}",
-                                    position.symbol,
-                                    get_mint_prefix(&position.mint),
-                                    swap_info.swap_type,
-                                    get_mint_prefix(&swap_info.token_mint)
-                                )
-                            );
-                        }
+                        // Type/token mismatch (same as backup system)
+                        position.transaction_entry_verified = false;
+                        log(
+                            LogTag::Positions,
+                            "POSITION_ENTRY_MISMATCH",
+                            &format!(
+                                "⚠️ Entry transaction {} type/token mismatch for position {}: expected Buy {}, got {} {} - PENDING TRANSACTION SHOULD BE REMOVED",
+                                get_signature_prefix(signature),
+                                position.symbol,
+                                get_mint_prefix(&position.mint),
+                                swap_info.swap_type,
+                                get_mint_prefix(&swap_info.token_mint)
+                            )
+                        );
                         return Err("Transaction type/token mismatch".to_string());
                     }
                 } else {
-                    if is_debug_positions_enabled() {
-                        log(
-                            LogTag::Positions,
-                            "POSITION_ENTRY_NO_SWAP",
-                            &format!(
-                                "⚠️ Entry transaction {} has no valid swap analysis for {}",
-                                get_signature_prefix(signature),
-                                position.symbol
-                            )
-                        );
-                    }
-                    return Err("No valid swap analysis for entry transaction".to_string());
+                    // No swap analysis available (same handling as backup system)
+                    log(
+                        LogTag::Positions,
+                        "POSITION_ENTRY_NO_SWAP",
+                        &format!(
+                            "⚠️ Entry transaction {} has no valid swap analysis for position {} - will retry on next verification cycle",
+                            get_signature_prefix(signature),
+                            position.symbol
+                        )
+                    );
+                    // Don't mark as failed - let it retry (same as backup)
+                    return Err("No valid swap analysis - will retry".to_string());
                 }
 
                 // Update in database
@@ -1670,34 +1673,35 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                             );
                         }
                     } else {
-                        if is_debug_positions_enabled() {
-                            log(
-                                LogTag::Positions,
-                                "POSITION_EXIT_MISMATCH",
-                                &format!(
-                                    "⚠️ Exit transaction type/token mismatch for {}: expected Sell {}, got {} {}",
-                                    position.symbol,
-                                    get_mint_prefix(&position.mint),
-                                    swap_info.swap_type,
-                                    get_mint_prefix(&swap_info.token_mint)
-                                )
-                            );
-                        }
+                        // Type/token mismatch (same as backup system)
+                        position.transaction_exit_verified = false;
+                        log(
+                            LogTag::Positions,
+                            "POSITION_EXIT_MISMATCH",
+                            &format!(
+                                "⚠️ Exit transaction {} type/token mismatch for position {}: expected Sell {}, got {} {} - PENDING TRANSACTION SHOULD BE REMOVED",
+                                get_signature_prefix(signature),
+                                position.symbol,
+                                get_mint_prefix(&position.mint),
+                                swap_info.swap_type,
+                                get_mint_prefix(&swap_info.token_mint)
+                            )
+                        );
                         return Err("Transaction type/token mismatch".to_string());
                     }
                 } else {
-                    if is_debug_positions_enabled() {
-                        log(
-                            LogTag::Positions,
-                            "POSITION_EXIT_NO_SWAP",
-                            &format!(
-                                "⚠️ Exit transaction {} has no valid swap analysis for {}",
-                                get_signature_prefix(signature),
-                                position.symbol
-                            )
-                        );
-                    }
-                    return Err("No valid swap analysis for exit transaction".to_string());
+                    // No swap analysis available (same handling as backup system)
+                    log(
+                        LogTag::Positions,
+                        "POSITION_EXIT_NO_SWAP",
+                        &format!(
+                            "⚠️ Exit transaction {} has no valid swap analysis for position {} - will retry on next verification cycle",
+                            get_signature_prefix(signature),
+                            position.symbol
+                        )
+                    );
+                    // Don't mark as failed - let it retry (same as backup)
+                    return Err("No valid swap analysis - will retry".to_string());
                 }
 
                 // Update in database
@@ -2499,12 +2503,40 @@ pub async fn initialize_positions_system() -> Result<(), String> {
     match load_all_positions().await {
         Ok(positions) => {
             let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+
+            // Add unverified positions to pending verification queue
+            let mut unverified_count = 0;
+            for position in &positions {
+                // Check if entry transaction needs verification
+                if !position.transaction_entry_verified {
+                    if let Some(entry_sig) = &position.entry_transaction_signature {
+                        state.pending_verifications.insert(entry_sig.clone(), Utc::now());
+                        unverified_count += 1;
+                    }
+                }
+                // Check if exit transaction needs verification
+                if !position.transaction_exit_verified {
+                    if let Some(exit_sig) = &position.exit_transaction_signature {
+                        state.pending_verifications.insert(exit_sig.clone(), Utc::now());
+                        unverified_count += 1;
+                    }
+                }
+            }
+
             state.positions = positions;
             log(
                 LogTag::Positions,
                 "STARTUP",
                 &format!("✅ Loaded {} positions from database", state.positions.len())
             );
+
+            if unverified_count > 0 {
+                log(
+                    LogTag::Positions,
+                    "STARTUP",
+                    &format!("🔍 Added {} unverified transactions to verification queue", unverified_count)
+                );
+            }
         }
         Err(e) => {
             log(
