@@ -102,6 +102,8 @@ pub use price::{
     get_token_price_safe,
     get_token_price_blocking_safe,
     update_open_positions_safe,
+    remove_closed_position_safe,
+    cleanup_closed_positions_safe,
     get_priority_tokens_safe,
     update_tokens_prices_safe,
     get_price_cache_stats,
@@ -284,6 +286,20 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
 
     // Initialize price service
     initialize_price_service().await?;
+
+    // Perform initial cleanup of any stale watch list entries from previous runs
+    tokio::spawn(async {
+        // Wait a moment for positions manager to initialize
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        let removed = cleanup_closed_positions_safe().await;
+        if removed > 0 {
+            log(
+                LogTag::System,
+                "CLEANUP",
+                &format!("Initial price service cleanup removed {} stale entries from previous runs", removed)
+            );
+        }
+    });
 
     // Initialize OHLCV service
     if let Err(e) = init_ohlcv_service().await {

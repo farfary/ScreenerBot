@@ -634,6 +634,10 @@ const DUPLICATE_SWAP_PREVENTION_SECS: i64 = 30;
 // Phantom detection thresholds (for synthetic closure of sold-but-open positions)
 const PHANTOM_CONFIRMATION_THRESHOLD: u32 = 3; // need N reconciliation confirmations
 const PHANTOM_MIN_DURATION_SECS: i64 = 30; // minimum seconds since first phantom detection before synthetic close
+// Verification safety windows
+const ENTRY_VERIFICATION_MAX_SECS: i64 = 90; // hard cap for entry verification age before treating as timeout
+const PENDING_VERIFICATION_PROTECT_SECS: i64 = 90; // window during which cleanup defers to pending verification
+const AGED_UNVERIFIED_CLEANUP_MINUTES: i64 = 10; // after this, aged unverified entries can be cleaned up
 
 /// Check if a similar swap was recently attempted for the same token
 /// NOTE: This function must NOT call other functions that might acquire global locks
@@ -851,15 +855,10 @@ impl PositionsManager {
 
         loop {
             tokio::select! {
+                // Always react to shutdown fast
                 _ = self.shutdown.notified() => {
                     log(LogTag::Positions, "INFO", "PositionsManager shutting down gracefully");
                     break;
-                }
-                // Handle background task messages (non-blocking)
-                maybe_bg_msg = bg_task_rx.recv() => {
-                    if let Some(bg_msg) = maybe_bg_msg {
-                        self.handle_background_message(bg_msg).await;
-                    }
                 }
                 // Prioritize user requests over background tasks
                 maybe_msg = rx.recv() => {
@@ -871,6 +870,12 @@ impl PositionsManager {
                             log(LogTag::Positions, "WARN", "PositionsManager channel closed; exiting actor");
                             break;
                         }
+                    }
+                }
+                // Handle background task messages (non-blocking) AFTER requests
+                maybe_bg_msg = bg_task_rx.recv() => {
+                    if let Some(bg_msg) = maybe_bg_msg {
+                        self.handle_background_message(bg_msg).await;
                     }
                 }
             }
@@ -1768,6 +1773,24 @@ impl PositionsManager {
                             position.effective_exit_price.unwrap_or(0.0)
                         )
                     );
+
+                    // Check if position is now fully closed and clean up watch list
+                    if position.transaction_entry_verified && position.transaction_exit_verified && position.exit_price.is_some() {
+                        log(
+                            LogTag::Positions,
+                            "RECONCILE_FULLY_CLOSED",
+                            &format!(
+                                "✅ Healed position {} is fully closed - removing from price watch list",
+                                position.symbol
+                            )
+                        );
+                        
+                        // Remove from price service watch list to prevent resource waste
+                        let mint_for_cleanup = position.mint.clone();
+                        tokio::spawn(async move {
+                            crate::tokens::remove_closed_position_safe(&mint_for_cleanup).await;
+                        });
+                    }
 
                     healed_positions += 1;
                     self.applied_exit_signatures.insert(exit_signature, now);
@@ -3104,7 +3127,7 @@ impl PositionsManager {
                         price_source: "pool".to_string(),
                         pool_type: pool_result.pool_type,
                         pool_address: Some(pool_result.pool_address),
-                        api_price: pool_result.price_usd,
+                        api_price: pool_result.price_sol,
                     };
                 }
 
@@ -3526,6 +3549,40 @@ impl PositionsManager {
     /// Check pending verifications and update positions accordingly
     /// Enhanced with comprehensive transaction verification using RPC and transaction analysis
     async fn check_pending_verifications(&mut self) {
+        // Prune stale pending verifications first to avoid forever-pending entries
+        let now = Utc::now();
+        let stale: Vec<String> = self.pending_verifications
+            .iter()
+            .filter_map(|(sig, added_at)| {
+                let age_secs = now.signed_duration_since(*added_at).num_seconds();
+                if (age_secs as i64) > ENTRY_VERIFICATION_MAX_SECS {
+                    Some(sig.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for sig in stale {
+            let age_secs = if let Some(t) = self.pending_verifications.get(&sig) {
+                now.signed_duration_since(*t).num_seconds()
+            } else {
+                0
+            };
+            log(
+                LogTag::Positions,
+                "PENDING_VERIFICATION_PRUNE",
+                &format!(
+                    "🧹 Pruning stale pending verification {} after {}s (> {}s)",
+                    get_signature_prefix(&sig),
+                    age_secs,
+                    ENTRY_VERIFICATION_MAX_SECS
+                )
+            );
+            let _ = self.handle_transaction_timeout(&sig).await;
+            self.pending_verifications.remove(&sig);
+        }
+
         let signatures_to_check: Vec<String> = self.pending_verifications.keys().cloned().collect();
 
         if is_debug_positions_enabled() && !signatures_to_check.is_empty() {
@@ -4039,10 +4096,11 @@ impl PositionsManager {
         // Enhanced failure detection for immediate cleanup
         let error_str = error.to_string();
         let is_definitive_failure =
-            error_str.contains("propagation failed") ||
-            error_str.contains("likely failed") ||
-            error_str.contains("dropped by network") ||
-            error_str.contains("verification timeout");
+            error_str.to_lowercase().contains("propagation failed") ||
+            error_str.to_lowercase().contains("likely failed") ||
+            error_str.to_lowercase().contains("dropped by network") ||
+            error_str.to_lowercase().contains("verification timeout") ||
+            error_str.to_lowercase().contains("transaction failed");
 
         // Find the position with this signature
         if
@@ -4109,7 +4167,7 @@ impl PositionsManager {
                 }
 
                 if should_remove {
-                    // Only flag as phantom for definitively failed transactions or after multiple retries
+                    // Only flag as phantom for definitively failed transactions or after safe windows
                     if is_definitive_failure {
                         log(
                             LogTag::Positions,
@@ -4128,8 +4186,8 @@ impl PositionsManager {
                             .signed_duration_since(position.entry_time)
                             .num_minutes();
 
-                        if age_minutes > 5 {
-                            // Only flag as phantom after 10+ minutes for non-definitive failures
+                        if age_minutes > AGED_UNVERIFIED_CLEANUP_MINUTES / 2 {
+                            // After half of the cleanup window, allow phantom flag for non-definitive failures
                             log(
                                 LogTag::Positions,
                                 "CONSERVATIVE_PHANTOM",
@@ -4347,16 +4405,33 @@ impl PositionsManager {
             // VERIFICATION STATE PROTECTION: Don't cleanup positions still in verification queue
             if let Some(entry_sig) = &position.entry_transaction_signature {
                 if self.pending_verifications.contains_key(entry_sig) {
-                    log(
-                        LogTag::Positions,
-                        "PENDING_VERIFICATION_PROTECTION",
-                        &format!(
-                            "🔍 Skipping cleanup for {} - transaction {} still in verification queue",
-                            position.symbol,
-                            crate::transactions::get_signature_prefix(entry_sig)
-                        )
-                    );
-                    continue;
+                    let protect = if let Some(added) = self.pending_verifications.get(entry_sig) {
+                        (now.signed_duration_since(*added).num_seconds() as i64) <=
+                            PENDING_VERIFICATION_PROTECT_SECS
+                    } else {
+                        false
+                    };
+                    if protect {
+                        log(
+                            LogTag::Positions,
+                            "PENDING_VERIFICATION_PROTECTION",
+                            &format!(
+                                "🔍 Skipping cleanup for {} - transaction {} still in verification queue",
+                                position.symbol,
+                                crate::transactions::get_signature_prefix(entry_sig)
+                            )
+                        );
+                        continue;
+                    } else {
+                        log(
+                            LogTag::Positions,
+                            "PENDING_VERIFICATION_EXPIRED",
+                            &format!(
+                                "⏱️ Pending verification protection expired for {} - proceeding with cleanup checks",
+                                position.symbol
+                            )
+                        );
+                    }
                 }
             }
 
@@ -4405,8 +4480,7 @@ impl PositionsManager {
                 !position.transaction_entry_verified
             {
                 let age_minutes = now.signed_duration_since(position.entry_time).num_minutes();
-                // INCREASED: Give 30 minutes instead of 10 for busy periods with slow verification
-                if age_minutes > 30 {
+                if age_minutes > AGED_UNVERIFIED_CLEANUP_MINUTES {
                     // Try quick lookup of transaction; if still missing, mark remove
                     if let Some(sig) = &position.entry_transaction_signature {
                         match crate::transactions::get_transaction(sig).await {
@@ -5007,6 +5081,24 @@ impl PositionsManager {
                         swap_pnl_info.calculated_price_sol
                     )
                 );
+
+                // Check if position is now fully closed and clean up watch list
+                if position.transaction_entry_verified && position.transaction_exit_verified && position.exit_price.is_some() {
+                    log(
+                        LogTag::Positions,
+                        "POSITION_FULLY_CLOSED",
+                        &format!(
+                            "✅ Position {} is fully closed - removing from price watch list",
+                            position.symbol
+                        )
+                    );
+                    
+                    // Remove from price service watch list to prevent resource waste
+                    let mint_for_cleanup = position.mint.clone();
+                    tokio::spawn(async move {
+                        crate::tokens::remove_closed_position_safe(&mint_for_cleanup).await;
+                    });
+                }
             } else {
                 position.transaction_exit_verified = false;
                 log(
@@ -5702,7 +5794,7 @@ async fn run_background_tasks(shutdown: Arc<Notify>, bg_tx: mpsc::Sender<Backgro
     let mut retry_interval = interval(Duration::from_secs(30));
     let mut cleanup_interval = interval(Duration::from_secs(120)); // Increased from 30s to 120s to allow more time for transaction verification during busy periods
     let mut reconciliation_interval = interval(Duration::from_secs(1800)); // 30 minutes
-    let mut cache_refresh_interval = interval(Duration::from_secs(30)); // Refresh cache every 30s
+    let mut cache_refresh_interval = interval(Duration::from_secs(10)); // Refresh cache every 10s for fresher summary
     let mut position_locks_cleanup_interval = interval(Duration::from_secs(300)); // Clean position locks every 5 minutes
 
     let mut reconciliation_in_progress = false;

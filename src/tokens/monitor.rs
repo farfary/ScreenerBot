@@ -206,6 +206,17 @@ impl TokenMonitor {
         // Perform database cleanup after token data has been updated
         if should_cleanup {
             self.cleanup_database().await?;
+            
+            // Clean up price service watch lists to remove closed positions
+            let removed = crate::tokens::cleanup_closed_positions_safe().await;
+            if removed > 0 {
+                log(
+                    LogTag::Monitor,
+                    "CLEANUP",
+                    &format!("Price service cleanup removed {} stale watch list entries", removed)
+                );
+            }
+            
             self.last_cleanup = std::time::Instant::now();
         }
 

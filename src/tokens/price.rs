@@ -34,8 +34,8 @@ const WATCH_TIMEOUT_SECONDS: i64 = 300; // 5 minutes
 const STALE_RETURN_MAX_AGE_SECONDS: i64 = 180; // 3 minutes
 /// Maximum allowed age for an open position price before forcing refresh - FASTEST 5s priority checking
 const OPEN_POSITION_MAX_AGE_SECONDS: i64 = 3; // 3 seconds - force refresh every 5-second monitoring cycle
-/// Timeout for pool price path for open positions (ms) - ultra-fast for priority tokens
-const POOL_PRICE_TIMEOUT_MS: u64 = 300; // 300ms for fastest response
+/// Timeout for pool price calculations (increased from 300ms to handle RPC delays)
+const POOL_PRICE_TIMEOUT_MS: u64 = 2000; // 2 seconds for pool calculations
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -331,6 +331,30 @@ impl TokenPriceService {
         });
     }
 
+    /// Remove a token from watch list and open positions tracking
+    /// Should be called when a position is closed to prevent resource waste
+    async fn remove_from_watch_list(&self, mint: &str) {
+        if is_debug_price_service_enabled() {
+            log(
+                LogTag::PriceService,
+                "REMOVE_WATCH",
+                &format!("🗑️ Removing {} from watch list (position closed)", mint)
+            );
+        }
+
+        // Remove from watch list
+        {
+            let mut watch_list = self.watch_list.write().await;
+            watch_list.remove(mint);
+        }
+
+        // Remove from open positions set
+        {
+            let mut open_positions = self.open_positions.write().await;
+            open_positions.remove(mint);
+        }
+    }
+
     async fn update_single_token_price(&self, mint: &str) -> Result<(), String> {
         let pool_service = get_pool_service();
         let is_open = is_open_position(mint).await;
@@ -414,15 +438,6 @@ impl TokenPriceService {
 
         let mut cache = self.price_cache.write().await;
         let old_price = cache.get(mint).and_then(|e| e.price_sol);
-        let new_price = cache_entry.price_sol;
-
-        // Only update cache if price actually changed or this is first time
-        let price_changed = match (old_price, new_price) {
-            (Some(old), Some(new)) => (old - new).abs() > f64::EPSILON * 1000.0, // Different prices
-            (None, Some(_)) => true, // First time getting price
-            _ => false, // No valid new price
-        };
-
         cache.insert(mint.to_string(), cache_entry.clone());
         drop(cache);
 
@@ -437,38 +452,44 @@ impl TokenPriceService {
         };
         if is_really_open {
             if let Some(cp) = cache_entry.price_sol {
-                // Only call position tracking if price actually changed or this is first time
-                if price_changed {
-                    // Debug logging to see if same prices are being sent to position tracking
-                    if crate::arguments::is_debug_price_service_enabled() {
-                        log(
-                            LogTag::PriceService,
-                            "DEBUG",
-                            &format!(
-                                "📈 CALLING update_tracking for {} | Price: {:.10} SOL | Old Price: {:.10} SOL | Source: {} | Changed: {}",
-                                mint,
-                                cp,
-                                old_price.unwrap_or(0.0),
-                                cache_entry.source,
-                                price_changed
-                            )
-                        );
-                    }
+                // Always call position tracking for open positions - let position logic handle change detection
+                log(
+                    LogTag::PriceService,
+                    "TRACK_CALL",
+                    &format!(
+                        "📈 CALLING update_tracking for {} | Price: {:.10} SOL | Old: {:.10} SOL | Source: {} | Age: {}s",
+                        mint,
+                        cp,
+                        old_price.unwrap_or(0.0),
+                        cache_entry.source,
+                        (Utc::now() - cache_entry.last_updated).num_seconds()
+                    )
+                );
 
-                    if let Some(h) = crate::positions::get_positions_handle().await {
-                        let _ = h.update_tracking(mint.to_string(), cp).await;
-                    }
-                } else if crate::arguments::is_debug_price_service_enabled() {
+                if let Some(h) = crate::positions::get_positions_handle().await {
+                    // Don't block price update pipeline on positions actor; fire-and-forget with a short timeout
+                    let mint_clone = mint.to_string();
+                    tokio::spawn(async move {
+                        let tracking = h.update_tracking(mint_clone, cp);
+                        // Give the actor a short window; if busy with background work, skip silently
+                        let _ = tokio::time::timeout(
+                            std::time::Duration::from_millis(250),
+                            tracking
+                        ).await;
+                    });
+                } else {
                     log(
                         LogTag::PriceService,
-                        "DEBUG",
-                        &format!(
-                            "⏭️ SKIPPING update_tracking for {} | Price unchanged: {:.10} SOL",
-                            mint,
-                            cp
-                        )
+                        "ERROR",
+                        &format!("❌ No positions handle available for tracking update of {}", mint)
                     );
                 }
+            } else {
+                log(
+                    LogTag::PriceService,
+                    "WARN",
+                    &format!("⚠️ No price available for open position {}", mint)
+                );
             }
         }
         // AUTO-HEAL: if token is really open but NOT in internal open_positions set, add it
@@ -589,13 +610,11 @@ impl TokenPriceService {
     }
 
     pub async fn update_tokens_from_api(&self, mints: &[String]) {
-        if is_debug_price_service_enabled() {
-            log(
-                LogTag::PriceService,
-                "API_UPDATE_START",
-                &format!("🔄 STARTING API UPDATE for {} tokens: {:?}", mints.len(), mints)
-            );
-        }
+        log(
+            LogTag::PriceService,
+            "API_UPDATE_START",
+            &format!("🔄 STARTING API UPDATE for {} tokens: {:?}", mints.len(), mints)
+        );
 
         let mut success_count = 0;
         let mut error_count = 0;
@@ -605,39 +624,28 @@ impl TokenPriceService {
             match self.update_single_token_price(mint).await {
                 Ok(()) => {
                     success_count += 1;
-                    if is_debug_price_service_enabled() {
-                        log(
-                            LogTag::PriceService,
-                            "API_UPDATE_SUCCESS",
-                            &format!("✅ Successfully updated price for {}", mint)
-                        );
-                    }
                 }
                 Err(e) => {
                     error_count += 1;
-                    if is_debug_price_service_enabled() {
-                        log(
-                            LogTag::PriceService,
-                            "API_UPDATE_ERROR",
-                            &format!("❌ Failed to update price for {}: {}", mint, e)
-                        );
-                    }
+                    log(
+                        LogTag::PriceService,
+                        "API_UPDATE_ERROR",
+                        &format!("❌ Failed to update price for {}: {}", mint, e)
+                    );
                 }
             }
         }
 
-        if is_debug_price_service_enabled() {
-            log(
-                LogTag::PriceService,
-                "API_UPDATE_COMPLETE",
-                &format!(
-                    "✅ API UPDATE COMPLETE: {}/{} successful, {} errors",
-                    success_count,
-                    mints.len(),
-                    error_count
-                )
-            );
-        }
+        log(
+            LogTag::PriceService,
+            "API_UPDATE_COMPLETE",
+            &format!(
+                "✅ API UPDATE COMPLETE: {}/{} successful, {} errors",
+                success_count,
+                mints.len(),
+                error_count
+            )
+        );
     }
 
     pub async fn cleanup_expired(&self) -> usize {
@@ -664,6 +672,99 @@ impl TokenPriceService {
                 LogTag::PriceService,
                 "CLEANUP",
                 &format!("Removed {} expired entries", removed_count)
+            );
+        }
+
+        removed_count
+    }
+
+    /// Aggressive cleanup: Remove tokens that are no longer open positions
+    /// This should be called periodically to prevent resource waste
+    pub async fn cleanup_closed_positions(&self) -> usize {
+        let mut removed_count = 0;
+
+        // Get current open position mints using positions handle
+        let current_open_mints = match crate::positions::get_positions_handle().await {
+            Some(handle) => {
+                handle.get_open_mints().await.into_iter().collect::<std::collections::HashSet<_>>()
+            }
+            None => {
+                if is_debug_price_service_enabled() {
+                    log(
+                        LogTag::PriceService,
+                        "CLEANUP_ERROR",
+                        "Failed to get positions handle for cleanup"
+                    );
+                }
+                return 0;
+            }
+        };
+
+        if is_debug_price_service_enabled() {
+            log(
+                LogTag::PriceService,
+                "CLEANUP_AGGRESSIVE",
+                &format!(
+                    "🧹 Starting aggressive cleanup - {} actual open positions",
+                    current_open_mints.len()
+                )
+            );
+        }
+
+        // Clean watch list: remove tokens not in current open positions
+        {
+            let mut watch_list = self.watch_list.write().await;
+            let initial_size = watch_list.len();
+            
+            watch_list.retain(|mint, entry| {
+                let is_open = current_open_mints.contains(mint);
+                let keep = is_open || !entry.is_expired();
+                
+                if !keep && is_debug_price_service_enabled() {
+                    log(
+                        LogTag::PriceService,
+                        "CLEANUP_REMOVE",
+                        &format!("🗑️ Removing {} from watch list (not open position)", mint)
+                    );
+                }
+                
+                keep
+            });
+            
+            removed_count += initial_size - watch_list.len();
+        }
+
+        // Clean open positions set: remove tokens not actually open
+        {
+            let mut open_positions = self.open_positions.write().await;
+            let initial_size = open_positions.len();
+            
+            open_positions.retain(|mint| {
+                let keep = current_open_mints.contains(mint);
+                
+                if !keep && is_debug_price_service_enabled() {
+                    log(
+                        LogTag::PriceService,
+                        "CLEANUP_REMOVE",
+                        &format!("🗑️ Removing {} from open positions set (not actually open)", mint)
+                    );
+                }
+                
+                keep
+            });
+            
+            removed_count += initial_size - open_positions.len();
+        }
+
+        if removed_count > 0 {
+            log(
+                LogTag::PriceService,
+                "CLEANUP_AGGRESSIVE_COMPLETE",
+                &format!(
+                    "🧹 Aggressive cleanup removed {} stale entries. Watch list now matches {} open positions",
+                    removed_count,
+                    current_open_mints.len()
+                )
             );
         }
 
@@ -775,6 +876,21 @@ pub async fn update_open_positions_safe(mints: Vec<String>) {
     if let Some(service) = PRICE_SERVICE.get() {
         service.update_open_positions(mints).await;
     }
+}
+
+/// Remove a closed position from watch list to prevent resource waste
+pub async fn remove_closed_position_safe(mint: &str) {
+    if let Some(service) = PRICE_SERVICE.get() {
+        service.remove_from_watch_list(mint).await;
+    }
+}
+
+/// Perform aggressive cleanup to remove closed positions from watch lists
+pub async fn cleanup_closed_positions_safe() -> usize {
+    if let Some(service) = PRICE_SERVICE.get() {
+        return service.cleanup_closed_positions().await;
+    }
+    0
 }
 
 /// Force an immediate price refresh for a token (bypass cache freshness)
