@@ -603,24 +603,18 @@ impl TokenDiscovery {
             )
         );
 
-        // Seed price service watch list (non-blocking) so pool/price monitoring has priority tokens
+        // REMOVED: Price service seeding that was causing resource waste
+        // Discovery tokens should not be added to priority monitoring
+        // Only open positions should be priority per user requirements
         if !all_mints.is_empty() {
-            let seed_limit = 50usize; // safety cap per cycle
-            let to_seed: Vec<String> = all_mints.iter().take(seed_limit).cloned().collect();
-            let seeded_count = to_seed.len();
-            if seeded_count > 0 {
-                log(
-                    LogTag::Discovery,
-                    "WATCH_SEED",
-                    &format!("Seeding {} tokens into price watch list", seeded_count)
-                );
-                for mint in to_seed {
-                    tokio::spawn(async move {
-                        // Fire and forget; this call internally adds to watch list
-                        let _ = crate::tokens::price::get_token_price_safe(&mint).await;
-                    });
-                }
-            }
+            log(
+                LogTag::Discovery,
+                "DISCOVERY_COMPLETE",
+                &format!(
+                    "📊 Discovery completed: {} tokens found (not added to priority monitoring)",
+                    all_mints.len().min(50)
+                )
+            );
         }
 
         if all_mints.is_empty() {

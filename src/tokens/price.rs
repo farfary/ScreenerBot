@@ -122,8 +122,8 @@ impl TokenPriceService {
 
     /// Get token price - instant cache lookup, no timeouts; will serve slightly stale values
     pub async fn get_token_price(&self, mint: &str) -> Option<f64> {
-        // Track this token request
-        self.add_to_watch_list(mint, false).await;
+        // REMOVED: add_to_watch_list call - only open positions should be priority
+        // Per user requirement: "only open positions is priority"
 
         // First check cache (instant, no await on lock contention)
         if let Some(price) = self.get_cached_price_maybe_stale(mint, true).await {
@@ -148,8 +148,7 @@ impl TokenPriceService {
                         if !open_pos.contains(mint) {
                             open_pos.insert(mint.to_string());
                             drop(open_pos);
-                            // Also upgrade watch list entry to open=true
-                            self.add_to_watch_list(mint, true).await;
+                            // Open position tracking is sufficient - no watch list needed
                             if is_debug_price_service_enabled() {
                                 log(
                                     LogTag::PriceService,
@@ -214,8 +213,8 @@ impl TokenPriceService {
 
     /// Get token price - waits for update on cache miss (blocking version for critical operations)
     pub async fn get_token_price_blocking(&self, mint: &str) -> Option<f64> {
-        // Track this token request
-        self.add_to_watch_list(mint, false).await;
+        // REMOVED: add_to_watch_list call - only open positions should be priority
+        // Per user requirement: "only open positions is priority"
 
         // First check cache
         if let Some(price) = self.get_cached_price_maybe_stale(mint, false).await {
@@ -453,18 +452,6 @@ impl TokenPriceService {
         if is_really_open {
             if let Some(cp) = cache_entry.price_sol {
                 // Always call position tracking for open positions - let position logic handle change detection
-                log(
-                    LogTag::PriceService,
-                    "TRACK_CALL",
-                    &format!(
-                        "📈 CALLING update_tracking for {} | Price: {:.10} SOL | Old: {:.10} SOL | Source: {} | Age: {}s",
-                        mint,
-                        cp,
-                        old_price.unwrap_or(0.0),
-                        cache_entry.source,
-                        (Utc::now() - cache_entry.last_updated).num_seconds()
-                    )
-                );
 
                 if let Some(h) = crate::positions::get_positions_handle().await {
                     // Don't block price update pipeline on positions actor; fire-and-forget with a short timeout
@@ -498,8 +485,7 @@ impl TokenPriceService {
             if !open.contains(mint) {
                 open.insert(mint.to_string());
                 drop(open);
-                // upgrade watch list entry to open=true
-                self.add_to_watch_list(mint, true).await;
+                // Open position tracking is sufficient - no watch list needed
                 if is_debug_price_service_enabled() {
                     log(
                         LogTag::PriceService,
@@ -509,39 +495,7 @@ impl TokenPriceService {
                 }
             }
         }
-        if let (Some(old), Some(new)) = (old_price, cache_entry.price_sol) {
-            // FASTEST 5s PRIORITY: Ultra-sensitive change detection for priority tokens
-            // Minimum 0.01% change threshold for maximum sensitivity with 5-second updates
-            let change_threshold = if old > 0.0 {
-                (old * 0.0001).max(f64::EPSILON * 100.0) // 0.01% minimum for fastest detection
-            } else {
-                f64::EPSILON * 100.0
-            };
-
-            if (old - new).abs() > change_threshold {
-                let symbol = match self.database.get_token_by_mint(mint) {
-                    Ok(Some(token)) if !token.symbol.is_empty() => token.symbol,
-                    _ => mint[..8].to_string(),
-                };
-                // Price change detection and logging now handled in position tracking
-                // to avoid duplicate logs and ensure comprehensive P&L information
-                if is_really_open {
-                    if is_debug_price_service_enabled() {
-                        log(
-                            LogTag::PriceService,
-                            "PRICE_CHANGE_DETECTED",
-                            &format!(
-                                "🔄 Price change detected for {}: {:.10} -> {:.10} SOL ({:.2}%)",
-                                symbol,
-                                old,
-                                new,
-                                ((new - old) / old) * 100.0
-                            )
-                        );
-                    }
-                }
-            }
-        }
+    
         Ok(())
     }
 
@@ -557,11 +511,7 @@ impl TokenPriceService {
         positions.clear();
         for mint in mints {
             positions.insert(mint.clone());
-            // Mark these as open positions in watch list
-            drop(positions);
-            self.add_to_watch_list(&mint, true).await;
-            // (Removed) pool watch list pinning: pool service now derives tokens from price service priority list
-            positions = self.open_positions.write().await;
+            // Open positions are tracked directly in the set, no watch list needed
         }
         let new_count = positions.len();
         drop(positions);
@@ -574,24 +524,23 @@ impl TokenPriceService {
     }
 
     pub async fn get_priority_tokens(&self) -> Vec<String> {
-        let mut priority_tokens = Vec::new();
-
-        // Add open positions first (highest priority)
+        // FIXED: Only return open positions as priority tokens
+        // Per user requirement: "only open positions is priority"
+        // This eliminates resource waste from monitoring discovery tokens
         let positions = self.open_positions.read().await;
-        let open_count = positions.len();
-        priority_tokens.extend(positions.iter().cloned());
+        let priority_tokens: Vec<String> = positions.iter().cloned().collect();
         drop(positions);
 
-        // Add watched tokens that are not expired
-        let watch_list = self.watch_list.read().await;
-        let mut watched_count = 0;
-        for (mint, entry) in watch_list.iter() {
-            if !entry.is_expired() && !priority_tokens.contains(mint) {
-                priority_tokens.push(mint.clone());
-                watched_count += 1;
-            }
+        if is_debug_price_service_enabled() {
+            log(
+                LogTag::PriceService,
+                "PRIORITY_TOKENS_ONLY_POSITIONS",
+                &format!(
+                    "🎯 Priority tokens limited to {} open positions only",
+                    priority_tokens.len()
+                )
+            );
         }
-        drop(watch_list);
 
         priority_tokens
     }

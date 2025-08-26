@@ -3213,26 +3213,6 @@ impl PositionsManager {
                 .unwrap_or(999); // Force log if no previous update
             let should_log_periodic = time_since_last_log >= 30; // Log every 30 seconds regardless
 
-            // Debug logging to understand why price changes aren't being logged
-            if crate::arguments::is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!(
-                        "🔍 PRICE TRACKING: {} | Old: {:.10} | New: {:.10} | Diff: {:.10} | Threshold: {:.10} | Time: {}s | Will Log: {} (diff: {} | periodic: {})",
-                        position.symbol,
-                        old_price,
-                        current_price,
-                        price_diff,
-                        change_threshold,
-                        time_since_last_log,
-                        price_diff > change_threshold || should_log_periodic,
-                        price_diff > change_threshold,
-                        should_log_periodic
-                    )
-                );
-            }
-
             if price_diff > change_threshold || should_log_periodic {
                 // Calculate current P&L for logging
                 let (pnl_sol, pnl_percent) = crate::positions::calculate_position_pnl(
