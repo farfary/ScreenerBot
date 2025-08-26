@@ -689,6 +689,7 @@ fn strip_ansi_codes(text: &str) -> String {
 }
 
 /// Helper function to wrap text at word boundaries, respecting existing newlines
+/// and breaking very long words (like URLs) that exceed the available space
 fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
     let mut result = Vec::new();
 
@@ -707,7 +708,20 @@ fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
                 let word_display_length = strip_ansi_codes(word).len();
                 let current_display_length = strip_ansi_codes(&current_line).len();
 
-                if current_line.is_empty() {
+                // Check if this single word is longer than max_width
+                if word_display_length > max_width {
+                    // If current line has content, flush it first
+                    if !current_line.is_empty() {
+                        result.push(current_line);
+                        current_line = String::new();
+                    }
+
+                    // Break the long word into chunks
+                    let word_chunks = break_long_word(word, max_width);
+                    for chunk in word_chunks {
+                        result.push(chunk);
+                    }
+                } else if current_line.is_empty() {
                     current_line = word.to_string();
                 } else if current_display_length + word_display_length + 1 <= max_width {
                     current_line.push(' ');
@@ -729,6 +743,51 @@ fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
     }
 
     result
+}
+
+/// Break a very long word (like URLs or JSON) into smaller chunks
+fn break_long_word(word: &str, max_width: usize) -> Vec<String> {
+    let mut chunks = Vec::new();
+    let mut remaining = word;
+
+    while !remaining.is_empty() {
+        if remaining.len() <= max_width {
+            chunks.push(remaining.to_string());
+            break;
+        }
+
+        let chunk_length = max_width;
+
+        // For URLs and other structured text, try to break at natural points
+        let break_point = if chunk_length < remaining.len() {
+            // Look for good break points in the next few characters (up to 15 chars ahead)
+            let search_end = std::cmp::min(chunk_length + 15, remaining.len());
+            let search_slice = &remaining[chunk_length..search_end];
+
+            // Priority order for URL/JSON break points:
+            // 1. URL path separators and query params: /, ?, &
+            // 2. Assignment and value separators: =, :
+            // 3. General separators: ., -, _
+            // 4. JSON/data separators: {, }, [, ], ,
+            let break_chars = ['/', '?', '&', '=', ':', '.', '-', '_', '{', '}', '[', ']', ','];
+
+            if let Some(pos) = search_slice.find(&break_chars[..]) {
+                let actual_pos = chunk_length + pos + 1;
+                // Make sure we don't go beyond the string
+                std::cmp::min(actual_pos, remaining.len())
+            } else {
+                chunk_length
+            }
+        } else {
+            chunk_length
+        };
+
+        let chunk = &remaining[..break_point];
+        chunks.push(chunk.to_string());
+        remaining = &remaining[break_point..];
+    }
+
+    chunks
 }
 /// Enhanced logging function for price changes with comprehensive Positions details
 /// Shows full symbol, both pool and API prices, pool information, and current P&L

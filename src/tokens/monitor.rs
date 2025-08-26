@@ -34,7 +34,7 @@ pub const ENHANCED_CYCLE_DURATION_SECONDS: u64 = 5;
 pub const CLEANUP_INTERVAL_SECONDS: u64 = 60;
 
 /// Maximum number of tokens to monitor per cycle - increased for 5-second intervals
-pub const MAX_TOKENS_PER_MONITOR_CYCLE: usize = 200;
+pub const MAX_TOKENS_PER_MONITOR_CYCLE: usize = 100;
 
 /// Window for "recent pools infos" refresh (seconds)
 pub const MONITOR_RECENT_POOLS_WINDOW_SECONDS: i64 = 600; // 10 minutes
