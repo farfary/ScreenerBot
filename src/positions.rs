@@ -14,7 +14,7 @@ use crate::{
     },
     rpc::{ lamports_to_sol, sol_to_lamports },
     errors::{ ScreenerBotError, PositionError, DataError, BlockchainError, NetworkError },
-    logger::{ log, LogTag },
+    logger::{ log, LogTag, log_price_change },
     arguments::{
         is_dry_run_enabled,
         is_debug_positions_enabled,
@@ -84,6 +84,26 @@ pub struct Position {
     pub phantom_first_seen: Option<DateTime<Utc>>, // When first confirmed phantom
     pub synthetic_exit: bool, // True if we synthetically closed due to missing exit tx
     pub closed_reason: Option<String>, // Optional reason for closure (e.g., "synthetic_phantom_closure")
+}
+
+/// Additional price information for comprehensive position price logging
+#[derive(Debug, Clone)]
+pub struct PositionPriceInfo {
+    pub price_source: String, // "pool", "api", "cache"
+    pub pool_type: Option<String>, // e.g., "RAYDIUM CPMM"
+    pub pool_address: Option<String>,
+    pub api_price: Option<f64>,
+}
+
+impl Default for PositionPriceInfo {
+    fn default() -> Self {
+        Self {
+            price_source: "unknown".to_string(),
+            pool_type: None,
+            pool_address: None,
+            api_price: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -660,8 +680,10 @@ pub async fn open_position_direct(
 /// Close an existing position directly (replaces actor message)
 pub async fn close_position_direct(
     mint: &str,
+    token: &Token,
     exit_price: f64,
-    exit_reason: String
+    exit_reason: String,
+    exit_time: DateTime<Utc>
 ) -> Result<String, String> {
     let _lock = acquire_position_lock(mint).await;
 
@@ -670,9 +692,10 @@ pub async fn close_position_direct(
             LogTag::Positions,
             "DEBUG",
             &format!(
-                "🔄 Attempting to close position for {} - reason: {}",
-                get_mint_prefix(mint),
-                exit_reason
+                "🔄 Attempting to close position for {} - reason: {} at price {:.8} SOL",
+                token.symbol,
+                exit_reason,
+                exit_price
             )
         );
     }
@@ -697,16 +720,33 @@ pub async fn close_position_direct(
         }
     }
 
-    // Find position and validate
+    // Find position and validate with enhanced state checking
     let position_info = {
         let state = GLOBAL_POSITIONS_STATE.lock().await;
         state.positions
             .iter()
             .find(|p| {
-                p.mint == mint &&
-                    p.position_type == "buy" &&
-                    p.exit_price.is_none() &&
-                    p.exit_transaction_signature.is_none()
+                let matches_mint = p.mint == mint;
+                let no_exit_sig = p.exit_transaction_signature.is_none();
+                let failed_exit =
+                    p.exit_transaction_signature.is_some() && !p.transaction_exit_verified;
+                let can_close = no_exit_sig || failed_exit;
+
+                if is_debug_positions_enabled() {
+                    log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!(
+                            "🎯 Position check: mint_match={}, no_exit_sig={}, failed_exit={}, can_close={}",
+                            matches_mint,
+                            no_exit_sig,
+                            failed_exit,
+                            can_close
+                        )
+                    );
+                }
+
+                matches_mint && can_close
             })
             .map(|p| (p.symbol.clone(), p.entry_size_sol, p.entry_price))
     };
@@ -729,6 +769,31 @@ pub async fn close_position_direct(
                 entry_size_sol
             )
         );
+    }
+
+    // Clear failed exit transaction data if retrying
+    {
+        let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+        if let Some(position) = state.positions.iter_mut().find(|p| p.mint == mint) {
+            if position.exit_transaction_signature.is_some() && !position.transaction_exit_verified {
+                log(
+                    LogTag::Positions,
+                    "RETRY_EXIT",
+                    &format!(
+                        "🔄 Previous exit transaction failed for {} - clearing failed exit data and retrying",
+                        position.symbol
+                    )
+                );
+                // Clear failed exit transaction data
+                position.exit_price = None;
+                position.exit_time = None;
+                position.transaction_exit_verified = false;
+                position.sol_received = None;
+                position.effective_exit_price = None;
+                position.exit_fee_lamports = None;
+                position.exit_transaction_signature = None; // Clear failed signature
+            }
+        }
     }
 
     // Check active sells to prevent duplicates
@@ -767,6 +832,35 @@ pub async fn close_position_direct(
         );
     }
 
+    // ✅ ENSURE token remains in watch list during sell process
+    let _price_service_result = match
+        tokio::time::timeout(
+            tokio::time::Duration::from_secs(10),
+            get_token_price_safe(&token.mint)
+        ).await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            log(
+                LogTag::Positions,
+                "TIMEOUT",
+                &format!(
+                    "⏰ Price service timeout for {} during sell after 10s - continuing without price check",
+                    token.symbol
+                )
+            );
+            Some(0.0)
+        }
+    };
+
+    if is_debug_positions_enabled() {
+        log(
+            LogTag::Positions,
+            "WATCH_LIST",
+            &format!("✅ Refreshed {} in watch list before sell execution", token.symbol)
+        );
+    }
+
     log(
         LogTag::Swap,
         "SELL_START",
@@ -783,7 +877,7 @@ pub async fn close_position_direct(
         }
     };
 
-    // Get token balance
+    // Get token balance using cached function for better performance
     let token_balance = match get_token_balance_safe(mint, &wallet_address).await {
         Some(balance) if balance > 0 => balance,
         Some(_) => {
@@ -885,39 +979,8 @@ pub async fn close_position_direct(
         )
     );
 
-    // Create token object for swap execution
-    let token = Token {
-        mint: mint.to_string(),
-        symbol: symbol.clone(),
-        name: symbol.clone(), // Use symbol as name if not available
-        chain: "solana".to_string(),
-        logo_url: None,
-        coingecko_id: None,
-        website: None,
-        description: None,
-        tags: vec![],
-        is_verified: false,
-        created_at: None,
-        price_dexscreener_sol: None,
-        price_dexscreener_usd: None,
-        price_pool_sol: None,
-        price_pool_usd: None,
-        dex_id: None,
-        pair_address: None,
-        pair_url: None,
-        labels: vec![],
-        fdv: None,
-        market_cap: None,
-        txns: None,
-        volume: None,
-        price_change: None,
-        liquidity: None,
-        info: None,
-        boosts: None,
-    };
-
-    // Execute the swap
-    let swap_result = execute_best_swap(&token, mint, SOL_MINT, token_balance, quote).await;
+    // Execute the swap using the provided token object (no manual creation needed)
+    let swap_result = execute_best_swap(token, mint, SOL_MINT, token_balance, quote).await;
 
     let transaction_signature = match swap_result {
         Ok(result) => {
@@ -968,7 +1031,7 @@ pub async fn close_position_direct(
         );
     }
 
-    // Update position with exit transaction
+    // Update position with exit transaction using provided exit_time
     {
         let mut state = GLOBAL_POSITIONS_STATE.lock().await;
         let mut position_for_db: Option<Position> = None;
@@ -976,10 +1039,12 @@ pub async fn close_position_direct(
         if
             let Some(position) = state.positions
                 .iter_mut()
-                .find(|p| p.mint == mint && p.exit_price.is_none())
+                .find(
+                    |p| p.mint == mint && (p.exit_price.is_none() || !p.transaction_exit_verified)
+                )
         {
             position.exit_transaction_signature = Some(transaction_signature.clone());
-            position.exit_time = Some(Utc::now());
+            position.exit_time = Some(exit_time); // Use provided exit_time
             position.exit_price = Some(exit_price);
             position.closed_reason = Some(exit_reason.clone());
 
@@ -988,9 +1053,10 @@ pub async fn close_position_direct(
                     LogTag::Positions,
                     "DEBUG",
                     &format!(
-                        "✅ Position updated with exit transaction {} for {}",
+                        "✅ Position updated with exit transaction {} for {} at {}",
                         get_signature_prefix(&transaction_signature),
-                        symbol
+                        symbol,
+                        exit_time.format("%H:%M:%S%.3f")
                     )
                 );
             }
@@ -1070,15 +1136,8 @@ pub async fn close_position_direct(
 pub async fn update_position_tracking(
     mint: &str,
     current_price: f64,
-    market_cap: Option<f64>,
-    liquidity_tier: Option<String>
-) -> Result<(), String> {
-    let _lock = acquire_position_lock(mint).await;
-
-    if is_debug_positions_enabled() {
-        println!("📊 Updating tracking for {} - Price: ${:.8}", &mint[..8], current_price);
-    }
-
+    price_info: PositionPriceInfo
+) -> bool {
     if current_price <= 0.0 || !current_price.is_finite() {
         if is_debug_positions_enabled() {
             log(
@@ -1091,105 +1150,152 @@ pub async fn update_position_tracking(
                 )
             );
         }
-        return Err("Invalid price for tracking update".to_string());
+        return false;
     }
 
-    // Find and update position in global state
-    let mut updated = false;
+    // Use timeout-based lock to avoid blocking tracking updates
+    let _lock = match
+        tokio::time::timeout(Duration::from_millis(100), acquire_position_lock(mint)).await
     {
-        let mut state = GLOBAL_POSITIONS_STATE.lock().await;
-
-        if let Some(position) = state.positions.iter_mut().find(|p| p.mint == mint) {
-            let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
-
-            // Initialize price tracking if not set
-            if position.price_highest == 0.0 {
-                position.price_highest = entry_price;
-                position.price_lowest = entry_price;
-            }
-
-            // Check for price change and log if significant
-            let old_price = position.current_price.unwrap_or(entry_price);
-            let price_change = current_price - old_price;
-            let price_change_percent = if old_price != 0.0 {
-                (price_change / old_price) * 100.0
-            } else {
-                0.0
-            };
-
-            // Log price change if significant (0.01% threshold)
-            let change_threshold = if old_price > 0.0 {
-                (old_price * 0.0001).max(f64::EPSILON * 100.0)
-            } else {
-                f64::EPSILON * 100.0
-            };
-
-            let price_diff = (old_price - current_price).abs();
-
-            // Check if enough time has passed since last log (30 seconds)
-            let time_since_last_log = position.current_price_updated
-                .map(|last| (Utc::now() - last).num_seconds())
-                .unwrap_or(999);
-            let should_log_periodic = time_since_last_log >= 30;
-
-            if price_diff > change_threshold || should_log_periodic {
-                // Calculate current P&L for logging
-                let (pnl_sol, pnl_percent) = calculate_position_pnl(
-                    position,
-                    Some(current_price)
-                ).await;
-
-                if is_debug_positions_enabled() {
-                    log(
-                        LogTag::Positions,
-                        "TRACKING",
-                        &format!(
-                            "📊 {} price: {:.10} SOL ({:+.2}%) | P&L: {:+.6} SOL ({:+.1}%)",
-                            position.symbol,
-                            current_price,
-                            price_change_percent,
-                            pnl_sol,
-                            pnl_percent
-                        )
-                    );
-                }
-            }
-
-            // Update tracking data
-            position.current_price = Some(current_price);
-            position.current_price_updated = Some(Utc::now());
-
-            // Update price high/low
-            if current_price > position.price_highest {
-                position.price_highest = current_price;
-            }
-            if current_price < position.price_lowest {
-                position.price_lowest = current_price;
-            }
-
-            // Update additional fields if provided
-            if let Some(tier) = liquidity_tier {
-                position.liquidity_tier = Some(tier);
-            }
-
-            updated = true;
-
-            // Save to database
-            if let Err(e) = sync_position_to_database(position).await {
+        Ok(lock) => lock,
+        Err(_) => {
+            if is_debug_positions_enabled() {
                 log(
                     LogTag::Positions,
-                    "ERROR",
-                    &format!("Failed to sync tracking update to database: {}", e)
+                    "WARN",
+                    &format!(
+                        "Tracking update for {} skipped due to lock timeout",
+                        get_mint_prefix(mint)
+                    )
+                );
+            }
+            return false; // Don't block tracking updates
+        }
+    };
+
+    let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+
+    if let Some(position) = state.positions.iter_mut().find(|p| p.mint == mint) {
+        let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+
+        // Initialize price tracking if not set
+        if position.price_highest == 0.0 {
+            position.price_highest = entry_price;
+            position.price_lowest = entry_price;
+        }
+
+        // Check for price change and log it BEFORE updating position
+        let old_price = position.current_price.unwrap_or(entry_price);
+        let price_change = current_price - old_price;
+        let price_change_percent = if old_price != 0.0 {
+            (price_change / old_price) * 100.0
+        } else {
+            0.0
+        };
+
+        // Log price change if significant (0.01% threshold for high sensitivity)
+        let change_threshold = if old_price > 0.0 {
+            (old_price * 0.0001).max(f64::EPSILON * 100.0) // 0.01% minimum
+        } else {
+            f64::EPSILON * 100.0
+        };
+
+        let price_diff = (old_price - current_price).abs();
+
+        // Check if enough time has passed since last log (fallback logging every 30 seconds)
+        let time_since_last_log = position.current_price_updated
+            .map(|last| (Utc::now() - last).num_seconds())
+            .unwrap_or(999); // Force log if no previous update
+        let should_log_periodic = time_since_last_log >= 30; // Log every 30 seconds regardless
+
+        if price_diff > change_threshold || should_log_periodic {
+            // Calculate current P&L for logging
+            let (pnl_sol, pnl_percent) = calculate_position_pnl(
+                position,
+                Some(current_price)
+            ).await;
+
+            log_price_change(
+                mint,
+                &position.symbol,
+                old_price,
+                current_price,
+                &price_info.price_source,
+                price_info.pool_type.as_deref(),
+                price_info.pool_address.as_deref(),
+                price_info.api_price,
+                Some((pnl_sol, pnl_percent))
+            );
+        }
+
+        let mut updated = false;
+
+        // Track new highs and lows with debug logging
+        if current_price > position.price_highest {
+            position.price_highest = current_price;
+            updated = true;
+            if is_debug_positions_enabled() {
+                log(
+                    LogTag::Positions,
+                    "DEBUG",
+                    &format!("📈 New high for {}: {:.10} SOL", position.symbol, current_price)
                 );
             }
         }
-    }
+        if current_price < position.price_lowest {
+            position.price_lowest = current_price;
+            updated = true;
+            if is_debug_positions_enabled() {
+                log(
+                    LogTag::Positions,
+                    "DEBUG",
+                    &format!("📉 New low for {}: {:.10} SOL", position.symbol, current_price)
+                );
+            }
+        }
 
-    if !updated {
-        return Err(format!("Position not found for mint: {}", get_mint_prefix(mint)));
-    }
+        // Update current price (always, regardless of high/low changes)
+        position.current_price = Some(current_price);
+        position.current_price_updated = Some(Utc::now());
 
-    Ok(())
+        // Async database update without blocking
+        if position.id.is_some() {
+            let position_clone = position.clone();
+            tokio::spawn(async move {
+                if let Err(e) = sync_position_to_database(&position_clone).await {
+                    log(
+                        LogTag::Positions,
+                        "ERROR",
+                        &format!("Failed to sync tracking update to database: {}", e)
+                    );
+                }
+            });
+        }
+
+        // Return true since current_price was updated (always meaningful for tracking)
+        true
+    } else {
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "WARN",
+                &format!("Position not found for tracking update: {}", get_mint_prefix(mint))
+            );
+        }
+        false
+    }
+}
+
+/// Helper function for simple tracking updates without detailed price info
+pub async fn update_position_tracking_simple(mint: &str, current_price: f64) -> bool {
+    let price_info = PositionPriceInfo {
+        price_source: "external".to_string(),
+        pool_type: None,
+        pool_address: None,
+        api_price: Some(current_price),
+    };
+
+    update_position_tracking(mint, current_price, price_info).await
 }
 
 /// Verify a position transaction with comprehensive analysis and field population
@@ -2216,7 +2322,38 @@ async fn retry_failed_operations_parallel(shutdown: Arc<Notify>) {
                                     // Get current price for exit
                                     let current_price = get_token_price_safe(&mint_clone).await.unwrap_or(position.entry_price);
                                     
-                                    match close_position_direct(&mint_clone, current_price, "retry_attempt".to_string()).await {
+                                    // Create token object for retry
+                                    let token = Token {
+                                        mint: mint_clone.clone(),
+                                        symbol: position.symbol.clone(),
+                                        name: position.name.clone(),
+                                        chain: "solana".to_string(),
+                                        logo_url: None,
+                                        coingecko_id: None,
+                                        website: None,
+                                        description: None,
+                                        tags: vec![],
+                                        is_verified: false,
+                                        created_at: None,
+                                        price_dexscreener_sol: None,
+                                        price_dexscreener_usd: None,
+                                        price_pool_sol: None,
+                                        price_pool_usd: None,
+                                        dex_id: None,
+                                        pair_address: None,
+                                        pair_url: None,
+                                        labels: vec![],
+                                        fdv: None,
+                                        market_cap: None,
+                                        txns: None,
+                                        volume: None,
+                                        price_change: None,
+                                        liquidity: None,
+                                        info: None,
+                                        boosts: None,
+                                    };
+                                    
+                                    match close_position_direct(&mint_clone, &token, current_price, "retry_attempt".to_string(), Utc::now()).await {
                                         Ok(signature) => {
                                             log(
                                                 LogTag::Positions,

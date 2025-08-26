@@ -4999,11 +4999,44 @@ async fn test_real_position_management(
             let exit_price = current_price * 1.02; // Simulate 2% profit
             let exit_time = chrono::Utc::now();
 
+            // Create token object for debug test
+            let token = screenerbot::tokens::Token {
+                mint: position.mint.clone(),
+                symbol: position.symbol.clone(),
+                name: position.name.clone(),
+                chain: "solana".to_string(),
+                logo_url: None,
+                coingecko_id: None,
+                website: None,
+                description: None,
+                tags: vec![],
+                is_verified: false,
+                created_at: None,
+                price_dexscreener_sol: None,
+                price_dexscreener_usd: None,
+                price_pool_sol: None,
+                price_pool_usd: None,
+                dex_id: None,
+                pair_address: None,
+                pair_url: None,
+                labels: vec![],
+                fdv: None,
+                market_cap: None,
+                txns: None,
+                volume: None,
+                price_change: None,
+                liquidity: None,
+                info: None,
+                boosts: None,
+            };
+
             match
                 positions::close_position_direct(
                     &position.mint,
+                    &token,
                     exit_price,
-                    "Debug test".to_string()
+                    "Debug test".to_string(),
+                    exit_time
                 ).await
             {
                 Ok(_) => {

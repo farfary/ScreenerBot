@@ -1030,13 +1030,11 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             if let Some(&current_price) = price_map.get(&position.mint) {
                 if current_price > 0.0 && current_price.is_finite() {
                     // Send price update to positions manager for tracking
-                    let tracking_result = crate::positions::update_position_tracking(
+                    let tracking_result = crate::positions::update_position_tracking_simple(
                         &position.mint,
-                        current_price,
-                        None, // market_cap
-                        None // liquidity_tier
+                        current_price
                     ).await;
-                    if is_debug_trader_enabled() && tracking_result.is_err() {
+                    if is_debug_trader_enabled() && !tracking_result {
                         log(
                             LogTag::Trader,
                             "WARN",
@@ -1288,8 +1286,10 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                 crate::positions
                                     ::close_position_direct(
                                         &position.mint,
+                                        &token,
                                         exit_price,
-                                        "Trading decision".to_string()
+                                        "Trading decision".to_string(),
+                                        Utc::now()
                                     ).await
                                     .map(|_| ())
                             }
