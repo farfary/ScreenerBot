@@ -128,37 +128,44 @@ impl TokenPriceService {
         // First check cache (instant, no await on lock contention)
         if let Some(price) = self.get_cached_price_maybe_stale(mint, true).await {
             // SELF-HEAL: if this is actually an open position but not in open_positions set
-            // or the cached price is older than OPEN_POSITION_MAX_AGE_SECONDS, trigger a background refresh.
-            // This fixes stale prices not updating for open positions when allow_stale=true returns early.
+            // CONCURRENCY FIX: Avoid holding locks during external calls
             let mut needs_refresh = false;
             if let Some(service) = PRICE_SERVICE.get().cloned() {
-                // We need the age & open flag
-                if
-                    let Some(entry) = ({
-                        let cache = self.price_cache.read().await;
-                        cache.get(mint).cloned()
-                    })
-                {
+                // Get cache entry without holding lock during external call
+                let entry_opt = {
+                    let cache = self.price_cache.read().await;
+                    cache.get(mint).cloned()
+                };
+
+                if let Some(entry) = entry_opt {
                     let age_seconds = (Utc::now() - entry.last_updated).num_seconds();
-                    // Check real open position state (bypass internal set which may be outdated)
+                    // Check real open position state (no locks held during this call)
                     let real_open = crate::positions::is_open_position(mint).await;
                     if real_open {
-                        // If not registered yet, register it (auto-heal)
-                        let mut open_pos = self.open_positions.write().await;
-                        if !open_pos.contains(mint) {
-                            open_pos.insert(mint.to_string());
-                            drop(open_pos);
-                            // Open position tracking is sufficient - no watch list needed
-                            if is_debug_price_service_enabled() {
-                                log(
-                                    LogTag::PriceService,
-                                    "OPEN_POS_HEAL",
-                                    &format!(
-                                        "⚕️ Auto-registered open position {} into price service (age={}s)",
-                                        mint,
-                                        age_seconds
-                                    )
-                                );
+                        // Quick lock scope for auto-heal registration
+                        let needs_registration = {
+                            let open_pos = self.open_positions.read().await;
+                            !open_pos.contains(mint)
+                        };
+
+                        if needs_registration {
+                            let mut open_pos = self.open_positions.write().await;
+                            // Double-check pattern to avoid race conditions
+                            if !open_pos.contains(mint) {
+                                open_pos.insert(mint.to_string());
+                                drop(open_pos);
+                                // Open position tracking is sufficient - no watch list needed
+                                if is_debug_price_service_enabled() {
+                                    log(
+                                        LogTag::PriceService,
+                                        "OPEN_POS_HEAL",
+                                        &format!(
+                                            "⚕️ Auto-registered open position {} into price service (age={}s)",
+                                            mint,
+                                            age_seconds
+                                        )
+                                    );
+                                }
                             }
                         }
                         // Force refresh if stale beyond strict open-position freshness
@@ -272,15 +279,20 @@ impl TokenPriceService {
     }
 
     async fn get_cached_price_maybe_stale(&self, mint: &str, allow_stale: bool) -> Option<f64> {
-        let cache = self.price_cache.read().await;
-        if let Some(entry) = cache.get(mint) {
+        // CONCURRENCY FIX: Get both values without nested locks to prevent deadlock
+        let (entry_opt, is_open) = {
+            let cache = self.price_cache.read().await;
+            let entry_opt = cache.get(mint).cloned();
+            drop(cache); // Release cache lock before acquiring positions lock
+            let positions = self.open_positions.read().await;
+            let is_open = positions.contains(mint);
+            (entry_opt, is_open)
+        };
+
+        if let Some(entry) = entry_opt {
             let age = Utc::now() - entry.last_updated;
             let age_seconds = age.num_seconds();
             let is_expired = entry.is_expired();
-            let is_open = {
-                let positions = self.open_positions.read().await;
-                positions.contains(mint)
-            };
 
             // For open positions enforce tight freshness; treat as expired beyond OPEN_POSITION_MAX_AGE_SECONDS
             if is_open && age_seconds > OPEN_POSITION_MAX_AGE_SECONDS {
@@ -480,22 +492,31 @@ impl TokenPriceService {
             }
         }
         // AUTO-HEAL: if token is really open but NOT in internal open_positions set, add it
+        // CONCURRENCY FIX: Use double-check pattern to avoid race conditions
         if is_really_open && !is_open {
-            let mut open = self.open_positions.write().await;
-            if !open.contains(mint) {
-                open.insert(mint.to_string());
-                drop(open);
-                // Open position tracking is sufficient - no watch list needed
-                if is_debug_price_service_enabled() {
-                    log(
-                        LogTag::PriceService,
-                        "OPEN_POS_HEAL",
-                        &format!("⚕️ Auto-healed missing open position registration for {}", mint)
-                    );
+            let needs_registration = {
+                let open = self.open_positions.read().await;
+                !open.contains(mint)
+            };
+
+            if needs_registration {
+                let mut open = self.open_positions.write().await;
+                // Double-check to avoid race condition
+                if !open.contains(mint) {
+                    open.insert(mint.to_string());
+                    drop(open);
+                    // Open position tracking is sufficient - no watch list needed
+                    if is_debug_price_service_enabled() {
+                        log(
+                            LogTag::PriceService,
+                            "OPEN_POS_HEAL",
+                            &format!("⚕️ Auto-healed missing open position registration for {}", mint)
+                        );
+                    }
                 }
             }
         }
-    
+
         Ok(())
     }
 

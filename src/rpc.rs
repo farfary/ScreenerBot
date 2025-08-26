@@ -22,7 +22,7 @@
 ///
 /// WARNING: If premium RPC fails when this is enabled, operations will fail
 /// instead of falling back to other endpoints.
-const FORCE_PREMIUM_RPC_ONLY: bool = true;
+const FORCE_PREMIUM_RPC_ONLY: bool = false;
 
 use crate::logger::{ log, LogTag };
 use crate::errors::{ NetworkError, RpcProviderError, ConfigurationError, DataError };
