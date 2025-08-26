@@ -3195,7 +3195,7 @@ impl PositionsManager {
             position.current_price_updated = Some(Utc::now());
 
             // Return whether any tracking data was updated (for potential save to disk)
-            updated || true // Always return true since current_price was updated
+            true // Always return true since current_price was updated
         } else {
             false
         }
