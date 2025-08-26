@@ -7,7 +7,6 @@ use screenerbot::{
             get_price_history_for_analysis,
             get_detailed_pool_price_history,
             get_pools_with_price_history,
-            cleanup_old_price_history_caches,
         },
         dexscreener::init_dexscreener_api,
     },
@@ -258,15 +257,8 @@ async fn cleanup_cache() -> Result<(), Box<dyn std::error::Error>> {
     println!("🧹 Cleaning up old price history caches...");
     println!("==========================================");
 
-    match cleanup_old_price_history_caches().await {
-        Ok(cleaned_count) => {
-            println!("✅ Cleanup completed successfully");
-            println!("📊 Processed {} cache files", cleaned_count);
-        }
-        Err(e) => {
-            println!("❌ Cleanup failed: {}", e);
-        }
-    }
+    println!("ℹ️  Disk cache cleanup not available - using in-memory cache only");
+    println!("✅ No cleanup needed for memory-only cache");
 
     Ok(())
 }

@@ -153,10 +153,8 @@ use crate::tokens::{
     discover_tokens_once,
     get_all_tokens_by_liquidity,
     get_token_price_blocking_safe,
-    monitor_tokens_once,
     pool::get_pool_service,
     sync_watch_list_with_trader,
-    update_open_positions_safe,
     Token,
 };
 use crate::utils::check_shutdown_or_delay;
@@ -286,7 +284,7 @@ pub async fn get_tokens_from_safe_system() -> Vec<Token> {
     }
 }
 
-/// Update open positions tracking in price service
+/// Update open positions tracking - now handled by positions manager
 async fn update_position_tracking_in_service() {
     let open_mints = if let Some(h) = crate::positions::get_positions_handle().await {
         h.get_open_mints().await
@@ -298,21 +296,18 @@ async fn update_position_tracking_in_service() {
     if !open_mints.is_empty() {
         log(
             LogTag::Trader,
-            "TRACK_START",
+            "TRACK_SKIP",
             &format!(
-                "🔄 Updating open positions tracking for {} tokens: {:?}",
+                "⚠️ Position tracking now handled by positions manager (would track {} tokens: {:?})",
                 open_mints.len(),
                 open_mints
             )
         );
-        update_open_positions_safe(open_mints).await;
-        log(LogTag::Trader, "TRACK_COMPLETE", "✅ Open positions tracking update completed");
-        if is_debug_trader_enabled() {
-            log(LogTag::Trader, "TRACK", "Updated open positions in price service");
-        }
+        // Note: Positions manager now handles its own priority monitoring
+        // No longer calling update_open_positions_safe - this was pool/price service monitoring
     } else {
         if is_debug_trader_enabled() {
-            log(LogTag::Trader, "TRACK", "⚠️ No open positions found for tracking update");
+            log(LogTag::Trader, "TRACK", "⚠️ No open positions found");
         }
     }
 }
@@ -327,11 +322,6 @@ async fn ensure_tokens_populated() {
             // Run manual discovery to populate the database
             if let Err(e) = discover_tokens_once().await {
                 log(LogTag::Trader, "WARN", &format!("Failed to run token discovery: {}", e));
-            }
-
-            // Run manual monitoring to update prices
-            if let Err(e) = monitor_tokens_once().await {
-                log(LogTag::Trader, "WARN", &format!("Failed to run token monitoring: {}", e));
             }
         }
         Ok(tokens) => {

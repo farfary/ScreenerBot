@@ -42,7 +42,7 @@ use once_cell::sync::Lazy;
 use unicode_width::{ UnicodeWidthChar, UnicodeWidthStr };
 
 use crate::positions::{ get_open_positions, get_closed_positions, calculate_position_pnl };
-use crate::tokens::{ get_pricing_stats, get_pool_service };
+use crate::tokens::{ get_pool_service };
 use crate::utils::{ get_sol_balance, get_wallet_address };
 use crate::rpc::get_global_rpc_stats;
 use crate::transactions::get_transaction_stats;
@@ -1010,17 +1010,8 @@ impl Dashboard {
             0
         };
 
-        // Get pricing stats (non-blocking with timeout)
-        let pricing_stats = if
-            let Ok(stats) = tokio::time::timeout(
-                Duration::from_millis(100),
-                get_pricing_stats()
-            ).await
-        {
-            stats
-        } else {
-            "Price Cache: Loading...".to_string()
-        };
+        // Pricing stats not available
+        let pricing_stats = "Price Cache: Disabled".to_string();
 
         // Get transaction stats (non-blocking with timeout)
         let tx_stats = if

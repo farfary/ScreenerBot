@@ -1788,12 +1788,6 @@ impl PositionsManager {
                                 position.symbol
                             )
                         );
-
-                        // Remove from price service watch list to prevent resource waste
-                        let mint_for_cleanup = position.mint.clone();
-                        tokio::spawn(async move {
-                            crate::tokens::remove_closed_position_safe(&mint_for_cleanup).await;
-                        });
                     }
 
                     healed_positions += 1;
@@ -5081,11 +5075,6 @@ impl PositionsManager {
                         )
                     );
 
-                    // Remove from price service watch list to prevent resource waste
-                    let mint_for_cleanup = position.mint.clone();
-                    tokio::spawn(async move {
-                        crate::tokens::remove_closed_position_safe(&mint_for_cleanup).await;
-                    });
                 }
             } else {
                 position.transaction_exit_verified = false;

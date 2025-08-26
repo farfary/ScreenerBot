@@ -362,12 +362,11 @@ async fn main() {
 
     // Cleanup price service on shutdown (with timeout)
     let cleanup_result = tokio::time::timeout(std::time::Duration::from_secs(3), async {
-        // Stop pool monitoring service and save price history caches
+        // Stop pool monitoring service
         let pool_service = screenerbot::tokens::pool::get_pool_service();
         pool_service.stop_monitoring().await;
-        log(LogTag::System, "INFO", "Pool monitoring service stopped and price history saved");
+        log(LogTag::System, "INFO", "Pool monitoring service stopped");
 
-        screenerbot::tokens::cleanup_price_cache().await;
         screenerbot::tokens::decimals::save_decimal_cache();
 
         // Save RPC statistics to disk

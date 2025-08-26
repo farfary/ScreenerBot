@@ -1,8 +1,7 @@
 /// Enhanced Token Monitoring System with Priority Queue
 ///
 /// This module provides intelligent token monitoring that prioritizes:
-/// 1. Tokens with open positions (highest priority)
-/// 2. Zero or stale price tokens that need updates
+/// 1. Zero or stale price tokens that need updates
 
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_monitor_enabled;
@@ -13,7 +12,7 @@ use crate::tokens::dexscreener::{
 };
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::blacklist::{ check_and_track_liquidity, is_token_blacklisted };
-use crate::tokens::price::{ get_priority_tokens_safe, update_tokens_prices_safe };
+use crate::tokens::price::update_tokens_prices_safe;
 use crate::tokens::pool::{
     refresh_pools_infos_for_tokens_safe,
     get_tokens_with_recent_pools_infos_safe,
@@ -96,119 +95,64 @@ impl TokenMonitor {
         // Check if it's time for database cleanup (every 1 minute)
         let should_cleanup = self.last_cleanup.elapsed().as_secs() >= CLEANUP_INTERVAL_SECONDS;
 
-        // Get priority tokens from price service (includes open positions + high liquidity)
-        let priority_mints = get_priority_tokens_safe().await;
+        // Get tokens that need monitoring from database
+        let tokens_to_monitor = self.get_tokens_needing_updates().await?;
 
-        // DIAGNOSTIC: Always log priority tokens status for debugging
-        if priority_mints.is_empty() {
-            log(
-                LogTag::Monitor,
-                "MONITOR",
-                "⚠️ No priority tokens to monitor - checking open positions"
-            );
-
-            // DIAGNOSTIC: Check if there are actual open positions
-            if let Some(positions_handle) = crate::positions::get_positions_handle().await {
-                let open_mints = positions_handle.get_open_mints().await;
-                if !open_mints.is_empty() {
-                    log(
-                        LogTag::Monitor,
-                        "DIAGNOSTIC",
-                        &format!(
-                            "🔍 Found {} open positions but no priority tokens: {:?}",
-                            open_mints.len(),
-                            open_mints
-                        )
-                    );
-
-                    // FORCE: Manually update price service with open positions
-                    crate::tokens::price::update_open_positions_safe(open_mints.clone()).await;
-                    log(
-                        LogTag::Monitor,
-                        "DIAGNOSTIC",
-                        "🔄 Force-updated price service with open positions"
-                    );
-
-                    // Try again to get priority tokens
-                    let priority_mints_retry = get_priority_tokens_safe().await;
-                    if priority_mints_retry.is_empty() {
-                        log(
-                            LogTag::Monitor,
-                            "DIAGNOSTIC",
-                            "❌ Still no priority tokens after force update"
-                        );
-                    } else {
-                        log(
-                            LogTag::Monitor,
-                            "DIAGNOSTIC",
-                            &format!(
-                                "✅ Now have {} priority tokens after force update",
-                                priority_mints_retry.len()
-                            )
-                        );
-                        // Continue processing with the retry result
-                        return self.process_priority_tokens_with_diagnostics(
-                            priority_mints_retry
-                        ).await;
-                    }
-                }
-            }
+        if tokens_to_monitor.is_empty() {
+            log(LogTag::Monitor, "MONITOR", "No tokens need monitoring in this cycle");
             return Ok(());
-        } else {
+        }
+
+        log(
+            LogTag::Monitor,
+            "MONITOR",
+            &format!(
+                "🔄 Enhanced monitoring {} tokens: {:?}",
+                tokens_to_monitor.len(),
+                tokens_to_monitor
+            )
+        );
+
+        // Process tokens
+        self.process_tokens_with_diagnostics(tokens_to_monitor.clone()).await?;
+
+        // Pre-warm/refresh pools infos for tokens without exceeding rate limits
+        // Limit refreshes per cycle to avoid API rate caps; 2 API calls worth of tokens
+        let refresh_budget = MAX_TOKENS_PER_API_CALL * 2;
+        let refreshed = refresh_pools_infos_for_tokens_safe(
+            &tokens_to_monitor,
+            refresh_budget
+        ).await;
+        if refreshed > 0 && is_debug_monitor_enabled() {
             log(
                 LogTag::Monitor,
-                "MONITOR",
-                &format!(
-                    "🔄 Enhanced monitoring {} priority tokens: {:?}",
-                    priority_mints.len(),
-                    priority_mints
-                )
+                "POOLS_INFO_REFRESH",
+                &format!("Refreshed pools infos for {} tokens", refreshed)
             );
+        }
 
-            // Process priority tokens first
-            self.process_priority_tokens_with_diagnostics(priority_mints.clone()).await?;
-
-            // Pre-warm/refresh pools infos for priority tokens without exceeding rate limits
-            // Limit refreshes per cycle to avoid API rate caps; 2 API calls worth of tokens
-            let refresh_budget = MAX_TOKENS_PER_API_CALL * 2;
-            let refreshed = refresh_pools_infos_for_tokens_safe(
-                &priority_mints,
-                refresh_budget
+        // Refresh pools infos for tokens seen in the last 10 minutes (bounded budget)
+        let recent_mints = get_tokens_with_recent_pools_infos_safe(
+            MONITOR_RECENT_POOLS_WINDOW_SECONDS
+        ).await;
+        if !recent_mints.is_empty() {
+            let recent_budget = MAX_TOKENS_PER_API_CALL / 2; // keep it light per cycle
+            let refreshed_recent = refresh_pools_infos_for_tokens_safe(
+                &recent_mints,
+                recent_budget
             ).await;
-            if refreshed > 0 && is_debug_monitor_enabled() {
+            if refreshed_recent > 0 && is_debug_monitor_enabled() {
                 log(
                     LogTag::Monitor,
-                    "POOLS_INFO_REFRESH",
-                    &format!("Refreshed pools infos for {} priority tokens", refreshed)
+                    "POOLS_INFO_RECENT_REFRESH",
+                    &format!("Refreshed pools infos for {} recently-seen tokens", refreshed_recent)
                 );
-            }
-
-            // Refresh pools infos for tokens seen in the last 10 minutes (bounded budget)
-            let recent_mints = get_tokens_with_recent_pools_infos_safe(
-                MONITOR_RECENT_POOLS_WINDOW_SECONDS
-            ).await;
-            if !recent_mints.is_empty() {
-                let recent_budget = MAX_TOKENS_PER_API_CALL / 2; // keep it light per cycle
-                let refreshed_recent = refresh_pools_infos_for_tokens_safe(
-                    &recent_mints,
-                    recent_budget
-                ).await;
-                if refreshed_recent > 0 && is_debug_monitor_enabled() {
-                    log(
-                        LogTag::Monitor,
-                        "POOLS_INFO_RECENT_REFRESH",
-                        &format!("Refreshed pools infos for {} recently-seen tokens", refreshed_recent)
-                    );
-                }
             }
         }
 
         // Perform database cleanup after token data has been updated
         if should_cleanup {
             self.cleanup_database().await?;
-
-            // Clean up price service watch lists to remove closed positions
-            let removed = crate::tokens::cleanup_closed_positions_safe().await;
             if removed > 0 {
                 log(
                     LogTag::Monitor,

@@ -30,7 +30,6 @@
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_ohlcv_enabled, CACHE_OHLCVS_DIR };
 use crate::tokens::pool::{ get_pool_service };
-use crate::tokens::price::{ get_priority_tokens_safe };
 use tokio::sync::{ RwLock, Notify };
 use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;
@@ -782,7 +781,7 @@ impl OhlcvService {
                 // Save to memory cache with size limit protection
                 {
                     let mut cache = self.cache.write().await;
-                    
+
                     // If cache is getting too large, remove oldest entries
                     if cache.len() >= MAX_MEMORY_CACHE_ENTRIES {
                         // Find oldest entry to remove
@@ -790,7 +789,7 @@ impl OhlcvService {
                             .iter()
                             .min_by_key(|(_, data)| data.last_updated)
                             .map(|(key, _)| key.clone());
-                            
+
                         if let Some(key) = oldest_key {
                             cache.remove(&key);
                             if is_debug_ohlcv_enabled() {
@@ -802,7 +801,7 @@ impl OhlcvService {
                             }
                         }
                     }
-                    
+
                     cache.insert(cache_key, cached_data.clone());
                 }
 
@@ -908,7 +907,7 @@ impl OhlcvService {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            
+
             if is_debug_ohlcv_enabled() {
                 log(
                     LogTag::Ohlcv,
@@ -916,13 +915,17 @@ impl OhlcvService {
                     &format!("❌ API error response: {} - {}", status, error_text)
                 );
             }
-            
+
             // Handle specific status codes
             match status.as_u16() {
                 429 => {
                     // Rate limit exceeded - wait longer before next call
                     if is_debug_ohlcv_enabled() {
-                        log(LogTag::Ohlcv, "RATE_LIMIT_EXCEEDED", "⚠️ API rate limit exceeded, backing off");
+                        log(
+                            LogTag::Ohlcv,
+                            "RATE_LIMIT_EXCEEDED",
+                            "⚠️ API rate limit exceeded, backing off"
+                        );
                     }
                     tokio::time::sleep(Duration::from_secs(10)).await;
                     return Err("Rate limit exceeded".to_string());
@@ -982,24 +985,48 @@ impl OhlcvService {
                 if timestamp <= 0 {
                     return Err(format!("Invalid timestamp: {}", timestamp));
                 }
-                
+
                 if open <= 0.0 || high <= 0.0 || low <= 0.0 || close <= 0.0 {
-                    return Err(format!("Invalid price data: open={}, high={}, low={}, close={}", open, high, low, close));
+                    return Err(
+                        format!(
+                            "Invalid price data: open={}, high={}, low={}, close={}",
+                            open,
+                            high,
+                            low,
+                            close
+                        )
+                    );
                 }
-                
+
                 if volume < 0.0 {
                     return Err(format!("Invalid volume: {}", volume));
                 }
-                
+
                 if high < low {
-                    return Err(format!("Invalid OHLC relationship: high ({}) < low ({})", high, low));
-                }
-                
-                if open > high || open < low || close > high || close < low {
-                    return Err(format!("OHLC values out of range: open={}, high={}, low={}, close={}", open, high, low, close));
+                    return Err(
+                        format!("Invalid OHLC relationship: high ({}) < low ({})", high, low)
+                    );
                 }
 
-                if !open.is_finite() || !high.is_finite() || !low.is_finite() || !close.is_finite() || !volume.is_finite() {
+                if open > high || open < low || close > high || close < low {
+                    return Err(
+                        format!(
+                            "OHLC values out of range: open={}, high={}, low={}, close={}",
+                            open,
+                            high,
+                            low,
+                            close
+                        )
+                    );
+                }
+
+                if
+                    !open.is_finite() ||
+                    !high.is_finite() ||
+                    !low.is_finite() ||
+                    !close.is_finite() ||
+                    !volume.is_finite()
+                {
                     return Err("Non-finite values in OHLCV data".to_string());
                 }
 
@@ -1095,10 +1122,12 @@ impl OhlcvService {
             return Err("Cache file not found".to_string());
         }
 
-        let content = fs::read_to_string(&cache_path)
+        let content = fs
+            ::read_to_string(&cache_path)
             .map_err(|e| format!("Failed to read cache file: {}", e))?;
 
-        let cached_data: CachedOhlcvData = serde_json::from_str(&content)
+        let cached_data: CachedOhlcvData = serde_json
+            ::from_str(&content)
             .map_err(|e| format!("Failed to parse cache file: {}", e))?;
 
         if is_debug_ohlcv_enabled() {
@@ -1136,9 +1165,11 @@ impl OhlcvService {
 
         // Atomic write: write to temporary file first, then rename
         let temp_path = cache_path.with_extension("json.tmp");
-        
-        fs::write(&temp_path, &content).map_err(|e| format!("Failed to write temporary cache file: {}", e))?;
-        
+
+        fs
+            ::write(&temp_path, &content)
+            .map_err(|e| format!("Failed to write temporary cache file: {}", e))?;
+
         fs::rename(&temp_path, &cache_path).map_err(|e| {
             // Clean up temp file on failure
             let _ = fs::remove_file(&temp_path);
@@ -1496,18 +1527,19 @@ use tokio::sync::{ RwLock as TokioRwLock };
 use std::sync::{ LazyLock };
 
 // Use LazyLock for safe global state (Rust 1.70+)
-static GLOBAL_OHLCV_SERVICE: LazyLock<TokioRwLock<Option<OhlcvService>>> = 
-    LazyLock::new(|| TokioRwLock::new(None));
+static GLOBAL_OHLCV_SERVICE: LazyLock<TokioRwLock<Option<OhlcvService>>> = LazyLock::new(||
+    TokioRwLock::new(None)
+);
 
 /// Initialize global OHLCV service
 pub async fn init_ohlcv_service() -> Result<(), Box<dyn std::error::Error>> {
     let mut service_guard = GLOBAL_OHLCV_SERVICE.write().await;
-    
+
     if service_guard.is_some() {
         // Already initialized
         return Ok(());
     }
-    
+
     match OhlcvService::new() {
         Ok(service) => {
             *service_guard = Some(service);
@@ -1515,18 +1547,17 @@ pub async fn init_ohlcv_service() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
         Err(e) => {
-            log(
-                LogTag::Ohlcv,
-                "ERROR",
-                &format!("❌ Failed to initialize OHLCV service: {}", e)
-            );
+            log(LogTag::Ohlcv, "ERROR", &format!("❌ Failed to initialize OHLCV service: {}", e));
             Err(e)
         }
     }
 }
 
 /// Get direct access to OHLCV service for sync operations
-pub async fn get_ohlcv_service_ref() -> Result<impl std::ops::Deref<Target = Option<OhlcvService>>, String> {
+pub async fn get_ohlcv_service_ref() -> Result<
+    impl std::ops::Deref<Target = Option<OhlcvService>>,
+    String
+> {
     Ok(GLOBAL_OHLCV_SERVICE.read().await)
 }
 
@@ -1550,13 +1581,11 @@ pub async fn get_ohlcv_service_clone() -> Result<OhlcvService, String> {
 pub async fn start_ohlcv_monitoring(
     shutdown: Arc<Notify>
 ) -> Result<tokio::task::JoinHandle<()>, String> {
-    init_ohlcv_service().await.map_err(|e|
-        format!("Failed to initialize OHLCV service: {}", e)
-    )?;
+    init_ohlcv_service().await.map_err(|e| format!("Failed to initialize OHLCV service: {}", e))?;
 
     // Get cloned service for async operations
     let service = get_ohlcv_service_clone().await?;
-    
+
     // Start monitoring
     service.start_monitoring(shutdown.clone()).await;
 
@@ -1570,9 +1599,11 @@ pub async fn start_ohlcv_monitoring(
 }
 
 /// Sync watch list with price service priority tokens (called from trader)
-pub async fn sync_watch_list_with_trader(shutdown: Option<std::sync::Arc<Notify>>) -> Result<(), String> {
-    // Get priority tokens from price service (these are the ones we're actively monitoring)
-    let priority_tokens = get_priority_tokens_safe().await;
+pub async fn sync_watch_list_with_trader(
+    shutdown: Option<std::sync::Arc<Notify>>
+) -> Result<(), String> {
+    // No more priority tokens from price service - positions manager handles this internally
+    let priority_tokens: Vec<String> = Vec::new();
 
     if is_debug_ohlcv_enabled() {
         log(
@@ -1583,13 +1614,17 @@ pub async fn sync_watch_list_with_trader(shutdown: Option<std::sync::Arc<Notify>
     }
 
     let service = get_ohlcv_service_clone().await?;
-    
+
     for token_mint in &priority_tokens {
         // If shutdown requested, stop syncing to avoid late logs during shutdown
         if let Some(ref s) = shutdown {
             if crate::utils::check_shutdown_or_delay(s, std::time::Duration::from_millis(0)).await {
                 if is_debug_ohlcv_enabled() {
-                    log(LogTag::Ohlcv, "SHUTDOWN", "Skipping OHLCV watch list sync due to shutdown");
+                    log(
+                        LogTag::Ohlcv,
+                        "SHUTDOWN",
+                        "Skipping OHLCV watch list sync due to shutdown"
+                    );
                 }
                 break;
             }
@@ -1634,7 +1669,7 @@ pub async fn is_ohlcv_data_available(mint: &str, timeframe: &Timeframe) -> bool 
             return false;
         }
     };
-    
+
     let availability = service.check_data_availability(mint, timeframe).await;
     let is_available = availability.has_cached_data && availability.is_fresh;
 

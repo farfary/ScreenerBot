@@ -29,7 +29,6 @@ use std::sync::Mutex;
 pub mod dexscreener;
 pub mod pool;
 pub mod discovery;
-pub mod monitor;
 pub mod cache;
 pub mod types;
 pub mod blacklist;
@@ -53,12 +52,6 @@ pub use dexscreener::{
     API_CALLS_PER_MONITORING_CYCLE,
 };
 pub use discovery::{ TokenDiscovery, start_token_discovery, discover_tokens_once };
-pub use monitor::{
-    TokenMonitor,
-    start_token_monitoring,
-    monitor_tokens_once,
-    get_monitoring_stats,
-};
 pub use cache::{ TokenDatabase, DatabaseStats };
 pub use decimals::{
     get_token_decimals_from_chain,
@@ -101,13 +94,7 @@ pub use price::{
     initialize_price_service,
     get_token_price_safe,
     get_token_price_blocking_safe,
-    update_open_positions_safe,
-    remove_closed_position_safe,
-    cleanup_closed_positions_safe,
-    get_priority_tokens_safe,
     update_tokens_prices_safe,
-    get_price_cache_stats,
-    cleanup_price_cache,
     TokenPriceService,
     PriceCacheEntry,
 };
@@ -132,7 +119,6 @@ pub const MAX_PRICE_DEVIATION_PERCENT: f64 = 50.0; // Maximum deviation between 
 /// Complete tokens system manager
 pub struct TokensSystem {
     discovery: TokenDiscovery,
-    monitor: TokenMonitor,
     database: TokenDatabase,
     rugcheck_service: Arc<RugcheckService>,
 }
@@ -141,7 +127,6 @@ impl TokensSystem {
     /// Create new tokens system instance
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let discovery = TokenDiscovery::new()?;
-        let monitor = TokenMonitor::new()?;
         let database = TokenDatabase::new()?;
 
         // Create rugcheck service with a temporary shutdown notify (will be replaced by global service)
@@ -152,7 +137,6 @@ impl TokensSystem {
 
         Ok(Self {
             discovery,
-            monitor,
             database,
             rugcheck_service,
         })
@@ -169,11 +153,6 @@ impl TokensSystem {
         log(LogTag::System, "START", "Starting token discovery task...");
         let discovery_handle = start_token_discovery(shutdown.clone()).await?;
         handles.push(discovery_handle);
-
-        // Start monitoring task
-        log(LogTag::System, "START", "Starting token monitoring task...");
-        let monitor_handle = start_token_monitoring(shutdown.clone()).await?;
-        handles.push(monitor_handle);
 
         // Start OHLCV monitoring task
         log(LogTag::System, "START", "Starting OHLCV monitoring task...");
@@ -197,16 +176,15 @@ impl TokensSystem {
         let db_stats = self.database
             .get_stats()
             .map_err(|e| format!("Failed to get database stats: {}", e))?;
-        let monitor_stats = get_monitoring_stats().await?;
         let blacklist_stats = get_blacklist_stats();
 
         Ok(TokensSystemStats {
             total_tokens: db_stats.total_tokens,
             tokens_with_liquidity: db_stats.tokens_with_liquidity,
-            active_tokens: monitor_stats.active_tokens,
+            active_tokens: 0, // No monitoring system
             blacklisted_tokens: blacklist_stats.map(|s| s.total_blacklisted).unwrap_or(0),
-            last_discovery_cycle: monitor_stats.last_cycle,
-            last_monitoring_cycle: monitor_stats.last_cycle,
+            last_discovery_cycle: None,
+            last_monitoring_cycle: None,
         })
     }
 
@@ -223,8 +201,8 @@ pub struct TokensSystemStats {
     pub tokens_with_liquidity: usize,
     pub active_tokens: usize,
     pub blacklisted_tokens: usize,
-    pub last_discovery_cycle: chrono::DateTime<chrono::Utc>,
-    pub last_monitoring_cycle: chrono::DateTime<chrono::Utc>,
+    pub last_discovery_cycle: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_monitoring_cycle: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 // =============================================================================
@@ -287,19 +265,8 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
     // Initialize price service
     initialize_price_service().await?;
 
-    // Perform initial cleanup of any stale watch list entries from previous runs
-    tokio::spawn(async {
-        // Wait a moment for positions manager to initialize
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        let removed = cleanup_closed_positions_safe().await;
-        if removed > 0 {
-            log(
-                LogTag::System,
-                "CLEANUP",
-                &format!("Initial price service cleanup removed {} stale entries from previous runs", removed)
-            );
-        }
-    });
+    // Note: Position-related cleanup is now handled by positions manager
+    // No longer need to cleanup stale watch list entries since monitoring is disabled
 
     // Initialize OHLCV service
     if let Err(e) = init_ohlcv_service().await {
@@ -493,13 +460,6 @@ pub async fn get_current_token_price(mint: &str) -> Option<f64> {
     get_token_price_safe(mint).await
 }
 
-/// Get multiple token prices in batch - much faster for multiple tokens
-pub async fn get_current_token_prices_batch(
-    mints: &[String]
-) -> std::collections::HashMap<String, Option<f64>> {
-    price::get_token_prices_batch_safe(mints).await
-}
-
 /// Get all tokens by liquidity using database directly (for compatibility)
 pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, String> {
     let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
@@ -522,11 +482,6 @@ pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, String> {
         }
         Err(e) => Err(format!("Database error: {}", e)),
     }
-}
-
-/// Get pricing system statistics
-pub async fn get_pricing_stats() -> String {
-    get_price_cache_stats().await
 }
 
 /// Get token from database using safe system (compatibility function)

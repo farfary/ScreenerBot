@@ -1149,9 +1149,9 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
         );
     }
     let disk_cache_stats = match
-        tokio::time::timeout(Duration::from_secs(2), pool_service.get_disk_cache_stats()).await
+        tokio::time::timeout(Duration::from_secs(2), pool_service.get_cache_stats()).await
     {
-        Ok(Ok(stats)) => {
+        Ok(stats) => {
             if is_debug_summary_enabled() {
                 log(
                     LogTag::Summary,
@@ -1173,7 +1173,7 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
                     disk_cache_start.elapsed().as_millis()
                 )
             );
-            crate::tokens::pool::PoolDiskCacheStats::default()
+            (0, 0, 0)
         }
     };
 
@@ -1227,43 +1227,19 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
         ),
     };
 
-    // Build disk cache display
+    // Build cache display (simplified - no disk cache)
+    let (pool_cache_count, price_cache_count, availability_cache_count) = disk_cache_stats;
     let disk_cache_display = PoolDiskCacheDisplay {
-        disk_tokens: format!("{}", disk_cache_stats.total_tokens),
-        disk_pools: format!("{}", disk_cache_stats.total_pools),
-        cache_files: format!("{}", disk_cache_stats.total_files),
-        total_entries: format!("{}", disk_cache_stats.total_entries),
-        cache_size: if disk_cache_stats.total_size_bytes > 0 {
-            format!("{:.2} MB", disk_cache_stats.get_cache_size_mb())
-        } else {
-            "0 MB".to_string()
-        },
-        data_range: if
-            let (Some(oldest), Some(newest)) = (
-                disk_cache_stats.oldest_entry,
-                disk_cache_stats.newest_entry,
-            )
-        {
-            let duration = newest.signed_duration_since(oldest);
-            if duration.num_hours() > 0 {
-                format!("{}h ago", duration.num_hours())
-            } else if duration.num_minutes() > 0 {
-                format!("{}m ago", duration.num_minutes())
-            } else {
-                format!("{}s ago", duration.num_seconds())
-            }
-        } else {
-            "No data".to_string()
-        },
-        avg_per_token: if disk_cache_stats.total_tokens > 0 {
-            format!(
-                "{:.1} pools, {:.0} entries",
-                disk_cache_stats.get_avg_pools_per_token(),
-                disk_cache_stats.get_avg_entries_per_token()
-            )
-        } else {
-            "N/A".to_string()
-        },
+        disk_tokens: format!("{}", pool_cache_count),
+        disk_pools: format!("{}", price_cache_count),
+        cache_files: format!("{}", availability_cache_count),
+        total_entries: format!(
+            "{}",
+            pool_cache_count + price_cache_count + availability_cache_count
+        ),
+        cache_size: "Memory only".to_string(),
+        data_range: "In-memory".to_string(),
+        avg_per_token: format!("{} pools cached", pool_cache_count),
     };
 
     // Build all table strings first, then display in one shot

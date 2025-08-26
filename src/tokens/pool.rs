@@ -37,21 +37,15 @@ const PRICE_CACHE_TTL_SECONDS: i64 = 5;
 /// Lower this for testing environments if you want stats to increment sooner.
 pub const MIN_POOL_LIQUIDITY_USD: f64 = 1000.0;
 
-/// Pool price history cache settings
-const POOL_PRICE_HISTORY_CACHE_DIR: &str = CACHE_POOL_DIR;
-const POOL_PRICE_HISTORY_MAX_AGE_HOURS: i64 = 24; // 24 hours maximum
-const POOL_PRICE_HISTORY_SAVE_INTERVAL_SECONDS: u64 = 5; // Save every 5 seconds
-const POOL_PRICE_HISTORY_MAX_ENTRIES: usize = 17280; // 24h * 60min * 12 entries/min = 17,280 entries
-
 // Monitoring concurrency & performance budgeting
 const POOL_MONITOR_CONCURRENCY: usize = 5; // Max concurrent token updates per cycle
 const POOL_MONITOR_CYCLE_BUDGET_MS: u128 = 2500; // Soft per-cycle time budget
 const POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS: u64 = 6; // Guard per token update future
 
-/// Pools infos disk cache file
-const POOLS_INFO_CACHE_FILE: &str = "data/pools_infos.json";
-/// Pools infos auto-save interval (seconds)
-const POOLS_INFO_SAVE_INTERVAL_SECONDS: u64 = 30;
+// Pool price history settings (in-memory only)
+const POOL_PRICE_HISTORY_MAX_AGE_HOURS: i64 = 24; // Keep 24 hours of history
+const POOL_PRICE_HISTORY_MAX_ENTRIES: usize = 1000; // Max entries per pool cache
+const POOL_PRICE_HISTORY_SAVE_INTERVAL_SECONDS: u64 = 300; // 5 minute intervals
 
 /// SOL mint address
 pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
@@ -379,111 +373,7 @@ impl PoolPriceHistoryCache {
     /// Check if cache is expired (older than 24 hours)
     pub fn is_expired(&self) -> bool {
         let age = Utc::now() - self.last_updated;
-        age.num_hours() >= POOL_PRICE_HISTORY_MAX_AGE_HOURS
-    }
-
-    /// Get file path for this pool's cache
-    pub fn get_cache_file_path(&self) -> String {
-        format!("{}/{}/{}.json", POOL_PRICE_HISTORY_CACHE_DIR, self.token_mint, self.pool_address)
-    }
-
-    /// Load pool price history from disk cache
-    pub fn load_from_disk(token_mint: &str, pool_address: &str) -> Result<Self, String> {
-        let cache_file = format!(
-            "{}/{}/{}.json",
-            POOL_PRICE_HISTORY_CACHE_DIR,
-            token_mint,
-            pool_address
-        );
-
-        if !Path::new(&cache_file).exists() {
-            return Ok(
-                Self::new(
-                    token_mint.to_string(),
-                    pool_address.to_string(),
-                    "unknown".to_string(),
-                    None
-                )
-            );
-        }
-
-        match fs::read_to_string(&cache_file) {
-            Ok(contents) => {
-                match serde_json::from_str::<PoolPriceHistoryCache>(&contents) {
-                    Ok(mut cache) => {
-                        // Clean up old entries on load
-                        cache.cleanup_old_entries();
-                        Ok(cache)
-                    }
-                    Err(e) => {
-                        log(
-                            LogTag::Pool,
-                            "CACHE_LOAD_ERROR",
-                            &format!(
-                                "Failed to parse pool cache for {}/{}: {}",
-                                token_mint,
-                                pool_address,
-                                e
-                            )
-                        );
-                        // Return new cache if parsing fails
-                        Ok(
-                            Self::new(
-                                token_mint.to_string(),
-                                pool_address.to_string(),
-                                "unknown".to_string(),
-                                None
-                            )
-                        )
-                    }
-                }
-            }
-            Err(e) => {
-                log(
-                    LogTag::Pool,
-                    "CACHE_READ_ERROR",
-                    &format!("Failed to read pool cache for {}/{}: {}", token_mint, pool_address, e)
-                );
-                // Return new cache if read fails
-                Ok(
-                    Self::new(
-                        token_mint.to_string(),
-                        pool_address.to_string(),
-                        "unknown".to_string(),
-                        None
-                    )
-                )
-            }
-        }
-    }
-
-    /// Save pool price history to disk cache
-    pub fn save_to_disk(&self) -> Result<(), String> {
-        // Ensure cache directory structure exists
-        let token_dir = format!("{}/{}", POOL_PRICE_HISTORY_CACHE_DIR, self.token_mint);
-        if let Err(e) = fs::create_dir_all(&token_dir) {
-            return Err(format!("Failed to create token cache directory {}: {}", token_dir, e));
-        }
-
-        let cache_file = self.get_cache_file_path();
-
-        match serde_json::to_string_pretty(self) {
-            Ok(json) => {
-                match fs::write(&cache_file, json) {
-                    Ok(_) => Ok(()),
-                    Err(e) => Err(format!("Failed to write pool cache file {}: {}", cache_file, e)),
-                }
-            }
-            Err(e) =>
-                Err(
-                    format!(
-                        "Failed to serialize pool cache for {}/{}: {}",
-                        self.token_mint,
-                        self.pool_address,
-                        e
-                    )
-                ),
-        }
+        age.num_hours() >= 24 // 24 hours
     }
 }
 
@@ -569,111 +459,6 @@ impl TokenAggregatedPriceHistoryCache {
     pub fn add_or_update_pool_cache(&mut self, pool_cache: PoolPriceHistoryCache) {
         self.pool_caches.insert(pool_cache.pool_address.clone(), pool_cache);
         self.last_updated = Utc::now();
-    }
-
-    /// Load all pool caches for a token from disk
-    pub fn load_from_disk(token_mint: &str) -> Result<Self, String> {
-        let mut cache = Self::new(token_mint.to_string());
-
-        let token_dir = format!("{}/{}", POOL_PRICE_HISTORY_CACHE_DIR, token_mint);
-        if !Path::new(&token_dir).exists() {
-            return Ok(cache);
-        }
-
-        match fs::read_dir(&token_dir) {
-            Ok(entries) => {
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        let path = entry.path();
-                        if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                            if let Some(pool_address) = path.file_stem().and_then(|s| s.to_str()) {
-                                match
-                                    PoolPriceHistoryCache::load_from_disk(token_mint, pool_address)
-                                {
-                                    Ok(pool_cache) => {
-                                        cache.pool_caches.insert(
-                                            pool_address.to_string(),
-                                            pool_cache
-                                        );
-                                    }
-                                    Err(e) => {
-                                        log(
-                                            LogTag::Pool,
-                                            "POOL_LOAD_ERROR",
-                                            &format!(
-                                                "Failed to load pool cache {}/{}: {}",
-                                                token_mint,
-                                                pool_address,
-                                                e
-                                            )
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                log(
-                    LogTag::Pool,
-                    "TOKEN_DIR_ERROR",
-                    &format!("Failed to read token directory {}: {}", token_dir, e)
-                );
-            }
-        }
-
-        Ok(cache)
-    }
-
-    /// Save all pool caches for this token to disk
-    pub fn save_to_disk(&self) -> Result<(), String> {
-        let mut error_count = 0;
-        let mut saved_count = 0;
-
-        for pool_cache in self.pool_caches.values() {
-            match pool_cache.save_to_disk() {
-                Ok(_) => {
-                    saved_count += 1;
-                }
-                Err(e) => {
-                    error_count += 1;
-                    log(
-                        LogTag::Pool,
-                        "POOL_SAVE_ERROR",
-                        &format!(
-                            "Failed to save pool cache {}/{}: {}",
-                            self.token_mint,
-                            pool_cache.pool_address,
-                            e
-                        )
-                    );
-                }
-            }
-        }
-
-        if error_count > 0 {
-            Err(
-                format!(
-                    "Failed to save {} out of {} pool caches",
-                    error_count,
-                    self.pool_caches.len()
-                )
-            )
-        } else {
-            if is_debug_pool_prices_enabled() && saved_count > 0 {
-                log(
-                    LogTag::Pool,
-                    "SAVE_SUCCESS",
-                    &format!(
-                        "Successfully saved {} pool caches for token {}",
-                        saved_count,
-                        self.token_mint
-                    )
-                );
-            }
-            Ok(())
-        }
     }
 }
 
@@ -791,59 +576,10 @@ impl PoolServiceStats {
 }
 
 /// Pool disk cache statistics for detailed reporting
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PoolDiskCacheStats {
-    pub total_tokens: usize,
-    pub total_pools: usize,
-    pub total_files: usize,
-    pub total_entries: usize,
-    pub total_size_bytes: u64,
-    pub oldest_entry: Option<DateTime<Utc>>,
-    pub newest_entry: Option<DateTime<Utc>>,
-    pub cache_directory: String,
-}
-
-impl Default for PoolDiskCacheStats {
-    fn default() -> Self {
-        Self {
-            total_tokens: 0,
-            total_pools: 0,
-            total_files: 0,
-            total_entries: 0,
-            total_size_bytes: 0,
-            oldest_entry: None,
-            newest_entry: None,
-            cache_directory: POOL_PRICE_HISTORY_CACHE_DIR.to_string(),
-        }
-    }
-}
-
-impl PoolDiskCacheStats {
-    pub fn get_cache_size_mb(&self) -> f64 {
-        (self.total_size_bytes as f64) / (1024.0 * 1024.0)
-    }
-
-    pub fn get_avg_entries_per_token(&self) -> f64 {
-        if self.total_tokens > 0 {
-            (self.total_entries as f64) / (self.total_tokens as f64)
-        } else {
-            0.0
-        }
-    }
-
-    pub fn get_avg_pools_per_token(&self) -> f64 {
-        if self.total_tokens > 0 {
-            (self.total_pools as f64) / (self.total_tokens as f64)
-        } else {
-            0.0
-        }
-    }
-}
-
 impl PoolPriceService {
-    /// Create new pool price service and load disk cache
+    /// Create new pool price service
     pub fn new() -> Self {
-        let service = Self {
+        Self {
             pool_cache: Arc::new(RwLock::new(HashMap::new())),
             price_cache: Arc::new(RwLock::new(HashMap::new())),
             availability_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -854,111 +590,7 @@ impl PoolPriceService {
             in_flight_updates: Arc::new(RwLock::new(HashSet::new())),
             unsupported_programs: Arc::new(RwLock::new(HashSet::new())),
             backoff_state: Arc::new(RwLock::new(HashMap::new())),
-        };
-
-        // Load existing pools infos cache from disk on startup
-        tokio::spawn({
-            let pool_cache = service.pool_cache.clone();
-            async move {
-                match Self::load_pools_info_cache_from_disk(&pool_cache).await {
-                    Ok(loaded) => {
-                        if is_debug_pool_prices_enabled() {
-                            log(
-                                LogTag::Pool,
-                                "POOLS_INFO_LOAD",
-                                &format!(
-                                    "Loaded {} tokens of pools infos from {} (<= {}s old)",
-                                    loaded,
-                                    POOLS_INFO_CACHE_FILE,
-                                    POOL_CACHE_TTL_SECONDS
-                                )
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        log(
-                            LogTag::Pool,
-                            "POOLS_INFO_LOAD_ERROR",
-                            &format!("Failed to load pools infos cache: {}", e)
-                        );
-                    }
-                }
-            }
-        });
-
-        // Start periodic auto-save and cleanup for pools infos cache
-        tokio::spawn({
-            let pool_cache = service.pool_cache.clone();
-            // Respect service shutdown by observing the same monitoring_active flag
-            let monitoring_active = service.monitoring_active.clone();
-            async move {
-                let mut interval = tokio::time::interval(
-                    Duration::from_secs(POOLS_INFO_SAVE_INTERVAL_SECONDS)
-                );
-                loop {
-                    interval.tick().await;
-
-                    // Stop when monitoring is no longer active (graceful shutdown)
-                    {
-                        let active = monitoring_active.read().await;
-                        if !*active {
-                            if is_debug_pool_prices_enabled() {
-                                log(
-                                    LogTag::Pool,
-                                    "POOLS_INFO_SAVE_STOP",
-                                    "Pools infos auto-save loop stopping (monitoring inactive)"
-                                );
-                            }
-                            break;
-                        }
-                    }
-
-                    if let Err(e) = Self::save_pools_info_cache_to_disk(&pool_cache).await {
-                        if is_debug_pool_prices_enabled() {
-                            log(
-                                LogTag::Pool,
-                                "POOLS_INFO_SAVE_ERROR",
-                                &format!("Failed to save pools infos cache: {}", e)
-                            );
-                        }
-                    }
-                    // Cleanup expired entries
-                    let cleaned = Self::cleanup_expired_pools_infos_internal(&pool_cache).await;
-                    if cleaned > 0 && is_debug_pool_prices_enabled() {
-                        log(
-                            LogTag::Pool,
-                            "POOLS_INFO_CLEANUP",
-                            &format!("Removed {} expired tokens from pools infos cache", cleaned)
-                        );
-                    }
-                }
-            }
-        });
-
-        // Load existing pool price history from disk on startup
-        tokio::spawn({
-            let pool_price_history = service.pool_price_history.clone();
-            async move {
-                if
-                    let Err(e) =
-                        Self::load_all_pool_price_history_from_disk(pool_price_history).await
-                {
-                    log(
-                        LogTag::Pool,
-                        "STARTUP_CACHE_ERROR",
-                        &format!("Failed to load pool price history cache on startup: {}", e)
-                    );
-                } else {
-                    log(
-                        LogTag::Pool,
-                        "STARTUP_CACHE_SUCCESS",
-                        "Successfully loaded pool price history cache from disk"
-                    );
-                }
-            }
-        });
-
-        service
+        }
     }
 
     /// Trigger background refresh of a token price with in-flight deduplication (stale-while-revalidate)
@@ -988,65 +620,6 @@ impl PoolPriceService {
         });
     }
 
-    /// Load pools infos cache from disk (only keep entries within TTL)
-    async fn load_pools_info_cache_from_disk(
-        pool_cache: &Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>
-    ) -> Result<usize, String> {
-        // Read file
-        let path = Path::new(POOLS_INFO_CACHE_FILE);
-        if !path.exists() {
-            return Ok(0);
-        }
-        let data = fs::read_to_string(path).map_err(|e| format!("Read error: {}", e))?;
-        let raw: HashMap<String, Vec<CachedPoolInfo>> = serde_json
-            ::from_str(&data)
-            .map_err(|e| format!("Deserialize error: {}", e))?;
-
-        // Filter out expired entries
-        let mut kept: HashMap<String, Vec<CachedPoolInfo>> = HashMap::new();
-        let now = Utc::now();
-        for (mint, pools) in raw.into_iter() {
-            let mut fresh: Vec<CachedPoolInfo> = pools
-                .into_iter()
-                .filter(|p| (now - p.cached_at).num_seconds() <= POOL_CACHE_TTL_SECONDS)
-                .collect();
-            if !fresh.is_empty() {
-                // Normalize cached_at to now to extend life only up to TTL behavior from load time
-                for p in &mut fresh {
-                    // keep original cached_at; TTL check already applied
-                    let _ = &p.cached_at;
-                }
-                kept.insert(mint, fresh);
-            }
-        }
-
-        let count = kept.len();
-        let mut cache = pool_cache.write().await;
-        *cache = kept;
-        Ok(count)
-    }
-
-    /// Save pools infos cache to disk
-    async fn save_pools_info_cache_to_disk(
-        pool_cache: &Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>
-    ) -> Result<(), String> {
-        // Ensure data directory exists
-        if let Some(parent) = Path::new(POOLS_INFO_CACHE_FILE).parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("Failed to create data dir: {}", e))?;
-        }
-        // Clone under read lock for minimal hold time
-        let snapshot: HashMap<String, Vec<CachedPoolInfo>> = {
-            let cache = pool_cache.read().await;
-            cache.clone()
-        };
-
-        let json = serde_json
-            ::to_string_pretty(&snapshot)
-            .map_err(|e| format!("Serialize error: {}", e))?;
-        fs::write(POOLS_INFO_CACHE_FILE, json).map_err(|e| format!("Write error: {}", e))?;
-        Ok(())
-    }
-
     /// Internal cleanup helper: remove tokens whose pools infos are all expired
     async fn cleanup_expired_pools_infos_internal(
         pool_cache: &Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>
@@ -1069,11 +642,9 @@ impl PoolPriceService {
         removed
     }
 
-    /// Public cleanup: remove expired and persist file
+    /// Public cleanup: remove expired entries
     pub async fn cleanup_expired_pools_infos(&self) -> usize {
-        let removed = Self::cleanup_expired_pools_infos_internal(&self.pool_cache).await;
-        let _ = Self::save_pools_info_cache_to_disk(&self.pool_cache).await;
-        removed
+        Self::cleanup_expired_pools_infos_internal(&self.pool_cache).await
     }
 
     /// Get tokens with pools infos updated within given seconds (e.g., last 10 min)
@@ -1133,131 +704,6 @@ impl PoolPriceService {
         updated_count
     }
 
-    /// Load all pool price history caches from disk on startup
-    async fn load_all_pool_price_history_from_disk(
-        pool_price_history: Arc<RwLock<HashMap<String, TokenAggregatedPriceHistoryCache>>>
-    ) -> Result<(), String> {
-        // Ensure cache directory exists
-        if let Err(e) = fs::create_dir_all(POOL_PRICE_HISTORY_CACHE_DIR) {
-            return Err(format!("Failed to create cache directory: {}", e));
-        }
-
-        let cache_dir = Path::new(POOL_PRICE_HISTORY_CACHE_DIR);
-        if !cache_dir.exists() {
-            return Ok(()); // No cache directory, nothing to load
-        }
-
-        let mut loaded_tokens = 0;
-        let mut loaded_pools = 0;
-        let mut total_entries = 0;
-
-        match fs::read_dir(cache_dir) {
-            Ok(token_entries) => {
-                for token_entry in token_entries {
-                    if let Ok(token_entry) = token_entry {
-                        let token_path = token_entry.path();
-                        if token_path.is_dir() {
-                            if
-                                let Some(token_mint) = token_path
-                                    .file_name()
-                                    .and_then(|s| s.to_str())
-                            {
-                                match TokenAggregatedPriceHistoryCache::load_from_disk(token_mint) {
-                                    Ok(token_cache) => {
-                                        if !token_cache.pool_caches.is_empty() {
-                                            for pool_cache in token_cache.pool_caches.values() {
-                                                total_entries += pool_cache.entries.len();
-                                                loaded_pools += 1;
-                                            }
-                                            let mut cache = pool_price_history.write().await;
-                                            cache.insert(token_mint.to_string(), token_cache);
-                                            loaded_tokens += 1;
-                                        }
-                                    }
-                                    Err(e) => {
-                                        log(
-                                            LogTag::Pool,
-                                            "CACHE_LOAD_ERROR",
-                                            &format!(
-                                                "Failed to load pool cache for token {}: {}",
-                                                token_mint,
-                                                e
-                                            )
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                return Err(format!("Failed to read cache directory: {}", e));
-            }
-        }
-
-        log(
-            LogTag::Pool,
-            "CACHE_LOADED",
-            &format!(
-                "Loaded {} tokens with {} pools and {} total entries from disk",
-                loaded_tokens,
-                loaded_pools,
-                total_entries
-            )
-        );
-
-        Ok(())
-    }
-
-    /// Save all pool price history caches to files
-    async fn save_all_pool_price_history_caches(
-        pool_price_history: &Arc<RwLock<HashMap<String, TokenAggregatedPriceHistoryCache>>>
-    ) -> Result<(), String> {
-        let cache = pool_price_history.read().await;
-        let mut saved_tokens = 0;
-        let mut saved_pools = 0;
-        let mut error_count = 0;
-
-        for token_cache in cache.values() {
-            match token_cache.save_to_disk() {
-                Ok(_) => {
-                    saved_tokens += 1;
-                    saved_pools += token_cache.pool_caches.len();
-                }
-                Err(e) => {
-                    error_count += 1;
-                    log(
-                        LogTag::Pool,
-                        "SAVE_ERROR",
-                        &format!(
-                            "Failed to save pool cache for token {}: {}",
-                            token_cache.token_mint,
-                            e
-                        )
-                    );
-                }
-            }
-        }
-
-        if error_count > 0 {
-            Err(format!("Failed to save {} out of {} pool caches", error_count, cache.len()))
-        } else {
-            if is_debug_pool_prices_enabled() && saved_tokens > 0 {
-                log(
-                    LogTag::Pool,
-                    "SAVE_SUCCESS",
-                    &format!(
-                        "Successfully saved {} tokens with {} pool caches",
-                        saved_tokens,
-                        saved_pools
-                    )
-                );
-            }
-            Ok(())
-        }
-    }
-
     /// Start background monitoring service
     pub async fn start_monitoring(&self) {
         let mut monitoring_active = self.monitoring_active.write().await;
@@ -1295,8 +741,8 @@ impl PoolPriceService {
 
                 let cycle_start = Instant::now();
 
-                // Source tokens to monitor from price service priority list
-                let tokens_to_monitor = crate::tokens::price::get_priority_tokens_safe().await;
+                // No more priority tokens - positions manager handles priority monitoring
+                let tokens_to_monitor: Vec<String> = Vec::new();
 
                 // Record last cycle token count early
                 {
@@ -1311,183 +757,8 @@ impl PoolPriceService {
                     };
                 }
 
-                if !tokens_to_monitor.is_empty() {
-                    if is_debug_pool_prices_enabled() {
-                        log(
-                            LogTag::Pool,
-                            "MONITOR",
-                            &format!("Monitoring {} tokens", tokens_to_monitor.len())
-                        );
-                    }
-
-                    // Update prices for watched tokens
-                    let mut idx = 0usize;
-                    let total = tokens_to_monitor.len();
-                    while idx < total {
-                        if
-                            (cycle_start.elapsed().as_millis() as u128) >
-                            POOL_MONITOR_CYCLE_BUDGET_MS
-                        {
-                            if is_debug_pool_prices_enabled() {
-                                log(
-                                    LogTag::Pool,
-                                    "MONITOR_BUDGET_EXHAUSTED",
-                                    &format!(
-                                        "Exceeded cycle budget (>{} ms) after processing {} of {} tokens",
-                                        POOL_MONITOR_CYCLE_BUDGET_MS,
-                                        idx,
-                                        total
-                                    )
-                                );
-                            }
-                            break;
-                        }
-                        let batch_end = (idx + POOL_MONITOR_CONCURRENCY).min(total);
-                        let batch = &tokens_to_monitor[idx..batch_end];
-                        if is_debug_pool_prices_enabled() {
-                            log(
-                                LogTag::Pool,
-                                "MONITOR_BATCH",
-                                &format!(
-                                    "Processing batch {}-{} (size {})",
-                                    idx,
-                                    batch_end - 1,
-                                    batch.len()
-                                )
-                            );
-                        }
-                        let mut handles = Vec::with_capacity(batch.len());
-                        for token_address in batch.iter().cloned() {
-                            // Backoff skip
-                            {
-                                let backoff = service_for_monitor.backoff_state.read().await;
-                                if let Some(entry) = backoff.get(&token_address) {
-                                    if entry.next_retry > Instant::now() {
-                                        let mut stats = stats_arc.write().await;
-                                        stats.calc_skips_backoff += 1;
-                                        if is_debug_pool_prices_enabled() {
-                                            log(
-                                                LogTag::Pool,
-                                                "BACKOFF_SKIP",
-                                                &format!("Skipping {} due to backoff", token_address)
-                                            );
-                                        }
-                                        continue;
-                                    }
-                                }
-                            }
-                            let pool_cache_c = pool_cache.clone();
-                            let price_cache_c = price_cache.clone();
-                            let stats_arc_c = stats_arc.clone();
-                            let service_for_monitor_c = service_for_monitor.clone();
-                            handles.push(
-                                tokio::spawn(async move {
-                                    let fut = Self::update_token_price_internal(
-                                        &pool_cache_c,
-                                        &price_cache_c,
-                                        &token_address
-                                    );
-                                    match
-                                        tokio::time::timeout(
-                                            Duration::from_secs(
-                                                POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS
-                                            ),
-                                            fut
-                                        ).await
-                                    {
-                                        Ok(Ok(success)) => {
-                                            if success {
-                                                let mut backoff =
-                                                    service_for_monitor_c.backoff_state.write().await;
-                                                if
-                                                    let Some(entry) = backoff.get_mut(
-                                                        &token_address
-                                                    )
-                                                {
-                                                    entry.reset();
-                                                }
-                                            }
-                                        }
-                                        Ok(Err(e)) => {
-                                            if is_debug_pool_prices_enabled() {
-                                                log(
-                                                    LogTag::Pool,
-                                                    "WATCH_ERROR",
-                                                    &format!("❌ Failed {}: {}", token_address, e)
-                                                );
-                                            }
-                                            if e.contains("timed out") {
-                                                let mut stats = stats_arc_c.write().await;
-                                                stats.vault_timeouts += 1;
-                                                let mut backoff =
-                                                    service_for_monitor_c.backoff_state.write().await;
-                                                let entry = backoff
-                                                    .entry(token_address.clone())
-                                                    .or_insert_with(BackoffEntry::new);
-                                                entry.register_failure();
-                                                // Count as failed calculation attempt
-                                                let mut calc_stats =
-                                                    service_for_monitor_c.stats.write().await;
-                                                calc_stats.record_failure();
-                                            } else if e.contains("Unsupported pool program ID") {
-                                                let mut unsupported =
-                                                    service_for_monitor_c.unsupported_programs.write().await;
-                                                if unsupported.insert(token_address.clone()) {
-                                                    let mut stats = stats_arc_c.write().await;
-                                                    stats.unsupported_programs_count += 1;
-                                                    if is_debug_pool_prices_enabled() {
-                                                        log(
-                                                            LogTag::Pool,
-                                                            "UNSUPPORTED_PROGRAM",
-                                                            &format!("Token {} unsupported", token_address)
-                                                        );
-                                                    }
-                                                    let mut calc_stats =
-                                                        service_for_monitor_c.stats.write().await;
-                                                    calc_stats.record_failure();
-                                                }
-                                            } else {
-                                                let mut calc_stats =
-                                                    service_for_monitor_c.stats.write().await;
-                                                calc_stats.record_failure();
-                                            }
-                                        }
-                                        Err(_) => {
-                                            // Timeout wrapper triggered
-                                            let mut stats = stats_arc_c.write().await;
-                                            stats.vault_timeouts += 1;
-                                            let mut backoff =
-                                                service_for_monitor_c.backoff_state.write().await;
-                                            let entry = backoff
-                                                .entry(token_address.clone())
-                                                .or_insert_with(BackoffEntry::new);
-                                            entry.register_failure();
-                                            if is_debug_pool_prices_enabled() {
-                                                log(
-                                                    LogTag::Pool,
-                                                    "TOKEN_TIMEOUT",
-                                                    &format!(
-                                                        "Timeout updating {} after {}s",
-                                                        token_address,
-                                                        POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS
-                                                    )
-                                                );
-                                            }
-                                            let mut calc_stats =
-                                                service_for_monitor_c.stats.write().await;
-                                            calc_stats.record_failure();
-                                        }
-                                    }
-                                })
-                            );
-                        }
-                        // Await batch completion
-                        for h in handles {
-                            let _ = h.await;
-                        }
-                        idx = batch_end;
-                    }
-                }
+                // Monitoring is now handled by positions manager - this loop is disabled
+                // Pool service still provides price calculation on-demand
 
                 // Finish cycle timing stats
                 let duration_ms = cycle_start.elapsed().as_secs_f64() * 1000.0;
@@ -1504,75 +775,6 @@ impl PoolPriceService {
             }
 
             log(LogTag::Pool, "STOP", "Pool price monitoring service stopped");
-        });
-
-        // Start pool price history auto-save service (every 5 seconds)
-        let pool_price_history_save = self.pool_price_history.clone();
-        let monitoring_active_save = self.monitoring_active.clone();
-
-        tokio::spawn(async move {
-            let mut save_interval = tokio::time::interval(
-                Duration::from_secs(POOL_PRICE_HISTORY_SAVE_INTERVAL_SECONDS)
-            );
-
-            loop {
-                save_interval.tick().await;
-
-                // Check if monitoring should continue
-                let active = {
-                    let monitoring = monitoring_active_save.read().await;
-                    *monitoring
-                };
-
-                if !active {
-                    // Final save before shutdown
-                    if
-                        let Err(e) = Self::save_all_pool_price_history_caches(
-                            &pool_price_history_save
-                        ).await
-                    {
-                        log(
-                            LogTag::Pool,
-                            "FINAL_SAVE_ERROR",
-                            &format!("Failed to save pool price history caches on shutdown: {}", e)
-                        );
-                    } else {
-                        log(
-                            LogTag::Pool,
-                            "FINAL_SAVE_SUCCESS",
-                            "Successfully saved all pool price history caches on shutdown"
-                        );
-                    }
-                    break;
-                }
-
-                // Auto-save pool price history caches
-                if
-                    let Err(e) = Self::save_all_pool_price_history_caches(
-                        &pool_price_history_save
-                    ).await
-                {
-                    log(
-                        LogTag::Pool,
-                        "AUTO_SAVE_ERROR",
-                        &format!("Failed to auto-save pool price history caches: {}", e)
-                    );
-                } else if is_debug_pool_prices_enabled() {
-                    let cache_count = {
-                        let cache = pool_price_history_save.read().await;
-                        cache.len()
-                    };
-                    if cache_count > 0 {
-                        log(
-                            LogTag::Pool,
-                            "AUTO_SAVE_SUCCESS",
-                            &format!("Auto-saved {} pool price history caches to disk", cache_count)
-                        );
-                    }
-                }
-            }
-
-            log(LogTag::Pool, "DISK_SAVE_SERVICE_STOP", "Disk cache auto-save service stopped");
         });
     }
 
@@ -1705,44 +907,8 @@ impl PoolPriceService {
 
             history
         } else {
-            // Try to load from disk if not in memory
-            drop(cache);
-            match TokenAggregatedPriceHistoryCache::load_from_disk(token_address) {
-                Ok(token_cache) => {
-                    let history = token_cache.get_combined_price_history();
-                    // Cache it in memory for future use
-                    {
-                        let mut pool_cache = self.pool_price_history.write().await;
-                        pool_cache.insert(token_address.to_string(), token_cache);
-                    }
-                    if is_debug_pool_prices_enabled() {
-                        log(
-                            LogTag::Pool,
-                            "PRICE_HISTORY_LOADED",
-                            &format!(
-                                "📊 Analysis: Loaded {} price history entries from disk for {}",
-                                history.len(),
-                                token_address
-                            )
-                        );
-                    }
-                    history
-                }
-                Err(e) => {
-                    if is_debug_pool_prices_enabled() {
-                        log(
-                            LogTag::Pool,
-                            "PRICE_HISTORY_ERROR",
-                            &format!(
-                                "📊 Analysis: Failed to load price history for {}: {}",
-                                token_address,
-                                e
-                            )
-                        );
-                    }
-                    Vec::new()
-                }
-            }
+            // No cache available, return empty history
+            Vec::new()
         }
     }
 
@@ -1762,20 +928,7 @@ impl PoolPriceService {
                 result.insert(pool_address.clone(), pool_cache.get_detailed_price_history());
             }
         } else {
-            // Try to load from disk if not in memory
-            drop(cache);
-            if
-                let Ok(token_cache) =
-                    TokenAggregatedPriceHistoryCache::load_from_disk(token_address)
-            {
-                for (pool_address, pool_cache) in &token_cache.pool_caches {
-                    result.insert(pool_address.clone(), pool_cache.get_detailed_price_history());
-                }
-
-                // Cache it in memory for future use
-                let mut pool_cache = self.pool_price_history.write().await;
-                pool_cache.insert(token_address.to_string(), token_cache);
-            }
+            // No cache available
         }
 
         result
@@ -1787,22 +940,8 @@ impl PoolPriceService {
         if let Some(token_cache) = cache.get(token_address) {
             token_cache.pool_caches.keys().cloned().collect()
         } else {
-            // Try to load from disk if not in memory
-            drop(cache);
-            if
-                let Ok(token_cache) =
-                    TokenAggregatedPriceHistoryCache::load_from_disk(token_address)
-            {
-                let pools = token_cache.pool_caches.keys().cloned().collect();
-
-                // Cache it in memory for future use
-                let mut pool_cache = self.pool_price_history.write().await;
-                pool_cache.insert(token_address.to_string(), token_cache);
-
-                pools
-            } else {
-                Vec::new()
-            }
+            // No cache available
+            Vec::new()
         }
     }
 
@@ -1812,22 +951,8 @@ impl PoolPriceService {
         if let Some(token_cache) = cache.get(token_address) {
             token_cache.get_best_pool_address()
         } else {
-            // Try to load from disk if not in memory
-            drop(cache);
-            if
-                let Ok(token_cache) =
-                    TokenAggregatedPriceHistoryCache::load_from_disk(token_address)
-            {
-                let best_pool = token_cache.get_best_pool_address();
-
-                // Cache it in memory for future use
-                let mut pool_cache = self.pool_price_history.write().await;
-                pool_cache.insert(token_address.to_string(), token_cache);
-
-                best_pool
-            } else {
-                None
-            }
+            // No cache available
+            None
         }
     }
 
@@ -2488,17 +1613,6 @@ impl PoolPriceService {
             }
         }
 
-        // Persist pools infos cache to disk (best-effort)
-        if let Err(e) = Self::save_pools_info_cache_to_disk(&self.pool_cache).await {
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "POOLS_INFO_SAVE_ERROR",
-                    &format!("Failed to save pools infos cache after update: {}", e)
-                );
-            }
-        }
-
         Ok(cached_pools)
     }
 
@@ -2513,10 +1627,7 @@ impl PoolPriceService {
         &self,
         token_address: &str
     ) -> Result<Vec<CachedPoolInfo>, String> {
-        let result = self.fetch_and_cache_pools(token_address).await?;
-        // Persist best-effort
-        let _ = Self::save_pools_info_cache_to_disk(&self.pool_cache).await;
-        Ok(result)
+        self.fetch_and_cache_pools(token_address).await
     }
 
     /// Calculate pool price for a token
@@ -2828,122 +1939,9 @@ impl PoolPriceService {
             .map(|v| v.len() as u64)
             .sum();
 
-        // Watch list stats now sourced from price service
-        let (wl_total, wl_expired, wl_never) =
-            crate::tokens::price::get_price_watch_list_stats_safe().await;
-        stats.watch_total = wl_total as u64;
-        stats.watch_expired = wl_expired as u64;
-        stats.watch_never_checked = wl_never as u64;
         stats.last_updated = Utc::now();
 
         stats.clone()
-    }
-
-    /// Get detailed disk cache statistics for pool price history
-    pub async fn get_disk_cache_stats(&self) -> Result<PoolDiskCacheStats, String> {
-        let cache_dir = Path::new(POOL_PRICE_HISTORY_CACHE_DIR);
-
-        if !cache_dir.exists() {
-            return Ok(PoolDiskCacheStats::default());
-        }
-
-        let mut total_tokens = 0;
-        let mut total_pools = 0;
-        let mut total_files = 0;
-        let mut total_entries = 0;
-        let mut total_size_bytes = 0;
-        let mut oldest_entry: Option<DateTime<Utc>> = None;
-        let mut newest_entry: Option<DateTime<Utc>> = None;
-
-        match fs::read_dir(cache_dir) {
-            Ok(token_dirs) => {
-                for token_dir_entry in token_dirs {
-                    if let Ok(token_dir) = token_dir_entry {
-                        if
-                            token_dir
-                                .file_type()
-                                .map(|t| t.is_dir())
-                                .unwrap_or(false)
-                        {
-                            total_tokens += 1;
-                            let token_path = token_dir.path();
-
-                            if let Ok(pool_files) = fs::read_dir(&token_path) {
-                                for pool_file_entry in pool_files {
-                                    if let Ok(pool_file) = pool_file_entry {
-                                        if
-                                            pool_file
-                                                .file_name()
-                                                .to_string_lossy()
-                                                .ends_with(".json")
-                                        {
-                                            total_pools += 1;
-                                            total_files += 1;
-
-                                            // Get file size
-                                            if let Ok(metadata) = pool_file.metadata() {
-                                                total_size_bytes += metadata.len();
-                                            }
-
-                                            // Try to load and get entry statistics
-                                            let pool_address = pool_file
-                                                .file_name()
-                                                .to_string_lossy()
-                                                .trim_end_matches(".json")
-                                                .to_string();
-                                            let token_mint = token_dir
-                                                .file_name()
-                                                .to_string_lossy()
-                                                .to_string();
-
-                                            if
-                                                let Ok(pool_cache) =
-                                                    PoolPriceHistoryCache::load_from_disk(
-                                                        &token_mint,
-                                                        &pool_address
-                                                    )
-                                            {
-                                                total_entries += pool_cache.entries.len();
-
-                                                // Track oldest and newest entries
-                                                for entry in &pool_cache.entries {
-                                                    if
-                                                        oldest_entry.is_none() ||
-                                                        entry.timestamp < oldest_entry.unwrap()
-                                                    {
-                                                        oldest_entry = Some(entry.timestamp);
-                                                    }
-                                                    if
-                                                        newest_entry.is_none() ||
-                                                        entry.timestamp > newest_entry.unwrap()
-                                                    {
-                                                        newest_entry = Some(entry.timestamp);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                return Err(format!("Failed to read cache directory: {}", e));
-            }
-        }
-
-        Ok(PoolDiskCacheStats {
-            total_tokens,
-            total_pools,
-            total_files,
-            total_entries,
-            total_size_bytes,
-            oldest_entry,
-            newest_entry,
-            cache_directory: POOL_PRICE_HISTORY_CACHE_DIR.to_string(),
-        })
     }
 
     /// Record a price request (internal tracking)
@@ -3149,163 +2147,6 @@ pub async fn get_detailed_pool_price_history(
 pub async fn get_pools_with_price_history(token_address: &str) -> Vec<String> {
     let pool_service = get_pool_service();
     pool_service.get_pools_with_price_history_for_token(token_address).await
-}
-
-/// Get the best pool for a token based on activity and liquidity (NEW FUNCTION)
-// Removed duplicate free functions (get_best_pool_for_token, prefetch_best_pools_for_tokens) to enforce single API via PoolPriceService methods per consolidation rules.
-
-/// Clean up old pool price history caches (can be called manually)
-pub async fn cleanup_old_price_history_caches() -> Result<usize, String> {
-    // Ensure cache directory exists
-    if let Err(e) = fs::create_dir_all(POOL_PRICE_HISTORY_CACHE_DIR) {
-        return Err(format!("Failed to create cache directory: {}", e));
-    }
-
-    let cache_dir = Path::new(POOL_PRICE_HISTORY_CACHE_DIR);
-    if !cache_dir.exists() {
-        return Ok(0); // No cache directory, nothing to clean
-    }
-
-    let mut cleaned_tokens = 0;
-    let mut cleaned_pools = 0;
-
-    match fs::read_dir(cache_dir) {
-        Ok(token_entries) => {
-            for token_entry in token_entries {
-                if let Ok(token_entry) = token_entry {
-                    let token_path = token_entry.path();
-                    if token_path.is_dir() {
-                        if let Some(token_mint) = token_path.file_name().and_then(|s| s.to_str()) {
-                            match TokenAggregatedPriceHistoryCache::load_from_disk(token_mint) {
-                                Ok(mut token_cache) => {
-                                    let mut pools_to_remove = Vec::new();
-                                    let mut pools_cleaned = 0;
-
-                                    for (pool_address, pool_cache) in &mut token_cache.pool_caches {
-                                        let old_count = pool_cache.entries.len();
-                                        pool_cache.cleanup_old_entries();
-                                        let new_count = pool_cache.entries.len();
-
-                                        if new_count == 0 {
-                                            pools_to_remove.push(pool_address.clone());
-                                        } else if new_count < old_count {
-                                            pools_cleaned += 1;
-                                            log(
-                                                LogTag::Pool,
-                                                "CLEANUP_CLEANED",
-                                                &format!(
-                                                    "Cleaned pool cache for {}/{}: {} -> {} entries",
-                                                    token_mint,
-                                                    pool_address,
-                                                    old_count,
-                                                    new_count
-                                                )
-                                            );
-                                        }
-                                    }
-
-                                    // Remove empty pool caches
-                                    for pool_address in &pools_to_remove {
-                                        token_cache.pool_caches.remove(pool_address);
-                                        // Also remove the file
-                                        let pool_file = format!(
-                                            "{}/{}/{}.json",
-                                            POOL_PRICE_HISTORY_CACHE_DIR,
-                                            token_mint,
-                                            pool_address
-                                        );
-                                        if let Err(e) = fs::remove_file(&pool_file) {
-                                            log(
-                                                LogTag::Pool,
-                                                "CLEANUP_ERROR",
-                                                &format!(
-                                                    "Failed to remove empty pool cache file {}: {}",
-                                                    pool_file,
-                                                    e
-                                                )
-                                            );
-                                        } else {
-                                            cleaned_pools += 1;
-                                            log(
-                                                LogTag::Pool,
-                                                "CLEANUP_REMOVED",
-                                                &format!(
-                                                    "Removed empty pool cache file for {}/{}",
-                                                    token_mint,
-                                                    pool_address
-                                                )
-                                            );
-                                        }
-                                    }
-
-                                    // If all pools are gone, remove the token directory
-                                    if token_cache.pool_caches.is_empty() {
-                                        if let Err(e) = fs::remove_dir(&token_path) {
-                                            log(
-                                                LogTag::Pool,
-                                                "CLEANUP_ERROR",
-                                                &format!(
-                                                    "Failed to remove empty token directory {}: {}",
-                                                    token_path.display(),
-                                                    e
-                                                )
-                                            );
-                                        } else {
-                                            cleaned_tokens += 1;
-                                            log(
-                                                LogTag::Pool,
-                                                "CLEANUP_REMOVED",
-                                                &format!("Removed empty token directory for {}", token_mint)
-                                            );
-                                        }
-                                    } else if pools_cleaned > 0 || !pools_to_remove.is_empty() {
-                                        // Save updated token cache
-                                        if let Err(e) = token_cache.save_to_disk() {
-                                            log(
-                                                LogTag::Pool,
-                                                "CLEANUP_SAVE_ERROR",
-                                                &format!(
-                                                    "Failed to save cleaned token cache for {}: {}",
-                                                    token_mint,
-                                                    e
-                                                )
-                                            );
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    log(
-                                        LogTag::Pool,
-                                        "CLEANUP_LOAD_ERROR",
-                                        &format!(
-                                            "Failed to load token cache for cleanup {}: {}",
-                                            token_mint,
-                                            e
-                                        )
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            return Err(format!("Failed to read cache directory for cleanup: {}", e));
-        }
-    }
-
-    log(
-        LogTag::Pool,
-        "CLEANUP_COMPLETE",
-        &format!(
-            "Pool price history cleanup complete: removed {} tokens and {} pools",
-            cleaned_tokens,
-            cleaned_pools
-        )
-    );
-
-    Ok(cleaned_tokens + cleaned_pools)
 }
 
 // =============================================================================
