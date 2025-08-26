@@ -715,11 +715,11 @@ impl TokenPriceService {
         {
             let mut watch_list = self.watch_list.write().await;
             let initial_size = watch_list.len();
-            
+
             watch_list.retain(|mint, entry| {
                 let is_open = current_open_mints.contains(mint);
                 let keep = is_open || !entry.is_expired();
-                
+
                 if !keep && is_debug_price_service_enabled() {
                     log(
                         LogTag::PriceService,
@@ -727,10 +727,10 @@ impl TokenPriceService {
                         &format!("🗑️ Removing {} from watch list (not open position)", mint)
                     );
                 }
-                
+
                 keep
             });
-            
+
             removed_count += initial_size - watch_list.len();
         }
 
@@ -738,10 +738,10 @@ impl TokenPriceService {
         {
             let mut open_positions = self.open_positions.write().await;
             let initial_size = open_positions.len();
-            
+
             open_positions.retain(|mint| {
                 let keep = current_open_mints.contains(mint);
-                
+
                 if !keep && is_debug_price_service_enabled() {
                     log(
                         LogTag::PriceService,
@@ -749,10 +749,10 @@ impl TokenPriceService {
                         &format!("🗑️ Removing {} from open positions set (not actually open)", mint)
                     );
                 }
-                
+
                 keep
             });
-            
+
             removed_count += initial_size - open_positions.len();
         }
 

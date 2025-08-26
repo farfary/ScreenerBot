@@ -1775,7 +1775,11 @@ impl PositionsManager {
                     );
 
                     // Check if position is now fully closed and clean up watch list
-                    if position.transaction_entry_verified && position.transaction_exit_verified && position.exit_price.is_some() {
+                    if
+                        position.transaction_entry_verified &&
+                        position.transaction_exit_verified &&
+                        position.exit_price.is_some()
+                    {
                         log(
                             LogTag::Positions,
                             "RECONCILE_FULLY_CLOSED",
@@ -1784,7 +1788,7 @@ impl PositionsManager {
                                 position.symbol
                             )
                         );
-                        
+
                         // Remove from price service watch list to prevent resource waste
                         let mint_for_cleanup = position.mint.clone();
                         tokio::spawn(async move {
@@ -5083,7 +5087,11 @@ impl PositionsManager {
                 );
 
                 // Check if position is now fully closed and clean up watch list
-                if position.transaction_entry_verified && position.transaction_exit_verified && position.exit_price.is_some() {
+                if
+                    position.transaction_entry_verified &&
+                    position.transaction_exit_verified &&
+                    position.exit_price.is_some()
+                {
                     log(
                         LogTag::Positions,
                         "POSITION_FULLY_CLOSED",
@@ -5092,7 +5100,7 @@ impl PositionsManager {
                             position.symbol
                         )
                     );
-                    
+
                     // Remove from price service watch list to prevent resource waste
                     let mint_for_cleanup = position.mint.clone();
                     tokio::spawn(async move {
