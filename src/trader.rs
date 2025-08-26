@@ -286,12 +286,7 @@ pub async fn get_tokens_from_safe_system() -> Vec<Token> {
 
 /// Update open positions tracking - now handled by positions manager
 async fn update_position_tracking_in_service() {
-    let open_mints = if let Some(h) = crate::positions::get_positions_handle().await {
-        h.get_open_mints().await
-    } else {
-        log(LogTag::Trader, "WARN", "⚠️ No positions handle available for tracking update");
-        Vec::new()
-    };
+    let open_mints = crate::positions::get_open_mints().await;
 
     if !open_mints.is_empty() {
         log(
