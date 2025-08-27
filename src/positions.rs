@@ -2952,24 +2952,33 @@ async fn remove_position_by_signature(signature: &str) -> Result<(), String> {
     log(
         LogTag::Positions,
         "CLEANUP_START",
-        &format!("🗑️ Starting cleanup of position with signature {}", get_signature_prefix(signature))
+        &format!(
+            "🗑️ Starting cleanup of position with signature {}",
+            get_signature_prefix(signature)
+        )
     );
 
     let position_to_remove = {
         let mut state = GLOBAL_POSITIONS_STATE.lock().await;
-        
+
         // Find position with matching entry or exit signature
-        let position_index = state.positions.iter().position(|p| {
-            p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature) ||
-            p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
-        });
+        let position_index = state.positions
+            .iter()
+            .position(|p| {
+                p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature) ||
+                    p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
+            });
 
         if let Some(index) = position_index {
             let position = state.positions.remove(index);
             log(
                 LogTag::Positions,
                 "CLEANUP_REMOVED",
-                &format!("🗑️ Removed position {} from memory (signature: {})", position.symbol, get_signature_prefix(signature))
+                &format!(
+                    "🗑️ Removed position {} from memory (signature: {})",
+                    position.symbol,
+                    get_signature_prefix(signature)
+                )
             );
             Some(position)
         } else {
@@ -2990,14 +2999,23 @@ async fn remove_position_by_signature(signature: &str) -> Result<(), String> {
                     log(
                         LogTag::Positions,
                         "CLEANUP_DB_SUCCESS",
-                        &format!("🗑️ Removed position {} (ID: {}) from database", position.symbol, position_id)
+                        &format!(
+                            "🗑️ Removed position {} (ID: {}) from database",
+                            position.symbol,
+                            position_id
+                        )
                     );
                 }
                 Err(e) => {
                     log(
                         LogTag::Positions,
                         "CLEANUP_DB_ERROR",
-                        &format!("❌ Failed to remove position {} (ID: {}) from database: {}", position.symbol, position_id, e)
+                        &format!(
+                            "❌ Failed to remove position {} (ID: {}) from database: {}",
+                            position.symbol,
+                            position_id,
+                            e
+                        )
                     );
                     return Err(format!("Database cleanup failed: {}", e));
                 }
@@ -3007,7 +3025,11 @@ async fn remove_position_by_signature(signature: &str) -> Result<(), String> {
         log(
             LogTag::Positions,
             "CLEANUP_COMPLETE",
-            &format!("✅ Successfully cleaned up failed position {} with signature {}", position.symbol, get_signature_prefix(signature))
+            &format!(
+                "✅ Successfully cleaned up failed position {} with signature {}",
+                position.symbol,
+                get_signature_prefix(signature)
+            )
         );
     }
 
