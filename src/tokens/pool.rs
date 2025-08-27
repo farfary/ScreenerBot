@@ -216,6 +216,7 @@ pub struct PoolPriceResult {
     pub token_address: String,
     pub price_sol: Option<f64>,
     pub price_usd: Option<f64>,
+    pub api_price_sol: Option<f64>, // API price for comparison and fallback
     pub liquidity_usd: f64,
     pub volume_24h: f64,
     pub source: String, // "pool" or "api"
@@ -609,7 +610,7 @@ impl PoolPriceService {
         let in_flight_updates = self.in_flight_updates.clone();
         tokio::spawn(async move {
             // Perform fresh calculation; ignore result on error
-            if let Ok(fresh) = get_pool_service().calculate_pool_price(&token).await {
+            if let Ok(fresh) = get_pool_service().calculate_pool_price(&token, None).await {
                 // Update cache
                 let mut pc = price_cache.write().await;
                 pc.insert(token.clone(), fresh);
@@ -1198,7 +1199,7 @@ impl PoolPriceService {
         }
 
         // Calculate pool price
-        match self.calculate_pool_price(token_address).await {
+        match self.calculate_pool_price(token_address, api_price_sol).await {
             Ok(pool_result) => {
                 let has_price = pool_result.price_sol.is_some();
                 was_blockchain = pool_result.source == "pool";
@@ -1631,7 +1632,11 @@ impl PoolPriceService {
     }
 
     /// Calculate pool price for a token
-    async fn calculate_pool_price(&self, token_address: &str) -> Result<PoolPriceResult, String> {
+    async fn calculate_pool_price(
+        &self,
+        token_address: &str,
+        api_price_sol: Option<f64>
+    ) -> Result<PoolPriceResult, String> {
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
@@ -1759,6 +1764,7 @@ impl PoolPriceService {
             token_address: token_address.to_string(),
             price_sol: Some(price_sol),
             price_usd: None, // We don't calculate USD prices from pools - only SOL prices
+            api_price_sol, // Include API price for comparison
             liquidity_usd: best_pool.liquidity_usd,
             volume_24h: best_pool.volume_24h,
             source: "pool".to_string(),
@@ -1971,7 +1977,8 @@ impl PoolPriceService {
     pub async fn get_pool_price_direct(
         &self,
         pool_address: &str,
-        token_mint: &str
+        token_mint: &str,
+        api_price_sol: Option<f64>
     ) -> Option<PoolPriceResult> {
         if is_debug_pool_prices_enabled() {
             log(
@@ -2010,6 +2017,7 @@ impl PoolPriceService {
                     token_address: token_mint.to_string(),
                     price_sol: Some(pool_price_info.price_sol),
                     price_usd: None, // We don't calculate USD prices from pools - only SOL prices
+                    api_price_sol, // Include API price for comparison
                     liquidity_usd: 0.0, // No API data for liquidity in direct mode
                     volume_24h: 0.0, // No API data for volume in direct mode
                     source: "pool_direct".to_string(),
@@ -4962,153 +4970,301 @@ pub async fn initialize_price_service() -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
-/// Get token price using pool service - instant response for cached prices
-pub async fn get_token_price_safe(mint: &str) -> Option<f64> {
-    if is_debug_pool_prices_enabled() {
-        log(LogTag::Pool, "PRICE_REQUEST", &format!("🌐 Price request for {}", mint));
-    }
+// =============================================================================
+// UNIVERSAL PRICE FUNCTION
+// =============================================================================
 
-    let pool_service = get_pool_service();
-
-    // Try to get pool price with fast cache lookup
-    if let Some(pool_result) = pool_service.get_pool_price(mint, None).await {
-        if let Some(price) = pool_result.price_sol {
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "PRICE_SUCCESS",
-                    &format!(
-                        "✅ Got price for {}: ${:.12} SOL from {}",
-                        mint,
-                        price,
-                        pool_result.source
-                    )
-                );
-            }
-            return Some(price);
-        }
-    }
-
-    if is_debug_pool_prices_enabled() {
-        log(LogTag::Pool, "PRICE_MISS", &format!("❌ No price available for {}", mint));
-    }
-
-    None
+/// Universal price result structure that covers all pricing needs
+#[derive(Debug, Clone)]
+pub struct PriceResult {
+    pub token_address: String,
+    pub price_sol: Option<f64>, // Primary SOL price (pool or API)
+    pub price_usd: Option<f64>, // USD price (if available)
+    pub api_price_sol: Option<f64>, // API-sourced SOL price
+    pub pool_price_sol: Option<f64>, // Pool-calculated SOL price
+    pub pool_address: Option<String>, // Pool address (if pool source)
+    pub dex_id: Option<String>, // DEX identifier (if pool source)
+    pub pool_type: Option<String>, // Pool type (if pool source)
+    pub liquidity_usd: Option<f64>, // Pool liquidity (if pool source)
+    pub volume_24h: Option<f64>, // 24h volume (if pool source)
+    pub source: String, // "pool", "api", "both", or "cache"
+    pub calculated_at: DateTime<Utc>, // When calculated
+    pub is_cached: bool, // Whether result came from cache
 }
 
-/// Get token price using pool service - waits for update on cache miss (blocking version)
-pub async fn get_token_price_blocking_safe(mint: &str) -> Option<f64> {
-    if is_debug_pool_prices_enabled() {
-        log(
-            LogTag::Pool,
-            "PRICE_BLOCKING_REQUEST",
-            &format!("🌐 Blocking price request for {}", mint)
-        );
+impl PriceResult {
+    /// Get the best available SOL price (prioritizes pool over API)
+    pub fn best_sol_price(&self) -> Option<f64> {
+        self.pool_price_sol.or(self.api_price_sol).or(self.price_sol)
     }
 
-    let pool_service = get_pool_service();
-
-    // Force availability check and calculation
-    if !pool_service.check_token_availability(mint).await {
-        if is_debug_pool_prices_enabled() {
-            log(
-                LogTag::Pool,
-                "PRICE_BLOCKING_UNAVAILABLE",
-                &format!("❌ Token {} not available for pool pricing", mint)
-            );
-        }
-        return None;
+    /// Get simple SOL price for backward compatibility
+    pub fn sol_price(&self) -> Option<f64> {
+        self.price_sol
     }
 
-    // Get pool price (this will calculate if needed)
-    if let Some(pool_result) = pool_service.get_pool_price(mint, None).await {
-        if let Some(price) = pool_result.price_sol {
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "PRICE_BLOCKING_SUCCESS",
-                    &format!(
-                        "✅ Got blocking price for {}: ${:.12} SOL from {}",
-                        mint,
-                        price,
-                        pool_result.source
-                    )
-                );
-            }
-            return Some(price);
-        }
+    /// Check if we have pool data
+    pub fn has_pool_data(&self) -> bool {
+        self.pool_address.is_some()
     }
 
-    if is_debug_pool_prices_enabled() {
-        log(
-            LogTag::Pool,
-            "PRICE_BLOCKING_FAILED",
-            &format!("❌ Failed to get blocking price for {}", mint)
-        );
-    }
-
-    None
-}
-
-/// Force an immediate price refresh for a token (bypass cache freshness)
-pub async fn force_refresh_token_price_safe(mint: &str) {
-    if is_debug_pool_prices_enabled() {
-        log(LogTag::Pool, "FORCE_REFRESH", &format!("🔄 Force refreshing price for {}", mint));
-    }
-
-    let pool_service = get_pool_service();
-
-    // Force refresh by calling get_pool_price with no cache consideration
-    let _ = pool_service.get_pool_price(mint, None).await;
-
-    if is_debug_pool_prices_enabled() {
-        log(
-            LogTag::Pool,
-            "FORCE_REFRESH_COMPLETE",
-            &format!("✅ Force refresh completed for {}", mint)
-        );
+    /// Check if we have API data
+    pub fn has_api_data(&self) -> bool {
+        self.api_price_sol.is_some()
     }
 }
 
-/// Update multiple token prices (called from monitor) - now uses pool service
-pub async fn update_tokens_prices_safe(mints: &[String]) {
+/// Price request options for configuring the universal get_price function
+#[derive(Debug, Clone)]
+pub struct PriceOptions {
+    /// Include pool price calculation
+    pub include_pool: bool,
+    /// Include API price lookup
+    pub include_api: bool,
+    /// Allow cached results (respects cache TTL)
+    pub allow_cache: bool,
+    /// Force fresh calculation (bypass cache)
+    pub force_refresh: bool,
+    /// Timeout for the entire operation (seconds)
+    pub timeout_secs: Option<u64>,
+    /// Minimum liquidity required for pool prices (USD)
+    pub min_liquidity_usd: Option<f64>,
+}
+
+impl Default for PriceOptions {
+    fn default() -> Self {
+        Self {
+            include_pool: true,
+            include_api: true,
+            allow_cache: true,
+            force_refresh: false,
+            timeout_secs: Some(10),
+            min_liquidity_usd: None,
+        }
+    }
+}
+
+impl PriceOptions {
+    /// Create options for simple price lookup (fastest)
+    pub fn simple() -> Self {
+        Self {
+            include_pool: true,
+            include_api: false,
+            allow_cache: true,
+            force_refresh: false,
+            timeout_secs: Some(5),
+            min_liquidity_usd: None,
+        }
+    }
+
+    /// Create options for comprehensive price (pool + API)
+    pub fn comprehensive() -> Self {
+        Self {
+            include_pool: true,
+            include_api: true,
+            allow_cache: true,
+            force_refresh: false,
+            timeout_secs: Some(15),
+            min_liquidity_usd: Some(MIN_POOL_LIQUIDITY_USD),
+        }
+    }
+
+    /// Create options for API only
+    pub fn api_only() -> Self {
+        Self {
+            include_pool: false,
+            include_api: true,
+            allow_cache: true,
+            force_refresh: false,
+            timeout_secs: Some(10),
+            min_liquidity_usd: None,
+        }
+    }
+
+    /// Create options for pool only
+    pub fn pool_only() -> Self {
+        Self {
+            include_pool: true,
+            include_api: false,
+            allow_cache: true,
+            force_refresh: false,
+            timeout_secs: Some(10),
+            min_liquidity_usd: Some(MIN_POOL_LIQUIDITY_USD),
+        }
+    }
+
+    /// Create options that force fresh data
+    pub fn fresh() -> Self {
+        Self {
+            include_pool: true,
+            include_api: true,
+            allow_cache: false,
+            force_refresh: true,
+            timeout_secs: Some(20),
+            min_liquidity_usd: None,
+        }
+    }
+}
+
+/// Universal price function - the ONLY price function you should use
+///
+/// This replaces all get_token_price_* and get_pool_price variants.
+/// Works in both sync and async contexts via the sync parameter.
+///
+/// Parameters:
+/// - token_address: The token mint address
+/// - options: PriceOptions to configure behavior
+/// - sync: If true, uses blocking execution for sync contexts
+///
+/// Returns PriceResult with comprehensive price information
+pub async fn get_price(
+    token_address: &str,
+    options: Option<PriceOptions>,
+    sync: bool
+) -> Option<PriceResult> {
+    let options = options.unwrap_or_default();
+
+    // Handle sync execution by wrapping in block_in_place
+    if sync {
+        return tokio::task::block_in_place(|| {
+            tokio::runtime::Handle
+                ::current()
+                .block_on(async { get_price_async(token_address, options).await })
+        });
+    }
+
+    get_price_async(token_address, options).await
+}
+
+/// Internal async implementation of universal price function
+async fn get_price_async(token_address: &str, options: PriceOptions) -> Option<PriceResult> {
+    let start_time = Instant::now();
+    let calculated_at = Utc::now();
+
+    // Apply timeout if specified
+    let result = if let Some(timeout_secs) = options.timeout_secs {
+        tokio::time
+            ::timeout(
+                Duration::from_secs(timeout_secs),
+                get_price_internal(token_address, &options, calculated_at)
+            ).await
+            .unwrap_or(None)
+    } else {
+        get_price_internal(token_address, &options, calculated_at).await
+    };
+
     if is_debug_pool_prices_enabled() {
+        let duration = start_time.elapsed();
+        let result_info = match &result {
+            Some(r) =>
+                format!(
+                    "source={}, pool={:?}, api={:?}",
+                    r.source,
+                    r.pool_price_sol,
+                    r.api_price_sol
+                ),
+            None => "failed".to_string(),
+        };
         log(
             LogTag::Pool,
-            "BATCH_UPDATE_REQUEST",
-            &format!("🔧 Batch price update for {} tokens: {:?}", mints.len(), mints)
+            "PRICE_RESULT",
+            &format!("get_price({}) -> {} in {:?}", &token_address[..8], result_info, duration)
         );
     }
 
-    let pool_service = get_pool_service();
-    let mut success_count = 0;
-    let mut error_count = 0;
+    result
+}
 
-    for mint in mints {
-        match pool_service.get_pool_price(mint, None).await {
-            Some(pool_result) => {
-                if pool_result.price_sol.is_some() {
-                    success_count += 1;
+/// Core price calculation logic
+async fn get_price_internal(
+    token_address: &str,
+    options: &PriceOptions,
+    calculated_at: DateTime<Utc>
+) -> Option<PriceResult> {
+    use crate::tokens::dexscreener::get_token_price_from_global_api;
+
+    let mut result = PriceResult {
+        token_address: token_address.to_string(),
+        price_sol: None,
+        price_usd: None,
+        api_price_sol: None,
+        pool_price_sol: None,
+        pool_address: None,
+        dex_id: None,
+        pool_type: None,
+        liquidity_usd: None,
+        volume_24h: None,
+        source: "none".to_string(),
+        calculated_at,
+        is_cached: false,
+    };
+
+    let mut sources = Vec::new();
+
+    // Get API price if requested
+    if options.include_api {
+        if let Some(api_price) = get_token_price_from_global_api(token_address).await {
+            result.api_price_sol = Some(api_price);
+            result.price_sol = Some(api_price); // Set as primary price
+            sources.push("api");
+        }
+    }
+
+    // Get pool price if requested
+    if options.include_pool {
+        let pool_service = get_pool_service();
+
+        // Use API price for pool service if we have it
+        let api_price_for_pool = if options.include_api { result.api_price_sol } else { None };
+
+        if
+            let Some(pool_result) = pool_service.get_pool_price(
+                token_address,
+                api_price_for_pool
+            ).await
+        {
+            result.pool_price_sol = pool_result.price_sol;
+            result.pool_address = Some(pool_result.pool_address);
+            result.dex_id = Some(pool_result.dex_id);
+            result.pool_type = pool_result.pool_type;
+            result.liquidity_usd = Some(pool_result.liquidity_usd);
+            result.volume_24h = Some(pool_result.volume_24h);
+            result.price_usd = pool_result.price_usd;
+
+            // Check minimum liquidity requirement
+            if let Some(min_liquidity) = options.min_liquidity_usd {
+                if pool_result.liquidity_usd < min_liquidity {
+                    // Pool doesn't meet liquidity requirement, clear pool data
+                    result.pool_price_sol = None;
+                    result.pool_address = None;
+                    result.dex_id = None;
+                    result.pool_type = None;
+                    result.liquidity_usd = None;
+                    result.volume_24h = None;
                 } else {
-                    error_count += 1;
+                    // Use pool price as primary if it meets requirements
+                    result.price_sol = pool_result.price_sol.or(result.price_sol);
+                    sources.push("pool");
                 }
-            }
-            None => {
-                error_count += 1;
+            } else {
+                // No liquidity requirement, use pool price as primary
+                result.price_sol = pool_result.price_sol.or(result.price_sol);
+                sources.push("pool");
             }
         }
     }
 
-    if is_debug_pool_prices_enabled() {
-        log(
-            LogTag::Pool,
-            "BATCH_UPDATE_COMPLETE",
-            &format!(
-                "✅ Batch update complete: {}/{} successful, {} errors",
-                success_count,
-                mints.len(),
-                error_count
-            )
-        );
+    // Set source information
+    result.source = if sources.is_empty() { "none".to_string() } else { sources.join("+") };
+
+    // Return result if we got any price data
+    if
+        result.price_sol.is_some() ||
+        result.api_price_sol.is_some() ||
+        result.pool_price_sol.is_some()
+    {
+        Some(result)
+    } else {
+        None
     }
 }

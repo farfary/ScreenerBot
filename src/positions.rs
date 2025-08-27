@@ -1,5 +1,5 @@
 use crate::{
-    tokens::{ Token, get_token_decimals, get_token_price_safe },
+    tokens::{ Token, get_token_decimals, PriceResult, get_price, PriceOptions },
     swaps::{
         get_best_quote,
         execute_best_swap,
@@ -85,26 +85,6 @@ pub struct Position {
     pub phantom_first_seen: Option<DateTime<Utc>>, // When first confirmed phantom
     pub synthetic_exit: bool, // True if we synthetically closed due to missing exit tx
     pub closed_reason: Option<String>, // Optional reason for closure (e.g., "synthetic_phantom_closure")
-}
-
-/// Additional price information for comprehensive position price logging
-#[derive(Debug, Clone)]
-pub struct PositionPriceInfo {
-    pub price_source: String, // "pool", "api", "cache"
-    pub pool_type: Option<String>, // e.g., "RAYDIUM CPMM"
-    pub pool_address: Option<String>,
-    pub api_price: Option<f64>,
-}
-
-impl Default for PositionPriceInfo {
-    fn default() -> Self {
-        Self {
-            price_source: "unknown".to_string(),
-            pool_type: None,
-            pool_address: None,
-            api_price: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -439,7 +419,7 @@ pub async fn open_position_direct(
     let _price_service_result = match
         tokio::time::timeout(
             tokio::time::Duration::from_secs(10),
-            get_token_price_safe(&token.mint)
+            get_price(&token.mint, Some(PriceOptions::simple()), false)
         ).await
     {
         Ok(result) => result,
@@ -452,7 +432,7 @@ pub async fn open_position_direct(
                     token.symbol
                 )
             );
-            Some(0.0)
+            None
         }
     };
 
@@ -866,7 +846,7 @@ pub async fn close_position_direct(
     let _price_service_result = match
         tokio::time::timeout(
             tokio::time::Duration::from_secs(10),
-            get_token_price_safe(&token.mint)
+            get_price(&token.mint, Some(PriceOptions::simple()), false)
         ).await
     {
         Ok(result) => result,
@@ -879,7 +859,7 @@ pub async fn close_position_direct(
                     token.symbol
                 )
             );
-            Some(0.0)
+            None
         }
     };
 
@@ -1166,7 +1146,7 @@ pub async fn close_position_direct(
 pub async fn update_position_tracking(
     mint: &str,
     current_price: f64,
-    price_info: PositionPriceInfo
+    price_result: &PriceResult
 ) -> bool {
     if current_price <= 0.0 || !current_price.is_finite() {
         if is_debug_positions_enabled() {
@@ -1250,10 +1230,10 @@ pub async fn update_position_tracking(
                 &position.symbol,
                 old_price,
                 current_price,
-                &price_info.price_source,
-                price_info.pool_type.as_deref(),
-                price_info.pool_address.as_deref(),
-                price_info.api_price,
+                &price_result.source,
+                price_result.pool_type.as_deref(),
+                price_result.pool_address.as_deref(),
+                price_result.api_price_sol, // Use api_price_sol field
                 Some((pnl_sol, pnl_percent))
             );
         }
@@ -1314,18 +1294,6 @@ pub async fn update_position_tracking(
         }
         false
     }
-}
-
-/// Helper function for simple tracking updates without detailed price info
-pub async fn update_position_tracking_simple(mint: &str, current_price: f64) -> bool {
-    let price_info = PositionPriceInfo {
-        price_source: "external".to_string(),
-        pool_type: None,
-        pool_address: None,
-        api_price: Some(current_price),
-    };
-
-    update_position_tracking(mint, current_price, price_info).await
 }
 
 /// Verify a position transaction with comprehensive analysis and field population
@@ -2588,7 +2556,10 @@ async fn retry_failed_operations_parallel(shutdown: Arc<Notify>) {
                                     );
 
                                     // Get current price for exit
-                                    let current_price = get_token_price_safe(&mint_clone).await.unwrap_or(position.entry_price);
+                                    let current_price = get_price(&mint_clone, Some(PriceOptions::simple()), false)
+                                        .await
+                                        .and_then(|r| r.best_sol_price())
+                                        .unwrap_or(position.entry_price);
                                     
                                     // Create token object for retry
                                     let token = Token {

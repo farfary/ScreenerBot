@@ -728,12 +728,17 @@ impl SafetyLevel {
 
 /// Analyze token comprehensively using all available data sources
 pub async fn analyze_token_comprehensive(mint: &str) -> Result<TokenAnalysis, String> {
-    // Get token price using pool service for real-time accuracy
-    let pool_service = get_pool_service();
-    let current_price = if let Some(pool_result) = pool_service.get_pool_price(mint, None).await {
-        pool_result.price_sol.ok_or_else(||
-            format!("Pool price calculation failed for token: {}", mint)
-        )?
+    // Get token price using new universal price function for real-time accuracy
+    let current_price = if
+        let Some(price_result) = crate::tokens::get_price(
+            mint,
+            Some(crate::tokens::PriceOptions::pool_only()),
+            false
+        ).await
+    {
+        price_result
+            .best_sol_price()
+            .ok_or_else(|| format!("Pool price calculation failed for token: {}", mint))?
     } else {
         return Err(format!("Failed to get pool price for token: {}", mint));
     };

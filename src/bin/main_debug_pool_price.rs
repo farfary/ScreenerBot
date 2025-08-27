@@ -869,7 +869,9 @@ async fn compare_pool_api_prices(
     }
 
     // Get API price (this returns SOL price) - use the blocking version to ensure we get the price
-    let api_price_sol = screenerbot::tokens::get_token_price_blocking_safe(token_address).await;
+    let api_price_sol = screenerbot::tokens
+        ::get_price(token_address, Some(screenerbot::tokens::PriceOptions::api_only()), false).await
+        .and_then(|r| r.best_sol_price());
     log(LogTag::Pool, "API", &format!("API price: {:.12} SOL", api_price_sol.unwrap_or(0.0)));
 
     // Get pool price with detailed debugging
@@ -948,7 +950,7 @@ async fn test_pool_direct(pool_address: &str, token_address: &str) {
     let pool_service = get_pool_service();
 
     // Test direct pool price calculation
-    match pool_service.get_pool_price_direct(pool_address, token_address).await {
+    match pool_service.get_pool_price_direct(pool_address, token_address, None).await {
         Some(pool_result) => {
             log(
                 LogTag::Pool,

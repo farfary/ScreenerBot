@@ -400,13 +400,18 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
 
     // Get current pool price with age validation AND liquidity data
     let (current_pool_price, pool_data_age, liquidity_usd) = match
-        pool_service.get_pool_price(&token.mint, None).await
+        crate::tokens::get_price(
+            &token.mint,
+            Some(crate::tokens::PriceOptions::pool_only()),
+            false
+        ).await
     {
-        Some(pool_result) => {
-            match pool_result.price_sol {
+        Some(price_result) => {
+            match price_result.best_sol_price() {
                 Some(price) if price > 0.0 && price.is_finite() => {
                     let data_age_minutes =
-                        (Utc::now() - pool_result.calculated_at).num_seconds() / MINUTES_PER_SECOND;
+                        (Utc::now() - price_result.calculated_at).num_seconds() /
+                        MINUTES_PER_SECOND;
 
                     if data_age_minutes > MAX_DATA_AGE_MINUTES {
                         if is_debug_entry_enabled() {
@@ -433,12 +438,12 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                     }
 
                     // Get liquidity or fallback to token data
-                    let liquidity = pool_result.liquidity_usd.max(
+                    let liquidity = price_result.liquidity_usd.unwrap_or_else(|| {
                         token.liquidity
                             .as_ref()
                             .and_then(|l| l.usd)
                             .unwrap_or(0.0)
-                    );
+                    });
 
                     if is_debug_entry_enabled() {
                         log(
@@ -791,14 +796,18 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
     let pool_service = get_pool_service();
 
     let liquidity_usd = if
-        let Some(pool_result) = pool_service.get_pool_price(&token.mint, None).await
+        let Some(price_result) = crate::tokens::get_price(
+            &token.mint,
+            Some(crate::tokens::PriceOptions::pool_only()),
+            false
+        ).await
     {
-        pool_result.liquidity_usd.max(
+        price_result.liquidity_usd.unwrap_or_else(|| {
             token.liquidity
                 .as_ref()
                 .and_then(|l| l.usd)
                 .unwrap_or(0.0)
-        )
+        })
     } else {
         token.liquidity
             .as_ref()

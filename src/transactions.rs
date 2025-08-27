@@ -31,7 +31,8 @@ use crate::tokens::{
     get_token_decimals,
     get_token_decimals_safe,
     initialize_price_service,
-    get_token_price_blocking_safe,
+    get_price,
+    PriceOptions,
     TokenDatabase,
     types::PriceSourceType,
 };
@@ -4306,17 +4307,19 @@ impl TransactionsManager {
         transaction.token_symbol = Some(symbol.clone());
 
         // Get current market price from price service
-        match get_token_price_blocking_safe(&token_mint).await {
-            Some(price_sol) => {
-                transaction.calculated_token_price_sol = Some(price_sol);
-                transaction.price_source = Some(PriceSourceType::CachedPrice);
+        match get_price(&token_mint, Some(PriceOptions::simple()), false).await {
+            Some(price_result) => {
+                if let Some(price_sol) = price_result.best_sol_price() {
+                    transaction.calculated_token_price_sol = Some(price_sol);
+                    transaction.price_source = Some(PriceSourceType::CachedPrice);
 
-                if self.debug_enabled {
-                    log(
-                        LogTag::Transactions,
-                        "PRICE",
-                        &format!("Market price for {}: {:.12} SOL", symbol, price_sol)
-                    );
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "PRICE",
+                            &format!("Market price for {}: {:.12} SOL", symbol, price_sol)
+                        );
+                    }
                 }
             }
             None => {

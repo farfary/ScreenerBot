@@ -152,7 +152,8 @@ use crate::positions::calculate_position_pnl;
 use crate::tokens::{
     discover_tokens_once,
     get_all_tokens_by_liquidity,
-    get_token_price_blocking_safe,
+    get_price,
+    PriceOptions,
     pool::get_pool_service,
     sync_watch_list_with_trader,
     Token,
@@ -285,29 +286,6 @@ pub async fn get_tokens_from_safe_system() -> Vec<Token> {
     }
 }
 
-/// Update open positions tracking - now handled by positions manager
-async fn update_position_tracking_in_service() {
-    let open_mints = crate::positions::get_open_mints().await;
-
-    if !open_mints.is_empty() {
-        log(
-            LogTag::Trader,
-            "TRACK_SKIP",
-            &format!(
-                "⚠️ Position tracking now handled by positions manager (would track {} tokens: {:?})",
-                open_mints.len(),
-                open_mints
-            )
-        );
-        // Note: Positions manager now handles its own priority monitoring
-        // No longer calling update_open_positions_safe - this was pool/price service monitoring
-    } else {
-        if is_debug_trader_enabled() {
-            log(LogTag::Trader, "TRACK", "⚠️ No open positions found");
-        }
-    }
-}
-
 /// Try to populate tokens database with discovery data if it's empty
 async fn ensure_tokens_populated() {
     // Check if we have tokens in the database
@@ -366,27 +344,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Add a maximum processing time for the entire token checking cycle
         let cycle_start = std::time::Instant::now();
 
-        // Update position tracking in price service
-        let position_update_start = std::time::Instant::now();
-        update_position_tracking_in_service().await;
-        if is_debug_trader_enabled() {
-            log(
-                LogTag::Trader,
-                "DEBUG",
-                &format!(
-                    "✅ Position tracking updated in {:.1}ms",
-                    position_update_start.elapsed().as_millis()
-                )
-            );
-        }
-
-        // Check for shutdown after position tracking update
+        // Check for shutdown before starting main processing
         if check_shutdown_or_delay(&shutdown, Duration::from_millis(10)).await {
-            log(
-                LogTag::Trader,
-                "INFO",
-                "✅ New entries monitor shutdown after position tracking update"
-            );
+            log(LogTag::Trader, "INFO", "✅ New entries monitor shutdown before token processing");
             break 'outer;
         }
 
@@ -805,12 +765,13 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                         // Get liquidity tier from pool data
                         let liquidity_tier = if
-                            let Some(pool_result) = pool_service.get_pool_price(
+                            let Some(price_result) = get_price(
                                 &token.mint,
-                                None
+                                Some(PriceOptions::pool_only()),
+                                false
                             ).await
                         {
-                            let liquidity_usd = pool_result.liquidity_usd;
+                            let liquidity_usd = price_result.liquidity_usd.unwrap_or(0.0);
                             if liquidity_usd < 0.0 {
                                 Some("INVALID".to_string())
                             } else {
@@ -932,41 +893,6 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         // First, collect all open position mints to fetch pool prices in parallel
         let open_position_mints: Vec<String> = crate::positions::get_open_mints().await;
 
-        // PERFORMANCE FIX: Pre-warm cache with fresh prices before position processing
-        // Wait for all refresh operations to complete to ensure fresh cache
-        if !open_position_mints.is_empty() {
-            log(
-                LogTag::Trader,
-                "CACHE_PREWARM_START",
-                &format!(
-                    "🔄 Pre-warming price cache for {} open positions",
-                    open_position_mints.len()
-                )
-            );
-
-            let refresh_futures: Vec<_> = open_position_mints
-                .iter()
-                .map(|mint| {
-                    let mint_clone = mint.clone();
-                    async move {
-                        // Force a refresh to ensure latest pool/API fetch (triggers price change logging)
-                        crate::tokens::force_refresh_token_price_safe(&mint_clone).await;
-                        // Touch cache to record watch time and verify availability
-                        crate::tokens::get_token_price_safe(&mint_clone).await
-                    }
-                })
-                .collect();
-
-            // Wait for all refresh operations to complete
-            let _prewarm_results = futures::future::join_all(refresh_futures).await;
-
-            log(
-                LogTag::Trader,
-                "CACHE_PREWARM_COMPLETE",
-                "✅ Price cache pre-warming completed - fresh prices available"
-            );
-        }
-
         let mut positions_to_close = Vec::new();
 
         // First, collect open positions data (without holding mutex across await)
@@ -999,16 +925,30 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             );
         }
 
-        // PERFORMANCE FIX: Use parallel non-blocking price fetches instead of sequential blocking calls
-        // Collect all price futures first (non-blocking, cache-first)
+        // Use efficient parallel price fetching with single API call per token
         let price_futures: Vec<_> = open_positions_data
             .iter()
             .map(|pos| {
                 let mint = pos.mint.clone();
                 async move {
-                    // Use non-blocking cache-first approach - will return cached price or None if stale
-                    let price = crate::tokens::get_token_price_safe(&mint).await;
-                    (mint, price)
+                    // Get comprehensive price data using universal function
+                    let price_result = get_price(
+                        &mint,
+                        Some(PriceOptions::comprehensive()),
+                        false
+                    ).await;
+
+                    // Extract best available price and price info
+                    if let Some(result) = price_result {
+                        let best_price = result.best_sol_price();
+                        if let Some(price) = best_price {
+                            (mint, Some((price, result)))
+                        } else {
+                            (mint, None)
+                        }
+                    } else {
+                        (mint, None)
+                    }
                 }
             })
             .collect();
@@ -1017,22 +957,29 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         let price_results = futures::future::join_all(price_futures).await;
 
         // Create price lookup map for fast access
-        let price_map: std::collections::HashMap<String, f64> = price_results
+        let price_map: std::collections::HashMap<
+            String,
+            (f64, crate::tokens::PriceResult)
+        > = price_results
             .into_iter()
-            .filter_map(|(mint, price_opt)| price_opt.map(|price| (mint, price)))
+            .filter_map(|(mint, result_opt)| {
+                result_opt.map(|(price, price_result)| (mint, (price, price_result)))
+            })
             .collect();
 
         // Now process each position with async calls (mutex is released)
         for position in open_positions_data.into_iter() {
             let mut position = position; // local mutable copy for calculations/logs
 
-            // Get current price from our parallel fetch results
-            if let Some(&current_price) = price_map.get(&position.mint) {
+            // Get current price and price result from our parallel fetch results
+            if let Some((current_price, price_result)) = price_map.get(&position.mint) {
+                let current_price = *current_price;
                 if current_price > 0.0 && current_price.is_finite() {
                     // Send price update to positions manager for tracking
-                    let tracking_result = crate::positions::update_position_tracking_simple(
+                    let tracking_result = crate::positions::update_position_tracking(
                         &position.mint,
-                        current_price
+                        current_price,
+                        price_result
                     ).await;
                     if is_debug_trader_enabled() && !tracking_result {
                         log(

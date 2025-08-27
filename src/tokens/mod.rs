@@ -1,5 +1,4 @@
-/// Centralized Token Management System - Thread-Safe Edition
-///# Pool pricing is enabled - use pool module for direct on-chain price calculations
+//// Pool pricing is enabled - use pool module for direct on-chain price calculations
 pub use pool::{
     PoolPriceCalculator,
     PoolPriceInfo,
@@ -15,7 +14,14 @@ pub use pool::{
     TokenAvailability,
     // Pool program display name function
     get_pool_program_display_name,
+    // Universal price function and types
+    PriceResult,
+    PriceOptions,
+    get_price,
 };
+
+/// Centralized Token Management System - Thread-Safe Edition
+/// Pool pricing is enabled - use pool module for direct on-chain price calculations
 
 /// This module provides thread-safe access to token data and prices
 /// using a centralized price service instead of direct database access.
@@ -89,14 +95,7 @@ pub use ohlcvs::{
     is_ohlcv_data_available,
     get_latest_ohlcv,
 };
-pub use pool::{
-    initialize_price_service,
-    get_token_price_safe,
-    get_token_price_blocking_safe,
-    update_tokens_prices_safe,
-    force_refresh_token_price_safe,
-    PriceCacheEntry,
-};
+pub use pool::{ initialize_price_service };
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
@@ -456,7 +455,7 @@ pub async fn get_rugcheck_score_safe(mint: &str) -> Option<i32> {
 
 /// Get current token price using thread-safe price service
 pub async fn get_current_token_price(mint: &str) -> Option<f64> {
-    get_token_price_safe(mint).await
+    get_price(mint, Some(PriceOptions::simple()), false).await.and_then(|r| r.best_sol_price())
 }
 
 /// Get all tokens by liquidity using database directly (for compatibility)
