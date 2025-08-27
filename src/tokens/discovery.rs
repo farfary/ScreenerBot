@@ -753,30 +753,46 @@ impl TokenDiscovery {
                             continue;
                         }
 
-                        // Check for new tokens before adding to database (for first-seen logging)
+                        // Check for new tokens before adding to database
+                        let original_count = tokens.len();
                         let mut new_tokens = Vec::new();
-                        let mut existing_tokens = Vec::new();
+                        let mut existing_count = 0;
 
-                        if is_debug_discovery_enabled() {
-                            for token in &tokens {
-                                match self.database.get_token_by_mint(&token.mint) {
-                                    Ok(Some(_)) => existing_tokens.push(token),
-                                    Ok(None) => new_tokens.push(token),
-                                    Err(_) => new_tokens.push(token), // Assume new if check fails
+                        for token in &tokens {
+                            match self.database.get_token_by_mint(&token.mint) {
+                                Ok(Some(_)) => {
+                                    existing_count += 1;
                                 }
+                                Ok(None) => new_tokens.push(token.clone()),
+                                Err(_) => new_tokens.push(token.clone()), // Assume new if check fails
                             }
                         }
 
-                        // Add tokens to database (now with correct decimals)
-                        match self.database.add_tokens(&tokens).await {
+                        if new_tokens.is_empty() {
+                            if is_debug_discovery_enabled() {
+                                log(
+                                    LogTag::Discovery,
+                                    "SKIP",
+                                    &format!("All {} tokens already exist in database - skipping batch", original_count)
+                                );
+                            }
+                            continue;
+                        }
+
+                        // Only add truly NEW tokens to database - let monitor handle updates
+                        match self.database.add_tokens(&new_tokens).await {
                             Ok(_) => {
-                                total_added += tokens.len();
+                                total_added += new_tokens.len();
 
                                 if is_debug_discovery_enabled() {
                                     log(
                                         LogTag::Discovery,
                                         "DATABASE",
-                                        &format!("Added {} tokens to database", tokens.len())
+                                        &format!(
+                                            "Added {} NEW tokens to database (skipped {} existing)",
+                                            new_tokens.len(),
+                                            existing_count
+                                        )
                                     );
 
                                     // Log only first-seen tokens
@@ -792,17 +808,6 @@ impl TokenDiscovery {
                                                     .as_ref()
                                                     .and_then(|l| l.usd)
                                                     .unwrap_or(0.0)
-                                            )
-                                        );
-                                    }
-
-                                    if !existing_tokens.is_empty() {
-                                        log(
-                                            LogTag::Discovery,
-                                            "DEBUG",
-                                            &format!(
-                                                "Skipped {} already known tokens",
-                                                existing_tokens.len()
                                             )
                                         );
                                     }

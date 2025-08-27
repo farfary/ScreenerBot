@@ -34,14 +34,14 @@ use futures;
 const POOL_CACHE_TTL_SECONDS: i64 = 600;
 
 /// Price cache TTL - increased to handle async task delays between pool calculation and entry checks
-const PRICE_CACHE_TTL_SECONDS: i64 = 10;
+const PRICE_CACHE_TTL_SECONDS: i64 = 8;
 
 // =============================================================================
 // BATCH PROCESSING CONFIGURATION
 // =============================================================================
 
 /// Priority tokens update interval (5 seconds exactly)
-const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 5;
+const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 4;
 
 /// Watchlist batch size for random updates
 const WATCHLIST_BATCH_SIZE: usize = 10;

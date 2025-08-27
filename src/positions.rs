@@ -2284,28 +2284,150 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                             // Only remove if truly timed out (beyond grace period)
                                             if e.contains("Verification timeout:") || e.contains("verification timeout") || 
                                                (e.contains("Transaction not found in system") && verification_age_seconds > VERIFICATION_GRACE_PERIOD_SECS) {
-                                                log(
-                                                    LogTag::Positions,
-                                                    "VERIFICATION_TIMEOUT_CLEANUP",
-                                                    &format!("🗑️ Removing position with permanently failed verification: {} (error: {}, age: {}s)", get_signature_prefix(&sig_clone), e, verification_age_seconds)
-                                                );
                                                 
-                                                // Remove the position with the failed transaction
-                                                tokio::spawn({
-                                                    let sig_for_cleanup = sig_clone.clone();
-                                                    async move {
-                                                        if let Err(cleanup_err) = remove_position_by_signature(&sig_for_cleanup).await {
-                                                            log(
-                                                                LogTag::Positions,
-                                                                "CLEANUP_ERROR",
-                                                                &format!("Failed to remove position with signature {}: {}", get_signature_prefix(&sig_for_cleanup), cleanup_err)
-                                                            );
+                                                // First check if this is an exit transaction by finding the position
+                                                let is_exit_transaction = {
+                                                    let state = GLOBAL_POSITIONS_STATE.lock().await;
+                                                    state.positions.iter().any(|p| {
+                                                        p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(&sig_clone)
+                                                    })
+                                                };
+                                                
+                                                if is_exit_transaction {
+                                                    // For exit transaction failures, check wallet balance before removing position
+                                                    log(
+                                                        LogTag::Positions,
+                                                        "EXIT_VERIFICATION_TIMEOUT",
+                                                        &format!("⏰ Exit transaction {} verification timeout - checking wallet balance before cleanup", get_signature_prefix(&sig_clone))
+                                                    );
+                                                    
+                                                    // Find the position and check wallet balance
+                                                    let should_remove_position = {
+                                                        let state = GLOBAL_POSITIONS_STATE.lock().await;
+                                                        if let Some(position) = state.positions.iter().find(|p| {
+                                                            p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(&sig_clone)
+                                                        }) {
+                                                            // Check wallet balance for this token
+                                                            match get_wallet_address() {
+                                                                Ok(wallet_address) => {
+                                                                    match get_token_balance(&wallet_address, &position.mint).await {
+                                                                        Ok(balance) => {
+                                                                            log(
+                                                                                LogTag::Positions,
+                                                                                "WALLET_BALANCE_CHECK",
+                                                                                &format!("💰 Wallet balance for {}: {} tokens", position.symbol, balance)
+                                                                            );
+                                                                            
+                                                                            if balance > 0 {
+                                                                                log(
+                                                                                    LogTag::Positions,
+                                                                                    "POSITION_KEPT_WITH_TOKENS",
+                                                                                    &format!("✅ Keeping position {} - tokens still in wallet ({})", position.symbol, balance)
+                                                                                );
+                                                                                false // Keep position - tokens still in wallet
+                                                                            } else {
+                                                                                log(
+                                                                                    LogTag::Positions,
+                                                                                    "POSITION_REMOVED_ZERO_BALANCE",
+                                                                                    &format!("🗑️ Removing position {} - zero balance confirmed", position.symbol)
+                                                                                );
+                                                                                true // Remove position - no tokens in wallet
+                                                                            }
+                                                                        }
+                                                                        Err(err) => {
+                                                                            log(
+                                                                                LogTag::Positions,
+                                                                                "BALANCE_CHECK_ERROR",
+                                                                                &format!("❌ Could not check balance for {}: {} - keeping position to be safe", position.symbol, err)
+                                                                            );
+                                                                            false // Keep position if balance check fails
+                                                                        }
+                                                                    }
+                                                                }
+                                                                Err(err) => {
+                                                                    log(
+                                                                        LogTag::Positions,
+                                                                        "WALLET_ADDRESS_ERROR",
+                                                                        &format!("❌ Could not get wallet address: {} - keeping position to be safe", err)
+                                                                    );
+                                                                    false // Keep position if wallet address fails
+                                                                }
+                                                            }
+                                                        } else {
+                                                            true // Position not found, safe to remove
                                                         }
+                                                    };
+                                                    
+                                                    if should_remove_position {
+                                                        log(
+                                                            LogTag::Positions,
+                                                            "VERIFICATION_TIMEOUT_CLEANUP",
+                                                            &format!("🗑️ Removing position with failed exit verification: {} (error: {}, age: {}s)", get_signature_prefix(&sig_clone), e, verification_age_seconds)
+                                                        );
+                                                        
+                                                        tokio::spawn({
+                                                            let sig_for_cleanup = sig_clone.clone();
+                                                            async move {
+                                                                if let Err(cleanup_err) = remove_position_by_signature(&sig_for_cleanup).await {
+                                                                    log(
+                                                                        LogTag::Positions,
+                                                                        "CLEANUP_ERROR",
+                                                                        &format!("Failed to remove position with signature {}: {}", get_signature_prefix(&sig_for_cleanup), cleanup_err)
+                                                                    );
+                                                                }
+                                                            }
+                                                        });
+                                                        
+                                                        // Return the signature to remove it from pending verifications
+                                                        Some(sig_clone)
+                                                    } else {
+                                                        // Don't remove from pending - keep trying or mark exit as failed
+                                                        log(
+                                                            LogTag::Positions,
+                                                            "EXIT_VERIFICATION_KEPT",
+                                                            &format!("🔄 Keeping position with failed exit verification: {} - tokens still in wallet", get_signature_prefix(&sig_clone))
+                                                        );
+                                                        
+                                                        // Mark the exit transaction as failed but keep the position
+                                                        {
+                                                            let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+                                                            if let Some(position) = state.positions.iter_mut().find(|p| {
+                                                                p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(&sig_clone)
+                                                            }) {
+                                                                position.exit_transaction_signature = None; // Clear failed exit transaction
+                                                                log(
+                                                                    LogTag::Positions,
+                                                                    "EXIT_CLEARED",
+                                                                    &format!("🔄 Cleared failed exit transaction for {} - position remains open for retry", position.symbol)
+                                                                );
+                                                            }
+                                                        }
+                                                        
+                                                        Some(sig_clone) // Remove from pending verifications
                                                     }
-                                                });
-                                                
-                                                // Return the signature to remove it from pending verifications
-                                                Some(sig_clone)
+                                                } else {
+                                                    // For entry transaction failures, always remove the position
+                                                    log(
+                                                        LogTag::Positions,
+                                                        "VERIFICATION_TIMEOUT_CLEANUP",
+                                                        &format!("🗑️ Removing position with failed entry verification: {} (error: {}, age: {}s)", get_signature_prefix(&sig_clone), e, verification_age_seconds)
+                                                    );
+                                                    
+                                                    tokio::spawn({
+                                                        let sig_for_cleanup = sig_clone.clone();
+                                                        async move {
+                                                            if let Err(cleanup_err) = remove_position_by_signature(&sig_for_cleanup).await {
+                                                                log(
+                                                                    LogTag::Positions,
+                                                                    "CLEANUP_ERROR",
+                                                                    &format!("Failed to remove position with signature {}: {}", get_signature_prefix(&sig_for_cleanup), cleanup_err)
+                                                                );
+                                                            }
+                                                        }
+                                                    });
+                                                    
+                                                    Some(sig_clone)
+                                                }
                                             } else {
                                                 log(
                                                     LogTag::Positions,

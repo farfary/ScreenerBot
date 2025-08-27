@@ -1970,7 +1970,7 @@ impl RpcClient {
                 tx_base64,
                 {
                     "encoding": "base64",
-                    "skipPreflight": false,
+                    "skipPreflight": true,
                     "preflightCommitment": "processed",
                     "maxRetries": 3
                 }
@@ -2305,7 +2305,7 @@ impl RpcClient {
                 "method": "sendTransaction",
                 "params": [
                     signed_transaction_base64,
-                    { "encoding": "base64", "skipPreflight": false, "preflightCommitment": "processed" }
+                    { "encoding": "base64", "skipPreflight": true, "preflightCommitment": "processed" }
                 ]
             });
 

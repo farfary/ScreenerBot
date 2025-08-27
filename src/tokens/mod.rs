@@ -43,6 +43,7 @@ pub mod blacklist;
 pub mod decimals;
 pub mod rugcheck;
 pub mod ohlcvs;
+pub mod monitor;
 
 // Re-export main types and functions
 pub use types::*;

@@ -550,6 +550,103 @@ impl TokenDatabase {
         // Use the async positions manager API to check for open positions
         is_open_position(mint).await
     }
+
+    /// Get all tokens with their last update times for monitoring
+    /// Returns tokens ordered by liquidity (highest first) with update time information
+    pub async fn get_all_tokens_with_update_time(
+        &self
+    ) -> Result<Vec<(String, String, DateTime<Utc>, f64)>, String> {
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
+
+        let mut stmt = connection
+            .prepare(
+                "SELECT mint, symbol, last_updated, COALESCE(liquidity_usd, 0.0) as liquidity
+                 FROM tokens 
+                 ORDER BY liquidity_usd DESC NULLS LAST"
+            )
+            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+        let token_iter = stmt
+            .query_map([], |row| {
+                let last_updated_str: String = row.get("last_updated")?;
+                let last_updated = chrono::DateTime
+                    ::parse_from_rfc3339(&last_updated_str)
+                    .map_err(|e|
+                        rusqlite::Error::InvalidColumnType(
+                            0,
+                            "last_updated".to_string(),
+                            rusqlite::types::Type::Text
+                        )
+                    )?
+                    .with_timezone(&chrono::Utc);
+
+                Ok((
+                    row.get::<_, String>("mint")?,
+                    row.get::<_, String>("symbol")?,
+                    last_updated,
+                    row.get::<_, f64>("liquidity")?,
+                ))
+            })
+            .map_err(|e| format!("Failed to execute query: {}", e))?;
+
+        let mut tokens = Vec::new();
+        for token in token_iter {
+            tokens.push(token.map_err(|e| format!("Failed to parse token: {}", e))?);
+        }
+
+        Ok(tokens)
+    }
+
+    /// Get tokens that need updating based on time criteria
+    /// Returns tokens that haven't been updated within the specified hours
+    pub async fn get_tokens_needing_update(
+        &self,
+        min_hours_since_update: i64
+    ) -> Result<Vec<(String, String, DateTime<Utc>, f64)>, String> {
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
+
+        let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(min_hours_since_update);
+        let cutoff_str = cutoff_time.to_rfc3339();
+
+        let mut stmt = connection
+            .prepare(
+                "SELECT mint, symbol, last_updated, COALESCE(liquidity_usd, 0.0) as liquidity
+                 FROM tokens 
+                 WHERE last_updated < ?1
+                 ORDER BY liquidity_usd DESC NULLS LAST"
+            )
+            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+        let token_iter = stmt
+            .query_map([&cutoff_str], |row| {
+                let last_updated_str: String = row.get("last_updated")?;
+                let last_updated = chrono::DateTime
+                    ::parse_from_rfc3339(&last_updated_str)
+                    .map_err(|e|
+                        rusqlite::Error::InvalidColumnType(
+                            0,
+                            "last_updated".to_string(),
+                            rusqlite::types::Type::Text
+                        )
+                    )?
+                    .with_timezone(&chrono::Utc);
+
+                Ok((
+                    row.get::<_, String>("mint")?,
+                    row.get::<_, String>("symbol")?,
+                    last_updated,
+                    row.get::<_, f64>("liquidity")?,
+                ))
+            })
+            .map_err(|e| format!("Failed to execute query: {}", e))?;
+
+        let mut tokens = Vec::new();
+        for token in token_iter {
+            tokens.push(token.map_err(|e| format!("Failed to parse token: {}", e))?);
+        }
+
+        Ok(tokens)
+    }
 }
 
 /// Database statistics

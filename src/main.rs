@@ -160,6 +160,23 @@ async fn main() {
     };
     log(LogTag::System, "INFO", "Global rugcheck service initialized successfully");
 
+    // Start token monitoring service for database updates
+    let shutdown_monitor = shutdown.clone();
+    let _token_monitor_handle = tokio::spawn(async move {
+        log(LogTag::System, "INFO", "Token monitoring service task started");
+        match screenerbot::tokens::monitor::start_token_monitoring(shutdown_monitor).await {
+            Ok(handle) => {
+                if let Err(e) = handle.await {
+                    log(LogTag::System, "ERROR", &format!("Token monitoring task failed: {:?}", e));
+                }
+            }
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!("Failed to start token monitoring: {}", e));
+            }
+        }
+        log(LogTag::System, "INFO", "Token monitoring service task ended");
+    });
+
     // Start tokens system background tasks (includes rugcheck service)
     let tokens_handles = match tokens_system.start_background_tasks(shutdown_tokens).await {
         Ok(handles) => handles,

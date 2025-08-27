@@ -30,7 +30,7 @@ const TARGET_LIQUIDITY_MIN: f64 = 100.0; // Reduced from 1000 to 100 - catch ver
 const TARGET_LIQUIDITY_MAX: f64 = 10_000_000.0; // Increased from 500k to 10M - allow big tokens
 
 // DROP PERCENTAGE RANGES (Less aggressive - catch smaller drops)
-const DROP_PERCENT_MIN: f64 = 1.0; // Reduced from 3% to 1% - catch micro drops
+const DROP_PERCENT_MIN: f64 = 5.0; // Reduced from 3% to 1% - catch micro drops
 const DROP_PERCENT_MAX: f64 = 15.0; // Increased from 9% to 15% - wider range
 const DROP_PERCENT_ULTRA_MAX: f64 = 50.0; // Increased from 30% to 50% - allow deeper drops
 
@@ -91,6 +91,7 @@ const PROFIT_TARGET_MIN_RANGE: f64 = 10.0; // Always at least 10% range
 
 // TRANSACTION ACTIVITY FILTERING
 const MIN_TRANSACTIONS_5MIN: i64 = 10; // Minimum total transactions in last 5 minutes
+const MAX_TRANSACTIONS_5MIN: i64 = 2000; // Maximum total transactions in last 5 minutes (avoid overheated tokens)
 
 // FAST DROP MULTIPLIER
 const FAST_DROP_THRESHOLD_MULTIPLIER: f64 = 1.2; // Fast drop threshold = 1.2x the min threshold (was 1.5x)
@@ -344,14 +345,40 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         );
     }
 
+    if txn_5min_count > MAX_TRANSACTIONS_5MIN {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "TXN_ACTIVITY_REJECT",
+                &format!(
+                    "❌ {} excessive transaction activity: {} txns in 5min (maximum {})",
+                    token.symbol,
+                    txn_5min_count,
+                    MAX_TRANSACTIONS_5MIN
+                )
+            );
+        }
+        return (
+            false,
+            0.0,
+            format!(
+                "Excessive transaction activity: {} txns in 5min (maximum {})",
+                txn_5min_count,
+                MAX_TRANSACTIONS_5MIN
+            ),
+        );
+    }
+
     if is_debug_entry_enabled() {
         log(
             LogTag::Entry,
             "TXN_ACTIVITY_PASS",
             &format!(
-                "✅ {} transaction activity sufficient: {} txns in 5min",
+                "✅ {} transaction activity in valid range: {} txns in 5min (range: {}-{})",
                 token.symbol,
-                txn_5min_count
+                txn_5min_count,
+                MIN_TRANSACTIONS_5MIN,
+                MAX_TRANSACTIONS_5MIN
             )
         );
     }
