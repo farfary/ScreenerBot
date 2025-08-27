@@ -51,7 +51,7 @@ pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 // -----------------------------------------------------------------------------
 
 /// Debug mode: Force sell all positions after a timeout (for testing)
-pub const DEBUG_FORCE_SELL_MODE: bool = true;
+pub const DEBUG_FORCE_SELL_MODE: bool = false;
 
 /// Debug mode: Force sell timeout in seconds
 pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 100.0;
@@ -930,6 +930,34 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         // First, collect all open position mints to fetch pool prices in parallel
         let open_position_mints: Vec<String> = crate::positions::get_open_mints().await;
 
+        // Request priority price updates for all open positions at the start of each cycle
+        // This ensures we have fresh prices before making any trading decisions
+        if !open_position_mints.is_empty() {
+            if is_debug_trader_enabled() {
+                debug_trader_log(
+                    "PRIORITY_UPDATE",
+                    &format!(
+                        "Requesting priority price updates for {} open positions",
+                        open_position_mints.len()
+                    )
+                );
+            }
+
+            // Use the pool service to request priority updates
+            let updated_count = crate::tokens::request_priority_updates_for_open_positions().await;
+
+            if is_debug_trader_enabled() {
+                debug_trader_log(
+                    "PRIORITY_RESULT",
+                    &format!(
+                        "Priority updates completed: {}/{} successful",
+                        updated_count,
+                        open_position_mints.len()
+                    )
+                );
+            }
+        }
+
         let mut positions_to_close = Vec::new();
 
         // First, collect open positions data (without holding mutex across await)
@@ -962,18 +990,14 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             );
         }
 
-        // Use efficient parallel price fetching with single API call per token
+        // Use efficient parallel price fetching - background service keeps prices fresh
         let price_futures: Vec<_> = open_positions_data
             .iter()
             .map(|pos| {
                 let mint = pos.mint.clone();
                 async move {
-                    // Get comprehensive price data using universal function
-                    let price_result = get_price(
-                        &mint,
-                        Some(PriceOptions::comprehensive()),
-                        false
-                    ).await;
+                    // Get price data from cache (background service keeps it fresh every 5s)
+                    let price_result = get_price(&mint, None, false).await;
 
                     // Extract best available price and price info
                     if let Some(result) = price_result {

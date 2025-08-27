@@ -18,6 +18,8 @@ pub use pool::{
     PriceResult,
     PriceOptions,
     get_price,
+    // Priority update function
+    request_priority_updates_for_open_positions,
 };
 
 /// Centralized Token Management System - Thread-Safe Edition

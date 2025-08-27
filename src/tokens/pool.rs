@@ -21,6 +21,7 @@ use serde::{ Deserialize, Serialize };
 use chrono::{ DateTime, Utc };
 use std::fs;
 use std::path::Path;
+use futures;
 
 // =============================================================================
 // CONSTANTS
@@ -124,6 +125,57 @@ pub struct PoolInfo {
     pub liquidity_usd: Option<f64>,
     /// sqrt_price for concentrated liquidity pools (Orca Whirlpool)
     pub sqrt_price: Option<u128>,
+}
+
+/// Cacheable pool metadata (addresses and static info) - NO RESERVE VALUES
+/// This is what gets cached for 10 minutes per requirements
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PoolMetadata {
+    pub pool_address: String,
+    pub pool_program_id: String,
+    pub pool_type: String,
+    pub token_0_mint: String,
+    pub token_1_mint: String,
+    pub token_0_vault: Option<String>,
+    pub token_1_vault: Option<String>,
+    pub token_0_decimals: u8,
+    pub token_1_decimals: u8,
+    pub lp_mint: Option<String>,
+    pub creator: Option<String>,
+    pub status: Option<u32>,
+    /// sqrt_price for concentrated liquidity pools (Orca Whirlpool)
+    pub sqrt_price: Option<u128>,
+}
+
+impl PoolMetadata {
+    /// Convert to PoolInfo by adding fresh reserve data
+    pub fn with_reserves(
+        self,
+        token_0_reserve: u64,
+        token_1_reserve: u64,
+        lp_supply: Option<u64>,
+        liquidity_usd: Option<f64>
+    ) -> PoolInfo {
+        PoolInfo {
+            pool_address: self.pool_address,
+            pool_program_id: self.pool_program_id,
+            pool_type: self.pool_type,
+            token_0_mint: self.token_0_mint,
+            token_1_mint: self.token_1_mint,
+            token_0_vault: self.token_0_vault,
+            token_1_vault: self.token_1_vault,
+            token_0_reserve,
+            token_1_reserve,
+            token_0_decimals: self.token_0_decimals,
+            token_1_decimals: self.token_1_decimals,
+            lp_mint: self.lp_mint,
+            lp_supply,
+            creator: self.creator,
+            status: self.status,
+            liquidity_usd,
+            sqrt_price: self.sqrt_price,
+        }
+    }
 }
 
 /// Raydium CPMM pool data structure
@@ -473,7 +525,7 @@ pub struct PoolPriceService {
     availability_cache: Arc<RwLock<HashMap<String, TokenAvailability>>>,
     // watch_list removed; pool service delegates token selection to price service
     price_history: Arc<RwLock<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>,
-    // New pool-specific disk-based price history cache
+    // New pool-specific memory-based price history cache
     pool_price_history: Arc<RwLock<HashMap<String, TokenAggregatedPriceHistoryCache>>>,
     monitoring_active: Arc<RwLock<bool>>,
     // Enhanced statistics tracking
@@ -576,7 +628,7 @@ impl PoolServiceStats {
     }
 }
 
-/// Pool disk cache statistics for detailed reporting
+/// Pool memory cache statistics for detailed reporting
 impl PoolPriceService {
     /// Create new pool price service
     pub fn new() -> Self {
@@ -742,8 +794,22 @@ impl PoolPriceService {
 
                 let cycle_start = Instant::now();
 
-                // No more priority tokens - positions manager handles priority monitoring
-                let tokens_to_monitor: Vec<String> = Vec::new();
+                // Get open positions tokens to prioritize for price updates
+                let tokens_to_monitor: Vec<String> = match crate::positions::get_open_mints().await {
+                    mints => {
+                        if is_debug_pool_prices_enabled() && !mints.is_empty() {
+                            log(
+                                LogTag::Pool,
+                                "MONITOR",
+                                &format!(
+                                    "Monitoring {} open position tokens for price updates",
+                                    mints.len()
+                                )
+                            );
+                        }
+                        mints
+                    }
+                };
 
                 // Record last cycle token count early
                 {
@@ -758,8 +824,111 @@ impl PoolPriceService {
                     };
                 }
 
-                // Monitoring is now handled by positions manager - this loop is disabled
-                // Pool service still provides price calculation on-demand
+                // Process each open position token to ensure fresh price data
+                if !tokens_to_monitor.is_empty() {
+                    // Use limited concurrency to avoid overwhelming the system
+                    let semaphore = Arc::new(tokio::sync::Semaphore::new(POOL_MONITOR_CONCURRENCY));
+
+                    let update_futures: Vec<_> = tokens_to_monitor
+                        .into_iter()
+                        .map(|token_address| {
+                            let semaphore = semaphore.clone();
+                            let service = service_for_monitor;
+
+                            async move {
+                                // Acquire semaphore permit for concurrency control
+                                let _permit = match
+                                    tokio::time::timeout(
+                                        Duration::from_secs(3),
+                                        semaphore.acquire()
+                                    ).await
+                                {
+                                    Ok(Ok(permit)) => permit,
+                                    Ok(Err(_)) => {
+                                        if is_debug_pool_prices_enabled() {
+                                            log(
+                                                LogTag::Pool,
+                                                "WARN",
+                                                &format!(
+                                                    "Semaphore acquire failed for token {}",
+                                                    &token_address[..8]
+                                                )
+                                            );
+                                        }
+                                        return;
+                                    }
+                                    Err(_) => {
+                                        if is_debug_pool_prices_enabled() {
+                                            log(
+                                                LogTag::Pool,
+                                                "WARN",
+                                                &format!(
+                                                    "Semaphore acquire timeout for token {}",
+                                                    &token_address[..8]
+                                                )
+                                            );
+                                        }
+                                        return;
+                                    }
+                                };
+
+                                // Update price for this token with timeout protection
+                                match
+                                    tokio::time::timeout(
+                                        Duration::from_secs(POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS),
+                                        service.ensure_pool_price_for_monitor(&token_address)
+                                    ).await
+                                {
+                                    Ok(_) => {
+                                        if is_debug_pool_prices_enabled() {
+                                            log(
+                                                LogTag::Pool,
+                                                "MONITOR",
+                                                &format!(
+                                                    "Updated price cache for open position token {}",
+                                                    &token_address[..8]
+                                                )
+                                            );
+                                        }
+                                    }
+                                    Err(_) => {
+                                        if is_debug_pool_prices_enabled() {
+                                            log(
+                                                LogTag::Pool,
+                                                "WARN",
+                                                &format!(
+                                                    "Price update timeout for token {}",
+                                                    &token_address[..8]
+                                                )
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        })
+                        .collect();
+
+                    // Execute all updates with overall timeout
+                    match
+                        tokio::time::timeout(
+                            Duration::from_millis(POOL_MONITOR_CYCLE_BUDGET_MS.min(4500) as u64), // Max 4.5s per cycle
+                            futures::future::join_all(update_futures)
+                        ).await
+                    {
+                        Ok(_) => {
+                            if is_debug_pool_prices_enabled() {
+                                log(
+                                    LogTag::Pool,
+                                    "MONITOR",
+                                    "Completed price updates for open positions"
+                                );
+                            }
+                        }
+                        Err(_) => {
+                            log(LogTag::Pool, "WARN", "Price update cycle exceeded time budget");
+                        }
+                    }
+                }
 
                 // Finish cycle timing stats
                 let duration_ms = cycle_start.elapsed().as_secs_f64() * 1000.0;
@@ -843,8 +1012,128 @@ impl PoolPriceService {
         log(LogTag::Pool, "STOP", "Stopping pool price monitoring service");
     }
 
+    /// Request immediate priority price updates for specific tokens (used by positions system)
+    /// This bypasses normal caching and forces fresh price calculations
+    pub async fn request_priority_price_updates(&self, token_addresses: &[String]) -> usize {
+        if token_addresses.is_empty() {
+            return 0;
+        }
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "PRIORITY_UPDATE",
+                &format!("Requesting priority price updates for {} tokens", token_addresses.len())
+            );
+        }
+
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(POOL_MONITOR_CONCURRENCY));
+        let mut successful_updates = 0;
+
+        let update_futures: Vec<_> = token_addresses
+            .iter()
+            .map(|token_address| {
+                let semaphore = semaphore.clone();
+                let token_address = token_address.clone();
+
+                async move {
+                    // Acquire semaphore permit for concurrency control
+                    let _permit = match
+                        tokio::time::timeout(Duration::from_secs(2), semaphore.acquire()).await
+                    {
+                        Ok(Ok(permit)) => permit,
+                        _ => {
+                            return false;
+                        }
+                    };
+
+                    // Force fresh price calculation by bypassing cache
+                    match
+                        tokio::time::timeout(
+                            Duration::from_secs(POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS),
+                            self.get_pool_price(&token_address, None)
+                        ).await
+                    {
+                        Ok(Some(_)) => {
+                            if is_debug_pool_prices_enabled() {
+                                log(
+                                    LogTag::Pool,
+                                    "PRIORITY_SUCCESS",
+                                    &format!(
+                                        "Priority update successful for {}",
+                                        &token_address[..8]
+                                    )
+                                );
+                            }
+                            true
+                        }
+                        Ok(None) => {
+                            if is_debug_pool_prices_enabled() {
+                                log(
+                                    LogTag::Pool,
+                                    "PRIORITY_NONE",
+                                    &format!(
+                                        "Priority update returned no price for {}",
+                                        &token_address[..8]
+                                    )
+                                );
+                            }
+                            false
+                        }
+                        Err(_) => {
+                            if is_debug_pool_prices_enabled() {
+                                log(
+                                    LogTag::Pool,
+                                    "PRIORITY_TIMEOUT",
+                                    &format!("Priority update timeout for {}", &token_address[..8])
+                                );
+                            }
+                            false
+                        }
+                    }
+                }
+            })
+            .collect();
+
+        // Execute all updates with overall timeout
+        match
+            tokio::time::timeout(
+                Duration::from_secs(10), // 10 second overall timeout for priority updates
+                futures::future::join_all(update_futures)
+            ).await
+        {
+            Ok(results) => {
+                successful_updates = results
+                    .iter()
+                    .filter(|&&success| success)
+                    .count();
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "PRIORITY_COMPLETE",
+                        &format!(
+                            "Priority updates completed: {}/{} successful",
+                            successful_updates,
+                            token_addresses.len()
+                        )
+                    );
+                }
+            }
+            Err(_) => {
+                log(LogTag::Pool, "WARN", "Priority price updates exceeded overall timeout");
+            }
+        }
+
+        successful_updates
+    }
+
+    /// Check if background monitoring is currently active
+    pub async fn is_monitoring_active(&self) -> bool {
+        *self.monitoring_active.read().await
+    }
+
     pub async fn get_recent_price_history(&self, token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
-        // First try disk cache for comprehensive history
+        // First try memory-based pool price history cache for comprehensive history
         {
             let pool_cache = self.pool_price_history.read().await;
             if let Some(cache) = pool_cache.get(token_address) {
@@ -853,9 +1142,9 @@ impl PoolPriceService {
                     if is_debug_pool_prices_enabled() && !history.is_empty() {
                         log(
                             LogTag::Pool,
-                            "PRICE_HISTORY_DISK",
+                            "PRICE_HISTORY_MEMORY",
                             &format!(
-                                "📊 Retrieved {} price history entries from disk cache for {}",
+                                "📊 Retrieved {} price history entries from memory cache for {}",
                                 history.len(),
                                 token_address
                             )
@@ -986,7 +1275,7 @@ impl PoolPriceService {
             }
         }
 
-        // Update pool-specific disk-based price history cache
+        // Update pool-specific memory-based price history cache
         {
             let mut pool_cache = self.pool_price_history.write().await;
             let token_cache = pool_cache
@@ -2185,6 +2474,30 @@ pub async fn refresh_pools_infos_for_tokens_safe(mints: &[String], max_tokens: u
     service.refresh_pools_infos_for_tokens(mints, max_tokens).await
 }
 
+/// Request priority price updates for open positions (global function)
+/// This function is designed to be called by the positions system when fresh prices are critically needed
+pub async fn request_priority_updates_for_open_positions() -> usize {
+    // Get current open position mints
+    let open_mints = match crate::positions::get_open_mints().await {
+        mints if !mints.is_empty() => mints,
+        _ => {
+            // No open positions, nothing to update
+            return 0;
+        }
+    };
+
+    if is_debug_pool_prices_enabled() {
+        log(
+            LogTag::Pool,
+            "PRIORITY_REQUEST",
+            &format!("Requesting priority updates for {} open position tokens", open_mints.len())
+        );
+    }
+
+    let service = get_pool_service();
+    service.request_priority_price_updates(&open_mints).await
+}
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
@@ -2271,9 +2584,9 @@ pub struct PoolPriceCalculator {
     // Centralized RPC client (no direct SolanaRpcClient instantiation allowed)
     rpc_client: &'static crate::rpc::RpcClient,
     pool_cache: Arc<RwLock<HashMap<String, PoolInfo>>>,
-    price_cache: Arc<RwLock<HashMap<String, (f64, Instant)>>>,
+    price_cache: Arc<RwLock<HashMap<String, (PoolPriceInfo, Instant)>>>,
     // Short TTL cache for vault (token account) balances to avoid duplicate RPCs inside monitoring cycles
-    vault_balance_cache: Arc<RwLock<HashMap<String, (u64, Instant)>>>,
+    // REMOVED: vault_balance_cache per requirements - reserve values should NOT be cached
     stats: Arc<RwLock<PoolStats>>,
     debug_enabled: bool,
 }
@@ -2286,7 +2599,7 @@ impl PoolPriceCalculator {
             rpc_client,
             pool_cache: Arc::new(RwLock::new(HashMap::new())),
             price_cache: Arc::new(RwLock::new(HashMap::new())),
-            vault_balance_cache: Arc::new(RwLock::new(HashMap::new())),
+            // vault_balance_cache removed per requirements - reserve values should NOT be cached
             stats: Arc::new(RwLock::new(PoolStats::new())),
             debug_enabled: false,
         }
@@ -2297,6 +2610,161 @@ impl PoolPriceCalculator {
     pub fn enable_debug(&mut self) {
         self.debug_enabled = true;
         log(LogTag::Pool, "DEBUG", "Pool calculator debug mode enabled");
+    }
+
+    /// Refresh only the reserve values in a PoolInfo (keeps cached metadata, fetches fresh reserves)
+    async fn refresh_pool_reserves(
+        &self,
+        pool_info: &PoolInfo,
+        account: &Account
+    ) -> Result<PoolInfo, String> {
+        let mut updated_pool = pool_info.clone();
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "REFRESH_RESERVES",
+                &format!(
+                    "Refreshing reserves for pool {} ({})",
+                    pool_info.pool_address,
+                    pool_info.pool_type
+                )
+            );
+        }
+
+        // Refresh reserves based on pool type
+        match pool_info.pool_program_id.as_str() {
+            RAYDIUM_CPMM_PROGRAM_ID | METEORA_DAMM_V2_PROGRAM_ID | ORCA_WHIRLPOOL_PROGRAM_ID => {
+                // These pools use vault balances
+                if
+                    let (Some(vault_0), Some(vault_1)) = (
+                        &pool_info.token_0_vault,
+                        &pool_info.token_1_vault,
+                    )
+                {
+                    let (reserve_0, reserve_1) = self.get_vault_balances(vault_0, vault_1).await?;
+                    updated_pool.token_0_reserve = reserve_0;
+                    updated_pool.token_1_reserve = reserve_1;
+                }
+            }
+            METEORA_DLMM_PROGRAM_ID => {
+                // DLMM uses different reserve accounts
+                if
+                    let (Some(vault_0), Some(vault_1)) = (
+                        &pool_info.token_0_vault,
+                        &pool_info.token_1_vault,
+                    )
+                {
+                    let (reserve_0, reserve_1) = self.get_dlmm_vault_balances(
+                        vault_0,
+                        vault_1
+                    ).await?;
+                    updated_pool.token_0_reserve = reserve_0;
+                    updated_pool.token_1_reserve = reserve_1;
+                }
+            }
+            RAYDIUM_LEGACY_AMM_PROGRAM_ID => {
+                // Legacy AMM may extract from pool data OR use vaults
+                if
+                    let (Some(vault_0), Some(vault_1)) = (
+                        &pool_info.token_0_vault,
+                        &pool_info.token_1_vault,
+                    )
+                {
+                    // Try vault balances first
+                    match self.get_vault_balances(vault_0, vault_1).await {
+                        Ok((reserve_0, reserve_1)) => {
+                            updated_pool.token_0_reserve = reserve_0;
+                            updated_pool.token_1_reserve = reserve_1;
+                        }
+                        Err(_) => {
+                            // Fallback to pool data extraction
+                            if
+                                let Ok(reserve_pairs) =
+                                    self.extract_raydium_legacy_reserves_from_data(&account.data)
+                            {
+                                if let Some((reserve_0, reserve_1)) = reserve_pairs.first() {
+                                    updated_pool.token_0_reserve = *reserve_0;
+                                    updated_pool.token_1_reserve = *reserve_1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            PUMP_FUN_AMM_PROGRAM_ID => {
+                // For Pump.fun, we need to re-extract vault addresses from pool data and fetch fresh balances
+                if
+                    let Ok((base_vault, quote_vault)) = self.extract_pump_fun_vault_addresses(
+                        &account.data
+                    )
+                {
+                    match self.get_vault_balances(&base_vault, &quote_vault).await {
+                        Ok((base_reserve, quote_reserve)) => {
+                            updated_pool.token_0_reserve = base_reserve;
+                            updated_pool.token_1_reserve = quote_reserve;
+
+                            if self.debug_enabled {
+                                log(
+                                    LogTag::Pool,
+                                    "PUMP_RESERVES_REFRESHED",
+                                    &format!(
+                                        "Fresh Pump.fun reserves: base_vault={} ({}), quote_vault={} ({})",
+                                        base_vault,
+                                        base_reserve,
+                                        quote_vault,
+                                        quote_reserve
+                                    )
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            if self.debug_enabled {
+                                log(
+                                    LogTag::Pool,
+                                    "PUMP_VAULT_ERROR",
+                                    &format!("Failed to refresh Pump.fun vault balances: {}", e)
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Pool,
+                            "PUMP_EXTRACT_ERROR",
+                            "Failed to extract vault addresses from Pump.fun pool data"
+                        );
+                    }
+                }
+            }
+            _ => {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Pool,
+                        "UNKNOWN_RESERVES",
+                        &format!(
+                            "Unknown pool type for reserve refresh: {}",
+                            pool_info.pool_program_id
+                        )
+                    );
+                }
+            }
+        }
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "RESERVES_REFRESHED",
+                &format!(
+                    "Fresh reserves: token_0={}, token_1={}",
+                    updated_pool.token_0_reserve,
+                    updated_pool.token_1_reserve
+                )
+            );
+        }
+
+        Ok(updated_pool)
     }
 
     /// Get pool information from on-chain data
@@ -2438,16 +2906,22 @@ impl PoolPriceCalculator {
     ) -> Result<Option<PoolPriceInfo>, String> {
         let cache_key = format!("{}_{}", pool_address, token_mint);
 
-        // Check price cache (valid for 30 seconds)
+        // Check for cached complete PoolPriceInfo (5 second TTL)
         {
             let cache = self.price_cache.read().await;
-            if let Some((price, timestamp)) = cache.get(&cache_key) {
-                if timestamp.elapsed().as_secs() < 30 {
+            if let Some((cached_info, timestamp)) = cache.get(&cache_key) {
+                if timestamp.elapsed().as_secs() < 5 {
                     if self.debug_enabled {
                         log(
                             LogTag::Pool,
-                            "CACHE",
-                            &format!("Using cached price {:.12} SOL for {}", price, token_mint)
+                            "CACHE_HIT_FULL",
+                            &format!(
+                                "Using cached complete PoolPriceInfo {:.12} SOL for {} (reserves: sol={}, token={})",
+                                cached_info.price_sol,
+                                token_mint,
+                                cached_info.sol_reserve,
+                                cached_info.token_reserve
+                            )
                         );
                     }
 
@@ -2457,23 +2931,13 @@ impl PoolPriceCalculator {
                         stats.cache_hits += 1;
                     }
 
-                    // Return cached price with minimal pool info
-                    return Ok(
-                        Some(PoolPriceInfo {
-                            pool_address: pool_address.to_string(),
-                            pool_program_id: "cached".to_string(),
-                            pool_type: "cached".to_string(),
-                            token_mint: token_mint.to_string(),
-                            price_sol: *price,
-                            token_reserve: 0,
-                            sol_reserve: 0,
-                            token_decimals: 9, // Default assumption, should be fetched properly
-                            sol_decimals: 9,
-                        })
-                    );
+                    // Return the cached complete price info with real reserve data
+                    return Ok(Some(cached_info.clone()));
                 }
             }
         }
+
+        // Always calculate fresh to ensure accurate reserve information
 
         let start_time = Instant::now();
 
@@ -2515,10 +2979,10 @@ impl PoolPriceCalculator {
             }
         };
 
-        // Cache the price
+        // Cache the complete price info (not just the price)
         if let Some(ref price_info) = price_info {
             let mut cache = self.price_cache.write().await;
-            cache.insert(cache_key, (price_info.price_sol, Instant::now()));
+            cache.insert(cache_key, (price_info.clone(), Instant::now()));
         }
 
         // Update stats
@@ -3070,55 +3534,37 @@ impl PoolPriceCalculator {
         let vault_1_pubkey = Pubkey::from_str(vault_1).map_err(|e|
             format!("Invalid vault 1 address {}: {}", vault_1, e)
         )?;
-        const VAULT_TTL_SECS: u64 = 2; // short-lived cache horizon
-        let now = Instant::now();
-        let mut missing: Vec<&str> = Vec::new();
-        {
-            let cache = self.vault_balance_cache.read().await;
-            for &v in &[vault_0, vault_1] {
-                match cache.get(v) {
-                    Some((_, ts)) if now.duration_since(*ts).as_secs() < VAULT_TTL_SECS => {}
-                    _ => missing.push(v),
-                }
-            }
+
+        // Always fetch fresh vault balances - NO CACHING of balance values per requirements
+        let pubkeys = vec![vault_0_pubkey, vault_1_pubkey];
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "VAULT_FETCH_FRESH",
+                &format!("Fetching fresh vault balances for 2 accounts (no cache)")
+            );
         }
-        if !missing.is_empty() {
-            let mut pubkeys = Vec::new();
-            for v in &missing {
-                if let Ok(pk) = Pubkey::from_str(v) {
-                    pubkeys.push(pk);
-                }
-            }
-            if !pubkeys.is_empty() {
-                if self.debug_enabled {
-                    log(
-                        LogTag::Pool,
-                        "VAULT_BATCH",
-                        &format!("Fetching {} vault accounts (cache miss)", pubkeys.len())
-                    );
-                }
-                let accounts = self.rpc_client
-                    .get_multiple_accounts(&pubkeys).await
-                    .map_err(|e| format!("Failed to get vault accounts: {}", e))?;
-                let mut cache = self.vault_balance_cache.write().await;
-                for (idx, acct_opt) in accounts.into_iter().enumerate() {
-                    if let Some(acct) = acct_opt {
-                        if let Ok(amount) = Self::decode_token_account_amount(&acct.data) {
-                            cache.insert(missing[idx].to_string(), (amount, now));
-                        }
-                    }
-                }
-            }
-        }
-        let cache = self.vault_balance_cache.read().await;
-        let balance_0 = cache
-            .get(vault_0)
-            .map(|(a, _)| *a)
-            .ok_or_else(|| "Vault 0 account not found".to_string())?;
-        let balance_1 = cache
-            .get(vault_1)
-            .map(|(a, _)| *a)
-            .ok_or_else(|| "Vault 1 account not found".to_string())?;
+
+        let accounts = self.rpc_client
+            .get_multiple_accounts(&pubkeys).await
+            .map_err(|e| format!("Failed to get vault accounts: {}", e))?;
+
+        let balance_0 = if let Some(acct) = &accounts[0] {
+            Self::decode_token_account_amount(&acct.data).map_err(|e|
+                format!("Failed to decode vault 0 balance: {}", e)
+            )?
+        } else {
+            return Err("Vault 0 account not found".to_string());
+        };
+
+        let balance_1 = if let Some(acct) = &accounts[1] {
+            Self::decode_token_account_amount(&acct.data).map_err(|e|
+                format!("Failed to decode vault 1 balance: {}", e)
+            )?
+        } else {
+            return Err("Vault 1 account not found".to_string());
+        };
 
         if self.debug_enabled {
             log(
@@ -3143,53 +3589,43 @@ impl PoolPriceCalculator {
         reserve_0: &str,
         reserve_1: &str
     ) -> Result<(u64, u64), String> {
-        const VAULT_TTL_SECS: u64 = 2;
-        let now = Instant::now();
-        let mut missing: Vec<&str> = Vec::new();
-        {
-            let cache = self.vault_balance_cache.read().await;
-            for &v in &[reserve_0, reserve_1] {
-                match cache.get(v) {
-                    Some((_, ts)) if now.duration_since(*ts).as_secs() < VAULT_TTL_SECS => {}
-                    _ => missing.push(v),
-                }
-            }
+        // Always fetch fresh DLMM reserve balances - NO CACHING of balance values per requirements
+        let reserve_0_pubkey = Pubkey::from_str(reserve_0).map_err(|e|
+            format!("Invalid DLMM reserve 0 address {}: {}", reserve_0, e)
+        )?;
+        let reserve_1_pubkey = Pubkey::from_str(reserve_1).map_err(|e|
+            format!("Invalid DLMM reserve 1 address {}: {}", reserve_1, e)
+        )?;
+
+        let pubkeys = vec![reserve_0_pubkey, reserve_1_pubkey];
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "DLMM_FETCH_FRESH",
+                &format!("Fetching fresh DLMM reserve balances for 2 accounts (no cache)")
+            );
         }
-        if !missing.is_empty() {
-            let pubkeys: Vec<Pubkey> = missing
-                .iter()
-                .filter_map(|v| Pubkey::from_str(v).ok())
-                .collect();
-            if !pubkeys.is_empty() {
-                if self.debug_enabled {
-                    log(
-                        LogTag::Pool,
-                        "DLMM_VAULT_BATCH",
-                        &format!("Fetching {} DLMM reserve accounts", pubkeys.len())
-                    );
-                }
-                let accounts = self.rpc_client
-                    .get_multiple_accounts(&pubkeys).await
-                    .map_err(|e| format!("Failed to get DLMM reserve accounts: {}", e))?;
-                let mut cache = self.vault_balance_cache.write().await;
-                for (i, acct_opt) in accounts.into_iter().enumerate() {
-                    if let Some(acct) = acct_opt {
-                        if let Ok(amount) = Self::decode_token_account_amount(&acct.data) {
-                            cache.insert(missing[i].to_string(), (amount, now));
-                        }
-                    }
-                }
-            }
-        }
-        let cache = self.vault_balance_cache.read().await;
-        let balance_0 = cache
-            .get(reserve_0)
-            .map(|(a, _)| *a)
-            .ok_or_else(|| format!("DLMM reserve 0 account {} not found", reserve_0))?;
-        let balance_1 = cache
-            .get(reserve_1)
-            .map(|(a, _)| *a)
-            .ok_or_else(|| format!("DLMM reserve 1 account {} not found", reserve_1))?;
+
+        let accounts = self.rpc_client
+            .get_multiple_accounts(&pubkeys).await
+            .map_err(|e| format!("Failed to get DLMM reserve accounts: {}", e))?;
+
+        let balance_0 = if let Some(acct) = &accounts[0] {
+            Self::decode_token_account_amount(&acct.data).map_err(|e|
+                format!("Failed to decode DLMM reserve 0 balance: {}", e)
+            )?
+        } else {
+            return Err(format!("DLMM reserve 0 account {} not found", reserve_0));
+        };
+
+        let balance_1 = if let Some(acct) = &accounts[1] {
+            Self::decode_token_account_amount(&acct.data).map_err(|e|
+                format!("Failed to decode DLMM reserve 1 balance: {}", e)
+            )?
+        } else {
+            return Err(format!("DLMM reserve 1 account {} not found", reserve_1));
+        };
 
         if self.debug_enabled {
             log(
@@ -3206,6 +3642,50 @@ impl PoolPriceCalculator {
         }
 
         Ok((balance_0, balance_1))
+    }
+
+    /// Extract Pump.fun vault addresses from pool account data
+    /// Returns (base_vault, quote_vault) addresses
+    fn extract_pump_fun_vault_addresses(&self, data: &[u8]) -> Result<(String, String), String> {
+        if data.len() < 200 {
+            return Err("Invalid Pump.fun pool account data length".to_string());
+        }
+
+        let mut offset = 8; // Skip discriminator
+
+        // Skip pool_bump (u8) and index (u16)
+        offset += 1 + 2;
+
+        // Skip creator pubkey
+        offset += 32;
+
+        // Skip base_mint and quote_mint
+        offset += 32 + 32;
+
+        // Skip lp_mint
+        offset += 32;
+
+        // Extract vault addresses
+        let base_vault = Self::read_pubkey_at_offset(data, &mut offset).map_err(|e|
+            format!("Failed to read base vault: {}", e)
+        )?;
+        let quote_vault = Self::read_pubkey_at_offset(data, &mut offset).map_err(|e|
+            format!("Failed to read quote vault: {}", e)
+        )?;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "PUMP_EXTRACT_VAULTS",
+                &format!(
+                    "Extracted Pump.fun vault addresses: base={}, quote={}",
+                    base_vault,
+                    quote_vault
+                )
+            );
+        }
+
+        Ok((base_vault.to_string(), quote_vault.to_string()))
     }
 
     /// Decode Raydium Legacy AMM pool data from account bytes
@@ -3269,76 +3749,6 @@ impl PoolPriceCalculator {
 
         // Map vaults correctly: pc_mint=SOL uses base_vault, coin_mint=token uses quote_vault
         let (coin_vault, pc_vault) = (quote_vault.clone(), base_vault.clone());
-
-        if self.debug_enabled {
-            log(
-                LogTag::Pool,
-                "LEGACY_PARSE_FIELDS",
-                &format!(
-                    "Using direct offset parsing: pc_mint at 0x190, coin_mint at 0x1b0, base_vault at 0x150, quote_vault at 0x160"
-                )
-            );
-
-            log(
-                LogTag::Pool,
-                "LEGACY_VAULT_ADDRESSES",
-                &format!(
-                    "Parsed vault addresses (with correct mapping):\n  \
-                         - Base Vault (SOL, {}): {}\n  \
-                         - Quote Vault (Token, {}): {}\n  \
-                         - Coin Vault (mapped to Quote): {}\n  \
-                         - PC Vault (mapped to Base): {}",
-                    pc_mint,
-                    base_vault,
-                    coin_mint,
-                    quote_vault,
-                    coin_vault,
-                    pc_vault
-                )
-            );
-
-            // Compare with expected addresses from pool data
-            let expected_base_vault = "F6iWqisguZYprVwp916BgGR7d5ahP6Ev5E213k8y3MEb";
-            let expected_quote_vault = "7bxbfwXi1CY7zWUXW35PBMZjhPD27SarVuHaehMzR2Fn";
-
-            log(
-                LogTag::Pool,
-                "LEGACY_VAULT_COMPARISON",
-                &format!(
-                    "Expected vault addresses from pool data:\n  \
-                         - Base Vault (SOL): {}\n  \
-                         - Quote Vault (Token): {}",
-                    expected_base_vault,
-                    expected_quote_vault
-                )
-            );
-
-            // Check if our parsed addresses match expected
-            let base_vault_str = base_vault.to_string();
-            let quote_vault_str = quote_vault.to_string();
-
-            if base_vault_str == expected_base_vault && quote_vault_str == expected_quote_vault {
-                log(
-                    LogTag::Pool,
-                    "LEGACY_VAULT_MATCH",
-                    "✅ Parsed vault addresses match expected pool data EXACTLY!"
-                );
-            } else {
-                log(
-                    LogTag::Pool,
-                    "LEGACY_VAULT_MISMATCH",
-                    &format!(
-                        "❌ Parsed vault addresses don't match expected:\n  \
-                             Parsed: base={}, quote={}\n  \
-                             Expected: base={}, quote={}",
-                        base_vault_str,
-                        quote_vault_str,
-                        expected_base_vault,
-                        expected_quote_vault
-                    )
-                );
-            }
-        }
 
         // Use decimal values from cache (since we skipped the pool structure parsing)
         let token_0_decimals = get_cached_decimals(&coin_mint.to_string()).unwrap_or(9);

@@ -1235,12 +1235,31 @@ pub async fn update_position_tracking(
 
         let price_diff = (old_price - current_price).abs();
 
-        // Check if enough time has passed since last log (fallback logging every 30 seconds)
+        // Check if enough time has passed since last log (fallback logging every 10 seconds)
         let time_since_last_log = position.current_price_updated
             .map(|last| (Utc::now() - last).num_seconds())
             .unwrap_or(999); // Force log if no previous update
-        let should_log_periodic = time_since_last_log >= 30; // Log every 30 seconds regardless
 
+        // Debug: Log price comparison details when debugging positions
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!(
+                    "🎯 Price tracking for {}: old={:.10}, current={:.10}, diff={:.10}, threshold={:.10}, time_since_log={}s",
+                    position.symbol,
+                    old_price,
+                    current_price,
+                    price_diff,
+                    change_threshold,
+                    time_since_last_log
+                )
+            );
+        }
+
+        let should_log_periodic = time_since_last_log >= 10; // Log every 10 seconds regardless
+
+        // Always log during position monitoring for visibility, regardless of price changes
         if price_diff > change_threshold || should_log_periodic {
             // Calculate current P&L for logging
             let (pnl_sol, pnl_percent) = calculate_position_pnl(
