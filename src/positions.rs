@@ -1731,8 +1731,8 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                         // Update position with actual exit transaction data
                         position.transaction_exit_verified = true;
 
-                        // Use actual SOL received from swap analysis
-                        position.sol_received = Some(swap_info.effective_sol_spent.abs()); // For sell, this is SOL received
+                        // Use actual SOL received from swap analysis (for sells, use effective_sol_received)
+                        position.sol_received = Some(swap_info.effective_sol_received.abs()); // For sell, this is SOL received
                         position.effective_exit_price = Some(swap_info.calculated_price_sol);
 
                         // Convert fee from SOL to lamports
