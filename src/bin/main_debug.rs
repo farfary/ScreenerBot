@@ -61,7 +61,7 @@ use screenerbot::transactions::{
 use screenerbot::logger::{ log, LogTag, init_file_logging };
 use screenerbot::global::{ set_cmd_args };
 use screenerbot::arguments::{ get_cmd_args, set_cmd_args as args_set_cmd_args };
-use screenerbot::rpc::{ get_rpc_client, SwapError, sol_to_lamports, TokenBalance };
+use screenerbot::rpc::{ get_rpc_client, sol_to_lamports, TokenBalance };
 use screenerbot::errors::ScreenerBotError;
 use screenerbot::utils::get_wallet_address;
 use solana_transaction_status::{
@@ -4393,7 +4393,7 @@ async fn execute_jupiter_swap_test(
     amount: f64,
     slippage: f64,
     is_buy: bool // true for SOL->Token, false for Token->SOL
-) -> Result<JupiterSwapResult, SwapError> {
+) -> Result<JupiterSwapResult, ScreenerBotError> {
     let wallet_address = get_wallet_address()?;
     let sol_mint = "So11111111111111111111111111111111111111112";
 
@@ -4431,7 +4431,7 @@ async fn execute_gmgn_swap_test(
     amount: f64,
     slippage: f64,
     is_buy: bool
-) -> Result<JupiterSwapResult, SwapError> {
+) -> Result<JupiterSwapResult, ScreenerBotError> {
     let wallet_address = get_wallet_address()?;
     let sol_mint = "So11111111111111111111111111111111111111112";
 
@@ -4502,7 +4502,7 @@ async fn execute_raydium_cpmm_swap_test(
     sol_amount: f64,
     slippage: f64,
     is_buy: bool
-) -> Result<JupiterSwapResult, SwapError> {
+) -> Result<JupiterSwapResult, ScreenerBotError> {
     // Raydium direct API is deprecated - use Jupiter aggregator which includes Raydium routes
     Err(
         ScreenerBotError::Configuration(screenerbot::errors::ConfigurationError::Generic {

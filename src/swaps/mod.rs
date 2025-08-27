@@ -7,7 +7,6 @@ pub mod jupiter;
 pub mod types;
 
 use crate::tokens::Token;
-use crate::rpc::SwapError;
 use crate::errors::{ BlockchainError, ScreenerBotError };
 use crate::logger::{ log, LogTag };
 use config::{ GMGN_ENABLED, JUPITER_ENABLED };
@@ -117,7 +116,7 @@ pub async fn get_best_quote(
     input_amount: u64,
     from_address: &str,
     slippage: f64
-) -> Result<UnifiedQuote, SwapError> {
+) -> Result<UnifiedQuote, ScreenerBotError> {
     log(
         LogTag::Swap,
         "BEST_QUOTE",
@@ -138,7 +137,7 @@ pub async fn get_best_quote(
     );
 
     let mut futures: Vec<
-        Pin<Box<dyn Future<Output = Result<UnifiedQuote, SwapError>> + Send>>
+        Pin<Box<dyn Future<Output = Result<UnifiedQuote, ScreenerBotError>> + Send>>
     > = Vec::new();
 
     // Prepare GMGN quote future
@@ -346,7 +345,7 @@ pub async fn execute_best_swap(
     output_mint: &str,
     input_amount: u64,
     quote: UnifiedQuote
-) -> Result<SwapResult, SwapError> {
+) -> Result<SwapResult, ScreenerBotError> {
     log(
         LogTag::Swap,
         "EXECUTE",

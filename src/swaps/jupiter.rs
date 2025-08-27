@@ -5,7 +5,6 @@
 use crate::tokens::Token;
 use crate::tokens::decimals::{ get_token_decimals_from_chain, SOL_DECIMALS };
 use crate::logger::{ log, LogTag };
-use crate::rpc::SwapError;
 use crate::errors::ScreenerBotError;
 use crate::global::{ is_debug_swaps_enabled, is_debug_api_enabled };
 use crate::swaps::types::{
@@ -52,7 +51,7 @@ pub async fn jupiter_sign_and_send_transaction(
     swap_transaction_base64: &str,
     priority_fee_lamports: Option<u64>,
     compute_unit_limit: Option<u64>
-) -> Result<String, SwapError> {
+) -> Result<String, ScreenerBotError> {
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
@@ -132,7 +131,7 @@ pub async fn get_jupiter_quote(
     output_mint: &str,
     input_amount: u64,
     slippage: f64
-) -> Result<SwapData, SwapError> {
+) -> Result<SwapData, ScreenerBotError> {
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
@@ -341,7 +340,7 @@ pub async fn get_jupiter_swap_transaction(
     user_public_key: &str,
     dynamic_compute_unit_limit: bool,
     priority_fee_lamports: Option<u64>
-) -> Result<JupiterSwapResponse, SwapError> {
+) -> Result<JupiterSwapResponse, ScreenerBotError> {
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
@@ -493,7 +492,7 @@ pub async fn execute_jupiter_swap(
     input_mint: &str,
     output_mint: &str,
     swap_data: SwapData
-) -> Result<JupiterSwapResult, SwapError> {
+) -> Result<JupiterSwapResult, ScreenerBotError> {
     let wallet_address = crate::utils::get_wallet_address()?;
 
     log(
@@ -565,7 +564,7 @@ pub async fn execute_jupiter_swap(
 /// Converts Jupiter quote response to unified SwapData format
 async fn convert_jupiter_quote_to_swap_data(
     jupiter_quote: JupiterQuoteResponse
-) -> Result<SwapData, SwapError> {
+) -> Result<SwapData, ScreenerBotError> {
     // Create SwapQuote from Jupiter response
     // CRITICAL FIX: Get actual token decimals instead of hardcoding to 9
     let input_decimals = if jupiter_quote.input_mint == SOL_MINT {
@@ -637,7 +636,7 @@ async fn convert_jupiter_quote_to_swap_data(
 /// Converts SwapData back to Jupiter quote format for transaction building
 fn convert_swap_data_to_jupiter_quote(
     swap_data: &SwapData
-) -> Result<JupiterQuoteResponse, SwapError> {
+) -> Result<JupiterQuoteResponse, ScreenerBotError> {
     let slippage_bps: u16 = swap_data.quote.slippage_bps
         .parse()
         .map_err(|_| ScreenerBotError::invalid_response("Invalid slippage_bps".to_string()))?;
@@ -666,7 +665,7 @@ fn convert_swap_data_to_jupiter_quote(
 }
 
 /// Validates Jupiter quote response for completeness and safety
-pub fn validate_jupiter_quote(quote: &SwapData) -> Result<(), SwapError> {
+pub fn validate_jupiter_quote(quote: &SwapData) -> Result<(), ScreenerBotError> {
     if quote.quote.input_mint.is_empty() {
         return Err(ScreenerBotError::invalid_response("Missing input mint".to_string()));
     }

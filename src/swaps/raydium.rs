@@ -4,7 +4,7 @@
 
 use crate::tokens::Token;
 use crate::logger::{log, LogTag};
-use crate::rpc::{SwapError, lamports_to_sol};
+use crate::rpc::{ScreenerBotError, lamports_to_sol};
 use crate::global::{is_debug_swaps_enabled, is_debug_api_enabled, read_configs};
 use crate::swaps::types::{SwapData, SwapQuote, RawTransaction};
 use super::config::{
@@ -108,7 +108,7 @@ pub struct RaydiumSwapResult {
 pub async fn raydium_sign_and_send_transaction(
     swap_transaction_base64: &str,
     configs: &crate::global::Configs
-) -> Result<String, SwapError> {
+) -> Result<String, ScreenerBotError> {
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
@@ -158,7 +158,7 @@ pub async fn get_raydium_quote(
     slippage: f64,
     fee: f64,
     is_anti_mev: bool,
-) -> Result<SwapData, SwapError> {
+) -> Result<SwapData, ScreenerBotError> {
     // Always log the issue for debugging
     log(
         LogTag::Swap,
@@ -201,7 +201,7 @@ pub async fn get_raydium_swap_transaction(
     quote: &SwapData,
     user_public_key: &str,
     compute_unit_price: Option<u64>,
-) -> Result<RaydiumSwapResponse, SwapError> {
+) -> Result<RaydiumSwapResponse, ScreenerBotError> {
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
@@ -302,7 +302,7 @@ pub async fn execute_raydium_swap(
     output_mint: &str,
     input_amount: u64,
     swap_data: SwapData
-) -> Result<RaydiumSwapResult, SwapError> {
+) -> Result<RaydiumSwapResult, ScreenerBotError> {
     log(
         LogTag::Swap,
         "RAYDIUM_SWAP_DEPRECATED",
@@ -329,7 +329,7 @@ pub async fn execute_raydium_swap(
 }
 
 /// Converts Raydium quote response to unified SwapData format
-fn convert_raydium_quote_to_swap_data(quote_response: RaydiumQuoteResponse) -> Result<SwapData, SwapError> {
+fn convert_raydium_quote_to_swap_data(quote_response: RaydiumQuoteResponse) -> Result<SwapData, ScreenerBotError> {
     // Determine decimals (default to 9 for SOL, 6 for USDC-like tokens, 9 for others)
     let in_decimals = if quote_response.data.input_mint == SOL_MINT { 9 } else { 9 };
     let out_decimals = if quote_response.data.output_mint == SOL_MINT { 9 } else { 9 };
@@ -371,7 +371,7 @@ fn convert_raydium_quote_to_swap_data(quote_response: RaydiumQuoteResponse) -> R
 }
 
 /// Converts unified SwapData back to Raydium quote format
-fn convert_swap_data_to_raydium_quote(swap_data: &SwapData) -> Result<RaydiumQuoteData, SwapError> {
+fn convert_swap_data_to_raydium_quote(swap_data: &SwapData) -> Result<RaydiumQuoteData, ScreenerBotError> {
     // Parse route plan back from JSON
     let route_plan: Vec<RaydiumRoutePlan> = serde_json::from_value(swap_data.quote.route_plan.clone())
         .map_err(|e| ScreenerBotError::invalid_response(format!("Failed to parse route plan: {}", e)))?;
@@ -397,7 +397,7 @@ pub fn validate_raydium_quote_price(
     expected_price: f64,
     is_sol_to_token: bool,
     slippage_tolerance: f64,
-) -> Result<(), SwapError> {
+) -> Result<(), ScreenerBotError> {
     let output_amount_str = &swap_data.quote.out_amount;
     log(
         LogTag::Swap,

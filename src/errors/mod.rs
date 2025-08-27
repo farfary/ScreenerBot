@@ -1,5 +1,5 @@
 /// Comprehensive error handling system for ScreenerBot
-/// Replaces old SwapError with structured blockchain-aware error types
+/// Replaces old ScreenerBotError with structured blockchain-aware error types
 
 use chrono::{ DateTime, Utc };
 
@@ -7,7 +7,7 @@ pub mod blockchain;
 pub use blockchain::*;
 
 // =============================================================================
-// MAIN ERROR TYPE - Replaces SwapError completely
+// MAIN ERROR TYPE - Replaces ScreenerBotError completely
 // =============================================================================
 
 #[derive(Debug, Clone)]
@@ -345,7 +345,7 @@ impl From<serde_json::Error> for ScreenerBotError {
 // =============================================================================
 
 impl ScreenerBotError {
-    /// Create an invalid amount error (replaces SwapError::InvalidAmount)
+    /// Create an invalid amount error (replaces ScreenerBotError::InvalidAmount)
     pub fn invalid_amount(amount: impl Into<String>, reason: impl Into<String>) -> Self {
         ScreenerBotError::Data(DataError::InvalidAmount {
             amount: amount.into(),
@@ -353,14 +353,14 @@ impl ScreenerBotError {
         })
     }
 
-    /// Create a network error (replaces SwapError::NetworkError)
+    /// Create a network error (replaces ScreenerBotError::NetworkError)
     pub fn network_error(message: impl Into<String>) -> Self {
         ScreenerBotError::Network(NetworkError::Generic {
             message: message.into(),
         })
     }
 
-    /// Create a signing error (replaces SwapError::SigningError)
+    /// Create a signing error (replaces ScreenerBotError::SigningError)
     pub fn signing_error(message: impl Into<String>) -> Self {
         ScreenerBotError::Blockchain(BlockchainError::TransactionDropped {
             signature: "unknown".to_string(),
@@ -370,7 +370,7 @@ impl ScreenerBotError {
         })
     }
 
-    /// Create an API error (replaces SwapError::ApiError)
+    /// Create an API error (replaces ScreenerBotError::ApiError)
     pub fn api_error(message: impl Into<String>) -> Self {
         ScreenerBotError::RpcProvider(RpcProviderError::Generic {
             provider_name: "unknown".to_string(),
@@ -378,7 +378,7 @@ impl ScreenerBotError {
         })
     }
 
-    /// Create an invalid response error (replaces SwapError::InvalidResponse)
+    /// Create an invalid response error (replaces ScreenerBotError::InvalidResponse)
     pub fn invalid_response(message: impl Into<String>) -> Self {
         ScreenerBotError::Data(DataError::InvalidFormat {
             expected: "valid response".to_string(),
@@ -386,7 +386,7 @@ impl ScreenerBotError {
         })
     }
 
-    /// Create a parse error (replaces SwapError::ParseError)
+    /// Create a parse error (replaces ScreenerBotError::ParseError)
     pub fn parse_error(message: impl Into<String>) -> Self {
         ScreenerBotError::Data(DataError::ParseError {
             data_type: "unknown".to_string(),
@@ -394,7 +394,7 @@ impl ScreenerBotError {
         })
     }
 
-    /// Create a slippage exceeded error (replaces SwapError::SlippageExceeded)
+    /// Create a slippage exceeded error (replaces ScreenerBotError::SlippageExceeded)
     pub fn slippage_exceeded(message: impl Into<String>) -> Self {
         ScreenerBotError::Data(DataError::ValidationError {
             field: "slippage".to_string(),
@@ -403,7 +403,7 @@ impl ScreenerBotError {
         })
     }
 
-    /// Create an insufficient balance error (replaces SwapError::InsufficientBalance)
+    /// Create an insufficient balance error (replaces ScreenerBotError::InsufficientBalance)
     pub fn insufficient_balance(message: impl Into<String>) -> Self {
         ScreenerBotError::Blockchain(BlockchainError::InsufficientBalance {
             pubkey: "unknown".to_string(),

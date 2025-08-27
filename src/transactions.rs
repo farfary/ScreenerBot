@@ -26,7 +26,11 @@ use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_transactions_enabled, read_configs, load_wallet_from_config };
 use crate::rpc::get_rpc_client;
 use crate::utils::get_wallet_address;
-use crate::errors::blockchain::{ BlockchainError, parse_solana_error };
+use crate::errors::blockchain::{
+    BlockchainError,
+    parse_structured_solana_error,
+    is_permanent_failure,
+};
 use crate::tokens::{
     get_token_decimals,
     get_token_decimals_safe,
@@ -1435,7 +1439,6 @@ impl TransactionsManager {
                 .and_then(|meta| meta.err.as_ref())
                 .map(|err| {
                     // Use structured error parsing for comprehensive error handling
-                    use crate::errors::blockchain::parse_structured_solana_error;
                     let structured_error = parse_structured_solana_error(
                         &serde_json::to_value(err).unwrap_or_default(),
                         Some(&signature)
@@ -2541,10 +2544,6 @@ impl TransactionsManager {
 
                 if let Some(err) = meta.get("err") {
                     // Parse structured blockchain error for comprehensive error handling
-                    use crate::errors::blockchain::{
-                        parse_structured_solana_error,
-                        is_permanent_failure,
-                    };
                     use crate::utils::safe_truncate;
 
                     let structured_error = parse_structured_solana_error(

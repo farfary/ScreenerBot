@@ -3,7 +3,8 @@ use tokio::sync::Notify;
 use std::time::Duration;
 use std::fs;
 use crate::logger::{ log, LogTag };
-use crate::errors::blockchain::{ BlockchainError, parse_solana_error };
+use crate::errors::blockchain::{ BlockchainError, parse_structured_solana_error };
+use crate::errors::parse_solana_error;
 use crate::errors::ScreenerBotError;
 
 /// Safe string truncation helper to prevent panic on out-of-bounds slicing
@@ -22,7 +23,6 @@ pub fn safe_format_signature(s: &str) -> String {
 
 // Wallet-related imports
 use crate::global::read_configs;
-use crate::rpc::SwapError;
 // Re-export for backward compatibility
 pub use crate::swaps::SwapResult;
 // Remove dependency on swaps module for get_wallet_address
@@ -41,7 +41,7 @@ use std::str::FromStr;
 
 /// Get the wallet address from the main wallet private key in configs
 /// This replaces the swaps::get_wallet_address dependency
-pub fn get_wallet_address() -> Result<String, SwapError> {
+pub fn get_wallet_address() -> Result<String, ScreenerBotError> {
     let configs = read_configs().map_err(|e|
         ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
             message: format!("Failed to read config file: {}", e),
@@ -186,7 +186,7 @@ pub fn hex_dump_data(
 /// Public function to manually close all empty ATAs for the configured wallet
 /// Note: ATA cleanup is now handled automatically by background service (see ata_cleanup.rs)
 /// This function is kept for manual cleanup or emergency situations
-pub async fn cleanup_all_empty_atas() -> Result<(u32, Vec<String>), SwapError> {
+pub async fn cleanup_all_empty_atas() -> Result<(u32, Vec<String>), ScreenerBotError> {
     log(
         LogTag::Wallet,
         "ATA",
@@ -197,13 +197,13 @@ pub async fn cleanup_all_empty_atas() -> Result<(u32, Vec<String>), SwapError> {
 }
 
 /// Checks wallet balance for SOL
-pub async fn get_sol_balance(wallet_address: &str) -> Result<f64, SwapError> {
+pub async fn get_sol_balance(wallet_address: &str) -> Result<f64, ScreenerBotError> {
     let rpc_client = crate::rpc::get_rpc_client();
     rpc_client.get_sol_balance(wallet_address).await
 }
 
 /// Checks wallet balance for a specific token
-pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, SwapError> {
+pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, ScreenerBotError> {
     use crate::logger::{ log, LogTag };
     use crate::arguments::is_debug_ata_enabled;
 
@@ -277,14 +277,17 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
 /// Gets all token accounts for a wallet
 pub async fn get_all_token_accounts(
     wallet_address: &str
-) -> Result<Vec<crate::rpc::TokenAccountInfo>, SwapError> {
+) -> Result<Vec<crate::rpc::TokenAccountInfo>, ScreenerBotError> {
     let rpc_client = crate::rpc::get_rpc_client();
     rpc_client.get_all_token_accounts(wallet_address).await
 }
 
 /// Closes a single empty ATA (Associated Token Account) for a specific mint
 /// Returns the transaction signature if successful
-pub async fn close_single_ata(wallet_address: &str, mint: &str) -> Result<String, SwapError> {
+pub async fn close_single_ata(
+    wallet_address: &str,
+    mint: &str
+) -> Result<String, ScreenerBotError> {
     log(LogTag::Wallet, "ATA", &format!("Attempting to close single ATA for mint {}", &mint[..8]));
 
     // Get all token accounts to find the specific one
@@ -349,7 +352,9 @@ pub async fn close_single_ata(wallet_address: &str, mint: &str) -> Result<String
 /// Closes all empty ATAs (Associated Token Accounts) for a wallet
 /// This reclaims the rent SOL (~0.002 SOL per account) from all empty token accounts
 /// Returns the number of accounts closed and total signatures
-pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<String>), SwapError> {
+pub async fn close_all_empty_atas(
+    wallet_address: &str
+) -> Result<(u32, Vec<String>), ScreenerBotError> {
     log(LogTag::Wallet, "ATA", "🔍 Checking for empty token accounts to close...");
 
     // Get all token accounts for the wallet
@@ -450,7 +455,10 @@ pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<Stri
 /// * `mint` - The token mint address
 /// * `wallet_address` - The wallet address
 /// * `recently_sold` - Optional flag indicating if tokens were recently sold (enables longer wait times)
-pub async fn close_token_account(mint: &str, wallet_address: &str) -> Result<String, SwapError> {
+pub async fn close_token_account(
+    mint: &str,
+    wallet_address: &str
+) -> Result<String, ScreenerBotError> {
     close_token_account_with_context(mint, wallet_address, false).await
 }
 
@@ -459,7 +467,7 @@ pub async fn close_token_account_with_context(
     mint: &str,
     wallet_address: &str,
     recently_sold: bool
-) -> Result<String, SwapError> {
+) -> Result<String, ScreenerBotError> {
     use crate::arguments::is_debug_ata_enabled;
 
     log(LogTag::Wallet, "ATA", &format!("Attempting to close token account for mint: {}", mint));
@@ -775,7 +783,7 @@ pub async fn close_token_account_with_context(
 async fn get_associated_token_account(
     wallet_address: &str,
     mint: &str
-) -> Result<String, SwapError> {
+) -> Result<String, ScreenerBotError> {
     let rpc_client = crate::rpc::get_rpc_client();
     rpc_client.get_associated_token_account(wallet_address, mint).await
 }
@@ -786,7 +794,7 @@ async fn close_ata(
     token_account: &str,
     mint: &str,
     is_token_2022: bool
-) -> Result<String, SwapError> {
+) -> Result<String, ScreenerBotError> {
     use crate::arguments::is_debug_ata_enabled;
 
     if is_debug_ata_enabled() {
@@ -868,7 +876,7 @@ async fn build_and_send_close_instruction(
     wallet_address: &str,
     token_account: &str,
     is_token_2022: bool
-) -> Result<String, SwapError> {
+) -> Result<String, ScreenerBotError> {
     use crate::arguments::is_debug_ata_enabled;
 
     if is_debug_ata_enabled() {
@@ -1083,7 +1091,7 @@ async fn build_and_send_close_instruction(
 fn build_token_2022_close_instruction(
     token_account: &Pubkey,
     owner: &Pubkey
-) -> Result<Instruction, SwapError> {
+) -> Result<Instruction, ScreenerBotError> {
     // Token-2022 uses the same close account instruction format as SPL Token
     // but with different program ID
     let token_2022_program_id = Pubkey::from_str(

@@ -41,7 +41,7 @@ use screenerbot::utils::{
 use screenerbot::swaps::{ get_best_quote, execute_best_swap, RouterType };
 use screenerbot::swaps::config::{ SOL_MINT, SELL_RETRY_SLIPPAGES };
 use screenerbot::swaps::types::SwapData;
-use screenerbot::rpc::{ SwapError, init_rpc_client, get_rpc_client };
+use screenerbot::rpc::{ init_rpc_client, get_rpc_client };
 use screenerbot::arguments::is_debug_ata_enabled;
 use reqwest;
 use serde_json;
@@ -389,7 +389,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             best_quote
                         ).await?;
 
-                        Ok::<SwapResult, SwapError>(swap_result)
+                        Ok::<SwapResult, ScreenerBotError>(swap_result)
                     }).await;
 
                     match sell_result {
@@ -1149,7 +1149,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Gets all token accounts for the given wallet address
-async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccount>, SwapError> {
+async fn get_all_token_accounts(
+    wallet_address: &str
+) -> Result<Vec<TokenAccount>, ScreenerBotError> {
     let configs = read_configs().map_err(|e|
         ScreenerBotError::Configuration(screenerbot::errors::ConfigurationError::Generic {
             message: format!("Failed to read config file: {}", e),
@@ -1277,7 +1279,9 @@ async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccount
 }
 
 /// Also get Token-2022 accounts (Token Extensions Program)
-async fn get_token_2022_accounts(wallet_address: &str) -> Result<Vec<TokenAccount>, SwapError> {
+async fn get_token_2022_accounts(
+    wallet_address: &str
+) -> Result<Vec<TokenAccount>, ScreenerBotError> {
     let configs = read_configs().map_err(|e|
         ScreenerBotError::Configuration(screenerbot::errors::ConfigurationError::Generic {
             message: format!("Failed to read config file: {}", e),

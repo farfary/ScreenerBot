@@ -22,6 +22,7 @@ use crate::{
     },
     rpc::{ lamports_to_sol, sol_to_lamports },
     errors::{ ScreenerBotError, PositionError, DataError, BlockchainError, NetworkError },
+    errors::blockchain::{ parse_structured_solana_error, is_permanent_failure },
     logger::{ log, LogTag, log_price_change },
     arguments::{
         is_dry_run_enabled,
@@ -2229,7 +2230,6 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                     }
                                     Err(e) => {
                                         // Check for permanent failures that should be cleaned up immediately
-                                        use crate::errors::blockchain::{parse_structured_solana_error, is_permanent_failure};
                                         
                                         let should_cleanup_immediately = if e.contains("[PERMANENT]") {
                                             // Error already contains permanent failure indicator

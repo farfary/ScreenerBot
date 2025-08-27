@@ -13,7 +13,7 @@ use super::config::{
 use super::types::{ GMGNApiResponse, SwapData };
 use crate::global::is_debug_swaps_enabled;
 use crate::logger::{ log, LogTag };
-use crate::rpc::{ lamports_to_sol, SwapError };
+use crate::rpc::{ lamports_to_sol };
 use crate::errors::ScreenerBotError;
 /// GMGN swap router implementation
 /// Handles GMGN-specific API calls and swap execution
@@ -40,7 +40,7 @@ pub struct GMGNSwapResult {
 /// Uses GMGN swap transaction format and premium RPC endpoints
 pub async fn gmgn_sign_and_send_transaction(
     swap_transaction_base64: &str
-) -> Result<String, SwapError> {
+) -> Result<String, ScreenerBotError> {
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
@@ -118,7 +118,7 @@ pub async fn get_gmgn_quote(
     input_amount: u64,
     from_address: &str,
     slippage: f64
-) -> Result<SwapData, SwapError> {
+) -> Result<SwapData, ScreenerBotError> {
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
@@ -458,7 +458,7 @@ pub async fn execute_gmgn_swap(
     output_mint: &str,
     input_amount: u64,
     swap_data: SwapData
-) -> Result<GMGNSwapResult, SwapError> {
+) -> Result<GMGNSwapResult, ScreenerBotError> {
     // Determine if this is SOL to token or token to SOL
     let is_sol_to_token = input_mint == SOL_MINT;
     let input_display = if is_sol_to_token {
@@ -525,7 +525,7 @@ pub fn validate_gmgn_quote_price(
     expected_price: f64,
     is_sol_to_token: bool,
     slippage_tolerance: f64
-) -> Result<(), SwapError> {
+) -> Result<(), ScreenerBotError> {
     let output_amount_str = &swap_data.quote.out_amount;
     log(
         LogTag::Swap,

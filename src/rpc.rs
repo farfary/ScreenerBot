@@ -366,10 +366,6 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
     Ok(FALLBACK_ATA_RENT)
 }
 
-/// Legacy type alias for backward compatibility during migration
-/// TODO: Remove this alias and use ScreenerBotError directly throughout the codebase
-pub type SwapError = ScreenerBotError;
-
 /// Return the SPL Token program id (legacy Tokenkeg)
 pub fn spl_token_program_id() -> &'static str {
     // SPL Token Program (legacy)
@@ -859,9 +855,12 @@ impl RpcClient {
     pub fn new() -> Self {
         Self::from_config().unwrap_or_else(|e| {
             log(LogTag::Rpc, "ERROR", &format!("Failed to load config: {}", e));
-            panic!(
+            log(
+                LogTag::Rpc,
+                "FATAL",
                 "Cannot initialize RPC client without valid configuration. Please check configs.json"
             );
+            std::process::exit(1);
         })
     }
 
@@ -2283,7 +2282,7 @@ impl RpcClient {
         const MAX_ATTEMPTS: usize = 3; // 1 initial + up to 2 refresh attempts
         let mut attempt = 0usize;
         let client = reqwest::Client::new();
-        let mut last_err: Option<SwapError> = None;
+        let mut last_err: Option<ScreenerBotError> = None;
         // flag removed: no 'goto' in Rust; retry handled by loop control
 
         while attempt < MAX_ATTEMPTS {
