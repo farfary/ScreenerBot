@@ -3921,7 +3921,7 @@ impl PoolPriceCalculator {
             // ALWAYS try vault balance fetch first - this is the accurate method
             match
                 tokio::time::timeout(
-                    Duration::from_secs(5), // Increased timeout for better reliability
+                    Duration::from_secs(10), // Increased timeout for better reliability
                     self.get_vault_balances(&coin_vault.to_string(), &pc_vault.to_string())
                 ).await
             {

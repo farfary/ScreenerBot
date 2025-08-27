@@ -153,9 +153,7 @@ static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> = LazyL
 });
 
 // Global position creation lock to prevent race conditions on MAX_OPEN_POSITIONS
-static GLOBAL_POSITION_CREATION_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| {
-    Mutex::new(())
-});
+static GLOBAL_POSITION_CREATION_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| { Mutex::new(()) });
 
 // Safety mechanisms from original implementation
 static RECENT_SWAP_ATTEMPTS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> = LazyLock::new(|| {
@@ -275,7 +273,7 @@ pub async fn open_position_direct(
     // ATOMIC POSITION CREATION: Use global lock to prevent race conditions
     // This ensures position limit checks and creation happen atomically
     let _global_creation_lock = GLOBAL_POSITION_CREATION_LOCK.lock().await;
-    
+
     // Check cooldowns and existing positions under global lock
     {
         let mut state = GLOBAL_POSITIONS_STATE.lock().await;
@@ -2230,26 +2228,33 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                         }
                                     }
                                     Err(e) => {
-                                        // Check verification age before removing position
-                                        let verification_age_seconds = {
-                                            let state = GLOBAL_POSITIONS_STATE.lock().await;
-                                            if let Some(added_at) = state.pending_verifications.get(&sig_clone) {
-                                                now.signed_duration_since(*added_at).num_seconds()
+                                        // Check for permanent failures that should be cleaned up immediately
+                                        use crate::errors::blockchain::{parse_structured_solana_error, is_permanent_failure};
+                                        
+                                        let should_cleanup_immediately = if e.contains("[PERMANENT]") {
+                                            // Error already contains permanent failure indicator
+                                            true
+                                        } else {
+                                            // Try to parse error for permanent failure detection
+                                            if let Ok(Some(transaction)) = crate::transactions::get_transaction(&sig_clone).await {
+                                                if let Some(error_msg) = &transaction.error_message {
+                                                    error_msg.contains("[PERMANENT]")
+                                                } else {
+                                                    false
+                                                }
                                             } else {
-                                                0 // If not found, treat as new
+                                                false
                                             }
                                         };
                                         
-                                        // Only remove if truly timed out (beyond grace period)
-                                        if e.contains("Verification timeout:") || e.contains("verification timeout") || 
-                                           (e.contains("Transaction not found in system") && verification_age_seconds > VERIFICATION_GRACE_PERIOD_SECS) {
+                                        if should_cleanup_immediately {
                                             log(
                                                 LogTag::Positions,
-                                                "VERIFICATION_TIMEOUT_CLEANUP",
-                                                &format!("🗑️ Removing position with permanently failed verification: {} (error: {}, age: {}s)", get_signature_prefix(&sig_clone), e, verification_age_seconds)
+                                                "PERMANENT_FAILURE_CLEANUP",
+                                                &format!("🗑️ Immediately removing position with permanent failure: {} (error: {})", get_signature_prefix(&sig_clone), e)
                                             );
                                             
-                                            // Remove the position with the failed transaction
+                                            // Remove the position with the permanently failed transaction
                                             tokio::spawn({
                                                 let sig_for_cleanup = sig_clone.clone();
                                                 async move {
@@ -2266,12 +2271,49 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                             // Return the signature to remove it from pending verifications
                                             Some(sig_clone)
                                         } else {
-                                            log(
-                                                LogTag::Positions,
-                                                "VERIFICATION_ERROR",
-                                                &format!("❌ Failed to verify {}: {}", get_signature_prefix(&sig_clone), e)
-                                            );
-                                            None
+                                            // Check verification age before removing position
+                                            let verification_age_seconds = {
+                                                let state = GLOBAL_POSITIONS_STATE.lock().await;
+                                                if let Some(added_at) = state.pending_verifications.get(&sig_clone) {
+                                                    now.signed_duration_since(*added_at).num_seconds()
+                                                } else {
+                                                    0 // If not found, treat as new
+                                                }
+                                            };
+                                            
+                                            // Only remove if truly timed out (beyond grace period)
+                                            if e.contains("Verification timeout:") || e.contains("verification timeout") || 
+                                               (e.contains("Transaction not found in system") && verification_age_seconds > VERIFICATION_GRACE_PERIOD_SECS) {
+                                                log(
+                                                    LogTag::Positions,
+                                                    "VERIFICATION_TIMEOUT_CLEANUP",
+                                                    &format!("🗑️ Removing position with permanently failed verification: {} (error: {}, age: {}s)", get_signature_prefix(&sig_clone), e, verification_age_seconds)
+                                                );
+                                                
+                                                // Remove the position with the failed transaction
+                                                tokio::spawn({
+                                                    let sig_for_cleanup = sig_clone.clone();
+                                                    async move {
+                                                        if let Err(cleanup_err) = remove_position_by_signature(&sig_for_cleanup).await {
+                                                            log(
+                                                                LogTag::Positions,
+                                                                "CLEANUP_ERROR",
+                                                                &format!("Failed to remove position with signature {}: {}", get_signature_prefix(&sig_for_cleanup), cleanup_err)
+                                                            );
+                                                        }
+                                                    }
+                                                });
+                                                
+                                                // Return the signature to remove it from pending verifications
+                                                Some(sig_clone)
+                                            } else {
+                                                log(
+                                                    LogTag::Positions,
+                                                    "VERIFICATION_ERROR",
+                                                    &format!("❌ Failed to verify {}: {}", get_signature_prefix(&sig_clone), e)
+                                                );
+                                                None
+                                            }
                                         }
                                     }
                                 }

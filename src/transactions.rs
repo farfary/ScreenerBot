@@ -1433,7 +1433,21 @@ impl TransactionsManager {
             error_message: tx_data.transaction.meta
                 .as_ref()
                 .and_then(|meta| meta.err.as_ref())
-                .map(|err| format!("{:?}", err)),
+                .map(|err| {
+                    // Use structured error parsing for comprehensive error handling
+                    use crate::errors::blockchain::parse_structured_solana_error;
+                    let structured_error = parse_structured_solana_error(
+                        &serde_json::to_value(err).unwrap_or_default(),
+                        Some(&signature)
+                    );
+                    format!(
+                        "[{}] {}: {} (code: {})",
+                        structured_error.error_type_name(),
+                        structured_error.error_name,
+                        structured_error.description,
+                        structured_error.error_code.map_or("N/A".to_string(), |c| c.to_string())
+                    )
+                }),
             fee_sol: tx_data.transaction.meta
                 .as_ref()
                 .map_or(0.0, |meta| lamports_to_sol(meta.fee)),
@@ -2526,13 +2540,42 @@ impl TransactionsManager {
                 transaction.success = meta.get("err").map_or(true, |v| v.is_null());
 
                 if let Some(err) = meta.get("err") {
-                    // Parse structured blockchain error instead of raw string
-                    let blockchain_error = parse_solana_error(
-                        &err.to_string(),
-                        None,
-                        "transaction_meta"
+                    // Parse structured blockchain error for comprehensive error handling
+                    use crate::errors::blockchain::{
+                        parse_structured_solana_error,
+                        is_permanent_failure,
+                    };
+                    use crate::utils::safe_truncate;
+
+                    let structured_error = parse_structured_solana_error(
+                        err,
+                        Some(&transaction.signature)
                     );
-                    transaction.error_message = Some(blockchain_error.to_string());
+
+                    // Store detailed error information
+                    transaction.error_message = Some(
+                        format!(
+                            "[{}] {}: {} (code: {})",
+                            structured_error.error_type_name(),
+                            structured_error.error_name,
+                            structured_error.description,
+                            structured_error.error_code.map_or("N/A".to_string(), |c| c.to_string())
+                        )
+                    );
+
+                    // Log permanent failures for immediate attention
+                    if is_permanent_failure(&structured_error) {
+                        log(
+                            LogTag::Transactions,
+                            "PERMANENT_FAILURE",
+                            &format!(
+                                "Transaction {} failed permanently: {} ({})",
+                                safe_truncate(&transaction.signature, 8),
+                                structured_error.error_name,
+                                structured_error.description
+                            )
+                        );
+                    }
                 }
 
                 // Extract log messages for analysis - THIS IS CRITICAL FOR SWAP DETECTION
