@@ -22,7 +22,7 @@ use crate::{
         is_debug_swaps_enabled,
         get_max_exit_retries,
     },
-    trader::{ CriticalOperationGuard, PROFIT_EXTRA_NEEDED_SOL },
+    trader::{ CriticalOperationGuard, PROFIT_EXTRA_NEEDED_SOL, MAX_OPEN_POSITIONS },
     utils::{ get_wallet_address, get_token_balance, safe_truncate },
     configs::{ read_configs },
     positions_db::{
@@ -165,7 +165,6 @@ const CLEANUP_BATCH_SIZE: usize = 20;
 const SWAP_ATTEMPT_COOLDOWN_SECONDS: i64 = 30;
 const BALANCE_CACHE_DURATION_SECONDS: i64 = 30;
 const DUPLICATE_SWAP_PREVENTION_SECS: i64 = 30;
-const MAX_OPEN_POSITIONS: usize = 10;
 const POSITION_OPEN_COOLDOWN_SECS: i64 = 0; // No global cooldown (from backup)
 const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 15; // Re-entry cooldown after closing (from backup)
 
@@ -313,19 +312,12 @@ pub async fn open_position_direct(
             let has_position = state.positions
                 .iter()
                 .any(|p| {
-                    p.mint == token.mint &&
-                        p.position_type == "buy" &&
-                        p.exit_price.is_none() &&
-                        p.exit_transaction_signature.is_none()
+                    p.mint == token.mint && p.position_type == "buy" && p.exit_time.is_none()
                 });
 
             let count = state.positions
                 .iter()
-                .filter(|p| {
-                    p.position_type == "buy" &&
-                        p.exit_price.is_none() &&
-                        p.exit_transaction_signature.is_none()
-                })
+                .filter(|p| { p.position_type == "buy" && p.exit_time.is_none() })
                 .count();
 
             if is_debug_positions_enabled() {
@@ -597,6 +589,37 @@ pub async fn open_position_direct(
     // Add position to global state and database
     let position_id = {
         let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+
+        // FINAL SAFETY CHECK: Re-verify position limits before adding
+        // This prevents race conditions where multiple threads pass initial check
+        let current_open_count = state.positions
+            .iter()
+            .filter(|p| { p.position_type == "buy" && p.exit_time.is_none() })
+            .count();
+
+        if current_open_count >= MAX_OPEN_POSITIONS {
+            return Err(
+                format!(
+                    "RACE CONDITION PREVENTED: Maximum open positions reached during execution ({}/{})",
+                    current_open_count,
+                    MAX_OPEN_POSITIONS
+                )
+            );
+        }
+
+        // Double-check for duplicate position (race condition safety)
+        let has_duplicate = state.positions
+            .iter()
+            .any(|p| { p.mint == token.mint && p.position_type == "buy" && p.exit_time.is_none() });
+
+        if has_duplicate {
+            return Err(
+                format!(
+                    "RACE CONDITION PREVENTED: Duplicate position detected for {} during execution",
+                    token.symbol
+                )
+            );
+        }
 
         // Track for comprehensive verification
         state.pending_verifications.insert(transaction_signature.clone(), Utc::now());
@@ -2007,14 +2030,14 @@ pub async fn get_open_positions_count() -> usize {
 pub async fn is_open_position(mint: &str) -> bool {
     // Try database first, fallback to memory
     match db_get_position_by_mint(mint).await {
-        Ok(Some(position)) => position.exit_price.is_none(),
+        Ok(Some(position)) => position.exit_time.is_none(),
         Ok(None) => false,
         Err(_) => {
             // Fallback to memory
             let state = GLOBAL_POSITIONS_STATE.lock().await;
             state.positions
                 .iter()
-                .any(|p| p.mint == mint && p.position_type == "buy" && p.exit_price.is_none())
+                .any(|p| p.mint == mint && p.position_type == "buy" && p.exit_time.is_none())
         }
     }
 }
