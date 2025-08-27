@@ -2858,6 +2858,10 @@ impl TransactionsManager {
         // 2. Check for GMGN swaps (external router with token balance changes)
         if
             log_text.contains("GMGN") ||
+            log_text.contains("GMGNreQcJFufBiCTLDBgKhYEfEe9B454UjpDr5CaSLA1") ||
+            transaction.instructions
+                .iter()
+                .any(|i| i.program_id == "GMGNreQcJFufBiCTLDBgKhYEfEe9B454UjpDr5CaSLA1") ||
             // Also check for GMGN-like patterns: token operations with SOL balance change but no major DEX program IDs
             (transaction.sol_balance_change.abs() > 0.001 && // Minimum 0.001 SOL change
                 (log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") ||
@@ -7775,7 +7779,7 @@ impl TransactionsManager {
                 {
                     let wallet_str = self.wallet_pubkey.to_string();
 
-                    // Look for token balance changes for our wallet (excluding WSOL)
+                    // First, look for token balance changes for our wallet in post-balances (excluding WSOL)
                     for post_balance in post_balances {
                         if
                             let Some(post_owner) = post_balance
@@ -7788,6 +7792,39 @@ impl TransactionsManager {
                                     mint != "So11111111111111111111111111111111111111112"
                                 {
                                     return Some(mint.to_string());
+                                }
+                            }
+                        }
+                    }
+
+                    // If not found in post-balances, check pre-balances for tokens that were sold (ATA closed)
+                    for pre_balance in pre_balances {
+                        if
+                            let Some(pre_owner) = pre_balance
+                                .get("owner")
+                                .and_then(|v| v.as_str())
+                        {
+                            if let Some(mint) = pre_balance.get("mint").and_then(|v| v.as_str()) {
+                                if
+                                    pre_owner == wallet_str &&
+                                    mint != "So11111111111111111111111111111111111111112"
+                                {
+                                    // Check if this token's ATA was closed (not in post-balances)
+                                    let account_index = pre_balance
+                                        .get("accountIndex")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(999);
+                                    
+                                    let still_exists = post_balances
+                                        .iter()
+                                        .any(|post| {
+                                            post.get("accountIndex")
+                                                .and_then(|v| v.as_u64()) == Some(account_index)
+                                        });
+                                    
+                                    if !still_exists {
+                                        return Some(mint.to_string());
+                                    }
                                 }
                             }
                         }
@@ -7817,6 +7854,7 @@ impl TransactionsManager {
                 {
                     let wallet_str = self.wallet_pubkey.to_string();
 
+                    // First check for token balance changes in post-balances
                     for (post_idx, post_balance) in post_balances.iter().enumerate() {
                         if
                             let Some(post_owner) = post_balance
@@ -7878,6 +7916,64 @@ impl TransactionsManager {
 
                                 if token_change.abs() > 1e-12 {
                                     return token_change.abs();
+                                }
+                            }
+                        }
+                    }
+
+                    // If no change found in post-balances, check for tokens that were sold (ATA closed)
+                    for pre_balance in pre_balances {
+                        if
+                            let Some(pre_owner) = pre_balance
+                                .get("owner")
+                                .and_then(|v| v.as_str())
+                        {
+                            let mint_str = pre_balance
+                                .get("mint")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown");
+
+                            // Skip WSOL
+                            if mint_str == "So11111111111111111111111111111111111111112" {
+                                continue;
+                            }
+
+                            if pre_owner == wallet_str {
+                                let account_index = pre_balance
+                                    .get("accountIndex")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(999);
+
+                                // Check if this token's ATA was closed (not in post-balances)
+                                let still_exists = post_balances
+                                    .iter()
+                                    .any(|post| {
+                                        post.get("accountIndex")
+                                            .and_then(|v| v.as_u64()) == Some(account_index)
+                                    });
+
+                                if !still_exists {
+                                    // ATA was closed, return the pre-balance amount
+                                    let pre_amount = pre_balance
+                                        .get("uiTokenAmount")
+                                        .and_then(|ui| ui.get("uiAmount"))
+                                        .and_then(|v| v.as_f64())
+                                        .unwrap_or(0.0);
+
+                                    if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "GMGN_TOKEN",
+                                            &format!(
+                                                "💰 GMGN token sold (ATA closed) for account[{}]: {} tokens (mint: {})",
+                                                account_index,
+                                                pre_amount,
+                                                mint_str
+                                            )
+                                        );
+                                    }
+
+                                    return pre_amount;
                                 }
                             }
                         }
