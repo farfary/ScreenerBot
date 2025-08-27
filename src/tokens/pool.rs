@@ -5254,8 +5254,14 @@ async fn get_price_internal(
         }
     }
 
-    // Set source information
-    result.source = if sources.is_empty() { "none".to_string() } else { sources.join("+") };
+    // Set source information - prioritize pool over API
+    result.source = if result.pool_price_sol.is_some() {
+        "pool".to_string()
+    } else if result.api_price_sol.is_some() {
+        "api".to_string()
+    } else {
+        "none".to_string()
+    };
 
     // Return result if we got any price data
     if
