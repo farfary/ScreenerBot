@@ -2332,12 +2332,38 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                         }
                                     }
                                     Err(e) => {
-                                        log(
-                                            LogTag::Positions,
-                                            "VERIFICATION_ERROR",
-                                            &format!("❌ Failed to verify {}: {}", get_signature_prefix(&sig_clone), e)
-                                        );
-                                        None
+                                        // Check if this is a permanent verification failure (timeout or not found)
+                                        if e.contains("Verification timeout:") || e.contains("verification timeout") || e.contains("Transaction not found in system") {
+                                            log(
+                                                LogTag::Positions,
+                                                "VERIFICATION_TIMEOUT_CLEANUP",
+                                                &format!("🗑️ Removing position with permanently failed verification: {} (error: {})", get_signature_prefix(&sig_clone), e)
+                                            );
+                                            
+                                            // Remove the position with the failed transaction
+                                            tokio::spawn({
+                                                let sig_for_cleanup = sig_clone.clone();
+                                                async move {
+                                                    if let Err(cleanup_err) = remove_position_by_signature(&sig_for_cleanup).await {
+                                                        log(
+                                                            LogTag::Positions,
+                                                            "CLEANUP_ERROR",
+                                                            &format!("Failed to remove position with signature {}: {}", get_signature_prefix(&sig_for_cleanup), cleanup_err)
+                                                        );
+                                                    }
+                                                }
+                                            });
+                                            
+                                            // Return the signature to remove it from pending verifications
+                                            Some(sig_clone)
+                                        } else {
+                                            log(
+                                                LogTag::Positions,
+                                                "VERIFICATION_ERROR",
+                                                &format!("❌ Failed to verify {}: {}", get_signature_prefix(&sig_clone), e)
+                                            );
+                                            None
+                                        }
                                     }
                                 }
                             }
@@ -2376,6 +2402,42 @@ async fn cleanup_phantom_positions_parallel(shutdown: Arc<Notify>) {
                 break;
             }
             _ = sleep(Duration::from_secs(60)) => {
+                // First, cleanup old unverified positions regardless of verification status
+                let open_positions = get_open_positions().await;
+                let old_unverified: Vec<Position> = open_positions.iter()
+                    .filter(|pos| {
+                        !pos.transaction_entry_verified && 
+                        (Utc::now() - pos.entry_time).num_minutes() > 5 // 5 minutes timeout for unverified
+                    })
+                    .cloned()
+                    .collect();
+
+                if !old_unverified.is_empty() {
+                    log(
+                        LogTag::Positions,
+                        "UNVERIFIED_CLEANUP",
+                        &format!("🗑️ Removing {} old unverified positions (>5min)", old_unverified.len())
+                    );
+                    
+                    for position in old_unverified {
+                        if let Some(sig) = &position.entry_transaction_signature {
+                            if let Err(e) = remove_position_by_signature(sig).await {
+                                log(
+                                    LogTag::Positions,
+                                    "CLEANUP_ERROR",
+                                    &format!("Failed to remove old unverified position {}: {}", position.symbol, e)
+                                );
+                            } else {
+                                log(
+                                    LogTag::Positions,
+                                    "UNVERIFIED_CLEANUP",
+                                    &format!("✅ Removed old unverified position: {}", position.symbol)
+                                );
+                            }
+                        }
+                    }
+                }
+
                 // Find potential phantom positions (open positions with zero wallet balance)
                 let wallet_address = match get_wallet_address() {
                     Ok(addr) => addr,
@@ -2400,7 +2462,7 @@ async fn cleanup_phantom_positions_parallel(shutdown: Arc<Notify>) {
                     }
 
                     // Check token balance for this position
-                    match get_token_balance(&position.mint, &wallet_address).await {
+                    match get_token_balance(&wallet_address, &position.mint).await {
                         Ok(balance) => {
                             if balance == 0 {
                                 phantom_candidates.push((position, age_minutes));
@@ -2711,7 +2773,7 @@ async fn is_duplicate_swap_attempt(mint: &str, size_sol: f64, swap_type: &str) -
 
 /// Get token balance safely with error handling
 async fn get_token_balance_safe(mint: &str, wallet_address: &str) -> Option<u64> {
-    match get_token_balance(mint, wallet_address).await {
+    match get_token_balance(wallet_address, mint).await {
         Ok(balance) => Some(balance),
         Err(e) => {
             if is_debug_positions_enabled() {
@@ -2884,6 +2946,73 @@ async fn cache_balance(mint: &str, balance: f64) {
 }
 
 // ==================== DATABASE SYNC HELPERS ====================
+
+/// Remove a position by its transaction signature (for cleanup of failed positions)
+async fn remove_position_by_signature(signature: &str) -> Result<(), String> {
+    log(
+        LogTag::Positions,
+        "CLEANUP_START",
+        &format!("🗑️ Starting cleanup of position with signature {}", get_signature_prefix(signature))
+    );
+
+    let position_to_remove = {
+        let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+        
+        // Find position with matching entry or exit signature
+        let position_index = state.positions.iter().position(|p| {
+            p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature) ||
+            p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
+        });
+
+        if let Some(index) = position_index {
+            let position = state.positions.remove(index);
+            log(
+                LogTag::Positions,
+                "CLEANUP_REMOVED",
+                &format!("🗑️ Removed position {} from memory (signature: {})", position.symbol, get_signature_prefix(signature))
+            );
+            Some(position)
+        } else {
+            log(
+                LogTag::Positions,
+                "CLEANUP_NOT_FOUND",
+                &format!("⚠️ No position found with signature {}", get_signature_prefix(signature))
+            );
+            None
+        }
+    };
+
+    // Remove from database if position had an ID
+    if let Some(position) = position_to_remove {
+        if let Some(position_id) = position.id {
+            match crate::positions_db::delete_position_by_id(position_id).await {
+                Ok(_) => {
+                    log(
+                        LogTag::Positions,
+                        "CLEANUP_DB_SUCCESS",
+                        &format!("🗑️ Removed position {} (ID: {}) from database", position.symbol, position_id)
+                    );
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Positions,
+                        "CLEANUP_DB_ERROR",
+                        &format!("❌ Failed to remove position {} (ID: {}) from database: {}", position.symbol, position_id, e)
+                    );
+                    return Err(format!("Database cleanup failed: {}", e));
+                }
+            }
+        }
+
+        log(
+            LogTag::Positions,
+            "CLEANUP_COMPLETE",
+            &format!("✅ Successfully cleaned up failed position {} with signature {}", position.symbol, get_signature_prefix(signature))
+        );
+    }
+
+    Ok(())
+}
 
 /// Sync a position between memory and database
 pub async fn sync_position_to_database(position: &Position) -> Result<(), String> {
