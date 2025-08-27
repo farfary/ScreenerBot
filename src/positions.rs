@@ -1,5 +1,8 @@
 use crate::{
-    tokens::{ Token, get_token_decimals, PriceResult, get_price, PriceOptions },
+    tokens::{ 
+        Token, get_token_decimals, PriceResult, get_price, PriceOptions,
+        pool::{ add_priority_token, remove_priority_token },
+    },
     swaps::{
         get_best_quote,
         execute_best_swap,
@@ -663,12 +666,15 @@ pub async fn open_position_direct(
         // Add position to in-memory list with correct ID
         state.positions.push(position_with_id);
 
+        // Add token to priority pool service for fast price updates
+        add_priority_token(&token.mint).await;
+
         if is_debug_positions_enabled() {
             log(
                 LogTag::Positions,
                 "DEBUG",
                 &format!(
-                    "✅ Position created for {} with signature {} - profit targets: {:.2}%-{:.2}%",
+                    "✅ Position created for {} with signature {} - profit targets: {:.2}%-{:.2}% | Added to priority pool service",
                     token.symbol,
                     get_signature_prefix(&transaction_signature),
                     profit_target_min,
@@ -1145,6 +1151,9 @@ pub async fn close_position_direct(
         )
     );
 
+    // Remove token from priority pool service (no longer need fast updates)
+    remove_priority_token(mint).await;
+
     // Immediately attempt to fetch transaction to accelerate verification
     let sig_for_fetch = transaction_signature.clone();
     tokio::spawn(async move {
@@ -1155,7 +1164,7 @@ pub async fn close_position_direct(
         LogTag::Positions,
         "SUCCESS",
         &format!(
-            "✅ POSITION CLOSED: {} | TX: {} | Reason: {} | Verification: Pending",
+            "✅ POSITION CLOSED: {} | TX: {} | Reason: {} | Verification: Pending | Removed from priority pool service",
             symbol,
             get_signature_prefix(&transaction_signature),
             exit_reason
@@ -2884,6 +2893,13 @@ async fn remove_position_by_signature(signature: &str) -> Result<(), String> {
                     get_signature_prefix(signature)
                 )
             );
+            
+            // Remove token from priority pool service since position is being cleaned up
+            let mint_for_cleanup = position.mint.clone();
+            tokio::spawn(async move {
+                remove_priority_token(&mint_for_cleanup).await;
+            });
+            
             Some(position)
         } else {
             log(

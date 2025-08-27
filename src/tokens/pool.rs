@@ -8,6 +8,7 @@
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_pool_prices_enabled, CACHE_POOL_DIR };
 use crate::tokens::dexscreener::{ get_token_pairs_from_api, TokenPair };
+use crate::utils::safe_truncate;
 use crate::tokens::decimals::{ get_cached_decimals };
 use crate::tokens::is_system_or_stable_token;
 use crate::rpc::get_rpc_client;
@@ -34,6 +35,25 @@ const POOL_CACHE_TTL_SECONDS: i64 = 600;
 
 /// Price cache TTL - aligned with 5s global monitoring cadence
 const PRICE_CACHE_TTL_SECONDS: i64 = 5;
+
+// =============================================================================
+// BATCH PROCESSING CONFIGURATION
+// =============================================================================
+
+/// Priority tokens update interval (5 seconds exactly)
+const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 5;
+
+/// Watchlist batch size for random updates
+const WATCHLIST_BATCH_SIZE: usize = 10;
+
+/// Watchlist update interval (spread updates over time)
+const WATCHLIST_UPDATE_INTERVAL_SECS: u64 = 30;
+
+/// Maximum tokens per DexScreener API call
+const MAX_TOKENS_PER_BATCH: usize = 30;
+
+/// Maximum watchlist size (user requirement)
+const MAX_WATCHLIST_SIZE: usize = 100;
 
 /// Minimum liquidity (USD) required to consider a pool usable for price calculation.
 /// Lower this for testing environments if you want stats to increment sooner.
@@ -528,7 +548,6 @@ pub struct PoolPriceService {
     pool_cache: Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>,
     price_cache: Arc<RwLock<HashMap<String, PoolPriceResult>>>,
     availability_cache: Arc<RwLock<HashMap<String, TokenAvailability>>>,
-    // watch_list removed; pool service delegates token selection to price service
     price_history: Arc<RwLock<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>,
     // New pool-specific memory-based price history cache
     pool_price_history: Arc<RwLock<HashMap<String, TokenAggregatedPriceHistoryCache>>>,
@@ -541,6 +560,16 @@ pub struct PoolPriceService {
     unsupported_programs: Arc<RwLock<HashSet<String>>>,
     // Per-token backoff after repeated timeouts
     backoff_state: Arc<RwLock<HashMap<String, BackoffEntry>>>,
+
+    // NEW WATCHLIST MANAGEMENT: Background service with batch updates
+    /// Priority tokens (positions) - updated every 5 seconds exactly
+    priority_tokens: Arc<RwLock<HashSet<String>>>,
+    /// Watchlist tokens (20-200 tokens) - randomly updated in batches
+    watchlist_tokens: Arc<RwLock<HashSet<String>>>,
+    /// Track last update time for watchlist tokens to implement random rotation
+    watchlist_last_updated: Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
+    /// Track request counts for watchlist tokens to manage capacity
+    watchlist_request_counts: Arc<RwLock<HashMap<String, u64>>>,
 }
 
 /// Pool service comprehensive statistics
@@ -648,6 +677,11 @@ impl PoolPriceService {
             in_flight_updates: Arc::new(RwLock::new(HashSet::new())),
             unsupported_programs: Arc::new(RwLock::new(HashSet::new())),
             backoff_state: Arc::new(RwLock::new(HashMap::new())),
+            // Initialize watchlist management
+            priority_tokens: Arc::new(RwLock::new(HashSet::new())),
+            watchlist_tokens: Arc::new(RwLock::new(HashSet::new())),
+            watchlist_last_updated: Arc::new(RwLock::new(HashMap::new())),
+            watchlist_request_counts: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -762,7 +796,7 @@ impl PoolPriceService {
         updated_count
     }
 
-    /// Start background monitoring service
+    /// Start background monitoring service with batch updates
     pub async fn start_monitoring(&self) {
         let mut monitoring_active = self.monitoring_active.write().await;
         if *monitoring_active {
@@ -772,185 +806,427 @@ impl PoolPriceService {
         *monitoring_active = true;
         drop(monitoring_active);
 
-        log(LogTag::Pool, "START", "Starting pool price monitoring service");
+        log(LogTag::Pool, "START", "Starting pool price monitoring service with batch updates");
 
-        let pool_cache = self.pool_cache.clone();
+        // Clone all necessary Arc references for the background task
         let price_cache = self.price_cache.clone();
-        // watch_list removed
-        let pool_price_history = self.pool_price_history.clone();
         let monitoring_active = self.monitoring_active.clone();
         let stats_arc = self.stats.clone();
-        let service_for_monitor = get_pool_service();
+        let priority_tokens = self.priority_tokens.clone();
+        let watchlist_tokens = self.watchlist_tokens.clone();
+        let watchlist_last_updated = self.watchlist_last_updated.clone();
 
-        // Start main monitoring loop (aligned to 5s system cadence)
+        // Start main monitoring loop with batch processing
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            let mut priority_interval = tokio::time::interval(
+                Duration::from_secs(PRIORITY_UPDATE_INTERVAL_SECS)
+            );
+            let mut watchlist_interval = tokio::time::interval(
+                Duration::from_secs(WATCHLIST_UPDATE_INTERVAL_SECS)
+            );
 
             loop {
-                interval.tick().await;
-
-                // Check if monitoring should continue
-                {
-                    let active = monitoring_active.read().await;
-                    if !*active {
-                        break;
-                    }
-                }
-
-                let cycle_start = Instant::now();
-
-                // Get open positions tokens to prioritize for price updates
-                let tokens_to_monitor: Vec<String> = match crate::positions::get_open_mints().await {
-                    mints => {
-                        if is_debug_pool_prices_enabled() && !mints.is_empty() {
-                            log(
-                                LogTag::Pool,
-                                "MONITOR",
-                                &format!(
-                                    "Monitoring {} open position tokens for price updates",
-                                    mints.len()
-                                )
-                            );
+                tokio::select! {
+                    // Priority tokens - update every 5 seconds exactly
+                    _ = priority_interval.tick() => {
+                        // Check if monitoring should continue
+                        {
+                            let active = monitoring_active.read().await;
+                            if !*active {
+                                break;
+                            }
                         }
-                        mints
+
+                        // Update priority tokens (open positions)
+                        let open_positions = match crate::positions::get_open_mints().await {
+                            mints => mints,
+                        };
+
+                        // Add open positions to priority tokens
+                        {
+                            let mut priority = priority_tokens.write().await;
+                            for token in &open_positions {
+                                priority.insert(token.clone());
+                            }
+                        }
+
+                        // Get current priority tokens for batch update
+                        let priority_tokens_list: Vec<String> = {
+                            let priority = priority_tokens.read().await;
+                            priority.iter().cloned().collect()
+                        };
+
+                        if !priority_tokens_list.is_empty() {
+                            Self::batch_update_token_prices(
+                                &priority_tokens_list,
+                                &price_cache,
+                                &stats_arc,
+                                "PRIORITY"
+                            ).await;
+                        }
                     }
-                };
 
-                // Record last cycle token count early
-                {
-                    let mut stats = stats_arc.write().await;
-                    stats.last_cycle_tokens = tokens_to_monitor.len() as u64;
-                    stats.total_cycle_tokens += stats.last_cycle_tokens;
-                    stats.monitoring_cycles += 1;
-                    stats.avg_tokens_per_cycle = if stats.monitoring_cycles > 0 {
-                        (stats.total_cycle_tokens as f64) / (stats.monitoring_cycles as f64)
-                    } else {
-                        0.0
-                    };
-                }
+                    // Watchlist tokens - random batch updates
+                    _ = watchlist_interval.tick() => {
+                        // Check if monitoring should continue
+                        {
+                            let active = monitoring_active.read().await;
+                            if !*active {
+                                break;
+                            }
+                        }
 
-                // Process each open position token to ensure fresh price data
-                if !tokens_to_monitor.is_empty() {
-                    // Use limited concurrency to avoid overwhelming the system
-                    let semaphore = Arc::new(tokio::sync::Semaphore::new(POOL_MONITOR_CONCURRENCY));
+                        // Get random batch of watchlist tokens for update
+                        let watchlist_batch = Self::get_random_watchlist_batch(
+                            &watchlist_tokens,
+                            &watchlist_last_updated,
+                            WATCHLIST_BATCH_SIZE
+                        ).await;
 
-                    let update_futures: Vec<_> = tokens_to_monitor
-                        .into_iter()
-                        .map(|token_address| {
-                            let semaphore = semaphore.clone();
-                            let service = service_for_monitor;
+                        if !watchlist_batch.is_empty() {
+                            Self::batch_update_token_prices(
+                                &watchlist_batch,
+                                &price_cache,
+                                &stats_arc,
+                                "WATCHLIST"
+                            ).await;
 
-                            async move {
-                                // Acquire semaphore permit for concurrency control
-                                let _permit = match
-                                    tokio::time::timeout(
-                                        Duration::from_secs(3),
-                                        semaphore.acquire()
-                                    ).await
-                                {
-                                    Ok(Ok(permit)) => permit,
-                                    Ok(Err(_)) => {
-                                        if is_debug_pool_prices_enabled() {
-                                            log(
-                                                LogTag::Pool,
-                                                "WARN",
-                                                &format!(
-                                                    "Semaphore acquire failed for token {}",
-                                                    &token_address[..8]
-                                                )
-                                            );
-                                        }
-                                        return;
-                                    }
-                                    Err(_) => {
-                                        if is_debug_pool_prices_enabled() {
-                                            log(
-                                                LogTag::Pool,
-                                                "WARN",
-                                                &format!(
-                                                    "Semaphore acquire timeout for token {}",
-                                                    &token_address[..8]
-                                                )
-                                            );
-                                        }
-                                        return;
-                                    }
-                                };
-
-                                // Update price for this token with timeout protection
-                                match
-                                    tokio::time::timeout(
-                                        Duration::from_secs(POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS),
-                                        service.ensure_pool_price_for_monitor(&token_address)
-                                    ).await
-                                {
-                                    Ok(_) => {
-                                        if is_debug_pool_prices_enabled() {
-                                            log(
-                                                LogTag::Pool,
-                                                "MONITOR",
-                                                &format!(
-                                                    "Updated price cache for open position token {}",
-                                                    &token_address[..8]
-                                                )
-                                            );
-                                        }
-                                    }
-                                    Err(_) => {
-                                        if is_debug_pool_prices_enabled() {
-                                            log(
-                                                LogTag::Pool,
-                                                "WARN",
-                                                &format!(
-                                                    "Price update timeout for token {}",
-                                                    &token_address[..8]
-                                                )
-                                            );
-                                        }
-                                    }
+                            // Update last updated times
+                            {
+                                let mut last_updated = watchlist_last_updated.write().await;
+                                let now = Utc::now();
+                                for token in &watchlist_batch {
+                                    last_updated.insert(token.clone(), now);
                                 }
                             }
-                        })
-                        .collect();
-
-                    // Execute all updates with overall timeout
-                    match
-                        tokio::time::timeout(
-                            Duration::from_millis(POOL_MONITOR_CYCLE_BUDGET_MS.min(4500) as u64), // Max 4.5s per cycle
-                            futures::future::join_all(update_futures)
-                        ).await
-                    {
-                        Ok(_) => {
-                            if is_debug_pool_prices_enabled() {
-                                log(
-                                    LogTag::Pool,
-                                    "MONITOR",
-                                    "Completed price updates for open positions"
-                                );
-                            }
-                        }
-                        Err(_) => {
-                            log(LogTag::Pool, "WARN", "Price update cycle exceeded time budget");
                         }
                     }
-                }
-
-                // Finish cycle timing stats
-                let duration_ms = cycle_start.elapsed().as_secs_f64() * 1000.0;
-                {
-                    let mut stats = stats_arc.write().await;
-                    stats.last_cycle_duration_ms = duration_ms;
-                    stats.total_cycle_duration_ms += duration_ms;
-                    stats.avg_cycle_duration_ms = if stats.monitoring_cycles > 0 {
-                        stats.total_cycle_duration_ms / (stats.monitoring_cycles as f64)
-                    } else {
-                        0.0
-                    };
                 }
             }
 
             log(LogTag::Pool, "STOP", "Pool price monitoring service stopped");
         });
+    }
+
+    /// Batch update token prices using DexScreener API
+    async fn batch_update_token_prices(
+        tokens: &[String],
+        price_cache: &Arc<RwLock<HashMap<String, PoolPriceResult>>>,
+        stats_arc: &Arc<RwLock<PoolServiceStats>>,
+        batch_type: &str
+    ) {
+        if tokens.is_empty() {
+            return;
+        }
+
+        let start_time = Instant::now();
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "BATCH_START",
+                &format!("Starting {} batch update for {} tokens", batch_type, tokens.len())
+            );
+        }
+
+        // Use batch API call instead of individual calls
+        use crate::tokens::dexscreener::get_multiple_token_prices_from_global_api;
+
+        // Process in chunks to respect API limits
+        for (chunk_idx, chunk) in tokens.chunks(MAX_TOKENS_PER_BATCH).enumerate() {
+            let batch_prices = get_multiple_token_prices_from_global_api(chunk).await;
+
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "BATCH_API",
+                    &format!(
+                        "{} batch chunk {}: {} prices received for {} tokens",
+                        batch_type,
+                        chunk_idx + 1,
+                        batch_prices.len(),
+                        chunk.len()
+                    )
+                );
+            }
+
+            // Update price cache with batch results
+            {
+                let mut cache = price_cache.write().await;
+                let now = Utc::now();
+
+                for token_address in chunk {
+                    if let Some(price_sol) = batch_prices.get(token_address) {
+                        let price_result = PoolPriceResult {
+                            pool_address: "batch_api".to_string(),
+                            dex_id: "dexscreener".to_string(),
+                            pool_type: Some("api".to_string()),
+                            token_address: token_address.clone(),
+                            price_sol: Some(*price_sol),
+                            price_usd: None, // Will be calculated if needed
+                            api_price_sol: Some(*price_sol),
+                            liquidity_usd: 0.0,
+                            volume_24h: 0.0,
+                            source: "batch_api".to_string(),
+                            calculated_at: now,
+                        };
+
+                        cache.insert(token_address.clone(), price_result);
+
+                        if is_debug_pool_prices_enabled() {
+                            log(
+                                LogTag::Pool,
+                                "BATCH_CACHE",
+                                &format!(
+                                    "Cached {} price: {} SOL for {}",
+                                    batch_type.to_lowercase(),
+                                    price_sol,
+                                    &token_address[..8]
+                                )
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Update statistics
+            {
+                let mut stats = stats_arc.write().await;
+                stats.monitoring_cycles += 1;
+                stats.last_cycle_tokens = chunk.len() as u64;
+                stats.total_cycle_tokens += chunk.len() as u64;
+                stats.successful_calculations += batch_prices.len() as u64;
+                stats.failed_calculations += (chunk.len() - batch_prices.len()) as u64;
+                stats.total_price_requests += chunk.len() as u64;
+            }
+
+            // Small delay between chunks to be API-friendly
+            if chunk_idx + 1 < tokens.chunks(MAX_TOKENS_PER_BATCH).count() {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
+
+        let duration = start_time.elapsed();
+        log(
+            LogTag::Pool,
+            "BATCH_COMPLETE",
+            &format!(
+                "{} batch update completed: {} tokens in {:?}",
+                batch_type,
+                tokens.len(),
+                duration
+            )
+        );
+    }
+
+    /// Get random batch of watchlist tokens for update (prioritize least recently updated)
+    async fn get_random_watchlist_batch(
+        watchlist_tokens: &Arc<RwLock<HashSet<String>>>,
+        watchlist_last_updated: &Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
+        batch_size: usize
+    ) -> Vec<String> {
+        let watchlist = watchlist_tokens.read().await;
+        let last_updated = watchlist_last_updated.read().await;
+
+        if watchlist.is_empty() {
+            return Vec::new();
+        }
+
+        // Get tokens with their last update times (never updated = highest priority)
+        let mut token_priorities: Vec<(String, DateTime<Utc>)> = watchlist
+            .iter()
+            .map(|token| {
+                let last_update = last_updated
+                    .get(token)
+                    .copied()
+                    .unwrap_or_else(|| DateTime::from_timestamp(0, 0).unwrap_or_default());
+                (token.clone(), last_update)
+            })
+            .collect();
+
+        // Sort by last update time (oldest first) and add some randomness
+        token_priorities.sort_by_key(|(_token, last_update)| *last_update);
+
+        // Take up to batch_size tokens, preferring least recently updated
+        // Add some randomness by taking from the oldest 50% randomly
+        let max_random_selection = (token_priorities.len() / 2).max(batch_size);
+        let selection_pool = &token_priorities[..max_random_selection.min(token_priorities.len())];
+
+        use rand::seq::SliceRandom;
+        use rand::thread_rng;
+
+        let mut selected = selection_pool.to_vec();
+        selected.shuffle(&mut thread_rng());
+
+        selected
+            .into_iter()
+            .take(batch_size)
+            .map(|(token, _)| token)
+            .collect()
+    }
+
+    // =============================================================================
+    // WATCHLIST MANAGEMENT FUNCTIONS
+    // =============================================================================
+
+    /// Add token to priority list (positions)
+    pub async fn add_priority_token(&self, token_address: &str) {
+        let mut priority = self.priority_tokens.write().await;
+        priority.insert(token_address.to_string());
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "PRIORITY_ADD",
+                &format!("Added {} to priority tokens", &token_address[..8])
+            );
+        }
+    }
+
+    /// Remove token from priority list
+    pub async fn remove_priority_token(&self, token_address: &str) {
+        let mut priority = self.priority_tokens.write().await;
+        priority.remove(token_address);
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "PRIORITY_REMOVE",
+                &format!("Removed {} from priority tokens", &token_address[..8])
+            );
+        }
+    }
+
+    /// Add token to watchlist
+    pub async fn add_watchlist_token(&self, token_address: &str) {
+        let mut watchlist = self.watchlist_tokens.write().await;
+        watchlist.insert(token_address.to_string());
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "WATCHLIST_ADD",
+                &format!("Added {} to watchlist tokens", &token_address[..8])
+            );
+        }
+    }
+
+    /// Remove token from watchlist
+    pub async fn remove_watchlist_token(&self, token_address: &str) {
+        let mut watchlist = self.watchlist_tokens.write().await;
+        watchlist.remove(token_address);
+
+        // Also remove from last updated tracking
+        let mut last_updated = self.watchlist_last_updated.write().await;
+        last_updated.remove(token_address);
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "WATCHLIST_REMOVE",
+                &format!("Removed {} from watchlist tokens", &token_address[..8])
+            );
+        }
+    }
+
+    /// Add multiple tokens to watchlist (batch operation)
+    pub async fn add_watchlist_tokens(&self, token_addresses: &[String]) {
+        let mut watchlist = self.watchlist_tokens.write().await;
+        let mut request_counts = self.watchlist_request_counts.write().await;
+        let mut actually_added = 0;
+
+        for token_address in token_addresses {
+            // Skip if already in watchlist
+            if watchlist.contains(token_address) {
+                continue;
+            }
+
+            // Check if we need to make room
+            if watchlist.len() >= MAX_WATCHLIST_SIZE {
+                // Find token with lowest request count (LRU)
+                let mut min_count = u64::MAX;
+                let mut min_token = String::new();
+                
+                for watchlist_token in watchlist.iter() {
+                    let count = request_counts.get(watchlist_token).unwrap_or(&0);
+                    if *count < min_count {
+                        min_count = *count;
+                        min_token = watchlist_token.clone();
+                    }
+                }
+
+                if !min_token.is_empty() {
+                    watchlist.remove(&min_token);
+                    request_counts.remove(&min_token);
+                    
+                    log(
+                        LogTag::Pool,
+                        "WATCHLIST_EVICT",
+                        &format!("Evicted {} with {} requests to make room", 
+                               safe_truncate(&min_token, 8), min_count)
+                    );
+                }
+            }
+
+            // Add new token
+            watchlist.insert(token_address.clone());
+            request_counts.insert(token_address.clone(), 0);
+            actually_added += 1;
+        }
+
+        log(
+            LogTag::Pool,
+            "WATCHLIST_BATCH_ADD",
+            &format!("Added {} tokens to watchlist (size: {})", actually_added, watchlist.len())
+        );
+    }
+
+    /// Get current priority tokens
+    pub async fn get_priority_tokens(&self) -> Vec<String> {
+        let priority = self.priority_tokens.read().await;
+        priority.iter().cloned().collect()
+    }
+
+    /// Get current watchlist tokens
+    pub async fn get_watchlist_tokens(&self) -> Vec<String> {
+        let watchlist = self.watchlist_tokens.read().await;
+        watchlist.iter().cloned().collect()
+    }
+
+    /// Get watchlist status (total, never updated, last update stats)
+    pub async fn get_watchlist_status(&self) -> (usize, usize, Option<DateTime<Utc>>) {
+        let watchlist = self.watchlist_tokens.read().await;
+        let last_updated = self.watchlist_last_updated.read().await;
+
+        let total = watchlist.len();
+        let never_updated = watchlist
+            .iter()
+            .filter(|token| !last_updated.contains_key(*token))
+            .count();
+        let most_recent_update = last_updated.values().max().copied();
+
+        (total, never_updated, most_recent_update)
+    }
+
+    /// Clear priority tokens (for testing/reset)
+    pub async fn clear_priority_tokens(&self) {
+        let mut priority = self.priority_tokens.write().await;
+        let count = priority.len();
+        priority.clear();
+
+        log(LogTag::Pool, "PRIORITY_CLEAR", &format!("Cleared {} priority tokens", count));
+    }
+
+    /// Clear watchlist tokens (for testing/reset)
+    pub async fn clear_watchlist_tokens(&self) {
+        let mut watchlist = self.watchlist_tokens.write().await;
+        let mut last_updated = self.watchlist_last_updated.write().await;
+
+        let count = watchlist.len();
+        watchlist.clear();
+        last_updated.clear();
+
+        log(LogTag::Pool, "WATCHLIST_CLEAR", &format!("Cleared {} watchlist tokens", count));
     }
 
     /// Public wrapper for stats recording (used by monitoring loop to count cache hits / availability failures)
@@ -5405,103 +5681,144 @@ async fn get_price_async(token_address: &str, options: PriceOptions) -> Option<P
     result
 }
 
-/// Core price calculation logic
+/// Core price calculation logic - READ-ONLY from service cache
 async fn get_price_internal(
     token_address: &str,
     options: &PriceOptions,
     calculated_at: DateTime<Utc>
 ) -> Option<PriceResult> {
-    use crate::tokens::dexscreener::get_token_price_from_global_api;
+    // NEW ARCHITECTURE: Universal function is READ-ONLY from service cache
+    // No API calls, no pool calculations - just read from background service results
 
-    let mut result = PriceResult {
-        token_address: token_address.to_string(),
-        price_sol: None,
-        price_usd: None,
-        api_price_sol: None,
-        pool_price_sol: None,
-        pool_address: None,
-        dex_id: None,
-        pool_type: None,
-        liquidity_usd: None,
-        volume_24h: None,
-        source: "none".to_string(),
-        calculated_at,
-        is_cached: false,
-    };
+    let service = get_pool_service();
 
-    let mut sources = Vec::new();
-
-    // Get API price if requested
-    if options.include_api {
-        if let Some(api_price) = get_token_price_from_global_api(token_address).await {
-            result.api_price_sol = Some(api_price);
-            result.price_sol = Some(api_price); // Set as primary price
-            sources.push("api");
-        }
-    }
-
-    // Get pool price if requested
-    if options.include_pool {
-        let pool_service = get_pool_service();
-
-        // Use API price for pool service if we have it
-        let api_price_for_pool = if options.include_api { result.api_price_sol } else { None };
-
-        if
-            let Some(pool_result) = pool_service.get_pool_price(
-                token_address,
-                api_price_for_pool,
-                options
-            ).await
-        {
-            result.pool_price_sol = pool_result.price_sol;
-            result.pool_address = Some(pool_result.pool_address);
-            result.dex_id = Some(pool_result.dex_id);
-            result.pool_type = pool_result.pool_type;
-            result.liquidity_usd = Some(pool_result.liquidity_usd);
-            result.volume_24h = Some(pool_result.volume_24h);
-            result.price_usd = pool_result.price_usd;
-
-            // Check minimum liquidity requirement
-            if let Some(min_liquidity) = options.min_liquidity_usd {
-                if pool_result.liquidity_usd < min_liquidity {
-                    // Pool doesn't meet liquidity requirement, clear pool data
-                    result.pool_price_sol = None;
-                    result.pool_address = None;
-                    result.dex_id = None;
-                    result.pool_type = None;
-                    result.liquidity_usd = None;
-                    result.volume_24h = None;
-                } else {
-                    // Use pool price as primary if it meets requirements
-                    result.price_sol = pool_result.price_sol.or(result.price_sol);
-                    sources.push("pool");
-                }
-            } else {
-                // No liquidity requirement, use pool price as primary
-                result.price_sol = pool_result.price_sol.or(result.price_sol);
-                sources.push("pool");
-            }
-        }
-    }
-
-    // Set source information - prioritize pool over API
-    result.source = if result.pool_price_sol.is_some() {
-        "pool".to_string()
-    } else if result.api_price_sol.is_some() {
-        "api".to_string()
-    } else {
-        "none".to_string()
-    };
-
-    // Return result if we got any price data
-    if
-        result.price_sol.is_some() ||
-        result.api_price_sol.is_some() ||
-        result.pool_price_sol.is_some()
+    // Track request count for watchlist tokens (for LRU eviction)
     {
-        Some(result)
-    } else {
-        None
+        let watchlist = service.watchlist_tokens.read().await;
+        if watchlist.contains(token_address) {
+            drop(watchlist); // Release read lock before acquiring write lock
+            let mut request_counts = service.watchlist_request_counts.write().await;
+            let current_count = *request_counts.get(token_address).unwrap_or(&0);
+            request_counts.insert(token_address.to_string(), current_count + 1);
+        }
     }
+
+    // Check if we have a cached price from the background service
+    let cached_result = {
+        let price_cache = service.price_cache.read().await;
+        price_cache.get(token_address).cloned()
+    };
+
+    if let Some(pool_result) = cached_result {
+        // Check if cached result is still fresh
+        let age = calculated_at - pool_result.calculated_at;
+        if age.num_seconds() <= PRICE_CACHE_TTL_SECONDS {
+            // Convert PoolPriceResult to PriceResult
+            let result = PriceResult {
+                token_address: token_address.to_string(),
+                price_sol: pool_result.price_sol,
+                price_usd: pool_result.price_usd,
+                api_price_sol: pool_result.api_price_sol,
+                pool_price_sol: pool_result.price_sol, // Same as price_sol for cached results
+                pool_address: Some(pool_result.pool_address),
+                dex_id: Some(pool_result.dex_id),
+                pool_type: pool_result.pool_type,
+                liquidity_usd: Some(pool_result.liquidity_usd),
+                volume_24h: Some(pool_result.volume_24h),
+                source: pool_result.source,
+                calculated_at,
+                is_cached: true,
+            };
+
+            // Apply filters if specified
+            if let Some(min_liquidity) = options.min_liquidity_usd {
+                if result.liquidity_usd.unwrap_or(0.0) < min_liquidity {
+                    return None;
+                }
+            }
+
+            return Some(result);
+        }
+    }
+
+    // No fresh cached data available
+    // In the new architecture, this means the token is not in priority/watchlist
+    // or the background service hasn't updated it yet
+
+    if is_debug_pool_prices_enabled() {
+        log(
+            LogTag::Pool,
+            "CACHE_MISS",
+            &format!(
+                "No fresh cached price for {} (not in active monitoring or cache expired)",
+                &token_address[..8]
+            )
+        );
+    }
+
+    None
+}
+
+// =============================================================================
+// GLOBAL WATCHLIST MANAGEMENT FUNCTIONS
+// =============================================================================
+
+/// Add token to priority monitoring (positions)
+pub async fn add_priority_token(token_address: &str) {
+    let service = get_pool_service();
+    service.add_priority_token(token_address).await;
+}
+
+/// Remove token from priority monitoring
+pub async fn remove_priority_token(token_address: &str) {
+    let service = get_pool_service();
+    service.remove_priority_token(token_address).await;
+}
+
+/// Add token to watchlist for random monitoring
+pub async fn add_watchlist_token(token_address: &str) {
+    let service = get_pool_service();
+    service.add_watchlist_token(token_address).await;
+}
+
+/// Remove token from watchlist
+pub async fn remove_watchlist_token(token_address: &str) {
+    let service = get_pool_service();
+    service.remove_watchlist_token(token_address).await;
+}
+
+/// Add multiple tokens to watchlist (batch operation)
+pub async fn add_watchlist_tokens(token_addresses: &[String]) {
+    let service = get_pool_service();
+    service.add_watchlist_tokens(token_addresses).await;
+}
+
+/// Get current priority tokens
+pub async fn get_priority_tokens() -> Vec<String> {
+    let service = get_pool_service();
+    service.get_priority_tokens().await
+}
+
+/// Get current watchlist tokens
+pub async fn get_watchlist_tokens() -> Vec<String> {
+    let service = get_pool_service();
+    service.get_watchlist_tokens().await
+}
+
+/// Get watchlist status information
+pub async fn get_watchlist_status() -> (usize, usize, Option<DateTime<Utc>>) {
+    let service = get_pool_service();
+    service.get_watchlist_status().await
+}
+
+/// Clear all priority tokens (for testing/reset)
+pub async fn clear_priority_tokens() {
+    let service = get_pool_service();
+    service.clear_priority_tokens().await;
+}
+
+/// Clear all watchlist tokens (for testing/reset)
+pub async fn clear_watchlist_tokens() {
+    let service = get_pool_service();
+    service.clear_watchlist_tokens().await;
 }

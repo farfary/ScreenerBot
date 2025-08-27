@@ -164,7 +164,7 @@ use crate::tokens::{
     get_all_tokens_by_liquidity,
     get_price,
     PriceOptions,
-    pool::get_pool_service,
+    pool::{get_pool_service, add_watchlist_tokens},
     sync_watch_list_with_trader,
     Token,
 };
@@ -659,6 +659,21 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         // Entry decision delegated to entry::should_buy
                         let (approved, _confidence, reason) = should_buy(&token).await;
                         if !approved {
+                            // Token passed filtering but doesn't meet entry criteria
+                            // Add to watchlist for future monitoring
+                            add_watchlist_tokens(&[token.mint.clone()]).await;
+                            
+                            if is_debug_trader_enabled() {
+                                log(
+                                    LogTag::Trader,
+                                    "WATCHLIST_ADD",
+                                    &format!(
+                                        "Added {} to watchlist (passed filtering, waiting for entry signal: {})", 
+                                        &token.symbol, 
+                                        reason
+                                    )
+                                );
+                            }
                             return;
                         }
 
