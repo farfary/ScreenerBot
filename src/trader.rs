@@ -164,7 +164,7 @@ use crate::tokens::{
     get_all_tokens_by_liquidity,
     get_price,
     PriceOptions,
-    pool::{get_pool_service, add_watchlist_tokens},
+    pool::{ get_pool_service, add_watchlist_tokens },
     sync_watch_list_with_trader,
     Token,
 };
@@ -433,12 +433,33 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             tokens_from_module
         };
 
-        // Randomize tokens order instead of sorting by liquidity
-        // More profitable tokens often have smaller liquidity, so we randomize to give all tokens equal chance
-        use rand::seq::SliceRandom;
-        use rand::SeedableRng;
-        let mut rng = rand::rngs::StdRng::from_entropy();
-        tokens.shuffle(&mut rng);
+        // Sort tokens by transaction activity in 5 minutes (highest first)
+        // This prioritizes tokens with the most trading activity, increasing chances of meeting entry thresholds
+        tokens.sort_by(|a, b| {
+            let a_txns = a.txns
+                .as_ref()
+                .and_then(|t| t.m5.as_ref())
+                .map(|m5| m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0))
+                .unwrap_or(0);
+            let b_txns = b.txns
+                .as_ref()
+                .and_then(|t| t.m5.as_ref())
+                .map(|m5| m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0))
+                .unwrap_or(0);
+            b_txns.cmp(&a_txns) // Sort descending (highest transactions first)
+        });
+
+        // Count tokens with transaction data for logging
+        let tokens_with_txns = tokens
+            .iter()
+            .filter(|token| {
+                token.txns
+                    .as_ref()
+                    .and_then(|t| t.m5.as_ref())
+                    .map(|m5| m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0))
+                    .unwrap_or(0) > 0
+            })
+            .count();
 
         // Safety check - if processing is taking too long, log it
         if cycle_start.elapsed() > Duration::from_secs(ENTRY_CYCLE_TIMEOUT_WARNING_SECS) {
@@ -452,27 +473,56 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         log(
             LogTag::Trader,
             "INFO",
-            &format!("Checking {} tokens for entry opportunities (randomized order)", tokens.len())
+            &format!(
+                "Sorted {} tokens by 5min transaction activity ({} have txn data)",
+                tokens.len(),
+                tokens_with_txns
+            )
         );
 
-        // ⚡ PERFORMANCE FIX: Limit token processing to prevent filtering bottleneck
-        const MAX_TOKENS_TO_PROCESS: usize = 100; // Reduced to 100 tokens to speed up filtering
+        // ⚡ PERFORMANCE FIX: Select tokens prioritizing high transaction activity
+        const MAX_TOKENS_TO_PROCESS: usize = 100; // Process 100 tokens
+        const MIN_HIGH_ACTIVITY_TOKENS: usize = 200; // Consider top 200 most active tokens for random selection
         const FILTERING_TIMEOUT_SECS: u64 = 120; // Increased to 120 second timeout for filtering to prevent timeouts
 
-        let tokens_to_process = if tokens.len() > MAX_TOKENS_TO_PROCESS {
+        let tokens_to_process: Vec<Token> = if tokens.len() > MAX_TOKENS_TO_PROCESS {
+            // Take tokens with highest activity for random selection
+            let high_activity_pool_size = std::cmp::min(
+                std::cmp::max(MIN_HIGH_ACTIVITY_TOKENS, MAX_TOKENS_TO_PROCESS * 2),
+                tokens.len()
+            );
+
+            let high_activity_tokens = &tokens[..high_activity_pool_size];
+
+            // Randomly select from the high-activity tokens
+            use rand::seq::SliceRandom;
+            use rand::SeedableRng;
+            let mut rng = rand::rngs::StdRng::from_entropy();
+            let mut selected_tokens = high_activity_tokens.to_vec();
+            selected_tokens.shuffle(&mut rng);
+
+            let final_selection = selected_tokens
+                .into_iter()
+                .take(MAX_TOKENS_TO_PROCESS)
+                .collect::<Vec<_>>();
+
             log(
                 LogTag::Trader,
                 "PERF",
                 &format!(
-                    "🚀 PERFORMANCE: Limiting processing from {} to {} tokens (randomized selection)",
-                    tokens.len(),
-                    MAX_TOKENS_TO_PROCESS
+                    "🚀 ACTIVITY-BASED: Selected {} random tokens from top {} most active (out of {} total)",
+                    final_selection.len(),
+                    high_activity_pool_size,
+                    tokens.len()
                 )
             );
-            &tokens[..MAX_TOKENS_TO_PROCESS]
+
+            final_selection
         } else {
-            &tokens[..]
+            tokens.clone()
         };
+
+        let tokens_to_process = &tokens_to_process;
 
         // Use centralized filtering system to get eligible tokens WITH TIMEOUT
         use crate::filtering::{ filter_tokens_with_reasons, get_filtering_stats };
@@ -506,19 +556,55 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         };
 
         // Log filtering statistics
-
         let (total, passed, pass_rate) = get_filtering_stats(tokens_to_process);
         log(
             LogTag::Trader,
             "FILTER_STATS",
             &format!(
-                "Token filtering: {}/{} passed ({:.1}% pass rate) - processed {} randomized tokens",
+                "Token filtering: {}/{} passed ({:.1}% pass rate) - processed {} activity-prioritized tokens",
                 passed,
                 total,
                 pass_rate,
                 tokens_to_process.len()
             )
         );
+
+        // Log transaction activity statistics for processed tokens
+        if is_debug_trader_enabled() {
+            let txn_stats: Vec<i64> = tokens_to_process
+                .iter()
+                .map(|token| {
+                    token.txns
+                        .as_ref()
+                        .and_then(|t| t.m5.as_ref())
+                        .map(|m5| m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0))
+                        .unwrap_or(0)
+                })
+                .collect();
+
+            if !txn_stats.is_empty() {
+                let max_txns = txn_stats.iter().max().unwrap_or(&0);
+                let min_txns = txn_stats.iter().min().unwrap_or(&0);
+                let avg_txns = (txn_stats.iter().sum::<i64>() as f64) / (txn_stats.len() as f64);
+                let tokens_with_10_plus = txn_stats
+                    .iter()
+                    .filter(|&&x| x >= 10)
+                    .count();
+
+                log(
+                    LogTag::Trader,
+                    "TXN_STATS",
+                    &format!(
+                        "📊 5min txn activity: max={}, min={}, avg={:.1}, ≥10txns: {}/{}",
+                        max_txns,
+                        min_txns,
+                        avg_txns,
+                        tokens_with_10_plus,
+                        txn_stats.len()
+                    )
+                );
+            }
+        }
 
         // Debug: Log some rejected tokens
         if is_debug_trader_enabled() && !rejected_tokens.is_empty() {
@@ -662,14 +748,14 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             // Token passed filtering but doesn't meet entry criteria
                             // Add to watchlist for future monitoring
                             add_watchlist_tokens(&[token.mint.clone()]).await;
-                            
+
                             if is_debug_trader_enabled() {
                                 log(
                                     LogTag::Trader,
                                     "WATCHLIST_ADD",
                                     &format!(
-                                        "Added {} to watchlist (passed filtering, waiting for entry signal: {})", 
-                                        &token.symbol, 
+                                        "Added {} to watchlist (passed filtering, waiting for entry signal: {})",
+                                        &token.symbol,
                                         reason
                                     )
                                 );

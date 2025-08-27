@@ -1,6 +1,10 @@
 use crate::{
-    tokens::{ 
-        Token, get_token_decimals, PriceResult, get_price, PriceOptions,
+    tokens::{
+        Token,
+        get_token_decimals,
+        PriceResult,
+        get_price,
+        PriceOptions,
         pool::{ add_priority_token, remove_priority_token },
     },
     swaps::{
@@ -148,6 +152,11 @@ static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> = LazyL
     RwLock::new(HashMap::new())
 });
 
+// Global position creation lock to prevent race conditions on MAX_OPEN_POSITIONS
+static GLOBAL_POSITION_CREATION_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| {
+    Mutex::new(())
+});
+
 // Safety mechanisms from original implementation
 static RECENT_SWAP_ATTEMPTS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> = LazyLock::new(|| {
     RwLock::new(HashMap::new())
@@ -173,6 +182,7 @@ const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 15; // Re-entry cooldown after clos
 
 // Verification safety windows
 const ENTRY_VERIFICATION_MAX_SECS: i64 = 90; // hard cap for entry verification age before treating as timeout
+const VERIFICATION_GRACE_PERIOD_SECS: i64 = 120; // grace period before aggressive cleanup (2 minutes)
 
 // Sell retry slippages (progressive)
 const SELL_RETRY_SLIPPAGES: &[f64] = &[3.0, 5.0, 8.0, 12.0, 20.0];
@@ -262,7 +272,11 @@ pub async fn open_position_direct(
         return Err("DRY-RUN: Position would be opened".to_string());
     }
 
-    // Check cooldowns and existing positions
+    // ATOMIC POSITION CREATION: Use global lock to prevent race conditions
+    // This ensures position limit checks and creation happen atomically
+    let _global_creation_lock = GLOBAL_POSITION_CREATION_LOCK.lock().await;
+    
+    // Check cooldowns and existing positions under global lock
     {
         let mut state = GLOBAL_POSITIONS_STATE.lock().await;
 
@@ -310,7 +324,7 @@ pub async fn open_position_direct(
             }
         }
 
-        // CHECK EXISTING POSITION
+        // ATOMIC POSITION LIMIT CHECK
         let (already_has_position, open_positions_count) = {
             let has_position = state.positions
                 .iter()
@@ -328,7 +342,7 @@ pub async fn open_position_direct(
                     LogTag::Positions,
                     "DEBUG",
                     &format!(
-                        "📊 Position check - existing: {}, open count: {}/{}",
+                        "📊 ATOMIC position check - existing: {}, open count: {}/{}",
                         has_position,
                         count,
                         MAX_OPEN_POSITIONS
@@ -357,7 +371,7 @@ pub async fn open_position_direct(
         state.last_open_time = Some(Utc::now());
     }
 
-    // Execute the buy transaction
+    // Execute the buy transaction (still under global creation lock)
     let _guard = CriticalOperationGuard::new(&format!("BUY {}", token.symbol));
 
     // DUPLICATE SWAP PREVENTION
@@ -589,40 +603,11 @@ pub async fn open_position_direct(
         closed_reason: None,
     };
 
-    // Add position to global state and database
+    // Add position to global state and database (still under global creation lock)
     let position_id = {
         let mut state = GLOBAL_POSITIONS_STATE.lock().await;
 
-        // FINAL SAFETY CHECK: Re-verify position limits before adding
-        // This prevents race conditions where multiple threads pass initial check
-        let current_open_count = state.positions
-            .iter()
-            .filter(|p| { p.position_type == "buy" && p.exit_time.is_none() })
-            .count();
-
-        if current_open_count >= MAX_OPEN_POSITIONS {
-            return Err(
-                format!(
-                    "RACE CONDITION PREVENTED: Maximum open positions reached during execution ({}/{})",
-                    current_open_count,
-                    MAX_OPEN_POSITIONS
-                )
-            );
-        }
-
-        // Double-check for duplicate position (race condition safety)
-        let has_duplicate = state.positions
-            .iter()
-            .any(|p| { p.mint == token.mint && p.position_type == "buy" && p.exit_time.is_none() });
-
-        if has_duplicate {
-            return Err(
-                format!(
-                    "RACE CONDITION PREVENTED: Duplicate position detected for {} during execution",
-                    token.symbol
-                )
-            );
-        }
+        // Position limits already checked atomically above - no need for redundant checks
 
         // Track for comprehensive verification
         state.pending_verifications.insert(transaction_signature.clone(), Utc::now());
@@ -2245,12 +2230,23 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                         }
                                     }
                                     Err(e) => {
-                                        // Check if this is a permanent verification failure (timeout or not found)
-                                        if e.contains("Verification timeout:") || e.contains("verification timeout") || e.contains("Transaction not found in system") {
+                                        // Check verification age before removing position
+                                        let verification_age_seconds = {
+                                            let state = GLOBAL_POSITIONS_STATE.lock().await;
+                                            if let Some(added_at) = state.pending_verifications.get(&sig_clone) {
+                                                now.signed_duration_since(*added_at).num_seconds()
+                                            } else {
+                                                0 // If not found, treat as new
+                                            }
+                                        };
+                                        
+                                        // Only remove if truly timed out (beyond grace period)
+                                        if e.contains("Verification timeout:") || e.contains("verification timeout") || 
+                                           (e.contains("Transaction not found in system") && verification_age_seconds > VERIFICATION_GRACE_PERIOD_SECS) {
                                             log(
                                                 LogTag::Positions,
                                                 "VERIFICATION_TIMEOUT_CLEANUP",
-                                                &format!("🗑️ Removing position with permanently failed verification: {} (error: {})", get_signature_prefix(&sig_clone), e)
+                                                &format!("🗑️ Removing position with permanently failed verification: {} (error: {}, age: {}s)", get_signature_prefix(&sig_clone), e, verification_age_seconds)
                                             );
                                             
                                             // Remove the position with the failed transaction
@@ -2315,42 +2311,6 @@ async fn cleanup_phantom_positions_parallel(shutdown: Arc<Notify>) {
                 break;
             }
             _ = sleep(Duration::from_secs(60)) => {
-                // First, cleanup old unverified positions regardless of verification status
-                let open_positions = get_open_positions().await;
-                let old_unverified: Vec<Position> = open_positions.iter()
-                    .filter(|pos| {
-                        !pos.transaction_entry_verified && 
-                        (Utc::now() - pos.entry_time).num_minutes() > 5 // 5 minutes timeout for unverified
-                    })
-                    .cloned()
-                    .collect();
-
-                if !old_unverified.is_empty() {
-                    log(
-                        LogTag::Positions,
-                        "UNVERIFIED_CLEANUP",
-                        &format!("🗑️ Removing {} old unverified positions (>5min)", old_unverified.len())
-                    );
-                    
-                    for position in old_unverified {
-                        if let Some(sig) = &position.entry_transaction_signature {
-                            if let Err(e) = remove_position_by_signature(sig).await {
-                                log(
-                                    LogTag::Positions,
-                                    "CLEANUP_ERROR",
-                                    &format!("Failed to remove old unverified position {}: {}", position.symbol, e)
-                                );
-                            } else {
-                                log(
-                                    LogTag::Positions,
-                                    "UNVERIFIED_CLEANUP",
-                                    &format!("✅ Removed old unverified position: {}", position.symbol)
-                                );
-                            }
-                        }
-                    }
-                }
-
                 // Find potential phantom positions (open positions with zero wallet balance)
                 let wallet_address = match get_wallet_address() {
                     Ok(addr) => addr,
@@ -2893,13 +2853,13 @@ async fn remove_position_by_signature(signature: &str) -> Result<(), String> {
                     get_signature_prefix(signature)
                 )
             );
-            
+
             // Remove token from priority pool service since position is being cleaned up
             let mint_for_cleanup = position.mint.clone();
             tokio::spawn(async move {
                 remove_priority_token(&mint_for_cleanup).await;
             });
-            
+
             Some(position)
         } else {
             log(

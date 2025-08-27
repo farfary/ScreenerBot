@@ -369,28 +369,8 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         return (false, 0.0, "Token already has an open position".to_string());
     }
 
-    // Check maximum open positions limit
-    use crate::trader::MAX_OPEN_POSITIONS;
-    let open_positions_count = crate::positions::get_open_positions_count().await;
-    if open_positions_count >= MAX_OPEN_POSITIONS {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "MAX_POSITIONS_REJECT",
-                &format!(
-                    "❌ {} max positions reached: {}/{}",
-                    token.symbol,
-                    open_positions_count,
-                    MAX_OPEN_POSITIONS
-                )
-            );
-        }
-        return (
-            false,
-            0.0,
-            format!("Maximum positions reached: {}/{}", open_positions_count, MAX_OPEN_POSITIONS),
-        );
-    }
+    // NOTE: Position limit check removed from here to prevent race conditions
+    // The atomic check happens in open_position_direct() during position creation
 
     let pool_service = get_pool_service();
 

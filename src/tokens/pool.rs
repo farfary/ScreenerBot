@@ -33,8 +33,8 @@ use futures;
 /// Requirement: cache all tokens pools addresses and infos for maximum 10 minutes
 const POOL_CACHE_TTL_SECONDS: i64 = 600;
 
-/// Price cache TTL - aligned with 5s global monitoring cadence
-const PRICE_CACHE_TTL_SECONDS: i64 = 5;
+/// Price cache TTL - increased to handle async task delays between pool calculation and entry checks
+const PRICE_CACHE_TTL_SECONDS: i64 = 10;
 
 // =============================================================================
 // BATCH PROCESSING CONFIGURATION
@@ -1146,7 +1146,7 @@ impl PoolPriceService {
                 // Find token with lowest request count (LRU)
                 let mut min_count = u64::MAX;
                 let mut min_token = String::new();
-                
+
                 for watchlist_token in watchlist.iter() {
                     let count = request_counts.get(watchlist_token).unwrap_or(&0);
                     if *count < min_count {
@@ -1158,12 +1158,15 @@ impl PoolPriceService {
                 if !min_token.is_empty() {
                     watchlist.remove(&min_token);
                     request_counts.remove(&min_token);
-                    
+
                     log(
                         LogTag::Pool,
                         "WATCHLIST_EVICT",
-                        &format!("Evicted {} with {} requests to make room", 
-                               safe_truncate(&min_token, 8), min_count)
+                        &format!(
+                            "Evicted {} with {} requests to make room",
+                            safe_truncate(&min_token, 8),
+                            min_count
+                        )
                     );
                 }
             }
@@ -1781,7 +1784,24 @@ impl PoolPriceService {
                     }
                 }
 
-                // NO CACHING - NO STORAGE OF RESULT
+                // FIXED: Store result in main price cache for get_price() to retrieve
+                {
+                    let mut price_cache = self.price_cache.write().await;
+                    price_cache.insert(token_address.to_string(), pool_result.clone());
+
+                    if is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "MONITOR_CACHE_STORED",
+                            &format!(
+                                "💾 CACHED monitor price for {}: {:.12} SOL from pool {}",
+                                token_address,
+                                pool_result.price_sol.unwrap_or(0.0),
+                                pool_result.pool_address
+                            )
+                        );
+                    }
+                }
 
                 // Add price to pool-specific history and manage watch list for -10% drop detection
                 if let Some(price_sol) = pool_result.price_sol {

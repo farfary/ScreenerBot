@@ -77,7 +77,7 @@ fn get_mint_prefix(mint: &str) -> &str {
 
 // Main monitoring intervals
 
-const NORMAL_CHECK_INTERVAL_SECS: u64 = 10; // Normal transaction checking every 10 seconds (user requirement)
+const NORMAL_CHECK_INTERVAL_SECS: u64 = 3; // Normal transaction checking every 3 seconds (faster for position verification)
 
 // RPC and batch processing limits
 const RPC_BATCH_SIZE: usize = 1000; // Transaction signatures fetch batch size (increased for fewer pages)
