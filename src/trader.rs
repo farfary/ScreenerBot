@@ -39,12 +39,22 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 3;
+pub const MAX_OPEN_POSITIONS: usize = 1;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
 
 pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
+
+// -----------------------------------------------------------------------------
+// Debug Mode Configuration
+// -----------------------------------------------------------------------------
+
+/// Debug mode: Force sell all positions after a timeout (for testing)
+pub const DEBUG_FORCE_SELL_MODE: bool = false;
+
+/// Debug mode: Force sell timeout in seconds
+pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 30.0;
 
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding
@@ -263,6 +273,33 @@ pub fn debug_trader_log(log_type: &str, message: &str) {
     if is_debug_trader_enabled() {
         log(LogTag::Trader, log_type, message);
     }
+}
+
+/// Debug function: Check if a position should be force-sold due to debug timeout
+pub fn should_debug_force_sell(position: &crate::positions::Position) -> bool {
+    if !DEBUG_FORCE_SELL_MODE {
+        return false;
+    }
+
+    let position_age_secs = Utc::now()
+        .signed_duration_since(position.entry_time)
+        .num_seconds() as f64;
+
+    if position_age_secs >= DEBUG_FORCE_SELL_TIMEOUT_SECS {
+        log(
+            LogTag::Trader,
+            "DEBUG_FORCE_SELL",
+            &format!(
+                "🚨 DEBUG MODE: Force selling {} after {:.1}s (timeout: {:.1}s)",
+                position.symbol,
+                position_age_secs,
+                DEBUG_FORCE_SELL_TIMEOUT_SECS
+            )
+        );
+        return true;
+    }
+
+    false
 }
 
 // =============================================================================
@@ -1001,18 +1038,24 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         Some(current_price)
                     ).await;
 
+                    // Check debug force sell first
+                    let debug_force_sell = should_debug_force_sell(&position);
+
                     // Calculate sell decision using the unified profit system
-                    let should_exit = crate::profit::should_sell(&position, current_price).await;
+                    let should_exit =
+                        debug_force_sell ||
+                        crate::profit::should_sell(&position, current_price).await;
 
                     if is_debug_trader_enabled() {
                         debug_trader_log(
                             "SELL_ANALYSIS",
                             &format!(
-                                "{} | Should Exit: {} | P&L: {:.2}% ({:.6} SOL)",
+                                "{} | Should Exit: {} | P&L: {:.2}% ({:.6} SOL) | Debug Force: {}",
                                 position.symbol,
                                 should_exit,
                                 pnl_percent,
-                                pnl_sol
+                                pnl_sol,
+                                debug_force_sell
                             )
                         );
                     }
