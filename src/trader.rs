@@ -39,7 +39,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 5;
+pub const MAX_OPEN_POSITIONS: usize = 8;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
@@ -482,7 +482,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         // ⚡ PERFORMANCE FIX: Select tokens prioritizing high transaction activity
         const MAX_TOKENS_TO_PROCESS: usize = 100; // Process 100 tokens
-        const MIN_HIGH_ACTIVITY_TOKENS: usize = 200; // Consider top 200 most active tokens for random selection
+        const MIN_HIGH_ACTIVITY_TOKENS: usize = 1000; // Consider top 200 most active tokens for random selection
         const FILTERING_TIMEOUT_SECS: u64 = 120; // Increased to 120 second timeout for filtering to prevent timeouts
 
         let tokens_to_process: Vec<Token> = if tokens.len() > MAX_TOKENS_TO_PROCESS {
