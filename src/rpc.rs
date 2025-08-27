@@ -1217,6 +1217,40 @@ impl RpcClient {
             .map_err(|e| format!("Task error: {}", e))?
     }
 
+    /// Get single account data with custom commitment level (for debugging)
+    pub async fn get_account_with_commitment(
+        &self,
+        pubkey: &Pubkey,
+        commitment: CommitmentConfig
+    ) -> Result<Account, String> {
+        self.wait_for_rate_limit().await;
+        self.record_call("get_account_with_commitment");
+        let url = self.url().to_string();
+        tokio::task
+            ::spawn_blocking({
+                let client = SolanaRpcClient::new_with_commitment(url.clone(), commitment);
+                let pubkey = *pubkey;
+                let url = url.clone();
+                move || {
+                    client.get_account(&pubkey).map_err(|e| {
+                        let es = e.to_string();
+                        if es.contains("AccountNotFound") || es.contains("could not find account") {
+                            let blockchain_error = BlockchainError::AccountNotFound {
+                                pubkey: pubkey.to_string(),
+                                context: "get_account_with_commitment".to_string(),
+                                rpc_endpoint: Some(url.clone()),
+                            };
+                            format!("blockchain_error:{}:{}:{}", pubkey, url, blockchain_error)
+                        } else {
+                            let blockchain_error = parse_solana_error(&es, None, "rpc_call");
+                            format!("blockchain_error:{}:{}:{}", pubkey, url, blockchain_error)
+                        }
+                    })
+                }
+            }).await
+            .map_err(|e| format!("Task error: {}", e))?
+    }
+
     /// Get multiple accounts data (batch request for efficiency)
     pub async fn get_multiple_accounts(
         &self,

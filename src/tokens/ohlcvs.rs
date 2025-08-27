@@ -30,6 +30,7 @@
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_ohlcv_enabled, CACHE_OHLCVS_DIR };
 use crate::tokens::pool::{ get_pool_service };
+use crate::tokens::PriceOptions;
 use tokio::sync::{ RwLock, Notify };
 use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;
@@ -578,7 +579,13 @@ impl OhlcvService {
         let has_pool = pool_service.check_token_availability(mint).await;
         let pool_address = if has_pool {
             // Get best pool address
-            if let Some(result) = pool_service.get_pool_price(mint, None).await {
+            if
+                let Some(result) = pool_service.get_pool_price(
+                    mint,
+                    None,
+                    &PriceOptions::default()
+                ).await
+            {
                 if is_debug_ohlcv_enabled() {
                     log(
                         LogTag::Ohlcv,
@@ -850,7 +857,13 @@ impl OhlcvService {
     /// Get pool address for a mint
     async fn get_pool_address_for_mint(&self, mint: &str) -> Option<String> {
         let pool_service = get_pool_service();
-        if let Some(result) = pool_service.get_pool_price(mint, None).await {
+        if
+            let Some(result) = pool_service.get_pool_price(
+                mint,
+                None,
+                &PriceOptions::default()
+            ).await
+        {
             Some(result.pool_address)
         } else {
             None
@@ -1276,7 +1289,13 @@ impl OhlcvService {
                         addr.clone()
                     } else {
                         let pool_service = get_pool_service();
-                        if let Some(result) = pool_service.get_pool_price(&entry.mint, None).await {
+                        if
+                            let Some(result) = pool_service.get_pool_price(
+                                &entry.mint,
+                                None,
+                                &PriceOptions::default()
+                            ).await
+                        {
                             result.pool_address
                         } else {
                             if is_debug_ohlcv_enabled() {

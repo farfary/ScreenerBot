@@ -1172,17 +1172,6 @@ pub async fn update_position_tracking(
     price_result: &PriceResult
 ) -> bool {
     if current_price <= 0.0 || !current_price.is_finite() {
-        if is_debug_positions_enabled() {
-            log(
-                LogTag::Positions,
-                "WARN",
-                &format!(
-                    "Skipping position tracking update for mint {}: invalid price {:.10}",
-                    get_mint_prefix(mint),
-                    current_price
-                )
-            );
-        }
         return false;
     }
 
@@ -1192,16 +1181,6 @@ pub async fn update_position_tracking(
     {
         Ok(lock) => lock,
         Err(_) => {
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "WARN",
-                    &format!(
-                        "Tracking update for {} skipped due to lock timeout",
-                        get_mint_prefix(mint)
-                    )
-                );
-            }
             return false; // Don't block tracking updates
         }
     };
@@ -1217,93 +1196,12 @@ pub async fn update_position_tracking(
             position.price_lowest = entry_price;
         }
 
-        // Check for price change and log it BEFORE updating position
-        let old_price = position.current_price.unwrap_or(entry_price);
-        let price_change = current_price - old_price;
-        let price_change_percent = if old_price != 0.0 {
-            (price_change / old_price) * 100.0
-        } else {
-            0.0
-        };
-
-        // Log price change if significant (0.01% threshold for high sensitivity)
-        let change_threshold = if old_price > 0.0 {
-            (old_price * 0.0001).max(f64::EPSILON * 100.0) // 0.01% minimum
-        } else {
-            f64::EPSILON * 100.0
-        };
-
-        let price_diff = (old_price - current_price).abs();
-
-        // Check if enough time has passed since last log (fallback logging every 10 seconds)
-        let time_since_last_log = position.current_price_updated
-            .map(|last| (Utc::now() - last).num_seconds())
-            .unwrap_or(999); // Force log if no previous update
-
-        // Debug: Log price comparison details when debugging positions
-        if is_debug_positions_enabled() {
-            log(
-                LogTag::Positions,
-                "DEBUG",
-                &format!(
-                    "🎯 Price tracking for {}: old={:.10}, current={:.10}, diff={:.10}, threshold={:.10}, time_since_log={}s",
-                    position.symbol,
-                    old_price,
-                    current_price,
-                    price_diff,
-                    change_threshold,
-                    time_since_last_log
-                )
-            );
-        }
-
-        let should_log_periodic = time_since_last_log >= 10; // Log every 10 seconds regardless
-
-        // Always log during position monitoring for visibility, regardless of price changes
-        if price_diff > change_threshold || should_log_periodic {
-            // Calculate current P&L for logging
-            let (pnl_sol, pnl_percent) = calculate_position_pnl(
-                position,
-                Some(current_price)
-            ).await;
-
-            log_price_change(
-                mint,
-                &position.symbol,
-                old_price,
-                current_price,
-                &price_result.source,
-                price_result.pool_type.as_deref(),
-                price_result.pool_address.as_deref(),
-                price_result.api_price_sol, // Use api_price_sol field
-                Some((pnl_sol, pnl_percent))
-            );
-        }
-
-        let mut updated = false;
-
-        // Track new highs and lows with debug logging
+        // Track new highs and lows
         if current_price > position.price_highest {
             position.price_highest = current_price;
-            updated = true;
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!("📈 New high for {}: {:.10} SOL", position.symbol, current_price)
-                );
-            }
         }
         if current_price < position.price_lowest {
             position.price_lowest = current_price;
-            updated = true;
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!("📉 New low for {}: {:.10} SOL", position.symbol, current_price)
-                );
-            }
         }
 
         // Update current price (always, regardless of high/low changes)
@@ -1314,26 +1212,13 @@ pub async fn update_position_tracking(
         if position.id.is_some() {
             let position_clone = position.clone();
             tokio::spawn(async move {
-                if let Err(e) = sync_position_to_database(&position_clone).await {
-                    log(
-                        LogTag::Positions,
-                        "ERROR",
-                        &format!("Failed to sync tracking update to database: {}", e)
-                    );
-                }
+                let _ = sync_position_to_database(&position_clone).await;
             });
         }
 
         // Return true since current_price was updated (always meaningful for tracking)
         true
     } else {
-        if is_debug_positions_enabled() {
-            log(
-                LogTag::Positions,
-                "WARN",
-                &format!("Position not found for tracking update: {}", get_mint_prefix(mint))
-            );
-        }
         false
     }
 }

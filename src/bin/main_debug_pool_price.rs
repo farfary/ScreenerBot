@@ -13,6 +13,7 @@
 use screenerbot::tokens::pool::{ get_pool_service, init_pool_service, initialize_price_service };
 use screenerbot::tokens::dexscreener::{ get_token_pairs_from_api, init_dexscreener_api };
 use screenerbot::tokens::decimals::{ get_cached_decimals, get_token_decimals_from_chain };
+use screenerbot::tokens::PriceOptions;
 use screenerbot::logger::{ log, LogTag, init_file_logging };
 use screenerbot::rpc::{ init_rpc_client, get_rpc_client };
 use screenerbot::arguments::set_cmd_args;
@@ -875,7 +876,11 @@ async fn compare_pool_api_prices(
     log(LogTag::Pool, "API", &format!("API price: {:.12} SOL", api_price_sol.unwrap_or(0.0)));
 
     // Get pool price with detailed debugging
-    let pool_result = pool_service.get_pool_price(token_address, api_price_sol).await;
+    let pool_result = pool_service.get_pool_price(
+        token_address,
+        api_price_sol,
+        &PriceOptions::default()
+    ).await;
 
     match pool_result {
         Some(pool_result) => {
@@ -972,7 +977,7 @@ async fn test_pool_direct(pool_address: &str, token_address: &str) {
 
             // Compare with API-based calculation if available
             log(LogTag::Pool, "COMPARISON", "Comparing with API-based calculation...");
-            match pool_service.get_pool_price(token_address, None).await {
+            match pool_service.get_pool_price(token_address, None, &PriceOptions::default()).await {
                 Some(api_result) => {
                     if
                         let (Some(direct_price), Some(api_price)) = (
@@ -1092,7 +1097,7 @@ async fn test_token_availability_and_price(
 
         if has_pools {
             // Test price calculation
-            match pool_service.get_pool_price(token_address, None).await {
+            match pool_service.get_pool_price(token_address, None, &PriceOptions::default()).await {
                 Some(pool_result) => {
                     log(
                         LogTag::Pool,
@@ -1264,7 +1269,7 @@ async fn debug_specific_pool_detailed(pool_address: &str, token_address: &str) {
     debug_pool_reserves(pool_address, token_address).await;
 
     // Step 4: Test price calculation
-    match pool_service.get_pool_price(token_address, None).await {
+    match pool_service.get_pool_price(token_address, None, &PriceOptions::default()).await {
         Some(pool_result) => {
             log(
                 LogTag::Pool,
