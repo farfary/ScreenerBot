@@ -27,6 +27,7 @@ const FORCE_PREMIUM_RPC_ONLY: bool = false;
 use crate::logger::{ log, LogTag };
 use crate::errors::{ NetworkError, RpcProviderError, ConfigurationError, DataError };
 use crate::errors::blockchain::CommitmentLevel;
+use crate::utils::safe_truncate;
 use crate::global::{
     is_debug_rpc_enabled,
     is_debug_transactions_enabled,

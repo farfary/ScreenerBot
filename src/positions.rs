@@ -108,7 +108,7 @@ impl Drop for PositionLockGuard {
             log(
                 LogTag::Positions,
                 "DEBUG",
-                &format!("🔓 Released position lock for mint: {}", &self.mint[..8])
+                &format!("🔓 Released position lock for mint: {}", safe_truncate(&self.mint, 8))
             );
         }
     }
@@ -208,7 +208,7 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
         log(
             LogTag::Positions,
             "DEBUG",
-            &format!("🔒 Acquired position lock for mint: {}", &mint_key[..8])
+            &format!("🔒 Acquired position lock for mint: {}", safe_truncate(&mint_key, 8))
         );
     }
 
@@ -517,7 +517,7 @@ pub async fn open_position_direct(
         log(
             LogTag::Positions,
             "TRANSACTION",
-            &format!("Transaction {} will be monitored by positions manager", &signature[..8])
+            &format!("Transaction {} will be monitored by positions manager", safe_truncate(&signature, 8))
         );
     }
 
@@ -1013,7 +1013,7 @@ pub async fn close_position_direct(
                     "TRANSACTION",
                     &format!(
                         "Sell transaction {} will be monitored by positions manager",
-                        &signature[..8]
+                        safe_truncate(&signature, 8)
                     )
                 );
                 signature.clone()
@@ -1486,7 +1486,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                                 "📊 Entry swap info for {}: type={}, token_mint={}, sol_amount={}, token_amount={}, price={:.9}",
                                 position.symbol,
                                 swap_info.swap_type,
-                                &swap_info.token_mint[..8],
+                                safe_truncate(&swap_info.token_mint, 8),
                                 swap_info.sol_amount,
                                 swap_info.token_amount,
                                 swap_info.calculated_price_sol
@@ -1616,7 +1616,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                                 "📊 Exit swap info for {}: type={}, token_mint={}, sol_amount={}, token_amount={}, price={:.9}",
                                 position.symbol,
                                 swap_info.swap_type,
-                                &swap_info.token_mint[..8],
+                                safe_truncate(&swap_info.token_mint, 8),
                                 swap_info.sol_amount,
                                 swap_info.token_amount,
                                 swap_info.calculated_price_sol

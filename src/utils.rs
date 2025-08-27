@@ -241,7 +241,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
                 log(
                     LogTag::Wallet,
                     "DEBUG",
-                    &format!("📊 TOKEN_BALANCE_RESULT: {} units for mint {}", balance, &mint[..8])
+                    &format!("📊 TOKEN_BALANCE_RESULT: {} units for mint {}", balance, safe_truncate(&mint, 8))
                 );
             }
             log(
@@ -261,13 +261,13 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
                 log(
                     LogTag::Wallet,
                     "DEBUG",
-                    &format!("❌ TOKEN_BALANCE_ERROR: {} for mint {}", blockchain_error, &mint[..8])
+                    &format!("❌ TOKEN_BALANCE_ERROR: {} for mint {}", blockchain_error, safe_truncate(&mint, 8))
                 );
             }
             log(
                 LogTag::Wallet,
                 "ERROR",
-                &format!("❌ Failed to fetch token balance for mint {}: {}", &mint[..8], e)
+                &format!("❌ Failed to fetch token balance for mint {}: {}", safe_truncate(&mint, 8), e)
             );
             Err(e)
         }
@@ -288,7 +288,7 @@ pub async fn close_single_ata(
     wallet_address: &str,
     mint: &str
 ) -> Result<String, ScreenerBotError> {
-    log(LogTag::Wallet, "ATA", &format!("Attempting to close single ATA for mint {}", &mint[..8]));
+    log(LogTag::Wallet, "ATA", &format!("Attempting to close single ATA for mint {}", safe_truncate(&mint, 8)));
 
     // Get all token accounts to find the specific one
     let token_accounts = get_all_token_accounts(wallet_address).await?;

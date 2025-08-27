@@ -3,6 +3,7 @@ use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_decimals_enabled, DECIMAL_CACHE as DECIMAL_CACHE_FILE };
 use crate::tokens::is_system_or_stable_token;
 use crate::rpc::get_rpc_client;
+use crate::utils::safe_truncate;
 use solana_sdk::pubkey::Pubkey;
 use solana_program::program_pack::Pack;
 use spl_token::state::Mint;

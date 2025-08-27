@@ -80,8 +80,8 @@ async fn get_cached_wallet_balance() -> String {
                         age_secs,
                         age_secs < CACHE_DURATION_SECS,
                         addresses_match,
-                        &cached.wallet_address[..8],
-                        &wallet_pubkey[..8]
+                        safe_truncate(&cached.wallet_address, 8),
+                        safe_truncate(&wallet_pubkey, 8)
                     )
                 );
             }

@@ -25,7 +25,7 @@ use rand;
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_transactions_enabled, read_configs, load_wallet_from_config };
 use crate::rpc::get_rpc_client;
-use crate::utils::get_wallet_address;
+use crate::utils::{ get_wallet_address, safe_truncate };
 use crate::errors::blockchain::{
     BlockchainError,
     parse_structured_solana_error,
@@ -629,7 +629,8 @@ fn shorten_signature(signature: &str) -> String {
     if signature.len() <= 16 {
         signature.to_string()
     } else {
-        format!("{}...{}", &signature[..8], &signature[signature.len() - 4..])
+        format!("{}...{}", safe_truncate(&signature, 8), 
+                if signature.len() >= 4 { &signature[signature.len() - 4..] } else { signature })
     }
 }
 
@@ -2544,7 +2545,6 @@ impl TransactionsManager {
 
                 if let Some(err) = meta.get("err") {
                     // Parse structured blockchain error for comprehensive error handling
-                    use crate::utils::safe_truncate;
 
                     let structured_error = parse_structured_solana_error(
                         err,
