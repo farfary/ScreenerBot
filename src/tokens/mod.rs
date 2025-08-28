@@ -410,16 +410,7 @@ pub async fn get_token_rugcheck_data_safe(mint: &str) -> Result<Option<RugcheckR
     }
 }
 
-/// Update rugcheck data for a newly discovered token
-pub async fn update_new_token_rugcheck_data_safe(mint: &str) -> Result<(), String> {
-    match get_global_rugcheck_service() {
-        Some(service) => service.update_token_rugcheck_data(mint).await,
-        None => {
-            log(LogTag::Rugcheck, "ERROR", "Global rugcheck service not initialized");
-            Err("Global rugcheck service not initialized".to_string())
-        }
-    }
-}
+
 
 /// Check if token is safe for trading based on rugcheck data (auto-fetch if missing)
 pub async fn is_token_safe_for_trading_safe(mint: &str) -> bool {
@@ -444,13 +435,7 @@ pub async fn is_token_safe_for_trading_safe(mint: &str) -> bool {
     }
 }
 
-/// Get rugcheck score for token (0-10 scale)
-pub async fn get_rugcheck_score_safe(mint: &str) -> Option<i32> {
-    match get_token_rugcheck_data_safe(mint).await {
-        Ok(Some(rugcheck_data)) => get_rugcheck_score(&rugcheck_data),
-        _ => None,
-    }
-}
+
 
 // =============================================================================
 // TOKEN DISCOVERY INTEGRATION
@@ -500,9 +485,4 @@ pub async fn get_token_from_db(mint: &str) -> Option<Token> {
     }
 }
 
-/// Test function to cleanup near-zero liquidity tokens (for testing purposes)
-pub async fn test_cleanup_near_zero_liquidity(threshold_usd: f64) -> Result<usize, String> {
-    let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
-    db.cleanup_near_zero_liquidity_tokens(threshold_usd).await
-        .map_err(|e| format!("Cleanup failed: {}", e))
-}
+

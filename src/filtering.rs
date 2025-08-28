@@ -1738,68 +1738,6 @@ pub fn get_token_5min_activity(token: &Token) -> i64 {
         .unwrap_or(0)
 }
 
-/// Calculate 1-hour transaction activity for a token
-pub fn get_token_1hour_activity(token: &Token) -> i64 {
-    token.txns
-        .as_ref()
-        .and_then(|t| t.h1.as_ref())
-        .map(|h1| h1.buys.unwrap_or(0) + h1.sells.unwrap_or(0))
-        .unwrap_or(0)
-}
-
-/// Sort tokens by 5-minute transaction activity (highest first)
-/// This prioritizes tokens with the most trading activity, increasing chances of meeting entry thresholds
-pub fn sort_tokens_by_activity(tokens: &mut [Token]) {
-    tokens.sort_by(|a, b| {
-        let a_txns = get_token_5min_activity(a);
-        let b_txns = get_token_5min_activity(b);
-        b_txns.cmp(&a_txns) // Sort descending (highest transactions first)
-    });
-}
-
-/// Select tokens prioritizing high transaction activity (moved from trader.rs)
-/// Returns a subset of tokens based on activity ranking and randomization
-pub fn select_high_activity_tokens(tokens: Vec<Token>) -> Vec<Token> {
-    if tokens.len() <= MAX_TOKENS_TO_PROCESS {
-        return tokens;
-    }
-
-    // Take tokens with highest activity for random selection
-    let high_activity_pool_size = std::cmp::min(
-        std::cmp::max(MIN_HIGH_ACTIVITY_TOKENS, MAX_TOKENS_TO_PROCESS * 2),
-        tokens.len()
-    );
-
-    let high_activity_tokens = &tokens[..high_activity_pool_size];
-
-    // Randomly select from the high-activity tokens
-    use rand::seq::SliceRandom;
-    use rand::SeedableRng;
-    let mut rng = rand::rngs::StdRng::from_entropy();
-    let mut selected_tokens = high_activity_tokens.to_vec();
-    selected_tokens.shuffle(&mut rng);
-
-    let final_selection = selected_tokens
-        .into_iter()
-        .take(MAX_TOKENS_TO_PROCESS)
-        .collect::<Vec<_>>();
-
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "TOKEN_SELECTION",
-            &format!(
-                "🚀 ACTIVITY-BASED: Selected {} random tokens from top {} most active (out of {} total)",
-                final_selection.len(),
-                high_activity_pool_size,
-                tokens.len()
-            )
-        );
-    }
-
-    final_selection
-}
-
 /// Count tokens with transaction data for logging
 pub fn count_tokens_with_transaction_data(tokens: &[Token]) -> usize {
     tokens
@@ -1861,14 +1799,7 @@ pub fn is_token_eligible_for_trading(token: &Token) -> bool {
     matches!(filter_token_for_trading(token), FilterResult::Approved)
 }
 
-/// Filter a list of tokens and return only eligible ones
-pub fn filter_eligible_tokens(tokens: &[Token]) -> Vec<Token> {
-    tokens
-        .iter()
-        .filter(|token| is_token_eligible_for_trading(token))
-        .cloned()
-        .collect()
-}
+
 
 /// Filter a list of tokens and return both eligible and rejected with reasons
 pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, FilterReason)>) {
@@ -2070,25 +2001,4 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
     log(LogTag::Filtering, "DEBUG", &format!("Rejection breakdown: {:?}", reason_counts));
 }
 
-/// Log specific filtering error for important cases
-pub fn log_filtering_error(token: &Token, reason: &FilterReason) {
-    let should_log = match reason {
-        FilterReason::LockAcquisitionFailed => true,
-        FilterReason::MaxPositionsReached { .. } => true,
-        _ => false,
-    };
 
-    if should_log {
-        let message = match reason {
-            FilterReason::LockAcquisitionFailed =>
-                format!("🔒 Lock acquisition failed for {}", token.symbol),
-            FilterReason::MaxPositionsReached { current, max } =>
-                format!("📊 Max positions reached ({}/{})", current, max),
-            _ => {
-                return;
-            }
-        };
-
-        log(LogTag::Filtering, "ERROR", &message);
-    }
-}
