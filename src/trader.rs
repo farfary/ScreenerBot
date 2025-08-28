@@ -39,7 +39,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 8;
+pub const MAX_OPEN_POSITIONS: usize = 4;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
@@ -433,33 +433,14 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             tokens_from_module
         };
 
-        // Sort tokens by transaction activity in 5 minutes (highest first)
-        // This prioritizes tokens with the most trading activity, increasing chances of meeting entry thresholds
-        tokens.sort_by(|a, b| {
-            let a_txns = a.txns
-                .as_ref()
-                .and_then(|t| t.m5.as_ref())
-                .map(|m5| m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0))
-                .unwrap_or(0);
-            let b_txns = b.txns
-                .as_ref()
-                .and_then(|t| t.m5.as_ref())
-                .map(|m5| m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0))
-                .unwrap_or(0);
-            b_txns.cmp(&a_txns) // Sort descending (highest transactions first)
-        });
-
-        // Count tokens with transaction data for logging
-        let tokens_with_txns = tokens
-            .iter()
-            .filter(|token| {
-                token.txns
-                    .as_ref()
-                    .and_then(|t| t.m5.as_ref())
-                    .map(|m5| m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0))
-                    .unwrap_or(0) > 0
-            })
-            .count();
+        // Sort tokens by transaction activity using centralized filtering system
+        use crate::filtering::{
+            sort_tokens_by_activity,
+            count_tokens_with_transaction_data,
+        };
+        
+        sort_tokens_by_activity(&mut tokens);
+        let tokens_with_txns = count_tokens_with_transaction_data(&tokens);
 
         // Safety check - if processing is taking too long, log it
         if cycle_start.elapsed() > Duration::from_secs(ENTRY_CYCLE_TIMEOUT_WARNING_SECS) {
@@ -481,46 +462,10 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         );
 
         // ⚡ PERFORMANCE FIX: Select tokens prioritizing high transaction activity
-        const MAX_TOKENS_TO_PROCESS: usize = 100; // Process 100 tokens
-        const MIN_HIGH_ACTIVITY_TOKENS: usize = 1000; // Consider top 200 most active tokens for random selection
+        // Using centralized filtering system
         const FILTERING_TIMEOUT_SECS: u64 = 120; // Increased to 120 second timeout for filtering to prevent timeouts
 
-        let tokens_to_process: Vec<Token> = if tokens.len() > MAX_TOKENS_TO_PROCESS {
-            // Take tokens with highest activity for random selection
-            let high_activity_pool_size = std::cmp::min(
-                std::cmp::max(MIN_HIGH_ACTIVITY_TOKENS, MAX_TOKENS_TO_PROCESS * 2),
-                tokens.len()
-            );
-
-            let high_activity_tokens = &tokens[..high_activity_pool_size];
-
-            // Randomly select from the high-activity tokens
-            use rand::seq::SliceRandom;
-            use rand::SeedableRng;
-            let mut rng = rand::rngs::StdRng::from_entropy();
-            let mut selected_tokens = high_activity_tokens.to_vec();
-            selected_tokens.shuffle(&mut rng);
-
-            let final_selection = selected_tokens
-                .into_iter()
-                .take(MAX_TOKENS_TO_PROCESS)
-                .collect::<Vec<_>>();
-
-            log(
-                LogTag::Trader,
-                "PERF",
-                &format!(
-                    "🚀 ACTIVITY-BASED: Selected {} random tokens from top {} most active (out of {} total)",
-                    final_selection.len(),
-                    high_activity_pool_size,
-                    tokens.len()
-                )
-            );
-
-            final_selection
-        } else {
-            tokens.clone()
-        };
+        let tokens_to_process: Vec<Token> = crate::filtering::select_high_activity_tokens(tokens.clone());
 
         let tokens_to_process = &tokens_to_process;
 
@@ -569,41 +514,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             )
         );
 
-        // Log transaction activity statistics for processed tokens
+        // Log transaction activity statistics for processed tokens using centralized system
         if is_debug_trader_enabled() {
-            let txn_stats: Vec<i64> = tokens_to_process
-                .iter()
-                .map(|token| {
-                    token.txns
-                        .as_ref()
-                        .and_then(|t| t.m5.as_ref())
-                        .map(|m5| m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0))
-                        .unwrap_or(0)
-                })
-                .collect();
-
-            if !txn_stats.is_empty() {
-                let max_txns = txn_stats.iter().max().unwrap_or(&0);
-                let min_txns = txn_stats.iter().min().unwrap_or(&0);
-                let avg_txns = (txn_stats.iter().sum::<i64>() as f64) / (txn_stats.len() as f64);
-                let tokens_with_10_plus = txn_stats
-                    .iter()
-                    .filter(|&&x| x >= 10)
-                    .count();
-
-                log(
-                    LogTag::Trader,
-                    "TXN_STATS",
-                    &format!(
-                        "📊 5min txn activity: max={}, min={}, avg={:.1}, ≥10txns: {}/{}",
-                        max_txns,
-                        min_txns,
-                        avg_txns,
-                        tokens_with_10_plus,
-                        txn_stats.len()
-                    )
-                );
-            }
+            crate::filtering::log_transaction_activity_stats(tokens_to_process);
         }
 
         // Debug: Log some rejected tokens

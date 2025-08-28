@@ -90,8 +90,7 @@ const PROFIT_TARGET_MIN_FLOOR: f64 = 8.0; // Never go below 8% profit target
 const PROFIT_TARGET_MIN_RANGE: f64 = 10.0; // Always at least 10% range
 
 // TRANSACTION ACTIVITY FILTERING
-const MIN_TRANSACTIONS_5MIN: i64 = 10; // Minimum total transactions in last 5 minutes
-const MAX_TRANSACTIONS_5MIN: i64 = 2000; // Maximum total transactions in last 5 minutes (avoid overheated tokens)
+// Transaction activity constants moved to filtering.rs for centralized configuration
 
 // FAST DROP MULTIPLIER
 const FAST_DROP_THRESHOLD_MULTIPLIER: f64 = 1.2; // Fast drop threshold = 1.2x the min threshold (was 1.5x)
@@ -308,80 +307,23 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         return (false, 0.0, "Token blacklisted or excluded".to_string());
     }
 
-    // Check minimum transaction activity in last 5 minutes
-    let txn_5min_count = if let Some(txns) = &token.txns {
-        if let Some(m5) = &txns.m5 {
-            let buys = m5.buys.unwrap_or(0);
-            let sells = m5.sells.unwrap_or(0);
-            buys + sells
-        } else {
-            0
-        }
-    } else {
-        0
-    };
-
-    if txn_5min_count < MIN_TRANSACTIONS_5MIN {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "TXN_ACTIVITY_REJECT",
-                &format!(
-                    "❌ {} insufficient transaction activity: {} txns in 5min (minimum {})",
-                    token.symbol,
-                    txn_5min_count,
-                    MIN_TRANSACTIONS_5MIN
-                )
-            );
-        }
-        return (
-            false,
-            0.0,
-            format!(
-                "Insufficient transaction activity: {} txns in 5min (minimum {})",
-                txn_5min_count,
-                MIN_TRANSACTIONS_5MIN
-            ),
-        );
-    }
-
-    if txn_5min_count > MAX_TRANSACTIONS_5MIN {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "TXN_ACTIVITY_REJECT",
-                &format!(
-                    "❌ {} excessive transaction activity: {} txns in 5min (maximum {})",
-                    token.symbol,
-                    txn_5min_count,
-                    MAX_TRANSACTIONS_5MIN
-                )
-            );
-        }
-        return (
-            false,
-            0.0,
-            format!(
-                "Excessive transaction activity: {} txns in 5min (maximum {})",
-                txn_5min_count,
-                MAX_TRANSACTIONS_5MIN
-            ),
-        );
-    }
+    // Get transaction activity using centralized filtering system
+    let txn_5min_count = crate::filtering::get_token_5min_activity(token);
 
     if is_debug_entry_enabled() {
         log(
             LogTag::Entry,
-            "TXN_ACTIVITY_PASS",
+            "TXN_ACTIVITY_INFO",
             &format!(
-                "✅ {} transaction activity in valid range: {} txns in 5min (range: {}-{})",
+                "📊 {} transaction activity: {} txns in 5min (already passed filtering)",
                 token.symbol,
-                txn_5min_count,
-                MIN_TRANSACTIONS_5MIN,
-                MAX_TRANSACTIONS_5MIN
+                txn_5min_count
             )
         );
     }
+
+    // NOTE: Transaction activity validation is now handled in centralized filtering.rs
+    // Tokens reaching this point have already passed transaction activity requirements
 
     // Position validation - moved here from filtering to avoid async runtime conflicts
     // Check for existing open position

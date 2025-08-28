@@ -35,8 +35,8 @@ use chrono::{ Duration as ChronoDuration, Utc };
 
 // ===== AGE FILTERING PARAMETERS =====
 /// Minimum token age in seconds before trading
-/// LEGENDARY MODE: No age restriction - trade fresh gems immediately!
-pub const MIN_TOKEN_AGE_SECONDS: i64 = 24 * 60 * 60; // 0 seconds - catch gems the moment they're born!
+/// REDUCED: Allow newer tokens to catch fresh opportunities
+pub const MIN_TOKEN_AGE_SECONDS: i64 = 2 * 60 * 60; // 2 hours - allow newer gems
 
 /// Maximum token age in seconds
 /// Extended to catch both new gems and established tokens
@@ -72,6 +72,33 @@ pub const MAX_MARKET_CAP_USD: f64 = 50_000_000_000.0; // $500K max market cap fo
 /// Minimum volume/liquidity ratio for activity detection
 /// High ratio indicates active trading despite small liquidity (pump signals)
 pub const MIN_VOLUME_LIQUIDITY_RATIO: f64 = 0.1; // 10% minimum volume/liquidity ratio
+
+// ===== TRANSACTION ACTIVITY FILTERING PARAMETERS =====
+/// Minimum transaction count in 5 minutes for trading eligibility
+/// MODERATE MODE: Reasonable threshold for real activity
+pub const MIN_TRANSACTIONS_5MIN: i64 = 5; // Minimum 5 transactions in 5 minutes
+
+/// Maximum transaction count in 5 minutes to avoid overly pumped tokens
+/// INCREASED: Allow higher activity for popular tokens
+pub const MAX_TRANSACTIONS_5MIN: i64 = 800; // Cap at 800 transactions in 5 minutes
+
+/// Minimum transaction count in 1 hour for established activity
+pub const MIN_TRANSACTIONS_1H: i64 = 15; // Minimum 15 transactions in 1 hour
+
+/// Minimum buy/sell ratio for balanced activity (healthy trading)
+/// Range: 0.4 (40% buys) to 2.5 (2.5x more buys than sells)
+pub const MIN_BUY_SELL_RATIO: f64 = 0.4; // At least 40% buys vs sells (more balanced)
+
+/// Maximum buy/sell ratio to avoid pure pump scenarios
+pub const MAX_BUY_SELL_RATIO: f64 = 2.5; // Max 2.5x more buys than sells (more balanced)
+
+// ===== TOKEN SELECTION AND SORTING PARAMETERS =====
+/// Maximum tokens to process per trading cycle (performance optimization)
+pub const MAX_TOKENS_TO_PROCESS: usize = 100;
+
+/// Pool size for high-activity token selection (top N most active tokens)
+/// REDUCED: Target middle-tier active tokens, not the most hyped ones
+pub const MIN_HIGH_ACTIVITY_TOKENS: usize = 300;
 
 // ===== RUGCHECK SECURITY PARAMETERS =====
 /// IMPORTANT: Rugcheck scores are RISK scores - higher values mean MORE risk, not less!
@@ -221,6 +248,26 @@ pub enum FilterReason {
     DecimalsNotAvailable {
         mint: String,
     },
+
+    // Transaction activity failures
+    InsufficientTransactionActivity {
+        period: String,
+        current_count: i64,
+        minimum_required: i64,
+    },
+    ExcessiveTransactionActivity {
+        period: String,
+        current_count: i64,
+        maximum_allowed: i64,
+    },
+    UnhealthyBuySellRatio {
+        buys: i64,
+        sells: i64,
+        ratio: f64,
+        min_ratio: f64,
+        max_ratio: f64,
+    },
+    NoTransactionData,
 }
 
 /// Result of token filtering
@@ -457,20 +504,20 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         );
     }
 
-    // 8. Decimal availability validation
+    // 8. Transaction Activity Validation (NEW - moved from trader.rs)
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "STEP_8",
-            &format!("🔢 Step 8: Checking decimal availability for {}", token.symbol)
+            &format!("📊 Step 8: Checking transaction activity for {}", token.symbol)
         );
     }
-    if let Some(reason) = validate_decimal_availability(token) {
+    if let Some(reason) = validate_transaction_activity(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_8",
-                &format!("❌ {}: FAILED Step 8 (Decimal Availability) - {:?}", token.symbol, reason)
+                &format!("❌ {}: FAILED Step 8 (Transaction Activity) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -478,34 +525,25 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
-            "PASS_STEP_7",
-            &format!("✅ {}: PASSED Step 7 (Decimal Availability)", token.symbol)
-        );
-    }
-
-    // 8. Position-related validation
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
             "PASS_STEP_8",
-            &format!("✅ {}: PASSED Step 8 (Decimal Availability)", token.symbol)
+            &format!("✅ {}: PASSED Step 8 (Transaction Activity)", token.symbol)
         );
     }
 
-    // 9. Position constraints validation
+    // 9. Decimal availability validation
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "STEP_9",
-            &format!("🔒 Step 9: Checking position constraints for {}", token.symbol)
+            &format!("🔢 Step 9: Checking decimal availability for {}", token.symbol)
         );
     }
-    if let Some(reason) = validate_position_constraints(token) {
+    if let Some(reason) = validate_decimal_availability(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_9",
-                &format!("❌ {}: FAILED Step 9 (Position Constraints) - {:?}", token.symbol, reason)
+                &format!("❌ {}: FAILED Step 9 (Decimal Availability) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -514,7 +552,33 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_9",
-            &format!("✅ {}: PASSED Step 9 (Position Constraints)", token.symbol)
+            &format!("✅ {}: PASSED Step 9 (Decimal Availability)", token.symbol)
+        );
+    }
+
+    // 10. Position constraints validation
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "STEP_10",
+            &format!("🔒 Step 10: Checking position constraints for {}", token.symbol)
+        );
+    }
+    if let Some(reason) = validate_position_constraints(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT_STEP_10",
+                &format!("❌ {}: FAILED Step 10 (Position Constraints) - {:?}", token.symbol, reason)
+            );
+        }
+        return FilterResult::Rejected(reason);
+    }
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "PASS_STEP_10",
+            &format!("✅ {}: PASSED Step 10 (Position Constraints)", token.symbol)
         );
     }
 
@@ -523,7 +587,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "ALL_STEPS_PASSED",
-            &format!("🎉 {}: PASSED ALL 8 FILTERING STEPS - ELIGIBLE FOR TRADING", token.symbol)
+            &format!("🎉 {}: PASSED ALL 10 FILTERING STEPS - ELIGIBLE FOR TRADING", token.symbol)
         );
     }
 
@@ -1244,13 +1308,15 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
             .and_then(|l| l.usd)
             .unwrap_or(0.0);
 
-        // More lenient thresholds for micro-caps since they naturally have higher concentration
+        // Much more lenient thresholds for micro-caps since they naturally have higher concentration
         let (max_single_holder, max_top5_total) = if liquidity_usd < 1000.0 {
-            (40.0, 80.0) // Micro-caps: max 40% single, 80% top 5
+            (85.0, 95.0) // Micro-caps: max 85% single, 95% top 5 (very lenient for new tokens)
         } else if liquidity_usd < 10000.0 {
-            (30.0, 70.0) // Small caps: max 30% single, 70% top 5
+            (70.0, 90.0) // Small caps: max 70% single, 90% top 5
+        } else if liquidity_usd < 50000.0 {
+            (60.0, 85.0) // Medium caps: max 60% single, 85% top 5
         } else {
-            (25.0, 60.0) // Larger tokens: max 25% single, 60% top 5
+            (40.0, 75.0) // Larger tokens: max 40% single, 75% top 5
         };
 
         // Check for dangerous single holders
@@ -1422,6 +1488,188 @@ fn validate_price_data(token: &Token) -> Option<FilterReason> {
     None
 }
 
+/// Validate transaction activity requirements (moved from trader.rs and entry.rs)
+fn validate_transaction_activity(token: &Token) -> Option<FilterReason> {
+    let Some(txns) = &token.txns else {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_TXN_ACTIVITY",
+                &format!("📊 Token {} has no transaction data", token.symbol)
+            );
+        }
+        return Some(FilterReason::NoTransactionData);
+    };
+
+    // Check 5-minute transaction activity
+    if let Some(m5) = &txns.m5 {
+        let buys_5min = m5.buys.unwrap_or(0);
+        let sells_5min = m5.sells.unwrap_or(0);
+        let total_5min = buys_5min + sells_5min;
+
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_TXN_ACTIVITY",
+                &format!(
+                    "📊 Token {} 5min activity: {} buys, {} sells, {} total (min: {}, max: {})",
+                    token.symbol,
+                    buys_5min,
+                    sells_5min,
+                    total_5min,
+                    MIN_TRANSACTIONS_5MIN,
+                    MAX_TRANSACTIONS_5MIN
+                )
+            );
+        }
+
+        // Check minimum activity requirement
+        if total_5min < MIN_TRANSACTIONS_5MIN {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_TXN_ACTIVITY",
+                    &format!(
+                        "❌ Token {} insufficient 5min activity: {} < {} minimum",
+                        token.symbol,
+                        total_5min,
+                        MIN_TRANSACTIONS_5MIN
+                    )
+                );
+            }
+            return Some(FilterReason::InsufficientTransactionActivity {
+                period: "5min".to_string(),
+                current_count: total_5min,
+                minimum_required: MIN_TRANSACTIONS_5MIN,
+            });
+        }
+
+        // Check maximum activity cap (avoid manipulation)
+        if total_5min > MAX_TRANSACTIONS_5MIN {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_TXN_ACTIVITY",
+                    &format!(
+                        "❌ Token {} excessive 5min activity: {} > {} maximum",
+                        token.symbol,
+                        total_5min,
+                        MAX_TRANSACTIONS_5MIN
+                    )
+                );
+            }
+            return Some(FilterReason::ExcessiveTransactionActivity {
+                period: "5min".to_string(),
+                current_count: total_5min,
+                maximum_allowed: MAX_TRANSACTIONS_5MIN,
+            });
+        }
+
+        // Check buy/sell ratio for healthy activity
+        if buys_5min > 0 && sells_5min > 0 {
+            let buy_sell_ratio = (buys_5min as f64) / (sells_5min as f64);
+            
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_TXN_ACTIVITY",
+                    &format!(
+                        "📊 Token {} buy/sell ratio: {:.2} (range: {:.1} - {:.1})",
+                        token.symbol,
+                        buy_sell_ratio,
+                        MIN_BUY_SELL_RATIO,
+                        MAX_BUY_SELL_RATIO
+                    )
+                );
+            }
+
+            if buy_sell_ratio < MIN_BUY_SELL_RATIO || buy_sell_ratio > MAX_BUY_SELL_RATIO {
+                if is_debug_filtering_enabled() {
+                    log(
+                        LogTag::Filtering,
+                        "DEBUG_TXN_ACTIVITY",
+                        &format!(
+                            "❌ Token {} unhealthy buy/sell ratio: {:.2} (acceptable: {:.1} - {:.1})",
+                            token.symbol,
+                            buy_sell_ratio,
+                            MIN_BUY_SELL_RATIO,
+                            MAX_BUY_SELL_RATIO
+                        )
+                    );
+                }
+                return Some(FilterReason::UnhealthyBuySellRatio {
+                    buys: buys_5min,
+                    sells: sells_5min,
+                    ratio: buy_sell_ratio,
+                    min_ratio: MIN_BUY_SELL_RATIO,
+                    max_ratio: MAX_BUY_SELL_RATIO,
+                });
+            }
+        }
+    } else {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_TXN_ACTIVITY",
+                &format!("📊 Token {} has no 5-minute transaction data", token.symbol)
+            );
+        }
+        return Some(FilterReason::NoTransactionData);
+    }
+
+    // Check 1-hour transaction activity for additional validation
+    if let Some(h1) = &txns.h1 {
+        let buys_1h = h1.buys.unwrap_or(0);
+        let sells_1h = h1.sells.unwrap_or(0);
+        let total_1h = buys_1h + sells_1h;
+
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_TXN_ACTIVITY",
+                &format!(
+                    "📊 Token {} 1hour activity: {} buys, {} sells, {} total (min: {})",
+                    token.symbol,
+                    buys_1h,
+                    sells_1h,
+                    total_1h,
+                    MIN_TRANSACTIONS_1H
+                )
+            );
+        }
+
+        if total_1h < MIN_TRANSACTIONS_1H {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_TXN_ACTIVITY",
+                    &format!(
+                        "❌ Token {} insufficient 1hour activity: {} < {} minimum",
+                        token.symbol,
+                        total_1h,
+                        MIN_TRANSACTIONS_1H
+                    )
+                );
+            }
+            return Some(FilterReason::InsufficientTransactionActivity {
+                period: "1hour".to_string(),
+                current_count: total_1h,
+                minimum_required: MIN_TRANSACTIONS_1H,
+            });
+        }
+    }
+
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_TXN_ACTIVITY",
+            &format!("✅ Token {} passed transaction activity validation", token.symbol)
+        );
+    }
+
+    None
+}
+
 /// Validate that token decimals are available (critical for trading calculations)
 fn validate_decimal_availability(token: &Token) -> Option<FilterReason> {
     // Use the synchronous decimal access function to check if decimals are available
@@ -1469,6 +1717,133 @@ fn validate_position_constraints(_token: &Token) -> Option<FilterReason> {
 
     // Always pass at filtering stage - position checks happen during trading
     None
+}
+
+// =============================================================================
+// TOKEN SORTING AND SELECTION UTILITIES (moved from trader.rs)
+// =============================================================================
+
+/// Calculate 5-minute transaction activity for a token
+pub fn get_token_5min_activity(token: &Token) -> i64 {
+    token.txns
+        .as_ref()
+        .and_then(|t| t.m5.as_ref())
+        .map(|m5| m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0))
+        .unwrap_or(0)
+}
+
+/// Calculate 1-hour transaction activity for a token
+pub fn get_token_1hour_activity(token: &Token) -> i64 {
+    token.txns
+        .as_ref()
+        .and_then(|t| t.h1.as_ref())
+        .map(|h1| h1.buys.unwrap_or(0) + h1.sells.unwrap_or(0))
+        .unwrap_or(0)
+}
+
+/// Sort tokens by 5-minute transaction activity (highest first)
+/// This prioritizes tokens with the most trading activity, increasing chances of meeting entry thresholds
+pub fn sort_tokens_by_activity(tokens: &mut [Token]) {
+    tokens.sort_by(|a, b| {
+        let a_txns = get_token_5min_activity(a);
+        let b_txns = get_token_5min_activity(b);
+        b_txns.cmp(&a_txns) // Sort descending (highest transactions first)
+    });
+}
+
+/// Select tokens prioritizing high transaction activity (moved from trader.rs)
+/// Returns a subset of tokens based on activity ranking and randomization
+pub fn select_high_activity_tokens(tokens: Vec<Token>) -> Vec<Token> {
+    if tokens.len() <= MAX_TOKENS_TO_PROCESS {
+        return tokens;
+    }
+
+    // Take tokens with highest activity for random selection
+    let high_activity_pool_size = std::cmp::min(
+        std::cmp::max(MIN_HIGH_ACTIVITY_TOKENS, MAX_TOKENS_TO_PROCESS * 2),
+        tokens.len()
+    );
+
+    let high_activity_tokens = &tokens[..high_activity_pool_size];
+
+    // Randomly select from the high-activity tokens
+    use rand::seq::SliceRandom;
+    use rand::SeedableRng;
+    let mut rng = rand::rngs::StdRng::from_entropy();
+    let mut selected_tokens = high_activity_tokens.to_vec();
+    selected_tokens.shuffle(&mut rng);
+
+    let final_selection = selected_tokens
+        .into_iter()
+        .take(MAX_TOKENS_TO_PROCESS)
+        .collect::<Vec<_>>();
+
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "TOKEN_SELECTION",
+            &format!(
+                "🚀 ACTIVITY-BASED: Selected {} random tokens from top {} most active (out of {} total)",
+                final_selection.len(),
+                high_activity_pool_size,
+                tokens.len()
+            )
+        );
+    }
+
+    final_selection
+}
+
+/// Count tokens with transaction data for logging
+pub fn count_tokens_with_transaction_data(tokens: &[Token]) -> usize {
+    tokens
+        .iter()
+        .filter(|token| get_token_5min_activity(token) > 0)
+        .count()
+}
+
+/// Generate transaction activity statistics for a list of tokens
+pub fn get_transaction_activity_stats(tokens: &[Token]) -> (i64, i64, f64, usize) {
+    let txn_stats: Vec<i64> = tokens
+        .iter()
+        .map(|token| get_token_5min_activity(token))
+        .collect();
+
+    if txn_stats.is_empty() {
+        return (0, 0, 0.0, 0);
+    }
+
+    let max_txns = *txn_stats.iter().max().unwrap_or(&0);
+    let min_txns = *txn_stats.iter().min().unwrap_or(&0);
+    let avg_txns = (txn_stats.iter().sum::<i64>() as f64) / (txn_stats.len() as f64);
+    let tokens_with_10_plus = txn_stats
+        .iter()
+        .filter(|&&x| x >= 10)
+        .count();
+
+    (max_txns, min_txns, avg_txns, tokens_with_10_plus)
+}
+
+/// Log transaction activity statistics for processed tokens
+pub fn log_transaction_activity_stats(tokens: &[Token]) {
+    if !is_debug_filtering_enabled() || tokens.is_empty() {
+        return;
+    }
+
+    let (max_txns, min_txns, avg_txns, tokens_with_10_plus) = get_transaction_activity_stats(tokens);
+
+    log(
+        LogTag::Filtering,
+        "TXN_STATS",
+        &format!(
+            "📊 5min txn activity: max={}, min={}, avg={:.1}, ≥10txns: {}/{}",
+            max_txns,
+            min_txns,
+            avg_txns,
+            tokens_with_10_plus,
+            tokens.len()
+        )
+    );
 }
 
 // =============================================================================
@@ -1630,6 +2005,10 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             FilterReason::WhaleConcentrationRisk { .. } => "Whale Concentration Risk",
             FilterReason::LockAcquisitionFailed => "System Errors",
             FilterReason::DecimalsNotAvailable { .. } => "Decimal Issues",
+            | FilterReason::InsufficientTransactionActivity { .. }
+            | FilterReason::ExcessiveTransactionActivity { .. }
+            | FilterReason::UnhealthyBuySellRatio { .. }
+            | FilterReason::NoTransactionData => "Transaction Activity Issues",
         };
 
         *reason_counts.entry(reason_type.to_string()).or_insert(0) += 1;
