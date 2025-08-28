@@ -303,45 +303,131 @@ pub fn should_debug_force_sell(position: &crate::positions::Position) -> bool {
 }
 
 // =============================================================================
-// HELPER FUNCTIONS FOR TOKENS MODULE INTEGRATION
+// TOKEN PREPARATION AND TRADING FUNCTIONS
 // =============================================================================
 
-/// Get tokens using the safe tokens module system
-pub async fn get_tokens_from_safe_system() -> Vec<Token> {
-    match get_all_tokens_by_liquidity().await {
-        Ok(api_tokens) => {
-            // Convert ApiToken to Token for compatibility with existing code
-            api_tokens
-                .into_iter()
-                .map(|api_token| api_token.into())
-                .collect()
-        }
-        Err(e) => {
-            log(LogTag::Trader, "WARN", &format!("Failed to get tokens from safe system: {}", e));
-            Vec::new()
-        }
-    }
-}
+/// Prepare tokens for filtering and trading by fetching from database
+/// Returns all available tokens ready for the filtering system to process
+pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token>, String> {
+    use crate::filtering::{
+        filter_tokens_with_reasons,
+        get_filtering_stats,
+        log_transaction_activity_stats,
+    };
 
-/// Try to populate tokens database with discovery data if it's empty
-async fn ensure_tokens_populated() {
-    // Check if we have tokens in the database
-    match get_all_tokens_by_liquidity().await {
-        Ok(tokens) if tokens.is_empty() => {
-            log(LogTag::Trader, "INFO", "Token database is empty, running discovery...");
+    // Timeout for filtering operations
+    const FILTERING_TIMEOUT_SECS: u64 = 120;
 
-            // Run manual discovery to populate the database
-            if let Err(e) = discover_tokens_once().await {
-                log(LogTag::Trader, "WARN", &format!("Failed to run token discovery: {}", e));
+    // 1. Fetch tokens from safe system
+    let mut tokens = {
+        let tokens_from_module: Vec<Token> = match get_all_tokens_by_liquidity().await {
+            Ok(api_tokens) => {
+                // Convert ApiToken to Token for compatibility with existing code
+                api_tokens
+                    .into_iter()
+                    .map(|api_token| api_token.into())
+                    .collect()
             }
+            Err(e) => {
+                log(LogTag::Trader, "WARN", &format!("Failed to get tokens from safe system: {}", e));
+                Vec::new()
+            }
+        };
+
+        // Log total tokens available
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!("Total tokens from safe system: {}", tokens_from_module.len())
+            );
         }
-        Ok(tokens) => {
-            log(LogTag::Trader, "INFO", &format!("Token database has {} tokens", tokens.len()));
+
+        // Count tokens with liquidity data
+        let with_liquidity = tokens_from_module
+            .iter()
+            .filter(|token| {
+                token.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(0.0) > 0.0
+            })
+            .count();
+
+        if with_liquidity > 0 {
+            log(
+                LogTag::Trader,
+                "INFO",
+                &format!("Processing {} tokens with liquidity", with_liquidity)
+            );
         }
-        Err(e) => {
-            log(LogTag::Trader, "WARN", &format!("Failed to check token database: {}", e));
+
+        tokens_from_module
+    };
+
+    // 2. Apply filtering with timeout protection
+    let filtering_result = tokio::time::timeout(
+        std::time::Duration::from_secs(FILTERING_TIMEOUT_SECS),
+        async {
+            // Run filtering in spawn_blocking to avoid blocking the async runtime
+            tokio::task::spawn_blocking({
+                let tokens_copy = tokens.to_vec();
+                move || filter_tokens_with_reasons(&tokens_copy)
+            }).await
+        }
+    ).await;
+
+    let (eligible_tokens, rejected_tokens) = match filtering_result {
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => {
+            return Err(format!("Token filtering task failed: {}", e));
+        }
+        Err(_) => {
+            return Err(format!("Token filtering timed out after {}s", FILTERING_TIMEOUT_SECS));
+        }
+    };
+
+    // 3. Log filtering statistics  
+    log(
+        LogTag::Trader,
+        "FILTER_STATS",
+        &format!(
+            "Token filtering: {}/{} passed ({:.1}% pass rate) - processed {} tokens",
+            eligible_tokens.len(),
+            tokens.len(),
+            if tokens.len() > 0 { (eligible_tokens.len() as f64 / tokens.len() as f64) * 100.0 } else { 0.0 },
+            tokens.len()
+        )
+    );
+
+    // 4. Log transaction activity statistics (debug mode)
+    if is_debug_trader_enabled() {
+        log_transaction_activity_stats(&tokens);
+    }
+
+    // 5. Debug logging for rejected tokens
+    if is_debug_trader_enabled() && !rejected_tokens.is_empty() {
+        let sample_size = std::cmp::min(5, rejected_tokens.len());
+        for (token, reason) in rejected_tokens.iter().take(sample_size) {
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!("🚫 {} filtered out: {:?}", token.symbol, reason)
+            );
+        }
+        if rejected_tokens.len() > sample_size {
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!(
+                    "... and {} more tokens filtered out",
+                    rejected_tokens.len() - sample_size
+                )
+            );
         }
     }
+
+    Ok(eligible_tokens)
 }
 
 /// Background task to monitor new tokens for entry opportunities
@@ -387,162 +473,14 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             break 'outer;
         }
 
-        ensure_tokens_populated().await;
-
-        // Check for shutdown after token population
-        if check_shutdown_or_delay(&shutdown, Duration::from_millis(10)).await {
-            log(LogTag::Trader, "INFO", "✅ New entries monitor shutdown after token population");
-            break 'outer;
-        }
-
-        let mut tokens: Vec<_> = {
-            // Get tokens from safe system
-            let tokens_from_module = get_tokens_from_safe_system().await;
-
-            // Log total tokens available
-            if is_debug_trader_enabled() {
-                log(
-                    LogTag::Trader,
-                    "DEBUG",
-                    &format!("Total tokens from safe system: {}", tokens_from_module.len())
-                );
-            }
-
-            // Keep all tokens, discovery ensures data freshness
-
-            // Count tokens with liquidity data
-            let with_liquidity = tokens_from_module
-                .iter()
-                .filter(
-                    |token|
-                        token.liquidity
-                            .as_ref()
-                            .and_then(|l| l.usd)
-                            .unwrap_or(0.0) > 0.0
-                )
-                .count();
-
-            if with_liquidity > 0 {
-                log(
-                    LogTag::Trader,
-                    "INFO",
-                    &format!("Processing {} tokens with liquidity", with_liquidity)
-                );
-            }
-
-            tokens_from_module
-        };
-
-        // Sort tokens by transaction activity using centralized filtering system
-        use crate::filtering::{
-            sort_tokens_by_activity,
-            count_tokens_with_transaction_data,
-        };
-        
-        sort_tokens_by_activity(&mut tokens);
-        let tokens_with_txns = count_tokens_with_transaction_data(&tokens);
-
-        // Safety check - if processing is taking too long, log it
-        if cycle_start.elapsed() > Duration::from_secs(ENTRY_CYCLE_TIMEOUT_WARNING_SECS) {
-            log(
-                LogTag::Trader,
-                "WARN",
-                &format!("Token sorting took too long: {:?}", cycle_start.elapsed())
-            );
-        }
-
-        log(
-            LogTag::Trader,
-            "INFO",
-            &format!(
-                "Sorted {} tokens by 5min transaction activity ({} have txn data)",
-                tokens.len(),
-                tokens_with_txns
-            )
-        );
-
-        // ⚡ PERFORMANCE FIX: Select tokens prioritizing high transaction activity
-        // Using centralized filtering system
-        const FILTERING_TIMEOUT_SECS: u64 = 120; // Increased to 120 second timeout for filtering to prevent timeouts
-
-        let tokens_to_process: Vec<Token> = crate::filtering::select_high_activity_tokens(tokens.clone());
-
-        let tokens_to_process = &tokens_to_process;
-
-        // Use centralized filtering system to get eligible tokens WITH TIMEOUT
-        use crate::filtering::{ filter_tokens_with_reasons, get_filtering_stats };
-
-        // Apply timeout to prevent infinite hang on filtering
-        let filtering_result = tokio::time::timeout(
-            std::time::Duration::from_secs(FILTERING_TIMEOUT_SECS),
-            async {
-                // Run filtering in spawn_blocking to avoid blocking the async runtime
-                tokio::task::spawn_blocking({
-                    let tokens_copy = tokens_to_process.to_vec();
-                    move || filter_tokens_with_reasons(&tokens_copy)
-                }).await
-            }
-        ).await;
-
-        let (eligible_tokens, rejected_tokens) = match filtering_result {
-            Ok(Ok(result)) => result,
-            Ok(Err(e)) => {
-                log(LogTag::Trader, "ERROR", &format!("Token filtering task failed: {}", e));
-                continue; // Skip this cycle and try again
-            }
-            Err(_) => {
-                log(
-                    LogTag::Trader,
-                    "WARN",
-                    &format!("⏰ Token filtering timed out after {}s - skipping this cycle", FILTERING_TIMEOUT_SECS)
-                );
+        // Prepare tokens for trading (fetch, sort, filter)
+        let tokens = match prepare_tokens(cycle_start).await {
+            Ok(tokens) => tokens,
+            Err(e) => {
+                log(LogTag::Trader, "ERROR", &format!("Token preparation failed: {}", e));
                 continue; // Skip this cycle and try again
             }
         };
-
-        // Log filtering statistics
-        let (total, passed, pass_rate) = get_filtering_stats(tokens_to_process);
-        log(
-            LogTag::Trader,
-            "FILTER_STATS",
-            &format!(
-                "Token filtering: {}/{} passed ({:.1}% pass rate) - processed {} activity-prioritized tokens",
-                passed,
-                total,
-                pass_rate,
-                tokens_to_process.len()
-            )
-        );
-
-        // Log transaction activity statistics for processed tokens using centralized system
-        if is_debug_trader_enabled() {
-            crate::filtering::log_transaction_activity_stats(tokens_to_process);
-        }
-
-        // Debug: Log some rejected tokens
-        if is_debug_trader_enabled() && !rejected_tokens.is_empty() {
-            let sample_size = std::cmp::min(5, rejected_tokens.len());
-            for (token, reason) in rejected_tokens.iter().take(sample_size) {
-                log(
-                    LogTag::Trader,
-                    "DEBUG",
-                    &format!("🚫 {} filtered out: {:?}", token.symbol, reason)
-                );
-            }
-            if rejected_tokens.len() > sample_size {
-                log(
-                    LogTag::Trader,
-                    "DEBUG",
-                    &format!(
-                        "... and {} more tokens filtered out",
-                        rejected_tokens.len() - sample_size
-                    )
-                );
-            }
-        }
-
-        // Use eligible tokens for trading
-        tokens = eligible_tokens;
 
         // Early return if no tokens to process
         if tokens.is_empty() {

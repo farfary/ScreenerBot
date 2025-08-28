@@ -268,6 +268,12 @@ pub enum FilterReason {
         max_ratio: f64,
     },
     NoTransactionData,
+    
+    // Performance-related filtering
+    PerformanceLimitExceeded {
+        total_tokens: usize,
+        max_allowed: usize,
+    },
 }
 
 /// Result of token filtering
@@ -1866,10 +1872,56 @@ pub fn filter_eligible_tokens(tokens: &[Token]) -> Vec<Token> {
 
 /// Filter a list of tokens and return both eligible and rejected with reasons
 pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, FilterReason)>) {
-    let mut eligible = Vec::new();
-    let mut rejected = Vec::new();
+    // Performance fix: Limit tokens to prevent timeout on large datasets
+    const MAX_TOKENS_FOR_DETAILED_FILTERING: usize = 5000;
+    
+    let (tokens_to_process, pre_filtered_rejected) = if tokens.len() > MAX_TOKENS_FOR_DETAILED_FILTERING {
+        log(
+            LogTag::Filtering,
+            "PERFORMANCE",
+            &format!(
+                "⚡ Large token set detected: {} tokens. Limiting to top {} by liquidity to prevent timeout",
+                tokens.len(),
+                MAX_TOKENS_FOR_DETAILED_FILTERING
+            )
+        );
+        
+        // Sort by liquidity (highest first) and take top tokens
+        let mut sorted_tokens = tokens.to_vec();
+        sorted_tokens.sort_by(|a, b| {
+            let a_liq = a.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
+            let b_liq = b.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
+            b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        
+        let top_tokens = sorted_tokens[..MAX_TOKENS_FOR_DETAILED_FILTERING].to_vec();
+        let excluded_tokens: Vec<(Token, FilterReason)> = sorted_tokens[MAX_TOKENS_FOR_DETAILED_FILTERING..]
+            .iter()
+            .map(|token| (token.clone(), FilterReason::PerformanceLimitExceeded {
+                total_tokens: tokens.len(),
+                max_allowed: MAX_TOKENS_FOR_DETAILED_FILTERING,
+            }))
+            .collect();
+        
+        log(
+            LogTag::Filtering,
+            "PERFORMANCE",
+            &format!(
+                "📊 Performance limiting: Processing top {} tokens, excluding {} lower-liquidity tokens",
+                top_tokens.len(),
+                excluded_tokens.len()
+            )
+        );
+        
+        (top_tokens, excluded_tokens)
+    } else {
+        (tokens.to_vec(), Vec::new())
+    };
 
-    for token in tokens {
+    let mut eligible = Vec::new();
+    let mut rejected = pre_filtered_rejected; // Start with pre-filtered rejected tokens
+
+    for token in &tokens_to_process {
         match filter_token_for_trading(token) {
             FilterResult::Approved => eligible.push(token.clone()),
             FilterResult::Rejected(reason) => rejected.push((token.clone(), reason)),
@@ -2009,6 +2061,7 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             | FilterReason::ExcessiveTransactionActivity { .. }
             | FilterReason::UnhealthyBuySellRatio { .. }
             | FilterReason::NoTransactionData => "Transaction Activity Issues",
+            FilterReason::PerformanceLimitExceeded { .. } => "Performance Limiting",
         };
 
         *reason_counts.entry(reason_type.to_string()).or_insert(0) += 1;
@@ -2037,32 +2090,5 @@ pub fn log_filtering_error(token: &Token, reason: &FilterReason) {
         };
 
         log(LogTag::Filtering, "ERROR", &message);
-    }
-}
-
-/// Main public interface function that combines filtering with logging
-/// This should be used by the trader instead of filter_token_for_trading directly
-pub fn should_buy_token(token: &Token) -> bool {
-    match filter_token_for_trading(token) {
-        FilterResult::Approved => {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "FINAL_APPROVE",
-                    &format!("✅ {} FINAL RESULT: APPROVED for trading", token.symbol)
-                );
-            }
-            true
-        }
-        FilterResult::Rejected(reason) => {
-            // Always log rejections for better debugging
-            log(
-                LogTag::Filtering,
-                "FINAL_REJECT",
-                &format!("❌ {} FINAL RESULT: REJECTED - {:?}", token.symbol, reason)
-            );
-            log_filtering_error(token, &reason);
-            false
-        }
     }
 }
