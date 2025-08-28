@@ -36,20 +36,20 @@ const SOFT_STOP_MEDIUM: f64 = -65.0; // medium liquidity: more patient at -65% (
 const SOFT_STOP_DEFAULT: f64 = -70.0; // small/unknown: more patient at -70% (was -55%)
 
 // ⏳ Time caps (minutes) — MORE PATIENT FOR PROFITS
-const SOFT_TIME_CAP_MIN: f64 = 20.0; // begin time pressure at 45 minutes (was 30)
-const HARD_TIME_CAP_MIN: f64 = 40.0; // must act by 60 minutes (was 45)
+const SOFT_TIME_CAP_MIN: f64 = 45.0; // begin time pressure at 45 minutes (increased from 20)
+const HARD_TIME_CAP_MIN: f64 = 90.0; // must act by 90 minutes (increased from 40)
 
 // 📐 Risk-Reward minimums by liquidity tier (RR = current_gain% / |MAE%|) - MORE TOLERANT
 const REQUIRED_RR_LARGE: f64 = 1.0; // more tolerant for high-liquidity (was 1.2)
 const REQUIRED_RR_MEDIUM: f64 = 1.2; // more tolerant (was 1.4)
-const REQUIRED_RR_DEFAULT: f64 = 1.4; // more tolerant for small/unknown (was 1.6)
+const REQUIRED_RR_DEFAULT: f64 = 1.0; // more tolerant for small/unknown (reduced from 1.4)
 
 // ⏰ OPTIMIZED HOLD TIMES BY SAFETY LEVEL (MINUTES)
 // AGGRESSIVE FOR FAST PROFITS: 0.25 minutes to 45 minutes based on volatility
 const ULTRA_SAFE_MAX_TIME: f64 = 45.0; // Ultra safe tokens - 45 minutes max (reduced from 120)
-const SAFE_MAX_TIME: f64 = 30.0; // Safe tokens - 30 minutes (reduced from 90)
-const MEDIUM_MAX_TIME: f64 = 20.0; // Medium risk tokens - 20 minutes (reduced from 60)
-const RISKY_MAX_TIME: f64 = 15.0; // Risky tokens - 15 minutes (reduced from 45)
+const SAFE_MAX_TIME: f64 = 60.0; // Safe tokens - 60 minutes (increased from 30)
+const MEDIUM_MAX_TIME: f64 = 45.0; // Medium risk tokens - 45 minutes (increased from 20)
+const RISKY_MAX_TIME: f64 = 30.0; // Risky tokens - 30 minutes (increased from 15)
 const DANGEROUS_MAX_TIME: f64 = 10.0; // Dangerous tokens - 10 minutes (reduced from 30)
 const MIN_HOLD_TIME: f64 = 0.25; // ULTRA-FAST: 15 seconds minimum (reduced from 0.5)
 
@@ -92,7 +92,7 @@ const MEGA_PUMP_PERCENT: f64 = 50.0; // 50%+ = mega pump
 const STRONG_MEGA_PERCENT: f64 = 30.0; // 30%+ = strong mega pump
 const MICRO_PUMP_PERCENT: f64 = 8.0; // 8%+ = micro pump (for volatile tokens)
 const PUMP_TIME_WINDOW: f64 = 5.0; // Minutes to analyze for pump detection
-const CONSERVATIVE_PROFIT_MIN: f64 = 8.0; // Don't sell below 8% profit easily (was 5%)
+const CONSERVATIVE_PROFIT_MIN: f64 = 3.0; // Don't sell below 3% profit easily (reduced from 8% to be more realistic)
 const TREND_PROFIT_MIN: f64 = 15.0; // Minimum for trend-based exits (was 12%)
 
 // ⚡ ULTRA-FAST PROFIT-TAKING THRESHOLDS - ADJUSTED TO REQUIRE DECENT PROFITS
