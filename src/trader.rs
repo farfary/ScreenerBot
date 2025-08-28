@@ -39,7 +39,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 4;
+pub const MAX_OPEN_POSITIONS: usize = 8;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
@@ -362,7 +362,19 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
             );
         }
 
-        tokens_from_module
+        // Randomize tokens before filtering to give all tokens fair opportunity
+        let mut randomized_tokens = tokens_from_module;
+        randomized_tokens.shuffle(&mut rand::thread_rng());
+        
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "DEBUG", 
+                &format!("🎲 Randomized {} tokens before filtering", randomized_tokens.len())
+            );
+        }
+        
+        randomized_tokens
     };
 
     // 2. Apply filtering with timeout protection
@@ -427,7 +439,19 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
         }
     }
 
-    Ok(eligible_tokens)
+    // 6. Randomize eligible tokens to ensure fair processing order
+    let mut final_tokens = eligible_tokens;
+    final_tokens.shuffle(&mut rand::thread_rng());
+    
+    if is_debug_trader_enabled() && !final_tokens.is_empty() {
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!("🎲 Randomized {} eligible tokens for processing", final_tokens.len())
+        );
+    }
+
+    Ok(final_tokens)
 }
 
 /// Background task to monitor new tokens for entry opportunities
@@ -519,7 +543,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Process tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
-        // Note: tokens are still sorted by liquidity from highest to lowest
+        // Note: tokens are now randomized to give all tokens fair processing opportunity
         for token in tokens.iter() {
             // Check for shutdown before spawning tasks
             if
