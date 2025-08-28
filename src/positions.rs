@@ -182,8 +182,9 @@ const DUPLICATE_SWAP_PREVENTION_SECS: i64 = 30;
 const POSITION_OPEN_COOLDOWN_SECS: i64 = 0; // No global cooldown (from backup)
 const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 6 * 60; // Re-entry cooldown after closing (from backup)
 
-// Verification safety windows
+// Verification safety windows - reduced for better UX
 const ENTRY_VERIFICATION_MAX_SECS: i64 = 90; // hard cap for entry verification age before treating as timeout
+const EXIT_VERIFICATION_MAX_SECS: i64 = 60; // 1 minute for exit verification (faster than entry)
 const VERIFICATION_GRACE_PERIOD_SECS: i64 = 120; // grace period before aggressive cleanup (2 minutes)
 
 // Sell retry slippages (progressive)
@@ -341,7 +342,12 @@ pub async fn open_position_direct(
 
             let count = state.positions
                 .iter()
-                .filter(|p| { p.position_type == "buy" && p.exit_time.is_none() })
+                .filter(|p| {
+                    p.position_type == "buy" && 
+                    p.exit_time.is_none() &&
+                    // Only count truly open positions for limit checks
+                    (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
+                })
                 .count();
 
             if is_debug_positions_enabled() {
@@ -1075,9 +1081,8 @@ pub async fn close_position_direct(
                 )
         {
             position.exit_transaction_signature = Some(transaction_signature.clone());
-            position.exit_time = Some(exit_time); // Use provided exit_time
-            position.exit_price = Some(exit_price);
-            position.closed_reason = Some(exit_reason.clone());
+            // Don't set exit_time and exit_price until verified - keep position as "closing in progress"
+            position.closed_reason = Some(format!("{}_pending_verification", exit_reason));
 
             if is_debug_positions_enabled() {
                 log(
@@ -1152,14 +1157,37 @@ pub async fn close_position_direct(
         let _ = get_transaction(&sig_for_fetch).await;
     });
 
+    // Quick verification attempt (30 seconds timeout)
+    let quick_verification_result = tokio::time::timeout(
+        Duration::from_secs(30),
+        verify_position_transaction(&transaction_signature)
+    ).await;
+
+    let position_status = match quick_verification_result {
+        Ok(Ok(true)) => {
+            // Verification succeeded quickly - position is truly closed
+            log(LogTag::Positions, "QUICK_VERIFICATION_SUCCESS", 
+                &format!("✅ {} exit verified immediately", symbol));
+            "CLOSED"
+        },
+        _ => {
+            // Verification failed or timed out - keep as "closing in progress"
+            log(LogTag::Positions, "QUICK_VERIFICATION_PENDING", 
+                &format!("⏳ {} exit pending verification (normal - will retry)", symbol));
+            "CLOSING"
+        }
+    };
+
     log(
         LogTag::Positions,
         "SUCCESS",
         &format!(
-            "✅ POSITION CLOSED: {} | TX: {} | Reason: {} | Verification: Pending | Removed from priority pool service",
+            "✅ POSITION {}: {} | TX: {} | Reason: {} | Status: {} | Removed from priority pool service",
+            position_status,
             symbol,
             get_signature_prefix(&transaction_signature),
-            exit_reason
+            exit_reason,
+            position_status
         )
     );
 
@@ -1888,7 +1916,12 @@ pub async fn get_open_positions() -> Vec<Position> {
             let state = GLOBAL_POSITIONS_STATE.lock().await;
             state.positions
                 .iter()
-                .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
+                .filter(|p| {
+                    p.position_type == "buy" && 
+                    p.exit_price.is_none() && 
+                    // Include positions with unverified exit transactions as "open" (closing in progress)
+                    (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
+                })
                 .cloned()
                 .collect()
         }
@@ -1918,7 +1951,11 @@ pub async fn get_closed_positions() -> Vec<Position> {
             let state = GLOBAL_POSITIONS_STATE.lock().await;
             state.positions
                 .iter()
-                .filter(|p| p.exit_price.is_some())
+                .filter(|p| {
+                    // Only truly closed positions (with verified exit or explicit exit_price)
+                    p.exit_price.is_some() && 
+                    (p.transaction_exit_verified || p.exit_transaction_signature.is_none())
+                })
                 .cloned()
                 .collect()
         }
@@ -1942,7 +1979,13 @@ pub async fn is_open_position(mint: &str) -> bool {
             let state = GLOBAL_POSITIONS_STATE.lock().await;
             state.positions
                 .iter()
-                .any(|p| p.mint == mint && p.position_type == "buy" && p.exit_time.is_none())
+                .any(|p| {
+                    p.mint == mint && 
+                    p.position_type == "buy" && 
+                    p.exit_time.is_none() &&
+                    // Include positions that are closing but not yet verified
+                    (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
+                })
         }
     }
 }
@@ -2002,6 +2045,43 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         }
     }
 
+    // For positions with pending exit transactions (closing in progress), use current price for estimation
+    if position.exit_transaction_signature.is_some() && !position.transaction_exit_verified {
+        if let Some(current) = current_price {
+            let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+            let entry_cost = position.entry_size_sol;
+            
+            // Calculate estimated P&L based on current price (closing in progress)
+            if let Some(token_amount) = position.token_amount {
+                let token_decimals_opt = get_token_decimals(&position.mint).await;
+                if let Some(token_decimals) = token_decimals_opt {
+                    let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+                    let current_value = ui_token_amount * current;
+                    
+                    // Account for fees (estimated)
+                    let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+                    let estimated_sell_fee = buy_fee;
+                    let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL;
+                    let net_pnl_sol = current_value - entry_cost - total_fees;
+                    let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
+                    
+                    return (net_pnl_sol, net_pnl_percent);
+                }
+            }
+            
+            // Fallback calculation for closing positions
+            let price_change = (current - entry_price) / entry_price;
+            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+            let estimated_sell_fee = buy_fee;
+            let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL;
+            let fee_percent = (total_fees / entry_cost) * 100.0;
+            let net_pnl_percent = price_change * 100.0 - fee_percent;
+            let net_pnl_sol = (net_pnl_percent / 100.0) * entry_cost;
+            
+            return (net_pnl_sol, net_pnl_percent);
+        }
+    }
+    
     // For closed positions, prioritize sol_received for most accurate P&L
     if let (Some(exit_price), Some(sol_received)) = (position.exit_price, position.sol_received) {
         // Use actual SOL invested vs SOL received for closed positions
@@ -2295,17 +2375,25 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                                 }
                                             };
                                             
-                                            // Only remove if truly timed out (beyond grace period)
+                                            // Progressive timeout handling - different timeouts for different situations
+                                            let is_exit_transaction = {
+                                                let state = GLOBAL_POSITIONS_STATE.lock().await;
+                                                state.positions.iter().any(|p| {
+                                                    p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(&sig_clone)
+                                                })
+                                            };
+                                            
+                                            let timeout_threshold = if is_exit_transaction {
+                                                60 // 1 minute for exit transactions
+                                            } else {
+                                                90 // 1.5 minutes for entry transactions  
+                                            };
+                                            
+                                            // Only remove if truly timed out (beyond progressive grace period)
                                             if e.contains("Verification timeout:") || e.contains("verification timeout") || 
-                                               (e.contains("Transaction not found in system") && verification_age_seconds > VERIFICATION_GRACE_PERIOD_SECS) {
+                                               (e.contains("Transaction not found in system") && verification_age_seconds > timeout_threshold) {
                                                 
-                                                // First check if this is an exit transaction by finding the position
-                                                let is_exit_transaction = {
-                                                    let state = GLOBAL_POSITIONS_STATE.lock().await;
-                                                    state.positions.iter().any(|p| {
-                                                        p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(&sig_clone)
-                                                    })
-                                                };
+                                                // Use the is_exit_transaction we already determined above
                                                 
                                                 if is_exit_transaction {
                                                     // For exit transaction failures, check wallet balance before removing position
@@ -2402,18 +2490,19 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                                             &format!("🔄 Keeping position with failed exit verification: {} - tokens still in wallet", get_signature_prefix(&sig_clone))
                                                         );
                                                         
-                                                        // Mark the exit transaction as failed but keep the position and schedule retry
-                                                        {
-                                                            let mut state = GLOBAL_POSITIONS_STATE.lock().await;
-                                                            if let Some(position) = state.positions.iter_mut().find(|p| {
-                                                                p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(&sig_clone)
-                                                            }) {
-                                                                position.exit_transaction_signature = None; // Clear failed exit transaction
-                                                                log(
-                                                                    LogTag::Positions,
-                                                                    "EXIT_CLEARED",
-                                                                    &format!("🔄 Cleared failed exit transaction for {} - position remains open for retry", position.symbol)
-                                                                );
+                                                                                                // Mark the exit transaction as failed but keep the position and schedule retry
+                                        {
+                                            let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+                                            if let Some(position) = state.positions.iter_mut().find(|p| {
+                                                p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(&sig_clone)
+                                            }) {
+                                                position.exit_transaction_signature = None; // Clear failed exit transaction
+                                                position.closed_reason = Some("exit_retry_pending".to_string()); // Better status tracking
+                                                log(
+                                                    LogTag::Positions,
+                                                    "EXIT_RETRY_SCHEDULED",
+                                                    &format!("🔄 {} exit failed, retry scheduled", position.symbol)
+                                                );
                                                                 
                                                                 // Schedule failed exit retry
                                                                 let mint_for_retry = position.mint.clone();
@@ -3179,7 +3268,12 @@ async fn retry_failed_exit(mint: &str, attempt_count: u32) -> Result<String, Str
         let state = GLOBAL_POSITIONS_STATE.lock().await;
         state.positions
             .iter()
-            .find(|p| p.mint == mint && p.exit_price.is_some() && !p.transaction_exit_verified)
+            .find(|p| {
+                p.mint == mint && 
+                // Position should have failed exit transaction OR be truly open
+                ((p.exit_transaction_signature.is_some() && !p.transaction_exit_verified) ||
+                 (p.exit_transaction_signature.is_none() && p.exit_price.is_none()))
+            })
             .cloned()
     };
 
