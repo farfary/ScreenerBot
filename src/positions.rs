@@ -1667,24 +1667,33 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                         // Use actual SOL received from swap analysis (for sells, use effective_sol_received)
                         position.sol_received = Some(swap_info.effective_sol_received.abs()); // For sell, this is SOL received
                         position.effective_exit_price = Some(swap_info.calculated_price_sol);
+                        
+                        // CRITICAL FIX: Set exit_time and exit_price when exit transaction is verified
+                        // Use accurate blockchain time if available, fallback to current time
+                        let exit_time = if let Some(block_time) = transaction.block_time {
+                            DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or_else(|| Utc::now())
+                        } else {
+                            Utc::now()
+                        };
+                        position.exit_time = Some(exit_time);
+                        position.exit_price = Some(swap_info.calculated_price_sol);
 
                         // Convert fee from SOL to lamports
                         position.exit_fee_lamports = Some(sol_to_lamports(swap_info.fee_sol));
 
                         verified = true;
 
-                        if is_debug_positions_enabled() {
-                            log(
-                                LogTag::Positions,
-                                "POSITION_EXIT_VERIFIED",
-                                &format!(
-                                    "✅ Exit transaction verified for {}: price={:.9} SOL, sol_received={:.6} SOL",
-                                    position.symbol,
-                                    swap_info.calculated_price_sol,
-                                    swap_info.effective_sol_spent.abs()
-                                )
-                            );
-                        }
+                        log(
+                            LogTag::Positions,
+                            "POSITION_EXIT_VERIFIED",
+                            &format!(
+                                "✅ Exit transaction verified for {}: price={:.9} SOL, sol_received={:.6} SOL, exit_time={} - POSITION NOW CLOSED",
+                                position.symbol,
+                                swap_info.calculated_price_sol,
+                                swap_info.effective_sol_received.abs(),
+                                exit_time.format("%H:%M:%S")
+                            )
+                        );
 
                         // Store position for database update (after releasing lock)
                         if position.id.is_some() {
