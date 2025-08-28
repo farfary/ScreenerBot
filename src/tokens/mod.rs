@@ -499,3 +499,10 @@ pub async fn get_token_from_db(mint: &str) -> Option<Token> {
         _ => None,
     }
 }
+
+/// Test function to cleanup near-zero liquidity tokens (for testing purposes)
+pub async fn test_cleanup_near_zero_liquidity(threshold_usd: f64) -> Result<usize, String> {
+    let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
+    db.cleanup_near_zero_liquidity_tokens(threshold_usd).await
+        .map_err(|e| format!("Cleanup failed: {}", e))
+}

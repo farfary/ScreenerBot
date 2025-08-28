@@ -542,6 +542,137 @@ impl TokenDatabase {
         Ok(deleted_count)
     }
 
+    /// Cleanup tokens with near-zero liquidity from the database
+    /// Only removes tokens that have liquidity below threshold AND are older than 1 hour
+    /// This should only be called after fetching and updating latest token data
+    pub async fn cleanup_near_zero_liquidity_tokens(&self, threshold_usd: f64) -> Result<usize, Box<dyn std::error::Error>> {
+        // First, collect the candidate tokens (with database lock)
+        let tokens_to_check = {
+            let connection = self.connection
+                .lock()
+                .map_err(
+                    |_e|
+                        Box::new(
+                            std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                "Database lock error".to_string()
+                            )
+                        ) as Box<dyn std::error::Error>
+                )?;
+
+            // Calculate cutoff time (1 hour ago)
+            let one_hour_ago = chrono::Utc::now() - chrono::Duration::hours(1);
+            let one_hour_ago_str = one_hour_ago.to_rfc3339();
+
+            // Get tokens with near-zero liquidity that are older than 1 hour
+            let mut stmt = connection.prepare(
+                "SELECT mint, symbol, last_updated FROM tokens 
+                 WHERE (liquidity_usd IS NULL OR liquidity_usd < ?2)
+                 AND last_updated < ?1
+                 ORDER BY last_updated ASC"
+            )?;
+
+            let token_rows = stmt.query_map(params![one_hour_ago_str, threshold_usd], |row| {
+                Ok((
+                    row.get::<_, String>("mint")?,
+                    row.get::<_, String>("symbol")?,
+                    row.get::<_, String>("last_updated")?,
+                ))
+            })?;
+
+            let mut tokens_to_check = Vec::new();
+            for row in token_rows {
+                tokens_to_check.push(row?);
+            }
+            tokens_to_check
+        }; // connection lock released here
+
+        if tokens_to_check.is_empty() {
+            return Ok(0);
+        }
+
+        log(
+            LogTag::System,
+            "CLEANUP",
+            &format!("Found {} tokens with liquidity below ${:.1} older than 1 hour", tokens_to_check.len(), threshold_usd)
+        );
+
+        // Check which tokens have open positions - we must not delete these
+        // (this is done outside the database lock to avoid holding it across async calls)
+        let mut tokens_to_delete = Vec::new();
+        for (mint, symbol, last_updated) in tokens_to_check {
+            // Check if this token has an open position
+            if !self.has_open_position(&mint).await {
+                tokens_to_delete.push((mint, symbol, last_updated));
+            }
+        }
+
+        if tokens_to_delete.is_empty() {
+            log(
+                LogTag::System,
+                "CLEANUP",
+                "No tokens eligible for deletion (all have open positions)"
+            );
+            return Ok(0);
+        }
+
+        // Finally, delete the eligible tokens (with database lock)
+        let deleted_count = {
+            let connection = self.connection
+                .lock()
+                .map_err(
+                    |_e|
+                        Box::new(
+                            std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                "Database lock error".to_string()
+                            )
+                        ) as Box<dyn std::error::Error>
+                )?;
+
+            let mut deleted_count = 0;
+            for (mint, symbol, last_updated) in &tokens_to_delete {
+                match connection.execute("DELETE FROM tokens WHERE mint = ?1", params![mint]) {
+                    Ok(rows_affected) => {
+                        if rows_affected > 0 {
+                            deleted_count += 1;
+                            log(
+                                LogTag::System,
+                                "CLEANUP",
+                                &format!(
+                                    "Deleted stale low liquidity token: {} ({}) - last updated: {}",
+                                    symbol,
+                                    mint,
+                                    last_updated
+                                )
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::System,
+                            "ERROR",
+                            &format!("Failed to delete token {}: {}", mint, e)
+                        );
+                    }
+                }
+            }
+            deleted_count
+        }; // connection lock released here
+
+        if deleted_count > 0 {
+            log(
+                LogTag::System,
+                "CLEANUP",
+                &format!("Database cleanup: Removed {} stale tokens with liquidity below ${:.1} (>1h old)", deleted_count, threshold_usd)
+            );
+        } else {
+            log(LogTag::System, "CLEANUP", "Database cleanup: No stale tokens removed");
+        }
+
+        Ok(deleted_count)
+    }
+
     /// Check if a token has an open position
     /// This prevents deletion of tokens that we currently hold
     async fn has_open_position(&self, mint: &str) -> bool {
