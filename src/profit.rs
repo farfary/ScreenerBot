@@ -36,8 +36,8 @@ const SOFT_STOP_MEDIUM: f64 = -65.0; // medium liquidity: more patient at -65% (
 const SOFT_STOP_DEFAULT: f64 = -70.0; // small/unknown: more patient at -70% (was -55%)
 
 // ⏳ Time caps (minutes) — MORE PATIENT FOR PROFITS
-const SOFT_TIME_CAP_MIN: f64 = 45.0; // begin time pressure at 45 minutes (was 30)
-const HARD_TIME_CAP_MIN: f64 = 60.0; // must act by 60 minutes (was 45)
+const SOFT_TIME_CAP_MIN: f64 = 20.0; // begin time pressure at 45 minutes (was 30)
+const HARD_TIME_CAP_MIN: f64 = 40.0; // must act by 60 minutes (was 45)
 
 // 📐 Risk-Reward minimums by liquidity tier (RR = current_gain% / |MAE%|) - MORE TOLERANT
 const REQUIRED_RR_LARGE: f64 = 1.0; // more tolerant for high-liquidity (was 1.2)

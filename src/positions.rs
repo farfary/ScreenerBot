@@ -5,6 +5,7 @@ use crate::{
         PriceResult,
         get_price,
         PriceOptions,
+        get_token_from_db,
         pool::{ add_priority_token, remove_priority_token },
     },
     swaps::{
@@ -125,6 +126,7 @@ pub struct GlobalPositionsState {
     pub last_open_time: Option<DateTime<Utc>>, // Global open cooldown
     pub reentry_cooldowns: HashMap<String, DateTime<Utc>>, // mint -> cooldown_until
     pub exit_verification_deadlines: HashMap<String, DateTime<Utc>>, // signature -> deadline
+    pub failed_exit_retries: HashMap<String, (DateTime<Utc>, u32)>, // mint -> (next_retry, attempt_count)
 }
 
 impl GlobalPositionsState {
@@ -137,6 +139,7 @@ impl GlobalPositionsState {
             last_open_time: None,
             reentry_cooldowns: HashMap::new(),
             exit_verification_deadlines: HashMap::new(),
+            failed_exit_retries: HashMap::new(),
         }
     }
 }
@@ -177,7 +180,7 @@ const SWAP_ATTEMPT_COOLDOWN_SECONDS: i64 = 30;
 const BALANCE_CACHE_DURATION_SECONDS: i64 = 30;
 const DUPLICATE_SWAP_PREVENTION_SECS: i64 = 30;
 const POSITION_OPEN_COOLDOWN_SECS: i64 = 0; // No global cooldown (from backup)
-const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 15; // Re-entry cooldown after closing (from backup)
+const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 6 * 60; // Re-entry cooldown after closing (from backup)
 
 // Verification safety windows
 const ENTRY_VERIFICATION_MAX_SECS: i64 = 90; // hard cap for entry verification age before treating as timeout
@@ -185,6 +188,11 @@ const VERIFICATION_GRACE_PERIOD_SECS: i64 = 120; // grace period before aggressi
 
 // Sell retry slippages (progressive)
 const SELL_RETRY_SLIPPAGES: &[f64] = &[3.0, 5.0, 8.0, 12.0, 20.0];
+
+// Failed exit retry configuration
+const FAILED_EXIT_RETRY_DELAY_MINUTES: u64 = 2; // Wait 2 minutes before retrying failed exit
+const MAX_FAILED_EXIT_RETRIES: u32 = 5; // Maximum 5 retry attempts for failed exits
+const FAILED_EXIT_RETRY_SLIPPAGES: &[f64] = &[5.0, 8.0, 12.0, 15.0, 20.0]; // Progressive slippage for failed exits
 
 // ==================== POSITION LOCKING ====================
 
@@ -2136,6 +2144,7 @@ pub async fn run_background_position_tasks(shutdown: Arc<Notify>) {
     let shutdown_clone1 = shutdown.clone();
     let shutdown_clone2 = shutdown.clone();
     let shutdown_clone3 = shutdown.clone();
+    let shutdown_clone4 = shutdown.clone();
 
     // Task 1: Verify pending transactions in parallel
     tokio::spawn(async move {
@@ -2150,6 +2159,11 @@ pub async fn run_background_position_tasks(shutdown: Arc<Notify>) {
     // Task 3: Retry failed operations in parallel
     tokio::spawn(async move {
         retry_failed_operations_parallel(shutdown_clone3).await;
+    });
+
+    // Task 4: Process failed exit retries in parallel
+    tokio::spawn(async move {
+        process_failed_exit_retries_parallel(shutdown_clone4).await;
     });
 }
 
@@ -2388,7 +2402,7 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                                             &format!("🔄 Keeping position with failed exit verification: {} - tokens still in wallet", get_signature_prefix(&sig_clone))
                                                         );
                                                         
-                                                        // Mark the exit transaction as failed but keep the position
+                                                        // Mark the exit transaction as failed but keep the position and schedule retry
                                                         {
                                                             let mut state = GLOBAL_POSITIONS_STATE.lock().await;
                                                             if let Some(position) = state.positions.iter_mut().find(|p| {
@@ -2400,6 +2414,12 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                                                     "EXIT_CLEARED",
                                                                     &format!("🔄 Cleared failed exit transaction for {} - position remains open for retry", position.symbol)
                                                                 );
+                                                                
+                                                                // Schedule failed exit retry
+                                                                let mint_for_retry = position.mint.clone();
+                                                                tokio::spawn(async move {
+                                                                    schedule_failed_exit_retry(&mint_for_retry, 0).await;
+                                                                });
                                                             }
                                                         }
                                                         
@@ -2771,6 +2791,113 @@ async fn retry_failed_operations_parallel(shutdown: Arc<Notify>) {
     }
 }
 
+/// Process failed exit retries with parallel processing
+async fn process_failed_exit_retries_parallel(shutdown: Arc<Notify>) {
+    log(LogTag::Positions, "STARTUP", "🔄 Starting parallel failed exit retry task");
+
+    loop {
+        tokio::select! {
+            _ = shutdown.notified() => {
+                log(LogTag::Positions, "SHUTDOWN", "🛑 Stopping failed exit retry task");
+                break;
+            }
+            _ = sleep(Duration::from_secs(60)) => {
+                // Get failed exit retries ready for processing
+                let retry_candidates: Vec<(String, u32)> = {
+                    let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+                    let now = Utc::now();
+                    let mut candidates = Vec::new();
+
+                    // Find retry candidates that are ready (past their retry time)
+                    let ready_mints: Vec<String> = state.failed_exit_retries
+                        .iter()
+                        .filter_map(|(mint, (next_retry, attempt_count))| {
+                            if now >= *next_retry && *attempt_count < MAX_FAILED_EXIT_RETRIES {
+                                Some((mint.clone(), *attempt_count))
+                            } else {
+                                None
+                            }
+                        })
+                        .map(|(mint, count)| {
+                            candidates.push((mint.clone(), count));
+                            mint
+                        })
+                        .collect();
+
+                    // Remove ready candidates from retry queue (they'll be re-added if they fail again)
+                    for mint in ready_mints {
+                        state.failed_exit_retries.remove(&mint);
+                    }
+
+                    candidates
+                };
+
+                if !retry_candidates.is_empty() {
+                    log(
+                        LogTag::Positions,
+                        "FAILED_EXIT_RETRY_PROCESSING",
+                        &format!("🔄 Processing {} failed exit retries", retry_candidates.len())
+                    );
+
+                    // Process retries in batches
+                    for batch in retry_candidates.chunks(3) { // Smaller batches for failed exit retries
+                        let retry_futures: Vec<_> = batch.iter().map(|(mint, attempt_count)| {
+                            let mint_clone = mint.clone();
+                            let attempts = *attempt_count;
+                            async move {
+                                match retry_failed_exit(&mint_clone, attempts).await {
+                                    Ok(signature) => {
+                                        log(
+                                            LogTag::Positions,
+                                            "FAILED_EXIT_RETRY_SUCCESS",
+                                            &format!("✅ Failed exit retry successful for {} with signature {}", get_mint_prefix(&mint_clone), get_signature_prefix(&signature))
+                                        );
+                                        None // Success, no need to retry again
+                                    }
+                                    Err(e) => {
+                                        log(
+                                            LogTag::Positions,
+                                            "FAILED_EXIT_RETRY_FAILED",
+                                            &format!("❌ Failed exit retry failed for {}: {}", get_mint_prefix(&mint_clone), e)
+                                        );
+                                        Some((mint_clone, attempts + 1)) // Failed, will retry if under limit
+                                    }
+                                }
+                            }
+                        }).collect();
+
+                        // Process retry batch in parallel
+                        let results = futures::future::join_all(retry_futures).await;
+                        
+                        // Re-schedule failed retries
+                        let failed_retries: Vec<(String, u32)> = results.into_iter().filter_map(|r| r).collect();
+                        if !failed_retries.is_empty() {
+                            let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+                            
+                            for (mint, attempts) in failed_retries {
+                                if attempts < MAX_FAILED_EXIT_RETRIES {
+                                    let next_retry = Utc::now() + chrono::Duration::minutes(FAILED_EXIT_RETRY_DELAY_MINUTES as i64);
+                                    state.failed_exit_retries.insert(mint, (next_retry, attempts));
+                                } else {
+                                    log(
+                                        LogTag::Positions,
+                                        "FAILED_EXIT_RETRY_EXHAUSTED",
+                                        &format!("❌ Maximum failed exit retry attempts reached for {}", get_mint_prefix(&mint))
+                                    );
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if is_debug_positions_enabled() {
+                        log(LogTag::Positions, "DEBUG", "🔄 No failed exit retries ready");
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ==================== HELPER FUNCTIONS ====================
 
 /// Get safe truncated mint prefix for logging
@@ -2887,6 +3014,26 @@ pub async fn initialize_positions_system() -> Result<(), String> {
 
     // Global state is already initialized by LazyLock
 
+    // Fix any existing failed exit positions (like CHAMP)
+    match fix_failed_exit_positions().await {
+        Ok(fixed_count) => {
+            if fixed_count > 0 {
+                log(
+                    LogTag::Positions,
+                    "STARTUP",
+                    &format!("🔧 Fixed {} failed exit positions during startup", fixed_count)
+                );
+            }
+        }
+        Err(e) => {
+            log(
+                LogTag::Positions,
+                "STARTUP_WARNING",
+                &format!("⚠️ Failed to fix failed exit positions during startup: {}", e)
+            );
+        }
+    }
+
     log(LogTag::Positions, "STARTUP", "✅ Positions system initialized");
     Ok(())
 }
@@ -2945,6 +3092,38 @@ async fn mark_actively_selling(mint: &str) {
     active_sells.insert(mint.to_string());
 }
 
+/// Schedule a failed exit retry for a position
+async fn schedule_failed_exit_retry(mint: &str, attempt_count: u32) {
+    let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+    
+    if attempt_count < MAX_FAILED_EXIT_RETRIES {
+        let next_retry = Utc::now() + chrono::Duration::minutes(FAILED_EXIT_RETRY_DELAY_MINUTES as i64);
+        state.failed_exit_retries.insert(mint.to_string(), (next_retry, attempt_count));
+        
+        log(
+            LogTag::Positions,
+            "FAILED_EXIT_SCHEDULED",
+            &format!(
+                "🔄 Scheduled failed exit retry for {} (attempt {}/{}), next retry in {} minutes",
+                get_mint_prefix(mint),
+                attempt_count + 1,
+                MAX_FAILED_EXIT_RETRIES,
+                FAILED_EXIT_RETRY_DELAY_MINUTES
+            )
+        );
+    } else {
+        log(
+            LogTag::Positions,
+            "FAILED_EXIT_MAX_RETRIES",
+            &format!(
+                "❌ Maximum failed exit retries reached for {} ({} attempts)",
+                get_mint_prefix(mint),
+                MAX_FAILED_EXIT_RETRIES
+            )
+        );
+    }
+}
+
 /// Remove position from actively selling
 async fn unmark_actively_selling(mint: &str) {
     let mut active_sells = ACTIVE_SELLS.write().await;
@@ -2980,6 +3159,99 @@ async fn cache_balance(mint: &str, balance: f64) {
     balance_cache.retain(|_, (_, cached_at)| {
         now.signed_duration_since(*cached_at).num_seconds() < BALANCE_CACHE_DURATION_SECONDS
     });
+}
+
+/// Retry a failed exit transaction for a position
+async fn retry_failed_exit(mint: &str, attempt_count: u32) -> Result<String, String> {
+    log(
+        LogTag::Positions,
+        "FAILED_EXIT_RETRY",
+        &format!(
+            "🔄 Retrying failed exit for {} (attempt {}/{})",
+            get_mint_prefix(mint),
+            attempt_count + 1,
+            MAX_FAILED_EXIT_RETRIES
+        )
+    );
+
+    // Get the position
+    let position = {
+        let state = GLOBAL_POSITIONS_STATE.lock().await;
+        state.positions
+            .iter()
+            .find(|p| p.mint == mint && p.exit_price.is_some() && !p.transaction_exit_verified)
+            .cloned()
+    };
+
+    let position = match position {
+        Some(pos) => pos,
+        None => {
+            return Err(format!("Position not found for failed exit retry: {}", get_mint_prefix(mint)));
+        }
+    };
+
+    // Get current price for exit
+    let current_price = get_price(&mint, Some(PriceOptions::simple()), false)
+        .await
+        .and_then(|r| r.best_sol_price())
+        .unwrap_or(position.entry_price);
+
+    // Get token object from database
+    let token = match get_token_from_db(mint).await {
+        Some(token) => token,
+        None => {
+            log(
+                LogTag::Positions,
+                "FAILED_EXIT_RETRY_TOKEN_ERROR",
+                &format!("❌ Could not retrieve token data for {} from database", get_mint_prefix(mint))
+            );
+            return Err(format!("Token not found in database: {}", get_mint_prefix(mint)));
+        }
+    };
+
+    // Use higher slippage for failed exit retries
+    let slippage = FAILED_EXIT_RETRY_SLIPPAGES
+        .get(attempt_count as usize)
+        .copied()
+        .unwrap_or(20.0);
+
+    log(
+        LogTag::Positions,
+        "FAILED_EXIT_RETRY_SLIPPAGE",
+        &format!(
+            "📊 Using {:.1}% slippage for failed exit retry of {}",
+            slippage,
+            position.symbol
+        )
+    );
+
+    // Try to close the position again with higher slippage
+    match close_position_direct(&mint, &token, current_price, "failed_exit_retry".to_string(), Utc::now()).await {
+        Ok(signature) => {
+            log(
+                LogTag::Positions,
+                "FAILED_EXIT_RETRY_SUCCESS",
+                &format!(
+                    "✅ Failed exit retry successful for {} with signature {}",
+                    position.symbol,
+                    get_signature_prefix(&signature)
+                )
+            );
+            Ok(signature)
+        }
+        Err(e) => {
+            log(
+                LogTag::Positions,
+                "FAILED_EXIT_RETRY_FAILED",
+                &format!(
+                    "❌ Failed exit retry failed for {}: {}",
+                    position.symbol,
+                    e
+                )
+            );
+            Err(e)
+        }
+    }
 }
 
 // ==================== DATABASE SYNC HELPERS ====================
@@ -3149,4 +3421,100 @@ pub async fn reload_positions_from_database() -> Result<(), String> {
     );
 
     Ok(())
+}
+
+/// Fix positions with failed exit transactions that still have tokens in wallet
+pub async fn fix_failed_exit_positions() -> Result<usize, String> {
+    log(LogTag::Positions, "FIX_START", "🔧 Starting failed exit position fix");
+
+    let wallet_address = match get_wallet_address() {
+        Ok(addr) => addr,
+        Err(e) => {
+            return Err(format!("Failed to get wallet address: {}", e));
+        }
+    };
+
+    let mut fixed_count = 0;
+    let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+
+    for position in &mut state.positions {
+        // Check for positions that have exit transaction but are not verified
+        if position.exit_transaction_signature.is_some() && !position.transaction_exit_verified {
+            // Check if tokens are still in wallet
+            match get_token_balance(&wallet_address, &position.mint).await {
+                Ok(balance) => {
+                    if balance > 0 {
+                        log(
+                            LogTag::Positions,
+                            "FIX_DETECTED",
+                            &format!(
+                                "🔧 Found failed exit position {} with {} tokens still in wallet",
+                                position.symbol,
+                                balance
+                            )
+                        );
+
+                        // Clear failed exit transaction data
+                        position.exit_transaction_signature = None;
+                        position.exit_time = None;
+                        position.exit_price = None;
+                        position.transaction_exit_verified = false;
+                        position.sol_received = None;
+                        position.effective_exit_price = None;
+                        position.exit_fee_lamports = None;
+                        position.closed_reason = None;
+
+                        // Update database
+                        if let Some(position_id) = position.id {
+                            tokio::spawn({
+                                let position_clone = position.clone();
+                                async move {
+                                    if let Err(e) = update_position(&position_clone).await {
+                                        log(
+                                            LogTag::Positions,
+                                            "FIX_DB_ERROR",
+                                            &format!("❌ Failed to update position {} in database: {}", position_clone.symbol, e)
+                                        );
+                                    } else {
+                                        log(
+                                            LogTag::Positions,
+                                            "FIX_DB_SUCCESS",
+                                            &format!("✅ Updated position {} in database", position_clone.symbol)
+                                        );
+                                    }
+                                }
+                            });
+                        }
+
+                        // Schedule retry
+                        let mint_for_retry = position.mint.clone();
+                        tokio::spawn(async move {
+                            schedule_failed_exit_retry(&mint_for_retry, 0).await;
+                        });
+
+                        fixed_count += 1;
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Positions,
+                        "FIX_BALANCE_ERROR",
+                        &format!("❌ Could not check balance for {}: {}", position.symbol, e)
+                    );
+                }
+            }
+        }
+    }
+
+    if fixed_count > 0 {
+        log(
+            LogTag::Positions,
+            "FIX_COMPLETE",
+            &format!("✅ Fixed {} failed exit positions", fixed_count)
+        );
+    } else {
+        log(LogTag::Positions, "FIX_COMPLETE", "✅ No failed exit positions found");
+    }
+
+    Ok(fixed_count)
 }

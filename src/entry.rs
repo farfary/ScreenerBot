@@ -30,8 +30,8 @@ const TARGET_LIQUIDITY_MIN: f64 = 100.0; // Reduced from 1000 to 100 - catch ver
 const TARGET_LIQUIDITY_MAX: f64 = 10_000_000.0; // Increased from 500k to 10M - allow big tokens
 
 // DROP PERCENTAGE RANGES (Less aggressive - catch smaller drops)
-const DROP_PERCENT_MIN: f64 = 5.0; // Reduced from 3% to 1% - catch micro drops
-const DROP_PERCENT_MAX: f64 = 15.0; // Increased from 9% to 15% - wider range
+const DROP_PERCENT_MIN: f64 = 8.0; // Reduced from 3% to 1% - catch micro drops
+const DROP_PERCENT_MAX: f64 = 20.0; // Increased from 9% to 15% - wider range
 const DROP_PERCENT_ULTRA_MAX: f64 = 50.0; // Increased from 30% to 50% - allow deeper drops
 
 // TIME WINDOWS FOR ANALYSIS (Multiple ultra-aggressive timeframes)

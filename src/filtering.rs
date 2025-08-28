@@ -36,7 +36,7 @@ use chrono::{ Duration as ChronoDuration, Utc };
 // ===== AGE FILTERING PARAMETERS =====
 /// Minimum token age in seconds before trading
 /// LEGENDARY MODE: No age restriction - trade fresh gems immediately!
-pub const MIN_TOKEN_AGE_SECONDS: i64 = 0; // 0 seconds - catch gems the moment they're born!
+pub const MIN_TOKEN_AGE_SECONDS: i64 = 24 * 60 * 60; // 0 seconds - catch gems the moment they're born!
 
 /// Maximum token age in seconds
 /// Extended to catch both new gems and established tokens
@@ -67,7 +67,7 @@ pub const GEM_HUNTING_MIN_LIQUIDITY_USD: f64 = 0.1; // God-tier aggressive mode
 
 /// MARKET CAP FILTERING - Avoid large market cap tokens that won't have big moves
 /// Maximum market cap in USD to focus on micro-cap gems
-pub const MAX_MARKET_CAP_USD: f64 = 50_000_000.0; // $500K max market cap for moonshot hunting
+pub const MAX_MARKET_CAP_USD: f64 = 50_000_000_000.0; // $500K max market cap for moonshot hunting
 
 /// Minimum volume/liquidity ratio for activity detection
 /// High ratio indicates active trading despite small liquidity (pump signals)
@@ -93,10 +93,10 @@ pub const MAX_CRITICAL_RISK_ISSUES: usize = 5; // Accept critical issues for moo
 
 // ===== LP LOCK SECURITY PARAMETERS =====
 /// Minimum percentage of LP tokens that must be locked
-pub const MIN_LP_LOCK_PERCENTAGE: f64 = 50.0;
+pub const MIN_LP_LOCK_PERCENTAGE: f64 = 80.0;
 
 /// Minimum percentage for new/risky tokens
-pub const MIN_LP_LOCK_PERCENTAGE_NEW_TOKENS: f64 = 50.0;
+pub const MIN_LP_LOCK_PERCENTAGE_NEW_TOKENS: f64 = 80.0;
 
 // ===== HISTORICAL PERFORMANCE PARAMETERS =====
 /// Maximum acceptable loss rate for historical performance (0.0-1.0)
