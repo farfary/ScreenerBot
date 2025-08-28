@@ -44,6 +44,13 @@ use crate::{
         get_open_positions as db_get_open_positions,
         get_closed_positions as db_get_closed_positions,
         get_position_by_mint as db_get_position_by_mint,
+        save_token_snapshot,
+        TokenSnapshot,
+    },
+    tokens::{
+        dexscreener::get_token_from_mint_global_api,
+        rugcheck::RugcheckResponse,
+        get_token_rugcheck_data_safe,
     },
 };
 use chrono::{ DateTime, Utc, Duration as ChronoDuration };
@@ -222,6 +229,299 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
     }
 
     PositionLockGuard { mint: mint_key }
+}
+
+// ==================== TOKEN SNAPSHOT FUNCTIONS ====================
+
+/// Fetch latest token data from APIs and create a snapshot
+async fn fetch_and_create_token_snapshot(
+    position_id: i64,
+    mint: &str,
+    snapshot_type: &str,
+) -> Result<TokenSnapshot, String> {
+    let fetch_start = Utc::now();
+    
+    if is_debug_positions_enabled() {
+        log(
+            LogTag::Positions,
+            "SNAPSHOT_FETCH",
+            &format!("Fetching latest token data for {} snapshot of {}", snapshot_type, safe_truncate(mint, 8))
+        );
+    }
+
+    // Fetch latest data from DexScreener API
+    let dex_token = match get_token_from_mint_global_api(mint).await {
+        Ok(Some(token)) => Some(token),
+        Ok(None) => {
+            log(
+                LogTag::Positions,
+                "SNAPSHOT_NO_DEX_DATA",
+                &format!("No DexScreener data found for {}", safe_truncate(mint, 8))
+            );
+            None
+        }
+        Err(e) => {
+            log(
+                LogTag::Positions,
+                "SNAPSHOT_DEX_ERROR",
+                &format!("Error fetching DexScreener data for {}: {}", safe_truncate(mint, 8), e)
+            );
+            None
+        }
+    };
+
+    // Fetch latest rugcheck data
+    let rugcheck_data = match get_token_rugcheck_data_safe(mint).await {
+        Ok(Some(data)) => Some(data),
+        Ok(None) => {
+            log(
+                LogTag::Positions,
+                "SNAPSHOT_NO_RUGCHECK",
+                &format!("No rugcheck data found for {}", safe_truncate(mint, 8))
+            );
+            None
+        }
+        Err(e) => {
+            log(
+                LogTag::Positions,
+                "SNAPSHOT_RUGCHECK_ERROR",
+                &format!("Error fetching rugcheck data for {}: {}", safe_truncate(mint, 8), e)
+            );
+            None
+        }
+    };
+
+    // Calculate data freshness score (0-100)
+    let fetch_duration_ms = Utc::now().signed_duration_since(fetch_start).num_milliseconds();
+    let freshness_score = if fetch_duration_ms < 1000 {
+        100 // Very fresh, under 1 second
+    } else if fetch_duration_ms < 5000 {
+        80  // Good, under 5 seconds
+    } else if fetch_duration_ms < 10000 {
+        60  // OK, under 10 seconds
+    } else if fetch_duration_ms < 30000 {
+        40  // Slow, under 30 seconds
+    } else {
+        20  // Very slow, over 30 seconds
+    };
+
+    // Extract DexScreener data
+    let (symbol, name, price_sol, price_usd, price_native, dex_id, pair_address, pair_url,
+         fdv, market_cap, pair_created_at, liquidity_usd, liquidity_base, liquidity_quote,
+         volume_h24, volume_h6, volume_h1, volume_m5,
+         txns_h24_buys, txns_h24_sells, txns_h6_buys, txns_h6_sells,
+         txns_h1_buys, txns_h1_sells, txns_m5_buys, txns_m5_sells,
+         price_change_h24, price_change_h6, price_change_h1, price_change_m5) = 
+        if let Some(ref token) = dex_token {
+            (
+                Some(token.symbol.clone()),
+                Some(token.name.clone()),
+                token.price_dexscreener_sol,
+                token.price_dexscreener_usd,
+                token.price_dexscreener_sol, // Use SOL price as native
+                token.dex_id.clone(),
+                token.pair_address.clone(),
+                token.pair_url.clone(),
+                token.fdv,
+                token.market_cap,
+                token.created_at.map(|dt| dt.timestamp()),
+                token.liquidity.as_ref().and_then(|l| l.usd),
+                token.liquidity.as_ref().and_then(|l| l.base),
+                token.liquidity.as_ref().and_then(|l| l.quote),
+                token.volume.as_ref().and_then(|v| v.h24),
+                token.volume.as_ref().and_then(|v| v.h6),
+                token.volume.as_ref().and_then(|v| v.h1),
+                token.volume.as_ref().and_then(|v| v.m5),
+                token.txns.as_ref().and_then(|t| t.h24.as_ref().and_then(|h| h.buys)),
+                token.txns.as_ref().and_then(|t| t.h24.as_ref().and_then(|h| h.sells)),
+                token.txns.as_ref().and_then(|t| t.h6.as_ref().and_then(|h| h.buys)),
+                token.txns.as_ref().and_then(|t| t.h6.as_ref().and_then(|h| h.sells)),
+                token.txns.as_ref().and_then(|t| t.h1.as_ref().and_then(|h| h.buys)),
+                token.txns.as_ref().and_then(|t| t.h1.as_ref().and_then(|h| h.sells)),
+                token.txns.as_ref().and_then(|t| t.m5.as_ref().and_then(|h| h.buys)),
+                token.txns.as_ref().and_then(|t| t.m5.as_ref().and_then(|h| h.sells)),
+                token.price_change.as_ref().and_then(|pc| pc.h24),
+                token.price_change.as_ref().and_then(|pc| pc.h6),
+                token.price_change.as_ref().and_then(|pc| pc.h1),
+                token.price_change.as_ref().and_then(|pc| pc.m5),
+            )
+        } else {
+            (None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+             None, None, None, None, None, None, None, None, None, None, None, None,
+             None, None, None, None)
+        };
+
+    // Extract rugcheck data
+    let (rugcheck_score, rugcheck_score_normalised, rugcheck_rugged, rugcheck_risks_json,
+         rugcheck_mint_authority, rugcheck_freeze_authority, rugcheck_creator, rugcheck_creator_balance,
+         rugcheck_total_holders, rugcheck_total_market_liquidity, rugcheck_total_stable_liquidity,
+         rugcheck_total_lp_providers, rugcheck_lp_locked_pct, rugcheck_lp_locked_usd,
+         rugcheck_transfer_fee_pct, rugcheck_transfer_fee_max_amount, rugcheck_jup_verified, rugcheck_jup_strict,
+         token_uri, token_description, token_image, token_website, token_twitter, token_telegram) = 
+        if let Some(ref data) = rugcheck_data {
+            let risks_json = if let Some(risks) = &data.risks {
+                match serde_json::to_string(risks) {
+                    Ok(json) => Some(json),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
+
+            let lp_data = data.markets.as_ref()
+                .and_then(|markets| markets.first())
+                .and_then(|market| market.lp.as_ref());
+
+            (
+                data.score,
+                data.score_normalised,
+                data.rugged,
+                risks_json,
+                data.mint_authority.as_ref().and_then(|ma| serde_json::to_string(ma).ok()),
+                data.freeze_authority.as_ref().and_then(|fa| serde_json::to_string(fa).ok()),
+                data.creator.clone(),
+                data.creator_balance.clone(),
+                data.total_holders,
+                data.total_market_liquidity,
+                data.total_stable_liquidity,
+                data.total_lp_providers,
+                lp_data.and_then(|lp| lp.lp_locked_pct),
+                lp_data.and_then(|lp| lp.lp_locked_usd),
+                data.transfer_fee.as_ref().and_then(|tf| tf.pct),
+                data.transfer_fee.as_ref().and_then(|tf| tf.max_amount.clone()),
+                data.verification.as_ref().and_then(|v| v.jup_verified),
+                data.verification.as_ref().and_then(|v| v.jup_strict),
+                data.token_meta.as_ref().and_then(|tm| tm.uri.clone()),
+                data.file_meta.as_ref().and_then(|fm| fm.description.clone()),
+                data.file_meta.as_ref().and_then(|fm| fm.image.clone()),
+                None, // website - extract from verification links if needed
+                None, // twitter - extract from verification links if needed
+                None, // telegram - extract from verification links if needed
+            )
+        } else {
+            (None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+             None, None, None, None, None, None, None, None, None, None)
+        };
+
+    // Create snapshot
+    let snapshot = TokenSnapshot {
+        id: None,
+        position_id,
+        snapshot_type: snapshot_type.to_string(),
+        mint: mint.to_string(),
+        symbol,
+        name,
+        price_sol,
+        price_usd,
+        price_native,
+        dex_id,
+        pair_address,
+        pair_url,
+        fdv,
+        market_cap,
+        pair_created_at,
+        liquidity_usd,
+        liquidity_base,
+        liquidity_quote,
+        volume_h24,
+        volume_h6,
+        volume_h1,
+        volume_m5,
+        txns_h24_buys,
+        txns_h24_sells,
+        txns_h6_buys,
+        txns_h6_sells,
+        txns_h1_buys,
+        txns_h1_sells,
+        txns_m5_buys,
+        txns_m5_sells,
+        price_change_h24,
+        price_change_h6,
+        price_change_h1,
+        price_change_m5,
+        rugcheck_score,
+        rugcheck_score_normalised,
+        rugcheck_rugged,
+        rugcheck_risks_json,
+        rugcheck_mint_authority,
+        rugcheck_freeze_authority,
+        rugcheck_creator,
+        rugcheck_creator_balance,
+        rugcheck_total_holders,
+        rugcheck_total_market_liquidity,
+        rugcheck_total_stable_liquidity,
+        rugcheck_total_lp_providers,
+        rugcheck_lp_locked_pct,
+        rugcheck_lp_locked_usd,
+        rugcheck_transfer_fee_pct,
+        rugcheck_transfer_fee_max_amount,
+        rugcheck_jup_verified,
+        rugcheck_jup_strict,
+        token_uri,
+        token_description,
+        token_image,
+        token_website,
+        token_twitter,
+        token_telegram,
+        snapshot_time: Utc::now(),
+        api_fetch_time: fetch_start,
+        data_freshness_score: freshness_score,
+    };
+
+    log(
+        LogTag::Positions,
+        "SNAPSHOT_CREATED",
+        &format!(
+            "Created {} snapshot for {} - freshness: {}/100, price: {:?} SOL, rugcheck: {:?}",
+            snapshot_type,
+            safe_truncate(mint, 8),
+            freshness_score,
+            price_sol,
+            rugcheck_score_normalised.or(rugcheck_score)
+        )
+    );
+
+    Ok(snapshot)
+}
+
+/// Save token snapshot for a position
+pub async fn save_position_token_snapshot(
+    position_id: i64,
+    mint: &str,
+    snapshot_type: &str,
+) -> Result<(), String> {
+    // Fetch and create snapshot
+    let snapshot = fetch_and_create_token_snapshot(position_id, mint, snapshot_type).await?;
+    
+    // Save to database
+    match save_token_snapshot(&snapshot).await {
+        Ok(snapshot_id) => {
+            log(
+                LogTag::Positions,
+                "SNAPSHOT_SAVED",
+                &format!(
+                    "Saved {} snapshot for {} with ID {}",
+                    snapshot_type,
+                    safe_truncate(mint, 8),
+                    snapshot_id
+                )
+            );
+            Ok(())
+        }
+        Err(e) => {
+            log(
+                LogTag::Positions,
+                "SNAPSHOT_SAVE_ERROR",
+                &format!(
+                    "Failed to save {} snapshot for {}: {}",
+                    snapshot_type,
+                    safe_truncate(mint, 8),
+                    e
+                )
+            );
+            Err(e)
+        }
+    }
 }
 
 // ==================== CORE POSITION OPERATIONS ====================
@@ -642,6 +942,21 @@ pub async fn open_position_direct(
                     "DB_SAVE",
                     &format!("Position saved to database with ID {}", id)
                 );
+
+                // Save opening token snapshot (async, non-blocking)
+                {
+                    let mint_clone = token.mint.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = save_position_token_snapshot(id, &mint_clone, "opening").await {
+                            log(
+                                LogTag::Positions,
+                                "SNAPSHOT_WARN",
+                                &format!("Failed to save opening snapshot for {}: {}", safe_truncate(&mint_clone, 8), e)
+                            );
+                        }
+                    });
+                }
+
                 id
             }
             Err(e) => {
@@ -1824,6 +2139,21 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                         position.transaction_exit_verified
                     )
                 );
+
+                // Save closing token snapshot if this is an exit transaction verification
+                if position.transaction_exit_verified && position.id.is_some() {
+                    let position_id = position.id.unwrap();
+                    let mint_clone = position.mint.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = save_position_token_snapshot(position_id, &mint_clone, "closing").await {
+                            log(
+                                LogTag::Positions,
+                                "SNAPSHOT_WARN",
+                                &format!("Failed to save closing snapshot for {}: {}", safe_truncate(&mint_clone, 8), e)
+                            );
+                        }
+                    });
+                }
 
                 // Only remove from pending verifications AFTER successful database update
                 {

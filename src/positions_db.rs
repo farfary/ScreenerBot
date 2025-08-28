@@ -114,6 +114,82 @@ CREATE TABLE IF NOT EXISTS position_metadata (
 );
 "#;
 
+const SCHEMA_TOKEN_SNAPSHOTS: &str =
+    r#"
+CREATE TABLE IF NOT EXISTS token_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    position_id INTEGER NOT NULL,
+    snapshot_type TEXT NOT NULL, -- 'opening' or 'closing'
+    mint TEXT NOT NULL,
+    -- DexScreener token data
+    symbol TEXT,
+    name TEXT,
+    price_sol REAL,
+    price_usd REAL,
+    price_native REAL,
+    dex_id TEXT,
+    pair_address TEXT,
+    pair_url TEXT,
+    fdv REAL,
+    market_cap REAL,
+    pair_created_at INTEGER,
+    -- Liquidity data
+    liquidity_usd REAL,
+    liquidity_base REAL,
+    liquidity_quote REAL,
+    -- Volume data
+    volume_h24 REAL,
+    volume_h6 REAL,
+    volume_h1 REAL,
+    volume_m5 REAL,
+    -- Transaction stats
+    txns_h24_buys INTEGER,
+    txns_h24_sells INTEGER,
+    txns_h6_buys INTEGER,
+    txns_h6_sells INTEGER,
+    txns_h1_buys INTEGER,
+    txns_h1_sells INTEGER,
+    txns_m5_buys INTEGER,
+    txns_m5_sells INTEGER,
+    -- Price change data
+    price_change_h24 REAL,
+    price_change_h6 REAL,
+    price_change_h1 REAL,
+    price_change_m5 REAL,
+    -- Rugcheck data
+    rugcheck_score INTEGER,
+    rugcheck_score_normalised INTEGER,
+    rugcheck_rugged BOOLEAN,
+    rugcheck_risks_json TEXT, -- JSON array of risks
+    rugcheck_mint_authority TEXT,
+    rugcheck_freeze_authority TEXT,
+    rugcheck_creator TEXT,
+    rugcheck_creator_balance TEXT,
+    rugcheck_total_holders INTEGER,
+    rugcheck_total_market_liquidity REAL,
+    rugcheck_total_stable_liquidity REAL,
+    rugcheck_total_lp_providers INTEGER,
+    rugcheck_lp_locked_pct REAL,
+    rugcheck_lp_locked_usd REAL,
+    rugcheck_transfer_fee_pct REAL,
+    rugcheck_transfer_fee_max_amount TEXT,
+    rugcheck_jup_verified BOOLEAN,
+    rugcheck_jup_strict BOOLEAN,
+    -- Token meta
+    token_uri TEXT,
+    token_description TEXT,
+    token_image TEXT,
+    token_website TEXT,
+    token_twitter TEXT,
+    token_telegram TEXT,
+    -- Snapshot metadata
+    snapshot_time TEXT NOT NULL DEFAULT (datetime('now')),
+    api_fetch_time TEXT NOT NULL DEFAULT (datetime('now')),
+    data_freshness_score INTEGER DEFAULT 0, -- 0-100 based on data recency
+    FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
+);
+"#;
+
 // Performance indexes
 const POSITIONS_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_positions_mint ON positions(mint);",
@@ -126,6 +202,9 @@ const POSITIONS_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_position_states_state ON position_states(state, changed_at DESC);",
     "CREATE INDEX IF NOT EXISTS idx_position_tracking_position_id ON position_tracking(position_id, tracked_at DESC);",
     "CREATE INDEX IF NOT EXISTS idx_position_tracking_price ON position_tracking(price, tracked_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_token_snapshots_position_id ON token_snapshots(position_id, snapshot_type);",
+    "CREATE INDEX IF NOT EXISTS idx_token_snapshots_mint ON token_snapshots(mint, snapshot_time DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_token_snapshots_type ON token_snapshots(snapshot_type, snapshot_time DESC);",
 ];
 
 // =============================================================================
@@ -182,6 +261,80 @@ pub struct PositionStateHistory {
     pub state: PositionState,
     pub changed_at: DateTime<Utc>,
     pub reason: Option<String>,
+}
+
+/// Token snapshot captured at position opening or closing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenSnapshot {
+    pub id: Option<i64>,
+    pub position_id: i64,
+    pub snapshot_type: String, // "opening" or "closing"
+    pub mint: String,
+    // DexScreener data
+    pub symbol: Option<String>,
+    pub name: Option<String>,
+    pub price_sol: Option<f64>,
+    pub price_usd: Option<f64>,
+    pub price_native: Option<f64>,
+    pub dex_id: Option<String>,
+    pub pair_address: Option<String>,
+    pub pair_url: Option<String>,
+    pub fdv: Option<f64>,
+    pub market_cap: Option<f64>,
+    pub pair_created_at: Option<i64>,
+    // Liquidity data
+    pub liquidity_usd: Option<f64>,
+    pub liquidity_base: Option<f64>,
+    pub liquidity_quote: Option<f64>,
+    // Volume data
+    pub volume_h24: Option<f64>,
+    pub volume_h6: Option<f64>,
+    pub volume_h1: Option<f64>,
+    pub volume_m5: Option<f64>,
+    // Transaction stats
+    pub txns_h24_buys: Option<i64>,
+    pub txns_h24_sells: Option<i64>,
+    pub txns_h6_buys: Option<i64>,
+    pub txns_h6_sells: Option<i64>,
+    pub txns_h1_buys: Option<i64>,
+    pub txns_h1_sells: Option<i64>,
+    pub txns_m5_buys: Option<i64>,
+    pub txns_m5_sells: Option<i64>,
+    // Price change data
+    pub price_change_h24: Option<f64>,
+    pub price_change_h6: Option<f64>,
+    pub price_change_h1: Option<f64>,
+    pub price_change_m5: Option<f64>,
+    // Rugcheck data
+    pub rugcheck_score: Option<i32>,
+    pub rugcheck_score_normalised: Option<i32>,
+    pub rugcheck_rugged: Option<bool>,
+    pub rugcheck_risks_json: Option<String>,
+    pub rugcheck_mint_authority: Option<String>,
+    pub rugcheck_freeze_authority: Option<String>,
+    pub rugcheck_creator: Option<String>,
+    pub rugcheck_creator_balance: Option<String>,
+    pub rugcheck_total_holders: Option<i32>,
+    pub rugcheck_total_market_liquidity: Option<f64>,
+    pub rugcheck_total_stable_liquidity: Option<f64>,
+    pub rugcheck_total_lp_providers: Option<i32>,
+    pub rugcheck_lp_locked_pct: Option<f64>,
+    pub rugcheck_lp_locked_usd: Option<f64>,
+    pub rugcheck_transfer_fee_pct: Option<f64>,
+    pub rugcheck_transfer_fee_max_amount: Option<String>,
+    pub rugcheck_jup_verified: Option<bool>,
+    pub rugcheck_jup_strict: Option<bool>,
+    // Token meta
+    pub token_uri: Option<String>,
+    pub token_description: Option<String>,
+    pub token_image: Option<String>,
+    pub token_website: Option<String>,
+    pub token_twitter: Option<String>,
+    pub token_telegram: Option<String>,
+    // Snapshot metadata
+    pub snapshot_time: DateTime<Utc>,
+    pub api_fetch_time: DateTime<Utc>,
+    pub data_freshness_score: i32,
 }
 
 /// Position tracking record for price updates
@@ -305,6 +458,10 @@ impl PositionsDatabase {
         conn
             .execute(SCHEMA_POSITION_METADATA, [])
             .map_err(|e| format!("Failed to create position_metadata table: {}", e))?;
+
+        conn
+            .execute(SCHEMA_TOKEN_SNAPSHOTS, [])
+            .map_err(|e| format!("Failed to create token_snapshots table: {}", e))?;
 
         // Create all indexes
         for index_sql in POSITIONS_INDEXES {
@@ -1058,6 +1215,253 @@ impl PositionsDatabase {
         Ok(())
     }
 
+    /// Save token snapshot to database
+    pub async fn save_token_snapshot(&self, snapshot: &TokenSnapshot) -> Result<i64, String> {
+        let conn = self.get_connection()?;
+
+        let result = conn.execute(
+            r#"
+            INSERT INTO token_snapshots (
+                position_id, snapshot_type, mint, symbol, name, price_sol, price_usd, price_native,
+                dex_id, pair_address, pair_url, fdv, market_cap, pair_created_at,
+                liquidity_usd, liquidity_base, liquidity_quote,
+                volume_h24, volume_h6, volume_h1, volume_m5,
+                txns_h24_buys, txns_h24_sells, txns_h6_buys, txns_h6_sells,
+                txns_h1_buys, txns_h1_sells, txns_m5_buys, txns_m5_sells,
+                price_change_h24, price_change_h6, price_change_h1, price_change_m5,
+                rugcheck_score, rugcheck_score_normalised, rugcheck_rugged, rugcheck_risks_json,
+                rugcheck_mint_authority, rugcheck_freeze_authority, rugcheck_creator, rugcheck_creator_balance,
+                rugcheck_total_holders, rugcheck_total_market_liquidity, rugcheck_total_stable_liquidity,
+                rugcheck_total_lp_providers, rugcheck_lp_locked_pct, rugcheck_lp_locked_usd,
+                rugcheck_transfer_fee_pct, rugcheck_transfer_fee_max_amount, rugcheck_jup_verified, rugcheck_jup_strict,
+                token_uri, token_description, token_image, token_website, token_twitter, token_telegram,
+                snapshot_time, api_fetch_time, data_freshness_score
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21,
+                ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40,
+                ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56, ?57, ?58, ?59, ?60
+            )
+            "#,
+            params![
+                snapshot.position_id,
+                snapshot.snapshot_type,
+                snapshot.mint,
+                snapshot.symbol,
+                snapshot.name,
+                snapshot.price_sol,
+                snapshot.price_usd,
+                snapshot.price_native,
+                snapshot.dex_id,
+                snapshot.pair_address,
+                snapshot.pair_url,
+                snapshot.fdv,
+                snapshot.market_cap,
+                snapshot.pair_created_at,
+                snapshot.liquidity_usd,
+                snapshot.liquidity_base,
+                snapshot.liquidity_quote,
+                snapshot.volume_h24,
+                snapshot.volume_h6,
+                snapshot.volume_h1,
+                snapshot.volume_m5,
+                snapshot.txns_h24_buys,
+                snapshot.txns_h24_sells,
+                snapshot.txns_h6_buys,
+                snapshot.txns_h6_sells,
+                snapshot.txns_h1_buys,
+                snapshot.txns_h1_sells,
+                snapshot.txns_m5_buys,
+                snapshot.txns_m5_sells,
+                snapshot.price_change_h24,
+                snapshot.price_change_h6,
+                snapshot.price_change_h1,
+                snapshot.price_change_m5,
+                snapshot.rugcheck_score,
+                snapshot.rugcheck_score_normalised,
+                snapshot.rugcheck_rugged,
+                snapshot.rugcheck_risks_json,
+                snapshot.rugcheck_mint_authority,
+                snapshot.rugcheck_freeze_authority,
+                snapshot.rugcheck_creator,
+                snapshot.rugcheck_creator_balance,
+                snapshot.rugcheck_total_holders,
+                snapshot.rugcheck_total_market_liquidity,
+                snapshot.rugcheck_total_stable_liquidity,
+                snapshot.rugcheck_total_lp_providers,
+                snapshot.rugcheck_lp_locked_pct,
+                snapshot.rugcheck_lp_locked_usd,
+                snapshot.rugcheck_transfer_fee_pct,
+                snapshot.rugcheck_transfer_fee_max_amount,
+                snapshot.rugcheck_jup_verified,
+                snapshot.rugcheck_jup_strict,
+                snapshot.token_uri,
+                snapshot.token_description,
+                snapshot.token_image,
+                snapshot.token_website,
+                snapshot.token_twitter,
+                snapshot.token_telegram,
+                snapshot.snapshot_time.to_rfc3339(),
+                snapshot.api_fetch_time.to_rfc3339(),
+                snapshot.data_freshness_score
+            ]
+        ).map_err(|e| format!("Failed to insert token snapshot: {}", e))?;
+
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// Get token snapshots for a position
+    pub async fn get_token_snapshots(&self, position_id: i64) -> Result<Vec<TokenSnapshot>, String> {
+        let conn = self.get_connection()?;
+
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT id, position_id, snapshot_type, mint, symbol, name, price_sol, price_usd, price_native,
+                   dex_id, pair_address, pair_url, fdv, market_cap, pair_created_at,
+                   liquidity_usd, liquidity_base, liquidity_quote,
+                   volume_h24, volume_h6, volume_h1, volume_m5,
+                   txns_h24_buys, txns_h24_sells, txns_h6_buys, txns_h6_sells,
+                   txns_h1_buys, txns_h1_sells, txns_m5_buys, txns_m5_sells,
+                   price_change_h24, price_change_h6, price_change_h1, price_change_m5,
+                   rugcheck_score, rugcheck_score_normalised, rugcheck_rugged, rugcheck_risks_json,
+                   rugcheck_mint_authority, rugcheck_freeze_authority, rugcheck_creator, rugcheck_creator_balance,
+                   rugcheck_total_holders, rugcheck_total_market_liquidity, rugcheck_total_stable_liquidity,
+                   rugcheck_total_lp_providers, rugcheck_lp_locked_pct, rugcheck_lp_locked_usd,
+                   rugcheck_transfer_fee_pct, rugcheck_transfer_fee_max_amount, rugcheck_jup_verified, rugcheck_jup_strict,
+                   token_uri, token_description, token_image, token_website, token_twitter, token_telegram,
+                   snapshot_time, api_fetch_time, data_freshness_score
+            FROM token_snapshots 
+            WHERE position_id = ?1 
+            ORDER BY snapshot_time ASC
+            "#
+        ).map_err(|e| format!("Failed to prepare token snapshots query: {}", e))?;
+
+        let snapshot_iter = stmt.query_map(params![position_id], |row| {
+            self.row_to_token_snapshot(row)
+        }).map_err(|e| format!("Failed to execute token snapshots query: {}", e))?;
+
+        let mut snapshots = Vec::new();
+        for snapshot_result in snapshot_iter {
+            snapshots.push(snapshot_result.map_err(|e| format!("Failed to parse token snapshot row: {}", e))?);
+        }
+
+        Ok(snapshots)
+    }
+
+    /// Get specific token snapshot by type
+    pub async fn get_token_snapshot(&self, position_id: i64, snapshot_type: &str) -> Result<Option<TokenSnapshot>, String> {
+        let conn = self.get_connection()?;
+
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT id, position_id, snapshot_type, mint, symbol, name, price_sol, price_usd, price_native,
+                   dex_id, pair_address, pair_url, fdv, market_cap, pair_created_at,
+                   liquidity_usd, liquidity_base, liquidity_quote,
+                   volume_h24, volume_h6, volume_h1, volume_m5,
+                   txns_h24_buys, txns_h24_sells, txns_h6_buys, txns_h6_sells,
+                   txns_h1_buys, txns_h1_sells, txns_m5_buys, txns_m5_sells,
+                   price_change_h24, price_change_h6, price_change_h1, price_change_m5,
+                   rugcheck_score, rugcheck_score_normalised, rugcheck_rugged, rugcheck_risks_json,
+                   rugcheck_mint_authority, rugcheck_freeze_authority, rugcheck_creator, rugcheck_creator_balance,
+                   rugcheck_total_holders, rugcheck_total_market_liquidity, rugcheck_total_stable_liquidity,
+                   rugcheck_total_lp_providers, rugcheck_lp_locked_pct, rugcheck_lp_locked_usd,
+                   rugcheck_transfer_fee_pct, rugcheck_transfer_fee_max_amount, rugcheck_jup_verified, rugcheck_jup_strict,
+                   token_uri, token_description, token_image, token_website, token_twitter, token_telegram,
+                   snapshot_time, api_fetch_time, data_freshness_score
+            FROM token_snapshots 
+            WHERE position_id = ?1 AND snapshot_type = ?2
+            ORDER BY snapshot_time DESC
+            LIMIT 1
+            "#
+        ).map_err(|e| format!("Failed to prepare token snapshot query: {}", e))?;
+
+        let result = stmt.query_row(params![position_id, snapshot_type], |row| {
+            self.row_to_token_snapshot(row)
+        }).optional().map_err(|e| format!("Failed to execute token snapshot query: {}", e))?;
+
+        Ok(result)
+    }
+
+    /// Helper function to convert database row to TokenSnapshot struct
+    fn row_to_token_snapshot(&self, row: &rusqlite::Row) -> rusqlite::Result<TokenSnapshot> {
+        let snapshot_time_str: String = row.get("snapshot_time")?;
+        let snapshot_time = DateTime::parse_from_rfc3339(&snapshot_time_str)
+            .map_err(|_| rusqlite::Error::InvalidColumnType(
+                0, "Invalid snapshot_time".to_string(), rusqlite::types::Type::Text
+            ))?
+            .with_timezone(&Utc);
+
+        let api_fetch_time_str: String = row.get("api_fetch_time")?;
+        let api_fetch_time = DateTime::parse_from_rfc3339(&api_fetch_time_str)
+            .map_err(|_| rusqlite::Error::InvalidColumnType(
+                0, "Invalid api_fetch_time".to_string(), rusqlite::types::Type::Text
+            ))?
+            .with_timezone(&Utc);
+
+        Ok(TokenSnapshot {
+            id: Some(row.get("id")?),
+            position_id: row.get("position_id")?,
+            snapshot_type: row.get("snapshot_type")?,
+            mint: row.get("mint")?,
+            symbol: row.get("symbol")?,
+            name: row.get("name")?,
+            price_sol: row.get("price_sol")?,
+            price_usd: row.get("price_usd")?,
+            price_native: row.get("price_native")?,
+            dex_id: row.get("dex_id")?,
+            pair_address: row.get("pair_address")?,
+            pair_url: row.get("pair_url")?,
+            fdv: row.get("fdv")?,
+            market_cap: row.get("market_cap")?,
+            pair_created_at: row.get("pair_created_at")?,
+            liquidity_usd: row.get("liquidity_usd")?,
+            liquidity_base: row.get("liquidity_base")?,
+            liquidity_quote: row.get("liquidity_quote")?,
+            volume_h24: row.get("volume_h24")?,
+            volume_h6: row.get("volume_h6")?,
+            volume_h1: row.get("volume_h1")?,
+            volume_m5: row.get("volume_m5")?,
+            txns_h24_buys: row.get("txns_h24_buys")?,
+            txns_h24_sells: row.get("txns_h24_sells")?,
+            txns_h6_buys: row.get("txns_h6_buys")?,
+            txns_h6_sells: row.get("txns_h6_sells")?,
+            txns_h1_buys: row.get("txns_h1_buys")?,
+            txns_h1_sells: row.get("txns_h1_sells")?,
+            txns_m5_buys: row.get("txns_m5_buys")?,
+            txns_m5_sells: row.get("txns_m5_sells")?,
+            price_change_h24: row.get("price_change_h24")?,
+            price_change_h6: row.get("price_change_h6")?,
+            price_change_h1: row.get("price_change_h1")?,
+            price_change_m5: row.get("price_change_m5")?,
+            rugcheck_score: row.get("rugcheck_score")?,
+            rugcheck_score_normalised: row.get("rugcheck_score_normalised")?,
+            rugcheck_rugged: row.get("rugcheck_rugged")?,
+            rugcheck_risks_json: row.get("rugcheck_risks_json")?,
+            rugcheck_mint_authority: row.get("rugcheck_mint_authority")?,
+            rugcheck_freeze_authority: row.get("rugcheck_freeze_authority")?,
+            rugcheck_creator: row.get("rugcheck_creator")?,
+            rugcheck_creator_balance: row.get("rugcheck_creator_balance")?,
+            rugcheck_total_holders: row.get("rugcheck_total_holders")?,
+            rugcheck_total_market_liquidity: row.get("rugcheck_total_market_liquidity")?,
+            rugcheck_total_stable_liquidity: row.get("rugcheck_total_stable_liquidity")?,
+            rugcheck_total_lp_providers: row.get("rugcheck_total_lp_providers")?,
+            rugcheck_lp_locked_pct: row.get("rugcheck_lp_locked_pct")?,
+            rugcheck_lp_locked_usd: row.get("rugcheck_lp_locked_usd")?,
+            rugcheck_transfer_fee_pct: row.get("rugcheck_transfer_fee_pct")?,
+            rugcheck_transfer_fee_max_amount: row.get("rugcheck_transfer_fee_max_amount")?,
+            rugcheck_jup_verified: row.get("rugcheck_jup_verified")?,
+            rugcheck_jup_strict: row.get("rugcheck_jup_strict")?,
+            token_uri: row.get("token_uri")?,
+            token_description: row.get("token_description")?,
+            token_image: row.get("token_image")?,
+            token_website: row.get("token_website")?,
+            token_twitter: row.get("token_twitter")?,
+            token_telegram: row.get("token_telegram")?,
+            snapshot_time,
+            api_fetch_time,
+            data_freshness_score: row.get("data_freshness_score")?,
+        })
+    }
+
     /// Helper function to convert database row to Position struct
     fn row_to_position(&self, row: &rusqlite::Row) -> rusqlite::Result<Position> {
         let entry_time_str: String = row.get("entry_time")?;
@@ -1284,6 +1688,33 @@ pub async fn get_position_by_mint(mint: &str) -> Result<Option<Position>, String
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_position_by_mint(mint).await,
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
+/// Save token snapshot to database
+pub async fn save_token_snapshot(snapshot: &TokenSnapshot) -> Result<i64, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.save_token_snapshot(snapshot).await,
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
+/// Get token snapshots for a position
+pub async fn get_token_snapshots(position_id: i64) -> Result<Vec<TokenSnapshot>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_token_snapshots(position_id).await,
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
+/// Get specific token snapshot by type
+pub async fn get_token_snapshot(position_id: i64, snapshot_type: &str) -> Result<Option<TokenSnapshot>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_token_snapshot(position_id, snapshot_type).await,
         None => Err("Positions database not initialized".to_string()),
     }
 }
