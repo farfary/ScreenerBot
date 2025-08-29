@@ -1041,16 +1041,19 @@ pub async fn open_position_direct(
         // Track for comprehensive verification
         let already_present = state.pending_verifications.contains_key(&transaction_signature);
         state.pending_verifications.insert(transaction_signature.clone(), Utc::now());
-        
+
         if is_debug_positions_enabled() {
             log(
                 LogTag::Positions,
                 "DEBUG",
-                &format!("📝 Enqueuing entry transaction {} for verification (already_present={})", 
-                    get_signature_prefix(&transaction_signature), already_present)
+                &format!(
+                    "📝 Enqueuing entry transaction {} for verification (already_present={})",
+                    get_signature_prefix(&transaction_signature),
+                    already_present
+                )
             );
         }
-        
+
         log(
             LogTag::Positions,
             "VERIFICATION_ENQUEUE_ENTRY",
@@ -2041,16 +2044,19 @@ pub async fn close_position_direct(
             }
 
             state.pending_verifications.insert(transaction_signature.clone(), Utc::now());
-            
+
             if is_debug_positions_enabled() {
                 log(
                     LogTag::Positions,
                     "DEBUG",
-                    &format!("📝 Enqueuing exit transaction {} for verification (already_present={})", 
-                        get_signature_prefix(&transaction_signature), already_present)
+                    &format!(
+                        "📝 Enqueuing exit transaction {} for verification (already_present={})",
+                        get_signature_prefix(&transaction_signature),
+                        already_present
+                    )
                 );
             }
-            
+
             log(
                 LogTag::Positions,
                 "VERIFICATION_ENQUEUE_EXIT",
@@ -2337,10 +2343,13 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
         log(
             LogTag::Positions,
             "DEBUG",
-            &format!("🔍 Starting comprehensive verification for transaction {}", get_signature_prefix(signature))
+            &format!(
+                "🔍 Starting comprehensive verification for transaction {}",
+                get_signature_prefix(signature)
+            )
         );
     }
-    
+
     if is_debug_positions_enabled() {
         log(
             LogTag::Positions,
@@ -2360,11 +2369,14 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                 log(
                     LogTag::Positions,
                     "DEBUG",
-                    &format!("🔍 Transaction {} found, checking status: {:?}", 
-                        get_signature_prefix(signature), transaction.status)
+                    &format!(
+                        "🔍 Transaction {} found, checking status: {:?}",
+                        get_signature_prefix(signature),
+                        transaction.status
+                    )
                 );
             }
-            
+
             // Check transaction status and success
             match transaction.status {
                 TransactionStatus::Finalized | TransactionStatus::Confirmed => {
@@ -2373,11 +2385,14 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                             log(
                                 LogTag::Positions,
                                 "DEBUG",
-                                &format!("✅ Transaction {} status: {:?}, success: true", 
-                                    get_signature_prefix(signature), transaction.status)
+                                &format!(
+                                    "✅ Transaction {} status: {:?}, success: true",
+                                    get_signature_prefix(signature),
+                                    transaction.status
+                                )
                             );
                         }
-                        
+
                         if is_debug_positions_enabled() {
                             log(
                                 LogTag::Positions,
@@ -2443,10 +2458,13 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                 log(
                     LogTag::Positions,
                     "DEBUG",
-                    &format!("🔍 Transaction {} not found in system, checking verification age", get_signature_prefix(signature))
+                    &format!(
+                        "🔍 Transaction {} not found in system, checking verification age",
+                        get_signature_prefix(signature)
+                    )
                 );
             }
-            
+
             // Transaction not found - check verification age
             let verification_age_seconds = {
                 let state = GLOBAL_POSITIONS_STATE.lock().await;
@@ -5369,6 +5387,10 @@ pub async fn attempt_position_recovery_from_transactions(
                             "RECOVERY_START_VERIFICATION",
                             &format!("🔍 Starting full verification workflow for recovered position {}", symbol)
                         );
+
+                        // CRITICAL FIX: Release the position lock BEFORE calling verification
+                        // to prevent deadlock when verification tries to acquire the same lock
+                        drop(_lock);
 
                         // Use the same comprehensive verification as normal position closing
                         match verify_position_transaction(&signature).await {
