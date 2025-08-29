@@ -20,6 +20,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 
 use crate::logger::{ log, LogTag };
 use crate::positions::Position;
+use crate::arguments::is_debug_positions_enabled;
 
 // Static flag to track if database has been initialized (to reduce log noise)
 static POSITIONS_DB_INITIALIZED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
@@ -496,6 +497,15 @@ impl PositionsDatabase {
 
     /// Insert new position and return the assigned ID
     pub async fn insert_position(&self, position: &Position) -> Result<i64, String> {
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("Inserting new position for mint {} with entry price {:.6} SOL", 
+                    position.mint, position.entry_price)
+            );
+        }
+
         let conn = self.get_connection()?;
 
         let position_id = conn
@@ -555,6 +565,16 @@ impl PositionsDatabase {
         // Record initial state as Open
         self.record_state_change(position_id, PositionState::Open, Some("Position created")).await?;
 
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("Successfully inserted position ID {} for mint {} with entry signature {}", 
+                    position_id, position.mint, 
+                    position.entry_transaction_signature.as_deref().unwrap_or("None"))
+            );
+        }
+
         log(
             LogTag::Positions,
             "INSERT",
@@ -570,8 +590,18 @@ impl PositionsDatabase {
             return Err("Cannot update position without ID".to_string());
         }
 
-        let conn = self.get_connection()?;
         let position_id = position.id.unwrap();
+        
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("Updating position ID {} for mint {} with current price {:.6} SOL", 
+                    position_id, position.mint, position.current_price.unwrap_or(0.0))
+            );
+        }
+
+        let conn = self.get_connection()?;
 
         let rows_affected = conn
             .execute(
@@ -628,6 +658,15 @@ impl PositionsDatabase {
 
         if rows_affected == 0 {
             return Err(format!("Position with ID {} not found", position_id));
+        }
+
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("Successfully updated position ID {} ({} rows affected)", 
+                    position_id, rows_affected)
+            );
         }
 
         // Force WAL checkpoint to ensure all connections see the update immediately
@@ -1006,6 +1045,15 @@ impl PositionsDatabase {
         state: PositionState,
         reason: Option<&str>
     ) -> Result<(), String> {
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("Recording state change for position ID {}: {} (reason: {})", 
+                    position_id, state, reason.unwrap_or("None"))
+            );
+        }
+
         let conn = self.get_connection()?;
 
         conn
@@ -1014,6 +1062,15 @@ impl PositionsDatabase {
                 params![position_id, state.to_string(), reason]
             )
             .map_err(|e| format!("Failed to record state change: {}", e))?;
+
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("Successfully recorded state change for position ID {}: {}", 
+                    position_id, state)
+            );
+        }
 
         Ok(())
     }
@@ -1245,6 +1302,16 @@ impl PositionsDatabase {
 
     /// Save token snapshot to database
     pub async fn save_token_snapshot(&self, snapshot: &TokenSnapshot) -> Result<i64, String> {
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("Saving token snapshot for position ID {} (type: {}) with price {:.6} SOL", 
+                    snapshot.position_id, snapshot.snapshot_type, 
+                    snapshot.price_sol.unwrap_or(0.0))
+            );
+        }
+
         let conn = self.get_connection()?;
 
         let result = conn
@@ -1336,7 +1403,18 @@ impl PositionsDatabase {
             )
             .map_err(|e| format!("Failed to insert token snapshot: {}", e))?;
 
-        Ok(conn.last_insert_rowid())
+        let snapshot_id = conn.last_insert_rowid();
+        
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("Successfully saved token snapshot ID {} for position ID {} (type: {})", 
+                    snapshot_id, snapshot.position_id, snapshot.snapshot_type)
+            );
+        }
+
+        Ok(snapshot_id)
     }
 
     /// Get token snapshots for a position
@@ -1687,14 +1765,38 @@ pub async fn load_all_positions() -> Result<Vec<Position>, String> {
 
 /// Save position to database
 pub async fn save_position(position: &Position) -> Result<i64, String> {
+    if is_debug_positions_enabled() {
+        log(
+            LogTag::Positions,
+            "DEBUG",
+            &format!("Saving position for mint {} (ID: {:?}) with entry price {:.6} SOL", 
+                position.mint, position.id, position.entry_price)
+        );
+    }
+
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => {
             if let Some(id) = position.id {
                 db.update_position(position).await?;
+                if is_debug_positions_enabled() {
+                    log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!("Updated existing position ID {} for mint {}", id, position.mint)
+                    );
+                }
                 Ok(id)
             } else {
-                db.insert_position(position).await
+                let new_id = db.insert_position(position).await?;
+                if is_debug_positions_enabled() {
+                    log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!("Created new position ID {} for mint {}", new_id, position.mint)
+                    );
+                }
+                Ok(new_id)
             }
         }
         None => Err("Positions database not initialized".to_string()),
@@ -1712,18 +1814,63 @@ pub async fn delete_position_by_id(id: i64) -> Result<bool, String> {
 
 /// Update position in database
 pub async fn update_position(position: &Position) -> Result<(), String> {
+            if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("Updating position ID {:?} for mint {} with current price {:.6} SOL", 
+                    position.id, position.mint, position.current_price.unwrap_or(0.0))
+            );
+        }
+
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.update_position(position).await,
+        Some(db) => {
+            let result = db.update_position(position).await;
+            if is_debug_positions_enabled() {
+                match &result {
+                    Ok(_) => log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!("Successfully updated position ID {:?} for mint {}", 
+                            position.id, position.mint)
+                    ),
+                    Err(e) => log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!("Failed to update position ID {:?} for mint {}: {}", 
+                            position.id, position.mint, e)
+                    ),
+                }
+            }
+            result
+        }
         None => Err("Positions database not initialized".to_string()),
     }
 }
 
 /// Force database synchronization after critical updates
 pub async fn force_database_sync() -> Result<(), String> {
+    if is_debug_positions_enabled() {
+        log(LogTag::Positions, "DEBUG", "Forcing database synchronization...");
+    }
+
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.force_sync().await,
+        Some(db) => {
+            let result = db.force_sync().await;
+            if is_debug_positions_enabled() {
+                match &result {
+                    Ok(_) => log(LogTag::Positions, "DEBUG", "Database synchronization completed successfully"),
+                    Err(e) => log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!("Database synchronization failed: {}", e)
+                    ),
+                }
+            }
+            result
+        }
         None => Err("Positions database not initialized".to_string()),
     }
 }
@@ -1766,9 +1913,37 @@ pub async fn get_position_by_id(id: i64) -> Result<Option<Position>, String> {
 
 /// Save token snapshot to database
 pub async fn save_token_snapshot(snapshot: &TokenSnapshot) -> Result<i64, String> {
+    if is_debug_positions_enabled() {
+        log(
+            LogTag::Positions,
+            "DEBUG",
+            &format!("Saving token snapshot for position ID {} (type: {}) with mint {}", 
+                snapshot.position_id, snapshot.snapshot_type, snapshot.mint)
+        );
+    }
+
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.save_token_snapshot(snapshot).await,
+        Some(db) => {
+            let result = db.save_token_snapshot(snapshot).await;
+            if is_debug_positions_enabled() {
+                match &result {
+                    Ok(snapshot_id) => log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!("Successfully saved token snapshot ID {} for position ID {} (type: {})", 
+                            snapshot_id, snapshot.position_id, snapshot.snapshot_type)
+                    ),
+                    Err(e) => log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!("Failed to save token snapshot for position ID {} (type: {}): {}", 
+                            snapshot.position_id, snapshot.snapshot_type, e)
+                    ),
+                }
+            }
+            result
+        }
         None => Err("Positions database not initialized".to_string()),
     }
 }
