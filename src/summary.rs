@@ -179,7 +179,7 @@ pub struct ClosedPositionDisplay {
     pnl_percent: String,
     #[tabled(rename = "💳 Fees (SOL)")]
     pub fees_sol: String,
-    #[tabled(rename = "⏱️ Duration")]
+    #[tabled(rename = "⏰ Duration")]
     duration: String,
     #[tabled(rename = "🎯 Status")]
     status: String,
@@ -206,7 +206,7 @@ pub struct OpenPositionDisplay {
     pnl_percent: String,
     #[tabled(rename = "💳 Fees (SOL)")]
     pub fees_sol: String,
-    #[tabled(rename = "⏱️ Duration")]
+    #[tabled(rename = "⏰ Duration")]
     duration: String,
     #[tabled(rename = "🎯 Status")]
     status: String,
@@ -285,7 +285,7 @@ pub struct PoolServiceDisplay {
     cycles: String,
     #[tabled(rename = "📦 Avg/Chunk")]
     avg_per_chunk: String,
-    #[tabled(rename = "⏱️ Last/Avg (ms)")]
+    #[tabled(rename = "⏰ Last/Avg (ms)")]
     last_avg_ms: String,
     #[tabled(rename = "📞 Total Requests")]
     total_requests: String,
@@ -452,7 +452,7 @@ pub struct TransactionFinalizationDisplay {
     total_finalized: String,
     #[tabled(rename = "⏳ Pending Finalization")]
     pending_finalization: String,
-    #[tabled(rename = "⏱️ Avg Finalization Time")]
+    #[tabled(rename = "⏰ Avg Finalization Time")]
     average_finalization_time: String,
     #[tabled(rename = "📦 Last Batch Size")]
     last_batch_size: String,
@@ -1875,7 +1875,7 @@ impl ClosedPositionDisplay {
                 pnl_percent: "UNVERIFIED".to_string(),
                 fees_sol: format!("{:.6}", total_fees),
                 duration,
-                status: "🔍 UNVERIFIED".to_string(),
+                status: "❓ UNVERIFIED".to_string(),
             };
         }
 
@@ -1898,9 +1898,9 @@ impl ClosedPositionDisplay {
 
         let pnl_percent_str = if position.transaction_entry_verified && position.transaction_exit_verified {
             if pnl_percent >= 0.0 {
-                format!("+{:.2}%", pnl_percent)
+                format!("🟢 +{:.2}%", pnl_percent)
             } else {
-                format!("{:.2}%", pnl_percent)
+                format!("🔴 {:.2}%", pnl_percent)
             }
         } else {
             "UNVERIFIED".to_string()
@@ -1978,7 +1978,7 @@ impl OpenPositionDisplay {
                 pnl_percent: "UNVERIFIED".to_string(),
                 fees_sol: format!("{:.6}", total_fees),
                 duration,
-                status: "🔍 UNVERIFIED".to_string(),
+                status: "❓ UNVERIFIED".to_string(),
             };
         }
 
@@ -1996,9 +1996,9 @@ impl OpenPositionDisplay {
                 format!("{:.6}", pnl_sol)
             };
             let percent_str = if pnl_percent >= 0.0 {
-                format!("+{:.2}%", pnl_percent)
+                format!("🟢 +{:.2}%", pnl_percent)
             } else {
-                format!("{:.2}%", pnl_percent)
+                format!("🔴 {:.2}%", pnl_percent)
             };
             (sol_str, percent_str)
         } else if !position.transaction_entry_verified {
@@ -2156,14 +2156,14 @@ fn format_position_status(position: &crate::positions::Position) -> String {
     let entry_verified = position.transaction_entry_verified;
     let exit_verified = position.transaction_exit_verified;
     
-    // Determine base status
+    // Determine base status with emojis
     if position.exit_price.is_some() && exit_verified {
-        "CLOSED".to_string()
+        "✅ CLOSED".to_string()
     } else if position.exit_transaction_signature.is_some() && !exit_verified {
-        "CLOSING".to_string()
+        "⏳ CLOSING".to_string()
     } else if entry_verified {
-        "OPEN".to_string()
+        "🟢 OPEN".to_string()
     } else {
-        "OPENING".to_string()
+        "🟡 OPENING".to_string()
     }
 }
