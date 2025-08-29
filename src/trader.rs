@@ -191,6 +191,7 @@ use std::sync::atomic::{ AtomicUsize, Ordering };
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
+use std::time::Instant;
 
 // =============================================================================
 // GLOBAL STATE AND STATIC STORAGE
@@ -203,6 +204,24 @@ pub static CRITICAL_OPERATIONS_IN_PROGRESS: Lazy<Arc<std::sync::atomic::AtomicUs
 
 /// Global tracker: number of buy operations currently in-flight (reserved but not yet reflected in open positions)
 // removed legacy in-flight buy tracking; PositionsManager enforces capacity
+
+// =============================================================================
+// TOKEN TRACKING FOR INTELLIGENT CHECKING
+// =============================================================================
+
+/// Tracks token checking information for intelligent prioritization
+#[derive(Clone)]
+pub struct TokenCheckInfo {
+    pub last_check_time: Instant,
+    pub last_price: Option<f64>,
+    pub check_count: usize,
+    pub had_recent_drop: bool,
+}
+
+/// Global token tracking state
+pub static TOKEN_CHECK_TRACKER: Lazy<Arc<std::sync::RwLock<HashMap<String, TokenCheckInfo>>>> = Lazy::new(|| {
+    Arc::new(std::sync::RwLock::new(HashMap::new()))
+});
 
 // =============================================================================
 // CRITICAL OPERATION PROTECTION
@@ -303,6 +322,104 @@ pub fn should_debug_force_sell(position: &crate::positions::Position) -> bool {
 }
 
 // =============================================================================
+// TOKEN TRACKING AND INTELLIGENT PRIORITIZATION
+// =============================================================================
+
+/// Update token tracking after checking a token
+pub fn update_token_check_info(mint: &str, current_price: Option<f64>, had_drop: bool) {
+    let mut tracker = TOKEN_CHECK_TRACKER.write().unwrap();
+    let info = tracker.entry(mint.to_string()).or_insert(TokenCheckInfo {
+        last_check_time: Instant::now(),
+        last_price: None,
+        check_count: 0,
+        had_recent_drop: false,
+    });
+    
+    info.last_check_time = Instant::now();
+    if let Some(price) = current_price {
+        info.last_price = Some(price);
+    }
+    info.check_count += 1;
+    info.had_recent_drop = had_drop;
+}
+
+/// Check if token had recent price drop (within 30 seconds)
+pub async fn check_token_for_recent_drop(token: &Token) -> bool {
+    let pool_service = get_pool_service();
+    let history = pool_service.get_recent_price_history(&token.mint).await;
+    
+    if history.len() < 2 {
+        return false;
+    }
+    
+    // Check for drops in last 30 seconds
+    let now = chrono::Utc::now();
+    let thirty_seconds_ago = now - chrono::Duration::seconds(30);
+    
+    let recent_prices: Vec<_> = history.into_iter()
+        .filter(|(timestamp, _)| *timestamp > thirty_seconds_ago)
+        .collect();
+    
+    if recent_prices.len() < 2 {
+        return false;
+    }
+    
+    // Check if there was a significant drop (>2%) in recent period
+    let max_recent = recent_prices.iter().map(|(_, price)| *price).fold(0.0f64, f64::max);
+    let current = recent_prices.last().map(|(_, price)| *price).unwrap_or(0.0);
+    
+    if max_recent > 0.0 && current > 0.0 {
+        let drop_percent = ((max_recent - current) / max_recent) * 100.0;
+        drop_percent > 2.0
+    } else {
+        false
+    }
+}
+
+/// Prioritize tokens for checking based on drops, check history, and fairness
+pub fn prioritize_tokens_for_checking(mut tokens: Vec<Token>) -> Vec<Token> {
+    let now = Instant::now();
+    let tracker = TOKEN_CHECK_TRACKER.read().unwrap();
+    
+    // Sort tokens by priority:
+    // 1. Tokens that had recent drops (within 30s)
+    // 2. Tokens that haven't been checked or haven't been checked in >1min with no price change
+    // 3. Tokens with fewest check counts (fairness)
+    // 4. Others
+    
+    tokens.sort_by(|a, b| {
+        let info_a = tracker.get(&a.mint);
+        let info_b = tracker.get(&b.mint);
+        
+        // Priority 1: Recent drops (highest priority)
+        let drop_a = info_a.map(|i| i.had_recent_drop).unwrap_or(false);
+        let drop_b = info_b.map(|i| i.had_recent_drop).unwrap_or(false);
+        if drop_a != drop_b {
+            return drop_b.cmp(&drop_a); // true first
+        }
+        
+        // Priority 2: Never checked or stale checks (>60s)
+        let stale_a = info_a.map(|i| now.duration_since(i.last_check_time).as_secs() > 60).unwrap_or(true);
+        let stale_b = info_b.map(|i| now.duration_since(i.last_check_time).as_secs() > 60).unwrap_or(true);
+        if stale_a != stale_b {
+            return stale_b.cmp(&stale_a); // true first
+        }
+        
+        // Priority 3: Fairness - fewer checks first
+        let count_a = info_a.map(|i| i.check_count).unwrap_or(0);
+        let count_b = info_b.map(|i| i.check_count).unwrap_or(0);
+        count_a.cmp(&count_b)
+    });
+    
+    // Clean up very old entries (>10 minutes) to prevent memory growth
+    drop(tracker);
+    let mut tracker_write = TOKEN_CHECK_TRACKER.write().unwrap();
+    tracker_write.retain(|_, info| now.duration_since(info.last_check_time).as_secs() < 600);
+    
+    tokens
+}
+
+// =============================================================================
 // TOKEN PREPARATION AND TRADING FUNCTIONS
 // =============================================================================
 
@@ -362,19 +479,9 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
             );
         }
 
-        // Randomize tokens before filtering to give all tokens fair opportunity
-        let mut randomized_tokens = tokens_from_module;
-        randomized_tokens.shuffle(&mut rand::thread_rng());
-        
-        if is_debug_trader_enabled() {
-            log(
-                LogTag::Trader,
-                "DEBUG", 
-                &format!("🎲 Randomized {} tokens before filtering", randomized_tokens.len())
-            );
-        }
-        
-        randomized_tokens
+        // Keep tokens in liquidity order for consistent processing
+        // Smart prioritization will happen after filtering
+        tokens_from_module
     };
 
     // 2. Apply filtering with timeout protection
@@ -439,19 +546,29 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
         }
     }
 
-    // 6. Randomize eligible tokens to ensure fair processing order
-    let mut final_tokens = eligible_tokens;
-    final_tokens.shuffle(&mut rand::thread_rng());
+    // 6. Smart token prioritization instead of random shuffling
+    let prioritized_tokens = prioritize_tokens_for_checking(eligible_tokens);
     
-    if is_debug_trader_enabled() && !final_tokens.is_empty() {
+    if is_debug_trader_enabled() && !prioritized_tokens.is_empty() {
         log(
             LogTag::Trader,
-            "DEBUG",
-            &format!("🎲 Randomized {} eligible tokens for processing", final_tokens.len())
+            "PRIORITY_ORDER",
+            &format!("📊 Prioritized {} tokens: drops={}, fair_rotation={}, others={}", 
+                prioritized_tokens.len(),
+                prioritized_tokens.iter().take(10).filter(|t| {
+                    TOKEN_CHECK_TRACKER.read().unwrap().get(&t.mint)
+                        .map(|info| info.had_recent_drop).unwrap_or(false)
+                }).count(),
+                prioritized_tokens.iter().filter(|t| {
+                    TOKEN_CHECK_TRACKER.read().unwrap().get(&t.mint)
+                        .map(|info| info.check_count == 0).unwrap_or(true)
+                }).count(),
+                prioritized_tokens.len() - 10
+            )
         );
     }
 
-    Ok(final_tokens)
+    Ok(prioritized_tokens)
 }
 
 /// Background task to monitor new tokens for entry opportunities
@@ -543,7 +660,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Process tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
-        // Note: tokens are now randomized to give all tokens fair processing opportunity
+        // Note: tokens are now prioritized by recent drops and fair rotation
         for token in tokens.iter() {
             // Check for shutdown before spawning tasks
             if
@@ -613,12 +730,21 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         {
                             Some(p) if p > 0.0 && p.is_finite() => p,
                             _ => {
+                                // Update tracking even for failed price fetches
+                                update_token_check_info(&token.mint, None, false);
                                 return;
                             }
                         };
+                        
+                        // Check for recent drops
+                        let had_recent_drop = check_token_for_recent_drop(&token).await;
 
                         // Entry decision delegated to entry::should_buy
                         let (approved, _confidence, reason) = should_buy(&token).await;
+                        
+                        // Update token tracking info
+                        update_token_check_info(&token.mint, Some(current_price), had_recent_drop);
+                        
                         if !approved {
                             // Token passed filtering but doesn't meet entry criteria
                             // Add to watchlist for future monitoring
@@ -629,9 +755,10 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     LogTag::Trader,
                                     "WATCHLIST_ADD",
                                     &format!(
-                                        "Added {} to watchlist (passed filtering, waiting for entry signal: {})",
+                                        "Added {} to watchlist (passed filtering, waiting for entry signal: {}) [Drop: {}]",
                                         &token.symbol,
-                                        reason
+                                        reason,
+                                        if had_recent_drop { "YES" } else { "NO" }
                                     )
                                 );
                             }
