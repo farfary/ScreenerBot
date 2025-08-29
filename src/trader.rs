@@ -45,7 +45,7 @@ pub const MAX_OPEN_POSITIONS: usize = 10;
 pub const TRADE_SIZE_SOL: f64 = 0.005;
 
 /// Enable minimum profit threshold requirement before allowing sells
-pub const MIN_PROFIT_THRESHOLD_ENABLED: bool = false;
+pub const MIN_PROFIT_THRESHOLD_ENABLED: bool = true;
 
 /// Minimum profit threshold percentage (e.g., 5.0 for 5%, -5.0 for -5%)
 /// Positions below this P&L will not be sold regardless of other exit conditions
