@@ -206,6 +206,10 @@ async fn main() {
         log(LogTag::System, "INFO", "ATA cleanup service task ended");
     });
 
+    // Start wallet monitoring background service
+    let shutdown_wallet = shutdown.clone();
+    let wallet_monitor_handle = screenerbot::wallet::start_wallet_monitoring_service(shutdown_wallet).await;
+
     // Start trader tasks (moved from trader() function for centralized management)
 
     // Initialize global transaction manager FIRST (before reconciliation)
@@ -515,6 +519,18 @@ async fn main() {
                 );
             } else {
                 log(LogTag::System, "INFO", "✅ ATA cleanup task shutdown completed");
+            }
+
+            // Wait for wallet monitoring service
+            log(LogTag::System, "INFO", "🔄 Waiting for wallet monitoring task to shutdown...");
+            if let Err(e) = wallet_monitor_handle.await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Wallet monitoring task failed to shutdown cleanly: {}", e)
+                );
+            } else {
+                log(LogTag::System, "INFO", "✅ Wallet monitoring task shutdown completed");
             }
 
             // Wait for transaction manager service

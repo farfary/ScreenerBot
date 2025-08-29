@@ -21,3 +21,4 @@ pub mod ohlcv_analysis;
 pub mod swaps;
 pub mod errors; // New structured error handling
 pub mod dashboard;
+pub mod wallet; // Wallet balance monitoring
