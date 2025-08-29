@@ -73,8 +73,8 @@ pub const MIN_POSITION_HOLD_TIME_SECS: f64 = 45.0;
 /// Maximum hold time cap for open positions (reduced to 45 minutes for risk control)
 pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 45.0 * 60.0; // 45 minutes (2700 seconds)
 
-/// Time after which time decay pressure starts - now 2 hours for better patience
-pub const TIME_DECAY_START_SECS: f64 = 7200.0; // 2 hours
+/// Re-entry cooldown after closing a position (minutes) - prevents immediate re-buy of same token
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 6 * 60; // 6 hours
 
 // -----------------------------------------------------------------------------
 // Trading Logic Configuration

@@ -21,6 +21,7 @@
 use crate::tokens::Token;
 use crate::tokens::get_pool_service;
 use crate::tokens::is_token_excluded_from_trading;
+use crate::trader::POSITION_CLOSE_COOLDOWN_MINUTES;
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_entry_enabled };
 use crate::tokens::cache::TokenDatabase;
@@ -118,9 +119,6 @@ const CONFIDENCE_CENTER_ADJUSTMENT: f64 = 15.0; // Adjustment factor for distanc
 // MATHEMATICAL CONSTANTS
 const PERCENTAGE_MULTIPLIER: f64 = 100.0; // Convert ratio to percentage
 const THOUSAND_DIVISOR: f64 = 1000.0; // Convert to thousands for display
-
-// POSITION RE-ENTRY COOLDOWN
-const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 7 * 24 * 60; // 7 days re-entry cooldown after closing
 const MILLION_DIVISOR: f64 = 1_000_000.0; // Convert to millions for display
 const MINUTES_PER_SECOND: i64 = 60; // Time conversion
 

@@ -33,7 +33,11 @@ use crate::{
         is_debug_swaps_enabled,
         get_max_exit_retries,
     },
-    trader::{ CriticalOperationGuard, PROFIT_EXTRA_NEEDED_SOL, MAX_OPEN_POSITIONS },
+    trader::{
+        CriticalOperationGuard,
+        PROFIT_EXTRA_NEEDED_SOL,
+        MAX_OPEN_POSITIONS,
+    },
     utils::{ get_wallet_address, get_token_balance, safe_truncate },
     configs::{ read_configs },
     positions_db::{
@@ -187,8 +191,7 @@ const CLEANUP_BATCH_SIZE: usize = 20;
 const SWAP_ATTEMPT_COOLDOWN_SECONDS: i64 = 30;
 const BALANCE_CACHE_DURATION_SECONDS: i64 = 30;
 const DUPLICATE_SWAP_PREVENTION_SECS: i64 = 30;
-const POSITION_OPEN_COOLDOWN_SECS: i64 = 15; // No global cooldown (from backup)
-const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 6 * 60; // Re-entry cooldown after closing (from backup)
+const POSITION_OPEN_COOLDOWN_SECS: i64 = 5; // No global cooldown (from backup)
 
 // Verification safety windows - reduced for better UX
 const ENTRY_VERIFICATION_MAX_SECS: i64 = 90; // hard cap for entry verification age before treating as timeout
