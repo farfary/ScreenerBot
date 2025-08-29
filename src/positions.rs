@@ -19,6 +19,8 @@ use crate::{
         get_priority_transaction,
         Transaction,
         TransactionStatus,
+        SwapAnalysis,
+        SwapPnLInfo,
         get_global_transaction_manager,
     },
     rpc::{ lamports_to_sol, sol_to_lamports },
@@ -44,6 +46,7 @@ use crate::{
         get_open_positions as db_get_open_positions,
         get_closed_positions as db_get_closed_positions,
         get_position_by_mint as db_get_position_by_mint,
+        get_position_by_id as db_get_position_by_id,
         save_token_snapshot,
         TokenSnapshot,
     },
@@ -1340,8 +1343,49 @@ pub async fn close_position_direct(
     let token_balance = match get_token_balance_safe(mint, &wallet_address).await {
         Some(balance) if balance > 0 => balance,
         Some(_) => {
-            cleanup().await;
-            return Err(format!("No {} tokens to sell", symbol));
+            // Zero tokens found - check if tokens were already sold in a recent transaction
+            log(
+                LogTag::Positions,
+                "RECOVERY_CHECK",
+                &format!("🔍 Zero {} tokens found - checking for recent sell transactions to recover position", symbol)
+            );
+
+            // Try to recover position from recent transactions
+            match attempt_position_recovery_from_transactions(mint, &symbol).await {
+                Ok(recovered_signature) => {
+                    cleanup().await;
+                    log(
+                        LogTag::Positions,
+                        "RECOVERY_SUCCESS",
+                        &format!(
+                            "✅ Position recovered for {} using transaction {}",
+                            symbol,
+                            crate::utils::safe_truncate(&recovered_signature, 12)
+                        )
+                    );
+                    return Ok(
+                        format!(
+                            "Position recovered from transaction {}",
+                            crate::utils::safe_truncate(&recovered_signature, 12)
+                        )
+                    );
+                }
+                Err(recovery_error) => {
+                    log(
+                        LogTag::Positions,
+                        "RECOVERY_FAILED",
+                        &format!("❌ Recovery failed for {}: {}", symbol, recovery_error)
+                    );
+                    cleanup().await;
+                    return Err(
+                        format!(
+                            "No {} tokens to sell (recovery failed: {})",
+                            symbol,
+                            recovery_error
+                        )
+                    );
+                }
+            }
         }
         None => {
             cleanup().await;
@@ -1558,27 +1602,105 @@ pub async fn close_position_direct(
             );
         }
 
-        // Track for comprehensive verification
-        state.pending_verifications.insert(transaction_signature.clone(), Utc::now());
-
-        // Update in database (after releasing the lock) - CRITICAL: Must be synchronous
+        // CRITICAL: Update database BEFORE adding to verification queue to prevent race conditions
         if let Some(position) = position_for_db {
             if position.id.is_some() {
-                // FIXED: Make database update synchronous to prevent race conditions
-                if let Err(e) = update_position(&position).await {
-                    log(
-                        LogTag::Positions,
-                        "DB_ERROR",
-                        &format!("Failed to update position in database: {}", e)
-                    );
-                } else {
-                    log(
-                        LogTag::Positions,
-                        "DB_UPDATE",
-                        &format!("Position {} updated in database", position.id.unwrap())
-                    );
+                let position_id = position.id.unwrap();
+
+                // Retry database update with read-after-write verification
+                let mut retry_count = 0;
+                let max_retries = 3;
+
+                loop {
+                    // Attempt database update
+                    match update_position(&position).await {
+                        Ok(_) => {
+                            // Verify write succeeded by reading back the exit signature
+                            match db_get_position_by_id(position_id).await {
+                                Ok(Some(updated_position)) => {
+                                    if
+                                        updated_position.exit_transaction_signature.as_ref() ==
+                                        Some(&transaction_signature)
+                                    {
+                                        log(
+                                            LogTag::Positions,
+                                            "DB_UPDATE",
+                                            &format!("Position {} exit signature verified in database", position_id)
+                                        );
+                                        break; // Success - exit signature confirmed persisted
+                                    } else {
+                                        log(
+                                            LogTag::Positions,
+                                            "DB_VERIFY_FAILED",
+                                            &format!(
+                                                "Exit signature not found in database for position {}, retry {}/{}",
+                                                position_id,
+                                                retry_count + 1,
+                                                max_retries
+                                            )
+                                        );
+                                    }
+                                }
+                                Ok(None) => {
+                                    log(
+                                        LogTag::Positions,
+                                        "DB_VERIFY_FAILED",
+                                        &format!(
+                                            "Position {} not found in database during verification, retry {}/{}",
+                                            position_id,
+                                            retry_count + 1,
+                                            max_retries
+                                        )
+                                    );
+                                }
+                                Err(e) => {
+                                    log(
+                                        LogTag::Positions,
+                                        "DB_VERIFY_ERROR",
+                                        &format!(
+                                            "Failed to verify position {} update: {}, retry {}/{}",
+                                            position_id,
+                                            e,
+                                            retry_count + 1,
+                                            max_retries
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Positions,
+                                "DB_ERROR",
+                                &format!(
+                                    "Failed to update position {} in database: {}, retry {}/{}",
+                                    position_id,
+                                    e,
+                                    retry_count + 1,
+                                    max_retries
+                                )
+                            );
+                        }
+                    }
+
+                    retry_count += 1;
+                    if retry_count >= max_retries {
+                        cleanup().await;
+                        return Err(
+                            format!("Failed to persist exit signature to database after {} attempts", max_retries)
+                        );
+                    }
+
+                    // Brief delay before retry
+                    sleep(Duration::from_millis(100 * (retry_count as u64))).await;
                 }
             }
+        }
+
+        // Only add to verification queue after confirming database persistence
+        {
+            let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+            state.pending_verifications.insert(transaction_signature.clone(), Utc::now());
         }
     }
 
@@ -4129,4 +4251,303 @@ pub async fn fix_failed_exit_positions() -> Result<usize, String> {
     }
 
     Ok(fixed_count)
+}
+
+/// Attempt to recover a position by finding its sell transaction and using full verification flow
+/// This handles cases where tokens were sold but position wasn't properly closed
+/// Uses the same verification workflow as normal position closing for consistency and full P&L calculation
+pub async fn attempt_position_recovery_from_transactions(
+    mint: &str,
+    symbol: &str
+) -> Result<String, String> {
+    log(
+        LogTag::Positions,
+        "RECOVERY_START",
+        &format!(
+            "🔍 Starting position recovery for {} (mint: {})",
+            symbol,
+            crate::utils::safe_truncate(mint, 8)
+        )
+    );
+
+    // First, find the position that needs recovery
+    let position = {
+        let state = GLOBAL_POSITIONS_STATE.lock().await;
+        state.positions
+            .iter()
+            .find(|p| p.mint == mint && p.exit_transaction_signature.is_none())
+            .cloned()
+    };
+
+    let position = match position {
+        Some(pos) => pos,
+        None => {
+            return Err("No open position found for this token".to_string());
+        }
+    };
+
+    log(
+        LogTag::Positions,
+        "RECOVERY_POSITION",
+        &format!(
+            "🎯 Found position to recover: {} (ID: {}, token_amount: {:?})",
+            symbol,
+            position.id.unwrap_or(0),
+            position.token_amount
+        )
+    );
+
+    // Search for recent SwapTokenToSol transactions for this token
+    let transaction_manager = match get_global_transaction_manager().await {
+        Some(manager_guard) => manager_guard,
+        None => {
+            return Err("Transaction manager not available".to_string());
+        }
+    };
+
+    // Get recent sell transactions for this token using transaction manager
+    let signatures = {
+        let manager = transaction_manager.lock().await;
+        if let Some(ref manager) = *manager {
+            if let Some(ref db) = manager.transaction_database {
+                // Try standard search first
+                match
+                    db.get_swap_signatures_for_token(mint, Some("SwapTokenToSol"), Some(20)).await
+                {
+                    Ok(sigs) if !sigs.is_empty() => sigs,
+                    _ => {
+                        // Fall back to broader search if standard search fails
+                        log(
+                            LogTag::Positions,
+                            "RECOVERY_FALLBACK_SEARCH",
+                            &format!("Standard search failed for {}, trying broader search", symbol)
+                        );
+
+                        // Search more broadly in transaction_type field for tokens with missing metadata
+                        match db.get_swap_signatures_for_token_fallback(mint, Some(20)).await {
+                            Ok(sigs) => sigs,
+                            Err(e) => {
+                                return Err(
+                                    format!("Failed to search transactions (fallback): {}", e)
+                                );
+                            }
+                        }
+                    }
+                }
+            } else {
+                return Err("Transaction database not available".to_string());
+            }
+        } else {
+            return Err("Transaction manager not initialized".to_string());
+        }
+    };
+
+    if signatures.is_empty() {
+        return Err("No recent sell transactions found".to_string());
+    }
+
+    log(
+        LogTag::Positions,
+        "RECOVERY_SEARCH",
+        &format!("🔍 Found {} potential sell transactions to check", signatures.len())
+    );
+
+    // Check each transaction to find the one that matches our position
+    for signature in signatures.iter() {
+        log(
+            LogTag::Positions,
+            "RECOVERY_CHECK_TX",
+            &format!("🔍 Checking transaction {}", crate::utils::safe_truncate(&signature, 12))
+        );
+
+        // Validate transaction exists and is successful using priority transaction access
+        // This bypasses the busy manager issue and ensures we get properly analyzed transactions
+        match get_priority_transaction(&signature).await {
+            Ok(Some(transaction)) => {
+                // Verify transaction is successful and finalized
+                if
+                    !transaction.success ||
+                    !matches!(
+                        transaction.status,
+                        TransactionStatus::Confirmed | TransactionStatus::Finalized
+                    )
+                {
+                    log(
+                        LogTag::Positions,
+                        "RECOVERY_SKIP_TX",
+                        &format!(
+                            "⚠️ Skipping failed/pending transaction {}",
+                            crate::utils::safe_truncate(&signature, 12)
+                        )
+                    );
+                    continue;
+                }
+
+                // Convert transaction to SwapPnLInfo using the same method as verification
+                let swap_pnl_info = {
+                    let manager = transaction_manager.lock().await;
+                    if let Some(ref manager) = *manager {
+                        let empty_cache = std::collections::HashMap::new();
+                        manager.convert_to_swap_pnl_info(&transaction, &empty_cache, false)
+                    } else {
+                        None
+                    }
+                };
+
+                // Check if this transaction is a valid sell for our token
+                if let Some(swap_info) = swap_pnl_info {
+                    if swap_info.swap_type == "Sell" && swap_info.token_mint == mint {
+                        log(
+                            LogTag::Positions,
+                            "RECOVERY_MATCH_FOUND",
+                            &format!(
+                                "✅ Found matching sell transaction: {} for token {}",
+                                crate::utils::safe_truncate(&signature, 12),
+                                symbol
+                            )
+                        );
+
+                        // CRITICAL: Set the exit transaction signature and use the NORMAL verification flow
+                        // This ensures the position gets fully verified with all the same calculations
+                        // as a normal position close, including proper P&L calculation
+
+                        // Update position with exit transaction signature
+                        {
+                            let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+                            if let Some(pos) = state.positions.iter_mut().find(|p| p.mint == mint) {
+                                pos.exit_transaction_signature = Some(signature.clone());
+                                log(
+                                    LogTag::Positions,
+                                    "RECOVERY_SET_EXIT_SIGNATURE",
+                                    &format!(
+                                        "🔄 Set exit signature for {}: {}",
+                                        symbol,
+                                        crate::utils::safe_truncate(&signature, 12)
+                                    )
+                                );
+                            }
+                        }
+
+                        // Update database with exit signature immediately
+                        if let Some(position_id) = position.id {
+                            let mut updated_position = position.clone();
+                            updated_position.exit_transaction_signature = Some(signature.clone());
+
+                            match update_position(&updated_position).await {
+                                Ok(_) => {
+                                    log(
+                                        LogTag::Positions,
+                                        "RECOVERY_EXIT_SIGNATURE_SAVED",
+                                        &format!("✅ Exit signature saved for {} in database", symbol)
+                                    );
+                                }
+                                Err(e) => {
+                                    log(
+                                        LogTag::Positions,
+                                        "RECOVERY_EXIT_SIGNATURE_ERROR",
+                                        &format!(
+                                            "❌ Failed to save exit signature for {}: {}",
+                                            symbol,
+                                            e
+                                        )
+                                    );
+                                    // Continue with verification anyway
+                                }
+                            }
+                        }
+
+                        // Add to verification queue and run the FULL verification workflow
+                        // This is the same process as normal position closing
+                        {
+                            let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+                            state.pending_verifications.insert(signature.clone(), Utc::now());
+                        }
+
+                        log(
+                            LogTag::Positions,
+                            "RECOVERY_START_VERIFICATION",
+                            &format!("🔍 Starting full verification workflow for recovered position {}", symbol)
+                        );
+
+                        // Use the same comprehensive verification as normal position closing
+                        match verify_position_transaction(&signature).await {
+                            Ok(true) => {
+                                log(
+                                    LogTag::Positions,
+                                    "RECOVERY_VERIFICATION_SUCCESS",
+                                    &format!("✅ Position recovery completed successfully for {}", symbol)
+                                );
+                                return Ok(signature.clone());
+                            }
+                            Ok(false) => {
+                                log(
+                                    LogTag::Positions,
+                                    "RECOVERY_VERIFICATION_INCOMPLETE",
+                                    &format!("⚠️ Position recovery verification incomplete for {} - will retry", symbol)
+                                );
+                                // Don't return error - verification is in progress
+                                return Ok(signature.clone());
+                            }
+                            Err(e) => {
+                                log(
+                                    LogTag::Positions,
+                                    "RECOVERY_VERIFICATION_ERROR",
+                                    &format!(
+                                        "❌ Position recovery verification failed for {}: {}",
+                                        symbol,
+                                        e
+                                    )
+                                );
+                                // Continue checking other transactions
+                            }
+                        }
+                    } else {
+                        log(
+                            LogTag::Positions,
+                            "RECOVERY_TYPE_MISMATCH",
+                            &format!(
+                                "⚠️ Transaction type/token mismatch for {}: expected Sell {}, got {} {}",
+                                crate::utils::safe_truncate(&signature, 12),
+                                crate::utils::safe_truncate(&mint, 8),
+                                swap_info.swap_type,
+                                crate::utils::safe_truncate(&swap_info.token_mint, 8)
+                            )
+                        );
+                    }
+                } else {
+                    log(
+                        LogTag::Positions,
+                        "RECOVERY_NO_ANALYSIS",
+                        &format!(
+                            "⚠️ No swap analysis data for transaction {}",
+                            crate::utils::safe_truncate(&signature, 12)
+                        )
+                    );
+                }
+            }
+            Ok(None) => {
+                log(
+                    LogTag::Positions,
+                    "RECOVERY_TX_NOT_FOUND",
+                    &format!(
+                        "⚠️ Transaction {} not found in database",
+                        crate::utils::safe_truncate(&signature, 12)
+                    )
+                );
+            }
+            Err(e) => {
+                log(
+                    LogTag::Positions,
+                    "RECOVERY_TX_ERROR",
+                    &format!(
+                        "❌ Error fetching transaction {}: {}",
+                        crate::utils::safe_truncate(&signature, 12),
+                        e
+                    )
+                );
+            }
+        }
+    }
+
+    Err("No matching sell transaction found for position recovery".to_string())
 }

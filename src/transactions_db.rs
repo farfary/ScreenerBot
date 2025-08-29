@@ -1354,6 +1354,90 @@ impl TransactionDatabase {
 
         Ok(signatures)
     }
+
+    /// Fallback search for tokens when token_info/swap_analysis are not populated
+    /// This searches directly in the transaction_type JSON for the mint address
+    pub async fn get_swap_signatures_for_token_fallback(
+        &self,
+        token_mint: &str,
+        limit: Option<usize>
+    ) -> Result<Vec<String>, String> {
+        let conn = self.pool
+            .get()
+            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+
+        let mut query = String::from(
+            "SELECT DISTINCT pt.signature FROM processed_transactions pt 
+             INNER JOIN raw_transactions rt ON pt.signature = rt.signature 
+             WHERE rt.success = 1
+             AND (pt.transaction_type LIKE ? OR pt.transaction_type LIKE ?)"
+        );
+
+        // Order by timestamp DESC to get most recent first
+        query.push_str(" ORDER BY rt.block_time DESC, rt.timestamp DESC");
+
+        // Add limit if specified
+        if let Some(limit) = limit {
+            query.push_str(&format!(" LIMIT {}", limit));
+        }
+
+        log(
+            LogTag::Transactions,
+            "FALLBACK_QUERY",
+            &format!("Fallback search for token {}: searching transaction_type field directly", if
+                token_mint.len() >= 8
+            {
+                &token_mint[..8]
+            } else {
+                token_mint
+            })
+        );
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| format!("Failed to prepare fallback query: {}", e))?;
+
+        // Search for both SwapTokenToSol and SwapSolToToken patterns with this mint
+        let pattern1 = format!("%SwapTokenToSol%{}%", token_mint);
+        let pattern2 = format!("%SwapSolToToken%{}%", token_mint);
+
+        let rows = stmt
+            .query_map([&pattern1, &pattern2], |row| Ok(row.get::<_, String>(0)?))
+            .map_err(|e| format!("Failed to execute fallback query: {}", e))?;
+
+        let mut signatures = Vec::new();
+        for row in rows {
+            if let Ok(signature) = row {
+                signatures.push(signature);
+            }
+        }
+
+        log(
+            LogTag::Transactions,
+            "FALLBACK_RESULT",
+            &format!(
+                "Fallback search found {} transactions for token {} (patterns: %SwapTokenToSol%{}%, %SwapSolToToken%{}%)",
+                signatures.len(),
+                if token_mint.len() >= 8 {
+                    &token_mint[..8]
+                } else {
+                    token_mint
+                },
+                if token_mint.len() >= 8 {
+                    &token_mint[..8]
+                } else {
+                    token_mint
+                },
+                if token_mint.len() >= 8 {
+                    &token_mint[..8]
+                } else {
+                    token_mint
+                }
+            )
+        );
+
+        Ok(signatures)
+    }
 }
 
 // =============================================================================

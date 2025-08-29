@@ -1219,8 +1219,9 @@ impl PositionsDatabase {
     pub async fn save_token_snapshot(&self, snapshot: &TokenSnapshot) -> Result<i64, String> {
         let conn = self.get_connection()?;
 
-        let result = conn.execute(
-            r#"
+        let result = conn
+            .execute(
+                r#"
             INSERT INTO token_snapshots (
                 position_id, snapshot_type, mint, symbol, name, price_sol, price_usd, price_native,
                 dex_id, pair_address, pair_url, fdv, market_cap, pair_created_at,
@@ -1242,79 +1243,84 @@ impl PositionsDatabase {
                 ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56, ?57, ?58, ?59, ?60
             )
             "#,
-            params![
-                snapshot.position_id,
-                snapshot.snapshot_type,
-                snapshot.mint,
-                snapshot.symbol,
-                snapshot.name,
-                snapshot.price_sol,
-                snapshot.price_usd,
-                snapshot.price_native,
-                snapshot.dex_id,
-                snapshot.pair_address,
-                snapshot.pair_url,
-                snapshot.fdv,
-                snapshot.market_cap,
-                snapshot.pair_created_at,
-                snapshot.liquidity_usd,
-                snapshot.liquidity_base,
-                snapshot.liquidity_quote,
-                snapshot.volume_h24,
-                snapshot.volume_h6,
-                snapshot.volume_h1,
-                snapshot.volume_m5,
-                snapshot.txns_h24_buys,
-                snapshot.txns_h24_sells,
-                snapshot.txns_h6_buys,
-                snapshot.txns_h6_sells,
-                snapshot.txns_h1_buys,
-                snapshot.txns_h1_sells,
-                snapshot.txns_m5_buys,
-                snapshot.txns_m5_sells,
-                snapshot.price_change_h24,
-                snapshot.price_change_h6,
-                snapshot.price_change_h1,
-                snapshot.price_change_m5,
-                snapshot.rugcheck_score,
-                snapshot.rugcheck_score_normalised,
-                snapshot.rugcheck_rugged,
-                snapshot.rugcheck_risks_json,
-                snapshot.rugcheck_mint_authority,
-                snapshot.rugcheck_freeze_authority,
-                snapshot.rugcheck_creator,
-                snapshot.rugcheck_creator_balance,
-                snapshot.rugcheck_total_holders,
-                snapshot.rugcheck_total_market_liquidity,
-                snapshot.rugcheck_total_stable_liquidity,
-                snapshot.rugcheck_total_lp_providers,
-                snapshot.rugcheck_lp_locked_pct,
-                snapshot.rugcheck_lp_locked_usd,
-                snapshot.rugcheck_transfer_fee_pct,
-                snapshot.rugcheck_transfer_fee_max_amount,
-                snapshot.rugcheck_jup_verified,
-                snapshot.rugcheck_jup_strict,
-                snapshot.token_uri,
-                snapshot.token_description,
-                snapshot.token_image,
-                snapshot.token_website,
-                snapshot.token_twitter,
-                snapshot.token_telegram,
-                snapshot.snapshot_time.to_rfc3339(),
-                snapshot.api_fetch_time.to_rfc3339(),
-                snapshot.data_freshness_score
-            ]
-        ).map_err(|e| format!("Failed to insert token snapshot: {}", e))?;
+                params![
+                    snapshot.position_id,
+                    snapshot.snapshot_type,
+                    snapshot.mint,
+                    snapshot.symbol,
+                    snapshot.name,
+                    snapshot.price_sol,
+                    snapshot.price_usd,
+                    snapshot.price_native,
+                    snapshot.dex_id,
+                    snapshot.pair_address,
+                    snapshot.pair_url,
+                    snapshot.fdv,
+                    snapshot.market_cap,
+                    snapshot.pair_created_at,
+                    snapshot.liquidity_usd,
+                    snapshot.liquidity_base,
+                    snapshot.liquidity_quote,
+                    snapshot.volume_h24,
+                    snapshot.volume_h6,
+                    snapshot.volume_h1,
+                    snapshot.volume_m5,
+                    snapshot.txns_h24_buys,
+                    snapshot.txns_h24_sells,
+                    snapshot.txns_h6_buys,
+                    snapshot.txns_h6_sells,
+                    snapshot.txns_h1_buys,
+                    snapshot.txns_h1_sells,
+                    snapshot.txns_m5_buys,
+                    snapshot.txns_m5_sells,
+                    snapshot.price_change_h24,
+                    snapshot.price_change_h6,
+                    snapshot.price_change_h1,
+                    snapshot.price_change_m5,
+                    snapshot.rugcheck_score,
+                    snapshot.rugcheck_score_normalised,
+                    snapshot.rugcheck_rugged,
+                    snapshot.rugcheck_risks_json,
+                    snapshot.rugcheck_mint_authority,
+                    snapshot.rugcheck_freeze_authority,
+                    snapshot.rugcheck_creator,
+                    snapshot.rugcheck_creator_balance,
+                    snapshot.rugcheck_total_holders,
+                    snapshot.rugcheck_total_market_liquidity,
+                    snapshot.rugcheck_total_stable_liquidity,
+                    snapshot.rugcheck_total_lp_providers,
+                    snapshot.rugcheck_lp_locked_pct,
+                    snapshot.rugcheck_lp_locked_usd,
+                    snapshot.rugcheck_transfer_fee_pct,
+                    snapshot.rugcheck_transfer_fee_max_amount,
+                    snapshot.rugcheck_jup_verified,
+                    snapshot.rugcheck_jup_strict,
+                    snapshot.token_uri,
+                    snapshot.token_description,
+                    snapshot.token_image,
+                    snapshot.token_website,
+                    snapshot.token_twitter,
+                    snapshot.token_telegram,
+                    snapshot.snapshot_time.to_rfc3339(),
+                    snapshot.api_fetch_time.to_rfc3339(),
+                    snapshot.data_freshness_score
+                ]
+            )
+            .map_err(|e| format!("Failed to insert token snapshot: {}", e))?;
 
         Ok(conn.last_insert_rowid())
     }
 
     /// Get token snapshots for a position
-    pub async fn get_token_snapshots(&self, position_id: i64) -> Result<Vec<TokenSnapshot>, String> {
+    pub async fn get_token_snapshots(
+        &self,
+        position_id: i64
+    ) -> Result<Vec<TokenSnapshot>, String> {
         let conn = self.get_connection()?;
 
-        let mut stmt = conn.prepare(
-            r#"
+        let mut stmt = conn
+            .prepare(
+                r#"
             SELECT id, position_id, snapshot_type, mint, symbol, name, price_sol, price_usd, price_native,
                    dex_id, pair_address, pair_url, fdv, market_cap, pair_created_at,
                    liquidity_usd, liquidity_base, liquidity_quote,
@@ -1333,26 +1339,34 @@ impl PositionsDatabase {
             WHERE position_id = ?1 
             ORDER BY snapshot_time ASC
             "#
-        ).map_err(|e| format!("Failed to prepare token snapshots query: {}", e))?;
+            )
+            .map_err(|e| format!("Failed to prepare token snapshots query: {}", e))?;
 
-        let snapshot_iter = stmt.query_map(params![position_id], |row| {
-            self.row_to_token_snapshot(row)
-        }).map_err(|e| format!("Failed to execute token snapshots query: {}", e))?;
+        let snapshot_iter = stmt
+            .query_map(params![position_id], |row| { self.row_to_token_snapshot(row) })
+            .map_err(|e| format!("Failed to execute token snapshots query: {}", e))?;
 
         let mut snapshots = Vec::new();
         for snapshot_result in snapshot_iter {
-            snapshots.push(snapshot_result.map_err(|e| format!("Failed to parse token snapshot row: {}", e))?);
+            snapshots.push(
+                snapshot_result.map_err(|e| format!("Failed to parse token snapshot row: {}", e))?
+            );
         }
 
         Ok(snapshots)
     }
 
     /// Get specific token snapshot by type
-    pub async fn get_token_snapshot(&self, position_id: i64, snapshot_type: &str) -> Result<Option<TokenSnapshot>, String> {
+    pub async fn get_token_snapshot(
+        &self,
+        position_id: i64,
+        snapshot_type: &str
+    ) -> Result<Option<TokenSnapshot>, String> {
         let conn = self.get_connection()?;
 
-        let mut stmt = conn.prepare(
-            r#"
+        let mut stmt = conn
+            .prepare(
+                r#"
             SELECT id, position_id, snapshot_type, mint, symbol, name, price_sol, price_usd, price_native,
                    dex_id, pair_address, pair_url, fdv, market_cap, pair_created_at,
                    liquidity_usd, liquidity_base, liquidity_quote,
@@ -1372,11 +1386,15 @@ impl PositionsDatabase {
             ORDER BY snapshot_time DESC
             LIMIT 1
             "#
-        ).map_err(|e| format!("Failed to prepare token snapshot query: {}", e))?;
+            )
+            .map_err(|e| format!("Failed to prepare token snapshot query: {}", e))?;
 
-        let result = stmt.query_row(params![position_id, snapshot_type], |row| {
-            self.row_to_token_snapshot(row)
-        }).optional().map_err(|e| format!("Failed to execute token snapshot query: {}", e))?;
+        let result = stmt
+            .query_row(params![position_id, snapshot_type], |row| {
+                self.row_to_token_snapshot(row)
+            })
+            .optional()
+            .map_err(|e| format!("Failed to execute token snapshot query: {}", e))?;
 
         Ok(result)
     }
@@ -1385,16 +1403,24 @@ impl PositionsDatabase {
     fn row_to_token_snapshot(&self, row: &rusqlite::Row) -> rusqlite::Result<TokenSnapshot> {
         let snapshot_time_str: String = row.get("snapshot_time")?;
         let snapshot_time = DateTime::parse_from_rfc3339(&snapshot_time_str)
-            .map_err(|_| rusqlite::Error::InvalidColumnType(
-                0, "Invalid snapshot_time".to_string(), rusqlite::types::Type::Text
-            ))?
+            .map_err(|_|
+                rusqlite::Error::InvalidColumnType(
+                    0,
+                    "Invalid snapshot_time".to_string(),
+                    rusqlite::types::Type::Text
+                )
+            )?
             .with_timezone(&Utc);
 
         let api_fetch_time_str: String = row.get("api_fetch_time")?;
         let api_fetch_time = DateTime::parse_from_rfc3339(&api_fetch_time_str)
-            .map_err(|_| rusqlite::Error::InvalidColumnType(
-                0, "Invalid api_fetch_time".to_string(), rusqlite::types::Type::Text
-            ))?
+            .map_err(|_|
+                rusqlite::Error::InvalidColumnType(
+                    0,
+                    "Invalid api_fetch_time".to_string(),
+                    rusqlite::types::Type::Text
+                )
+            )?
             .with_timezone(&Utc);
 
         Ok(TokenSnapshot {
@@ -1692,6 +1718,15 @@ pub async fn get_position_by_mint(mint: &str) -> Result<Option<Position>, String
     }
 }
 
+/// Get position by ID from database
+pub async fn get_position_by_id(id: i64) -> Result<Option<Position>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_position_by_id(id).await,
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
 /// Save token snapshot to database
 pub async fn save_token_snapshot(snapshot: &TokenSnapshot) -> Result<i64, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
@@ -1711,7 +1746,10 @@ pub async fn get_token_snapshots(position_id: i64) -> Result<Vec<TokenSnapshot>,
 }
 
 /// Get specific token snapshot by type
-pub async fn get_token_snapshot(position_id: i64, snapshot_type: &str) -> Result<Option<TokenSnapshot>, String> {
+pub async fn get_token_snapshot(
+    position_id: i64,
+    snapshot_type: &str
+) -> Result<Option<TokenSnapshot>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_token_snapshot(position_id, snapshot_type).await,
