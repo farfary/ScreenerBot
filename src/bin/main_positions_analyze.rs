@@ -16,20 +16,31 @@ use std::collections::HashMap;
 use chrono::{ DateTime, Utc, Duration as ChronoDuration };
 use serde::{ Serialize, Deserialize };
 use clap::{ Arg, Command };
+use std::sync::Arc;
+use tokio::sync::Notify;
 
 use screenerbot::{
     positions::{ Position, calculate_position_pnl, get_open_positions, get_closed_positions },
     positions_db::{ get_token_snapshots, initialize_positions_database },
-    tokens::rugcheck::RugcheckResponse,
+    tokens::{
+        rugcheck::RugcheckResponse,
+        get_global_rugcheck_service,
+        initialize_global_rugcheck_service,
+        cache::TokenDatabase,
+    },
     logger::init_file_logging,
 };
 
 /// Safe wrapper for rugcheck data retrieval
-async fn get_token_rugcheck_data_safe(_mint: &str) -> Option<RugcheckResponse> {
-    // This is a simplified version - in a real implementation, you'd want to get the service instance
-    // For now, we'll return None to avoid compilation errors
-    // TODO: Implement proper rugcheck service integration
-    None
+async fn get_token_rugcheck_data_safe(mint: &str) -> Option<RugcheckResponse> {
+    if let Some(service) = get_global_rugcheck_service() {
+        match service.get_rugcheck_data(mint).await {
+            Ok(data) => data,
+            Err(_) => None,
+        }
+    } else {
+        None
+    }
 }
 
 /// Calculate transaction activity score based on transaction patterns
@@ -217,6 +228,7 @@ pub struct TokenCharacteristics {
 
     // Rugcheck data
     pub rugcheck_score: Option<i32>,
+    pub rugcheck_score_normalized: Option<i32>, // Added normalized rugcheck score
     pub rugcheck_rugged: Option<bool>,
     pub lp_locked_pct: Option<f64>,
     pub total_holders: Option<i32>,
@@ -246,6 +258,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "   This is required for position analysis. Please ensure the database is accessible."
         );
         std::process::exit(1);
+    }
+
+    // Initialize rugcheck service for accessing rugcheck data
+    if get_global_rugcheck_service().is_none() {
+        println!("🔧 Initializing rugcheck service for token analysis...");
+        let database = TokenDatabase::new().map_err(|e|
+            format!("Failed to initialize token database: {}", e)
+        )?;
+        let shutdown_notify = Arc::new(Notify::new());
+
+        if let Err(e) = initialize_global_rugcheck_service(database, shutdown_notify).await {
+            eprintln!("⚠️  Warning: Failed to initialize rugcheck service: {}", e);
+            eprintln!("   Rugcheck data will not be available for analysis.");
+        } else {
+            println!("✅ Rugcheck service initialized successfully");
+        }
     }
 
     let matches = Command::new("ScreenerBot Positions Analyzer")
@@ -700,6 +728,7 @@ async fn collect_token_characteristics(
 
             // Rugcheck data
             rugcheck_score: rugcheck_data.as_ref().and_then(|r| r.score),
+            rugcheck_score_normalized: rugcheck_data.as_ref().and_then(|r| r.score_normalised),
             rugcheck_rugged: rugcheck_data.as_ref().and_then(|r| r.rugged),
             lp_locked_pct: rugcheck_data
                 .as_ref()
@@ -849,10 +878,24 @@ fn calculate_similarity_score(char1: &TokenCharacteristics, char2: &TokenCharact
         }
     }
 
-    // Rugcheck score similarity
+    // Rugcheck score similarity (original)
     if let (Some(score1), Some(score2)) = (char1.rugcheck_score, char2.rugcheck_score) {
         total_comparisons += 1;
         if (score1 - score2).abs() <= 2 {
+            // Within 2 points
+            matches += 1;
+        }
+    }
+
+    // Rugcheck normalized score similarity
+    if
+        let (Some(norm1), Some(norm2)) = (
+            char1.rugcheck_score_normalized,
+            char2.rugcheck_score_normalized,
+        )
+    {
+        total_comparisons += 1;
+        if (norm1 - norm2).abs() <= 2 {
             // Within 2 points
             matches += 1;
         }
@@ -957,6 +1000,17 @@ fn get_matching_attributes(
         }
     }
 
+    if
+        let (Some(norm1), Some(norm2)) = (
+            char1.rugcheck_score_normalized,
+            char2.rugcheck_score_normalized,
+        )
+    {
+        if (norm1 - norm2).abs() <= 2 {
+            attributes.push("Similar Normalized Rugcheck Score".to_string());
+        }
+    }
+
     if char1.jup_verified == char2.jup_verified && char1.jup_verified.is_some() {
         attributes.push("Same Verification Status".to_string());
     }
@@ -985,6 +1039,17 @@ fn get_differing_attributes(
     if let (Some(score1), Some(score2)) = (char1.rugcheck_score, char2.rugcheck_score) {
         if (score1 - score2).abs() > 2 {
             attributes.push("Rugcheck Score".to_string());
+        }
+    }
+
+    if
+        let (Some(norm1), Some(norm2)) = (
+            char1.rugcheck_score_normalized,
+            char2.rugcheck_score_normalized,
+        )
+    {
+        if (norm1 - norm2).abs() > 2 {
+            attributes.push("Normalized Rugcheck Score".to_string());
         }
     }
 
@@ -1071,6 +1136,47 @@ fn identify_profitable_patterns(
                 "Tokens with rugcheck score >= 7 that were profitable",
                 &high_rugcheck_profitable,
                 vec![("min_rugcheck_score".to_string(), "7".to_string())]
+            )
+        );
+    }
+
+    // Pattern 4b: High normalized rugcheck score profitable tokens
+    let high_normalized_rugcheck_profitable: Vec<_> = characteristics
+        .iter()
+        .filter(|c| c.is_profitable && c.rugcheck_score_normalized.unwrap_or(0) >= 7)
+        .collect();
+
+    if high_normalized_rugcheck_profitable.len() >= min_positions {
+        patterns.push(
+            create_pattern(
+                "High Normalized Rugcheck Score Winners",
+                "Tokens with normalized rugcheck score >= 7 that were profitable",
+                &high_normalized_rugcheck_profitable,
+                vec![("min_normalized_rugcheck_score".to_string(), "7".to_string())]
+            )
+        );
+    }
+
+    // Pattern 4c: Excellent rugcheck scores (both metrics high)
+    let excellent_rugcheck_profitable: Vec<_> = characteristics
+        .iter()
+        .filter(|c| {
+            c.is_profitable &&
+                c.rugcheck_score.unwrap_or(0) >= 8 &&
+                c.rugcheck_score_normalized.unwrap_or(0) >= 8
+        })
+        .collect();
+
+    if excellent_rugcheck_profitable.len() >= min_positions {
+        patterns.push(
+            create_pattern(
+                "Excellent Rugcheck Winners",
+                "Tokens with both original (>=8) and normalized (>=8) rugcheck scores high",
+                &excellent_rugcheck_profitable,
+                vec![
+                    ("min_rugcheck_score".to_string(), "8".to_string()),
+                    ("min_normalized_rugcheck_score".to_string(), "8".to_string())
+                ]
             )
         );
     }
