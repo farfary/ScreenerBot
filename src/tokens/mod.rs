@@ -51,6 +51,7 @@ pub use dexscreener::{
     DexScreenerApi,
     get_token_prices_from_api,
     get_token_pairs_from_api,
+    get_token_from_mint_global_api,
     init_dexscreener_api,
     get_global_dexscreener_api,
     // API configuration constants
@@ -410,8 +411,6 @@ pub async fn get_token_rugcheck_data_safe(mint: &str) -> Result<Option<RugcheckR
     }
 }
 
-
-
 /// Check if token is safe for trading based on rugcheck data (auto-fetch if missing)
 pub async fn is_token_safe_for_trading_safe(mint: &str) -> bool {
     match get_token_rugcheck_data_safe(mint).await {
@@ -434,8 +433,6 @@ pub async fn is_token_safe_for_trading_safe(mint: &str) -> bool {
         }
     }
 }
-
-
 
 // =============================================================================
 // TOKEN DISCOVERY INTEGRATION
@@ -484,5 +481,3 @@ pub async fn get_token_from_db(mint: &str) -> Option<Token> {
         _ => None,
     }
 }
-
-

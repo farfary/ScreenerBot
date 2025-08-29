@@ -45,6 +45,10 @@ path = "src/lib.rs"
 name = "screenerbot"
 path = "src/main.rs"
 
+[[bin]]
+name = "main_positions_analyze"
+path = "src/bin/main_positions_analyze.rs"
+
 
 
 [dependencies]
