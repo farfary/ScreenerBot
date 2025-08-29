@@ -188,7 +188,7 @@ const SWAP_ATTEMPT_COOLDOWN_SECONDS: i64 = 30;
 const BALANCE_CACHE_DURATION_SECONDS: i64 = 30;
 const DUPLICATE_SWAP_PREVENTION_SECS: i64 = 30;
 const POSITION_OPEN_COOLDOWN_SECS: i64 = 15; // No global cooldown (from backup)
-const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 7 * 24 * 60; // Re-entry cooldown after closing (from backup)
+const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 6 * 60; // Re-entry cooldown after closing (from backup)
 
 // Verification safety windows - reduced for better UX
 const ENTRY_VERIFICATION_MAX_SECS: i64 = 90; // hard cap for entry verification age before treating as timeout
