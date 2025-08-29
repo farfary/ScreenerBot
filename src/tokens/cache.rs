@@ -505,6 +505,25 @@ impl TokenDatabase {
                     Ok(rows_affected) => {
                         if rows_affected > 0 {
                             deleted_count += 1;
+
+                            // Also delete rugcheck data for this token
+                            if
+                                let Err(e) = connection.execute(
+                                    "DELETE FROM rugcheck_data WHERE mint = ?1",
+                                    params![mint]
+                                )
+                            {
+                                log(
+                                    LogTag::System,
+                                    "ERROR",
+                                    &format!(
+                                        "Failed to delete rugcheck data for token {}: {}",
+                                        mint,
+                                        e
+                                    )
+                                );
+                            }
+
                             log(
                                 LogTag::System,
                                 "CLEANUP",
@@ -545,7 +564,10 @@ impl TokenDatabase {
     /// Cleanup tokens with near-zero liquidity from the database
     /// Only removes tokens that have liquidity below threshold AND are older than 1 hour
     /// This should only be called after fetching and updating latest token data
-    pub async fn cleanup_near_zero_liquidity_tokens(&self, threshold_usd: f64) -> Result<usize, Box<dyn std::error::Error>> {
+    pub async fn cleanup_near_zero_liquidity_tokens(
+        &self,
+        threshold_usd: f64
+    ) -> Result<usize, Box<dyn std::error::Error>> {
         // First, collect the candidate tokens (with database lock)
         let tokens_to_check = {
             let connection = self.connection
@@ -594,7 +616,11 @@ impl TokenDatabase {
         log(
             LogTag::System,
             "CLEANUP",
-            &format!("Found {} tokens with liquidity below ${:.1} older than 1 hour", tokens_to_check.len(), threshold_usd)
+            &format!(
+                "Found {} tokens with liquidity below ${:.1} older than 1 hour",
+                tokens_to_check.len(),
+                threshold_usd
+            )
         );
 
         // Check which tokens have open positions - we must not delete these
@@ -636,6 +662,25 @@ impl TokenDatabase {
                     Ok(rows_affected) => {
                         if rows_affected > 0 {
                             deleted_count += 1;
+
+                            // Also delete rugcheck data for this token
+                            if
+                                let Err(e) = connection.execute(
+                                    "DELETE FROM rugcheck_data WHERE mint = ?1",
+                                    params![mint]
+                                )
+                            {
+                                log(
+                                    LogTag::System,
+                                    "ERROR",
+                                    &format!(
+                                        "Failed to delete rugcheck data for token {}: {}",
+                                        mint,
+                                        e
+                                    )
+                                );
+                            }
+
                             log(
                                 LogTag::System,
                                 "CLEANUP",
@@ -664,7 +709,11 @@ impl TokenDatabase {
             log(
                 LogTag::System,
                 "CLEANUP",
-                &format!("Database cleanup: Removed {} stale tokens with liquidity below ${:.1} (>1h old)", deleted_count, threshold_usd)
+                &format!(
+                    "Database cleanup: Removed {} stale tokens with liquidity below ${:.1} (>1h old)",
+                    deleted_count,
+                    threshold_usd
+                )
             );
         } else {
             log(LogTag::System, "CLEANUP", "Database cleanup: No stale tokens removed");
@@ -1270,5 +1319,23 @@ impl TokenDatabase {
             creator_tokens,
             launchpad,
         })
+    }
+
+    /// Delete rugcheck data for a specific token
+    pub fn delete_rugcheck_data(&self, mint: &str) -> Result<bool, rusqlite::Error> {
+        let connection = self.connection
+            .lock()
+            .map_err(|_|
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                    Some("Failed to acquire database lock".to_string())
+                )
+            )?;
+
+        let rows_affected = connection.execute(
+            "DELETE FROM rugcheck_data WHERE mint = ?1",
+            params![mint]
+        )?;
+        Ok(rows_affected > 0)
     }
 }
