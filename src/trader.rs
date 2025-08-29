@@ -51,6 +51,16 @@ pub const MIN_PROFIT_THRESHOLD_ENABLED: bool = true;
 /// Positions below this P&L will not be sold regardless of other exit conditions
 pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 20.0;
 
+/// Time-based override: Allow sell decisions after this duration (hours)
+/// Positions held longer than this can bypass profit threshold if in significant loss
+/// This prevents positions from being held indefinitely when they're clearly failing
+pub const TIME_OVERRIDE_DURATION_HOURS: f64 = 12.0;
+
+/// Loss threshold for time-based override (negative percentage, e.g., -20.0 for -20%)
+/// Positions with losses worse than this threshold can bypass profit requirements after time override
+/// This allows cutting losses on positions that have been failing for extended periods
+pub const TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT: f64 = -20.0;
+
 pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 
 // -----------------------------------------------------------------------------
@@ -1077,8 +1087,19 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                     // Apply minimum profit threshold check if enabled
                     let should_exit = if MIN_PROFIT_THRESHOLD_ENABLED && !debug_force_sell {
-                        // Only allow exit if P&L meets minimum threshold
-                        if pnl_percent >= MIN_PROFIT_THRESHOLD_PERCENT {
+                        // Check if position qualifies for time-based override
+                        let position_age_hours =
+                            (now.signed_duration_since(position.entry_time).num_seconds() as f64) /
+                            3600.0;
+                        let time_override_applies =
+                            position_age_hours >= TIME_OVERRIDE_DURATION_HOURS &&
+                            pnl_percent <= TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT;
+
+                        if time_override_applies {
+                            // Time override: Allow should_sell to decide for old positions with significant losses
+                            should_exit_base
+                        } else if pnl_percent >= MIN_PROFIT_THRESHOLD_PERCENT {
+                            // Normal case: Only allow exit if P&L meets minimum threshold
                             should_exit_base
                         } else {
                             false // Block exit due to insufficient profit
@@ -1088,17 +1109,30 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     };
 
                     if is_debug_trader_enabled() {
+                        let position_age_hours =
+                            (now.signed_duration_since(position.entry_time).num_seconds() as f64) /
+                            3600.0;
+                        let time_override_applies =
+                            position_age_hours >= TIME_OVERRIDE_DURATION_HOURS &&
+                            pnl_percent <= TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT;
+
                         debug_trader_log(
                             "SELL_ANALYSIS",
                             &format!(
-                                "{} | Should Exit: {} (Base: {}) | P&L: {:.2}% ({:.6} SOL) | Min Threshold: {}% (Enabled: {}) | Debug Force: {}",
+                                "{} | Should Exit: {} (Base: {}) | P&L: {:.2}% ({:.6} SOL) | Age: {:.1}h | Min Threshold: {}% (Enabled: {}) | Time Override: {} | Debug Force: {}",
                                 position.symbol,
                                 should_exit,
                                 should_exit_base,
                                 pnl_percent,
                                 pnl_sol,
+                                position_age_hours,
                                 MIN_PROFIT_THRESHOLD_PERCENT,
                                 MIN_PROFIT_THRESHOLD_ENABLED,
+                                if time_override_applies {
+                                    "YES"
+                                } else {
+                                    "NO"
+                                },
                                 debug_force_sell
                             )
                         );
