@@ -1,9 +1,22 @@
-/// Pool-based entry logic for ScreenerBot
+/// Pool-based entry logic for ScreenerBot with Enhanced Momentum Analysis
 ///
-/// This module provides pool price-based entry decisions with -10% drop detection.
+/// This module provides sophisticated entry timing based on drop momentum and acceleration analysis.
 /// Uses real-time blockchain pool data for trading decisions while API data is used only for validation.
-/// Enhanced with 2-minute data age filtering and RL learning advisory (non-blocking).
-/// OPTIMIZED FOR FAST TRADING: Sub-minute decisions with pool price priority.
+/// 
+/// ## Key Features:
+/// - **Drop Momentum Analysis**: Multi-timeframe velocity tracking (10s, 30s, 60s) to detect acceleration/deceleration
+/// - **Optimal Entry Timing**: Waits for drop deceleration before entering to avoid catching falling knives
+/// - **Maturity Scoring**: Calculates drop maturity scores to enter at optimal depths, not too aggressively
+/// - **Bounce Detection**: Advanced bounce suppression using velocity-based strong bounce detection
+/// - **Multi-Window Analysis**: Near-top filtering with 1m, 5m, 15m windows plus ATH proximity guards
+/// 
+/// ## Timing Logic:
+/// 1. **Acceleration Check**: Rejects entries if drop is still accelerating downward
+/// 2. **Momentum Analysis**: Tracks velocity across multiple timeframes for trend consistency
+/// 3. **Maturity Scoring**: Requires minimum maturity scores based on drop depth and momentum
+/// 4. **Deceleration Detection**: Prefers entries when drop momentum is slowing (optimal timing)
+/// 
+/// OPTIMIZED FOR SMART TIMING: Enters at optimal drop depths with momentum-based timing guards.
 
 use crate::tokens::Token;
 use crate::tokens::get_pool_service;
@@ -858,6 +871,204 @@ fn calculate_price_volatility(
     }
 }
 
+// ============================================================================
+// 🎯 ENHANCED MOMENTUM ANALYSIS STRUCTURES AND FUNCTIONS
+// ============================================================================
+
+/// Drop momentum analysis structure for better entry timing
+#[derive(Debug, Clone)]
+struct MomentumAnalysis {
+    velocity_per_minute: f64,        // Current velocity %/min (negative = dropping)
+    acceleration: f64,               // Acceleration %/min² (negative = decelerating drop)
+    is_accelerating: bool,           // Is drop still gaining momentum?
+    is_bouncing_strong: bool,        // Is price bouncing aggressively?
+    velocity_10s: f64,               // 10-second velocity
+    velocity_30s: f64,               // 30-second velocity  
+    velocity_60s: f64,               // 60-second velocity
+    trend_consistency: f64,          // How consistent is the trend (0-1)
+}
+
+/// Analyze drop momentum across multiple timeframes for optimal entry timing
+fn analyze_drop_momentum(
+    price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
+    current_price: f64,
+    now: &chrono::DateTime<chrono::Utc>
+) -> MomentumAnalysis {
+    if price_history.len() < 3 {
+        return MomentumAnalysis {
+            velocity_per_minute: 0.0,
+            acceleration: 0.0,
+            is_accelerating: false,
+            is_bouncing_strong: false,
+            velocity_10s: 0.0,
+            velocity_30s: 0.0,
+            velocity_60s: 0.0,
+            trend_consistency: 0.0,
+        };
+    }
+
+    // Calculate velocities across different timeframes
+    let velocity_10s = calculate_velocity_for_window(price_history, current_price, now, 10);
+    let velocity_30s = calculate_velocity_for_window(price_history, current_price, now, 30);
+    let velocity_60s = calculate_velocity_for_window(price_history, current_price, now, 60);
+
+    // Primary velocity is 30s smoothed
+    let velocity_per_minute = velocity_30s;
+
+    // Calculate acceleration by comparing recent vs older velocity
+    let acceleration = if velocity_10s.is_finite() && velocity_60s.is_finite() {
+        (velocity_10s - velocity_60s) / 50.0 // Acceleration over ~50s
+    } else {
+        0.0
+    };
+
+    // Determine if drop is still accelerating (getting faster downward)
+    let is_accelerating = {
+        // Drop is accelerating if:
+        // 1. Recent velocity is more negative than older velocity
+        // 2. Acceleration is negative (speeding up downward)
+        // 3. Velocity magnitude is increasing
+        velocity_10s < velocity_30s && 
+        velocity_30s < velocity_60s && 
+        acceleration < -0.5 && 
+        velocity_per_minute < -2.0 // Meaningful downward velocity
+    };
+
+    // Detect strong bounce (rapid upward movement)
+    let is_bouncing_strong = {
+        velocity_10s > 3.0 && // Fast upward movement
+        velocity_30s > 1.0 && // Sustained upward movement
+        acceleration > 1.0    // Accelerating upward
+    };
+
+    // Calculate trend consistency (how aligned are the different timeframes)
+    let trend_consistency = calculate_trend_consistency(velocity_10s, velocity_30s, velocity_60s);
+
+    MomentumAnalysis {
+        velocity_per_minute,
+        acceleration,
+        is_accelerating,
+        is_bouncing_strong,
+        velocity_10s,
+        velocity_30s,
+        velocity_60s,
+        trend_consistency,
+    }
+}
+
+/// Calculate velocity for a specific time window
+fn calculate_velocity_for_window(
+    price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
+    current_price: f64,
+    now: &chrono::DateTime<chrono::Utc>,
+    window_seconds: i64
+) -> f64 {
+    let now_owned = *now;
+    let window_prices: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
+        .iter()
+        .filter(|(ts, _)| (now_owned - *ts).num_seconds() <= window_seconds)
+        .cloned()
+        .collect();
+
+    if window_prices.len() < 2 {
+        return 0.0;
+    }
+
+    // Use first and last prices in window for velocity calculation
+    let first = window_prices.first().unwrap();
+    let last = window_prices.last().unwrap();
+
+    if first.1 <= 0.0 || !first.1.is_finite() || !last.1.is_finite() {
+        return 0.0;
+    }
+
+    let time_diff = (last.0 - first.0).num_seconds().max(1) as f64;
+    let price_change_pct = ((current_price - first.1) / first.1) * 100.0;
+    
+    // Convert to %/minute
+    price_change_pct * (60.0 / time_diff)
+}
+
+/// Calculate trend consistency across timeframes (0-1 scale)
+fn calculate_trend_consistency(vel_10s: f64, vel_30s: f64, vel_60s: f64) -> f64 {
+    if !vel_10s.is_finite() || !vel_30s.is_finite() || !vel_60s.is_finite() {
+        return 0.0;
+    }
+
+    // Check if all velocities have the same sign (direction)
+    let same_direction = (vel_10s > 0.0) == (vel_30s > 0.0) && (vel_30s > 0.0) == (vel_60s > 0.0);
+    
+    if !same_direction {
+        return 0.0; // Inconsistent trend
+    }
+
+    // Calculate how similar the magnitudes are
+    let velocities = vec![vel_10s.abs(), vel_30s.abs(), vel_60s.abs()];
+    let max_vel = velocities.iter().fold(0.0f64, |a, &b| a.max(b));
+    let min_vel = velocities.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+
+    if max_vel <= 0.0 {
+        return 0.0;
+    }
+
+    // Consistency is higher when velocities are similar in magnitude
+    let magnitude_consistency = min_vel / max_vel;
+    
+    // Boost consistency for meaningful trends
+    if max_vel > 2.0 {
+        magnitude_consistency * 1.2
+    } else {
+        magnitude_consistency * 0.8
+    }.min(1.0)
+}
+
+/// Calculate drop maturity score - higher score means better entry timing
+fn calculate_drop_maturity(
+    momentum: &MomentumAnalysis,
+    drop_percent: f64,
+    min_drop_threshold: f64
+) -> f64 {
+    if drop_percent < min_drop_threshold * 0.5 {
+        return 0.0; // Not enough of a drop yet
+    }
+
+    let mut maturity_score = 0.0;
+
+    // Base score from drop magnitude (larger drops = more mature)
+    let magnitude_score = ((drop_percent / min_drop_threshold) - 0.5) * 0.3;
+    maturity_score += magnitude_score.min(0.4);
+
+    // Deceleration bonus (drop slowing down = good timing)
+    if !momentum.is_accelerating && momentum.velocity_per_minute < 0.0 {
+        maturity_score += 0.3;
+    }
+
+    // Trend consistency bonus (stable trend = more predictable)
+    maturity_score += momentum.trend_consistency * 0.2;
+
+    // Velocity stabilization bonus (not moving too fast in either direction)
+    let velocity_stability = if momentum.velocity_per_minute.abs() < 5.0 {
+        0.2
+    } else if momentum.velocity_per_minute.abs() < 10.0 {
+        0.1
+    } else {
+        0.0
+    };
+    maturity_score += velocity_stability;
+
+    // Penalty for still accelerating downward (too early)
+    if momentum.is_accelerating {
+        maturity_score -= 0.4;
+    }
+
+    // Penalty for bouncing (too late)
+    if momentum.is_bouncing_strong {
+        maturity_score -= 0.3;
+    }
+
+    maturity_score.max(0.0).min(1.0)
+}
+
 /// Dynamic drop analysis with liquidity-based entry decisions
 /// Returns Some((drop_percent, reason)) if dynamic drop detected, None otherwise
 /// ENHANCED: Handles new tokens with minimal or no price history
@@ -1138,16 +1349,27 @@ async fn analyze_deep_drop_entry(
         }
     }
 
-    // Need at least 2 data points for drop analysis
-    if price_history.len() < 2 {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "INSUFFICIENT_DATA",
-                "❌ Need at least 2 price points for drop analysis"
-            );
+    // Need at least 3 data points for proper momentum analysis
+    if price_history.len() < 3 {
+        // Allow 2 points for ultra-fresh tokens but with limited strategies
+        if price_history.len() == 2 && liquidity_usd >= 10000.0 {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "LIMITED_DATA_ALLOWED",
+                    "⚠️ Only 2 price points - allowing limited analysis for high liquidity token"
+                );
+            }
+        } else {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "INSUFFICIENT_DATA",
+                    "❌ Need at least 3 price points for momentum analysis"
+                );
+            }
+            return None;
         }
-        return None;
     }
 
     // Get recent prices within time window
@@ -1199,6 +1421,63 @@ async fn analyze_deep_drop_entry(
                 recent_high,
                 current_price,
                 recent_low
+            )
+        );
+    }
+
+    // ============================================================================
+    // 🎯 ENHANCED MOMENTUM & TIMING ANALYSIS - Avoid entering too early in drops
+    // ============================================================================
+    
+    // Multi-timeframe velocity analysis to detect drop acceleration/deceleration
+    let momentum_analysis = analyze_drop_momentum(&recent_prices, current_price, &now);
+    
+    // Check if drop is still accelerating (too early to enter)
+    if momentum_analysis.is_accelerating && drop_percent >= effective_min_drop {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "DROP_STILL_ACCELERATING",
+                &format!(
+                    "⏳ Drop {:.1}% still accelerating (vel: {:.1}%/min, accel: {:.2}), waiting for deceleration",
+                    drop_percent,
+                    momentum_analysis.velocity_per_minute,
+                    momentum_analysis.acceleration
+                )
+            );
+        }
+        return None; // Wait for drop to mature
+    }
+    
+    // Enhanced bounce detection with momentum consideration
+    if momentum_analysis.is_bouncing_strong {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "STRONG_BOUNCE_DETECTED",
+                &format!(
+                    "🚫 Strong bounce detected (vel: +{:.1}%/min), avoiding late entry",
+                    momentum_analysis.velocity_per_minute
+                )
+            );
+        }
+        return None;
+    }
+    
+    // Drop maturity check - prefer entries when drop momentum is slowing
+    let drop_maturity_score = calculate_drop_maturity(&momentum_analysis, drop_percent, effective_min_drop);
+    
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Entry,
+            "MOMENTUM_ANALYSIS",
+            &format!(
+                "🔄 Momentum: vel={:.1}%/min accel={:.2} maturity={:.0}% bouncing={} accelerating={}",
+                momentum_analysis.velocity_per_minute,
+                momentum_analysis.acceleration,
+                drop_maturity_score * 100.0,
+                momentum_analysis.is_bouncing_strong,
+                momentum_analysis.is_accelerating
             )
         );
     }
@@ -1287,31 +1566,57 @@ async fn analyze_deep_drop_entry(
         }
     }
 
-    // Strategy 2: Dynamic drop detection (main entry condition) - LIQUIDITY ADJUSTED
+    // Strategy 2: Dynamic drop detection (main entry condition) - ENHANCED WITH TIMING
     if drop_percent >= effective_min_drop && drop_percent <= max_drop_threshold {
-        let time_span = recent_prices.len();
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "DYNAMIC_DROP_HIT",
-                &format!(
-                    "✅ Dynamic drop {:.1}% in range {:.1}%-{:.1}%",
-                    drop_percent,
+        // Require minimum maturity score for main strategy (unless very deep drop)
+        let min_maturity_required = if drop_percent >= effective_min_drop * 2.0 {
+            0.3 // Lower bar for very deep drops
+        } else {
+            0.5 // Higher bar for marginal drops
+        };
+        
+        if drop_maturity_score >= min_maturity_required {
+            let time_span = recent_prices.len();
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "DYNAMIC_DROP_HIT",
+                    &format!(
+                        "✅ Dynamic drop {:.1}% in range {:.1}%-{:.1}% (maturity: {:.0}% ≥ {:.0}%)",
+                        drop_percent,
+                        effective_min_drop,
+                        max_drop_threshold,
+                        drop_maturity_score * 100.0,
+                        min_maturity_required * 100.0
+                    )
+                );
+            }
+            return Some((
+                drop_percent,
+                format!(
+                    "dynamic drop in {}pts (${:.0}k: {:.1}%-{:.1}%, maturity: {:.0}%)",
+                    time_span,
+                    liquidity_usd / THOUSAND_DIVISOR,
                     effective_min_drop,
-                    max_drop_threshold
-                )
-            );
+                    max_drop_threshold,
+                    drop_maturity_score * 100.0
+                ),
+            ));
+        } else {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "DYNAMIC_DROP_IMMATURE",
+                    &format!(
+                        "⏳ Drop {:.1}% qualifies but immature (maturity: {:.0}% < {:.0}%)",
+                        drop_percent,
+                        drop_maturity_score * 100.0,
+                        min_maturity_required * 100.0
+                    )
+                );
+            }
+            return None; // Wait for better timing
         }
-        return Some((
-            drop_percent,
-            format!(
-                "dynamic drop in {}pts (${:.0}k: {:.1}%-{:.1}%)",
-                time_span,
-                liquidity_usd / THOUSAND_DIVISOR,
-                effective_min_drop,
-                max_drop_threshold
-            ),
-        ));
     }
 
     // Strategy 3: Dynamic target ratio drop detection - LIQUIDITY ADJUSTED
@@ -1341,7 +1646,7 @@ async fn analyze_deep_drop_entry(
         ));
     }
 
-    // Strategy 4: Fast dynamic drop (higher threshold but faster timeframe) - LIQUIDITY ADJUSTED
+    // Strategy 4: Fast dynamic drop (higher threshold but faster timeframe) - ENHANCED WITH TIMING
     let ultra_recent: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
         .iter()
         .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= FAST_DROP_TIME_WINDOW_SEC)
@@ -1357,30 +1662,59 @@ async fn analyze_deep_drop_entry(
         if ultra_high > 0.0 && ultra_high.is_finite() {
             let ultra_drop = ((ultra_high - current_price) / ultra_high) * PERCENTAGE_MULTIPLIER;
 
-            // Fast drop threshold is 1.5x the minimum threshold for that liquidity level
+            // Fast drop threshold is 1.2x the minimum threshold for that liquidity level
             let fast_threshold = effective_min_drop * FAST_DROP_THRESHOLD_MULTIPLIER;
 
             if ultra_drop >= fast_threshold && ultra_drop <= max_drop_threshold {
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "FAST_DROP_HIT",
-                        &format!(
-                            "⚡ Fast drop {:.1}% ≥ {:.1}% threshold",
-                            ultra_drop,
-                            fast_threshold
-                        )
-                    );
-                }
-                return Some((
-                    ultra_drop,
-                    format!(
-                        "fast dynamic drop {:.1}% (${:.0}k: ≥{:.1}%)",
+                // For fast drops, require higher maturity OR very deep drop (due to speed)
+                let min_maturity_for_fast = if ultra_drop >= fast_threshold * 1.5 {
+                    0.4 // Lower bar for very fast deep drops
+                } else {
+                    0.6 // Higher bar for fast but shallow drops
+                };
+                
+                // Fast drops get some maturity bonus due to their speed
+                let adjusted_maturity = (drop_maturity_score + 0.1).min(1.0);
+                
+                if adjusted_maturity >= min_maturity_for_fast || 
+                   (!momentum_analysis.is_accelerating && momentum_analysis.velocity_per_minute < -8.0) {
+                    if is_debug_entry_enabled() {
+                        log(
+                            LogTag::Entry,
+                            "FAST_DROP_HIT",
+                            &format!(
+                                "⚡ Fast drop {:.1}% ≥ {:.1}% threshold (adj_maturity: {:.0}% ≥ {:.0}%)",
+                                ultra_drop,
+                                fast_threshold,
+                                adjusted_maturity * 100.0,
+                                min_maturity_for_fast * 100.0
+                            )
+                        );
+                    }
+                    return Some((
                         ultra_drop,
-                        liquidity_usd / THOUSAND_DIVISOR,
-                        fast_threshold
-                    ),
-                ));
+                        format!(
+                            "fast dynamic drop {:.1}% (${:.0}k: ≥{:.1}%, timing: {:.0}%)",
+                            ultra_drop,
+                            liquidity_usd / THOUSAND_DIVISOR,
+                            fast_threshold,
+                            adjusted_maturity * 100.0
+                        ),
+                    ));
+                } else {
+                    if is_debug_entry_enabled() {
+                        log(
+                            LogTag::Entry,
+                            "FAST_DROP_EARLY",
+                            &format!(
+                                "⏳ Fast drop {:.1}% too early (adj_maturity: {:.0}% < {:.0}%)",
+                                ultra_drop,
+                                adjusted_maturity * 100.0,
+                                min_maturity_for_fast * 100.0
+                            )
+                        );
+                    }
+                }
             }
         }
     }
