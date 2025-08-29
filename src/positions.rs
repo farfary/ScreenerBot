@@ -5393,7 +5393,8 @@ pub async fn attempt_position_recovery_from_transactions(
                         drop(_lock);
 
                         // Use the same comprehensive verification as normal position closing
-                        match verify_position_transaction(&signature).await {
+                        let verification_result = verify_position_transaction(&signature).await;
+                        match verification_result {
                             Ok(true) => {
                                 log(
                                     LogTag::Positions,
@@ -5421,7 +5422,10 @@ pub async fn attempt_position_recovery_from_transactions(
                                         e
                                     )
                                 );
-                                // Continue checking other transactions
+                                // Return error since we found the right transaction but verification failed
+                                return Err(
+                                    format!("Verification failed for matching transaction: {}", e)
+                                );
                             }
                         }
                     } else {

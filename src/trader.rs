@@ -49,7 +49,7 @@ pub const MIN_PROFIT_THRESHOLD_ENABLED: bool = true;
 
 /// Minimum profit threshold percentage (e.g., 5.0 for 5%, -5.0 for -5%)
 /// Positions below this P&L will not be sold regardless of other exit conditions
-pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 1.0;
+pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 25.0;
 
 /// Time-based override: Allow sell decisions after this duration (hours)
 /// Positions held longer than this can bypass profit threshold if in significant loss
@@ -59,7 +59,7 @@ pub const TIME_OVERRIDE_DURATION_HOURS: f64 = 12.0;
 /// Loss threshold for time-based override (negative percentage, e.g., -20.0 for -20%)
 /// Positions with losses worse than this threshold can bypass profit requirements after time override
 /// This allows cutting losses on positions that have been failing for extended periods
-pub const TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT: f64 = -25.0;
+pub const TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT: f64 = -40.0;
 
 pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 
