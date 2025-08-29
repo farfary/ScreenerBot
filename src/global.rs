@@ -68,7 +68,7 @@ pub const TOKENS_DATABASE: &str = "data/tokens.db";
 
 /// Cache files
 pub const ATA_FAILED_CACHE: &str = "data/ata_failed_cache.json";
-pub const DECIMAL_CACHE: &str = "data/decimal_cache.json";
+
 pub const TOKEN_BLACKLIST: &str = "data/token_blacklist.json";
 pub const RPC_STATS: &str = "data/rpc_stats.json";
 

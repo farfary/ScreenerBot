@@ -388,7 +388,8 @@ async fn main() {
         pool_service.stop_monitoring().await;
         log(LogTag::System, "INFO", "Pool monitoring service stopped");
 
-        screenerbot::tokens::decimals::save_decimal_cache();
+        // Decimals are now automatically saved to database
+        log(LogTag::System, "INFO", "Decimals database persists automatically");
 
         // Save RPC statistics to disk
         if let Err(e) = screenerbot::rpc::save_global_rpc_stats() {
