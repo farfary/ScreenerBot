@@ -19,7 +19,7 @@ use clap::{ Arg, Command };
 
 use screenerbot::{
     positions::{ Position, calculate_position_pnl, get_open_positions, get_closed_positions },
-    positions_db::{ get_token_snapshots, TokenSnapshot, initialize_positions_database },
+    positions_db::{ get_token_snapshots, initialize_positions_database },
     tokens::rugcheck::RugcheckResponse,
     logger::init_file_logging,
 };
@@ -30,6 +30,86 @@ async fn get_token_rugcheck_data_safe(_mint: &str) -> Option<RugcheckResponse> {
     // For now, we'll return None to avoid compilation errors
     // TODO: Implement proper rugcheck service integration
     None
+}
+
+/// Calculate transaction activity score based on transaction patterns
+/// Returns a score from 0-100 where higher scores indicate more active/healthy trading
+fn calculate_transaction_activity_score(
+    txns_h24_total: Option<i64>,
+    txns_h6_total: Option<i64>,
+    txns_h1_total: Option<i64>,
+    buy_sell_ratio_24h: Option<f64>
+) -> Option<f64> {
+    let mut score = 0.0;
+    let mut factors = 0;
+
+    // Factor 1: 24h transaction volume (0-40 points)
+    if let Some(txns_24h) = txns_h24_total {
+        let activity_score = match txns_24h {
+            0..=10 => 0.0, // Very low activity
+            11..=50 => 10.0, // Low activity
+            51..=200 => 25.0, // Moderate activity
+            201..=1000 => 35.0, // High activity
+            _ => 40.0, // Very high activity
+        };
+        score += activity_score;
+        factors += 1;
+    }
+
+    // Factor 2: Buy/sell ratio balance (0-30 points)
+    if let Some(ratio) = buy_sell_ratio_24h {
+        let balance_score = if ratio.is_infinite() || ratio == 0.0 {
+            0.0 // All buys or all sells - not balanced
+        } else if ratio >= 0.3 && ratio <= 3.0 {
+            30.0 // Good balance between buys and sells
+        } else if ratio >= 0.1 && ratio <= 10.0 {
+            20.0 // Reasonable balance
+        } else {
+            10.0 // Poor balance
+        };
+        score += balance_score;
+        factors += 1;
+    }
+
+    // Factor 3: Recent activity trend (0-20 points)
+    if
+        let (Some(txns_1h), Some(_txns_6h), Some(txns_24h)) = (
+            txns_h1_total,
+            txns_h6_total,
+            txns_h24_total,
+        )
+    {
+        let trend_score = if txns_24h == 0 {
+            0.0
+        } else {
+            let recent_ratio = (txns_1h as f64) / ((txns_24h as f64) / 24.0); // Normalized hourly rate
+            if recent_ratio >= 1.5 {
+                20.0 // Increasing activity
+            } else if recent_ratio >= 0.8 {
+                15.0 // Stable activity
+            } else if recent_ratio >= 0.5 {
+                10.0 // Decreasing activity
+            } else {
+                5.0 // Low recent activity
+            }
+        };
+        score += trend_score;
+        factors += 1;
+    }
+
+    // Factor 4: Minimum viable activity threshold (0-10 points)
+    if let Some(txns_24h) = txns_h24_total {
+        if txns_24h >= 20 {
+            score += 10.0; // Bonus for having meaningful activity
+        }
+        factors += 1;
+    }
+
+    if factors > 0 {
+        Some(((score / (factors as f64)) * 100.0) / 100.0) // Normalize to 0-100
+    } else {
+        None
+    }
 }
 
 // Analysis result structures
@@ -121,6 +201,19 @@ pub struct TokenCharacteristics {
     pub market_cap: Option<f64>,
     pub volume_24h: Option<f64>,
     pub price_change_24h: Option<f64>,
+
+    // Transaction counts
+    pub txns_h24_buys: Option<i64>,
+    pub txns_h24_sells: Option<i64>,
+    pub txns_h24_total: Option<i64>,
+    pub txns_h6_buys: Option<i64>,
+    pub txns_h6_sells: Option<i64>,
+    pub txns_h6_total: Option<i64>,
+    pub txns_h1_buys: Option<i64>,
+    pub txns_h1_sells: Option<i64>,
+    pub txns_h1_total: Option<i64>,
+    pub buy_sell_ratio_24h: Option<f64>,
+    pub transaction_activity_score: Option<f64>, // Calculated score based on transaction patterns
 
     // Rugcheck data
     pub rugcheck_score: Option<i32>,
@@ -527,6 +620,57 @@ async fn collect_token_characteristics(
             None
         };
 
+        // Calculate transaction metrics from snapshots
+        let (txns_h24_buys, txns_h24_sells, txns_h24_total) = if
+            let Some(snapshot) = opening_snapshot
+        {
+            let buys = snapshot.txns_h24_buys.unwrap_or(0);
+            let sells = snapshot.txns_h24_sells.unwrap_or(0);
+            let total = buys + sells;
+            (Some(buys), Some(sells), Some(total))
+        } else {
+            (None, None, None)
+        };
+
+        let (txns_h6_buys, txns_h6_sells, txns_h6_total) = if let Some(snapshot) = opening_snapshot {
+            let buys = snapshot.txns_h6_buys.unwrap_or(0);
+            let sells = snapshot.txns_h6_sells.unwrap_or(0);
+            let total = buys + sells;
+            (Some(buys), Some(sells), Some(total))
+        } else {
+            (None, None, None)
+        };
+
+        let (txns_h1_buys, txns_h1_sells, txns_h1_total) = if let Some(snapshot) = opening_snapshot {
+            let buys = snapshot.txns_h1_buys.unwrap_or(0);
+            let sells = snapshot.txns_h1_sells.unwrap_or(0);
+            let total = buys + sells;
+            (Some(buys), Some(sells), Some(total))
+        } else {
+            (None, None, None)
+        };
+
+        // Calculate buy/sell ratio for 24h
+        let buy_sell_ratio_24h = if let (Some(buys), Some(sells)) = (txns_h24_buys, txns_h24_sells) {
+            if sells > 0 {
+                Some((buys as f64) / (sells as f64))
+            } else if buys > 0 {
+                Some(f64::INFINITY) // All buys, no sells
+            } else {
+                Some(0.0) // No transactions
+            }
+        } else {
+            None
+        };
+
+        // Calculate transaction activity score (0-100)
+        let transaction_activity_score = calculate_transaction_activity_score(
+            txns_h24_total,
+            txns_h6_total,
+            txns_h1_total,
+            buy_sell_ratio_24h
+        );
+
         let characteristics_entry = TokenCharacteristics {
             mint: position.mint.clone(),
             symbol: position.symbol.clone(),
@@ -540,6 +684,19 @@ async fn collect_token_characteristics(
             market_cap: opening_snapshot.and_then(|s| s.market_cap),
             volume_24h: opening_snapshot.and_then(|s| s.volume_h24),
             price_change_24h: opening_snapshot.and_then(|s| s.price_change_h24),
+
+            // Transaction counts
+            txns_h24_buys,
+            txns_h24_sells,
+            txns_h24_total,
+            txns_h6_buys,
+            txns_h6_sells,
+            txns_h6_total,
+            txns_h1_buys,
+            txns_h1_sells,
+            txns_h1_total,
+            buy_sell_ratio_24h,
+            transaction_activity_score,
 
             // Rugcheck data
             rugcheck_score: rugcheck_data.as_ref().and_then(|r| r.score),
@@ -653,6 +810,45 @@ fn calculate_similarity_score(char1: &TokenCharacteristics, char2: &TokenCharact
         }
     }
 
+    // Transaction activity similarity
+    if let (Some(txns1), Some(txns2)) = (char1.txns_h24_total, char2.txns_h24_total) {
+        total_comparisons += 1;
+        if txns1 == 0 && txns2 == 0 {
+            matches += 1; // Both have no activity
+        } else if txns1 > 0 && txns2 > 0 {
+            let ratio = (txns1 as f64) / (txns2 as f64);
+            if ratio >= 0.5 && ratio <= 2.0 {
+                matches += 1; // Similar transaction volume
+            }
+        }
+    }
+
+    // Buy/sell ratio similarity
+    if let (Some(ratio1), Some(ratio2)) = (char1.buy_sell_ratio_24h, char2.buy_sell_ratio_24h) {
+        total_comparisons += 1;
+        if ratio1.is_infinite() && ratio2.is_infinite() {
+            matches += 1; // Both all-buy tokens
+        } else if !ratio1.is_infinite() && !ratio2.is_infinite() && ratio1 > 0.0 && ratio2 > 0.0 {
+            let ratio_diff = (ratio1 - ratio2).abs() / ratio1.max(ratio2);
+            if ratio_diff < 0.5 {
+                matches += 1; // Similar buy/sell patterns
+            }
+        }
+    }
+
+    // Transaction activity score similarity
+    if
+        let (Some(score1), Some(score2)) = (
+            char1.transaction_activity_score,
+            char2.transaction_activity_score,
+        )
+    {
+        total_comparisons += 1;
+        if (score1 - score2).abs() < 20.0 {
+            matches += 1; // Within 20 points
+        }
+    }
+
     // Rugcheck score similarity
     if let (Some(score1), Some(score2)) = (char1.rugcheck_score, char2.rugcheck_score) {
         total_comparisons += 1;
@@ -713,6 +909,48 @@ fn get_matching_attributes(
         }
     }
 
+    // Transaction activity matching
+    if let (Some(txns1), Some(txns2)) = (char1.txns_h24_total, char2.txns_h24_total) {
+        if txns1 == 0 && txns2 == 0 {
+            attributes.push("Both Low Activity".to_string());
+        } else if txns1 > 0 && txns2 > 0 {
+            let ratio = (txns1 as f64) / (txns2 as f64);
+            if ratio >= 0.5 && ratio <= 2.0 {
+                attributes.push("Similar Transaction Volume".to_string());
+            }
+        }
+    }
+
+    // Buy/sell ratio matching
+    if let (Some(ratio1), Some(ratio2)) = (char1.buy_sell_ratio_24h, char2.buy_sell_ratio_24h) {
+        if ratio1.is_infinite() && ratio2.is_infinite() {
+            attributes.push("Both All-Buy Tokens".to_string());
+        } else if !ratio1.is_infinite() && !ratio2.is_infinite() && ratio1 > 0.0 && ratio2 > 0.0 {
+            let ratio_diff = (ratio1 - ratio2).abs() / ratio1.max(ratio2);
+            if ratio_diff < 0.5 {
+                attributes.push("Similar Buy/Sell Patterns".to_string());
+            }
+        }
+    }
+
+    // Transaction activity score matching
+    if
+        let (Some(score1), Some(score2)) = (
+            char1.transaction_activity_score,
+            char2.transaction_activity_score,
+        )
+    {
+        if (score1 - score2).abs() < 20.0 {
+            if score1 >= 70.0 && score2 >= 70.0 {
+                attributes.push("Both High Activity".to_string());
+            } else if score1 >= 40.0 && score2 >= 40.0 {
+                attributes.push("Both Moderate Activity".to_string());
+            } else {
+                attributes.push("Similar Activity Level".to_string());
+            }
+        }
+    }
+
     if let (Some(score1), Some(score2)) = (char1.rugcheck_score, char2.rugcheck_score) {
         if (score1 - score2).abs() <= 2 {
             attributes.push("Similar Rugcheck Score".to_string());
@@ -764,7 +1002,63 @@ fn identify_profitable_patterns(
 ) -> Vec<ProfitablePattern> {
     let mut patterns = Vec::new();
 
-    // Pattern 1: High rugcheck score profitable tokens
+    // Pattern 1: High transaction activity profitable tokens
+    let high_activity_profitable: Vec<_> = characteristics
+        .iter()
+        .filter(|c| c.is_profitable && c.transaction_activity_score.unwrap_or(0.0) >= 70.0)
+        .collect();
+
+    if high_activity_profitable.len() >= min_positions {
+        patterns.push(
+            create_pattern(
+                "High Activity Winners",
+                "Tokens with high transaction activity (score >= 70) that were profitable",
+                &high_activity_profitable,
+                vec![("min_activity_score".to_string(), "70".to_string())]
+            )
+        );
+    }
+
+    // Pattern 2: Balanced buy/sell ratio profitable tokens
+    let balanced_trading_profitable: Vec<_> = characteristics
+        .iter()
+        .filter(|c| {
+            c.is_profitable &&
+                c.buy_sell_ratio_24h.map_or(false, |ratio| {
+                    !ratio.is_infinite() && ratio >= 0.3 && ratio <= 3.0
+                })
+        })
+        .collect();
+
+    if balanced_trading_profitable.len() >= min_positions {
+        patterns.push(
+            create_pattern(
+                "Balanced Trading Winners",
+                "Tokens with balanced buy/sell ratios (0.3-3.0) that were profitable",
+                &balanced_trading_profitable,
+                vec![("balanced_trading".to_string(), "true".to_string())]
+            )
+        );
+    }
+
+    // Pattern 3: High volume profitable tokens (24h transactions)
+    let high_volume_profitable: Vec<_> = characteristics
+        .iter()
+        .filter(|c| c.is_profitable && c.txns_h24_total.unwrap_or(0) >= 200)
+        .collect();
+
+    if high_volume_profitable.len() >= min_positions {
+        patterns.push(
+            create_pattern(
+                "High Volume Winners",
+                "Tokens with high 24h transaction volume (>=200) that were profitable",
+                &high_volume_profitable,
+                vec![("min_txns_24h".to_string(), "200".to_string())]
+            )
+        );
+    }
+
+    // Pattern 4: High rugcheck score profitable tokens
     let high_rugcheck_profitable: Vec<_> = characteristics
         .iter()
         .filter(|c| c.is_profitable && c.rugcheck_score.unwrap_or(0) >= 7)
@@ -781,7 +1075,7 @@ fn identify_profitable_patterns(
         );
     }
 
-    // Pattern 2: Jupiter verified profitable tokens
+    // Pattern 5: Jupiter verified profitable tokens
     let jup_verified_profitable: Vec<_> = characteristics
         .iter()
         .filter(|c| c.is_profitable && c.jup_verified == Some(true))
@@ -798,7 +1092,7 @@ fn identify_profitable_patterns(
         );
     }
 
-    // Pattern 3: High liquidity profitable tokens
+    // Pattern 6: High liquidity profitable tokens
     let high_liquidity_profitable: Vec<_> = characteristics
         .iter()
         .filter(|c| c.is_profitable && c.liquidity_usd.unwrap_or(0.0) >= 50000.0)
@@ -815,7 +1109,7 @@ fn identify_profitable_patterns(
         );
     }
 
-    // Pattern 4: Quick profit pattern (< 2 hours)
+    // Pattern 7: Quick profit pattern (< 2 hours)
     let quick_profit: Vec<_> = characteristics
         .iter()
         .filter(|c| c.is_profitable && c.duration_hours.unwrap_or(f64::INFINITY) < 2.0)
@@ -832,7 +1126,7 @@ fn identify_profitable_patterns(
         );
     }
 
-    // Pattern 5: LP locked tokens
+    // Pattern 8: LP locked tokens
     let lp_locked_profitable: Vec<_> = characteristics
         .iter()
         .filter(|c| c.is_profitable && c.lp_locked_pct.unwrap_or(0.0) >= 50.0)
