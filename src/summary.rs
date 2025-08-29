@@ -161,6 +161,8 @@ async fn get_cached_wallet_balance() -> String {
 /// Display structure for closed positions with specific "Exit" column
 #[derive(Tabled)]
 pub struct ClosedPositionDisplay {
+    #[tabled(rename = "🆔 ID")]
+    id: String,
     #[tabled(rename = "🏷️ Symbol")]
     symbol: String,
     #[tabled(rename = "🔑 Mint")]
@@ -186,6 +188,8 @@ pub struct ClosedPositionDisplay {
 /// Display structure for open positions with specific "Price" column
 #[derive(Tabled)]
 pub struct OpenPositionDisplay {
+    #[tabled(rename = "🆔 ID")]
+    id: String,
     #[tabled(rename = "🏷️ Symbol")]
     symbol: String,
     #[tabled(rename = "🔑 Mint")]
@@ -1861,6 +1865,7 @@ impl ClosedPositionDisplay {
             };
 
             return Self {
+                id: position.id.map(|id| id.to_string()).unwrap_or_else(|| "N/A".to_string()),
                 symbol: position.symbol.clone(),
                 mint: position.mint.clone(),
                 entry_price: "UNVERIFIED".to_string(),
@@ -1881,16 +1886,24 @@ impl ClosedPositionDisplay {
 
         let (pnl_sol, pnl_percent) = (pnl_sol, pnl_percent);
 
-        let pnl_sol_str = if pnl_sol >= 0.0 {
-            format!("+{:.6}", pnl_sol)
+        let pnl_sol_str = if position.transaction_entry_verified && position.transaction_exit_verified {
+            if pnl_sol >= 0.0 {
+                format!("+{:.6}", pnl_sol)
+            } else {
+                format!("{:.6}", pnl_sol)
+            }
         } else {
-            format!("{:.6}", pnl_sol)
+            "UNVERIFIED".to_string()
         };
 
-        let pnl_percent_str = if pnl_percent >= 0.0 {
-            format!("+{:.2}%", pnl_percent)
+        let pnl_percent_str = if position.transaction_entry_verified && position.transaction_exit_verified {
+            if pnl_percent >= 0.0 {
+                format!("+{:.2}%", pnl_percent)
+            } else {
+                format!("{:.2}%", pnl_percent)
+            }
         } else {
-            format!("{:.2}%", pnl_percent)
+            "UNVERIFIED".to_string()
         };
 
         let duration = if let Some(exit_time) = position.exit_time {
@@ -1899,17 +1912,26 @@ impl ClosedPositionDisplay {
             format_duration_compact(position.entry_time, Utc::now())
         };
 
-        let status = format_profit_status_label(pnl_sol, pnl_percent, true);
+        let status = format_position_status(position);
 
         Self {
+            id: position.id.map(|id| id.to_string()).unwrap_or_else(|| "N/A".to_string()),
             symbol: position.symbol.clone(),
             mint: position.mint.clone(),
-            entry_price: if let Some(effective_price) = position.effective_entry_price {
-                format!("{:.11}", effective_price)
+            entry_price: if position.transaction_entry_verified {
+                if let Some(effective_price) = position.effective_entry_price {
+                    format!("{:.11}", effective_price)
+                } else {
+                    format!("{:.11}", position.entry_price)
+                }
             } else {
-                format!("{:.11}", position.entry_price)
+                "UNVERIFIED".to_string()
             },
-            exit_price: format!("{:.11}", exit_price),
+            exit_price: if position.transaction_exit_verified {
+                format!("{:.11}", exit_price)
+            } else {
+                "UNVERIFIED".to_string()
+            },
             size_sol: format!("{:.6}", position.entry_size_sol),
             pnl_sol: pnl_sol_str,
             pnl_percent: pnl_percent_str,
@@ -1946,6 +1968,7 @@ impl OpenPositionDisplay {
             };
 
             return Self {
+                id: position.id.map(|id| id.to_string()).unwrap_or_else(|| "N/A".to_string()),
                 symbol: position.symbol.clone(),
                 mint: position.mint.clone(),
                 entry_price: "UNVERIFIED".to_string(),
@@ -1966,7 +1989,7 @@ impl OpenPositionDisplay {
             "N/A".to_string()
         };
 
-        let (pnl_sol_str, pnl_percent_str) = if let Some(price) = current_price {
+        let (pnl_sol_str, pnl_percent_str) = if position.transaction_entry_verified && current_price.is_some() {
             let sol_str = if pnl_sol >= 0.0 {
                 format!("+{:.6}", pnl_sol)
             } else {
@@ -1978,23 +2001,26 @@ impl OpenPositionDisplay {
                 format!("{:.2}%", pnl_percent)
             };
             (sol_str, percent_str)
+        } else if !position.transaction_entry_verified {
+            ("UNVERIFIED".to_string(), "UNVERIFIED".to_string())
         } else {
             ("N/A".to_string(), "N/A".to_string())
         };
 
-        let status = if let Some(price) = current_price {
-            format_profit_status_label(pnl_sol, pnl_percent, false)
-        } else {
-            "OPEN".to_string()
-        };
+        let status = format_position_status(position);
 
         Self {
+            id: position.id.map(|id| id.to_string()).unwrap_or_else(|| "N/A".to_string()),
             symbol: position.symbol.clone(),
             mint: position.mint.clone(),
-            entry_price: if let Some(effective_price) = position.effective_entry_price {
-                format!("{:.11}", effective_price)
+            entry_price: if position.transaction_entry_verified {
+                if let Some(effective_price) = position.effective_entry_price {
+                    format!("{:.11}", effective_price)
+                } else {
+                    format!("{:.11}", position.entry_price)
+                }
             } else {
-                format!("{:.11}", position.entry_price)
+                "UNVERIFIED".to_string()
             },
             current_price: current_price_str,
             size_sol: format!("{:.6}", position.entry_size_sol),
@@ -2124,19 +2150,20 @@ impl RecentTransactionDisplay {
     }
 }
 
-/// Generate profit-based status for positions
-fn format_profit_status_label(_pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> String {
-    let base_status = if is_closed { "CLOSED" } else { "OPEN" };
-
-    if pnl_percent >= 15.0 {
-        format!("🚀 {}", base_status) // Rocket gains (15%+)
-    } else if pnl_percent >= 0.0 {
-        format!("✅ {}", base_status) // Positive gains (0-15%)
-    } else if pnl_percent >= -10.0 {
-        format!("⚠️ {}", base_status) // Small loss (0 to -10%)
-    } else if pnl_percent >= -50.0 {
-        format!("❌ {}", base_status) // Negative loss (-10 to -50%)
+/// Generate position status based on position state
+fn format_position_status(position: &crate::positions::Position) -> String {
+    // Check if position is verified
+    let entry_verified = position.transaction_entry_verified;
+    let exit_verified = position.transaction_exit_verified;
+    
+    // Determine base status
+    if position.exit_price.is_some() && exit_verified {
+        "CLOSED".to_string()
+    } else if position.exit_transaction_signature.is_some() && !exit_verified {
+        "CLOSING".to_string()
+    } else if entry_verified {
+        "OPEN".to_string()
     } else {
-        format!("💀 {}", base_status) // Very loss (-50%+)
+        "OPENING".to_string()
     }
 }
