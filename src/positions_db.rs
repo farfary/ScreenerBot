@@ -630,6 +630,30 @@ impl PositionsDatabase {
             return Err(format!("Position with ID {} not found", position_id));
         }
 
+        // Force WAL checkpoint to ensure all connections see the update immediately
+        // This is critical for preventing race conditions in concurrent read operations
+        if let Ok(mut stmt) = conn.prepare("PRAGMA wal_checkpoint(PASSIVE);") {
+            let _ = stmt.query([]);
+        }
+
+        Ok(())
+    }
+
+    /// Force database synchronization to ensure all connections see recent writes
+    /// This should be called after critical updates to prevent race conditions
+    pub async fn force_sync(&self) -> Result<(), String> {
+        let conn = self.get_connection()?;
+
+        // Force WAL checkpoint to synchronize all connections
+        // Use prepare and query since PRAGMA wal_checkpoint returns results
+        let mut stmt = conn
+            .prepare("PRAGMA wal_checkpoint(FULL);")
+            .map_err(|e| format!("Failed to prepare WAL checkpoint: {}", e))?;
+
+        let _result = stmt
+            .query([])
+            .map_err(|e| format!("Failed to execute WAL checkpoint: {}", e))?;
+
         Ok(())
     }
 
@@ -804,7 +828,7 @@ impl PositionsDatabase {
                    transaction_entry_verified, transaction_exit_verified,
                    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
                    phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
-            FROM positions WHERE exit_time IS NULL ORDER BY entry_time DESC
+            FROM positions WHERE transaction_exit_verified = 0 ORDER BY entry_time DESC
             "#
             )
             .map_err(|e| format!("Failed to prepare open positions query: {}", e))?;
@@ -838,7 +862,7 @@ impl PositionsDatabase {
                    transaction_entry_verified, transaction_exit_verified,
                    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
                    phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
-            FROM positions WHERE exit_time IS NOT NULL ORDER BY exit_time DESC
+            FROM positions WHERE transaction_exit_verified = 1 ORDER BY exit_time DESC
             "#
             )
             .map_err(|e| format!("Failed to prepare closed positions query: {}", e))?;
@@ -1142,14 +1166,18 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to count total positions: {}", e))?;
 
         let open_positions: i64 = conn
-            .query_row("SELECT COUNT(*) FROM positions WHERE exit_time IS NULL", [], |row|
-                row.get(0)
+            .query_row(
+                "SELECT COUNT(*) FROM positions WHERE transaction_exit_verified = 0",
+                [],
+                |row| row.get(0)
             )
             .map_err(|e| format!("Failed to count open positions: {}", e))?;
 
         let closed_positions: i64 = conn
-            .query_row("SELECT COUNT(*) FROM positions WHERE exit_time IS NOT NULL", [], |row|
-                row.get(0)
+            .query_row(
+                "SELECT COUNT(*) FROM positions WHERE transaction_exit_verified = 1",
+                [],
+                |row| row.get(0)
             )
             .map_err(|e| format!("Failed to count closed positions: {}", e))?;
 
@@ -1687,6 +1715,15 @@ pub async fn update_position(position: &Position) -> Result<(), String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.update_position(position).await,
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
+/// Force database synchronization after critical updates
+pub async fn force_database_sync() -> Result<(), String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.force_sync().await,
         None => Err("Positions database not initialized".to_string()),
     }
 }

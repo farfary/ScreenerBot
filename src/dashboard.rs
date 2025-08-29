@@ -823,7 +823,7 @@ impl Dashboard {
             let left_iter = open_positions.iter();
             let right_iter = closed_positions
                 .iter()
-                .filter(|p| p.exit_price.is_some())
+                .filter(|p| p.transaction_exit_verified)
                 .rev();
             let mut left_rows: Vec<String> = Vec::new();
             let mut right_rows: Vec<String> = Vec::new();

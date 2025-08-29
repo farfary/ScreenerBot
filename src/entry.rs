@@ -308,7 +308,7 @@ async fn check_position_cooldown(mint: &str) -> (bool, i64, String) {
             let mut relevant_positions: Vec<_> = closed_positions
                 .iter()
                 .filter(|p| {
-                    p.mint == mint && p.exit_time.is_some() && p.transaction_exit_verified // Only consider properly closed positions
+                    p.mint == mint && p.transaction_exit_verified // Only consider properly closed positions
                 })
                 .collect();
 
@@ -2224,7 +2224,7 @@ async fn get_reentry_profile(mint: &str) -> Option<ReentryProfile> {
     // Filter for this specific mint and buy positions with exit prices
     let mut closed: Vec<_> = all_closed
         .iter()
-        .filter(|p| p.mint == mint && p.position_type == "buy" && p.exit_price.is_some())
+        .filter(|p| p.mint == mint && p.position_type == "buy")
         .collect();
 
     if closed.is_empty() {

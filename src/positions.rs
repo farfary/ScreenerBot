@@ -33,11 +33,7 @@ use crate::{
         is_debug_swaps_enabled,
         get_max_exit_retries,
     },
-    trader::{
-        CriticalOperationGuard,
-        PROFIT_EXTRA_NEEDED_SOL,
-        MAX_OPEN_POSITIONS,
-    },
+    trader::{ CriticalOperationGuard, PROFIT_EXTRA_NEEDED_SOL, MAX_OPEN_POSITIONS },
     utils::{ get_wallet_address, get_token_balance, safe_truncate },
     configs::{ read_configs },
     positions_db::{
@@ -47,6 +43,7 @@ use crate::{
         load_all_positions,
         delete_position_by_id,
         update_position,
+        force_database_sync,
         get_open_positions as db_get_open_positions,
         get_closed_positions as db_get_closed_positions,
         get_position_by_mint as db_get_position_by_mint,
@@ -1630,6 +1627,23 @@ pub async fn close_position_direct(
                                             "DB_UPDATE",
                                             &format!("Position {} exit signature verified in database", position_id)
                                         );
+
+                                        // Force database sync to ensure all connections see the update immediately
+                                        // This prevents race conditions with concurrent verification processes
+                                        if let Err(sync_err) = force_database_sync().await {
+                                            log(
+                                                LogTag::Positions,
+                                                "DB_SYNC_WARNING",
+                                                &format!("Failed to sync database after exit signature update: {}", sync_err)
+                                            );
+                                        } else {
+                                            log(
+                                                LogTag::Positions,
+                                                "DB_SYNC_SUCCESS",
+                                                &format!("Database synchronized after position {} exit signature update", position_id)
+                                            );
+                                        }
+
                                         break; // Success - exit signature confirmed persisted
                                     } else {
                                         log(
@@ -2413,6 +2427,29 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                     )
                 );
 
+                // Force database sync after verification updates to prevent race conditions
+                // This is critical when exit_verified changes from 0 to 1
+                if let Err(sync_err) = force_database_sync().await {
+                    log(
+                        LogTag::Positions,
+                        "DB_SYNC_WARNING",
+                        &format!(
+                            "Failed to sync database after verification update for {}: {}",
+                            position.symbol,
+                            sync_err
+                        )
+                    );
+                } else {
+                    log(
+                        LogTag::Positions,
+                        "DB_SYNC_SUCCESS",
+                        &format!(
+                            "Database synchronized after verification update for {}",
+                            position.symbol
+                        )
+                    );
+                }
+
                 // Save closing token snapshot if this is an exit transaction verification
                 if position.transaction_exit_verified && position.id.is_some() {
                     let position_id = position.id.unwrap();
@@ -2467,26 +2504,6 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
     }
 
     if verified {
-        // Reload positions from database to ensure perfect sync after verification update
-        if let Err(e) = reload_positions_from_database().await {
-            log(
-                LogTag::Positions,
-                "WARNING",
-                &format!("Failed to reload positions after verification: {}", e)
-            );
-        } else {
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "SYNC_SUCCESS",
-                    &format!(
-                        "✅ Positions reloaded from database after verification of {}",
-                        get_signature_prefix(signature)
-                    )
-                );
-            }
-        }
-
         if is_debug_positions_enabled() {
             log(
                 LogTag::Positions,
@@ -2574,9 +2591,8 @@ pub async fn get_closed_positions() -> Vec<Position> {
             state.positions
                 .iter()
                 .filter(|p| {
-                    // Only truly closed positions (with verified exit or explicit exit_price)
-                    p.exit_price.is_some() &&
-                        (p.transaction_exit_verified || p.exit_transaction_signature.is_none())
+                    // Only truly closed positions (verified exit)
+                    p.transaction_exit_verified
                 })
                 .cloned()
                 .collect()

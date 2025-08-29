@@ -1886,17 +1886,19 @@ impl ClosedPositionDisplay {
 
         let (pnl_sol, pnl_percent) = (pnl_sol, pnl_percent);
 
-        let pnl_sol_str = if position.transaction_entry_verified && position.transaction_exit_verified {
-            if pnl_sol >= 0.0 {
-                format!("+{:.6}", pnl_sol)
-            } else {
-                format!("{:.6}", pnl_sol)
-            }
+        let pnl_sol_str = if
+            position.transaction_entry_verified &&
+            position.transaction_exit_verified
+        {
+            if pnl_sol >= 0.0 { format!("+{:.6}", pnl_sol) } else { format!("{:.6}", pnl_sol) }
         } else {
             "UNVERIFIED".to_string()
         };
 
-        let pnl_percent_str = if position.transaction_entry_verified && position.transaction_exit_verified {
+        let pnl_percent_str = if
+            position.transaction_entry_verified &&
+            position.transaction_exit_verified
+        {
             if pnl_percent >= 0.0 {
                 format!("🟢 +{:.2}%", pnl_percent)
             } else {
@@ -1989,7 +1991,10 @@ impl OpenPositionDisplay {
             "N/A".to_string()
         };
 
-        let (pnl_sol_str, pnl_percent_str) = if position.transaction_entry_verified && current_price.is_some() {
+        let (pnl_sol_str, pnl_percent_str) = if
+            position.transaction_entry_verified &&
+            current_price.is_some()
+        {
             let sol_str = if pnl_sol >= 0.0 {
                 format!("+{:.6}", pnl_sol)
             } else {
@@ -2155,9 +2160,9 @@ fn format_position_status(position: &crate::positions::Position) -> String {
     // Check if position is verified
     let entry_verified = position.transaction_entry_verified;
     let exit_verified = position.transaction_exit_verified;
-    
+
     // Determine base status with emojis
-    if position.exit_price.is_some() && exit_verified {
+    if exit_verified {
         "✅ CLOSED".to_string()
     } else if position.exit_transaction_signature.is_some() && !exit_verified {
         "⏳ CLOSING".to_string()

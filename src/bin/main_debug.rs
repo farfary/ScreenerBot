@@ -5352,7 +5352,7 @@ async fn generate_comprehensive_position_test_report(
 
     // Position Status
     println!("\n📈 POSITION STATUS:");
-    if position.exit_price.is_some() {
+    if position.transaction_exit_verified {
         println!("✅ Position closed successfully");
         println!("Status: COMPLETED");
     } else {
