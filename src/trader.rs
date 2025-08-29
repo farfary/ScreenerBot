@@ -44,6 +44,13 @@ pub const MAX_OPEN_POSITIONS: usize = 10;
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
 
+/// Enable minimum profit threshold requirement before allowing sells
+pub const MIN_PROFIT_THRESHOLD_ENABLED: bool = false;
+
+/// Minimum profit threshold percentage (e.g., 5.0 for 5%, -5.0 for -5%)
+/// Positions below this P&L will not be sold regardless of other exit conditions
+pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
+
 pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 
 // -----------------------------------------------------------------------------
@@ -219,9 +226,9 @@ pub struct TokenCheckInfo {
 }
 
 /// Global token tracking state
-pub static TOKEN_CHECK_TRACKER: Lazy<Arc<std::sync::RwLock<HashMap<String, TokenCheckInfo>>>> = Lazy::new(|| {
-    Arc::new(std::sync::RwLock::new(HashMap::new()))
-});
+pub static TOKEN_CHECK_TRACKER: Lazy<
+    Arc<std::sync::RwLock<HashMap<String, TokenCheckInfo>>>
+> = Lazy::new(|| { Arc::new(std::sync::RwLock::new(HashMap::new())) });
 
 // =============================================================================
 // CRITICAL OPERATION PROTECTION
@@ -334,7 +341,7 @@ pub fn update_token_check_info(mint: &str, current_price: Option<f64>, had_drop:
         check_count: 0,
         had_recent_drop: false,
     });
-    
+
     info.last_check_time = Instant::now();
     if let Some(price) = current_price {
         info.last_price = Some(price);
@@ -347,27 +354,34 @@ pub fn update_token_check_info(mint: &str, current_price: Option<f64>, had_drop:
 pub async fn check_token_for_recent_drop(token: &Token) -> bool {
     let pool_service = get_pool_service();
     let history = pool_service.get_recent_price_history(&token.mint).await;
-    
+
     if history.len() < 2 {
         return false;
     }
-    
+
     // Check for drops in last 30 seconds
     let now = chrono::Utc::now();
     let thirty_seconds_ago = now - chrono::Duration::seconds(30);
-    
-    let recent_prices: Vec<_> = history.into_iter()
+
+    let recent_prices: Vec<_> = history
+        .into_iter()
         .filter(|(timestamp, _)| *timestamp > thirty_seconds_ago)
         .collect();
-    
+
     if recent_prices.len() < 2 {
         return false;
     }
-    
+
     // Check if there was a significant drop (>2%) in recent period
-    let max_recent = recent_prices.iter().map(|(_, price)| *price).fold(0.0f64, f64::max);
-    let current = recent_prices.last().map(|(_, price)| *price).unwrap_or(0.0);
-    
+    let max_recent = recent_prices
+        .iter()
+        .map(|(_, price)| *price)
+        .fold(0.0f64, f64::max);
+    let current = recent_prices
+        .last()
+        .map(|(_, price)| *price)
+        .unwrap_or(0.0);
+
     if max_recent > 0.0 && current > 0.0 {
         let drop_percent = ((max_recent - current) / max_recent) * 100.0;
         drop_percent > 2.0
@@ -380,42 +394,46 @@ pub async fn check_token_for_recent_drop(token: &Token) -> bool {
 pub fn prioritize_tokens_for_checking(mut tokens: Vec<Token>) -> Vec<Token> {
     let now = Instant::now();
     let tracker = TOKEN_CHECK_TRACKER.read().unwrap();
-    
+
     // Sort tokens by priority:
     // 1. Tokens that had recent drops (within 30s)
     // 2. Tokens that haven't been checked or haven't been checked in >1min with no price change
     // 3. Tokens with fewest check counts (fairness)
     // 4. Others
-    
+
     tokens.sort_by(|a, b| {
         let info_a = tracker.get(&a.mint);
         let info_b = tracker.get(&b.mint);
-        
+
         // Priority 1: Recent drops (highest priority)
         let drop_a = info_a.map(|i| i.had_recent_drop).unwrap_or(false);
         let drop_b = info_b.map(|i| i.had_recent_drop).unwrap_or(false);
         if drop_a != drop_b {
             return drop_b.cmp(&drop_a); // true first
         }
-        
+
         // Priority 2: Never checked or stale checks (>60s)
-        let stale_a = info_a.map(|i| now.duration_since(i.last_check_time).as_secs() > 60).unwrap_or(true);
-        let stale_b = info_b.map(|i| now.duration_since(i.last_check_time).as_secs() > 60).unwrap_or(true);
+        let stale_a = info_a
+            .map(|i| now.duration_since(i.last_check_time).as_secs() > 60)
+            .unwrap_or(true);
+        let stale_b = info_b
+            .map(|i| now.duration_since(i.last_check_time).as_secs() > 60)
+            .unwrap_or(true);
         if stale_a != stale_b {
             return stale_b.cmp(&stale_a); // true first
         }
-        
+
         // Priority 3: Fairness - fewer checks first
         let count_a = info_a.map(|i| i.check_count).unwrap_or(0);
         let count_b = info_b.map(|i| i.check_count).unwrap_or(0);
         count_a.cmp(&count_b)
     });
-    
+
     // Clean up very old entries (>10 minutes) to prevent memory growth
     drop(tracker);
     let mut tracker_write = TOKEN_CHECK_TRACKER.write().unwrap();
     tracker_write.retain(|_, info| now.duration_since(info.last_check_time).as_secs() < 600);
-    
+
     tokens
 }
 
@@ -446,7 +464,11 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
                     .collect()
             }
             Err(e) => {
-                log(LogTag::Trader, "WARN", &format!("Failed to get tokens from safe system: {}", e));
+                log(
+                    LogTag::Trader,
+                    "WARN",
+                    &format!("Failed to get tokens from safe system: {}", e)
+                );
                 Vec::new()
             }
         };
@@ -506,7 +528,7 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
         }
     };
 
-    // 3. Log filtering statistics  
+    // 3. Log filtering statistics
     log(
         LogTag::Trader,
         "FILTER_STATS",
@@ -514,7 +536,11 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
             "Token filtering: {}/{} passed ({:.1}% pass rate) - processed {} tokens",
             eligible_tokens.len(),
             tokens.len(),
-            if tokens.len() > 0 { (eligible_tokens.len() as f64 / tokens.len() as f64) * 100.0 } else { 0.0 },
+            if tokens.len() > 0 {
+                ((eligible_tokens.len() as f64) / (tokens.len() as f64)) * 100.0
+            } else {
+                0.0
+            },
             tokens.len()
         )
     );
@@ -538,31 +564,42 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
             log(
                 LogTag::Trader,
                 "DEBUG",
-                &format!(
-                    "... and {} more tokens filtered out",
-                    rejected_tokens.len() - sample_size
-                )
+                &format!("... and {} more tokens filtered out", rejected_tokens.len() - sample_size)
             );
         }
     }
 
     // 6. Smart token prioritization instead of random shuffling
     let prioritized_tokens = prioritize_tokens_for_checking(eligible_tokens);
-    
+
     if is_debug_trader_enabled() && !prioritized_tokens.is_empty() {
         log(
             LogTag::Trader,
             "PRIORITY_ORDER",
-            &format!("📊 Prioritized {} tokens: drops={}, fair_rotation={}, others={}", 
+            &format!(
+                "📊 Prioritized {} tokens: drops={}, fair_rotation={}, others={}",
                 prioritized_tokens.len(),
-                prioritized_tokens.iter().take(10).filter(|t| {
-                    TOKEN_CHECK_TRACKER.read().unwrap().get(&t.mint)
-                        .map(|info| info.had_recent_drop).unwrap_or(false)
-                }).count(),
-                prioritized_tokens.iter().filter(|t| {
-                    TOKEN_CHECK_TRACKER.read().unwrap().get(&t.mint)
-                        .map(|info| info.check_count == 0).unwrap_or(true)
-                }).count(),
+                prioritized_tokens
+                    .iter()
+                    .take(10)
+                    .filter(|t| {
+                        TOKEN_CHECK_TRACKER.read()
+                            .unwrap()
+                            .get(&t.mint)
+                            .map(|info| info.had_recent_drop)
+                            .unwrap_or(false)
+                    })
+                    .count(),
+                prioritized_tokens
+                    .iter()
+                    .filter(|t| {
+                        TOKEN_CHECK_TRACKER.read()
+                            .unwrap()
+                            .get(&t.mint)
+                            .map(|info| info.check_count == 0)
+                            .unwrap_or(true)
+                    })
+                    .count(),
                 prioritized_tokens.len() - 10
             )
         );
@@ -735,16 +772,16 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 return;
                             }
                         };
-                        
+
                         // Check for recent drops
                         let had_recent_drop = check_token_for_recent_drop(&token).await;
 
                         // Entry decision delegated to entry::should_buy
                         let (approved, _confidence, reason) = should_buy(&token).await;
-                        
+
                         // Update token tracking info
                         update_token_check_info(&token.mint, Some(current_price), had_recent_drop);
-                        
+
                         if !approved {
                             // Token passed filtering but doesn't meet entry criteria
                             // Add to watchlist for future monitoring
@@ -758,7 +795,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                         "Added {} to watchlist (passed filtering, waiting for entry signal: {}) [Drop: {}]",
                                         &token.symbol,
                                         reason,
-                                        if had_recent_drop { "YES" } else { "NO" }
+                                        if had_recent_drop {
+                                            "YES"
+                                        } else {
+                                            "NO"
+                                        }
                                     )
                                 );
                             }
@@ -1030,19 +1071,34 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     let debug_force_sell = should_debug_force_sell(&position);
 
                     // Calculate sell decision using the unified profit system
-                    let should_exit =
+                    let should_exit_base =
                         debug_force_sell ||
                         crate::profit::should_sell(&position, current_price).await;
+
+                    // Apply minimum profit threshold check if enabled
+                    let should_exit = if MIN_PROFIT_THRESHOLD_ENABLED && !debug_force_sell {
+                        // Only allow exit if P&L meets minimum threshold
+                        if pnl_percent >= MIN_PROFIT_THRESHOLD_PERCENT {
+                            should_exit_base
+                        } else {
+                            false // Block exit due to insufficient profit
+                        }
+                    } else {
+                        should_exit_base // Normal behavior when threshold disabled or debug force sell
+                    };
 
                     if is_debug_trader_enabled() {
                         debug_trader_log(
                             "SELL_ANALYSIS",
                             &format!(
-                                "{} | Should Exit: {} | P&L: {:.2}% ({:.6} SOL) | Debug Force: {}",
+                                "{} | Should Exit: {} (Base: {}) | P&L: {:.2}% ({:.6} SOL) | Min Threshold: {}% (Enabled: {}) | Debug Force: {}",
                                 position.symbol,
                                 should_exit,
+                                should_exit_base,
                                 pnl_percent,
                                 pnl_sol,
+                                MIN_PROFIT_THRESHOLD_PERCENT,
+                                MIN_PROFIT_THRESHOLD_ENABLED,
                                 debug_force_sell
                             )
                         );
