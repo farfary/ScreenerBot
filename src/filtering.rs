@@ -36,7 +36,7 @@ use chrono::{ Duration as ChronoDuration, Utc };
 // ===== AGE FILTERING PARAMETERS =====
 /// Minimum token age in seconds before trading
 /// REDUCED: Allow newer tokens to catch fresh opportunities
-pub const MIN_TOKEN_AGE_SECONDS: i64 = 2 * 60 * 60; // 2 hours - allow newer gems
+pub const MIN_TOKEN_AGE_SECONDS: i64 = 0; // 2 hours - allow newer gems
 
 /// Maximum token age in seconds
 /// Extended to catch both new gems and established tokens

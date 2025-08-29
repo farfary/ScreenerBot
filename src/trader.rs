@@ -39,7 +39,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 20;
+pub const MAX_OPEN_POSITIONS: usize = 30;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
@@ -49,7 +49,7 @@ pub const MIN_PROFIT_THRESHOLD_ENABLED: bool = true;
 
 /// Minimum profit threshold percentage (e.g., 5.0 for 5%, -5.0 for -5%)
 /// Positions below this P&L will not be sold regardless of other exit conditions
-pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 20.0;
+pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 0.0;
 
 pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 
