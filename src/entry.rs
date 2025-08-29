@@ -2,20 +2,20 @@
 ///
 /// This module provides sophisticated entry timing based on drop momentum and acceleration analysis.
 /// Uses real-time blockchain pool data for trading decisions while API data is used only for validation.
-/// 
+///
 /// ## Key Features:
 /// - **Drop Momentum Analysis**: Multi-timeframe velocity tracking (10s, 30s, 60s) to detect acceleration/deceleration
 /// - **Optimal Entry Timing**: Waits for drop deceleration before entering to avoid catching falling knives
 /// - **Maturity Scoring**: Calculates drop maturity scores to enter at optimal depths, not too aggressively
 /// - **Bounce Detection**: Advanced bounce suppression using velocity-based strong bounce detection
 /// - **Multi-Window Analysis**: Near-top filtering with 1m, 5m, 15m windows plus ATH proximity guards
-/// 
+///
 /// ## Timing Logic:
 /// 1. **Acceleration Check**: Rejects entries if drop is still accelerating downward
 /// 2. **Momentum Analysis**: Tracks velocity across multiple timeframes for trend consistency
 /// 3. **Maturity Scoring**: Requires minimum maturity scores based on drop depth and momentum
 /// 4. **Deceleration Detection**: Prefers entries when drop momentum is slowing (optimal timing)
-/// 
+///
 /// OPTIMIZED FOR SMART TIMING: Enters at optimal drop depths with momentum-based timing guards.
 
 use crate::tokens::Token;
@@ -118,6 +118,9 @@ const CONFIDENCE_CENTER_ADJUSTMENT: f64 = 15.0; // Adjustment factor for distanc
 // MATHEMATICAL CONSTANTS
 const PERCENTAGE_MULTIPLIER: f64 = 100.0; // Convert ratio to percentage
 const THOUSAND_DIVISOR: f64 = 1000.0; // Convert to thousands for display
+
+// POSITION RE-ENTRY COOLDOWN
+const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 7 * 24 * 60; // 7 days re-entry cooldown after closing
 const MILLION_DIVISOR: f64 = 1_000_000.0; // Convert to millions for display
 const MINUTES_PER_SECOND: i64 = 60; // Time conversion
 
@@ -297,6 +300,78 @@ fn is_near_recent_top(
     is_too_close_to_top
 }
 
+/// Check if token is in 7-day re-entry cooldown period
+/// Returns (is_in_cooldown, minutes_remaining, reason)
+async fn check_position_cooldown(mint: &str) -> (bool, i64, String) {
+    // Get the last closed position for this token that has verified exit transaction
+    match crate::positions_db::get_closed_positions().await {
+        Ok(closed_positions) => {
+            // Find the most recent closed position for this mint with verified exit
+            let mut relevant_positions: Vec<_> = closed_positions
+                .iter()
+                .filter(|p| {
+                    p.mint == mint && p.exit_time.is_some() && p.transaction_exit_verified // Only consider properly closed positions
+                })
+                .collect();
+
+            if relevant_positions.is_empty() {
+                return (false, 0, "No previous closed positions".to_string());
+            }
+
+            // Sort by exit_time to get the most recent
+            relevant_positions.sort_by_key(|p| p.exit_time);
+
+            if let Some(last_position) = relevant_positions.last() {
+                if let Some(exit_time) = last_position.exit_time {
+                    let now = chrono::Utc::now();
+                    let elapsed_minutes = now.signed_duration_since(exit_time).num_minutes();
+
+                    if elapsed_minutes < POSITION_CLOSE_COOLDOWN_MINUTES {
+                        let remaining_minutes = POSITION_CLOSE_COOLDOWN_MINUTES - elapsed_minutes;
+                        let remaining_hours = remaining_minutes / 60;
+                        let remaining_days = remaining_hours / 24;
+
+                        let reason = if remaining_days > 0 {
+                            format!(
+                                "{}d {}h cooldown remaining",
+                                remaining_days,
+                                remaining_hours % 24
+                            )
+                        } else if remaining_hours > 0 {
+                            format!(
+                                "{}h {}m cooldown remaining",
+                                remaining_hours,
+                                remaining_minutes % 60
+                            )
+                        } else {
+                            format!("{}m cooldown remaining", remaining_minutes)
+                        };
+
+                        return (true, remaining_minutes, reason);
+                    }
+                }
+            }
+
+            (false, 0, "Cooldown period expired".to_string())
+        }
+        Err(e) => {
+            // If we can't check the database, allow entry but log the issue
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "COOLDOWN_CHECK_ERROR",
+                    &format!(
+                        "❌ Could not check position cooldown for {}: {}",
+                        crate::utils::safe_truncate(mint, 8),
+                        e
+                    )
+                );
+            }
+            (false, 0, format!("Database error: {}", e))
+        }
+    }
+}
+
 /// Deep drop entry decision with dynamic liquidity-based scaling
 /// Returns true if token shows deep drop pattern for immediate entry
 pub async fn should_buy(token: &Token) -> (bool, f64, String) {
@@ -318,6 +393,21 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             log(LogTag::Entry, "BLACKLIST_REJECT", &format!("❌ {} blacklisted", token.symbol));
         }
         return (false, 0.0, "Token blacklisted or excluded".to_string());
+    }
+
+    // Check 7-day re-entry cooldown
+    let (is_in_cooldown, remaining_minutes, cooldown_reason) = check_position_cooldown(
+        &token.mint
+    ).await;
+    if is_in_cooldown {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "COOLDOWN_REJECT",
+                &format!("❌ {} in cooldown: {}", token.symbol, cooldown_reason)
+            );
+        }
+        return (false, 0.0, format!("Token in cooldown: {}", cooldown_reason));
     }
 
     // Get transaction activity using centralized filtering system
@@ -878,14 +968,14 @@ fn calculate_price_volatility(
 /// Drop momentum analysis structure for better entry timing
 #[derive(Debug, Clone)]
 struct MomentumAnalysis {
-    velocity_per_minute: f64,        // Current velocity %/min (negative = dropping)
-    acceleration: f64,               // Acceleration %/min² (negative = decelerating drop)
-    is_accelerating: bool,           // Is drop still gaining momentum?
-    is_bouncing_strong: bool,        // Is price bouncing aggressively?
-    velocity_10s: f64,               // 10-second velocity
-    velocity_30s: f64,               // 30-second velocity  
-    velocity_60s: f64,               // 60-second velocity
-    trend_consistency: f64,          // How consistent is the trend (0-1)
+    velocity_per_minute: f64, // Current velocity %/min (negative = dropping)
+    acceleration: f64, // Acceleration %/min² (negative = decelerating drop)
+    is_accelerating: bool, // Is drop still gaining momentum?
+    is_bouncing_strong: bool, // Is price bouncing aggressively?
+    velocity_10s: f64, // 10-second velocity
+    velocity_30s: f64, // 30-second velocity
+    velocity_60s: f64, // 60-second velocity
+    trend_consistency: f64, // How consistent is the trend (0-1)
 }
 
 /// Analyze drop momentum across multiple timeframes for optimal entry timing
@@ -928,17 +1018,17 @@ fn analyze_drop_momentum(
         // 1. Recent velocity is more negative than older velocity
         // 2. Acceleration is negative (speeding up downward)
         // 3. Velocity magnitude is increasing
-        velocity_10s < velocity_30s && 
-        velocity_30s < velocity_60s && 
-        acceleration < -0.5 && 
-        velocity_per_minute < -2.0 // Meaningful downward velocity
+        velocity_10s < velocity_30s &&
+            velocity_30s < velocity_60s &&
+            acceleration < -0.5 &&
+            velocity_per_minute < -2.0 // Meaningful downward velocity
     };
 
     // Detect strong bounce (rapid upward movement)
     let is_bouncing_strong = {
         velocity_10s > 3.0 && // Fast upward movement
-        velocity_30s > 1.0 && // Sustained upward movement
-        acceleration > 1.0    // Accelerating upward
+            velocity_30s > 1.0 && // Sustained upward movement
+            acceleration > 1.0 // Accelerating upward
     };
 
     // Calculate trend consistency (how aligned are the different timeframes)
@@ -984,7 +1074,7 @@ fn calculate_velocity_for_window(
 
     let time_diff = (last.0 - first.0).num_seconds().max(1) as f64;
     let price_change_pct = ((current_price - first.1) / first.1) * 100.0;
-    
+
     // Convert to %/minute
     price_change_pct * (60.0 / time_diff)
 }
@@ -997,7 +1087,7 @@ fn calculate_trend_consistency(vel_10s: f64, vel_30s: f64, vel_60s: f64) -> f64 
 
     // Check if all velocities have the same sign (direction)
     let same_direction = (vel_10s > 0.0) == (vel_30s > 0.0) && (vel_30s > 0.0) == (vel_60s > 0.0);
-    
+
     if !same_direction {
         return 0.0; // Inconsistent trend
     }
@@ -1013,13 +1103,9 @@ fn calculate_trend_consistency(vel_10s: f64, vel_30s: f64, vel_60s: f64) -> f64 
 
     // Consistency is higher when velocities are similar in magnitude
     let magnitude_consistency = min_vel / max_vel;
-    
+
     // Boost consistency for meaningful trends
-    if max_vel > 2.0 {
-        magnitude_consistency * 1.2
-    } else {
-        magnitude_consistency * 0.8
-    }.min(1.0)
+    (if max_vel > 2.0 { magnitude_consistency * 1.2 } else { magnitude_consistency * 0.8 }).min(1.0)
 }
 
 /// Calculate drop maturity score - higher score means better entry timing
@@ -1035,7 +1121,7 @@ fn calculate_drop_maturity(
     let mut maturity_score = 0.0;
 
     // Base score from drop magnitude (larger drops = more mature)
-    let magnitude_score = ((drop_percent / min_drop_threshold) - 0.5) * 0.3;
+    let magnitude_score = (drop_percent / min_drop_threshold - 0.5) * 0.3;
     maturity_score += magnitude_score.min(0.4);
 
     // Deceleration bonus (drop slowing down = good timing)
@@ -1428,10 +1514,10 @@ async fn analyze_deep_drop_entry(
     // ============================================================================
     // 🎯 ENHANCED MOMENTUM & TIMING ANALYSIS - Avoid entering too early in drops
     // ============================================================================
-    
+
     // Multi-timeframe velocity analysis to detect drop acceleration/deceleration
     let momentum_analysis = analyze_drop_momentum(&recent_prices, current_price, &now);
-    
+
     // Check if drop is still accelerating (too early to enter)
     if momentum_analysis.is_accelerating && drop_percent >= effective_min_drop {
         if is_debug_entry_enabled() {
@@ -1448,7 +1534,7 @@ async fn analyze_deep_drop_entry(
         }
         return None; // Wait for drop to mature
     }
-    
+
     // Enhanced bounce detection with momentum consideration
     if momentum_analysis.is_bouncing_strong {
         if is_debug_entry_enabled() {
@@ -1463,10 +1549,14 @@ async fn analyze_deep_drop_entry(
         }
         return None;
     }
-    
+
     // Drop maturity check - prefer entries when drop momentum is slowing
-    let drop_maturity_score = calculate_drop_maturity(&momentum_analysis, drop_percent, effective_min_drop);
-    
+    let drop_maturity_score = calculate_drop_maturity(
+        &momentum_analysis,
+        drop_percent,
+        effective_min_drop
+    );
+
     if is_debug_entry_enabled() {
         log(
             LogTag::Entry,
@@ -1574,7 +1664,7 @@ async fn analyze_deep_drop_entry(
         } else {
             0.5 // Higher bar for marginal drops
         };
-        
+
         if drop_maturity_score >= min_maturity_required {
             let time_span = recent_prices.len();
             if is_debug_entry_enabled() {
@@ -1672,12 +1762,15 @@ async fn analyze_deep_drop_entry(
                 } else {
                     0.6 // Higher bar for fast but shallow drops
                 };
-                
+
                 // Fast drops get some maturity bonus due to their speed
                 let adjusted_maturity = (drop_maturity_score + 0.1).min(1.0);
-                
-                if adjusted_maturity >= min_maturity_for_fast || 
-                   (!momentum_analysis.is_accelerating && momentum_analysis.velocity_per_minute < -8.0) {
+
+                if
+                    adjusted_maturity >= min_maturity_for_fast ||
+                    (!momentum_analysis.is_accelerating &&
+                        momentum_analysis.velocity_per_minute < -8.0)
+                {
                     if is_debug_entry_enabled() {
                         log(
                             LogTag::Entry,

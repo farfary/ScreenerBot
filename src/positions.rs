@@ -131,7 +131,6 @@ pub struct GlobalPositionsState {
     pub retry_queue: HashMap<String, (DateTime<Utc>, u32)>, // signature -> (next_retry, count)
     pub frozen_cooldowns: HashMap<String, DateTime<Utc>>, // mint -> cooldown_until
     pub last_open_time: Option<DateTime<Utc>>, // Global open cooldown
-    pub reentry_cooldowns: HashMap<String, DateTime<Utc>>, // mint -> cooldown_until
     pub exit_verification_deadlines: HashMap<String, DateTime<Utc>>, // signature -> deadline
     pub failed_exit_retries: HashMap<String, (DateTime<Utc>, u32)>, // mint -> (next_retry, attempt_count)
 }
@@ -144,7 +143,6 @@ impl GlobalPositionsState {
             retry_queue: HashMap::new(),
             frozen_cooldowns: HashMap::new(),
             last_open_time: None,
-            reentry_cooldowns: HashMap::new(),
             exit_verification_deadlines: HashMap::new(),
             failed_exit_retries: HashMap::new(),
         }
@@ -237,15 +235,19 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
 async fn fetch_and_create_token_snapshot(
     position_id: i64,
     mint: &str,
-    snapshot_type: &str,
+    snapshot_type: &str
 ) -> Result<TokenSnapshot, String> {
     let fetch_start = Utc::now();
-    
+
     if is_debug_positions_enabled() {
         log(
             LogTag::Positions,
             "SNAPSHOT_FETCH",
-            &format!("Fetching latest token data for {} snapshot of {}", snapshot_type, safe_truncate(mint, 8))
+            &format!(
+                "Fetching latest token data for {} snapshot of {}",
+                snapshot_type,
+                safe_truncate(mint, 8)
+            )
         );
     }
 
@@ -296,112 +298,210 @@ async fn fetch_and_create_token_snapshot(
     let freshness_score = if fetch_duration_ms < 1000 {
         100 // Very fresh, under 1 second
     } else if fetch_duration_ms < 5000 {
-        80  // Good, under 5 seconds
+        80 // Good, under 5 seconds
     } else if fetch_duration_ms < 10000 {
-        60  // OK, under 10 seconds
+        60 // OK, under 10 seconds
     } else if fetch_duration_ms < 30000 {
-        40  // Slow, under 30 seconds
+        40 // Slow, under 30 seconds
     } else {
-        20  // Very slow, over 30 seconds
+        20 // Very slow, over 30 seconds
     };
 
     // Extract DexScreener data
-    let (symbol, name, price_sol, price_usd, price_native, dex_id, pair_address, pair_url,
-         fdv, market_cap, pair_created_at, liquidity_usd, liquidity_base, liquidity_quote,
-         volume_h24, volume_h6, volume_h1, volume_m5,
-         txns_h24_buys, txns_h24_sells, txns_h6_buys, txns_h6_sells,
-         txns_h1_buys, txns_h1_sells, txns_m5_buys, txns_m5_sells,
-         price_change_h24, price_change_h6, price_change_h1, price_change_m5) = 
-        if let Some(ref token) = dex_token {
-            (
-                Some(token.symbol.clone()),
-                Some(token.name.clone()),
-                token.price_dexscreener_sol,
-                token.price_dexscreener_usd,
-                token.price_dexscreener_sol, // Use SOL price as native
-                token.dex_id.clone(),
-                token.pair_address.clone(),
-                token.pair_url.clone(),
-                token.fdv,
-                token.market_cap,
-                token.created_at.map(|dt| dt.timestamp()),
-                token.liquidity.as_ref().and_then(|l| l.usd),
-                token.liquidity.as_ref().and_then(|l| l.base),
-                token.liquidity.as_ref().and_then(|l| l.quote),
-                token.volume.as_ref().and_then(|v| v.h24),
-                token.volume.as_ref().and_then(|v| v.h6),
-                token.volume.as_ref().and_then(|v| v.h1),
-                token.volume.as_ref().and_then(|v| v.m5),
-                token.txns.as_ref().and_then(|t| t.h24.as_ref().and_then(|h| h.buys)),
-                token.txns.as_ref().and_then(|t| t.h24.as_ref().and_then(|h| h.sells)),
-                token.txns.as_ref().and_then(|t| t.h6.as_ref().and_then(|h| h.buys)),
-                token.txns.as_ref().and_then(|t| t.h6.as_ref().and_then(|h| h.sells)),
-                token.txns.as_ref().and_then(|t| t.h1.as_ref().and_then(|h| h.buys)),
-                token.txns.as_ref().and_then(|t| t.h1.as_ref().and_then(|h| h.sells)),
-                token.txns.as_ref().and_then(|t| t.m5.as_ref().and_then(|h| h.buys)),
-                token.txns.as_ref().and_then(|t| t.m5.as_ref().and_then(|h| h.sells)),
-                token.price_change.as_ref().and_then(|pc| pc.h24),
-                token.price_change.as_ref().and_then(|pc| pc.h6),
-                token.price_change.as_ref().and_then(|pc| pc.h1),
-                token.price_change.as_ref().and_then(|pc| pc.m5),
-            )
-        } else {
-            (None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-             None, None, None, None, None, None, None, None, None, None, None, None,
-             None, None, None, None)
-        };
+    let (
+        symbol,
+        name,
+        price_sol,
+        price_usd,
+        price_native,
+        dex_id,
+        pair_address,
+        pair_url,
+        fdv,
+        market_cap,
+        pair_created_at,
+        liquidity_usd,
+        liquidity_base,
+        liquidity_quote,
+        volume_h24,
+        volume_h6,
+        volume_h1,
+        volume_m5,
+        txns_h24_buys,
+        txns_h24_sells,
+        txns_h6_buys,
+        txns_h6_sells,
+        txns_h1_buys,
+        txns_h1_sells,
+        txns_m5_buys,
+        txns_m5_sells,
+        price_change_h24,
+        price_change_h6,
+        price_change_h1,
+        price_change_m5,
+    ) = if let Some(ref token) = dex_token {
+        (
+            Some(token.symbol.clone()),
+            Some(token.name.clone()),
+            token.price_dexscreener_sol,
+            token.price_dexscreener_usd,
+            token.price_dexscreener_sol, // Use SOL price as native
+            token.dex_id.clone(),
+            token.pair_address.clone(),
+            token.pair_url.clone(),
+            token.fdv,
+            token.market_cap,
+            token.created_at.map(|dt| dt.timestamp()),
+            token.liquidity.as_ref().and_then(|l| l.usd),
+            token.liquidity.as_ref().and_then(|l| l.base),
+            token.liquidity.as_ref().and_then(|l| l.quote),
+            token.volume.as_ref().and_then(|v| v.h24),
+            token.volume.as_ref().and_then(|v| v.h6),
+            token.volume.as_ref().and_then(|v| v.h1),
+            token.volume.as_ref().and_then(|v| v.m5),
+            token.txns.as_ref().and_then(|t| t.h24.as_ref().and_then(|h| h.buys)),
+            token.txns.as_ref().and_then(|t| t.h24.as_ref().and_then(|h| h.sells)),
+            token.txns.as_ref().and_then(|t| t.h6.as_ref().and_then(|h| h.buys)),
+            token.txns.as_ref().and_then(|t| t.h6.as_ref().and_then(|h| h.sells)),
+            token.txns.as_ref().and_then(|t| t.h1.as_ref().and_then(|h| h.buys)),
+            token.txns.as_ref().and_then(|t| t.h1.as_ref().and_then(|h| h.sells)),
+            token.txns.as_ref().and_then(|t| t.m5.as_ref().and_then(|h| h.buys)),
+            token.txns.as_ref().and_then(|t| t.m5.as_ref().and_then(|h| h.sells)),
+            token.price_change.as_ref().and_then(|pc| pc.h24),
+            token.price_change.as_ref().and_then(|pc| pc.h6),
+            token.price_change.as_ref().and_then(|pc| pc.h1),
+            token.price_change.as_ref().and_then(|pc| pc.m5),
+        )
+    } else {
+        (
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+    };
 
     // Extract rugcheck data
-    let (rugcheck_score, rugcheck_score_normalised, rugcheck_rugged, rugcheck_risks_json,
-         rugcheck_mint_authority, rugcheck_freeze_authority, rugcheck_creator, rugcheck_creator_balance,
-         rugcheck_total_holders, rugcheck_total_market_liquidity, rugcheck_total_stable_liquidity,
-         rugcheck_total_lp_providers, rugcheck_lp_locked_pct, rugcheck_lp_locked_usd,
-         rugcheck_transfer_fee_pct, rugcheck_transfer_fee_max_amount, rugcheck_jup_verified, rugcheck_jup_strict,
-         token_uri, token_description, token_image, token_website, token_twitter, token_telegram) = 
-        if let Some(ref data) = rugcheck_data {
-            let risks_json = if let Some(risks) = &data.risks {
-                match serde_json::to_string(risks) {
-                    Ok(json) => Some(json),
-                    Err(_) => None,
-                }
-            } else {
-                None
-            };
-
-            let lp_data = data.markets.as_ref()
-                .and_then(|markets| markets.first())
-                .and_then(|market| market.lp.as_ref());
-
-            (
-                data.score,
-                data.score_normalised,
-                data.rugged,
-                risks_json,
-                data.mint_authority.as_ref().and_then(|ma| serde_json::to_string(ma).ok()),
-                data.freeze_authority.as_ref().and_then(|fa| serde_json::to_string(fa).ok()),
-                data.creator.clone(),
-                data.creator_balance.clone(),
-                data.total_holders,
-                data.total_market_liquidity,
-                data.total_stable_liquidity,
-                data.total_lp_providers,
-                lp_data.and_then(|lp| lp.lp_locked_pct),
-                lp_data.and_then(|lp| lp.lp_locked_usd),
-                data.transfer_fee.as_ref().and_then(|tf| tf.pct),
-                data.transfer_fee.as_ref().and_then(|tf| tf.max_amount.clone()),
-                data.verification.as_ref().and_then(|v| v.jup_verified),
-                data.verification.as_ref().and_then(|v| v.jup_strict),
-                data.token_meta.as_ref().and_then(|tm| tm.uri.clone()),
-                data.file_meta.as_ref().and_then(|fm| fm.description.clone()),
-                data.file_meta.as_ref().and_then(|fm| fm.image.clone()),
-                None, // website - extract from verification links if needed
-                None, // twitter - extract from verification links if needed
-                None, // telegram - extract from verification links if needed
-            )
+    let (
+        rugcheck_score,
+        rugcheck_score_normalised,
+        rugcheck_rugged,
+        rugcheck_risks_json,
+        rugcheck_mint_authority,
+        rugcheck_freeze_authority,
+        rugcheck_creator,
+        rugcheck_creator_balance,
+        rugcheck_total_holders,
+        rugcheck_total_market_liquidity,
+        rugcheck_total_stable_liquidity,
+        rugcheck_total_lp_providers,
+        rugcheck_lp_locked_pct,
+        rugcheck_lp_locked_usd,
+        rugcheck_transfer_fee_pct,
+        rugcheck_transfer_fee_max_amount,
+        rugcheck_jup_verified,
+        rugcheck_jup_strict,
+        token_uri,
+        token_description,
+        token_image,
+        token_website,
+        token_twitter,
+        token_telegram,
+    ) = if let Some(ref data) = rugcheck_data {
+        let risks_json = if let Some(risks) = &data.risks {
+            match serde_json::to_string(risks) {
+                Ok(json) => Some(json),
+                Err(_) => None,
+            }
         } else {
-            (None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-             None, None, None, None, None, None, None, None, None, None)
+            None
         };
+
+        let lp_data = data.markets
+            .as_ref()
+            .and_then(|markets| markets.first())
+            .and_then(|market| market.lp.as_ref());
+
+        (
+            data.score,
+            data.score_normalised,
+            data.rugged,
+            risks_json,
+            data.mint_authority.as_ref().and_then(|ma| serde_json::to_string(ma).ok()),
+            data.freeze_authority.as_ref().and_then(|fa| serde_json::to_string(fa).ok()),
+            data.creator.clone(),
+            data.creator_balance.clone(),
+            data.total_holders,
+            data.total_market_liquidity,
+            data.total_stable_liquidity,
+            data.total_lp_providers,
+            lp_data.and_then(|lp| lp.lp_locked_pct),
+            lp_data.and_then(|lp| lp.lp_locked_usd),
+            data.transfer_fee.as_ref().and_then(|tf| tf.pct),
+            data.transfer_fee.as_ref().and_then(|tf| tf.max_amount.clone()),
+            data.verification.as_ref().and_then(|v| v.jup_verified),
+            data.verification.as_ref().and_then(|v| v.jup_strict),
+            data.token_meta.as_ref().and_then(|tm| tm.uri.clone()),
+            data.file_meta.as_ref().and_then(|fm| fm.description.clone()),
+            data.file_meta.as_ref().and_then(|fm| fm.image.clone()),
+            None, // website - extract from verification links if needed
+            None, // twitter - extract from verification links if needed
+            None, // telegram - extract from verification links if needed
+        )
+    } else {
+        (
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+    };
 
     // Create snapshot
     let snapshot = TokenSnapshot {
@@ -488,11 +588,11 @@ async fn fetch_and_create_token_snapshot(
 pub async fn save_position_token_snapshot(
     position_id: i64,
     mint: &str,
-    snapshot_type: &str,
+    snapshot_type: &str
 ) -> Result<(), String> {
     // Fetch and create snapshot
     let snapshot = fetch_and_create_token_snapshot(position_id, mint, snapshot_type).await?;
-    
+
     // Save to database
     match save_token_snapshot(&snapshot).await {
         Ok(snapshot_id) => {
@@ -588,33 +688,6 @@ pub async fn open_position_direct(
     {
         let mut state = GLOBAL_POSITIONS_STATE.lock().await;
 
-        // RE-ENTRY COOLDOWN CHECK
-        if let Some(cooldown_until) = state.reentry_cooldowns.get(&token.mint) {
-            let now = Utc::now();
-            if *cooldown_until > now {
-                let remaining = (*cooldown_until - now).num_minutes();
-                if is_debug_positions_enabled() {
-                    log(
-                        LogTag::Positions,
-                        "DEBUG",
-                        &format!(
-                            "⏳ Re-entry cooldown active for {} - {} minutes remaining",
-                            token.symbol,
-                            remaining
-                        )
-                    );
-                }
-                return Err(
-                    format!(
-                        "Re-entry cooldown active for {} ({}): wait {}m",
-                        token.symbol,
-                        get_mint_prefix(&token.mint),
-                        remaining
-                    )
-                );
-            }
-        }
-
         // GLOBAL COOLDOWN CHECK
         if let Some(last_open) = state.last_open_time {
             let now = Utc::now();
@@ -643,10 +716,10 @@ pub async fn open_position_direct(
             let count = state.positions
                 .iter()
                 .filter(|p| {
-                    p.position_type == "buy" && 
-                    p.exit_time.is_none() &&
-                    // Only count truly open positions for limit checks
-                    (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
+                    p.position_type == "buy" &&
+                        p.exit_time.is_none() &&
+                        // Only count truly open positions for limit checks
+                        (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
                 })
                 .count();
 
@@ -831,7 +904,10 @@ pub async fn open_position_direct(
         log(
             LogTag::Positions,
             "TRANSACTION",
-            &format!("Transaction {} will be monitored by positions manager", safe_truncate(&signature, 8))
+            &format!(
+                "Transaction {} will be monitored by positions manager",
+                safe_truncate(&signature, 8)
+            )
         );
     }
 
@@ -947,11 +1023,21 @@ pub async fn open_position_direct(
                 {
                     let mint_clone = token.mint.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = save_position_token_snapshot(id, &mint_clone, "opening").await {
+                        if
+                            let Err(e) = save_position_token_snapshot(
+                                id,
+                                &mint_clone,
+                                "opening"
+                            ).await
+                        {
                             log(
                                 LogTag::Positions,
                                 "SNAPSHOT_WARN",
-                                &format!("Failed to save opening snapshot for {}: {}", safe_truncate(&mint_clone, 8), e)
+                                &format!(
+                                    "Failed to save opening snapshot for {}: {}",
+                                    safe_truncate(&mint_clone, 8),
+                                    e
+                                )
                             );
                         }
                     });
@@ -1129,12 +1215,12 @@ pub async fn close_position_direct(
         if let Some(position) = state.positions.iter_mut().find(|p| p.mint == mint) {
             if position.exit_transaction_signature.is_some() && !position.transaction_exit_verified {
                 let sig = position.exit_transaction_signature.as_ref().unwrap();
-                
+
                 // Check if transaction actually exists on blockchain
                 let transaction_exists = get_priority_transaction(sig).await
                     .map(|opt| opt.is_some())
                     .unwrap_or(false);
-                
+
                 if transaction_exists {
                     log(
                         LogTag::Positions,
@@ -1157,7 +1243,7 @@ pub async fn close_position_direct(
                     // Clear signature since transaction doesn't exist
                     position.exit_transaction_signature = None;
                 }
-                
+
                 // Clear other failed exit data regardless
                 position.exit_price = None;
                 position.exit_time = None;
@@ -1422,7 +1508,7 @@ pub async fn close_position_direct(
                 let existing_tx_exists = get_priority_transaction(existing_sig).await
                     .map(|opt| opt.is_some())
                     .unwrap_or(false);
-                    
+
                 if existing_tx_exists {
                     // Don't overwrite valid existing transaction
                     log(
@@ -1436,10 +1522,15 @@ pub async fn close_position_direct(
                         )
                     );
                     cleanup().await;
-                    return Err(format!("Position already has valid exit transaction: {}", get_signature_prefix(existing_sig)));
+                    return Err(
+                        format!(
+                            "Position already has valid exit transaction: {}",
+                            get_signature_prefix(existing_sig)
+                        )
+                    );
                 }
             }
-            
+
             position.exit_transaction_signature = Some(transaction_signature.clone());
             // Don't set exit_time and exit_price until verified - keep position as "closing in progress"
             position.closed_reason = Some(format!("{}_pending_verification", exit_reason));
@@ -1469,10 +1560,6 @@ pub async fn close_position_direct(
 
         // Track for comprehensive verification
         state.pending_verifications.insert(transaction_signature.clone(), Utc::now());
-
-        // Add re-entry cooldown
-        let cooldown_duration = chrono::Duration::minutes(POSITION_CLOSE_COOLDOWN_MINUTES);
-        state.reentry_cooldowns.insert(mint.to_string(), Utc::now() + cooldown_duration);
 
         // Update in database (after releasing the lock) - CRITICAL: Must be synchronous
         if let Some(position) = position_for_db {
@@ -1525,14 +1612,20 @@ pub async fn close_position_direct(
     let position_status = match quick_verification_result {
         Ok(Ok(true)) => {
             // Verification succeeded quickly - position is truly closed
-            log(LogTag::Positions, "QUICK_VERIFICATION_SUCCESS", 
-                &format!("✅ {} exit verified immediately", symbol));
+            log(
+                LogTag::Positions,
+                "QUICK_VERIFICATION_SUCCESS",
+                &format!("✅ {} exit verified immediately", symbol)
+            );
             "CLOSED"
-        },
+        }
         _ => {
             // Verification failed or timed out - keep as "closing in progress"
-            log(LogTag::Positions, "QUICK_VERIFICATION_PENDING", 
-                &format!("⏳ {} exit pending verification (normal - will retry)", symbol));
+            log(
+                LogTag::Positions,
+                "QUICK_VERIFICATION_PENDING",
+                &format!("⏳ {} exit pending verification (normal - will retry)", symbol)
+            );
             "CLOSING"
         }
     };
@@ -2035,11 +2128,13 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                         // Use actual SOL received from swap analysis (for sells, use effective_sol_received)
                         position.sol_received = Some(swap_info.effective_sol_received.abs()); // For sell, this is SOL received
                         position.effective_exit_price = Some(swap_info.calculated_price_sol);
-                        
+
                         // CRITICAL FIX: Set exit_time and exit_price when exit transaction is verified
                         // Use accurate blockchain time if available, fallback to current time
                         let exit_time = if let Some(block_time) = transaction.block_time {
-                            DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or_else(|| Utc::now())
+                            DateTime::<Utc>
+                                ::from_timestamp(block_time, 0)
+                                .unwrap_or_else(|| Utc::now())
                         } else {
                             Utc::now()
                         };
@@ -2198,11 +2293,21 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                     let position_id = position.id.unwrap();
                     let mint_clone = position.mint.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = save_position_token_snapshot(position_id, &mint_clone, "closing").await {
+                        if
+                            let Err(e) = save_position_token_snapshot(
+                                position_id,
+                                &mint_clone,
+                                "closing"
+                            ).await
+                        {
                             log(
                                 LogTag::Positions,
                                 "SNAPSHOT_WARN",
-                                &format!("Failed to save closing snapshot for {}: {}", safe_truncate(&mint_clone, 8), e)
+                                &format!(
+                                    "Failed to save closing snapshot for {}: {}",
+                                    safe_truncate(&mint_clone, 8),
+                                    e
+                                )
                             );
                         }
                     });
@@ -2309,10 +2414,10 @@ pub async fn get_open_positions() -> Vec<Position> {
             state.positions
                 .iter()
                 .filter(|p| {
-                    p.position_type == "buy" && 
-                    p.exit_price.is_none() && 
-                    // Include positions with unverified exit transactions as "open" (closing in progress)
-                    (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
+                    p.position_type == "buy" &&
+                        p.exit_price.is_none() &&
+                        // Include positions with unverified exit transactions as "open" (closing in progress)
+                        (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
                 })
                 .cloned()
                 .collect()
@@ -2345,8 +2450,8 @@ pub async fn get_closed_positions() -> Vec<Position> {
                 .iter()
                 .filter(|p| {
                     // Only truly closed positions (with verified exit or explicit exit_price)
-                    p.exit_price.is_some() && 
-                    (p.transaction_exit_verified || p.exit_transaction_signature.is_none())
+                    p.exit_price.is_some() &&
+                        (p.transaction_exit_verified || p.exit_transaction_signature.is_none())
                 })
                 .cloned()
                 .collect()
@@ -2369,15 +2474,13 @@ pub async fn is_open_position(mint: &str) -> bool {
         Err(_) => {
             // Fallback to memory
             let state = GLOBAL_POSITIONS_STATE.lock().await;
-            state.positions
-                .iter()
-                .any(|p| {
-                    p.mint == mint && 
-                    p.position_type == "buy" && 
+            state.positions.iter().any(|p| {
+                p.mint == mint &&
+                    p.position_type == "buy" &&
                     p.exit_time.is_none() &&
                     // Include positions that are closing but not yet verified
                     (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
-                })
+            })
         }
     }
 }
@@ -2442,25 +2545,28 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         if let Some(current) = current_price {
             let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
             let entry_cost = position.entry_size_sol;
-            
+
             // Calculate estimated P&L based on current price (closing in progress)
             if let Some(token_amount) = position.token_amount {
                 let token_decimals_opt = get_token_decimals(&position.mint).await;
                 if let Some(token_decimals) = token_decimals_opt {
-                    let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+                    let ui_token_amount =
+                        (token_amount as f64) / (10_f64).powi(token_decimals as i32);
                     let current_value = ui_token_amount * current;
-                    
+
                     // Account for fees (estimated)
-                    let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+                    let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee|
+                        lamports_to_sol(fee)
+                    );
                     let estimated_sell_fee = buy_fee;
                     let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL;
                     let net_pnl_sol = current_value - entry_cost - total_fees;
                     let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
-                    
+
                     return (net_pnl_sol, net_pnl_percent);
                 }
             }
-            
+
             // Fallback calculation for closing positions
             let price_change = (current - entry_price) / entry_price;
             let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
@@ -2469,11 +2575,11 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             let fee_percent = (total_fees / entry_cost) * 100.0;
             let net_pnl_percent = price_change * 100.0 - fee_percent;
             let net_pnl_sol = (net_pnl_percent / 100.0) * entry_cost;
-            
+
             return (net_pnl_sol, net_pnl_percent);
         }
     }
-    
+
     // For closed positions, prioritize sol_received for most accurate P&L
     if let (Some(exit_price), Some(sol_received)) = (position.exit_price, position.sol_received) {
         // Use actual SOL invested vs SOL received for closed positions
@@ -3592,11 +3698,12 @@ async fn mark_actively_selling(mint: &str) {
 /// Schedule a failed exit retry for a position
 async fn schedule_failed_exit_retry(mint: &str, attempt_count: u32) {
     let mut state = GLOBAL_POSITIONS_STATE.lock().await;
-    
+
     if attempt_count < MAX_FAILED_EXIT_RETRIES {
-        let next_retry = Utc::now() + chrono::Duration::minutes(FAILED_EXIT_RETRY_DELAY_MINUTES as i64);
+        let next_retry =
+            Utc::now() + chrono::Duration::minutes(FAILED_EXIT_RETRY_DELAY_MINUTES as i64);
         state.failed_exit_retries.insert(mint.to_string(), (next_retry, attempt_count));
-        
+
         log(
             LogTag::Positions,
             "FAILED_EXIT_SCHEDULED",
@@ -3677,10 +3784,10 @@ async fn retry_failed_exit(mint: &str, attempt_count: u32) -> Result<String, Str
         state.positions
             .iter()
             .find(|p| {
-                p.mint == mint && 
-                // Position should have failed exit transaction OR be truly open
-                ((p.exit_transaction_signature.is_some() && !p.transaction_exit_verified) ||
-                 (p.exit_transaction_signature.is_none() && p.exit_price.is_none()))
+                p.mint == mint &&
+                    // Position should have failed exit transaction OR be truly open
+                    ((p.exit_transaction_signature.is_some() && !p.transaction_exit_verified) ||
+                        (p.exit_transaction_signature.is_none() && p.exit_price.is_none()))
             })
             .cloned()
     };
@@ -3688,13 +3795,14 @@ async fn retry_failed_exit(mint: &str, attempt_count: u32) -> Result<String, Str
     let position = match position {
         Some(pos) => pos,
         None => {
-            return Err(format!("Position not found for failed exit retry: {}", get_mint_prefix(mint)));
+            return Err(
+                format!("Position not found for failed exit retry: {}", get_mint_prefix(mint))
+            );
         }
     };
 
     // Get current price for exit
-    let current_price = get_price(&mint, Some(PriceOptions::simple()), false)
-        .await
+    let current_price = get_price(&mint, Some(PriceOptions::simple()), false).await
         .and_then(|r| r.best_sol_price())
         .unwrap_or(position.entry_price);
 
@@ -3705,30 +3813,36 @@ async fn retry_failed_exit(mint: &str, attempt_count: u32) -> Result<String, Str
             log(
                 LogTag::Positions,
                 "FAILED_EXIT_RETRY_TOKEN_ERROR",
-                &format!("❌ Could not retrieve token data for {} from database", get_mint_prefix(mint))
+                &format!(
+                    "❌ Could not retrieve token data for {} from database",
+                    get_mint_prefix(mint)
+                )
             );
             return Err(format!("Token not found in database: {}", get_mint_prefix(mint)));
         }
     };
 
     // Use higher slippage for failed exit retries
-    let slippage = FAILED_EXIT_RETRY_SLIPPAGES
-        .get(attempt_count as usize)
+    let slippage = FAILED_EXIT_RETRY_SLIPPAGES.get(attempt_count as usize)
         .copied()
         .unwrap_or(20.0);
 
     log(
         LogTag::Positions,
         "FAILED_EXIT_RETRY_SLIPPAGE",
-        &format!(
-            "📊 Using {:.1}% slippage for failed exit retry of {}",
-            slippage,
-            position.symbol
-        )
+        &format!("📊 Using {:.1}% slippage for failed exit retry of {}", slippage, position.symbol)
     );
 
     // Try to close the position again with higher slippage
-    match close_position_direct(&mint, &token, current_price, "failed_exit_retry".to_string(), Utc::now()).await {
+    match
+        close_position_direct(
+            &mint,
+            &token,
+            current_price,
+            "failed_exit_retry".to_string(),
+            Utc::now()
+        ).await
+    {
         Ok(signature) => {
             log(
                 LogTag::Positions,
@@ -3745,11 +3859,7 @@ async fn retry_failed_exit(mint: &str, attempt_count: u32) -> Result<String, Str
             log(
                 LogTag::Positions,
                 "FAILED_EXIT_RETRY_FAILED",
-                &format!(
-                    "❌ Failed exit retry failed for {}: {}",
-                    position.symbol,
-                    e
-                )
+                &format!("❌ Failed exit retry failed for {}: {}", position.symbol, e)
             );
             Err(e)
         }
@@ -3973,7 +4083,11 @@ pub async fn fix_failed_exit_positions() -> Result<usize, String> {
                                 log(
                                     LogTag::Positions,
                                     "FIX_DB_ERROR",
-                                    &format!("❌ Failed to update position {} in database: {}", position.symbol, e)
+                                    &format!(
+                                        "❌ Failed to update position {} in database: {}",
+                                        position.symbol,
+                                        e
+                                    )
                                 );
                             } else {
                                 log(
