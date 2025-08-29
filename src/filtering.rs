@@ -76,7 +76,7 @@ pub const MIN_VOLUME_LIQUIDITY_RATIO: f64 = 0.1; // 10% minimum volume/liquidity
 // ===== TRANSACTION ACTIVITY FILTERING PARAMETERS =====
 /// Minimum transaction count in 5 minutes for trading eligibility
 /// MODERATE MODE: Reasonable threshold for real activity
-pub const MIN_TRANSACTIONS_5MIN: i64 = 5; // Minimum 5 transactions in 5 minutes
+pub const MIN_TRANSACTIONS_5MIN: i64 = 50; // Minimum 5 transactions in 5 minutes
 
 /// Maximum transaction count in 5 minutes to avoid overly pumped tokens
 /// INCREASED: Allow higher activity for popular tokens

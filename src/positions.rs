@@ -1123,27 +1123,48 @@ pub async fn close_position_direct(
         );
     }
 
-    // Clear failed exit transaction data if retrying
+    // Clear failed exit transaction data if retrying (check transaction existence first)
     {
         let mut state = GLOBAL_POSITIONS_STATE.lock().await;
         if let Some(position) = state.positions.iter_mut().find(|p| p.mint == mint) {
             if position.exit_transaction_signature.is_some() && !position.transaction_exit_verified {
-                log(
-                    LogTag::Positions,
-                    "RETRY_EXIT",
-                    &format!(
-                        "🔄 Previous exit transaction failed for {} - clearing failed exit data and retrying",
-                        position.symbol
-                    )
-                );
-                // Clear failed exit transaction data
+                let sig = position.exit_transaction_signature.as_ref().unwrap();
+                
+                // Check if transaction actually exists on blockchain
+                let transaction_exists = get_priority_transaction(sig).await
+                    .map(|opt| opt.is_some())
+                    .unwrap_or(false);
+                
+                if transaction_exists {
+                    log(
+                        LogTag::Positions,
+                        "RETRY_EXIT",
+                        &format!(
+                            "🔄 Previous exit transaction exists for {} - keeping signature, clearing other exit data",
+                            position.symbol
+                        )
+                    );
+                    // Keep signature since transaction exists, just retry verification
+                } else {
+                    log(
+                        LogTag::Positions,
+                        "RETRY_EXIT",
+                        &format!(
+                            "🔄 Previous exit transaction not found for {} - clearing all exit data for retry",
+                            position.symbol
+                        )
+                    );
+                    // Clear signature since transaction doesn't exist
+                    position.exit_transaction_signature = None;
+                }
+                
+                // Clear other failed exit data regardless
                 position.exit_price = None;
                 position.exit_time = None;
                 position.transaction_exit_verified = false;
                 position.sol_received = None;
                 position.effective_exit_price = None;
                 position.exit_fee_lamports = None;
-                position.exit_transaction_signature = None; // Clear failed signature
             }
         }
     }
@@ -1395,6 +1416,30 @@ pub async fn close_position_direct(
                     |p| p.mint == mint && (p.exit_price.is_none() || !p.transaction_exit_verified)
                 )
         {
+            // FIXED: Check if position already has a valid exit transaction to prevent duplicate sells
+            if let Some(existing_sig) = &position.exit_transaction_signature {
+                // Check if existing transaction actually exists on blockchain
+                let existing_tx_exists = get_priority_transaction(existing_sig).await
+                    .map(|opt| opt.is_some())
+                    .unwrap_or(false);
+                    
+                if existing_tx_exists {
+                    // Don't overwrite valid existing transaction
+                    log(
+                        LogTag::Positions,
+                        "WARNING",
+                        &format!(
+                            "⚠️ Position {} already has valid exit transaction {} - not overwriting with {}",
+                            symbol,
+                            get_signature_prefix(existing_sig),
+                            get_signature_prefix(&transaction_signature)
+                        )
+                    );
+                    cleanup().await;
+                    return Err(format!("Position already has valid exit transaction: {}", get_signature_prefix(existing_sig)));
+                }
+            }
+            
             position.exit_transaction_signature = Some(transaction_signature.clone());
             // Don't set exit_time and exit_price until verified - keep position as "closing in progress"
             position.closed_reason = Some(format!("{}_pending_verification", exit_reason));
@@ -1429,24 +1474,23 @@ pub async fn close_position_direct(
         let cooldown_duration = chrono::Duration::minutes(POSITION_CLOSE_COOLDOWN_MINUTES);
         state.reentry_cooldowns.insert(mint.to_string(), Utc::now() + cooldown_duration);
 
-        // Update in database (after releasing the lock)
+        // Update in database (after releasing the lock) - CRITICAL: Must be synchronous
         if let Some(position) = position_for_db {
             if position.id.is_some() {
-                tokio::spawn(async move {
-                    if let Err(e) = update_position(&position).await {
-                        log(
-                            LogTag::Positions,
-                            "DB_ERROR",
-                            &format!("Failed to update position in database: {}", e)
-                        );
-                    } else {
-                        log(
-                            LogTag::Positions,
-                            "DB_UPDATE",
-                            &format!("Position {} updated in database", position.id.unwrap())
-                        );
-                    }
-                });
+                // FIXED: Make database update synchronous to prevent race conditions
+                if let Err(e) = update_position(&position).await {
+                    log(
+                        LogTag::Positions,
+                        "DB_ERROR",
+                        &format!("Failed to update position in database: {}", e)
+                    );
+                } else {
+                    log(
+                        LogTag::Positions,
+                        "DB_UPDATE",
+                        &format!("Position {} updated in database", position.id.unwrap())
+                    );
+                }
             }
         }
     }
@@ -1552,11 +1596,20 @@ pub async fn update_position_tracking(
         position.current_price = Some(current_price);
         position.current_price_updated = Some(Utc::now());
 
-        // Async database update without blocking
+        // Database update for price tracking (can be async since not critical for verification)
         if position.id.is_some() {
             let position_clone = position.clone();
             tokio::spawn(async move {
-                let _ = sync_position_to_database(&position_clone).await;
+                if let Err(e) = sync_position_to_database(&position_clone).await {
+                    // Only log if debug is enabled to avoid spam
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG",
+                            &format!("Price sync failed for {}: {}", position_clone.symbol, e)
+                        );
+                    }
+                }
             });
         }
 
@@ -2835,13 +2888,29 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                             if let Some(position) = state.positions.iter_mut().find(|p| {
                                                 p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(&sig_clone)
                                             }) {
-                                                position.exit_transaction_signature = None; // Clear failed exit transaction
-                                                position.closed_reason = Some("exit_retry_pending".to_string()); // Better status tracking
-                                                log(
-                                                    LogTag::Positions,
-                                                    "EXIT_RETRY_SCHEDULED",
-                                                    &format!("🔄 {} exit failed, retry scheduled", position.symbol)
-                                                );
+                                                // FIXED: Check if transaction actually exists before preserving signature
+                                                let transaction_exists = get_priority_transaction(&sig_clone).await
+                                                    .map(|opt| opt.is_some())
+                                                    .unwrap_or(false);
+                                                
+                                                if transaction_exists {
+                                                    // Transaction exists on blockchain - preserve signature, retry verification only
+                                                    position.closed_reason = Some("exit_verification_retry_pending".to_string());
+                                                    log(
+                                                        LogTag::Positions,
+                                                        "EXIT_VERIFICATION_RETRY",
+                                                        &format!("🔄 {} exit transaction exists but verification failed - preserving signature", position.symbol)
+                                                    );
+                                                } else {
+                                                    // Transaction doesn't exist - clear signature and allow new sell attempt
+                                                    position.exit_transaction_signature = None;
+                                                    position.closed_reason = Some("exit_retry_pending".to_string());
+                                                    log(
+                                                        LogTag::Positions,
+                                                        "EXIT_RETRY_SCHEDULED",
+                                                        &format!("🔄 {} exit transaction not found - clearing signature for retry", position.symbol)
+                                                    );
+                                                }
                                                                 
                                                                 // Schedule failed exit retry
                                                                 let mint_for_retry = position.mint.clone();
@@ -3897,26 +3966,22 @@ pub async fn fix_failed_exit_positions() -> Result<usize, String> {
                         position.exit_fee_lamports = None;
                         position.closed_reason = None;
 
-                        // Update database
+                        // Update database - CRITICAL: Must be synchronous to prevent race conditions
                         if let Some(position_id) = position.id {
-                            tokio::spawn({
-                                let position_clone = position.clone();
-                                async move {
-                                    if let Err(e) = update_position(&position_clone).await {
-                                        log(
-                                            LogTag::Positions,
-                                            "FIX_DB_ERROR",
-                                            &format!("❌ Failed to update position {} in database: {}", position_clone.symbol, e)
-                                        );
-                                    } else {
-                                        log(
-                                            LogTag::Positions,
-                                            "FIX_DB_SUCCESS",
-                                            &format!("✅ Updated position {} in database", position_clone.symbol)
-                                        );
-                                    }
-                                }
-                            });
+                            // FIXED: Make database update synchronous
+                            if let Err(e) = update_position(&position).await {
+                                log(
+                                    LogTag::Positions,
+                                    "FIX_DB_ERROR",
+                                    &format!("❌ Failed to update position {} in database: {}", position.symbol, e)
+                                );
+                            } else {
+                                log(
+                                    LogTag::Positions,
+                                    "FIX_DB_SUCCESS",
+                                    &format!("✅ Updated position {} in database", position.symbol)
+                                );
+                            }
                         }
 
                         // Schedule retry
