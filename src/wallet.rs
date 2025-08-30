@@ -9,6 +9,7 @@
 /// - Historical snapshots stored in data/wallet.db
 /// - Tracks both SOL and token balances
 /// - Integration with existing RPC infrastructure
+/// - Pure wallet monitoring without position management interference
 
 use std::path::Path;
 use std::sync::Arc;
@@ -26,11 +27,6 @@ use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_wallet_enabled };
 use crate::rpc::{ get_rpc_client, TokenAccountInfo };
 use crate::utils::get_wallet_address;
-use crate::positions::{
-    get_open_positions,
-    attempt_position_recovery_from_transactions,
-    is_critical_operation_active,
-};
 
 // Database schema version
 const WALLET_SCHEMA_VERSION: u32 = 1;
@@ -800,150 +796,6 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
             LogTag::Wallet,
             "SNAPSHOT",
             &format!("Collected snapshot: SOL {:.6}, {} tokens", sol_balance, total_tokens_count)
-        );
-    }
-
-    // POSITION RECOVERY LOGIC: Check for orphaned positions with zero wallet balance
-    // This handles cases where tokens were sold but position wasn't properly closed
-
-    // Create a map of token balances for precise balance checking
-    let wallet_token_balances: HashMap<String, u64> = token_balances
-        .iter()
-        .map(|tb| (tb.mint.clone(), tb.balance))
-        .collect();
-
-    let open_positions = get_open_positions().await;
-    let mut recovery_count = 0;
-    let current_time = Utc::now();
-
-    // Time-based protection: Don't interfere with positions opened/closed in last 5 minutes
-    const POSITION_PROTECTION_MINUTES: i64 = 5;
-
-    for position in open_positions {
-        // PROTECTION 1: Check if position is undergoing active operation by positions manager
-        // This prevents race conditions where wallet monitoring interferes with ongoing position operations
-        if is_critical_operation_active(&position.mint).await {
-            if is_debug_wallet_enabled() {
-                log(
-                    LogTag::Wallet,
-                    "POSITION_RECOVERY_SKIP_CRITICAL",
-                    &format!(
-                        "Skipping orphaned position recovery for {} ({}) - critical operation in progress",
-                        position.symbol,
-                        &position.mint[..8]
-                    )
-                );
-            }
-            continue; // Skip this position as it's being handled by positions manager
-        }
-
-        // PROTECTION 2: Time-based protection - skip recently opened positions
-        // During position opening, there's a delay between position creation and token receipt
-        let position_age_minutes = current_time
-            .signed_duration_since(position.entry_time)
-            .num_minutes();
-        if position_age_minutes < POSITION_PROTECTION_MINUTES {
-            if is_debug_wallet_enabled() {
-                log(
-                    LogTag::Wallet,
-                    "POSITION_RECOVERY_SKIP_RECENT_OPEN",
-                    &format!(
-                        "Skipping position recovery for {} ({}) - opened {} minutes ago (within {} minute protection window)",
-                        position.symbol,
-                        &position.mint[..8],
-                        position_age_minutes,
-                        POSITION_PROTECTION_MINUTES
-                    )
-                );
-            }
-            continue;
-        }
-
-        // PROTECTION 3: Skip recently closed positions (if they were reopened)
-        if let Some(exit_time) = position.exit_time {
-            let exit_age_minutes = current_time.signed_duration_since(exit_time).num_minutes();
-            if exit_age_minutes < POSITION_PROTECTION_MINUTES {
-                if is_debug_wallet_enabled() {
-                    log(
-                        LogTag::Wallet,
-                        "POSITION_RECOVERY_SKIP_RECENT_CLOSE",
-                        &format!(
-                            "Skipping position recovery for {} ({}) - closed/modified {} minutes ago (within {} minute protection window)",
-                            position.symbol,
-                            &position.mint[..8],
-                            exit_age_minutes,
-                            POSITION_PROTECTION_MINUTES
-                        )
-                    );
-                }
-                continue;
-            }
-        }
-
-        // PROTECTION 4: Check if position token has ZERO balance in wallet (not just missing from map)
-        let token_balance = wallet_token_balances.get(&position.mint).copied().unwrap_or(0);
-        if token_balance == 0 {
-            if is_debug_wallet_enabled() {
-                log(
-                    LogTag::Wallet,
-                    "POSITION_RECOVERY_ATTEMPT",
-                    &format!(
-                        "Detected orphaned position: {} ({}) - zero balance in wallet ({}), attempting recovery",
-                        position.symbol,
-                        &position.mint[..8],
-                        token_balance
-                    )
-                );
-            }
-
-            // Attempt to recover the position by finding the sell transaction
-            match
-                attempt_position_recovery_from_transactions(&position.mint, &position.symbol).await
-            {
-                Ok(recovery_signature) => {
-                    recovery_count += 1;
-                    log(
-                        LogTag::Wallet,
-                        "POSITION_RECOVERY_SUCCESS",
-                        &format!(
-                            "Successfully recovered orphaned position {} with transaction {}",
-                            position.symbol,
-                            &recovery_signature[..8]
-                        )
-                    );
-                }
-                Err(e) => {
-                    if is_debug_wallet_enabled() {
-                        log(
-                            LogTag::Wallet,
-                            "POSITION_RECOVERY_FAILED",
-                            &format!("Failed to recover position {}: {}", position.symbol, e)
-                        );
-                    }
-                }
-            }
-        } else {
-            // Token has non-zero balance - this is normal, don't attempt recovery
-            if is_debug_wallet_enabled() {
-                log(
-                    LogTag::Wallet,
-                    "POSITION_RECOVERY_SKIP_BALANCE",
-                    &format!(
-                        "Skipping position recovery for {} ({}) - has balance: {}",
-                        position.symbol,
-                        &position.mint[..8],
-                        token_balance
-                    )
-                );
-            }
-        }
-    }
-
-    if recovery_count > 0 {
-        log(
-            LogTag::Wallet,
-            "POSITION_RECOVERY_SUMMARY",
-            &format!("Recovered {} orphaned positions during wallet snapshot", recovery_count)
         );
     }
 
