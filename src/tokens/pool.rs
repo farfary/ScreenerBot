@@ -47,7 +47,7 @@ const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 1;
 const WATCHLIST_BATCH_SIZE: usize = 10;
 
 /// Watchlist update interval (spread updates over time)
-const WATCHLIST_UPDATE_INTERVAL_SECS: u64 = 30;
+const WATCHLIST_UPDATE_INTERVAL_SECS: u64 = 5;
 
 /// Maximum tokens per DexScreener API call
 const MAX_TOKENS_PER_BATCH: usize = 30;

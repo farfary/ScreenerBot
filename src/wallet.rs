@@ -13,7 +13,7 @@
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{ Duration, Instant };
-use std::collections::HashSet;
+use std::collections::{ HashSet, HashMap };
 use tokio::sync::{ Notify, Mutex };
 use chrono::{ DateTime, Utc };
 use serde::{ Deserialize, Serialize };
@@ -805,42 +805,93 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
 
     // POSITION RECOVERY LOGIC: Check for orphaned positions with zero wallet balance
     // This handles cases where tokens were sold but position wasn't properly closed
-    let wallet_token_mints: HashSet<String> = token_balances
+
+    // Create a map of token balances for precise balance checking
+    let wallet_token_balances: HashMap<String, u64> = token_balances
         .iter()
-        .map(|tb| tb.mint.clone())
+        .map(|tb| (tb.mint.clone(), tb.balance))
         .collect();
 
     let open_positions = get_open_positions().await;
     let mut recovery_count = 0;
+    let current_time = Utc::now();
+
+    // Time-based protection: Don't interfere with positions opened/closed in last 5 minutes
+    const POSITION_PROTECTION_MINUTES: i64 = 5;
 
     for position in open_positions {
-        // Check if position token is NOT in wallet (zero balance)
-        if !wallet_token_mints.contains(&position.mint) {
-            // CRITICAL: Check if position is undergoing active operation by positions manager
-            // This prevents race conditions where wallet monitoring interferes with ongoing position operations
-            if is_critical_operation_active(&position.mint).await {
+        // PROTECTION 1: Check if position is undergoing active operation by positions manager
+        // This prevents race conditions where wallet monitoring interferes with ongoing position operations
+        if is_critical_operation_active(&position.mint).await {
+            if is_debug_wallet_enabled() {
+                log(
+                    LogTag::Wallet,
+                    "POSITION_RECOVERY_SKIP_CRITICAL",
+                    &format!(
+                        "Skipping orphaned position recovery for {} ({}) - critical operation in progress",
+                        position.symbol,
+                        &position.mint[..8]
+                    )
+                );
+            }
+            continue; // Skip this position as it's being handled by positions manager
+        }
+
+        // PROTECTION 2: Time-based protection - skip recently opened positions
+        // During position opening, there's a delay between position creation and token receipt
+        let position_age_minutes = current_time
+            .signed_duration_since(position.entry_time)
+            .num_minutes();
+        if position_age_minutes < POSITION_PROTECTION_MINUTES {
+            if is_debug_wallet_enabled() {
+                log(
+                    LogTag::Wallet,
+                    "POSITION_RECOVERY_SKIP_RECENT_OPEN",
+                    &format!(
+                        "Skipping position recovery for {} ({}) - opened {} minutes ago (within {} minute protection window)",
+                        position.symbol,
+                        &position.mint[..8],
+                        position_age_minutes,
+                        POSITION_PROTECTION_MINUTES
+                    )
+                );
+            }
+            continue;
+        }
+
+        // PROTECTION 3: Skip recently closed positions (if they were reopened)
+        if let Some(exit_time) = position.exit_time {
+            let exit_age_minutes = current_time.signed_duration_since(exit_time).num_minutes();
+            if exit_age_minutes < POSITION_PROTECTION_MINUTES {
                 if is_debug_wallet_enabled() {
                     log(
                         LogTag::Wallet,
-                        "POSITION_RECOVERY_SKIP_CRITICAL",
+                        "POSITION_RECOVERY_SKIP_RECENT_CLOSE",
                         &format!(
-                            "Skipping orphaned position recovery for {} ({}) - critical operation in progress",
+                            "Skipping position recovery for {} ({}) - closed/modified {} minutes ago (within {} minute protection window)",
                             position.symbol,
-                            &position.mint[..8]
+                            &position.mint[..8],
+                            exit_age_minutes,
+                            POSITION_PROTECTION_MINUTES
                         )
                     );
                 }
-                continue; // Skip this position as it's being handled by positions manager
+                continue;
             }
+        }
 
+        // PROTECTION 4: Check if position token has ZERO balance in wallet (not just missing from map)
+        let token_balance = wallet_token_balances.get(&position.mint).copied().unwrap_or(0);
+        if token_balance == 0 {
             if is_debug_wallet_enabled() {
                 log(
                     LogTag::Wallet,
                     "POSITION_RECOVERY_ATTEMPT",
                     &format!(
-                        "Detected orphaned position: {} ({}) - not in wallet, attempting recovery",
+                        "Detected orphaned position: {} ({}) - zero balance in wallet ({}), attempting recovery",
                         position.symbol,
-                        &position.mint[..8]
+                        &position.mint[..8],
+                        token_balance
                     )
                 );
             }
@@ -870,6 +921,20 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
                         );
                     }
                 }
+            }
+        } else {
+            // Token has non-zero balance - this is normal, don't attempt recovery
+            if is_debug_wallet_enabled() {
+                log(
+                    LogTag::Wallet,
+                    "POSITION_RECOVERY_SKIP_BALANCE",
+                    &format!(
+                        "Skipping position recovery for {} ({}) - has balance: {}",
+                        position.symbol,
+                        &position.mint[..8],
+                        token_balance
+                    )
+                );
             }
         }
     }

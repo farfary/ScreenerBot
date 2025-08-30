@@ -123,9 +123,10 @@ const MILLION_DIVISOR: f64 = 1_000_000.0; // Convert to millions for display
 const MINUTES_PER_SECOND: i64 = 60; // Time conversion
 
 // ============================================================================
-// 📦 PRICE HISTORY FRESHNESS SAFEGUARDS (SIMPLIFIED FOR NEW TOKENS)
+// 📦 PRICE HISTORY FRESHNESS SAFEGUARDS (HARDCODED MINIMUM REQUIREMENTS)
 // ============================================================================
-// Simplified to allow immediate buying of new tokens with minimal history
+// Hardcoded minimum price points required before allowing any entry
+const MIN_PRICE_POINTS_REQUIRED: usize = 8; // MINIMUM 30 price points before entry
 const HISTORY_MAX_POINT_AGE_SEC: i64 = 1800; // Extended to 30m for more flexibility
 const HISTORY_MIN_POINTS_60S: usize = 0; // NO REQUIREMENT - allow fresh tokens
 const HISTORY_MIN_POINTS_300S: usize = 0; // NO REQUIREMENT - allow fresh tokens
@@ -176,9 +177,9 @@ fn is_near_recent_top(
         .map(|(_, price)| *price)
         .collect();
 
-    if recent_prices.len() < 3 {
-        // Not enough data points, allow entry
-        return false;
+    if recent_prices.len() < MIN_PRICE_POINTS_REQUIRED {
+        // Not enough data points, reject entry
+        return true; // Reject entry due to insufficient price data
     }
 
     // Find the highest/lowest price in the 15-minute window and when it occurred
@@ -640,33 +641,29 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     }
 
     // Gate dynamic drop strategies if insufficient fresh data
-    // SIMPLIFIED: Only check for completely empty history during startup
-    if price_history.is_empty() && within_startup_grace {
+    // HARDCODED REQUIREMENT: Must have at least MIN_PRICE_POINTS_REQUIRED price points
+    if price_history.len() < MIN_PRICE_POINTS_REQUIRED {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Entry,
-                "FRESHNESS_REJECT",
-                &format!("⏸️ {} no price history during startup grace", token.symbol)
+                "INSUFFICIENT_PRICE_DATA",
+                &format!(
+                    "❌ {} insufficient price data: {} < {} required points",
+                    token.symbol,
+                    price_history.len(),
+                    MIN_PRICE_POINTS_REQUIRED
+                )
             );
         }
-        return (false, 0.0, "No price history during startup".to_string());
-    }
-
-    // Allow all tokens to proceed - even with minimal history
-    if is_debug_entry_enabled() {
-        if price_history.is_empty() {
-            log(
-                LogTag::Entry,
-                "FRESHNESS_ALLOW_EMPTY",
-                &format!("✅ {} proceeding without history (new token)", token.symbol)
-            );
-        } else {
-            log(
-                LogTag::Entry,
-                "FRESHNESS_ALLOW",
-                &format!("✅ {} proceeding with {} price points", token.symbol, price_history.len())
-            );
-        }
+        return (
+            false,
+            0.0,
+            format!(
+                "Insufficient price data: {} < {} required points",
+                price_history.len(),
+                MIN_PRICE_POINTS_REQUIRED
+            ),
+        );
     }
 
     if is_debug_entry_enabled() {
@@ -788,31 +785,9 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     }
 
     // VOLUME-BASED FALLBACK: If no drop signal, check for high volume activity
-    // ENHANCED: More aggressive thresholds for new tokens with minimal history
+    // NOTE: This is now only reached if we have sufficient price points (>= MIN_PRICE_POINTS_REQUIRED)
     if let Some(vol_24h) = token.volume.as_ref().and_then(|v| v.h24) {
-        // Aggressive entry for new/fresh tokens with minimal history
-        if price_history.len() <= 2 {
-            // NEW TOKENS: Lower thresholds for volume and liquidity
-            if vol_24h > 10000.0 && liquidity_usd > 2000.0 {
-                // $10k vol + $2k liq
-                let confidence = 70.0; // Higher confidence for new tokens with volume
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "NEW_TOKEN_VOLUME_ENTRY",
-                        &format!(
-                            "🚀 New token volume entry: ${:.0}k vol, ${:.0}k liq (history: {})",
-                            vol_24h / 1000.0,
-                            liquidity_usd / 1000.0,
-                            price_history.len()
-                        )
-                    );
-                }
-                return (true, confidence, "New token high volume".to_string());
-            }
-        }
-
-        // Standard volume entry for tokens with more history
+        // Standard volume entry for tokens with sufficient history
         if vol_24h > 50000.0 && liquidity_usd > 10000.0 {
             let confidence = 60.0; // Conservative confidence for volume-based entry
             if is_debug_entry_enabled() {
@@ -820,9 +795,10 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                     LogTag::Entry,
                     "VOLUME_ENTRY",
                     &format!(
-                        "📈 Volume-based entry: ${:.0}k vol, ${:.0}k liq",
+                        "� Volume-based entry: ${:.0}k vol, ${:.0}k liq (history: {})",
                         vol_24h / 1000.0,
-                        liquidity_usd / 1000.0
+                        liquidity_usd / 1000.0,
+                        price_history.len()
                     )
                 );
             }
@@ -982,7 +958,7 @@ fn analyze_drop_momentum(
     current_price: f64,
     now: &chrono::DateTime<chrono::Utc>
 ) -> MomentumAnalysis {
-    if price_history.len() < 3 {
+    if price_history.len() < MIN_PRICE_POINTS_REQUIRED {
         return MomentumAnalysis {
             velocity_per_minute: 0.0,
             acceleration: 0.0,
@@ -1155,7 +1131,7 @@ fn calculate_drop_maturity(
 
 /// Dynamic drop analysis with liquidity-based entry decisions
 /// Returns Some((drop_percent, reason)) if dynamic drop detected, None otherwise
-/// ENHANCED: Handles new tokens with minimal or no price history
+/// REQUIRES MINIMUM PRICE POINTS: Only analyzes tokens with sufficient price history
 async fn analyze_deep_drop_entry(
     mint: &str,
     current_price: f64,
@@ -1167,57 +1143,21 @@ async fn analyze_deep_drop_entry(
 ) -> Option<(f64, String)> {
     use chrono::Utc;
 
-    // NEW TOKEN INSTANT ENTRY: If no price history, allow immediate entry for new tokens
-    if price_history.is_empty() {
-        // For new tokens with no history, check basic conditions
-        if liquidity_usd >= 1000.0 {
-            // Minimum $1k liquidity
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "NEW_TOKEN_INSTANT",
-                    &format!(
-                        "🚀 New token instant entry: ${:.0}k liquidity",
-                        liquidity_usd / 1000.0
-                    )
-                );
-            }
-            return Some((0.0, "new token instant entry".to_string()));
+    // HARDCODED REQUIREMENT: Must have minimum price points before any analysis
+    if price_history.len() < MIN_PRICE_POINTS_REQUIRED {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "INSUFFICIENT_PRICE_POINTS",
+                &format!(
+                    "❌ {} insufficient points: {} < {} required",
+                    crate::utils::safe_truncate(mint, 8),
+                    price_history.len(),
+                    MIN_PRICE_POINTS_REQUIRED
+                )
+            );
         }
-
-        // Volume-based new token entry
-        if let Some(vol_24h) = volume_24h {
-            if vol_24h >= 10000.0 && liquidity_usd >= 500.0 {
-                // $10k volume + $500 liquidity
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "NEW_TOKEN_VOLUME",
-                        &format!(
-                            "🚀 New token volume entry: ${:.0}k vol, ${:.0}k liq",
-                            vol_24h / 1000.0,
-                            liquidity_usd / 1000.0
-                        )
-                    );
-                }
-                return Some((0.0, "new token high volume".to_string()));
-            }
-        }
-    }
-
-    // MINIMAL HISTORY ENTRY: If only 1 price point, allow entry based on current conditions
-    if price_history.len() == 1 {
-        if liquidity_usd >= 5000.0 {
-            // Higher bar for single-point tokens
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "MINIMAL_HISTORY_ENTRY",
-                    &format!("💎 Minimal history entry: ${:.0}k liquidity", liquidity_usd / 1000.0)
-                );
-            }
-            return Some((0.0, "minimal history entry".to_string()));
-        }
+        return None;
     }
 
     // --- Adaptive tuner (runtime auto-tuning of min drop) -----------------
@@ -1433,27 +1373,17 @@ async fn analyze_deep_drop_entry(
         }
     }
 
-    // Need at least 3 data points for proper momentum analysis
-    if price_history.len() < 3 {
-        // Allow 2 points for ultra-fresh tokens but with limited strategies
-        if price_history.len() == 2 && liquidity_usd >= 10000.0 {
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "LIMITED_DATA_ALLOWED",
-                    "⚠️ Only 2 price points - allowing limited analysis for high liquidity token"
-                );
-            }
-        } else {
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "INSUFFICIENT_DATA",
-                    "❌ Need at least 3 price points for momentum analysis"
-                );
-            }
-            return None;
+    // Need at least MIN_PRICE_POINTS_REQUIRED data points for proper momentum analysis
+    // (This check is redundant since we already checked at function start, but kept for clarity)
+    if price_history.len() < MIN_PRICE_POINTS_REQUIRED {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "INSUFFICIENT_DATA",
+                &format!("❌ Need at least {} price points for momentum analysis", MIN_PRICE_POINTS_REQUIRED)
+            );
         }
+        return None;
     }
 
     // Get recent prices within time window

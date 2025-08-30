@@ -5484,6 +5484,9 @@ pub async fn attempt_position_recovery_from_transactions(
     );
 
     // Check each transaction to find the one that matches our position
+    // ENHANCED FILTERING: Use comprehensive transaction-to-position matching
+    let mut candidate_transactions = Vec::new();
+
     for signature in signatures.iter() {
         log(
             LogTag::Positions,
@@ -5525,169 +5528,104 @@ pub async fn attempt_position_recovery_from_transactions(
                 // Check if this transaction is a valid sell for our token
                 if let Some(swap_info) = swap_pnl_info {
                     if swap_info.swap_type == "Sell" && swap_info.token_mint == mint {
-                        log(
-                            LogTag::Positions,
-                            "RECOVERY_MATCH_FOUND",
-                            &format!(
-                                "✅ Found matching sell transaction: {} for token {}",
-                                signature,
-                                symbol
-                            )
-                        );
-
-                        // CRITICAL: Set the exit transaction signature and use the NORMAL verification flow
-                        // This ensures the position gets fully verified with all the same calculations
-                        // as a normal position close, including proper P&L calculation
-
-                        // Update position with exit transaction signature
-                        {
-                            let mut positions = POSITIONS.write().await;
-                            if let Some(pos) = positions.iter_mut().find(|p| p.mint == mint) {
-                                pos.exit_transaction_signature = Some(signature.clone());
-
-                                log(
-                                    LogTag::Positions,
-                                    "RECOVERY_SET_EXIT_SIGNATURE",
-                                    &format!("🔄 Set exit signature for {}: {}", symbol, signature)
-                                );
-                            }
-                        }
-
-                        // Update signature index
-                        {
-                            let mut sig_to_mint = SIG_TO_MINT_INDEX.write().await;
-                            sig_to_mint.insert(signature.clone(), mint.to_string());
-                        }
-
-                        // Add to verification queue
-                        {
-                            let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
-                            let dup = pending_verifications.contains_key(signature);
-                            pending_verifications.insert(signature.clone(), Utc::now());
+                        // CRITICAL TIME-BASED FILTERING: Only consider transactions AFTER position entry
+                        if swap_info.timestamp <= position.entry_time {
                             log(
                                 LogTag::Positions,
-                                "VERIFICATION_ENQUEUE_EXIT_RECOVERY",
+                                "RECOVERY_SKIP_TIME",
                                 &format!(
-                                    "📥 Enqueued EXIT (recovery) {} for {} (dup={}, queue_size={})",
+                                    "⏰ Skipping pre-entry transaction: {} (tx: {}, pos entry: {})",
                                     signature,
-                                    safe_truncate(&symbol, 8),
-                                    dup,
-                                    pending_verifications.len()
+                                    swap_info.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                                    position.entry_time.format("%Y-%m-%d %H:%M:%S")
                                 )
                             );
+                            continue;
                         }
 
-                        // Update database with exit signature immediately
-                        if let Some(position_id) = position.id {
-                            let mut updated_position = position.clone();
-                            updated_position.exit_transaction_signature = Some(signature.clone());
+                        // AMOUNT-BASED SCORING: Calculate how well the transaction amount matches position
+                        let expected_tokens = position.token_amount.unwrap_or(0) as f64; // Position token amount
+                        let actual_tokens = swap_info.token_amount.abs(); // Transaction token amount
+                        let amount_diff = (actual_tokens - expected_tokens).abs();
+                        let amount_ratio = if expected_tokens > 0.0 {
+                            amount_diff / expected_tokens
+                        } else {
+                            f64::INFINITY
+                        };
 
-                            match update_position(&updated_position).await {
-                                Ok(_) => {
-                                    log(
-                                        LogTag::Positions,
-                                        "RECOVERY_EXIT_SIGNATURE_SAVED",
-                                        &format!("✅ Exit signature saved for {} in database", symbol)
-                                    );
-                                }
-                                Err(e) => {
-                                    log(
-                                        LogTag::Positions,
-                                        "RECOVERY_EXIT_SIGNATURE_ERROR",
-                                        &format!(
-                                            "❌ Failed to save exit signature for {}: {}",
-                                            symbol,
-                                            e
-                                        )
-                                    );
-                                    // Continue with verification anyway
-                                }
-                            }
-                        }
+                        // TIME PROXIMITY SCORING: Prefer transactions closer to entry time
+                        let time_diff_seconds = (
+                            swap_info.timestamp - position.entry_time
+                        ).num_seconds() as f64;
 
-                        // Add to verification queue and run the FULL verification workflow
-                        // This is the same process as normal position closing
-                        {
-                            let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
-                            let dup = pending_verifications.contains_key(signature);
-                            pending_verifications.insert(signature.clone(), Utc::now());
-                            log(
-                                LogTag::Positions,
-                                "VERIFICATION_ENQUEUE_EXIT_RECOVERY_FORCE",
-                                &format!(
-                                    "📥 Forced enqueue EXIT (recovery) {} (dup_before={}, queue_size={})",
-                                    signature,
-                                    dup,
-                                    pending_verifications.len()
-                                )
-                            );
-                        }
-
-                        log(
-                            LogTag::Positions,
-                            "RECOVERY_START_VERIFICATION",
-                            &format!("🔍 Starting full verification workflow for recovered position {}", symbol)
-                        );
-
-                        // CRITICAL FIX: Release the position lock BEFORE calling verification
-                        // to prevent deadlock when verification tries to acquire the same lock
-                        drop(_lock);
-
-                        // Use the same comprehensive verification as normal position closing
-                        let verification_result = verify_position_transaction(&signature).await;
-                        match verification_result {
-                            Ok(true) => {
-                                log(
-                                    LogTag::Positions,
-                                    "RECOVERY_VERIFICATION_SUCCESS",
-                                    &format!("✅ Position recovery completed successfully for {}", symbol)
-                                );
-                                return Ok(signature.clone());
-                            }
-                            Ok(false) => {
-                                log(
-                                    LogTag::Positions,
-                                    "RECOVERY_VERIFICATION_INCOMPLETE",
-                                    &format!("⚠️ Position recovery verification incomplete for {} - will retry", symbol)
-                                );
-                                // Don't return error - verification is in progress
-                                return Ok(signature.clone());
-                            }
+                        // WALLET ADDRESS VERIFICATION: Ensure this transaction is from our wallet
+                        let wallet_address = match get_wallet_address() {
+                            Ok(addr) => addr,
                             Err(e) => {
                                 log(
                                     LogTag::Positions,
-                                    "RECOVERY_VERIFICATION_ERROR",
-                                    &format!(
-                                        "❌ Position recovery verification failed for {}: {}",
-                                        symbol,
-                                        e
-                                    )
+                                    "ERROR",
+                                    &format!("Failed to load wallet address for verification: {}", e)
                                 );
-                                // Return error since we found the right transaction but verification failed
-                                return Err(
-                                    format!("Verification failed for matching transaction: {}", e)
-                                );
+                                continue;
+                            }
+                        };
+
+                        // Verify the transaction involves our wallet address
+                        // Check if our wallet is involved in any token transfers
+                        let mut is_our_transaction = false;
+                        for transfer in &transaction.token_transfers {
+                            if transfer.from == wallet_address || transfer.to == wallet_address {
+                                is_our_transaction = true;
+                                break;
                             }
                         }
-                    } else {
+
+                        // Also check SOL balance changes
+                        if !is_our_transaction {
+                            for balance_change in &transaction.sol_balance_changes {
+                                if balance_change.account == wallet_address {
+                                    is_our_transaction = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if !is_our_transaction {
+                            log(
+                                LogTag::Positions,
+                                "RECOVERY_SKIP_WALLET",
+                                &format!("🚫 Skipping transaction from different wallet: {}", signature)
+                            );
+                            continue;
+                        }
+
+                        // Calculate composite score: prioritize amount accuracy, then time proximity
+                        let composite_score = amount_ratio + (time_diff_seconds / 86400.0) * 0.1; // Time factor
+
+                        candidate_transactions.push((
+                            swap_info.clone(),
+                            amount_ratio,
+                            time_diff_seconds,
+                            composite_score,
+                            signature.clone(),
+                            transaction.clone(),
+                        ));
+
                         log(
                             LogTag::Positions,
-                            "RECOVERY_TYPE_MISMATCH",
+                            "RECOVERY_CANDIDATE",
                             &format!(
-                                "⚠️ Transaction type/token mismatch for {}: expected Sell {}, got {} {}",
+                                "📊 Candidate transaction: {} - Amount: {:.2} vs pos {:.2} (ratio: {:.4}), Time: +{:.0}s, Score: {:.4}",
                                 signature,
-                                crate::utils::safe_truncate(&mint, 8),
-                                swap_info.swap_type,
-                                crate::utils::safe_truncate(&swap_info.token_mint, 8)
+                                actual_tokens,
+                                expected_tokens,
+                                amount_ratio,
+                                time_diff_seconds,
+                                composite_score
                             )
                         );
                     }
-                } else {
-                    log(
-                        LogTag::Positions,
-                        "RECOVERY_NO_ANALYSIS",
-                        &format!("⚠️ No swap analysis data for transaction {}", signature)
-                    );
                 }
             }
             Ok(None) => {
@@ -5696,15 +5634,184 @@ pub async fn attempt_position_recovery_from_transactions(
                     "RECOVERY_TX_NOT_FOUND",
                     &format!("⚠️ Transaction {} not found in database", signature)
                 );
+                continue;
             }
             Err(e) => {
                 log(
                     LogTag::Positions,
-                    "RECOVERY_TX_ERROR",
-                    &format!("❌ Error fetching transaction {}: {}", signature, e)
+                    "RECOVERY_ERROR_TX",
+                    &format!("❌ Failed to get transaction {}: {}", signature, e)
                 );
+                continue;
             }
         }
+    }
+
+    // Sort candidates by composite score (best match first)
+    candidate_transactions.sort_by(|a, b| {
+        a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    log(
+        LogTag::Positions,
+        "RECOVERY_CANDIDATES",
+        &format!(
+            "🎯 Found {} candidate transactions for position {} ({}), sorted by best match",
+            candidate_transactions.len(),
+            position.id.unwrap_or(0),
+            symbol
+        )
+    );
+
+    // Use the best matching candidate if it meets quality criteria
+    if
+        let Some(
+            (best_swap_info, amount_ratio, time_diff, score, best_signature, best_transaction),
+        ) = candidate_transactions.first()
+    {
+        // Quality threshold: require reasonable amount matching (allow 15% difference)
+        if *amount_ratio < 0.15 {
+            log(
+                LogTag::Positions,
+                "RECOVERY_BEST_MATCH",
+                &format!(
+                    "🏆 Using best match {} for position {}: amount ratio {:.4}, time +{:.0}s, score {:.4}",
+                    best_signature,
+                    position.id.unwrap_or(0),
+                    amount_ratio,
+                    time_diff,
+                    score
+                )
+            );
+
+            // CRITICAL: Set the exit transaction signature and use the NORMAL verification flow
+            // This ensures the position gets fully verified with all the same calculations
+            // as a normal position close, including proper P&L calculation
+
+            // Update position with exit transaction signature
+            {
+                let mut positions = POSITIONS.write().await;
+                if let Some(pos) = positions.iter_mut().find(|p| p.mint == mint) {
+                    pos.exit_transaction_signature = Some(best_signature.clone());
+
+                    log(
+                        LogTag::Positions,
+                        "RECOVERY_SET_EXIT_SIGNATURE",
+                        &format!("🔄 Set exit signature for {}: {}", symbol, best_signature)
+                    );
+                }
+            }
+
+            // Update signature index
+            {
+                let mut sig_to_mint = SIG_TO_MINT_INDEX.write().await;
+                sig_to_mint.insert(best_signature.clone(), mint.to_string());
+            }
+
+            // Add to verification queue
+            {
+                let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
+                let dup = pending_verifications.contains_key(best_signature);
+                pending_verifications.insert(best_signature.clone(), Utc::now());
+                log(
+                    LogTag::Positions,
+                    "VERIFICATION_ENQUEUE_EXIT_RECOVERY",
+                    &format!(
+                        "📥 Enqueued EXIT (recovery) {} for {} (dup={}, queue_size={})",
+                        best_signature,
+                        safe_truncate(&symbol, 8),
+                        dup,
+                        pending_verifications.len()
+                    )
+                );
+            }
+
+            // Update database with exit signature immediately
+            if let Some(position_id) = position.id {
+                let mut updated_position = position.clone();
+                updated_position.exit_transaction_signature = Some(best_signature.clone());
+
+                match update_position(&updated_position).await {
+                    Ok(_) => {
+                        log(
+                            LogTag::Positions,
+                            "RECOVERY_EXIT_SIGNATURE_SAVED",
+                            &format!("✅ Exit signature saved for {} in database", symbol)
+                        );
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Positions,
+                            "RECOVERY_EXIT_SIGNATURE_ERROR",
+                            &format!("❌ Failed to save exit signature for {}: {}", symbol, e)
+                        );
+                        // Continue with verification anyway
+                    }
+                }
+            }
+
+            log(
+                LogTag::Positions,
+                "RECOVERY_START_VERIFICATION",
+                &format!("🔍 Starting full verification workflow for recovered position {}", symbol)
+            );
+
+            // CRITICAL FIX: Release the position lock BEFORE calling verification
+            // to prevent deadlock when verification tries to acquire the same lock
+            drop(_lock);
+
+            // Use the same comprehensive verification as normal position closing
+            let verification_result = verify_position_transaction(&best_signature).await;
+            match verification_result {
+                Ok(true) => {
+                    log(
+                        LogTag::Positions,
+                        "RECOVERY_VERIFICATION_SUCCESS",
+                        &format!("✅ Position recovery completed successfully for {}", symbol)
+                    );
+                    return Ok(best_signature.clone());
+                }
+                Ok(false) => {
+                    log(
+                        LogTag::Positions,
+                        "RECOVERY_VERIFICATION_INCOMPLETE",
+                        &format!("⚠️ Position recovery verification incomplete for {} - will retry", symbol)
+                    );
+                    // Don't return error - verification is in progress
+                    return Ok(best_signature.clone());
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Positions,
+                        "RECOVERY_VERIFICATION_ERROR",
+                        &format!("❌ Position recovery verification failed for {}: {}", symbol, e)
+                    );
+                    // Return error since we found the right transaction but verification failed
+                    return Err(format!("Verification failed for matching transaction: {}", e));
+                }
+            }
+        } else {
+            log(
+                LogTag::Positions,
+                "RECOVERY_POOR_MATCH",
+                &format!(
+                    "❌ Best candidate {} has poor amount match (ratio: {:.4} > 0.15) for position {}",
+                    best_signature,
+                    amount_ratio,
+                    position.id.unwrap_or(0)
+                )
+            );
+        }
+    } else {
+        log(
+            LogTag::Positions,
+            "RECOVERY_NO_CANDIDATES",
+            &format!(
+                "❌ No valid candidate transactions found for position {} ({})",
+                position.id.unwrap_or(0),
+                symbol
+            )
+        );
     }
 
     Err("No matching sell transaction found for position recovery".to_string())

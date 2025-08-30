@@ -15,6 +15,7 @@ use crate::tokens::pool::get_pool_service;
 use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
 use crate::transactions::{ TransactionsManager, SwapPnLInfo };
 use crate::utils::get_wallet_address;
+use crate::wallet::{ get_current_wallet_status };
 // New pool price system is now integrated via background services
 
 use chrono::{ Utc };
@@ -25,138 +26,6 @@ use std::str::FromStr;
 use tokio::sync::{ Notify, Mutex };
 use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
 use crate::tokens::discovery::get_discovery_stats;
-
-/// Cached wallet balance structure
-#[derive(Clone)]
-struct CachedWalletBalance {
-    balance: f64,
-    cached_at: Instant,
-    wallet_address: String,
-}
-
-impl CachedWalletBalance {
-    fn is_valid(&self, cache_duration_secs: u64) -> bool {
-        self.cached_at.elapsed().as_secs() < cache_duration_secs
-    }
-}
-
-/// Global wallet balance cache (5 minute cache)
-static WALLET_BALANCE_CACHE: std::sync::LazyLock<Arc<Mutex<Option<CachedWalletBalance>>>> = std::sync::LazyLock::new(
-    || Arc::new(Mutex::new(None))
-);
-
-/// Get cached wallet balance with 5-minute cache duration
-async fn get_cached_wallet_balance() -> String {
-    const CACHE_DURATION_SECS: u64 = 300; // Increased from 60s to 5 minutes for better performance
-
-    // Try to get wallet address first
-    let wallet_pubkey = match crate::utils::get_wallet_address() {
-        Ok(addr) => addr,
-        Err(_) => {
-            if is_debug_summary_enabled() {
-                log(
-                    LogTag::Summary,
-                    "WARN",
-                    "[get_cached_wallet_balance] Wallet pubkey unavailable"
-                );
-            }
-            return "N/A".to_string();
-        }
-    };
-
-    // Check cache first
-    {
-        let cache_guard = WALLET_BALANCE_CACHE.lock().await;
-        if let Some(cached) = cache_guard.as_ref() {
-            let age_secs = cached.cached_at.elapsed().as_secs();
-            let addresses_match = cached.wallet_address == wallet_pubkey;
-
-            if is_debug_summary_enabled() {
-                log(
-                    LogTag::Summary,
-                    "DEBUG",
-                    &format!(
-                        "[get_cached_wallet_balance] Cache check - Age: {}s, Valid: {}, Addresses match: {}, Cached addr: {}, Current addr: {}",
-                        age_secs,
-                        age_secs < CACHE_DURATION_SECS,
-                        addresses_match,
-                        safe_truncate(&cached.wallet_address, 8),
-                        safe_truncate(&wallet_pubkey, 8)
-                    )
-                );
-            }
-
-            if addresses_match && cached.is_valid(CACHE_DURATION_SECS) {
-                if is_debug_summary_enabled() {
-                    log(
-                        LogTag::Summary,
-                        "DEBUG",
-                        &format!(
-                            "[get_cached_wallet_balance] Using cached balance: {:.6} SOL (cached {:.1}s ago)",
-                            cached.balance,
-                            cached.cached_at.elapsed().as_secs_f64()
-                        )
-                    );
-                }
-                return format!("{:.6} SOL", cached.balance);
-            }
-        } else if is_debug_summary_enabled() {
-            log(LogTag::Summary, "DEBUG", "[get_cached_wallet_balance] No cache entry exists");
-        }
-    }
-
-    // Cache miss or expired - fetch fresh balance
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            "[get_cached_wallet_balance] Cache miss/expired, fetching fresh balance via RPC"
-        );
-    }
-
-    let rpc_start = Instant::now();
-    match crate::utils::get_sol_balance(&wallet_pubkey).await {
-        Ok(balance) => {
-            if is_debug_summary_enabled() {
-                log(
-                    LogTag::Summary,
-                    "DEBUG",
-                    &format!(
-                        "[get_cached_wallet_balance] Fresh RPC balance call successful in {} ms: {:.6} SOL",
-                        rpc_start.elapsed().as_millis(),
-                        balance
-                    )
-                );
-            }
-
-            // Update cache
-            {
-                let mut cache_guard = WALLET_BALANCE_CACHE.lock().await;
-                *cache_guard = Some(CachedWalletBalance {
-                    balance,
-                    cached_at: Instant::now(),
-                    wallet_address: wallet_pubkey,
-                });
-            }
-
-            format!("{:.6} SOL", balance)
-        }
-        Err(e) => {
-            if is_debug_summary_enabled() {
-                log(
-                    LogTag::Summary,
-                    "WARN",
-                    &format!(
-                        "[get_cached_wallet_balance] RPC balance call failed in {} ms: {}",
-                        rpc_start.elapsed().as_millis(),
-                        e
-                    )
-                );
-            }
-            "Error".to_string()
-        }
-    }
-}
 
 /// Display structure for closed positions with specific "Exit" column
 #[derive(Tabled)]
@@ -985,8 +854,21 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
         );
     }
 
-    // Calculate wallet balance using cached method (30-second cache)
-    let wallet_balance = get_cached_wallet_balance().await;
+    // Get wallet balance from wallet system
+    let wallet_balance = match get_current_wallet_status().await {
+        Ok(Some(snapshot)) => format!("{:.6} SOL", snapshot.sol_balance),
+        Ok(None) => "No Data".to_string(),
+        Err(e) => {
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "WARN",
+                    &format!("[build_summary_report] Failed to get wallet status: {}", e)
+                );
+            }
+            "Error".to_string()
+        }
+    };
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
