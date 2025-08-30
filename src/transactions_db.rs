@@ -19,6 +19,12 @@ use rusqlite::{ Connection, OptionalExtension, params, Result as SqliteResult };
 use r2d2::{ Pool, PooledConnection };
 use r2d2_sqlite::SqliteConnectionManager;
 
+use crate::transactions_types::{
+    Transaction,
+    TransactionStatus,
+    TransactionType,
+    TransactionDirection,
+};
 use crate::logger::{ log, LogTag };
 
 // Static flag to track if database has been initialized (to reduce log noise)
@@ -512,7 +518,7 @@ impl TransactionDatabase {
     /// This is the main method for storing complete transaction analysis
     pub async fn store_full_transaction_analysis(
         &self,
-        transaction: &crate::transactions::Transaction
+        transaction: &Transaction
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
 
@@ -522,9 +528,9 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to serialize transaction type: {}", e))?;
 
         let direction_str = match transaction.direction {
-            crate::transactions::TransactionDirection::Incoming => "Incoming",
-            crate::transactions::TransactionDirection::Outgoing => "Outgoing",
-            crate::transactions::TransactionDirection::Internal => "Internal",
+            TransactionDirection::Incoming => "Incoming",
+            TransactionDirection::Outgoing => "Outgoing",
+            TransactionDirection::Internal => "Internal",
         };
 
         let token_transfers_json = if !transaction.token_transfers.is_empty() {
@@ -751,7 +757,7 @@ impl TransactionDatabase {
     pub async fn get_full_transaction_from_db(
         &self,
         signature: &str
-    ) -> Result<Option<crate::transactions::Transaction>, String> {
+    ) -> Result<Option<Transaction>, String> {
         let conn = self.get_connection()?;
 
         // First, get raw transaction data
@@ -770,10 +776,10 @@ impl TransactionDatabase {
 
                     let status_str: String = row.get(4)?;
                     let status = match status_str.as_str() {
-                        "Pending" => crate::transactions::TransactionStatus::Pending,
-                        "Confirmed" => crate::transactions::TransactionStatus::Confirmed,
-                        "Finalized" => crate::transactions::TransactionStatus::Finalized,
-                        _ => crate::transactions::TransactionStatus::Failed(status_str),
+                        "Pending" => TransactionStatus::Pending,
+                        "Confirmed" => TransactionStatus::Confirmed,
+                        "Finalized" => TransactionStatus::Finalized,
+                        _ => TransactionStatus::Failed(status_str),
                     };
 
                     let timestamp_str: String = row.get(3)?;
@@ -823,7 +829,7 @@ impl TransactionDatabase {
                                         &transaction_type_str
                                     )
                                 );
-                                crate::transactions::TransactionType::Unknown
+                                TransactionType::Unknown
                             }
                         };
 
@@ -839,9 +845,9 @@ impl TransactionDatabase {
 
                         let direction_str: String = row.get(1)?;
                         let direction = match direction_str.as_str() {
-                            "Incoming" => crate::transactions::TransactionDirection::Incoming,
-                            "Outgoing" => crate::transactions::TransactionDirection::Outgoing,
-                            _ => crate::transactions::TransactionDirection::Internal,
+                            "Incoming" => TransactionDirection::Incoming,
+                            "Outgoing" => TransactionDirection::Outgoing,
+                            _ => TransactionDirection::Internal,
                         };
 
                         let cached_analysis_str: Option<String> = row.get(8)?;
@@ -868,7 +874,7 @@ impl TransactionDatabase {
                 .map_err(|e| format!("Failed to get processed transaction: {}", e))?;
 
             // Construct the Transaction object
-            let mut transaction = crate::transactions::Transaction {
+            let mut transaction = Transaction {
                 signature: sig.clone(),
                 slot,
                 block_time,
@@ -880,8 +886,8 @@ impl TransactionDatabase {
                 last_updated: Utc::now(),
 
                 // Initialize with defaults - will be populated from processed data if available
-                transaction_type: crate::transactions::TransactionType::Unknown,
-                direction: crate::transactions::TransactionDirection::Internal,
+                transaction_type: TransactionType::Unknown,
+                direction: TransactionDirection::Internal,
                 fee_sol: 0.0,
                 sol_balance_change: 0.0,
                 token_transfers: Vec::new(),
@@ -1094,7 +1100,7 @@ impl TransactionDatabase {
     pub async fn get_recent_transactions_batch(
         &self,
         limit: usize
-    ) -> Result<Vec<crate::transactions::Transaction>, String> {
+    ) -> Result<Vec<Transaction>, String> {
         let conn = self.get_connection()?;
 
         let mut transactions = Vec::new();
@@ -1125,10 +1131,10 @@ impl TransactionDatabase {
 
                 let status_str: String = row.get(4)?;
                 let status = match status_str.as_str() {
-                    "Pending" => crate::transactions::TransactionStatus::Pending,
-                    "Confirmed" => crate::transactions::TransactionStatus::Confirmed,
-                    "Finalized" => crate::transactions::TransactionStatus::Finalized,
-                    _ => crate::transactions::TransactionStatus::Failed(status_str),
+                    "Pending" => TransactionStatus::Pending,
+                    "Confirmed" => TransactionStatus::Confirmed,
+                    "Finalized" => TransactionStatus::Finalized,
+                    _ => TransactionStatus::Failed(status_str),
                 };
 
                 let timestamp_str: String = row.get(3)?;
@@ -1149,13 +1155,13 @@ impl TransactionDatabase {
                 ) = if let Ok(Some(tx_type_str)) = row.get::<_, Option<String>>(8) {
                     let tx_type = serde_json
                         ::from_str(&tx_type_str)
-                        .unwrap_or(crate::transactions::TransactionType::Unknown);
+                        .unwrap_or(TransactionType::Unknown);
 
                     let direction_str: String = row.get(9).unwrap_or("Internal".to_string());
                     let direction = match direction_str.as_str() {
-                        "Incoming" => crate::transactions::TransactionDirection::Incoming,
-                        "Outgoing" => crate::transactions::TransactionDirection::Outgoing,
-                        _ => crate::transactions::TransactionDirection::Internal,
+                        "Incoming" => TransactionDirection::Incoming,
+                        "Outgoing" => TransactionDirection::Outgoing,
+                        _ => TransactionDirection::Internal,
                     };
 
                     let cached_analysis_str: Option<String> = row.get(16).unwrap_or(None);
@@ -1181,8 +1187,8 @@ impl TransactionDatabase {
                 } else {
                     // No processed data available - use defaults
                     (
-                        crate::transactions::TransactionType::Unknown,
-                        crate::transactions::TransactionDirection::Internal,
+                        TransactionType::Unknown,
+                        TransactionDirection::Internal,
                         0.0,
                         0.0,
                         None,
@@ -1192,7 +1198,7 @@ impl TransactionDatabase {
                     )
                 };
 
-                Ok(crate::transactions::Transaction {
+                Ok(Transaction {
                     signature: row.get(0)?,
                     slot: row.get::<_, Option<i64>>(1)?.map(|s| s as u64),
                     block_time: row.get(2)?,

@@ -13,7 +13,8 @@ use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
 use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
-use crate::transactions::{ TransactionsManager, SwapPnLInfo };
+use crate::transactions::TransactionsManager;
+use crate::transactions_types::{ SwapPnLInfo, TransactionType, Transaction };
 use crate::utils::get_wallet_address;
 use crate::wallet::{ get_current_wallet_status };
 // New pool price system is now integrated via background services
@@ -1387,13 +1388,13 @@ async fn build_recent_swaps_section() -> Result<String, String> {
         match tokio::time::timeout(Duration::from_secs(5), manager_guard.lock()).await {
             Ok(mut guard) => {
                 if let Some(ref mut manager) = *guard {
-                    match manager.get_all_swap_transactions_limited(Some(20), Some(true)).await {
-                        Ok(swap_pnls) => swap_pnls,
-                        Err(_) => {
+                    match manager.get_recent_swaps(20).await {
+                        Ok(swap_transactions) => swap_transactions,
+                        Err(e) => {
                             log(
                                 LogTag::Summary,
-                                "DEBUG",
-                                "Failed to get limited swaps from global manager, using empty list"
+                                "ERROR",
+                                &format!("Failed to fetch recent swap transactions: {}", e)
                             );
                             Vec::new()
                         }
@@ -1432,7 +1433,10 @@ async fn build_recent_swaps_section() -> Result<String, String> {
     let conversion_start = Instant::now();
     let recent_swaps: Vec<RecentSwapDisplay> = swaps
         .into_iter()
-        .map(|swap| RecentSwapDisplay::from_swap_pnl_info(&swap))
+        .filter_map(|swap| {
+            // Use the new method to create RecentSwapDisplay from Transaction with SwapAnalysis
+            RecentSwapDisplay::from_transaction_with_swap_analysis(&swap)
+        })
         .collect();
 
     if is_debug_summary_enabled() {
@@ -1978,10 +1982,108 @@ impl RecentSwapDisplay {
             status: swap.status.clone(),
         }
     }
+
+    /// Create RecentSwapDisplay from Transaction with SwapAnalysis
+    pub fn from_transaction_with_swap_analysis(tx: &Transaction) -> Option<Self> {
+        let swap_analysis = tx.swap_analysis.as_ref()?;
+
+        // Helper function to shorten signatures
+        let shorten_signature = |signature: &str| -> String {
+            if signature.len() <= 16 {
+                signature.to_string()
+            } else {
+                crate::utils::safe_format_signature(signature)
+            }
+        };
+
+        let shortened_signature = shorten_signature(&tx.signature);
+
+        // Determine swap type and amounts from transaction type
+        let (swap_type, sol_amount, token_amount, token_symbol, router) = match
+            &tx.transaction_type
+        {
+            TransactionType::SwapSolToToken { token_mint: _, sol_amount, token_amount, router } => {
+                ("Buy".to_string(), *sol_amount, *token_amount, "UNK".to_string(), router.clone())
+            }
+            TransactionType::SwapTokenToSol { token_mint: _, token_amount, sol_amount, router } => {
+                ("Sell".to_string(), *sol_amount, *token_amount, "UNK".to_string(), router.clone())
+            }
+            TransactionType::SwapTokenToToken {
+                from_mint: _,
+                to_mint: _,
+                from_amount,
+                to_amount,
+                router,
+            } => {
+                ("Swap".to_string(), *from_amount, *to_amount, "UNK".to_string(), router.clone())
+            }
+            _ => {
+                return None;
+            }
+        };
+
+        // Apply intuitive sign conventions for display
+        let (display_sol_amount, display_token_amount) = if swap_type == "Buy" {
+            // Buy: SOL spent (negative), tokens received (positive)
+            (-sol_amount, token_amount.abs())
+        } else {
+            // Sell: SOL received (positive), tokens sold (negative)
+            (sol_amount, -token_amount.abs())
+        };
+
+        let type_display = if swap_type == "Buy" { "🟢 Buy" } else { "🔴 Sell" };
+
+        // Format amounts for display
+        let sol_formatted = if display_sol_amount.abs() >= 1.0 {
+            format!("{:+.3}", display_sol_amount)
+        } else {
+            format!("{:+.6}", display_sol_amount)
+        };
+
+        let token_formatted = if display_token_amount.abs() >= 1000.0 {
+            format!("{:+.0}", display_token_amount)
+        } else if display_token_amount.abs() >= 1.0 {
+            format!("{:+.2}", display_token_amount)
+        } else {
+            format!("{:+.2}", display_token_amount)
+        };
+
+        // Calculate price from effective price in swap analysis
+        let price = if swap_analysis.effective_price > 0.0 {
+            format!("{:.9}", swap_analysis.effective_price)
+        } else {
+            "N/A".to_string()
+        };
+
+        // Calculate total fees from fee breakdown
+        let total_fee =
+            swap_analysis.fee_breakdown.transaction_fee +
+            swap_analysis.fee_breakdown.router_fee +
+            swap_analysis.fee_breakdown.platform_fee;
+
+        Some(Self {
+            date: tx.timestamp.format("%m-%d").to_string(),
+            time: tx.timestamp.format("%H:%M").to_string(),
+            ago: format!("{} ago", format_duration_compact(tx.timestamp, Utc::now())),
+            signature: shortened_signature,
+            swap_type: type_display.to_string(),
+            token: crate::utils::safe_truncate(&token_symbol, 15).to_string(),
+            sol_amount: sol_formatted,
+            token_amount: token_formatted,
+            price,
+            router: crate::utils::safe_truncate(&router, 12).to_string(),
+            fee: format!("{:.6}", total_fee),
+            status: if tx.success {
+                "✅ Success".to_string()
+            } else {
+                "❌ Failed".to_string()
+            },
+        })
+    }
 }
 
 impl RecentTransactionDisplay {
-    pub fn from_transaction(tx: crate::transactions::Transaction) -> Self {
+    pub fn from_transaction(tx: crate::transactions_types::Transaction) -> Self {
         // Shorten signature
         let signature = if tx.signature.len() <= 16 {
             tx.signature.clone()
@@ -1991,16 +2093,14 @@ impl RecentTransactionDisplay {
 
         // Type string
         let tx_type = match &tx.transaction_type {
-            crate::transactions::TransactionType::SwapSolToToken { .. } => "Buy".to_string(),
-            crate::transactions::TransactionType::SwapTokenToSol { .. } => "Sell".to_string(),
-            crate::transactions::TransactionType::SwapTokenToToken { .. } =>
-                "Token→Token".to_string(),
-            crate::transactions::TransactionType::SolTransfer { .. } => "SOL Transfer".to_string(),
-            crate::transactions::TransactionType::TokenTransfer { .. } =>
-                "Token Transfer".to_string(),
-            crate::transactions::TransactionType::AtaClose { .. } => "ATA Close".to_string(),
-            crate::transactions::TransactionType::Other { .. } => "Other".to_string(),
-            crate::transactions::TransactionType::Unknown => "Unknown".to_string(),
+            TransactionType::SwapSolToToken { .. } => "Buy".to_string(),
+            TransactionType::SwapTokenToSol { .. } => "Sell".to_string(),
+            TransactionType::SwapTokenToToken { .. } => "Token→Token".to_string(),
+            TransactionType::SolTransfer { .. } => "SOL Transfer".to_string(),
+            TransactionType::TokenTransfer { .. } => "Token Transfer".to_string(),
+            TransactionType::AtaClose { .. } => "ATA Close".to_string(),
+            TransactionType::Other { .. } => "Other".to_string(),
+            TransactionType::Unknown => "Unknown".to_string(),
         };
 
         // Token symbol if present

@@ -14,15 +14,8 @@ use crate::{
         UnifiedQuote,
         config::{ SOL_MINT, QUOTE_SLIPPAGE_PERCENT },
     },
-    transactions::{
-        get_transaction,
-        get_priority_transaction,
-        Transaction,
-        TransactionStatus,
-        SwapAnalysis,
-        SwapPnLInfo,
-        get_global_transaction_manager,
-    },
+    transactions::{ get_transaction, get_global_transaction_manager },
+    transactions_types::{ Transaction, TransactionStatus, SwapAnalysis, SwapPnLInfo },
     rpc::{ lamports_to_sol, sol_to_lamports },
     errors::{ ScreenerBotError, PositionError, DataError, BlockchainError, NetworkError },
     errors::blockchain::{ parse_structured_solana_error, is_permanent_failure },
@@ -1374,7 +1367,7 @@ pub async fn close_position_direct(
                 let sig = position.exit_transaction_signature.as_ref().unwrap();
 
                 // Check if transaction actually exists on blockchain
-                let transaction_exists = get_priority_transaction(sig).await
+                let transaction_exists = get_transaction(sig).await
                     .map(|opt| opt.is_some())
                     .unwrap_or(false);
 
@@ -1706,7 +1699,7 @@ pub async fn close_position_direct(
 
     // 3. Validate existing exit signature (potential RPC) outside any lock
     if let Some(ref existing_sig) = existing_exit_sig {
-        if let Ok(Some(_)) = get_priority_transaction(existing_sig).await {
+        if let Ok(Some(_)) = get_transaction(existing_sig).await {
             log(
                 LogTag::Positions,
                 "WARNING",
@@ -2550,7 +2543,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
 
     // Get the transaction with comprehensive verification using priority processing
     // This ensures we get a fully analyzed transaction even when the manager is busy
-    let transaction = match get_priority_transaction(signature).await {
+    let transaction = match get_transaction(signature).await {
         Ok(Some(transaction)) => {
             if is_debug_positions_enabled() {
                 log(
@@ -4324,7 +4317,7 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                                 p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(&sig_clone)
                                             }) {
                                                 // FIXED: Check if transaction actually exists before preserving signature
-                                                let transaction_exists = get_priority_transaction(&sig_clone).await
+                                                let transaction_exists = get_transaction(&sig_clone).await
                                                     .map(|opt| opt.is_some())
                                                     .unwrap_or(false);
                                                 
@@ -4973,7 +4966,7 @@ pub async fn attempt_position_recovery_from_transactions(
 
         // Validate transaction exists and is successful using priority transaction access
         // This bypasses the busy manager issue and ensures we get properly analyzed transactions
-        match get_priority_transaction(&signature).await {
+        match get_transaction(&signature).await {
             Ok(Some(transaction)) => {
                 // Verify transaction is successful and finalized
                 if

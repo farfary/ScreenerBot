@@ -52,11 +52,15 @@
 
 use screenerbot::transactions::{
     TransactionsManager,
+    get_transaction,
+    initialize_global_transaction_manager,
+};
+use screenerbot::transactions_types::{
     Transaction,
     TransactionType,
     TransactionDirection,
-    get_transaction,
-    initialize_global_transaction_manager,
+    SwapPnLInfo,
+    AtaOperationType,
 };
 use screenerbot::logger::{ log, LogTag, init_file_logging };
 use screenerbot::global::{ set_cmd_args };
@@ -1011,8 +1015,15 @@ async fn analyze_swaps(
     };
 
     // Get all swap transactions (now includes automatic recalculation and count limiting)
-    match manager.get_all_swap_transactions_limited(count, None).await {
-        Ok(all_swaps) => {
+    match manager.get_recent_swaps(count.unwrap_or(20)).await {
+        Ok(all_transactions) => {
+            // Convert transactions to SwapPnLInfo objects
+            let mut token_cache = std::collections::HashMap::new();
+            let all_swaps: Vec<SwapPnLInfo> = all_transactions
+                .iter()
+                .filter_map(|tx| manager.convert_to_swap_pnl_info(tx, &token_cache, true))
+                .collect();
+
             // Apply date/time and SOL amount filtering
             let filtered_swaps: Vec<_> = all_swaps
                 .iter()
@@ -1094,7 +1105,7 @@ async fn analyze_swaps(
 }
 
 /// Display detailed swap statistics
-fn display_detailed_swap_statistics(swaps: &[screenerbot::transactions::SwapPnLInfo]) {
+fn display_detailed_swap_statistics(swaps: &[SwapPnLInfo]) {
     if swaps.is_empty() {
         return;
     }
@@ -1268,7 +1279,7 @@ async fn analyze_all_transactions(
     };
 
     // Get all cached transactions first
-    match manager.recalculate_all_cached_transactions(Some(max_count)).await {
+    match manager.fetch_all_wallet_transactions().await {
         Ok(transactions) => {
             log(
                 LogTag::Transactions,
@@ -1317,7 +1328,7 @@ async fn analyze_all_transactions(
 }
 
 /// Display comprehensive table of ALL transaction types
-fn display_all_transactions_table(transactions: &[screenerbot::transactions::Transaction]) {
+fn display_all_transactions_table(transactions: &[screenerbot::transactions_types::Transaction]) {
     log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE TRANSACTION ANALYSIS ===");
     log(
         LogTag::Transactions,
@@ -1340,7 +1351,7 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
         let _timestamp = transaction.timestamp.format("%H:%M:%S").to_string();
 
         let (tx_type, details) = match &transaction.transaction_type {
-            screenerbot::transactions::TransactionType::SwapSolToToken {
+            screenerbot::transactions_types::TransactionType::SwapSolToToken {
                 token_mint: _,
                 sol_amount,
                 token_amount,
@@ -1351,7 +1362,7 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
                     format!("{:.4} SOL -> {:.0} tokens via {}", sol_amount, token_amount, router),
                 )
             }
-            screenerbot::transactions::TransactionType::SwapTokenToSol {
+            screenerbot::transactions_types::TransactionType::SwapTokenToSol {
                 token_mint: _,
                 token_amount,
                 sol_amount,
@@ -1362,7 +1373,7 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
                     format!("{:.0} tokens -> {:.4} SOL via {}", token_amount, sol_amount, router),
                 )
             }
-            screenerbot::transactions::TransactionType::SwapTokenToToken {
+            screenerbot::transactions_types::TransactionType::SwapTokenToToken {
                 from_mint: _,
                 to_mint: _,
                 from_amount,
@@ -1371,12 +1382,12 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
             } => {
                 ("Token->Token", format!("{:.0} -> {:.0} via {}", from_amount, to_amount, router))
             }
-            screenerbot::transactions::TransactionType::SolTransfer { from, to, amount } => {
+            screenerbot::transactions_types::TransactionType::SolTransfer { from, to, amount } => {
                 let from_short = screenerbot::utils::safe_truncate(from, 8);
                 let to_short = screenerbot::utils::safe_truncate(to, 8);
                 ("SOL Transfer", format!("{:.4} SOL: {}...->{}...", amount, from_short, to_short))
             }
-            screenerbot::transactions::TransactionType::TokenTransfer {
+            screenerbot::transactions_types::TransactionType::TokenTransfer {
                 mint: _,
                 from,
                 to,
@@ -1389,14 +1400,17 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
                     format!("{:.0} tokens: {}...->{}...", amount, from_short, to_short),
                 )
             }
-            screenerbot::transactions::TransactionType::AtaClose { token_mint, recovered_sol } => {
+            screenerbot::transactions_types::TransactionType::AtaClose {
+                token_mint,
+                recovered_sol,
+            } => {
                 let mint_short = screenerbot::utils::safe_truncate(token_mint, 8);
                 ("ATA Close", format!("Recovered {:.6} SOL from {}...", recovered_sol, mint_short))
             }
-            screenerbot::transactions::TransactionType::Other { description, details } => {
+            screenerbot::transactions_types::TransactionType::Other { description, details } => {
                 ("Other", format!("{}: {}", description, details))
             }
-            screenerbot::transactions::TransactionType::Unknown => {
+            screenerbot::transactions_types::TransactionType::Unknown => {
                 ("Unknown", "Unidentified transaction type".to_string())
             }
         };
@@ -1431,7 +1445,7 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
 
 /// Display comprehensive statistics for all transaction types
 fn display_comprehensive_transaction_statistics(
-    transactions: &[screenerbot::transactions::Transaction]
+    transactions: &[screenerbot::transactions_types::Transaction]
 ) {
     log(LogTag::Transactions, "STATS", "=== COMPREHENSIVE TRANSACTION STATISTICS ===");
 
@@ -1447,15 +1461,18 @@ fn display_comprehensive_transaction_statistics(
     // Count transaction types and calculate statistics
     for transaction in transactions {
         let tx_type = match &transaction.transaction_type {
-            screenerbot::transactions::TransactionType::SwapSolToToken { .. } => "Swap: SOL->Token",
-            screenerbot::transactions::TransactionType::SwapTokenToSol { .. } => "Swap: Token->SOL",
-            screenerbot::transactions::TransactionType::SwapTokenToToken { .. } =>
+            screenerbot::transactions_types::TransactionType::SwapSolToToken { .. } =>
+                "Swap: SOL->Token",
+            screenerbot::transactions_types::TransactionType::SwapTokenToSol { .. } =>
+                "Swap: Token->SOL",
+            screenerbot::transactions_types::TransactionType::SwapTokenToToken { .. } =>
                 "Swap: Token->Token",
-            screenerbot::transactions::TransactionType::SolTransfer { .. } => "SOL Transfer",
-            screenerbot::transactions::TransactionType::TokenTransfer { .. } => "Token Transfer",
-            screenerbot::transactions::TransactionType::AtaClose { .. } => "ATA Close",
-            screenerbot::transactions::TransactionType::Other { .. } => "Other",
-            screenerbot::transactions::TransactionType::Unknown => "Unknown",
+            screenerbot::transactions_types::TransactionType::SolTransfer { .. } => "SOL Transfer",
+            screenerbot::transactions_types::TransactionType::TokenTransfer { .. } =>
+                "Token Transfer",
+            screenerbot::transactions_types::TransactionType::AtaClose { .. } => "ATA Close",
+            screenerbot::transactions_types::TransactionType::Other { .. } => "Other",
+            screenerbot::transactions_types::TransactionType::Unknown => "Unknown",
         };
 
         *type_counts.entry(tx_type.to_string()).or_insert(0) += 1;
@@ -1538,7 +1555,10 @@ fn display_comprehensive_transaction_statistics(
 }
 
 /// Determine if a transaction involves a given token mint in any capacity
-fn transaction_involves_mint(tx: &screenerbot::transactions::Transaction, mint: &str) -> bool {
+fn transaction_involves_mint(
+    tx: &screenerbot::transactions_types::Transaction,
+    mint: &str
+) -> bool {
     // Check token transfers first
     if tx.token_transfers.iter().any(|t| t.mint == mint) {
         return true;
@@ -1549,14 +1569,18 @@ fn transaction_involves_mint(tx: &screenerbot::transactions::Transaction, mint: 
     }
     // Check analyzed transaction type fields
     match &tx.transaction_type {
-        screenerbot::transactions::TransactionType::SwapSolToToken { token_mint, .. } =>
+        screenerbot::transactions_types::TransactionType::SwapSolToToken { token_mint, .. } =>
             token_mint == mint,
-        screenerbot::transactions::TransactionType::SwapTokenToSol { token_mint, .. } =>
+        screenerbot::transactions_types::TransactionType::SwapTokenToSol { token_mint, .. } =>
             token_mint == mint,
-        screenerbot::transactions::TransactionType::SwapTokenToToken { from_mint, to_mint, .. } =>
-            from_mint == mint || to_mint == mint,
-        screenerbot::transactions::TransactionType::TokenTransfer { mint: m, .. } => m == mint,
-        screenerbot::transactions::TransactionType::AtaClose { token_mint, .. } =>
+        screenerbot::transactions_types::TransactionType::SwapTokenToToken {
+            from_mint,
+            to_mint,
+            ..
+        } => from_mint == mint || to_mint == mint,
+        screenerbot::transactions_types::TransactionType::TokenTransfer { mint: m, .. } =>
+            m == mint,
+        screenerbot::transactions_types::TransactionType::AtaClose { token_mint, .. } =>
             token_mint == mint,
         _ => false,
     }
@@ -1583,7 +1607,7 @@ async fn analyze_ata_operations(wallet_pubkey: Pubkey, max_count: usize) {
     };
 
     // Get all cached transactions and analyze ATA operations
-    match manager.recalculate_all_cached_transactions(Some(max_count)).await {
+    match manager.fetch_all_wallet_transactions().await {
         Ok(transactions) => {
             log(
                 LogTag::Transactions,
@@ -1609,7 +1633,9 @@ async fn analyze_ata_operations(wallet_pubkey: Pubkey, max_count: usize) {
 }
 
 /// Analyze and display detailed ATA operations from transactions
-fn analyze_and_display_ata_operations(transactions: &[screenerbot::transactions::Transaction]) {
+fn analyze_and_display_ata_operations(
+    transactions: &[screenerbot::transactions_types::Transaction]
+) {
     log(LogTag::Transactions, "ATA_ANALYSIS", "=== COMPREHENSIVE ATA OPERATIONS ANALYSIS ===");
 
     let mut total_transactions_with_ata = 0;
@@ -1652,15 +1678,24 @@ fn analyze_and_display_ata_operations(transactions: &[screenerbot::transactions:
                 total_rent_recovered += ata_analysis.total_rent_recovered;
 
                 let tx_type = match &transaction.transaction_type {
-                    screenerbot::transactions::TransactionType::SwapSolToToken { router, .. } => {
+                    screenerbot::transactions_types::TransactionType::SwapSolToToken {
+                        router,
+                        ..
+                    } => {
                         swap_transactions_with_ata += 1;
                         format!("Buy ({})", screenerbot::utils::safe_truncate(router, 12))
                     }
-                    screenerbot::transactions::TransactionType::SwapTokenToSol { router, .. } => {
+                    screenerbot::transactions_types::TransactionType::SwapTokenToSol {
+                        router,
+                        ..
+                    } => {
                         swap_transactions_with_ata += 1;
                         format!("Sell ({})", screenerbot::utils::safe_truncate(router, 12))
                     }
-                    screenerbot::transactions::TransactionType::SwapTokenToToken { router, .. } => {
+                    screenerbot::transactions_types::TransactionType::SwapTokenToToken {
+                        router,
+                        ..
+                    } => {
                         swap_transactions_with_ata += 1;
                         format!("Swap ({})", screenerbot::utils::safe_truncate(router, 12))
                     }
@@ -1721,7 +1756,7 @@ fn analyze_and_display_ata_operations(transactions: &[screenerbot::transactions:
                     for operation in &ata_analysis.detected_operations {
                         let op_type = if
                             operation.operation_type ==
-                            screenerbot::transactions::AtaOperationType::Creation
+                            screenerbot::transactions_types::AtaOperationType::Creation
                         {
                             "CREATE"
                         } else {
@@ -1886,7 +1921,7 @@ async fn show_unknown_transactions(wallet_pubkey: Pubkey, max_count: usize) {
     };
 
     // Get all cached transactions
-    match manager.recalculate_all_cached_transactions(Some(max_count)).await {
+    match manager.fetch_all_wallet_transactions().await {
         Ok(transactions) => {
             log(
                 LogTag::Transactions,
@@ -1912,7 +1947,7 @@ async fn show_unknown_transactions(wallet_pubkey: Pubkey, max_count: usize) {
                 .filter(|tx|
                     matches!(
                         tx.transaction_type,
-                        screenerbot::transactions::TransactionType::Unknown
+                        screenerbot::transactions_types::TransactionType::Unknown
                     )
                 )
                 .collect();
@@ -2867,7 +2902,7 @@ async fn update_transaction_cache(wallet_pubkey: Pubkey, max_count: usize) {
     let mut unknown_count = 0;
 
     // Use database instead of JSON files
-    match manager.recalculate_all_cached_transactions(Some(max_count)).await {
+    match manager.fetch_all_wallet_transactions().await {
         Ok(transactions) => {
             let total_signatures = transactions.len();
             log(
@@ -2977,8 +3012,15 @@ async fn update_transaction_cache(wallet_pubkey: Pubkey, max_count: usize) {
                     "Performing comprehensive swap analysis on updated cache..."
                 );
 
-                match manager.get_all_swap_transactions().await {
-                    Ok(swaps) => {
+                match manager.get_recent_swaps(50).await {
+                    Ok(transactions) => {
+                        // Convert transactions to SwapPnLInfo objects
+                        let mut token_cache = std::collections::HashMap::new();
+                        let swaps: Vec<SwapPnLInfo> = transactions
+                            .iter()
+                            .filter_map(|tx| manager.convert_to_swap_pnl_info(tx, &token_cache, true))
+                            .collect();
+
                         log(
                             LogTag::Transactions,
                             "SUCCESS",
@@ -3237,8 +3279,8 @@ fn display_detailed_ata_analysis(transaction: &Transaction) {
             log(LogTag::Transactions, "ATA_ANALYSIS", "--- Detailed ATA Operations ---");
             for (i, operation) in ata_analysis.detected_operations.iter().enumerate() {
                 let op_type = match operation.operation_type {
-                    screenerbot::transactions::AtaOperationType::Creation => "Creation",
-                    screenerbot::transactions::AtaOperationType::Closure => "Closure",
+                    screenerbot::transactions_types::AtaOperationType::Creation => "Creation",
+                    screenerbot::transactions_types::AtaOperationType::Closure => "Closure",
                 };
 
                 let token_type = if operation.is_wsol { "WSOL" } else { "Token" };
@@ -6642,7 +6684,7 @@ fn display_fee_breakdown_analysis(transactions: &[&Transaction]) {
 }
 
 /// Display comprehensive ATA operations and SOL flow analysis
-fn display_ata_and_sol_flow_analysis(swaps: &[screenerbot::transactions::SwapPnLInfo]) {
+fn display_ata_and_sol_flow_analysis(swaps: &[screenerbot::transactions_types::SwapPnLInfo]) {
     if swaps.is_empty() {
         return;
     }

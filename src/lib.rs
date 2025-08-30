@@ -14,6 +14,9 @@ pub mod filtering;
 pub mod rpc;
 pub mod ata_cleanup;
 pub mod transactions;
+pub mod transactions_types; // Transaction type definitions
+pub mod transactions_lib; // Transaction analysis library
+pub mod transactions_debug; // Transaction debugging utilities
 pub mod transactions_db; // New database module
 pub mod positions_db; // Positions database module
 pub mod entry;

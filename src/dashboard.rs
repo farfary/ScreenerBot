@@ -46,6 +46,7 @@ use crate::tokens::{ get_pool_service };
 use crate::utils::{ get_sol_balance, get_wallet_address };
 use crate::rpc::get_global_rpc_stats;
 use crate::transactions::get_transaction_stats;
+use crate::transactions_types::TransactionStats;
 use crate::logger::LogTag;
 
 /// Dashboard configuration constants
@@ -1022,7 +1023,7 @@ impl Dashboard {
         {
             stats
         } else {
-            crate::transactions::TransactionStats {
+            TransactionStats {
                 total_transactions: 0,
                 new_transactions_count: 0,
                 known_signatures_count: 0,
