@@ -14,6 +14,7 @@ use futures::FutureExt; // for now_or_never on shutdown future
 // =============================================================================
 // NETWORK CONSTANTS / HELPERS
 // =============================================================================
+// =============================================================================
 /// Per-endpoint HTTP timeout for discovery API calls (seconds)
 /// Increased to 15s to accommodate RugCheck new_tokens endpoint (~10s response time)
 const DISCOVERY_HTTP_TIMEOUT_SECS: u64 = 15;
@@ -33,16 +34,16 @@ fn build_discovery_client() -> Result<Client, String> {
 
 /// Fetch latest token profiles from DexScreener API and extract Solana mint addresses
 pub async fn fetch_dexscreener_latest_token_profiles() -> Result<Vec<String>, String> {
-    log(LogTag::Discovery, "DEBUG", "ENTERED fetch_dexscreener_latest_token_profiles function");
-
     if is_debug_discovery_enabled() {
+        log(LogTag::Discovery, "DEBUG", "ENTERED fetch_dexscreener_latest_token_profiles function");
         log(LogTag::Discovery, "API", "Fetching latest token profiles from DexScreener");
+        log(LogTag::Discovery, "DEBUG", "Building HTTP client...");
     }
-
-    log(LogTag::Discovery, "DEBUG", "Building HTTP client...");
     let client = build_discovery_client()?;
 
-    log(LogTag::Discovery, "DEBUG", "Making HTTP request to profiles API...");
+    if is_debug_discovery_enabled() {
+        log(LogTag::Discovery, "DEBUG", "Making HTTP request to profiles API...");
+    }
     let response = client
         .get("https://api.dexscreener.com/token-profiles/latest/v1")
         .header("Accept", "*/*")
@@ -428,7 +429,9 @@ impl TokenDiscovery {
                 // reset per-source for this cycle; will be overwritten below
                 stats.per_source = DiscoverySourceCounts::default();
             } else {
-                log(LogTag::Discovery, "WARN", "Stats lock busy, skipping stats update");
+                if is_debug_discovery_enabled() {
+                    log(LogTag::Discovery, "WARN", "Stats lock busy, skipping stats update");
+                }
             }
         }
 
@@ -436,7 +439,9 @@ impl TokenDiscovery {
         // Per-cycle source counters
         let mut cycle_counts = DiscoverySourceCounts::default();
 
-        log(LogTag::Discovery, "API_START", "About to fetch from profiles API");
+        if is_debug_discovery_enabled() {
+            log(LogTag::Discovery, "API_START", "About to fetch from profiles API");
+        }
         log(
             LogTag::Discovery,
             "DEBUG",
@@ -446,7 +451,13 @@ impl TokenDiscovery {
         // Fetch latest token profiles
         match fetch_dexscreener_latest_token_profiles().await {
             Ok(mints) => {
-                log(LogTag::Discovery, "SUCCESS", &format!("Profiles fetched: {}", mints.len()));
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("Profiles fetched: {}", mints.len())
+                    );
+                }
                 cycle_counts.profiles = mints.len();
                 all_mints.extend(mints);
             }
@@ -463,7 +474,9 @@ impl TokenDiscovery {
         // Fetch latest boosted tokens
         match fetch_dexscreener_latest_boosted_tokens().await {
             Ok(mints) => {
-                log(LogTag::Discovery, "SUCCESS", &format!("Boosted fetched: {}", mints.len()));
+                if is_debug_discovery_enabled() {
+                    log(LogTag::Discovery, "SUCCESS", &format!("Boosted fetched: {}", mints.len()));
+                }
                 cycle_counts.boosted = mints.len();
                 all_mints.extend(mints);
             }
@@ -480,7 +493,13 @@ impl TokenDiscovery {
         // Fetch tokens with most active boosts
         match fetch_dexscreener_tokens_with_most_active_boosts().await {
             Ok(mints) => {
-                log(LogTag::Discovery, "SUCCESS", &format!("Top boosts fetched: {}", mints.len()));
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("Top boosts fetched: {}", mints.len())
+                    );
+                }
                 cycle_counts.top_boosts = mints.len();
                 all_mints.extend(mints);
             }
@@ -492,16 +511,16 @@ impl TokenDiscovery {
                     }
                 }
             }
-        }
-
-        // Fetch new tokens from RugCheck
+        } // Fetch new tokens from RugCheck
         match fetch_rugcheck_new_tokens().await {
             Ok(mints) => {
-                log(
-                    LogTag::Discovery,
-                    "SUCCESS",
-                    &format!("RugCheck new fetched: {}", mints.len())
-                );
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("RugCheck new fetched: {}", mints.len())
+                    );
+                }
                 cycle_counts.rug_new = mints.len();
                 all_mints.extend(mints);
             }
@@ -518,11 +537,13 @@ impl TokenDiscovery {
         // Fetch most viewed tokens from RugCheck
         match fetch_rugcheck_most_viewed().await {
             Ok(mints) => {
-                log(
-                    LogTag::Discovery,
-                    "SUCCESS",
-                    &format!("RugCheck viewed fetched: {}", mints.len())
-                );
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("RugCheck viewed fetched: {}", mints.len())
+                    );
+                }
                 cycle_counts.rug_viewed = mints.len();
                 all_mints.extend(mints);
             }
@@ -539,11 +560,13 @@ impl TokenDiscovery {
         // Fetch trending tokens from RugCheck
         match fetch_rugcheck_trending().await {
             Ok(mints) => {
-                log(
-                    LogTag::Discovery,
-                    "SUCCESS",
-                    &format!("RugCheck trending fetched: {}", mints.len())
-                );
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("RugCheck trending fetched: {}", mints.len())
+                    );
+                }
                 cycle_counts.rug_trending = mints.len();
                 all_mints.extend(mints);
             }
@@ -560,11 +583,13 @@ impl TokenDiscovery {
         // Fetch verified tokens from RugCheck
         match fetch_rugcheck_verified().await {
             Ok(mints) => {
-                log(
-                    LogTag::Discovery,
-                    "SUCCESS",
-                    &format!("RugCheck verified fetched: {}", mints.len())
-                );
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("RugCheck verified fetched: {}", mints.len())
+                    );
+                }
                 cycle_counts.rug_verified = mints.len();
                 all_mints.extend(mints);
             }
@@ -591,34 +616,40 @@ impl TokenDiscovery {
         let after_blacklist_count = all_mints.len();
         let blacklisted_count = before_blacklist_count - after_blacklist_count;
 
-        log(
-            LogTag::Discovery,
-            "DEDUP",
-            &format!(
-                "Processed mints: {} → {} deduplicated → {} after blacklist filter (removed {} blacklisted)",
-                original_count,
-                deduplicated_count,
-                after_blacklist_count,
-                blacklisted_count
-            )
-        );
+        if is_debug_discovery_enabled() {
+            log(
+                LogTag::Discovery,
+                "DEDUP",
+                &format!(
+                    "Processed mints: {} → {} deduplicated → {} after blacklist filter (removed {} blacklisted)",
+                    original_count,
+                    deduplicated_count,
+                    after_blacklist_count,
+                    blacklisted_count
+                )
+            );
+        }
 
         // REMOVED: Price service seeding that was causing resource waste
         // Discovery tokens should not be added to priority monitoring
         // Only open positions should be priority per user requirements
         if !all_mints.is_empty() {
-            log(
-                LogTag::Discovery,
-                "DISCOVERY_COMPLETE",
-                &format!(
-                    "📊 Discovery completed: {} tokens found (not added to priority monitoring)",
-                    all_mints.len().min(50)
-                )
-            );
+            if is_debug_discovery_enabled() {
+                log(
+                    LogTag::Discovery,
+                    "DISCOVERY_COMPLETE",
+                    &format!(
+                        "📊 Discovery completed: {} tokens found (not added to priority monitoring)",
+                        all_mints.len().min(50)
+                    )
+                );
+            }
         }
 
         if all_mints.is_empty() {
-            log(LogTag::Discovery, "COMPLETE", "No tokens to process");
+            if is_debug_discovery_enabled() {
+                log(LogTag::Discovery, "COMPLETE", "No tokens to process");
+            }
             // Update stats and return (non-blocking)
             if let Some(stats_handle) = DISCOVERY_STATS.get() {
                 if let Ok(mut stats) = stats_handle.try_write() {
@@ -639,16 +670,18 @@ impl TokenDiscovery {
         let mut total_added = 0;
 
         for (batch_index, batch) in all_mints.chunks(batch_size).enumerate() {
-            log(
-                LogTag::Discovery,
-                "BATCH",
-                &format!(
-                    "Processing batch {}/{} with {} tokens",
-                    batch_index + 1,
-                    (all_mints.len() + batch_size - 1) / batch_size,
-                    batch.len()
-                )
-            );
+            if is_debug_discovery_enabled() {
+                log(
+                    LogTag::Discovery,
+                    "BATCH",
+                    &format!(
+                        "Processing batch {}/{} with {} tokens",
+                        batch_index + 1,
+                        (all_mints.len() + batch_size - 1) / batch_size,
+                        batch.len()
+                    )
+                );
+            }
 
             // Get token information from DexScreener API
             let tokens_result = {
@@ -733,23 +766,27 @@ impl TokenDiscovery {
                         let filtered_count = tokens.len();
 
                         if original_count != filtered_count {
-                            log(
-                                LogTag::Discovery,
-                                "FILTER",
-                                &format!(
-                                    "Removed {} tokens with failed decimal fetching (keeping {} tokens)",
-                                    original_count - filtered_count,
-                                    filtered_count
-                                )
-                            );
+                            if is_debug_discovery_enabled() {
+                                log(
+                                    LogTag::Discovery,
+                                    "FILTER",
+                                    &format!(
+                                        "Removed {} tokens with failed decimal fetching (keeping {} tokens)",
+                                        original_count - filtered_count,
+                                        filtered_count
+                                    )
+                                );
+                            }
                         }
 
                         if tokens.is_empty() {
-                            log(
-                                LogTag::Discovery,
-                                "SKIP",
-                                "No tokens remaining after decimal validation"
-                            );
+                            if is_debug_discovery_enabled() {
+                                log(
+                                    LogTag::Discovery,
+                                    "SKIP",
+                                    "No tokens remaining after decimal validation"
+                                );
+                            }
                             continue;
                         }
 
@@ -848,24 +885,26 @@ impl TokenDiscovery {
             }
         }
 
-        log(
-            LogTag::Discovery,
-            "COMPLETE",
-            &format!(
-                "Discovery cycle completed: processed {} added {} | sources profiles={} boosted={} top_boosts={} rug_new={} rug_viewed={} rug_trending={} rug_verified={} dedup_removed={} blacklist_removed={}",
-                total_processed,
-                total_added,
-                cycle_counts.profiles,
-                cycle_counts.boosted,
-                cycle_counts.top_boosts,
-                cycle_counts.rug_new,
-                cycle_counts.rug_viewed,
-                cycle_counts.rug_trending,
-                cycle_counts.rug_verified,
-                dedup_removed,
-                blacklisted_count
-            )
-        );
+        if is_debug_discovery_enabled() {
+            log(
+                LogTag::Discovery,
+                "COMPLETE",
+                &format!(
+                    "Discovery cycle completed: processed {} added {} | sources profiles={} boosted={} top_boosts={} rug_new={} rug_viewed={} rug_trending={} rug_verified={} dedup_removed={} blacklist_removed={}",
+                    total_processed,
+                    total_added,
+                    cycle_counts.profiles,
+                    cycle_counts.boosted,
+                    cycle_counts.top_boosts,
+                    cycle_counts.rug_new,
+                    cycle_counts.rug_viewed,
+                    cycle_counts.rug_trending,
+                    cycle_counts.rug_verified,
+                    dedup_removed,
+                    blacklisted_count
+                )
+            );
+        }
 
         // Persist stats (non-blocking)
         if let Some(stats_handle) = DISCOVERY_STATS.get() {
@@ -881,7 +920,9 @@ impl TokenDiscovery {
                 stats.per_source = cycle_counts;
                 stats.last_cycle_completed = Some(Utc::now());
             } else {
-                log(LogTag::Discovery, "WARN", "Stats lock busy, skipping final stats update");
+                if is_debug_discovery_enabled() {
+                    log(LogTag::Discovery, "WARN", "Stats lock busy, skipping final stats update");
+                }
             }
         }
 
@@ -901,7 +942,9 @@ impl TokenDiscovery {
             return;
         }
 
-        log(LogTag::Discovery, "START_FETCHING", "Beginning API data collection");
+        if is_debug_discovery_enabled() {
+            log(LogTag::Discovery, "START_FETCHING", "Beginning API data collection");
+        }
         if let Err(e) = self.discover_new_tokens(Some(shutdown.clone())).await {
             log(LogTag::Discovery, "ERROR", &format!("Discovery initial cycle failed: {}", e));
         }
@@ -937,7 +980,9 @@ pub async fn start_token_discovery(
     let handle = tokio::spawn(async move {
         let mut discovery = match TokenDiscovery::new() {
             Ok(discovery) => {
-                log(LogTag::Discovery, "INIT", "Discovery instance created successfully");
+                if is_debug_discovery_enabled() {
+                    log(LogTag::Discovery, "INIT", "Discovery instance created successfully");
+                }
                 discovery
             }
             Err(e) => {
@@ -946,9 +991,13 @@ pub async fn start_token_discovery(
             }
         };
 
-        log(LogTag::Discovery, "READY", "Starting discovery loop");
+        if is_debug_discovery_enabled() {
+            log(LogTag::Discovery, "READY", "Starting discovery loop");
+        }
         discovery.start_discovery_loop(shutdown).await;
-        log(LogTag::Discovery, "EXIT", "Discovery task ended");
+        if is_debug_discovery_enabled() {
+            log(LogTag::Discovery, "EXIT", "Discovery task ended");
+        }
     });
 
     Ok(handle)
