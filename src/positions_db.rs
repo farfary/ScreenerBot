@@ -596,7 +596,7 @@ impl PositionsDatabase {
             log(
                 LogTag::Positions,
                 "DEBUG",
-                &format!("Updating position ID {} for mint {} with current price {:.6} SOL", 
+                &format!("Updating position ID {} for mint {} with current price {:.11} SOL", 
                     position_id, position.mint, position.current_price.unwrap_or(0.0))
             );
         }
@@ -1818,7 +1818,7 @@ pub async fn update_position(position: &Position) -> Result<(), String> {
             log(
                 LogTag::Positions,
                 "DEBUG",
-                &format!("Updating position ID {:?} for mint {} with current price {:.6} SOL", 
+                &format!("Updating position ID {:?} for mint {} with current price {:.11} SOL", 
                     position.id, position.mint, position.current_price.unwrap_or(0.0))
             );
         }
