@@ -4020,36 +4020,118 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                         };
                                         
                                         if should_cleanup_immediately {
-                                            if is_debug_positions_enabled() {
+                                            // NEW LOGIC: distinguish entry vs exit. Never delete position on exit permanent failure; instead revert state if tokens remain.
+                                            let is_exit_permanent = {
+                                                let positions = POSITIONS.read().await;
+                                                positions.iter().any(|p| p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(&sig_clone))
+                                            };
+
+                                            if is_exit_permanent {
+                                                if is_debug_positions_enabled() {
+                                                    log(
+                                                        LogTag::Positions,
+                                                        "DEBUG",
+                                                        &format!("🛑 Permanent EXIT tx failure detected for {} ({}). Retaining position & scheduling retry.", sig_clone, e)
+                                                    );
+                                                }
+
                                                 log(
                                                     LogTag::Positions,
-                                                    "DEBUG",
-                                                    &format!("🗑️ Permanent failure detected for {}, initiating cleanup", sig_clone)
+                                                    "PERMANENT_EXIT_FAILURE",
+                                                    &format!("🛑 Exit transaction permanent failure: {} (error: {}). Will revert exit attempt if tokens still present and retry.", sig_clone, e)
                                                 );
-                                            }
-                                            
-                                            log(
-                                                LogTag::Positions,
-                                                "PERMANENT_FAILURE_CLEANUP",
-                                                &format!("🗑️ Immediately removing position with permanent failure: {} (error: {})", sig_clone, e)
-                                            );
-                                            
-                                            // Remove the position with the permanently failed transaction
-                                            tokio::spawn({
-                                                let sig_for_cleanup = sig_clone.clone();
-                                                async move {
-                                                    if let Err(cleanup_err) = remove_position_by_signature(&sig_for_cleanup).await {
-                                                        log(
-                                                            LogTag::Positions,
-                                                            "CLEANUP_ERROR",
-                                                            &format!("Failed to remove position with signature {}: {}", sig_for_cleanup, cleanup_err)
-                                                        );
+
+                                                // Revert / clear exit signature if tx failed and tokens still in wallet so we can attempt a new close later
+                                                let mut cleared_for_retry = false;
+                                                {
+                                                    let mut positions = POSITIONS.write().await;
+                                                    if let Some(position) = positions.iter_mut().find(|p| p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(&sig_clone)) {
+                                                        // Check wallet balance to decide whether to clear signature
+                                                        let mut clear_sig = false;
+                                                        if let Ok(wallet_address) = get_wallet_address() {
+                                                            if let Ok(balance) = get_token_balance(&wallet_address, &position.mint).await {
+                                                                if balance > 0 { clear_sig = true; }
+                                                            }
+                                                        }
+                                                        if clear_sig {
+                                                            position.exit_transaction_signature = None; // allow re-close attempt
+                                                            position.transaction_exit_verified = false;
+                                                            position.closed_reason = Some("exit_permanent_failure_retry".to_string());
+                                                            cleared_for_retry = true;
+                                                        } else {
+                                                            // No tokens left -> treat as synthetic exit (we effectively sold or tokens gone)
+                                                            position.synthetic_exit = true;
+                                                            position.transaction_exit_verified = true; // mark as verified to prevent infinite loop
+                                                            position.closed_reason = Some("synthetic_exit_permanent_failure".to_string());
+                                                            position.exit_time = Some(Utc::now());
+                                                        }
                                                     }
                                                 }
-                                            });
-                                            
-                                            // Return the signature to remove it from pending verifications
-                                            Some(sig_clone)
+
+                                                if cleared_for_retry {
+                                                    // Persist cleared signature + closed_reason update to DB and remove old signature from index
+                                                    {
+                                                        let positions = POSITIONS.read().await;
+                                                        if let Some(position) = positions.iter().find(|p| p.closed_reason.as_deref() == Some("exit_permanent_failure_retry")) {
+                                                            if let Some(id) = position.id {
+                                                                let _ = update_position(position).await; // best-effort
+                                                            }
+                                                        }
+                                                    }
+                                                    {
+                                                        // Remove the failed signature mapping (if still present)
+                                                        let mut sig_index = SIG_TO_MINT_INDEX.write().await;
+                                                        sig_index.remove(&sig_clone);
+                                                    }
+
+                                                    // Spawn background retry attempt
+                                                    tokio::spawn(async move {
+                                                        sleep(Duration::from_secs(5)).await;
+                                                        // Snapshot positions and pick one flagged for retry
+                                                        let positions_snapshot = POSITIONS.read().await;
+                                                        if let Some(position) = positions_snapshot.iter().find(|p| p.closed_reason.as_deref() == Some("exit_permanent_failure_retry") && p.exit_transaction_signature.is_none()) {
+                                                            if let Some(token_obj) = get_token_from_db(&position.mint).await {
+                                                                if let Some(price_res) = get_price(&position.mint, Some(PriceOptions::simple()), false).await {
+                                                                    if let Some(price) = price_res.price_sol {
+                                                                        let reason = format!("Retry after permanent exit failure for {}", position.symbol);
+                                                                        let _ = close_position_direct(&position.mint, &token_obj, price, reason, Utc::now()).await;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    });
+                                                }
+
+                                                // Return signature to remove from pending queue only (position retained)
+                                                Some(sig_clone)
+                                            } else {
+                                                // ENTRY permanent failure: keep legacy behavior (remove orphan position to free capital)
+                                                if is_debug_positions_enabled() {
+                                                    log(
+                                                        LogTag::Positions,
+                                                        "DEBUG",
+                                                        &format!("🗑️ Permanent ENTRY failure detected for {}, initiating cleanup", sig_clone)
+                                                    );
+                                                }
+                                                log(
+                                                    LogTag::Positions,
+                                                    "PERMANENT_FAILURE_CLEANUP",
+                                                    &format!("🗑️ Removing position with permanent entry failure: {} (error: {})", sig_clone, e)
+                                                );
+                                                tokio::spawn({
+                                                    let sig_for_cleanup = sig_clone.clone();
+                                                    async move {
+                                                        if let Err(cleanup_err) = remove_position_by_signature(&sig_for_cleanup).await {
+                                                            log(
+                                                                LogTag::Positions,
+                                                                "CLEANUP_ERROR",
+                                                                &format!("Failed to remove position with signature {}: {}", sig_for_cleanup, cleanup_err)
+                                                            );
+                                                        }
+                                                    }
+                                                });
+                                                Some(sig_clone)
+                                            }
                                         } else {
                                             // Check verification age before removing position
                                             let verification_age_seconds = {
@@ -4267,6 +4349,34 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                                             }
                                                         }
                                                         
+                                                        // Spawn background retry if signature was cleared (meaning tokens still present and we plan to re-attempt close)
+                                                        {
+                                                            let positions = POSITIONS.read().await;
+                                                            if let Some(pos) = positions.iter().find(|p| p.exit_transaction_signature.is_none() && p.closed_reason.as_deref() == Some("exit_retry_pending")) {
+                                                                let mint_retry = pos.mint.clone();
+                                                                let symbol_retry = pos.symbol.clone();
+
+                                                                // Persist state change (cleared signature) to DB
+                                                                if let Some(id) = pos.id { let _ = update_position(pos).await; }
+                                                                // Remove old failed signature from index
+                                                                {
+                                                                    let mut sig_index = SIG_TO_MINT_INDEX.write().await;
+                                                                    sig_index.remove(&sig_clone);
+                                                                }
+
+                                                                tokio::spawn(async move {
+                                                                    sleep(Duration::from_secs(5)).await; // small delay
+                                                                    if let Some(token_obj) = get_token_from_db(&mint_retry).await {
+                                                                        if let Some(price_res) = get_price(&mint_retry, Some(PriceOptions::simple()), false).await {
+                                                                            if let Some(price) = price_res.price_sol {
+                                                                                let reason = format!("Retry after failed exit verification for {}", symbol_retry);
+                                                                                let _ = close_position_direct(&mint_retry, &token_obj, price, reason, Utc::now()).await;
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                });
+                                                            }
+                                                        }
                                                         Some(sig_clone) // Remove from pending verifications
                                                     }
                                                 } else {
