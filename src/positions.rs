@@ -245,7 +245,7 @@ async fn unmark_critical_operation(mint: &str) {
 }
 
 /// Check if a position is undergoing critical operation
-async fn is_critical_operation_active(mint: &str) -> bool {
+pub async fn is_critical_operation_active(mint: &str) -> bool {
     let critical_ops = CRITICAL_OPERATIONS.read().await;
     critical_ops.contains(mint)
 }
@@ -292,11 +292,7 @@ async fn add_signature_to_index(signature: &str, mint: &str) {
         log(
             LogTag::Positions,
             "DEBUG",
-            &format!(
-                "📋 Added signature {} -> mint {} to index",
-                signature,
-                mint
-            )
+            &format!("📋 Added signature {} -> mint {} to index", signature, mint)
         );
     }
 }
@@ -1020,10 +1016,7 @@ pub async fn open_position_direct(
         log(
             LogTag::Positions,
             "TRANSACTION",
-            &format!(
-                "Transaction {} will be monitored by positions manager",
-                signature
-            )
+            &format!("Transaction {} will be monitored by positions manager", signature)
         );
     }
 
@@ -1049,9 +1042,7 @@ pub async fn open_position_direct(
 
     // Additional validation: Check if signature is valid base58
     if bs58::decode(&transaction_signature).into_vec().is_err() {
-        return Err(
-            format!("Invalid base58 format: {}", transaction_signature)
-        );
+        return Err(format!("Invalid base58 format: {}", transaction_signature));
     }
 
     // Log swap execution details
@@ -1147,11 +1138,7 @@ pub async fn open_position_direct(
                 log(
                     LogTag::Positions,
                     "INSERT",
-                    &format!(
-                        "Inserted new position ID {} for mint {}",
-                        id,
-                        token.mint
-                    )
+                    &format!("Inserted new position ID {} for mint {}", id, token.mint)
                 );
                 log(
                     LogTag::Positions,
@@ -1243,10 +1230,7 @@ pub async fn open_position_direct(
     log(
         LogTag::Positions,
         "POSITION_ENTRY",
-        &format!(
-            "📝 Entry transaction {} added to comprehensive verification queue (RPC + transaction analysis)",
-            transaction_signature
-        )
+        &format!("📝 Entry transaction {} added to comprehensive verification queue (RPC + transaction analysis)", transaction_signature)
     );
 
     // Immediately attempt to fetch transaction to accelerate verification
@@ -1424,9 +1408,7 @@ pub async fn close_position_direct(
     {
         let active_sells = ACTIVE_SELLS.read().await;
         if active_sells.contains(mint) {
-            return Err(
-                format!("Sell already in progress for {} ({})", symbol, mint)
-            );
+            return Err(format!("Sell already in progress for {} ({})", symbol, mint));
         }
     }
 
@@ -1490,7 +1472,12 @@ pub async fn close_position_direct(
     log(
         LogTag::Positions,
         "SELL_START",
-        &format!("🔴 SELLING all {} tokens (ID: {}) (mint: {}) for SOL", symbol, position_id.unwrap_or(-1), mint)
+        &format!(
+            "🔴 SELLING all {} tokens (ID: {}) (mint: {}) for SOL",
+            symbol,
+            position_id.unwrap_or(-1),
+            mint
+        )
     );
 
     // Get wallet address
@@ -1528,10 +1515,7 @@ pub async fn close_position_direct(
                         )
                     );
                     return Ok(
-                        format!(
-                            "Position recovered from transaction {}",
-                            recovered_signature
-                        )
+                        format!("Position recovered from transaction {}", recovered_signature)
                     );
                 }
                 Err(recovery_error) => {
@@ -1655,10 +1639,7 @@ pub async fn close_position_direct(
                 log(
                     LogTag::Positions,
                     "TRANSACTION",
-                    &format!(
-                        "Sell transaction {} will be monitored by positions manager",
-                        signature
-                    )
+                    &format!("Sell transaction {} will be monitored by positions manager", signature)
                 );
                 signature.clone()
             } else {
@@ -1676,11 +1657,7 @@ pub async fn close_position_direct(
         log(
             LogTag::Positions,
             "DEBUG",
-            &format!(
-                "🔴 SELL operation completed for {} - TX: {}",
-                symbol,
-                transaction_signature
-            )
+            &format!("🔴 SELL operation completed for {} - TX: {}", symbol, transaction_signature)
         );
     }
 
@@ -1693,9 +1670,7 @@ pub async fn close_position_direct(
     // Additional validation: Check if signature is valid base58
     if bs58::decode(&transaction_signature).into_vec().is_err() {
         cleanup().await;
-        return Err(
-            format!("Invalid base58 format: {}", transaction_signature)
-        );
+        return Err(format!("Invalid base58 format: {}", transaction_signature));
     }
 
     // === Phase 2: Sharded locks + O(1) index lookup for exit signature update ===
@@ -1735,12 +1710,7 @@ pub async fn close_position_direct(
                 )
             );
             cleanup().await;
-            return Err(
-                format!(
-                    "Position already has valid exit transaction: {}",
-                    existing_sig
-                )
-            );
+            return Err(format!("Position already has valid exit transaction: {}", existing_sig));
         }
     }
 
@@ -2026,10 +1996,7 @@ pub async fn close_position_direct(
         log(
             LogTag::Positions,
             "DEBUG",
-            &format!(
-                "🔄 About to enqueue verification for transaction {}",
-                transaction_signature
-            )
+            &format!("🔄 About to enqueue verification for transaction {}", transaction_signature)
         );
     }
 
@@ -2242,10 +2209,7 @@ pub async fn close_position_direct(
                         log(
                             LogTag::Positions,
                             "INFO",
-                            &format!(
-                                "ℹ️ Transaction {} already in verification queue - background retry successful",
-                                bg_signature
-                            )
+                            &format!("ℹ️ Transaction {} already in verification queue - background retry successful", bg_signature)
                         );
                         break; // Already in queue - exit background retry loop
                     }
@@ -2262,11 +2226,7 @@ pub async fn close_position_direct(
     // so verify_position_transaction can acquire it. Without this, the quick
     // verification would block until timeout, slowing closure flow.
     if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "DEBUG",
-            &format!("🔓 Releasing position lock for {}", mint)
-        );
+        log(LogTag::Positions, "DEBUG", &format!("🔓 Releasing position lock for {}", mint));
     }
     drop(_lock);
 
@@ -2296,10 +2256,7 @@ pub async fn close_position_direct(
     log(
         LogTag::Positions,
         "POSITION_EXIT",
-        &format!(
-            "📝 Exit transaction {} added to comprehensive verification queue (RPC + transaction analysis)",
-            transaction_signature
-        )
+        &format!("📝 Exit transaction {} added to comprehensive verification queue (RPC + transaction analysis)", transaction_signature)
     );
 
     if is_debug_positions_enabled() {
@@ -2317,10 +2274,7 @@ pub async fn close_position_direct(
         log(
             LogTag::Positions,
             "DEBUG",
-            &format!(
-                "🚀 Spawning background transaction fetch for {}",
-                transaction_signature
-            )
+            &format!("🚀 Spawning background transaction fetch for {}", transaction_signature)
         );
     }
 
@@ -2334,12 +2288,13 @@ pub async fn close_position_direct(
         log(
             LogTag::Positions,
             "DEBUG",
-            &format!(
-                "⚡ Starting quick verification attempt for {}",
-                transaction_signature
-            )
+            &format!("⚡ Starting quick verification attempt for {} (with 3s propagation delay)", transaction_signature)
         );
     }
+
+    // CRITICAL: Add initial delay to allow for transaction propagation
+    // This prevents verification from failing immediately due to RPC propagation delays
+    tokio::time::sleep(Duration::from_secs(3)).await;
 
     // Quick verification attempt (30 seconds timeout)
     let quick_verification_result = tokio::time::timeout(
@@ -2354,10 +2309,7 @@ pub async fn close_position_direct(
                 log(
                     LogTag::Positions,
                     "DEBUG",
-                    &format!(
-                        "✅ Quick verification succeeded for {}",
-                        transaction_signature
-                    )
+                    &format!("✅ Quick verification succeeded for {}", transaction_signature)
                 );
             }
             log(
@@ -2373,10 +2325,7 @@ pub async fn close_position_direct(
                 log(
                     LogTag::Positions,
                     "DEBUG",
-                    &format!(
-                        "⏳ Quick verification failed/timed out for {}, will verify in background",
-                        transaction_signature
-                    )
+                    &format!("⏳ Quick verification failed/timed out for {}, will verify in background", transaction_signature)
                 );
             }
             log(
@@ -2520,10 +2469,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
         log(
             LogTag::Positions,
             "DEBUG",
-            &format!(
-                "🔍 Starting comprehensive verification for transaction {}",
-                signature
-            )
+            &format!("🔍 Starting comprehensive verification for transaction {}", signature)
         );
     }
 
@@ -2531,10 +2477,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
         log(
             LogTag::Positions,
             "VERIFY",
-            &format!(
-                "🔍 Performing comprehensive verification for transaction {}",
-                signature
-            )
+            &format!("🔍 Performing comprehensive verification for transaction {}", signature)
         );
     }
 
@@ -2562,11 +2505,11 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                             log(
                                 LogTag::Positions,
                                 "DEBUG",
-                                                            &format!(
-                                "✅ Transaction {} status: {:?}, success: true",
-                                signature,
-                                transaction.status
-                            )
+                                &format!(
+                                    "✅ Transaction {} status: {:?}, success: true",
+                                    signature,
+                                    transaction.status
+                                )
                             );
                         }
 
@@ -2591,11 +2534,11 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                             log(
                                 LogTag::Positions,
                                 "VERIFY_FAILED",
-                                                            &format!(
-                                "❌ Transaction {} failed on-chain: {}",
-                                signature,
-                                error_msg
-                            )
+                                &format!(
+                                    "❌ Transaction {} failed on-chain: {}",
+                                    signature,
+                                    error_msg
+                                )
                             );
                         }
                         return Err(format!("Transaction failed on-chain: {}", error_msg));
@@ -2606,10 +2549,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                         log(
                             LogTag::Positions,
                             "VERIFY_PENDING",
-                                                    &format!(
-                            "⏳ Transaction {} still pending verification",
-                            signature
-                        )
+                            &format!("⏳ Transaction {} still pending verification", signature)
                         );
                     }
                     return Err("Transaction still pending".to_string());
@@ -2619,11 +2559,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                         log(
                             LogTag::Positions,
                             "VERIFY_FAILED",
-                            &format!(
-                                "❌ Transaction {} failed: {}",
-                                signature,
-                                error
-                            )
+                            &format!("❌ Transaction {} failed: {}", signature, error)
                         );
                     }
                     return Err(format!("Transaction failed: {}", error));
@@ -2635,10 +2571,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                 log(
                     LogTag::Positions,
                     "DEBUG",
-                    &format!(
-                        "🔍 Transaction {} not found in system, checking verification age",
-                        signature
-                    )
+                    &format!("🔍 Transaction {} not found in system, checking verification age", signature)
                 );
             }
 
@@ -2704,11 +2637,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                 log(
                     LogTag::Positions,
                     "VERIFY_ERROR",
-                    &format!(
-                        "❌ Error getting transaction {}: {}",
-                        signature,
-                        e
-                    )
+                    &format!("❌ Error getting transaction {}: {}", signature, e)
                 );
             }
             return Err(format!("Error getting transaction: {}", e));
@@ -2757,10 +2686,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                     log(
                         LogTag::Positions,
                         "DEBUG",
-                        &format!(
-                            "⚠️ No swap analysis result for transaction {}",
-                            signature
-                        )
+                        &format!("⚠️ No swap analysis result for transaction {}", signature)
                     );
                 }
             }
@@ -2803,11 +2729,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                 log(
                     LogTag::Positions,
                     "DEBUG",
-                    &format!(
-                        "✅ Position mint found for {}: {}",
-                        signature,
-                        mint
-                    )
+                    &format!("✅ Position mint found for {}: {}", signature, mint)
                 );
             }
             mint
@@ -2817,10 +2739,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                 log(
                     LogTag::Positions,
                     "ERROR",
-                    &format!(
-                        "❌ No position mint found for signature {} in index",
-                        signature
-                    )
+                    &format!("❌ No position mint found for signature {} in index", signature)
                 );
             }
             return Err("No matching position found for transaction".to_string());
@@ -3278,10 +3197,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                         log(
                             LogTag::Positions,
                             "DEBUG",
-                            &format!(
-                                "🗑️ Removed {} from pending verifications after successful DB update",
-                                signature
-                            )
+                            &format!("🗑️ Removed {} from pending verifications after successful DB update", signature)
                         );
                     }
                 }
@@ -3302,10 +3218,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
             log(
                 LogTag::Positions,
                 "SUCCESS",
-                &format!(
-                    "✅ Comprehensive verification completed for transaction {}",
-                    signature
-                )
+                &format!("✅ Comprehensive verification completed for transaction {}", signature)
             );
         }
 
@@ -3320,10 +3233,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
             log(
                 LogTag::Positions,
                 "WARNING",
-                &format!(
-                    "⚠️ No matching position found for transaction {}",
-                    signature
-                )
+                &format!("⚠️ No matching position found for transaction {}", signature)
             );
         }
 
@@ -3720,10 +3630,12 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                 log(LogTag::Positions, "SHUTDOWN", "🛑 Stopping transaction verification task");
                 break;
             }
-            _ = sleep(if first_cycle { Duration::from_secs(5) } else { Duration::from_secs(30) }) => {
+            _ = sleep(if first_cycle { Duration::from_secs(5) } else { Duration::from_secs(15) }) => {
                 if first_cycle {
                     first_cycle = false;
                     log(LogTag::Positions, "VERIFICATION_ACCELERATE", "⚡ Running accelerated first verification cycle (5s)");
+                } else {
+                    log(LogTag::Positions, "VERIFICATION_CYCLE", "🔄 Starting verification cycle (15s interval for responsive processing)");
                 }
                 // GUARD: Re-enqueue any exit signatures that are set but not yet verified and missing from pending queue
                 {
@@ -3794,24 +3706,46 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                     }
                 }
 
-                // Get batch of pending verifications
+                // Get batch of pending verifications with prioritization for recent transactions
                 let pending_sigs: Vec<String> = {
                     let pending_verifications = PENDING_VERIFICATIONS.read().await;
-                    let sigs: Vec<String> = pending_verifications.keys().cloned().collect();
+                    let now = Utc::now();
+                    
+                    // Sort by age - prioritize newest transactions (within 60 seconds) for responsive verification
+                    let mut sig_ages: Vec<(String, i64)> = pending_verifications
+                        .iter()
+                        .map(|(sig, added_at)| {
+                            let age_seconds = now.signed_duration_since(*added_at).num_seconds();
+                            (sig.clone(), age_seconds)
+                        })
+                        .collect();
+                    
+                    // Sort by age: recent transactions (0-60s) first, then older ones
+                    sig_ages.sort_by(|a, b| {
+                        match (a.1 <= 60, b.1 <= 60) {
+                            (true, false) => std::cmp::Ordering::Less,  // a is recent, b is old -> a first
+                            (false, true) => std::cmp::Ordering::Greater, // a is old, b is recent -> b first
+                            _ => a.1.cmp(&b.1) // both recent or both old -> sort by age
+                        }
+                    });
+                    
+                    let sigs: Vec<String> = sig_ages.iter().map(|(sig, _)| sig.clone()).collect();
                     
                     // Always log pending verifications for debugging
                     if !sigs.is_empty() {
+                        let recent_count = sig_ages.iter().filter(|(_, age)| *age <= 60).count();
                         log(
                             LogTag::Positions,
                             "VERIFICATION_QUEUE",
-                            &format!("📋 Found {} pending verifications: {}", 
+                            &format!("📋 Found {} pending verifications ({} recent): {}", 
                                 sigs.len(),
+                                recent_count,
                                 sigs.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
                             )
                         );
                         
                         if is_debug_positions_enabled() {
-                            // Log detailed verification queue information
+                            // Log detailed verification queue information with ages
                             let pending_verifications = PENDING_VERIFICATIONS.read().await;
                             for (i, sig) in sigs.iter().enumerate() {
                                 if let Some(added_at) = pending_verifications.get(sig) {
@@ -4715,8 +4649,6 @@ async fn process_failed_exit_retries_parallel(shutdown: Arc<Notify>) {
 
 // ==================== HELPER FUNCTIONS ====================
 
-
-
 /// Check if a swap attempt is a duplicate within the prevention window
 async fn is_duplicate_swap_attempt(mint: &str, size_sol: f64, swap_type: &str) -> bool {
     let key = format!(
@@ -4790,13 +4722,13 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                         log(
                             LogTag::Positions,
                             "VERIFICATION_REQUEUE_ENTRY",
-                                                            &format!(
-                                    "♻️ Startup requeue ENTRY {} for {} (dup={}, queue_size={})",
-                                    entry_sig,
-                                    safe_truncate(&position.symbol, 8),
-                                    dup,
-                                    pending_verifications.len()
-                                )
+                            &format!(
+                                "♻️ Startup requeue ENTRY {} for {} (dup={}, queue_size={})",
+                                entry_sig,
+                                safe_truncate(&position.symbol, 8),
+                                dup,
+                                pending_verifications.len()
+                            )
                         );
                         unverified_count += 1;
                     }
@@ -5046,9 +4978,7 @@ async fn retry_failed_exit(mint: &str, attempt_count: u32) -> Result<String, Str
     let position = match position {
         Some(pos) => pos,
         None => {
-            return Err(
-                format!("Position not found for failed exit retry: {}", mint)
-            );
+            return Err(format!("Position not found for failed exit retry: {}", mint));
         }
     };
 
@@ -5064,10 +4994,7 @@ async fn retry_failed_exit(mint: &str, attempt_count: u32) -> Result<String, Str
             log(
                 LogTag::Positions,
                 "FAILED_EXIT_RETRY_TOKEN_ERROR",
-                &format!(
-                    "❌ Could not retrieve token data for {} from database",
-                    mint
-                )
+                &format!("❌ Could not retrieve token data for {} from database", mint)
             );
             return Err(format!("Token not found in database: {}", mint));
         }
@@ -5124,10 +5051,7 @@ async fn remove_position_by_signature(signature: &str) -> Result<(), String> {
     log(
         LogTag::Positions,
         "CLEANUP_START",
-        &format!(
-            "🗑️ Starting cleanup of position with signature {}",
-            signature
-        )
+        &format!("🗑️ Starting cleanup of position with signature {}", signature)
     );
 
     // Find mint first, then acquire lock
@@ -5582,10 +5506,7 @@ pub async fn attempt_position_recovery_from_transactions(
                     log(
                         LogTag::Positions,
                         "RECOVERY_SKIP_TX",
-                        &format!(
-                            "⚠️ Skipping failed/pending transaction {}",
-                            signature
-                        )
+                        &format!("⚠️ Skipping failed/pending transaction {}", signature)
                     );
                     continue;
                 }
@@ -5627,11 +5548,7 @@ pub async fn attempt_position_recovery_from_transactions(
                                 log(
                                     LogTag::Positions,
                                     "RECOVERY_SET_EXIT_SIGNATURE",
-                                    &format!(
-                                        "🔄 Set exit signature for {}: {}",
-                                        symbol,
-                                        signature
-                                    )
+                                    &format!("🔄 Set exit signature for {}: {}", symbol, signature)
                                 );
                             }
                         }
@@ -5769,10 +5686,7 @@ pub async fn attempt_position_recovery_from_transactions(
                     log(
                         LogTag::Positions,
                         "RECOVERY_NO_ANALYSIS",
-                        &format!(
-                            "⚠️ No swap analysis data for transaction {}",
-                            signature
-                        )
+                        &format!("⚠️ No swap analysis data for transaction {}", signature)
                     );
                 }
             }
@@ -5780,21 +5694,14 @@ pub async fn attempt_position_recovery_from_transactions(
                 log(
                     LogTag::Positions,
                     "RECOVERY_TX_NOT_FOUND",
-                    &format!(
-                        "⚠️ Transaction {} not found in database",
-                        signature
-                    )
+                    &format!("⚠️ Transaction {} not found in database", signature)
                 );
             }
             Err(e) => {
                 log(
                     LogTag::Positions,
                     "RECOVERY_TX_ERROR",
-                    &format!(
-                        "❌ Error fetching transaction {}: {}",
-                        signature,
-                        e
-                    )
+                    &format!("❌ Error fetching transaction {}: {}", signature, e)
                 );
             }
         }

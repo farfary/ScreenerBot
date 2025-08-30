@@ -26,7 +26,11 @@ use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_wallet_enabled };
 use crate::rpc::{ get_rpc_client, TokenAccountInfo };
 use crate::utils::get_wallet_address;
-use crate::positions::{ get_open_positions, attempt_position_recovery_from_transactions };
+use crate::positions::{
+    get_open_positions,
+    attempt_position_recovery_from_transactions,
+    is_critical_operation_active,
+};
 
 // Database schema version
 const WALLET_SCHEMA_VERSION: u32 = 1;
@@ -812,6 +816,23 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
     for position in open_positions {
         // Check if position token is NOT in wallet (zero balance)
         if !wallet_token_mints.contains(&position.mint) {
+            // CRITICAL: Check if position is undergoing active operation by positions manager
+            // This prevents race conditions where wallet monitoring interferes with ongoing position operations
+            if is_critical_operation_active(&position.mint).await {
+                if is_debug_wallet_enabled() {
+                    log(
+                        LogTag::Wallet,
+                        "POSITION_RECOVERY_SKIP_CRITICAL",
+                        &format!(
+                            "Skipping orphaned position recovery for {} ({}) - critical operation in progress",
+                            position.symbol,
+                            &position.mint[..8]
+                        )
+                    );
+                }
+                continue; // Skip this position as it's being handled by positions manager
+            }
+
             if is_debug_wallet_enabled() {
                 log(
                     LogTag::Wallet,
