@@ -49,7 +49,7 @@ pub const MIN_PROFIT_THRESHOLD_ENABLED: bool = true;
 
 /// Minimum profit threshold percentage (e.g., 5.0 for 5%, -5.0 for -5%)
 /// Positions below this P&L will not be sold regardless of other exit conditions
-pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 10.0;
+pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 0.0;
 
 /// Time-based override: Allow sell decisions after this duration (hours)
 /// Positions held longer than this can bypass profit threshold if in significant loss
@@ -68,7 +68,7 @@ pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 // -----------------------------------------------------------------------------
 
 /// Debug mode: Force sell all positions after a timeout (for testing)
-pub const DEBUG_FORCE_SELL_MODE: bool = true;
+pub const DEBUG_FORCE_SELL_MODE: bool = false;
 
 /// Debug mode: Force sell timeout in seconds
 pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 45.0;

@@ -2,7 +2,7 @@
 //! Simulates price paths to evaluate profiting logic.
 
 use screenerbot::positions::Position;
-use screenerbot::profit::should_sell;
+use screenerbot::profit::{ should_sell, trailing_gap, continuation_odds };
 use chrono::{ Utc, Duration as ChronoDuration };
 
 #[tokio::main]
@@ -49,6 +49,36 @@ async fn main() {
                 (20.0, 0.7), // -30%
                 (30.0, 0.55) // -45% - should trigger stop loss
             ],
+        ),
+        (
+            "Trailing Stop Capture",
+            vec![
+                (0.0, 1.0),
+                (8.0, 1.4), // +40% in 8m
+                (16.0, 1.55), // +55%
+                (24.0, 1.7), // +70%
+                (32.0, 1.62), // - from peak -> drawdown triggers trailing maybe
+                (40.0, 1.55) // deeper pullback
+            ],
+        ),
+        (
+            "Odds Based Late Exit",
+            vec![
+                (0.0, 1.0),
+                (50.0, 1.25), // +25% after long time
+                (80.0, 1.3), // +30%
+                (100.0, 1.28), // slight retrace; odds should decay
+                (110.0, 1.27)
+            ],
+        ),
+        (
+            "Time Cap",
+            vec![
+                (0.0, 1.0),
+                (110.0, 1.5), // +50%
+                (119.0, 1.55), // +55%
+                (121.0, 1.53) // exceed MAX_HOLD_MINUTES
+            ],
         )
     ];
 
@@ -92,7 +122,7 @@ async fn main() {
             closed_reason: None,
         };
 
-        println!("minute,price,profit%,peak%,drawdown%,decision");
+        println!("minute,price,profit%,peak%,drawdown%,gap%,odds,decision");
 
         for (minute, price) in path {
             // Update position highest/lowest prices
@@ -110,14 +140,18 @@ async fn main() {
             let profit_pct = (price / pos.entry_price - 1.0) * 100.0;
             let peak_profit = ((pos.price_highest - pos.entry_price) / pos.entry_price) * 100.0;
             let drawdown = peak_profit - profit_pct;
+            let gap = trailing_gap(peak_profit, minute);
+            let odds = continuation_odds(profit_pct, minute);
 
             println!(
-                "{:.1},{:.4},{:.2},{:.2},{:.2},{}",
+                "{:.1},{:.4},{:.2},{:.2},{:.2},{:.2},{:.2},{}",
                 minute,
                 price,
                 profit_pct,
                 peak_profit,
                 drawdown,
+                gap,
+                odds,
                 if decision {
                     "SELL"
                 } else {
