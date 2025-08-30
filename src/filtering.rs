@@ -59,12 +59,6 @@ pub const MIN_LIQUIDITY_USD: f64 = 1.0; // LEGENDARY MOONSHOT MODE: Catch ANY ge
 /// MOONSHOT FOCUS: Cap at $75K to avoid large, stable tokens with low volatility
 pub const MAX_LIQUIDITY_USD: f64 = 500_000.0; // Focus on micro-caps with moonshot potential!
 
-/// Alternative ultra-aggressive mode for catching micro-cap gems
-pub const ULTRA_AGGRESSIVE_MIN_LIQUIDITY_USD: f64 = 0.5; // For catching sub-$1 gems
-
-/// Gem hunting mode - even more aggressive for catching 500-1000% movers
-pub const GEM_HUNTING_MIN_LIQUIDITY_USD: f64 = 0.1; // God-tier aggressive mode
-
 /// MARKET CAP FILTERING - Avoid large market cap tokens that won't have big moves
 /// Maximum market cap in USD to focus on micro-cap gems
 pub const MAX_MARKET_CAP_USD: f64 = 50_000_000_000.0; // $500K max market cap for moonshot hunting
@@ -76,11 +70,11 @@ pub const MIN_VOLUME_LIQUIDITY_RATIO: f64 = 0.1; // 10% minimum volume/liquidity
 // ===== TRANSACTION ACTIVITY FILTERING PARAMETERS =====
 /// Minimum transaction count in 5 minutes for trading eligibility
 /// MODERATE MODE: Reasonable threshold for real activity
-pub const MIN_TRANSACTIONS_5MIN: i64 = 50; // Minimum 5 transactions in 5 minutes
+pub const MIN_TRANSACTIONS_5MIN: i64 = 20; // Minimum 5 transactions in 5 minutes
 
 /// Maximum transaction count in 5 minutes to avoid overly pumped tokens
 /// INCREASED: Allow higher activity for popular tokens
-pub const MAX_TRANSACTIONS_5MIN: i64 = 800; // Cap at 800 transactions in 5 minutes
+pub const MAX_TRANSACTIONS_5MIN: i64 = 2000; // Cap at 800 transactions in 5 minutes
 
 /// Minimum transaction count in 1 hour for established activity
 pub const MIN_TRANSACTIONS_1H: i64 = 15; // Minimum 15 transactions in 1 hour
@@ -92,14 +86,6 @@ pub const MIN_BUY_SELL_RATIO: f64 = 0.4; // At least 40% buys vs sells (more bal
 /// Maximum buy/sell ratio to avoid pure pump scenarios
 pub const MAX_BUY_SELL_RATIO: f64 = 2.5; // Max 2.5x more buys than sells (more balanced)
 
-// ===== TOKEN SELECTION AND SORTING PARAMETERS =====
-/// Maximum tokens to process per trading cycle (performance optimization)
-pub const MAX_TOKENS_TO_PROCESS: usize = 100;
-
-/// Pool size for high-activity token selection (top N most active tokens)
-/// REDUCED: Target middle-tier active tokens, not the most hyped ones
-pub const MIN_HIGH_ACTIVITY_TOKENS: usize = 300;
-
 // ===== RUGCHECK SECURITY PARAMETERS =====
 /// IMPORTANT: Rugcheck scores are RISK scores - higher values mean MORE risk, not less!
 /// Maximum allowed rugcheck risk score (0-100 scale) - HIGHER MEANS MORE RISKY
@@ -108,12 +94,6 @@ pub const MAX_RUGCHECK_RISK_SCORE: i32 = 100; // Accept ANY risk for moonshot po
 
 /// Emergency override for very risky tokens - any score above this is automatically rejected
 pub const EMERGENCY_MAX_RISK_SCORE: i32 = 100; // No emergency limit - we're fearless!
-
-/// GEM HUNTING MODE: Accept even riskier tokens for potential 1000% gains
-pub const GEM_HUNTING_MAX_RISK_SCORE: i32 = 100; // God-tier risk tolerance
-
-/// Maximum number of high-risk issues to tolerate
-pub const MAX_HIGH_RISK_ISSUES: usize = 10; // Accept many high-risk issues for gems
 
 /// Maximum number of critical-risk issues to tolerate
 pub const MAX_CRITICAL_RISK_ISSUES: usize = 5; // Accept critical issues for moonshot potential
@@ -1804,7 +1784,7 @@ pub fn is_token_eligible_for_trading(token: &Token) -> bool {
 /// Filter a list of tokens and return both eligible and rejected with reasons
 pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, FilterReason)>) {
     // Performance fix: Limit tokens to prevent timeout on large datasets
-    const MAX_TOKENS_FOR_DETAILED_FILTERING: usize = 5000;
+    const MAX_TOKENS_FOR_DETAILED_FILTERING: usize = 8000;
     
     let (tokens_to_process, pre_filtered_rejected) = if tokens.len() > MAX_TOKENS_FOR_DETAILED_FILTERING {
         log(

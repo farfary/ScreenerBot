@@ -2019,66 +2019,228 @@ pub async fn close_position_direct(
 
         // Only add to verification queue after confirming database persistence
         // This must happen regardless of whether database update succeeded or failed
-        {
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!("🔒 Acquiring GLOBAL_POSITIONS_STATE lock for verification enqueue...")
-                );
-            }
+        // CRITICAL: Verification enqueue MUST succeed - retry until it works
+        let mut enqueue_attempt = 1;
+        let max_enqueue_attempts = 5;
+        let mut enqueue_success = false;
 
-            let mut state = GLOBAL_POSITIONS_STATE.lock().await;
-            let already_present = state.pending_verifications.contains_key(&transaction_signature);
-
+        while !enqueue_success && enqueue_attempt <= max_enqueue_attempts {
             if is_debug_positions_enabled() {
                 log(
                     LogTag::Positions,
                     "DEBUG",
                     &format!(
-                        "🔍 Verification queue check: already_present={}, queue_size={}",
-                        already_present,
-                        state.pending_verifications.len()
+                        "🔄 Verification enqueue attempt {}/{} for transaction {}",
+                        enqueue_attempt,
+                        max_enqueue_attempts,
+                        get_signature_prefix(&transaction_signature)
                     )
                 );
             }
 
-            state.pending_verifications.insert(transaction_signature.clone(), Utc::now());
+            match
+                tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG",
+                            &format!("🔒 Acquiring GLOBAL_POSITIONS_STATE lock for verification enqueue (attempt {})...", enqueue_attempt)
+                        );
+                    }
 
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!(
-                        "📝 Enqueuing exit transaction {} for verification (already_present={})",
-                        get_signature_prefix(&transaction_signature),
-                        already_present
-                    )
-                );
+                    let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+                    let already_present = state.pending_verifications.contains_key(
+                        &transaction_signature
+                    );
+
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG",
+                            &format!(
+                                "🔍 Verification queue check: already_present={}, queue_size={}",
+                                already_present,
+                                state.pending_verifications.len()
+                            )
+                        );
+                    }
+
+                    state.pending_verifications.insert(transaction_signature.clone(), Utc::now());
+
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG",
+                            &format!(
+                                "📝 Enqueuing exit transaction {} for verification (already_present={})",
+                                get_signature_prefix(&transaction_signature),
+                                already_present
+                            )
+                        );
+                    }
+
+                    log(
+                        LogTag::Positions,
+                        "VERIFICATION_ENQUEUE_EXIT",
+                        &format!(
+                            "📥 Enqueued EXIT tx {} (already_present={}, queue_size={}, attempt={})",
+                            get_signature_prefix(&transaction_signature),
+                            already_present,
+                            state.pending_verifications.len(),
+                            enqueue_attempt
+                        )
+                    );
+
+                    Ok::<(), String>(())
+                }).await
+            {
+                Ok(Ok(())) => {
+                    // Verification enqueue succeeded
+                    enqueue_success = true;
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG",
+                            &format!(
+                                "✅ Verification enqueue completed successfully for transaction {} (attempt {})",
+                                get_signature_prefix(&transaction_signature),
+                                enqueue_attempt
+                            )
+                        );
+                    }
+                }
+                Ok(Err(e)) => {
+                    // Verification enqueue failed with error
+                    log(
+                        LogTag::Positions,
+                        "WARN",
+                        &format!(
+                            "❌ Verification enqueue failed for transaction {} (attempt {}): {}",
+                            get_signature_prefix(&transaction_signature),
+                            enqueue_attempt,
+                            e
+                        )
+                    );
+                }
+                Err(_) => {
+                    // Verification enqueue timed out
+                    log(
+                        LogTag::Positions,
+                        "WARN",
+                        &format!(
+                            "⏰ Verification enqueue timed out (5s) for transaction {} (attempt {})",
+                            get_signature_prefix(&transaction_signature),
+                            enqueue_attempt
+                        )
+                    );
+                }
             }
 
-            log(
-                LogTag::Positions,
-                "VERIFICATION_ENQUEUE_EXIT",
-                &format!(
-                    "📥 Enqueued EXIT tx {} (already_present={}, queue_size={})",
-                    get_signature_prefix(&transaction_signature),
-                    already_present,
-                    state.pending_verifications.len()
-                )
-            );
+            if !enqueue_success {
+                enqueue_attempt += 1;
+                if enqueue_attempt <= max_enqueue_attempts {
+                    // Wait before retrying (exponential backoff)
+                    let wait_ms = (enqueue_attempt - 1) * 500; // 500ms, 1000ms, 1500ms, 2000ms
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG",
+                            &format!(
+                                "⏳ Waiting {}ms before verification enqueue retry {}/{}",
+                                wait_ms,
+                                enqueue_attempt,
+                                max_enqueue_attempts
+                            )
+                        );
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_millis(wait_ms as u64)).await;
+                }
+            }
         }
 
-        // DEBUG: Log that verification enqueue completed
-        if is_debug_positions_enabled() {
+        // CRITICAL CHECK: If verification enqueue failed after all attempts, log critical error
+        if !enqueue_success {
             log(
                 LogTag::Positions,
-                "DEBUG",
+                "ERROR",
                 &format!(
-                    "✅ Verification enqueue completed for transaction {}",
+                    "🚨 CRITICAL: Verification enqueue FAILED after {} attempts for transaction {}! Position will be stuck!",
+                    max_enqueue_attempts,
                     get_signature_prefix(&transaction_signature)
                 )
             );
+
+            // Spawn a background task to keep retrying indefinitely
+            let bg_signature = transaction_signature.clone();
+            tokio::spawn(async move {
+                let mut bg_attempt = 1;
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+                    log(
+                        LogTag::Positions,
+                        "RETRY_BACKGROUND",
+                        &format!(
+                            "🔁 Background verification enqueue retry {} for transaction {}",
+                            bg_attempt,
+                            get_signature_prefix(&bg_signature)
+                        )
+                    );
+
+                    match
+                        tokio::time::timeout(tokio::time::Duration::from_secs(10), async {
+                            let mut state = GLOBAL_POSITIONS_STATE.lock().await;
+                            if !state.pending_verifications.contains_key(&bg_signature) {
+                                state.pending_verifications.insert(
+                                    bg_signature.clone(),
+                                    Utc::now()
+                                );
+                                log(
+                                    LogTag::Positions,
+                                    "VERIFICATION_ENQUEUE_EXIT_BACKGROUND",
+                                    &format!(
+                                        "📥 Background enqueued EXIT tx {} (queue_size={}, bg_attempt={})",
+                                        get_signature_prefix(&bg_signature),
+                                        state.pending_verifications.len(),
+                                        bg_attempt
+                                    )
+                                );
+                                true
+                            } else {
+                                false // Already in queue
+                            }
+                        }).await
+                    {
+                        Ok(true) => {
+                            log(
+                                LogTag::Positions,
+                                "SUCCESS",
+                                &format!(
+                                    "✅ Background verification enqueue succeeded for transaction {} after {} attempts",
+                                    get_signature_prefix(&bg_signature),
+                                    bg_attempt
+                                )
+                            );
+                            break; // Success - exit background retry loop
+                        }
+                        Ok(false) => {
+                            log(
+                                LogTag::Positions,
+                                "INFO",
+                                &format!(
+                                    "ℹ️ Transaction {} already in verification queue - background retry successful",
+                                    get_signature_prefix(&bg_signature)
+                                )
+                            );
+                            break; // Already in queue - exit background retry loop
+                        }
+                        Err(_) => {
+                            // Timeout - continue retrying
+                            bg_attempt += 1;
+                        }
+                    }
+                }
+            });
         }
 
         // IMPORTANT: Release the per-position lock BEFORE attempting quick verification
