@@ -2749,7 +2749,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
     // NOW acquire the position lock for the correct mint
     let _lock = acquire_position_lock(&position_mint_for_lock).await;
 
-    // Update position verification status using O(1) index lookup
+    // Update position verification status using O(1) index lookup with fallback
     let mut verified = false;
     let mut position_for_db_update: Option<Position> = None;
     let mut position_mint: Option<String> = None;
@@ -2763,7 +2763,65 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
         let position_index = match position_index {
             Some(index) => index,
             None => {
-                return Err("Position index not found for mint".to_string());
+                // CRITICAL FIX: Index lookup failed - attempt recovery
+                log(
+                    LogTag::Positions,
+                    "INDEX_RECOVERY",
+                    &format!("❌ Position index not found for mint {}, attempting recovery", position_mint_for_lock)
+                );
+
+                // Try to rebuild the index and find the position
+                update_mint_position_index().await;
+
+                // Retry the lookup after rebuilding
+                let mint_to_index = MINT_TO_POSITION_INDEX.read().await;
+                if let Some(recovered_index) = mint_to_index.get(&position_mint_for_lock).copied() {
+                    log(
+                        LogTag::Positions,
+                        "INDEX_RECOVERY_SUCCESS",
+                        &format!(
+                            "✅ Position index recovered for mint {} at index {}",
+                            position_mint_for_lock,
+                            recovered_index
+                        )
+                    );
+                    recovered_index
+                } else {
+                    // Still not found after recovery - try linear search as last resort
+                    log(
+                        LogTag::Positions,
+                        "INDEX_RECOVERY_FALLBACK",
+                        &format!("⚠️ Index recovery failed for mint {}, falling back to linear search", position_mint_for_lock)
+                    );
+
+                    let positions = POSITIONS.read().await;
+                    if
+                        let Some((found_index, _)) = positions
+                            .iter()
+                            .enumerate()
+                            .find(|(_, p)| p.mint == position_mint_for_lock)
+                    {
+                        log(
+                            LogTag::Positions,
+                            "LINEAR_SEARCH_SUCCESS",
+                            &format!(
+                                "✅ Position found via linear search for mint {} at index {}",
+                                position_mint_for_lock,
+                                found_index
+                            )
+                        );
+                        found_index
+                    } else {
+                        log(
+                            LogTag::Positions,
+                            "POSITION_NOT_FOUND",
+                            &format!("❌ Position not found for mint {} even with linear search", position_mint_for_lock)
+                        );
+                        return Err(
+                            "Position not found even after index recovery and linear search".to_string()
+                        );
+                    }
+                }
             }
         };
 
@@ -2771,6 +2829,15 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
         let mut positions = POSITIONS.write().await;
 
         if position_index >= positions.len() {
+            log(
+                LogTag::Positions,
+                "INDEX_OUT_OF_BOUNDS",
+                &format!(
+                    "❌ Position index {} out of bounds (positions.len()={})",
+                    position_index,
+                    positions.len()
+                )
+            );
             return Err("Position index out of bounds".to_string());
         }
 
@@ -3189,6 +3256,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                 }
 
                 // Only remove from pending verifications AFTER successful database update
+                // Note: Final cleanup at function end ensures this always happens
                 {
                     let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
                     pending_verifications.remove(signature);
@@ -3213,6 +3281,37 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
         }
     }
 
+    // CRITICAL: Always ensure pending verification cleanup and critical operation cleanup
+    // regardless of verification outcome or any earlier failures
+    {
+        let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
+        let was_pending = pending_verifications.remove(signature);
+
+        if was_pending.is_some() && is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "CLEANUP",
+                &format!("🗑️ Final cleanup: Removed {} from pending verifications", signature)
+            );
+        }
+    }
+
+    // Always cleanup critical operation marking for any discovered mint
+    if let Some(ref mint) = position_mint {
+        unmark_critical_operation(mint).await;
+
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "CLEANUP",
+                &format!(
+                    "🧹 Final cleanup: Unmarked critical operation for mint {}",
+                    safe_truncate(mint, 8)
+                )
+            );
+        }
+    }
+
     if verified {
         if is_debug_positions_enabled() {
             log(
@@ -3220,11 +3319,6 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                 "SUCCESS",
                 &format!("✅ Comprehensive verification completed for transaction {}", signature)
             );
-        }
-
-        // Cleanup critical operation marking
-        if let Some(ref mint) = position_mint {
-            unmark_critical_operation(mint).await;
         }
 
         Ok(true)
@@ -3235,11 +3329,6 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                 "WARNING",
                 &format!("⚠️ No matching position found for transaction {}", signature)
             );
-        }
-
-        // Cleanup critical operation marking
-        if let Some(ref mint) = position_mint {
-            unmark_critical_operation(mint).await;
         }
 
         Err("No matching position found for transaction".to_string())
@@ -3851,6 +3940,13 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                         }
                                     }
                                     Err(e) => {
+                                        // CRITICAL: Always log verification failures to catch silent issues
+                                        log(
+                                            LogTag::Positions,
+                                            "VERIFICATION_ERROR",
+                                            &format!("❌ Verification failed for {}: {}", sig_clone, e)
+                                        );
+                                        
                                         if is_debug_positions_enabled() {
                                             log(
                                                 LogTag::Positions,

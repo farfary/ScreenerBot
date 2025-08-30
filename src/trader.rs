@@ -39,7 +39,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 2;
+pub const MAX_OPEN_POSITIONS: usize = 5;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
@@ -68,7 +68,7 @@ pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 // -----------------------------------------------------------------------------
 
 /// Debug mode: Force sell all positions after a timeout (for testing)
-pub const DEBUG_FORCE_SELL_MODE: bool = true;
+pub const DEBUG_FORCE_SELL_MODE: bool = false;
 
 /// Debug mode: Force sell timeout in seconds
 pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 45.0;
