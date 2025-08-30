@@ -19,10 +19,16 @@
 /// - sign_and_send_transaction()
 /// - get_transaction_details()
 /// - get_wallet_signatures_main_rpc()
-///
+
+
 /// WARNING: If premium RPC fails when this is enabled, operations will fail
 /// instead of falling back to other endpoints.
 const FORCE_PREMIUM_RPC_ONLY: bool = false;
+
+/// RPC RATE LIMITING CONFIGURATION
+/// Maximum calls per second for main RPC (premium RPC has no limits)
+const MAX_RPC_CALLS_PER_SECOND: u64 = 4;
+
 
 use crate::logger::{ log, LogTag };
 use crate::errors::{ NetworkError, RpcProviderError, ConfigurationError, DataError };
@@ -642,9 +648,7 @@ impl RpcStats {
     }
 }
 
-/// RPC RATE LIMITING CONFIGURATION
-/// Maximum calls per second for main RPC (premium RPC has no limits)
-const MAX_RPC_CALLS_PER_SECOND: u64 = 1;
+
 
 /// Enhanced rate limiter for RPC calls with adaptive backoff and 429 prevention
 pub struct RpcRateLimiter {

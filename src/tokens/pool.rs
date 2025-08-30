@@ -41,7 +41,7 @@ const PRICE_CACHE_TTL_SECONDS: i64 = 8;
 // =============================================================================
 
 /// Priority tokens update interval (5 seconds exactly)
-const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 4;
+const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 1;
 
 /// Watchlist batch size for random updates
 const WATCHLIST_BATCH_SIZE: usize = 10;
