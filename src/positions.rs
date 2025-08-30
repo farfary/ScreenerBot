@@ -1115,56 +1115,81 @@ pub async fn open_position_direct(
             );
         }
 
-        // Save to database first to get the ID
-        let position_id = match save_position(&new_position).await {
-            Ok(id) => {
-                log(
-                    LogTag::Positions,
-                    "INSERT",
-                    &format!("Inserted new position ID {} for mint {}", id, token.mint)
-                );
-                log(
-                    LogTag::Positions,
-                    "DB_SAVE",
-                    &format!("Position saved to database with ID {}", id)
-                );
+        // Save to database first to get the ID (with retries BEFORE mutating in-memory state)
+        let mut position_id: i64 = -1;
+        let mut attempt = 0;
+        const MAX_DB_RETRIES: usize = 3;
+        while attempt < MAX_DB_RETRIES {
+            match save_position(&new_position).await {
+                Ok(id) => {
+                    position_id = id;
+                    log(
+                        LogTag::Positions,
+                        "INSERT",
+                        &format!("Inserted new position ID {} for mint {}", id, token.mint)
+                    );
+                    log(
+                        LogTag::Positions,
+                        "DB_SAVE",
+                        &format!(
+                            "Position saved to database with ID {} (attempt {} )",
+                            id,
+                            attempt + 1
+                        )
+                    );
 
-                // Save opening token snapshot (async, non-blocking)
-                {
-                    let mint_clone = token.mint.clone();
-                    tokio::spawn(async move {
-                        if
-                            let Err(e) = save_position_token_snapshot(
-                                id,
-                                &mint_clone,
-                                "opening"
-                            ).await
-                        {
-                            log(
-                                LogTag::Positions,
-                                "SNAPSHOT_WARN",
-                                &format!(
-                                    "Failed to save opening snapshot for {}: {}",
-                                    safe_truncate(&mint_clone, 8),
-                                    e
-                                )
-                            );
-                        }
-                    });
+                    // Save opening token snapshot (async, non-blocking)
+                    {
+                        let mint_clone = token.mint.clone();
+                        tokio::spawn(async move {
+                            if
+                                let Err(e) = save_position_token_snapshot(
+                                    id,
+                                    &mint_clone,
+                                    "opening"
+                                ).await
+                            {
+                                log(
+                                    LogTag::Positions,
+                                    "SNAPSHOT_WARN",
+                                    &format!(
+                                        "Failed to save opening snapshot for {}: {}",
+                                        safe_truncate(&mint_clone, 8),
+                                        e
+                                    )
+                                );
+                            }
+                        });
+                    }
+                    break;
                 }
-
-                id
+                Err(e) => {
+                    attempt += 1;
+                    log(
+                        LogTag::Positions,
+                        "DB_ERROR",
+                        &format!(
+                            "Failed to save position to database (attempt {}/{}): {}",
+                            attempt,
+                            MAX_DB_RETRIES,
+                            e
+                        )
+                    );
+                    if attempt >= MAX_DB_RETRIES {
+                        // Abort opening to avoid inconsistent in-memory only position
+                        return Err(
+                            format!(
+                                "Failed to persist new position after {} attempts: {}",
+                                MAX_DB_RETRIES,
+                                e
+                            )
+                        );
+                    }
+                    // small backoff
+                    sleep(Duration::from_millis(150 * (attempt as u64))).await;
+                }
             }
-            Err(e) => {
-                log(
-                    LogTag::Positions,
-                    "DB_ERROR",
-                    &format!("Failed to save position to database: {}", e)
-                );
-                // Continue without database ID - position is still in memory
-                -1
-            }
-        };
+        }
 
         // Update position with database ID if successful
         let mut position_with_id = new_position.clone();
@@ -1745,6 +1770,7 @@ pub async fn close_position_direct(
     }
 
     // 4. Proceed with database persistence (outside global lock)
+    let mut db_update_succeeded = true; // track for enqueue logic
     if let Some(position) = position_for_db {
         if is_debug_positions_enabled() {
             log(
@@ -1926,10 +1952,14 @@ pub async fn close_position_direct(
                             )
                         );
                     }
-                    cleanup().await;
-                    return Err(
-                        format!("Failed to persist exit signature to database after {} attempts", max_retries)
+                    // Do NOT abort here: continue with enqueue so verification can still proceed
+                    log(
+                        LogTag::Positions,
+                        "EXIT_DB_PERSIST_DEFERRED",
+                        &format!("❌ Failed to persist exit signature after {} attempts (will proceed & retry in background)", max_retries)
                     );
+                    db_update_succeeded = false;
+                    break;
                 }
 
                 if is_debug_positions_enabled() {
@@ -2278,6 +2308,60 @@ pub async fn close_position_direct(
     // CRITICAL: Add initial delay to allow for transaction propagation
     // This prevents verification from failing immediately due to RPC propagation delays
     tokio::time::sleep(Duration::from_secs(3)).await;
+
+    // Schedule background DB retry if needed
+    if !db_update_succeeded {
+        let mint_clone = mint.to_string();
+        let signature_clone = transaction_signature.clone();
+        tokio::spawn(async move {
+            let mut retry = 0;
+            while retry < 10 {
+                // up to ~10 retries with backoff
+                tokio::time::sleep(Duration::from_secs(5 * ((retry + 1) as u64))).await;
+                // fetch position and retry update
+                let pos_opt = {
+                    let positions = POSITIONS.read().await;
+                    positions
+                        .iter()
+                        .find(|p| p.mint == mint_clone)
+                        .cloned()
+                };
+                if let Some(pos) = pos_opt {
+                    if let Some(id) = pos.id {
+                        // only if still missing persisted exit sig
+                        match update_position(&pos).await {
+                            Ok(_) => {
+                                log(
+                                    LogTag::Positions,
+                                    "EXIT_DB_RETRY_SUCCESS",
+                                    &format!(
+                                        "✅ Background retry succeeded updating exit signature {} for mint {} (retry {})",
+                                        signature_clone,
+                                        safe_truncate(&mint_clone, 8),
+                                        retry + 1
+                                    )
+                                );
+                                break;
+                            }
+                            Err(e) => {
+                                log(
+                                    LogTag::Positions,
+                                    "EXIT_DB_RETRY_FAIL",
+                                    &format!(
+                                        "⚠️ Background retry {} failed updating exit signature for mint {}: {}",
+                                        retry + 1,
+                                        safe_truncate(&mint_clone, 8),
+                                        e
+                                    )
+                                );
+                            }
+                        }
+                    }
+                }
+                retry += 1;
+            }
+        });
+    }
 
     // Quick verification attempt (30 seconds timeout)
     let quick_verification_result = tokio::time::timeout(
@@ -4664,7 +4748,6 @@ pub async fn sync_position_to_database(position: &Position) -> Result<(), String
         Ok(())
     }
 }
-
 
 /// Attempt to recover a position by finding its sell transaction and using full verification flow
 /// This handles cases where tokens were sold but position wasn't properly closed
