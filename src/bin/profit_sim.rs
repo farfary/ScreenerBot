@@ -1,7 +1,7 @@
 //! Profit system simulation
 //! Simulates price paths to evaluate profiting logic.
 
-use screenerbot::positions::Position;
+use screenerbot::positions_types::Position;
 use screenerbot::profit::{ should_sell, trailing_gap, continuation_odds };
 use chrono::{ Utc, Duration as ChronoDuration };
 

@@ -1,7 +1,7 @@
 //! Comprehensive profit system analyzer
 //! Deep analysis of profit decision logic, parameter sensitivity, and edge cases
 
-use screenerbot::positions::Position;
+use screenerbot::positions_types::Position;
 use screenerbot::profit::*;
 use chrono::{ Utc, Duration as ChronoDuration };
 

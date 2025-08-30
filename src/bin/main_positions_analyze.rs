@@ -20,7 +20,9 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 
 use screenerbot::{
-    positions::{ Position, calculate_position_pnl, get_open_positions, get_closed_positions },
+    positions::{ get_open_positions, get_closed_positions },
+    positions_types::Position,
+    positions_lib::calculate_position_pnl,
     positions_db::{ get_token_snapshots, initialize_positions_database },
     tokens::{
         rugcheck::RugcheckResponse,

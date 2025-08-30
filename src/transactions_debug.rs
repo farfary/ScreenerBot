@@ -9,6 +9,692 @@ use solana_sdk::pubkey::Pubkey;
 use tokio::time::Duration;
 
 impl TransactionsManager {
+
+    /// Update transaction status in database when status changes
+    pub async fn update_transaction_status_in_db(
+        &self,
+        signature: &str,
+        status: &TransactionStatus,
+        success: bool,
+        error_message: Option<&str>
+    ) -> Result<(), String> {
+        if let Some(ref db) = self.transaction_database {
+            let status_str = match status {
+                TransactionStatus::Pending => "Pending",
+                TransactionStatus::Confirmed => "Confirmed",
+                TransactionStatus::Finalized => "Finalized",
+                TransactionStatus::Failed(ref msg) => "Failed",
+            };
+
+            db.update_transaction_status(signature, status_str, success, error_message).await?;
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "STATUS_UPDATE",
+                    &format!(
+                        "Updated transaction {} status to {} in database",
+                        &signature[..8],
+                        status_str
+                    )
+                );
+            }
+        }
+        Ok(())
+    }
+
+    
+    /// Process transaction directly from blockchain (bypassing cache)
+    /// This is similar to process_transaction but forces fresh fetch from RPC
+    pub async fn process_transaction_direct(
+        &mut self,
+        signature: &str
+    ) -> Result<Transaction, String> {
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "DIRECT",
+                &format!("Processing transaction directly from blockchain: {}", &signature[..8])
+            );
+        }
+
+        // Create new transaction struct
+        let mut transaction = Transaction {
+            signature: signature.to_string(),
+            slot: None,
+            block_time: None,
+            timestamp: Utc::now(),
+            status: TransactionStatus::Confirmed,
+            transaction_type: TransactionType::Unknown,
+            direction: TransactionDirection::Internal,
+            success: false,
+            error_message: None,
+            fee_sol: 0.0,
+            sol_balance_change: 0.0,
+            token_transfers: Vec::new(),
+            raw_transaction_data: None,
+            log_messages: Vec::new(),
+            instructions: Vec::new(),
+            sol_balance_changes: Vec::new(),
+            token_balance_changes: Vec::new(),
+            swap_analysis: None,
+            position_impact: None,
+            profit_calculation: None,
+            fee_breakdown: None,
+            ata_analysis: None,
+            token_info: None,
+            calculated_token_price_sol: None,
+            price_source: None,
+            token_symbol: None,
+            token_decimals: None,
+            last_updated: Utc::now(),
+            cached_analysis: None,
+        };
+
+        // Fetch fresh transaction data from blockchain
+        let raw_blockchain_transaction_data = self.get_or_fetch_transaction_data(&transaction.signature).await?;
+        transaction.raw_transaction_data = Some(raw_blockchain_transaction_data);
+
+        // Perform comprehensive analysis
+        self.analyze_transaction(&mut transaction).await?;
+        // Defensive: if raw data has block_time and no error, treat as finalized
+        if transaction.block_time.is_some() && transaction.success {
+            transaction.status = TransactionStatus::Finalized;
+
+            // Update status in database
+            if
+                let Err(e) = self.update_transaction_status_in_db(
+                    &transaction.signature,
+                    &transaction.status,
+                    transaction.success,
+                    transaction.error_message.as_deref()
+                ).await
+            {
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    &format!("Failed to update transaction status in DB: {}", e)
+                );
+            }
+        }
+
+        // Persist a snapshot for finalized transactions to avoid future re-analysis
+        if
+            matches!(transaction.status, TransactionStatus::Finalized) &&
+            transaction.raw_transaction_data.is_some()
+        {
+            transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
+        }
+
+        // Cache the processed transaction
+        self.cache_transaction(&transaction).await?;
+
+        // Update known signatures
+        self.known_signatures.insert(signature.to_string());
+
+        Ok(transaction)
+    }
+
+    /// Process transaction from encoded data (used for batch processing)
+    /// This is optimized for batch processing where we already have the transaction data
+    async fn process_transaction_from_encoded_data(
+        &mut self,
+        signature: &str,
+        encoded_tx: solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta
+    ) -> Result<Transaction, String> {
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "BATCH_PROCESS",
+                &format!("Processing transaction from batch data: {}", &signature[..8])
+            );
+        }
+
+        // Create new transaction struct
+        let mut transaction = Transaction {
+            signature: signature.to_string(),
+            slot: None,
+            block_time: None,
+            timestamp: Utc::now(),
+            status: TransactionStatus::Confirmed,
+            transaction_type: TransactionType::Unknown,
+            direction: TransactionDirection::Internal,
+            success: false,
+            error_message: None,
+            fee_sol: 0.0,
+            sol_balance_change: 0.0,
+            token_transfers: Vec::new(),
+            raw_transaction_data: None,
+            log_messages: Vec::new(),
+            instructions: Vec::new(),
+            sol_balance_changes: Vec::new(),
+            token_balance_changes: Vec::new(),
+            swap_analysis: None,
+            position_impact: None,
+            profit_calculation: None,
+            fee_breakdown: None,
+            ata_analysis: None,
+            token_info: None,
+            calculated_token_price_sol: None,
+            price_source: None,
+            token_symbol: None,
+            token_decimals: None,
+            last_updated: Utc::now(),
+            cached_analysis: None,
+        };
+
+        // Convert encoded transaction to raw data format
+        let raw_blockchain_transaction_data = serde_json
+            ::to_value(&encoded_tx)
+            .map_err(|e| format!("Failed to serialize encoded transaction data: {}", e))?;
+
+        transaction.raw_transaction_data = Some(raw_blockchain_transaction_data);
+
+        // Perform comprehensive analysis
+        self.analyze_transaction(&mut transaction).await?;
+        // Defensive: if raw data has block_time and no error, treat as finalized
+        if transaction.block_time.is_some() && transaction.success {
+            transaction.status = TransactionStatus::Finalized;
+
+            // Update status in database
+            if
+                let Err(e) = self.update_transaction_status_in_db(
+                    &transaction.signature,
+                    &transaction.status,
+                    transaction.success,
+                    transaction.error_message.as_deref()
+                ).await
+            {
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    &format!("Failed to update transaction status in DB: {}", e)
+                );
+            }
+        }
+
+        // Persist a snapshot for finalized transactions to avoid future re-analysis
+        if
+            matches!(transaction.status, TransactionStatus::Finalized) &&
+            transaction.raw_transaction_data.is_some()
+        {
+            transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
+        }
+
+        // Cache the processed transaction
+        self.cache_transaction(&transaction).await?;
+
+        // Update known signatures
+        self.known_signatures.insert(signature.to_string());
+
+        Ok(transaction)
+    }
+    
+     /// Fetch and analyze ALL wallet transactions from blockchain (unlimited)
+    /// This method fetches comprehensive transaction history directly from the blockchain
+    /// and processes each transaction with full analysis, bypassing the cache
+    pub async fn fetch_all_wallet_transactions(&mut self) -> Result<Vec<Transaction>, String> {
+        log(
+            LogTag::Transactions,
+            "INFO",
+            &format!(
+                "Starting comprehensive blockchain fetch for wallet {} (no limit)",
+                self.wallet_pubkey
+            )
+        );
+
+        // Initialize known signatures from cache so we can skip existing ones
+        if let Err(e) = self.initialize_known_signatures().await {
+            log(
+                LogTag::Transactions,
+                "ERROR",
+                &format!("Failed to initialize known signatures: {}", e)
+            );
+        } else if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "INIT",
+                &format!(
+                    "Cache has {} transactions; will skip these during fetch",
+                    self.known_signatures.len()
+                )
+            );
+        }
+
+        let rpc_client = get_rpc_client();
+        let mut all_transactions = Vec::new();
+        let mut before_signature = None;
+        let batch_size = RPC_BATCH_SIZE; // Fetch in batches to avoid rate limits
+        let mut total_fetched = 0;
+        let mut total_skipped_cached = 0usize;
+
+        log(
+            LogTag::Transactions,
+            "FETCH",
+            "Fetching ALL transaction signatures from blockchain..."
+        );
+
+        // Fetch transaction signatures in batches until exhausted
+        loop {
+            let signatures = match
+                rpc_client.get_wallet_signatures_main_rpc(
+                    &self.wallet_pubkey,
+                    batch_size,
+                    before_signature.as_deref()
+                ).await
+            {
+                Ok(sigs) => sigs,
+                Err(e) => {
+                    log(
+                        LogTag::Transactions,
+                        "ERROR",
+                        &format!("Failed to fetch signatures batch: {}", e)
+                    );
+                    break;
+                }
+            };
+
+            if signatures.is_empty() {
+                log(
+                    LogTag::Transactions,
+                    "INFO",
+                    "No more signatures available - completed full fetch"
+                );
+                break;
+            }
+
+            let batch_count = signatures.len();
+            total_fetched += batch_count;
+
+            // Build list of signatures we don't already have cached
+            let mut signatures_to_process: Vec<String> = Vec::new();
+            for s in &signatures {
+                if self.known_signatures.contains(&s.signature) {
+                    total_skipped_cached += 1;
+                } else {
+                    signatures_to_process.push(s.signature.clone());
+                }
+            }
+
+            log(
+                LogTag::Transactions,
+                "FETCH",
+                &format!(
+                    "Fetched batch of {} signatures (total seen: {}), to process (not cached): {} | skipped cached: {}",
+                    batch_count,
+                    total_fetched,
+                    signatures_to_process.len(),
+                    total_skipped_cached
+                )
+            );
+
+            for chunk in signatures_to_process.chunks(TRANSACTION_DATA_BATCH_SIZE) {
+                let chunk_size = chunk.len();
+                log(
+                    LogTag::Transactions,
+                    "BATCH",
+                    &format!("Processing batch of {} transactions using batch RPC call", chunk_size)
+                );
+
+                // Use batch RPC call to fetch all transactions in this chunk at once
+                match rpc_client.batch_get_transaction_details_premium_rpc(chunk).await {
+                    Ok(batch_results) => {
+                        log(
+                            LogTag::Transactions,
+                            "BATCH",
+                            &format!(
+                                "✅ Batch fetched {}/{} transactions successfully",
+                                batch_results.len(),
+                                chunk_size
+                            )
+                        );
+
+                        // Process each transaction from the batch results
+                        for (signature, encoded_tx) in batch_results {
+                            if self.debug_enabled {
+                                log(
+                                    LogTag::Transactions,
+                                    "BATCH",
+                                    &format!(
+                                        "Processing transaction from batch: {}",
+                                        &signature[..8]
+                                    )
+                                );
+                            }
+
+                            match
+                                self.process_transaction_from_encoded_data(
+                                    &signature,
+                                    encoded_tx
+                                ).await
+                            {
+                                Ok(transaction) => {
+                                    all_transactions.push(transaction);
+                                    if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "BATCH",
+                                            &format!(
+                                                "✅ Processed transaction: {}",
+                                                &signature[..8]
+                                            )
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    log(
+                                        LogTag::Transactions,
+                                        "WARN",
+                                        &format!(
+                                            "Failed to process transaction {}: {}",
+                                            &signature[..8],
+                                            e
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Transactions,
+                            "ERROR",
+                            &format!("Failed to batch fetch {} transactions: {}", chunk_size, e)
+                        );
+
+                        // Fallback to individual processing if batch fails
+                        log(
+                            LogTag::Transactions,
+                            "FALLBACK",
+                            "Falling back to individual transaction processing"
+                        );
+                        for signature in chunk {
+                            match self.process_transaction_direct(&signature).await {
+                                Ok(transaction) => {
+                                    all_transactions.push(transaction);
+                                }
+                                Err(e) => {
+                                    log(
+                                        LogTag::Transactions,
+                                        "WARN",
+                                        &format!(
+                                            "Failed to process transaction {}: {}",
+                                            &signature[..8],
+                                            e
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Shorter delay between transaction batches
+                if chunk_size == TRANSACTION_DATA_BATCH_SIZE {
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                }
+            }
+
+            // Set the before signature for the next batch
+            if let Some(last_sig) = signatures.last() {
+                before_signature = Some(last_sig.signature.clone());
+            } else {
+                // Empty signatures list - should not happen but handle safely
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    "Empty signatures list in startup discovery batch"
+                );
+                break;
+            }
+
+            // Batch processing delay
+            tokio::time::sleep(Duration::from_millis(500)).await; // Batch processing delay
+        }
+
+        log(
+            LogTag::Transactions,
+            "SUCCESS",
+            &format!(
+                "Completed comprehensive fetch: {} new transactions processed | {} cached skipped",
+                all_transactions.len(),
+                total_skipped_cached
+            )
+        );
+
+        Ok(all_transactions)
+    }
+
+    /// Fetch and analyze limited number of wallet transactions from blockchain (for testing)
+    /// This method fetches a specific number of transactions for testing purposes
+    pub async fn fetch_limited_wallet_transactions(
+        &mut self,
+        max_count: usize
+    ) -> Result<Vec<Transaction>, String> {
+        log(
+            LogTag::Transactions,
+            "INFO",
+            &format!(
+                "Starting limited blockchain fetch for wallet {} (max {} transactions)",
+                self.wallet_pubkey,
+                max_count
+            )
+        );
+
+        // Initialize known signatures from cache so we can skip existing ones
+        if let Err(e) = self.initialize_known_signatures().await {
+            log(
+                LogTag::Transactions,
+                "ERROR",
+                &format!("Failed to initialize known signatures: {}", e)
+            );
+        } else if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "INIT",
+                &format!(
+                    "Cache has {} transactions; will skip these during limited fetch",
+                    self.known_signatures.len()
+                )
+            );
+        }
+
+        let rpc_client = get_rpc_client();
+        let mut all_transactions = Vec::new();
+        let mut before_signature = None;
+        let batch_size = RPC_BATCH_SIZE;
+        let mut total_fetched = 0; // total signatures seen
+        let mut total_skipped_cached = 0usize;
+        let mut total_to_process = 0usize; // count of new (not cached) we attempted to process
+
+        log(LogTag::Transactions, "FETCH", "Fetching transaction signatures from blockchain...");
+
+        // Fetch transaction signatures in batches
+        while total_to_process < max_count {
+            let signatures = match
+                rpc_client.get_wallet_signatures_main_rpc(
+                    &self.wallet_pubkey,
+                    batch_size,
+                    before_signature.as_deref()
+                ).await
+            {
+                Ok(sigs) => sigs,
+                Err(e) => {
+                    log(
+                        LogTag::Transactions,
+                        "ERROR",
+                        &format!("Failed to fetch signatures batch: {}", e)
+                    );
+                    break;
+                }
+            };
+
+            if signatures.is_empty() {
+                log(LogTag::Transactions, "INFO", "No more signatures available");
+                break;
+            }
+
+            let batch_count = signatures.len();
+            total_fetched += batch_count;
+
+            // Filter out cached signatures; only process unknown ones, but cap by remaining_needed
+            let mut signatures_to_process: Vec<String> = Vec::new();
+            for s in &signatures {
+                if self.known_signatures.contains(&s.signature) {
+                    total_skipped_cached += 1;
+                } else if signatures_to_process.len() + total_to_process < max_count {
+                    signatures_to_process.push(s.signature.clone());
+                }
+            }
+
+            total_to_process += signatures_to_process.len();
+
+            log(
+                LogTag::Transactions,
+                "FETCH",
+                &format!(
+                    "Fetched batch of {} signatures (seen total: {}), to process (not cached): {} (goal {}), skipped cached so far: {}",
+                    batch_count,
+                    total_fetched,
+                    signatures_to_process.len(),
+                    max_count,
+                    total_skipped_cached
+                )
+            );
+
+            for chunk in signatures_to_process.chunks(TRANSACTION_DATA_BATCH_SIZE) {
+                let chunk_size = chunk.len();
+                log(
+                    LogTag::Transactions,
+                    "BATCH",
+                    &format!("Processing batch of {} transactions using batch RPC call", chunk_size)
+                );
+
+                // Use batch RPC call to fetch all transactions in this chunk at once
+                match rpc_client.batch_get_transaction_details_premium_rpc(chunk).await {
+                    Ok(batch_results) => {
+                        log(
+                            LogTag::Transactions,
+                            "BATCH",
+                            &format!(
+                                "✅ Batch fetched {}/{} transactions successfully",
+                                batch_results.len(),
+                                chunk_size
+                            )
+                        );
+
+                        // Process each transaction from the batch results
+                        for (signature, encoded_tx) in batch_results {
+                            if self.debug_enabled {
+                                log(
+                                    LogTag::Transactions,
+                                    "BATCH",
+                                    &format!(
+                                        "Processing transaction from batch: {}",
+                                        &signature[..8]
+                                    )
+                                );
+                            }
+
+                            match
+                                self.process_transaction_from_encoded_data(
+                                    &signature,
+                                    encoded_tx
+                                ).await
+                            {
+                                Ok(transaction) => {
+                                    all_transactions.push(transaction);
+                                    if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "BATCH",
+                                            &format!(
+                                                "✅ Processed transaction: {}",
+                                                &signature[..8]
+                                            )
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    log(
+                                        LogTag::Transactions,
+                                        "WARN",
+                                        &format!(
+                                            "Failed to process transaction {}: {}",
+                                            &signature[..8],
+                                            e
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Transactions,
+                            "ERROR",
+                            &format!("Failed to batch fetch {} transactions: {}", chunk_size, e)
+                        );
+
+                        // Fallback to individual processing if batch fails
+                        log(
+                            LogTag::Transactions,
+                            "FALLBACK",
+                            "Falling back to individual transaction processing"
+                        );
+                        for signature in chunk {
+                            match self.process_transaction_direct(&signature).await {
+                                Ok(transaction) => {
+                                    all_transactions.push(transaction);
+                                }
+                                Err(e) => {
+                                    log(
+                                        LogTag::Transactions,
+                                        "WARN",
+                                        &format!(
+                                            "Failed to process transaction {}: {}",
+                                            &signature[..8],
+                                            e
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Shorter delay between transaction batches
+                if chunk_size == TRANSACTION_DATA_BATCH_SIZE {
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                }
+            }
+
+            // Set the before signature for the next batch
+            if let Some(last_sig) = signatures.last() {
+                before_signature = Some(last_sig.signature.clone());
+            } else {
+                // Empty signatures list - should not happen but handle safely
+                log(LogTag::Transactions, "WARN", "Empty signatures list in gap backfill batch");
+                break;
+            }
+
+            // Batch processing delay
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+
+        log(
+            LogTag::Transactions,
+            "SUCCESS",
+            &format!(
+                "Completed limited fetch: {} new transactions processed | {} cached skipped",
+                all_transactions.len(),
+                total_skipped_cached
+            )
+        );
+
+        Ok(all_transactions)
+    }
+
     /// Display comprehensive swap analysis table with shortened signatures for better readability
     /// Signatures are displayed as first8...last4 format (e.g., "2iPhXfdK...oGiM")
     /// Full signatures are still logged and searchable in transaction data

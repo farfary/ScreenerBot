@@ -175,7 +175,7 @@ pub const AUTO_CLOSE_ATA_AFTER_SELL: bool = true;
 
 use crate::global::is_debug_trader_enabled;
 use crate::logger::{ log, LogTag };
-use crate::positions::calculate_position_pnl;
+use crate::positions_lib::calculate_position_pnl;
 use crate::tokens::{
     discover_tokens_once,
     get_all_tokens_by_liquidity,
@@ -312,7 +312,7 @@ pub fn debug_trader_log(log_type: &str, message: &str) {
 }
 
 /// Debug function: Check if a position should be force-sold due to debug timeout
-pub fn should_debug_force_sell(position: &crate::positions::Position) -> bool {
+pub fn should_debug_force_sell(position: &crate::positions_types::Position) -> bool {
     if !DEBUG_FORCE_SELL_MODE {
         return false;
     }
@@ -987,12 +987,12 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         let mut positions_to_close = Vec::new();
 
         // First, collect open positions data (without holding mutex across await)
-        let open_positions_data_all: Vec<crate::positions::Position> =
+        let open_positions_data_all: Vec<crate::positions_types::Position> =
             crate::positions::get_open_positions().await;
 
         // Filter to only verified-entry, not yet exited positions (preserve previous behavior)
         let mut unverified_count = 0usize;
-        let open_positions_data: Vec<crate::positions::Position> = open_positions_data_all
+        let open_positions_data: Vec<crate::positions_types::Position> = open_positions_data_all
             .into_iter()
             .filter(|p| {
                 if p.transaction_entry_verified {
@@ -1072,7 +1072,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     let now = Utc::now();
 
                     // Calculate P&L for logging and decision making
-                    let (pnl_sol, pnl_percent) = crate::positions::calculate_position_pnl(
+                    let (pnl_sol, pnl_percent) = calculate_position_pnl(
                         &position,
                         Some(current_price)
                     ).await;

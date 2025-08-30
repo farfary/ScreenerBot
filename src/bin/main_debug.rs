@@ -84,6 +84,7 @@ use screenerbot::swaps::{
     JupiterSwapResult,
 };
 use screenerbot::positions;
+use screenerbot::positions_types::Position;
 use screenerbot::entry::get_profit_target;
 
 use spl_associated_token_account::get_associated_token_address;
@@ -5272,7 +5273,7 @@ async fn generate_comprehensive_position_test_report(
     token_mint: &str,
     sol_amount: f64,
     wallet_pubkey: Pubkey,
-    position: &positions::Position
+    position: &Position
 ) {
     println!("\n{}", "=".repeat(80));
     println!("🔍 COMPREHENSIVE POSITION TEST REPORT");

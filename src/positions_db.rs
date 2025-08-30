@@ -19,7 +19,7 @@ use r2d2::{ Pool, PooledConnection };
 use r2d2_sqlite::SqliteConnectionManager;
 
 use crate::logger::{ log, LogTag };
-use crate::positions::Position;
+use crate::positions_types::Position;
 use crate::arguments::is_debug_positions_enabled;
 
 // Static flag to track if database has been initialized (to reduce log noise)
@@ -1968,3 +1968,4 @@ pub async fn get_token_snapshot(
         None => Err("Positions database not initialized".to_string()),
     }
 }
+

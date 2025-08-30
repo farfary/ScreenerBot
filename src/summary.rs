@@ -1,5 +1,7 @@
 use crate::trader::*;
 use crate::positions::*;
+use crate::positions_types::Position;
+use crate::positions_lib::{calculate_position_pnl, calculate_position_total_fees};
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
 use crate::utils::*;
@@ -2138,7 +2140,7 @@ impl RecentTransactionDisplay {
 }
 
 /// Generate position status based on position state
-fn format_position_status(position: &crate::positions::Position) -> String {
+fn format_position_status(position: &crate::positions_types::Position) -> String {
     // Check if position is verified
     let entry_verified = position.transaction_entry_verified;
     let exit_verified = position.transaction_exit_verified;

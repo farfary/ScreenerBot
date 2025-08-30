@@ -41,11 +41,12 @@ use std::collections::VecDeque;
 use once_cell::sync::Lazy;
 use unicode_width::{ UnicodeWidthChar, UnicodeWidthStr };
 
-use crate::positions::{ get_open_positions, get_closed_positions, calculate_position_pnl };
+use crate::positions::{ get_open_positions, get_closed_positions };
+use crate::positions_lib::calculate_position_pnl;
 use crate::tokens::{ get_pool_service };
 use crate::utils::{ get_sol_balance, get_wallet_address };
 use crate::rpc::get_global_rpc_stats;
-use crate::transactions::get_transaction_stats;
+use crate::transactions::TransactionsManager;
 use crate::transactions_types::TransactionStats;
 use crate::logger::LogTag;
 
@@ -1018,7 +1019,7 @@ impl Dashboard {
         let tx_stats = if
             let Ok(stats) = tokio::time::timeout(
                 Duration::from_millis(100),
-                get_transaction_stats()
+                TransactionsManager::get_transaction_stats()
             ).await
         {
             stats

@@ -8,6 +8,8 @@ pub mod trader;
 pub mod logger;
 pub mod summary;
 pub mod positions;
+pub mod positions_types; // Position type definitions
+pub mod positions_lib; // Position management library
 pub mod tokens;
 pub mod profit;
 pub mod filtering;

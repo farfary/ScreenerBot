@@ -15,7 +15,8 @@
 
 use chrono::Utc;
 use crate::logger::{log, LogTag};
-use crate::positions::{Position, calculate_position_pnl};
+use crate::positions_types::Position;
+use crate::positions_lib::calculate_position_pnl;
 use crate::global::*;
 
 /// ============================= Tunables =============================

@@ -44,6 +44,8 @@ use crate::{
         save_token_snapshot,
         TokenSnapshot,
     },
+    positions_types::Position,
+    positions_lib::{save_position_token_snapshot, get_position_index_by_mint, add_signature_to_index, update_mint_position_index, sync_position_to_database, remove_position_by_signature},
     tokens::{
         dexscreener::get_token_from_mint_global_api,
         rugcheck::RugcheckResponse,
@@ -55,50 +57,7 @@ use serde::{ Deserialize, Serialize };
 use std::{ collections::{ HashMap, HashSet }, sync::{ Arc, LazyLock }, str::FromStr };
 use tokio::{ sync::{ Mutex, RwLock, Notify, OwnedMutexGuard }, time::{ sleep, Duration } };
 
-// ==================== POSITION STRUCTURES ====================
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Position {
-    pub id: Option<i64>, // Database ID - None for new positions
-    pub mint: String,
-    pub symbol: String,
-    pub name: String,
-    pub entry_price: f64,
-    pub entry_time: DateTime<Utc>,
-    pub exit_price: Option<f64>,
-    pub exit_time: Option<DateTime<Utc>>,
-    pub position_type: String, // "buy" or "sell"
-    pub entry_size_sol: f64,
-    pub total_size_sol: f64,
-    pub price_highest: f64,
-    pub price_lowest: f64,
-    // Transaction signatures
-    pub entry_transaction_signature: Option<String>,
-    pub exit_transaction_signature: Option<String>,
-    pub token_amount: Option<u64>, // Amount of tokens bought/sold
-    pub effective_entry_price: Option<f64>, // Actual price from on-chain transaction
-    pub effective_exit_price: Option<f64>, // Actual exit price from on-chain transaction
-    pub sol_received: Option<f64>, // Actual SOL received after sell (lamports converted to SOL)
-    // Profit targets
-    pub profit_target_min: Option<f64>, // Minimum profit target percentage
-    pub profit_target_max: Option<f64>, // Maximum profit target percentage
-    pub liquidity_tier: Option<String>, // Liquidity tier for reference
-    // Verification status
-    pub transaction_entry_verified: bool, // Whether entry transaction is fully verified
-    pub transaction_exit_verified: bool, // Whether exit transaction is fully verified
-    // Fee tracking
-    pub entry_fee_lamports: Option<u64>, // Actual entry transaction fee
-    pub exit_fee_lamports: Option<u64>, // Actual exit transaction fee
-    // Price tracking
-    pub current_price: Option<f64>, // Current market price (updated by monitoring system)
-    pub current_price_updated: Option<DateTime<Utc>>, // When current_price was last updated
-    // Phantom position handling
-    pub phantom_remove: bool,
-    pub phantom_confirmations: u32, // How many times we confirmed zero wallet balance while still open
-    pub phantom_first_seen: Option<DateTime<Utc>>, // When first confirmed phantom
-    pub synthetic_exit: bool, // True if we synthetically closed due to missing exit tx
-    pub closed_reason: Option<String>, // Optional reason for closure (e.g., "synthetic_phantom_closure")
-}
 
 #[derive(Debug)]
 pub struct PositionLockGuard {
@@ -133,7 +92,7 @@ impl Drop for PositionLockGuard {
 // Each shard can be locked independently, allowing concurrent operations
 
 // Core position data with concurrent read access
-static POSITIONS: LazyLock<RwLock<Vec<Position>>> = LazyLock::new(|| { RwLock::new(Vec::new()) });
+pub static POSITIONS: LazyLock<RwLock<Vec<Position>>> = LazyLock::new(|| { RwLock::new(Vec::new()) });
 
 // Verification queue - isolated from position data for fast enqueue/dequeue
 static PENDING_VERIFICATIONS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> = LazyLock::new(|| {
@@ -156,12 +115,12 @@ static EXIT_VERIFICATION_DEADLINES: LazyLock<
 // ==================== CONSTANT-TIME INDEXES ====================
 
 // Phase 2: O(1) signature to mint lookup (eliminates position vector scans)
-static SIG_TO_MINT_INDEX: LazyLock<RwLock<HashMap<String, String>>> = LazyLock::new(|| {
+pub static SIG_TO_MINT_INDEX: LazyLock<RwLock<HashMap<String, String>>> = LazyLock::new(|| {
     RwLock::new(HashMap::new())
 });
 
 // Phase 2: O(1) mint to position vector index lookup
-static MINT_TO_POSITION_INDEX: LazyLock<RwLock<HashMap<String, usize>>> = LazyLock::new(|| {
+pub static MINT_TO_POSITION_INDEX: LazyLock<RwLock<HashMap<String, usize>>> = LazyLock::new(|| {
     RwLock::new(HashMap::new())
 });
 
@@ -257,458 +216,9 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
     }
 }
 
-// ==================== INDEX MAINTENANCE HELPERS ====================
 
-/// Add signature to mint mapping for O(1) lookups
-async fn add_signature_to_index(signature: &str, mint: &str) {
-    let mut index = SIG_TO_MINT_INDEX.write().await;
-    index.insert(signature.to_string(), mint.to_string());
 
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "DEBUG",
-            &format!("📋 Added signature {} -> mint {} to index", signature, mint)
-        );
-    }
-}
 
-/// Remove signature from mint mapping
-async fn remove_signature_from_index(signature: &str) {
-    let mut index = SIG_TO_MINT_INDEX.write().await;
-    index.remove(signature);
-}
-
-/// Update mint to position index (must be called when positions vector changes)
-async fn update_mint_position_index() {
-    let positions = POSITIONS.read().await;
-    let mut index = MINT_TO_POSITION_INDEX.write().await;
-
-    index.clear();
-    for (idx, position) in positions.iter().enumerate() {
-        index.insert(position.mint.clone(), idx);
-    }
-}
-
-/// Get position index by mint (O(1) lookup)
-async fn get_position_index_by_mint(mint: &str) -> Option<usize> {
-    let index = MINT_TO_POSITION_INDEX.read().await;
-    index.get(mint).copied()
-}
-
-/// Get mint by signature (O(1) lookup)
-async fn get_mint_by_signature(signature: &str) -> Option<String> {
-    let index = SIG_TO_MINT_INDEX.read().await;
-    index.get(signature).cloned()
-}
-
-/// Find position by signature using O(1) index lookup
-async fn find_position_by_signature(signature: &str) -> Option<(String, usize)> {
-    // Step 1: Get mint from signature index
-    let mint = get_mint_by_signature(signature).await?;
-
-    // Step 2: Get position index from mint index
-    let position_idx = get_position_index_by_mint(&mint).await?;
-
-    Some((mint, position_idx))
-}
-
-// ==================== TOKEN SNAPSHOT FUNCTIONS ====================
-
-/// Fetch latest token data from APIs and create a snapshot
-async fn fetch_and_create_token_snapshot(
-    position_id: i64,
-    mint: &str,
-    snapshot_type: &str
-) -> Result<TokenSnapshot, String> {
-    let fetch_start = Utc::now();
-
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "SNAPSHOT_FETCH",
-            &format!(
-                "Fetching latest token data for {} snapshot of {}",
-                snapshot_type,
-                safe_truncate(mint, 8)
-            )
-        );
-    }
-
-    // Fetch latest data from DexScreener API
-    let dex_token = match get_token_from_mint_global_api(mint).await {
-        Ok(Some(token)) => Some(token),
-        Ok(None) => {
-            log(
-                LogTag::Positions,
-                "SNAPSHOT_NO_DEX_DATA",
-                &format!("No DexScreener data found for {}", safe_truncate(mint, 8))
-            );
-            None
-        }
-        Err(e) => {
-            log(
-                LogTag::Positions,
-                "SNAPSHOT_DEX_ERROR",
-                &format!("Error fetching DexScreener data for {}: {}", safe_truncate(mint, 8), e)
-            );
-            None
-        }
-    };
-
-    // Fetch latest rugcheck data
-    let rugcheck_data = match get_token_rugcheck_data_safe(mint).await {
-        Ok(Some(data)) => Some(data),
-        Ok(None) => {
-            log(
-                LogTag::Positions,
-                "SNAPSHOT_NO_RUGCHECK",
-                &format!("No rugcheck data found for {}", safe_truncate(mint, 8))
-            );
-            None
-        }
-        Err(e) => {
-            log(
-                LogTag::Positions,
-                "SNAPSHOT_RUGCHECK_ERROR",
-                &format!("Error fetching rugcheck data for {}: {}", safe_truncate(mint, 8), e)
-            );
-            None
-        }
-    };
-
-    // Calculate data freshness score (0-100)
-    let fetch_duration_ms = Utc::now().signed_duration_since(fetch_start).num_milliseconds();
-    let freshness_score = if fetch_duration_ms < 1000 {
-        100 // Very fresh, under 1 second
-    } else if fetch_duration_ms < 5000 {
-        80 // Good, under 5 seconds
-    } else if fetch_duration_ms < 10000 {
-        60 // OK, under 10 seconds
-    } else if fetch_duration_ms < 30000 {
-        40 // Slow, under 30 seconds
-    } else {
-        20 // Very slow, over 30 seconds
-    };
-
-    // Extract DexScreener data
-    let (
-        symbol,
-        name,
-        price_sol,
-        price_usd,
-        price_native,
-        dex_id,
-        pair_address,
-        pair_url,
-        fdv,
-        market_cap,
-        pair_created_at,
-        liquidity_usd,
-        liquidity_base,
-        liquidity_quote,
-        volume_h24,
-        volume_h6,
-        volume_h1,
-        volume_m5,
-        txns_h24_buys,
-        txns_h24_sells,
-        txns_h6_buys,
-        txns_h6_sells,
-        txns_h1_buys,
-        txns_h1_sells,
-        txns_m5_buys,
-        txns_m5_sells,
-        price_change_h24,
-        price_change_h6,
-        price_change_h1,
-        price_change_m5,
-    ) = if let Some(ref token) = dex_token {
-        (
-            Some(token.symbol.clone()),
-            Some(token.name.clone()),
-            token.price_dexscreener_sol,
-            token.price_dexscreener_usd,
-            token.price_dexscreener_sol, // Use SOL price as native
-            token.dex_id.clone(),
-            token.pair_address.clone(),
-            token.pair_url.clone(),
-            token.fdv,
-            token.market_cap,
-            token.created_at.map(|dt| dt.timestamp()),
-            token.liquidity.as_ref().and_then(|l| l.usd),
-            token.liquidity.as_ref().and_then(|l| l.base),
-            token.liquidity.as_ref().and_then(|l| l.quote),
-            token.volume.as_ref().and_then(|v| v.h24),
-            token.volume.as_ref().and_then(|v| v.h6),
-            token.volume.as_ref().and_then(|v| v.h1),
-            token.volume.as_ref().and_then(|v| v.m5),
-            token.txns.as_ref().and_then(|t| t.h24.as_ref().and_then(|h| h.buys)),
-            token.txns.as_ref().and_then(|t| t.h24.as_ref().and_then(|h| h.sells)),
-            token.txns.as_ref().and_then(|t| t.h6.as_ref().and_then(|h| h.buys)),
-            token.txns.as_ref().and_then(|t| t.h6.as_ref().and_then(|h| h.sells)),
-            token.txns.as_ref().and_then(|t| t.h1.as_ref().and_then(|h| h.buys)),
-            token.txns.as_ref().and_then(|t| t.h1.as_ref().and_then(|h| h.sells)),
-            token.txns.as_ref().and_then(|t| t.m5.as_ref().and_then(|h| h.buys)),
-            token.txns.as_ref().and_then(|t| t.m5.as_ref().and_then(|h| h.sells)),
-            token.price_change.as_ref().and_then(|pc| pc.h24),
-            token.price_change.as_ref().and_then(|pc| pc.h6),
-            token.price_change.as_ref().and_then(|pc| pc.h1),
-            token.price_change.as_ref().and_then(|pc| pc.m5),
-        )
-    } else {
-        (
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-    };
-
-    // Extract rugcheck data
-    let (
-        rugcheck_score,
-        rugcheck_score_normalised,
-        rugcheck_rugged,
-        rugcheck_risks_json,
-        rugcheck_mint_authority,
-        rugcheck_freeze_authority,
-        rugcheck_creator,
-        rugcheck_creator_balance,
-        rugcheck_total_holders,
-        rugcheck_total_market_liquidity,
-        rugcheck_total_stable_liquidity,
-        rugcheck_total_lp_providers,
-        rugcheck_lp_locked_pct,
-        rugcheck_lp_locked_usd,
-        rugcheck_transfer_fee_pct,
-        rugcheck_transfer_fee_max_amount,
-        rugcheck_jup_verified,
-        rugcheck_jup_strict,
-        token_uri,
-        token_description,
-        token_image,
-        token_website,
-        token_twitter,
-        token_telegram,
-    ) = if let Some(ref data) = rugcheck_data {
-        let risks_json = if let Some(risks) = &data.risks {
-            match serde_json::to_string(risks) {
-                Ok(json) => Some(json),
-                Err(_) => None,
-            }
-        } else {
-            None
-        };
-
-        let lp_data = data.markets
-            .as_ref()
-            .and_then(|markets| markets.first())
-            .and_then(|market| market.lp.as_ref());
-
-        (
-            data.score,
-            data.score_normalised,
-            data.rugged,
-            risks_json,
-            data.mint_authority.as_ref().and_then(|ma| serde_json::to_string(ma).ok()),
-            data.freeze_authority.as_ref().and_then(|fa| serde_json::to_string(fa).ok()),
-            data.creator.clone(),
-            data.creator_balance.clone(),
-            data.total_holders,
-            data.total_market_liquidity,
-            data.total_stable_liquidity,
-            data.total_lp_providers,
-            lp_data.and_then(|lp| lp.lp_locked_pct),
-            lp_data.and_then(|lp| lp.lp_locked_usd),
-            data.transfer_fee.as_ref().and_then(|tf| tf.pct),
-            data.transfer_fee.as_ref().and_then(|tf| tf.max_amount.clone()),
-            data.verification.as_ref().and_then(|v| v.jup_verified),
-            data.verification.as_ref().and_then(|v| v.jup_strict),
-            data.token_meta.as_ref().and_then(|tm| tm.uri.clone()),
-            data.file_meta.as_ref().and_then(|fm| fm.description.clone()),
-            data.file_meta.as_ref().and_then(|fm| fm.image.clone()),
-            None, // website - extract from verification links if needed
-            None, // twitter - extract from verification links if needed
-            None, // telegram - extract from verification links if needed
-        )
-    } else {
-        (
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-    };
-
-    // Create snapshot
-    let snapshot = TokenSnapshot {
-        id: None,
-        position_id,
-        snapshot_type: snapshot_type.to_string(),
-        mint: mint.to_string(),
-        symbol,
-        name,
-        price_sol,
-        price_usd,
-        price_native,
-        dex_id,
-        pair_address,
-        pair_url,
-        fdv,
-        market_cap,
-        pair_created_at,
-        liquidity_usd,
-        liquidity_base,
-        liquidity_quote,
-        volume_h24,
-        volume_h6,
-        volume_h1,
-        volume_m5,
-        txns_h24_buys,
-        txns_h24_sells,
-        txns_h6_buys,
-        txns_h6_sells,
-        txns_h1_buys,
-        txns_h1_sells,
-        txns_m5_buys,
-        txns_m5_sells,
-        price_change_h24,
-        price_change_h6,
-        price_change_h1,
-        price_change_m5,
-        rugcheck_score,
-        rugcheck_score_normalised,
-        rugcheck_rugged,
-        rugcheck_risks_json,
-        rugcheck_mint_authority,
-        rugcheck_freeze_authority,
-        rugcheck_creator,
-        rugcheck_creator_balance,
-        rugcheck_total_holders,
-        rugcheck_total_market_liquidity,
-        rugcheck_total_stable_liquidity,
-        rugcheck_total_lp_providers,
-        rugcheck_lp_locked_pct,
-        rugcheck_lp_locked_usd,
-        rugcheck_transfer_fee_pct,
-        rugcheck_transfer_fee_max_amount,
-        rugcheck_jup_verified,
-        rugcheck_jup_strict,
-        token_uri,
-        token_description,
-        token_image,
-        token_website,
-        token_twitter,
-        token_telegram,
-        snapshot_time: Utc::now(),
-        api_fetch_time: fetch_start,
-        data_freshness_score: freshness_score,
-    };
-
-    log(
-        LogTag::Positions,
-        "SNAPSHOT_CREATED",
-        &format!(
-            "Created {} snapshot for {} - freshness: {}/100, price: {:?} SOL, rugcheck: {:?}",
-            snapshot_type,
-            safe_truncate(mint, 8),
-            freshness_score,
-            price_sol,
-            rugcheck_score_normalised.or(rugcheck_score)
-        )
-    );
-
-    Ok(snapshot)
-}
-
-/// Save token snapshot for a position
-pub async fn save_position_token_snapshot(
-    position_id: i64,
-    mint: &str,
-    snapshot_type: &str
-) -> Result<(), String> {
-    let _lock = acquire_position_lock(mint).await;
-
-    // Fetch and create snapshot
-    let snapshot = fetch_and_create_token_snapshot(position_id, mint, snapshot_type).await?;
-
-    // Save to database
-    match save_token_snapshot(&snapshot).await {
-        Ok(snapshot_id) => {
-            log(
-                LogTag::Positions,
-                "SNAPSHOT_SAVED",
-                &format!(
-                    "Saved {} snapshot for {} with ID {}",
-                    snapshot_type,
-                    safe_truncate(mint, 8),
-                    snapshot_id
-                )
-            );
-            Ok(())
-        }
-        Err(e) => {
-            log(
-                LogTag::Positions,
-                "SNAPSHOT_SAVE_ERROR",
-                &format!(
-                    "Failed to save {} snapshot for {}: {}",
-                    snapshot_type,
-                    safe_truncate(mint, 8),
-                    e
-                )
-            );
-            Err(e)
-        }
-    }
-}
 
 // ==================== CORE POSITION OPERATIONS ====================
 
@@ -1338,7 +848,7 @@ pub async fn close_position_direct(
             .map(|p| (p.symbol.clone(), p.entry_size_sol, p.entry_price, p.id))
     };
 
-    let (symbol, entry_size_sol, entry_price, position_id) = match position_info {
+    let (symbol, entry_size_sol, entry_price, position_id): (String, f64, f64, Option<i64>) = match position_info {
         Some(info) => info,
         None => {
             cleanup_critical_op().await;
@@ -1679,7 +1189,7 @@ pub async fn close_position_direct(
     let position_idx = get_position_index_by_mint(mint).await;
 
     // 2. Snapshot existing exit signature using minimal read lock
-    let existing_exit_sig = if let Some(idx) = position_idx {
+    let existing_exit_sig: Option<String> = if let Some(idx) = position_idx {
         let positions = POSITIONS.read().await;
         if let Some(position) = positions.get(idx) {
             if
@@ -1698,7 +1208,7 @@ pub async fn close_position_direct(
     };
 
     // 3. Validate existing exit signature (potential RPC) outside any lock
-    if let Some(ref existing_sig) = existing_exit_sig {
+    if let Some(existing_sig) = &existing_exit_sig {
         if let Ok(Some(_)) = get_transaction(existing_sig).await {
             log(
                 LogTag::Positions,
@@ -3517,206 +3027,7 @@ pub async fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
         .collect()
 }
 
-// ==================== P&L CALCULATION ====================
 
-/// Unified profit/loss calculation for both open and closed positions
-/// Uses effective prices and actual token amounts when available
-/// For closed positions with sol_received, uses actual SOL invested vs SOL received
-/// NOTE: sol_received should contain ONLY the SOL from token sale, excluding ATA rent reclaim
-pub async fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
-    // Safety check: validate position has valid entry price
-    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
-    if entry_price <= 0.0 || !entry_price.is_finite() {
-        if is_debug_positions_enabled() {
-            log(
-                LogTag::Positions,
-                "DEBUG",
-                &format!("❌ Invalid entry price for {}: {}", position.symbol, entry_price)
-            );
-        }
-        // Invalid entry price - return neutral P&L to avoid triggering emergency exits
-        return (0.0, 0.0);
-    }
-
-    // For open positions, validate current price if provided
-    if let Some(current) = current_price {
-        if current <= 0.0 || !current.is_finite() {
-            // Invalid current price - return neutral P&L to avoid false emergency signals
-            return (0.0, 0.0);
-        }
-    }
-
-    // For positions with pending exit transactions (closing in progress), use current price for estimation
-    if position.exit_transaction_signature.is_some() && !position.transaction_exit_verified {
-        if let Some(current) = current_price {
-            let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
-            let entry_cost = position.entry_size_sol;
-
-            // Calculate estimated P&L based on current price (closing in progress)
-            if let Some(token_amount) = position.token_amount {
-                let token_decimals_opt = get_token_decimals(&position.mint).await;
-                if let Some(token_decimals) = token_decimals_opt {
-                    let ui_token_amount =
-                        (token_amount as f64) / (10_f64).powi(token_decimals as i32);
-                    let current_value = ui_token_amount * current;
-
-                    // Account for fees (estimated)
-                    let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee|
-                        lamports_to_sol(fee)
-                    );
-                    let estimated_sell_fee = buy_fee;
-                    let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL;
-                    let net_pnl_sol = current_value - entry_cost - total_fees;
-                    let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
-
-                    return (net_pnl_sol, net_pnl_percent);
-                }
-            }
-
-            // Fallback calculation for closing positions
-            let price_change = (current - entry_price) / entry_price;
-            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-            let estimated_sell_fee = buy_fee;
-            let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL;
-            let fee_percent = (total_fees / entry_cost) * 100.0;
-            let net_pnl_percent = price_change * 100.0 - fee_percent;
-            let net_pnl_sol = (net_pnl_percent / 100.0) * entry_cost;
-
-            return (net_pnl_sol, net_pnl_percent);
-        }
-    }
-
-    // For closed positions, prioritize sol_received for most accurate P&L
-    if let (Some(exit_price), Some(sol_received)) = (position.exit_price, position.sol_received) {
-        // Use actual SOL invested vs SOL received for closed positions
-        let sol_invested = position.entry_size_sol;
-
-        // Use actual transaction fees plus profit buffer for P&L calculation
-        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-        let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-        let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer in P&L calculation
-
-        let net_pnl_sol = sol_received - sol_invested - total_fees;
-        let safe_invested = if sol_invested < 0.00001 { 0.00001 } else { sol_invested };
-        let net_pnl_percent = (net_pnl_sol / safe_invested) * 100.0;
-
-        return (net_pnl_sol, net_pnl_percent);
-    }
-
-    // Fallback for closed positions without sol_received (backward compatibility)
-    if let Some(exit_price) = position.exit_price {
-        let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
-        let effective_exit = position.effective_exit_price.unwrap_or(exit_price);
-
-        // For closed positions: actual transaction-based calculation
-        if let Some(token_amount) = position.token_amount {
-            // Get token decimals from cache (async)
-            let token_decimals_opt = get_token_decimals(&position.mint).await;
-
-            // CRITICAL: Skip P&L calculation if decimals are not available
-            let token_decimals = match token_decimals_opt {
-                Some(decimals) => decimals,
-                None => {
-                    log(
-                        LogTag::Positions,
-                        "ERROR",
-                        &format!(
-                            "Cannot calculate P&L for {} - decimals not available, skipping calculation",
-                            position.mint
-                        )
-                    );
-                    return (0.0, 0.0); // Return zero P&L instead of wrong calculation
-                }
-            };
-
-            let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
-            let entry_cost = position.entry_size_sol;
-            let exit_value = ui_token_amount * effective_exit;
-
-            // Account for actual buy + sell fees plus profit buffer
-            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-            let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-            let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
-            let net_pnl_sol = exit_value - entry_cost - total_fees;
-            let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
-
-            return (net_pnl_sol, net_pnl_percent);
-        }
-
-        // Fallback for closed positions without token amount
-        let price_change = (effective_exit - entry_price) / entry_price;
-        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-        let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-        let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
-        let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
-        let net_pnl_percent = price_change * 100.0 - fee_percent;
-        let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
-
-        return (net_pnl_sol, net_pnl_percent);
-    }
-
-    // For open positions, use current price
-    if let Some(current) = current_price {
-        let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
-
-        // For open positions: current value vs entry cost
-        if let Some(token_amount) = position.token_amount {
-            // Get token decimals from cache (async)
-            let token_decimals_opt = get_token_decimals(&position.mint).await;
-
-            // CRITICAL: Skip P&L calculation if decimals are not available
-            let token_decimals = match token_decimals_opt {
-                Some(decimals) => decimals,
-                None => {
-                    log(
-                        LogTag::Positions,
-                        "ERROR",
-                        &format!(
-                            "Cannot calculate P&L for {} - decimals not available, skipping calculation",
-                            position.mint
-                        )
-                    );
-                    return (0.0, 0.0); // Return zero P&L instead of wrong calculation
-                }
-            };
-
-            let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
-            let current_value = ui_token_amount * current;
-            let entry_cost = position.entry_size_sol;
-
-            // Account for actual buy fee (already paid) + estimated sell fee + profit buffer
-            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-            let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
-            let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
-            let net_pnl_sol = current_value - entry_cost - total_fees;
-            let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
-
-            return (net_pnl_sol, net_pnl_percent);
-        }
-
-        // Fallback for open positions without token amount
-        let price_change = (current - entry_price) / entry_price;
-        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-        let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
-        let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
-        let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
-        let net_pnl_percent = price_change * 100.0 - fee_percent;
-        let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
-
-        return (net_pnl_sol, net_pnl_percent);
-    }
-
-    // No price available
-    (0.0, 0.0)
-}
-
-/// Calculate total fees for a position
-pub fn calculate_position_total_fees(position: &Position) -> f64 {
-    // Sum entry and exit fees in SOL (excluding ATA rent from trading costs)
-    let entry_fees_sol = (position.entry_fee_lamports.unwrap_or(0) as f64) / 1_000_000_000.0;
-    let exit_fees_sol = (position.exit_fee_lamports.unwrap_or(0) as f64) / 1_000_000_000.0;
-    entry_fees_sol + exit_fees_sol
-}
 
 // ==================== BACKGROUND TASKS ====================
 
@@ -4514,7 +3825,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                 // Check if entry transaction needs verification
                 if !position.transaction_entry_verified {
                     if let Some(entry_sig) = &position.entry_transaction_signature {
-                        let dup = pending_verifications.contains_key(entry_sig);
+                        let dup = pending_verifications.contains_key(entry_sig.as_str());
                         pending_verifications.insert(entry_sig.clone(), Utc::now());
                         log(
                             LogTag::Positions,
@@ -4533,7 +3844,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                 // Check if exit transaction needs verification
                 if !position.transaction_exit_verified {
                     if let Some(exit_sig) = &position.exit_transaction_signature {
-                        let dup = pending_verifications.contains_key(exit_sig);
+                        let dup = pending_verifications.contains_key(exit_sig.as_str());
                         pending_verifications.insert(exit_sig.clone(), Utc::now());
                         log(
                             LogTag::Positions,
@@ -4690,167 +4001,6 @@ async fn cache_balance(mint: &str, balance: f64) {
     });
 }
 
-// ==================== DATABASE SYNC HELPERS ====================
-
-/// Remove a position by its transaction signature (for cleanup of failed positions)
-async fn remove_position_by_signature(signature: &str) -> Result<(), String> {
-    log(
-        LogTag::Positions,
-        "CLEANUP_START",
-        &format!("🗑️ Starting cleanup of position with signature {}", signature)
-    );
-
-    // Find mint first, then acquire lock
-    let mint_for_lock = {
-        let positions = POSITIONS.read().await;
-        positions
-            .iter()
-            .find(|p| {
-                p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature) ||
-                    p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
-            })
-            .map(|p| p.mint.clone())
-    };
-
-    let mint_for_lock = match mint_for_lock {
-        Some(mint) => mint,
-        None => {
-            log(
-                LogTag::Positions,
-                "CLEANUP_NOT_FOUND",
-                &format!("⚠️ No position found with signature {}", signature)
-            );
-            return Ok(());
-        }
-    };
-
-    let _lock = acquire_position_lock(&mint_for_lock).await;
-
-    let position_to_remove = {
-        let mut positions = POSITIONS.write().await;
-
-        // Find position with matching entry or exit signature
-        let position_index = positions
-            .iter()
-            .position(|p| {
-                p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature) ||
-                    p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
-            });
-
-        if let Some(index) = position_index {
-            let position = positions.remove(index);
-
-            // Update indexes after removal
-            {
-                let mut sig_to_mint = SIG_TO_MINT_INDEX.write().await;
-                let mut mint_to_position = MINT_TO_POSITION_INDEX.write().await;
-
-                // Remove signature mappings for this position
-                if let Some(ref entry_sig) = position.entry_transaction_signature {
-                    sig_to_mint.remove(entry_sig);
-                }
-                if let Some(ref exit_sig) = position.exit_transaction_signature {
-                    sig_to_mint.remove(exit_sig);
-                }
-                mint_to_position.remove(&position.mint);
-
-                // Rebuild position index mapping since positions shifted
-                mint_to_position.clear();
-                for (new_index, pos) in positions.iter().enumerate() {
-                    mint_to_position.insert(pos.mint.clone(), new_index);
-                }
-            }
-
-            log(
-                LogTag::Positions,
-                "CLEANUP_REMOVED",
-                &format!(
-                    "🗑️ Removed position {} from memory (signature: {})",
-                    position.symbol,
-                    signature
-                )
-            );
-
-            // Remove token from priority pool service since position is being cleaned up
-            let mint_for_cleanup = position.mint.clone();
-            tokio::spawn(async move {
-                remove_priority_token(&mint_for_cleanup).await;
-            });
-
-            Some(position)
-        } else {
-            log(
-                LogTag::Positions,
-                "CLEANUP_NOT_FOUND",
-                &format!("⚠️ No position found with signature {}", signature)
-            );
-            None
-        }
-    };
-
-    // Remove from database if position had an ID
-    if let Some(position) = position_to_remove {
-        if let Some(position_id) = position.id {
-            match crate::positions_db::delete_position_by_id(position_id).await {
-                Ok(_) => {
-                    log(
-                        LogTag::Positions,
-                        "CLEANUP_DB_SUCCESS",
-                        &format!(
-                            "🗑️ Removed position {} (ID: {}) from database",
-                            position.symbol,
-                            position_id
-                        )
-                    );
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Positions,
-                        "CLEANUP_DB_ERROR",
-                        &format!(
-                            "❌ Failed to remove position {} (ID: {}) from database: {}",
-                            position.symbol,
-                            position_id,
-                            e
-                        )
-                    );
-                    return Err(format!("Database cleanup failed: {}", e));
-                }
-            }
-        }
-
-        log(
-            LogTag::Positions,
-            "CLEANUP_COMPLETE",
-            &format!(
-                "✅ Successfully cleaned up failed position {} with signature {}",
-                position.symbol,
-                signature
-            )
-        );
-    }
-
-    Ok(())
-}
-
-/// Sync a position between memory and database
-pub async fn sync_position_to_database(position: &Position) -> Result<(), String> {
-    let _lock = acquire_position_lock(&position.mint).await;
-
-    if let Some(_position_id) = position.id {
-        // Update existing position
-        update_position(position).await
-    } else {
-        // Insert new position
-        let new_id = save_position(position).await?;
-        log(
-            LogTag::Positions,
-            "DB_SYNC",
-            &format!("Position synced to database with new ID {}", new_id)
-        );
-        Ok(())
-    }
-}
 
 /// Attempt to recover a position by finding its sell transaction and using full verification flow
 /// This handles cases where tokens were sold but position wasn't properly closed
