@@ -62,16 +62,6 @@ fn is_direction_internal(direction: &TransactionDirection) -> bool {
     matches!(direction, TransactionDirection::Internal)
 }
 
-/// Helper function to safely get signature prefix for logging
-pub fn get_signature_prefix(signature: &str) -> &str {
-    if signature.len() >= 8 { &signature[..8] } else { signature }
-}
-
-/// Helper function to safely get mint address prefix for logging
-fn get_mint_prefix(mint: &str) -> &str {
-    if mint.len() >= 8 { &mint[..8] } else { mint }
-}
-
 // =============================================================================
 // CONFIGURATION CONSTANTS
 // =============================================================================
@@ -621,19 +611,6 @@ pub struct PositionDisplayRow {
     pub duration: String,
 }
 
-/// Helper function to shorten transaction signatures for display
-/// Shows first 8 characters + "..." + last 4 characters
-/// Example: "2iPhXfdKg4VsyPoLpsstHTmXb7VuoetfGSu9s1Ajrk7Xqmt8qEScRFjpynqUUPSKZ4ySrGUajEQnudL3AWPFoGiM"
-/// becomes: "2iPhXfdK...oGiM"
-fn shorten_signature(signature: &str) -> String {
-    if signature.len() <= 16 {
-        signature.to_string()
-    } else {
-        format!("{}...{}", safe_truncate(&signature, 8), 
-                if signature.len() >= 4 { &signature[signature.len() - 4..] } else { signature })
-    }
-}
-
 // =============================================================================
 // TRANSACTIONS MANAGER
 // =============================================================================
@@ -1150,7 +1127,7 @@ impl TransactionsManager {
                     "FAILED_STATE_SAVED",
                     &format!(
                         "Saved failed transaction state for {} to database: {}",
-                        get_signature_prefix(signature),
+                        signature,
                         error
                     )
                 );
@@ -2569,7 +2546,7 @@ impl TransactionsManager {
                             "PERMANENT_FAILURE",
                             &format!(
                                 "Transaction {} failed permanently: {} ({})",
-                                safe_truncate(&transaction.signature, 8),
+                                transaction.signature,
                                 structured_error.error_name,
                                 structured_error.description
                             )
@@ -4419,7 +4396,7 @@ impl TransactionsManager {
                         "DB_FULL_LOAD",
                         &format!(
                             "Loaded full transaction {} with type: {:?}",
-                            get_signature_prefix(signature),
+                            signature,
                             transaction.transaction_type
                         )
                     );
@@ -4430,11 +4407,7 @@ impl TransactionsManager {
                     log(
                         LogTag::Transactions,
                         "DB_ERROR",
-                        &format!(
-                            "Error loading transaction {}: {}",
-                            get_signature_prefix(signature),
-                            e
-                        )
+                        &format!("Error loading transaction {}: {}", signature, e)
                     );
                     None
                 }
@@ -4459,26 +4432,21 @@ impl TransactionsManager {
             return Err(
                 format!(
                     "Transaction {} not confirmed - status: {:?}",
-                    get_signature_prefix(&transaction.signature),
+                    &transaction.signature,
                     transaction.status
                 )
             );
         }
 
         if !transaction.success {
-            return Err(
-                format!(
-                    "Transaction {} failed - cannot analyze",
-                    get_signature_prefix(&transaction.signature)
-                )
-            );
+            return Err(format!("Transaction {} failed - cannot analyze", &transaction.signature));
         }
 
         if transaction.log_messages.is_empty() {
             return Err(
                 format!(
                     "Transaction {} has no log messages - cannot analyze",
-                    get_signature_prefix(&transaction.signature)
+                    &transaction.signature
                 )
             );
         }
@@ -4488,7 +4456,7 @@ impl TransactionsManager {
             "FORCE_ANALYSIS",
             &format!(
                 "Force recalculating analysis for {} (confirmed, successful, {} logs)",
-                get_signature_prefix(&transaction.signature),
+                &transaction.signature,
                 transaction.log_messages.len()
             )
         );
@@ -4521,7 +4489,7 @@ impl TransactionsManager {
             "FORCE_ANALYSIS_COMPLETE",
             &format!(
                 "Completed force analysis for {} - type: {:?}, has_swap: {}, sol_change: {:.9}",
-                get_signature_prefix(&transaction.signature),
+                &transaction.signature,
                 transaction.transaction_type,
                 transaction.swap_analysis.is_some(),
                 transaction.sol_balance_change
@@ -4751,7 +4719,7 @@ impl TransactionsManager {
                 "CONVERT_ATTEMPT",
                 &format!(
                     "Converting {} to SwapPnLInfo - type: {:?}, success: {}, has_swap_analysis: {}",
-                    get_signature_prefix(&transaction.signature),
+                    &transaction.signature,
                     transaction.transaction_type,
                     transaction.success,
                     transaction.swap_analysis.is_some()
@@ -4766,7 +4734,7 @@ impl TransactionsManager {
                     "CONVERT_NOT_SWAP",
                     &format!(
                         "Transaction {} is not a swap transaction - type: {:?}",
-                        get_signature_prefix(&transaction.signature),
+                        &transaction.signature,
                         transaction.transaction_type
                     )
                 );
@@ -4780,7 +4748,7 @@ impl TransactionsManager {
                 "CONVERT_IS_SWAP",
                 &format!(
                     "Transaction {} identified as swap - proceeding with conversion",
-                    get_signature_prefix(&transaction.signature)
+                    &transaction.signature
                 )
             );
         }
@@ -4885,7 +4853,7 @@ impl TransactionsManager {
 
             let token_symbol = transaction.token_symbol
                 .clone()
-                .unwrap_or_else(|| format!("TOKEN_{}", get_mint_prefix(&token_mint)));
+                .unwrap_or_else(|| format!("TOKEN_{}", &token_mint));
 
             let router = self.extract_router_from_transaction(transaction);
             let blockchain_timestamp = if let Some(block_time) = transaction.block_time {
@@ -5351,8 +5319,6 @@ impl TransactionsManager {
                 None => "Unknown".to_string(),
             };
 
-            let shortened_signature = shorten_signature(&swap.signature);
-
             // Apply intuitive sign conventions for final display:
             // SOL: negative for outflow (spent), positive for inflow (received)
             // Token: negative for outflow (sold), positive for inflow (bought)
@@ -5396,6 +5362,13 @@ impl TransactionsManager {
                 format!("{:.9}", price)
             } else {
                 "N/A".to_string()
+            };
+
+            // Shorten signature for table display (keeps full signatures in logs)
+            let shortened_signature = if swap.signature.len() <= 16 {
+                swap.signature.clone()
+            } else {
+                crate::utils::safe_format_signature(&swap.signature)
             };
 
             display_rows.push(SwapDisplayRow {
@@ -5494,7 +5467,6 @@ impl TransactionsManager {
 
             // Use shortened signature for better table readability
             // Full signature is still available in logs and for searching
-            let shortened_signature = shorten_signature(&swap.signature);
 
             // Apply intuitive sign conventions for final display:
             // SOL: negative for outflow (spent), positive for inflow (received)
@@ -5539,6 +5511,13 @@ impl TransactionsManager {
                 format!("{:.9}", price)
             } else {
                 "N/A".to_string()
+            };
+
+            // Shorten signature for table display (keeps full signatures in logs)
+            let shortened_signature = if swap.signature.len() <= 16 {
+                swap.signature.clone()
+            } else {
+                crate::utils::safe_format_signature(&swap.signature)
             };
 
             display_rows.push(SwapDisplayRow {
@@ -6449,7 +6428,7 @@ pub async fn get_priority_transaction(signature: &str) -> Result<Option<Transact
     log(
         LogTag::Transactions,
         "PRIORITY_REQUEST",
-        &format!("Priority transaction request for {}", get_signature_prefix(signature))
+        &format!("Priority transaction request for {}", signature)
     );
 
     // First try global manager with priority flag
@@ -6466,10 +6445,7 @@ pub async fn get_priority_transaction(signature: &str) -> Result<Option<Transact
                 log(
                     LogTag::Transactions,
                     "PRIORITY_GLOBAL_SUCCESS",
-                    &format!(
-                        "Priority request served by global manager for {}",
-                        get_signature_prefix(signature)
-                    )
+                    &format!("Priority request served by global manager for {}", signature)
                 );
                 return Ok(Some(tx));
             }
@@ -6480,7 +6456,7 @@ pub async fn get_priority_transaction(signature: &str) -> Result<Option<Transact
     log(
         LogTag::Transactions,
         "PRIORITY_GLOBAL_MANAGER",
-        &format!("Using global manager for priority request {}", get_signature_prefix(signature))
+        &format!("Using global manager for priority request {}", signature)
     );
 
     // Use global manager instead of creating unauthorized instance
@@ -6499,10 +6475,7 @@ pub async fn get_priority_transaction(signature: &str) -> Result<Option<Transact
                             log(
                                 LogTag::Transactions,
                                 "PRIORITY_SUCCESS",
-                                &format!(
-                                    "Priority transaction {} retrieved from global manager",
-                                    get_signature_prefix(signature)
-                                )
+                                &format!("Priority transaction {} retrieved from global manager", signature)
                             );
                             return Ok(Some(transaction));
                         }
@@ -6513,7 +6486,7 @@ pub async fn get_priority_transaction(signature: &str) -> Result<Option<Transact
                 log(
                     LogTag::Transactions,
                     "PRIORITY_TIMEOUT",
-                    &format!("Priority request timeout for {}", get_signature_prefix(signature))
+                    &format!("Priority request timeout for {}", signature)
                 );
             }
         }
@@ -6522,10 +6495,7 @@ pub async fn get_priority_transaction(signature: &str) -> Result<Option<Transact
     log(
         LogTag::Transactions,
         "PRIORITY_UNAVAILABLE",
-        &format!(
-            "Priority transaction {} not available from global manager",
-            get_signature_prefix(signature)
-        )
+        &format!("Priority transaction {} not available from global manager", signature)
     );
     Ok(None)
 }
@@ -6686,7 +6656,7 @@ pub async fn get_swap_transactions_for_token(
         "FILTER_START",
         &format!(
             "Getting swap transactions for token {} (type: {:?}, limit: {:?})",
-            get_mint_prefix(token_mint),
+            token_mint,
             swap_type,
             limit
         )
@@ -6711,11 +6681,7 @@ pub async fn get_swap_transactions_for_token(
     log(
         LogTag::Transactions,
         "FILTER_SIGNATURES",
-        &format!(
-            "Found {} filtered signatures for token {}",
-            signatures.len(),
-            get_mint_prefix(token_mint)
-        )
+        &format!("Found {} filtered signatures for token {}", signatures.len(), token_mint)
     );
 
     // Convert filtered signatures to SwapPnLInfo
@@ -6747,7 +6713,7 @@ pub async fn get_swap_transactions_for_token(
                     "Processed {}/{} filtered signatures for {}",
                     index + 1,
                     signatures.len(),
-                    get_mint_prefix(token_mint)
+                    token_mint
                 )
             );
         }
@@ -6759,7 +6725,7 @@ pub async fn get_swap_transactions_for_token(
         &format!(
             "Converted {} swap transactions for token {} (from {} signatures)",
             swap_transactions.len(),
-            get_mint_prefix(token_mint),
+            token_mint,
             signatures.len()
         )
     );
@@ -6777,7 +6743,7 @@ pub async fn get_single_transaction_swap_info(
         log(
             LogTag::Transactions,
             "CACHE_HIT",
-            &format!("Using existing transaction data for {}", get_signature_prefix(signature))
+            &format!("Using existing transaction data for {}", signature)
         );
 
         // Convert existing transaction to SwapPnLInfo if it's a swap
@@ -6797,7 +6763,7 @@ pub async fn get_single_transaction_swap_info(
                 "SUCCESS",
                 &format!(
                     "Generated swap info from existing transaction {}: {} tokens at {:.12} SOL",
-                    get_signature_prefix(signature),
+                    signature,
                     swap_info.token_amount,
                     swap_info.calculated_price_sol
                 )
@@ -6807,10 +6773,7 @@ pub async fn get_single_transaction_swap_info(
             log(
                 LogTag::Transactions,
                 "INFO",
-                &format!(
-                    "Existing transaction {} is not a swap transaction",
-                    get_signature_prefix(signature)
-                )
+                &format!("Existing transaction {} is not a swap transaction", signature)
             );
             return Ok(None);
         }
@@ -6820,10 +6783,7 @@ pub async fn get_single_transaction_swap_info(
     log(
         LogTag::Transactions,
         "SINGLE_TX_PROCESS",
-        &format!(
-            "Processing single transaction {} (not in global cache)",
-            get_signature_prefix(signature)
-        )
+        &format!("Processing single transaction {} (not in global cache)", signature)
     );
 
     let wallet_address = load_wallet_address_from_config().await?;
@@ -6837,11 +6797,7 @@ pub async fn get_single_transaction_swap_info(
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!(
-                        "Failed to recalculate transaction {}: {}",
-                        get_signature_prefix(signature),
-                        e
-                    )
+                    &format!("Failed to recalculate transaction {}: {}", signature, e)
                 );
                 return Ok(None);
             }
@@ -6856,11 +6812,7 @@ pub async fn get_single_transaction_swap_info(
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!(
-                            "Failed to cache recalculated transaction {}: {}",
-                            get_signature_prefix(signature),
-                            e
-                        )
+                        &format!("Failed to cache recalculated transaction {}: {}", signature, e)
                     );
                 }
             }
@@ -6877,7 +6829,7 @@ pub async fn get_single_transaction_swap_info(
                     "SUCCESS",
                     &format!(
                         "Generated swap info for single transaction {}: {} tokens at {:.12} SOL",
-                        get_signature_prefix(signature),
+                        signature,
                         swap_info.token_amount,
                         swap_info.calculated_price_sol
                     )
@@ -6887,10 +6839,7 @@ pub async fn get_single_transaction_swap_info(
                 log(
                     LogTag::Transactions,
                     "INFO",
-                    &format!(
-                        "Transaction {} is not a swap transaction",
-                        get_signature_prefix(signature)
-                    )
+                    &format!("Transaction {} is not a swap transaction", signature)
                 );
                 Ok(None)
             }
@@ -6899,7 +6848,7 @@ pub async fn get_single_transaction_swap_info(
             log(
                 LogTag::Transactions,
                 "WARN",
-                &format!("Failed to process transaction {}: {}", get_signature_prefix(signature), e)
+                &format!("Failed to process transaction {}: {}", signature, e)
             );
             Ok(None)
         }
@@ -7799,11 +7748,7 @@ impl TransactionsManager {
 
                     // If not found in post-balances, check pre-balances for tokens that were sold (ATA closed)
                     for pre_balance in pre_balances {
-                        if
-                            let Some(pre_owner) = pre_balance
-                                .get("owner")
-                                .and_then(|v| v.as_str())
-                        {
+                        if let Some(pre_owner) = pre_balance.get("owner").and_then(|v| v.as_str()) {
                             if let Some(mint) = pre_balance.get("mint").and_then(|v| v.as_str()) {
                                 if
                                     pre_owner == wallet_str &&
@@ -7814,14 +7759,14 @@ impl TransactionsManager {
                                         .get("accountIndex")
                                         .and_then(|v| v.as_u64())
                                         .unwrap_or(999);
-                                    
+
                                     let still_exists = post_balances
                                         .iter()
                                         .any(|post| {
-                                            post.get("accountIndex")
-                                                .and_then(|v| v.as_u64()) == Some(account_index)
+                                            post.get("accountIndex").and_then(|v| v.as_u64()) ==
+                                                Some(account_index)
                                         });
-                                    
+
                                     if !still_exists {
                                         return Some(mint.to_string());
                                     }
@@ -7923,11 +7868,7 @@ impl TransactionsManager {
 
                     // If no change found in post-balances, check for tokens that were sold (ATA closed)
                     for pre_balance in pre_balances {
-                        if
-                            let Some(pre_owner) = pre_balance
-                                .get("owner")
-                                .and_then(|v| v.as_str())
-                        {
+                        if let Some(pre_owner) = pre_balance.get("owner").and_then(|v| v.as_str()) {
                             let mint_str = pre_balance
                                 .get("mint")
                                 .and_then(|v| v.as_str())
@@ -7948,8 +7889,8 @@ impl TransactionsManager {
                                 let still_exists = post_balances
                                     .iter()
                                     .any(|post| {
-                                        post.get("accountIndex")
-                                            .and_then(|v| v.as_u64()) == Some(account_index)
+                                        post.get("accountIndex").and_then(|v| v.as_u64()) ==
+                                            Some(account_index)
                                     });
 
                                 if !still_exists {
@@ -8188,10 +8129,10 @@ impl TransactionsManager {
                                         {
                                             match db.get_token_by_mint(mint) {
                                                 Ok(Some(token_info)) => token_info.symbol,
-                                                _ => format!("TOKEN_{}", get_mint_prefix(mint)),
+                                                _ => format!("TOKEN_{}", mint),
                                             }
                                         } else {
-                                            format!("TOKEN_{}", get_mint_prefix(mint))
+                                            format!("TOKEN_{}", mint)
                                         };
 
                                         return (
@@ -8215,10 +8156,10 @@ impl TransactionsManager {
             let token_symbol = if let Some(ref db) = self.token_database {
                 match db.get_token_by_mint(&transfer.mint) {
                     Ok(Some(token_info)) => token_info.symbol,
-                    _ => format!("TOKEN_{}", get_mint_prefix(&transfer.mint)),
+                    _ => format!("TOKEN_{}", &transfer.mint),
                 }
             } else {
-                format!("TOKEN_{}", get_mint_prefix(&transfer.mint))
+                format!("TOKEN_{}", &transfer.mint)
             };
 
             return (transfer.mint.clone(), token_symbol, transfer.amount, None);
@@ -9125,10 +9066,10 @@ impl TransactionsManager {
                     &format!(
                         "{} selected mint={} amount={} from={} to={} among {} transfers",
                         &transaction.signature[..8],
-                        get_mint_prefix(&best.mint),
+                        &best.mint,
                         best.amount,
-                        get_signature_prefix(&best.from),
-                        get_signature_prefix(&best.to),
+                        &best.from,
+                        &best.to,
                         transaction.token_transfers.len()
                     )
                 );

@@ -1846,7 +1846,7 @@ fn analyze_and_display_ata_operations(transactions: &[screenerbot::transactions:
                 "ATA_ANALYSIS",
                 &format!(
                     "  {}: {} - Actual: {:.6} SOL, Expected from ATA: {:.6} SOL, Difference: {:.6} SOL",
-                    screenerbot::utils::safe_truncate(&signature, 8),
+                    signature,
                     tx_type,
                     actual_sol,
                     expected_sol,

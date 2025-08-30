@@ -373,16 +373,11 @@ impl BlockchainError {
                     Some(age) if *age > 300 =>
                         format!(
                             "Transaction {} not found after {} minutes - likely failed",
-                            safe_truncate(signature, 8),
+                            signature,
                             age / 60
                         ),
-                    Some(age) =>
-                        format!(
-                            "Transaction {} still processing ({}s)",
-                            safe_truncate(signature, 8),
-                            age
-                        ),
-                    None => format!("Transaction {} not yet indexed", safe_truncate(signature, 8)),
+                    Some(age) => format!("Transaction {} still processing ({}s)", signature, age),
+                    None => format!("Transaction {} not yet indexed", signature),
                 }
             }
             BlockchainError::BlockhashExpired { signature, age_seconds, .. } => {
@@ -405,7 +400,7 @@ impl BlockchainError {
             BlockchainError::InsufficientFunds { signature, required, available } => {
                 format!(
                     "Transaction {} failed: insufficient funds (need {} lamports, have {})",
-                    safe_truncate(signature, 8),
+                    signature,
                     required,
                     available
                 )

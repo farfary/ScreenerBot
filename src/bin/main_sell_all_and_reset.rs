@@ -136,8 +136,6 @@ const DATA_FILES_TO_REMOVE: &[&str] = &[
     "data/positions.db",
 ];
 
-
-
 /// Configuration for retry logic
 const MAX_SELL_RETRIES: u32 = 3;
 const MAX_ATA_CLOSE_RETRIES: u32 = 3;
@@ -171,7 +169,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::System, "INFO", "  - Scan for all token accounts (SPL & Token-2022)");
     if !dry_run {
         log(LogTag::System, "INFO", "  - Sell ALL tokens for SOL with retry logic");
-        log(LogTag::System, "INFO", "  - Close all Associated Token Accounts (ATAs) with retry logic");
+        log(
+            LogTag::System,
+            "INFO",
+            "  - Close all Associated Token Accounts (ATAs) with retry logic"
+        );
         log(LogTag::System, "INFO", "  - Reclaim rent SOL from closed ATAs");
         log(LogTag::System, "INFO", "  - Delete specific bot data files to reset the system");
     } else {
@@ -210,7 +212,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(balance) => {
             log(LogTag::System, "BALANCE", &format!("Initial SOL balance: {:.6} SOL", balance));
             balance
-        },
+        }
         Err(e) => {
             log(LogTag::System, "ERROR", &format!("Failed to get initial SOL balance: {}", e));
             return Err(Box::new(e) as Box<dyn std::error::Error>);
@@ -299,7 +301,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 4: Close all ATAs with retry logic
     let (successful_closes, failed_closes) = if !token_accounts.is_empty() {
-        close_all_atas_with_retry(&token_accounts, &successfully_sold_mints, &wallet_address, dry_run).await
+        close_all_atas_with_retry(
+            &token_accounts,
+            &successfully_sold_mints,
+            &wallet_address,
+            dry_run
+        ).await
     } else {
         (0, 0)
     };
@@ -307,7 +314,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Check balance after ATA closing
     if successful_closes > 0 || failed_closes > 0 {
         if let Err(e) = check_comprehensive_balance(&wallet_address, "AFTER_ATA_CLOSING").await {
-            log(LogTag::System, "WARNING", &format!("Post-ATA-closing balance check failed: {}", e));
+            log(
+                LogTag::System,
+                "WARNING",
+                &format!("Post-ATA-closing balance check failed: {}", e)
+            );
         }
     }
 
@@ -617,13 +628,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 log(
                     LogTag::System,
                     "BALANCE_CHANGE",
-                    &format!("SOL balance increased by {:.6} SOL (from {:.6} to {:.6})", sol_change, initial_sol_balance, balance)
+                    &format!(
+                        "SOL balance increased by {:.6} SOL (from {:.6} to {:.6})",
+                        sol_change,
+                        initial_sol_balance,
+                        balance
+                    )
                 );
             } else if sol_change < 0.0 {
                 log(
                     LogTag::System,
                     "BALANCE_CHANGE",
-                    &format!("SOL balance decreased by {:.6} SOL (from {:.6} to {:.6})", -sol_change, initial_sol_balance, balance)
+                    &format!(
+                        "SOL balance decreased by {:.6} SOL (from {:.6} to {:.6})",
+                        -sol_change,
+                        initial_sol_balance,
+                        balance
+                    )
                 );
             } else {
                 log(
@@ -633,7 +654,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
             balance
-        },
+        }
         Err(e) => {
             log(LogTag::System, "ERROR", &format!("Failed to get final SOL balance: {}", e));
             initial_sol_balance
@@ -759,7 +780,11 @@ async fn sell_single_token_with_retry(
         log(
             LogTag::System,
             "DRY_SELL",
-            &format!("Would sell {} raw units of {}", account.balance, safe_truncate(&account.mint, 8))
+            &format!(
+                "Would sell {} raw units of {}",
+                account.balance,
+                safe_truncate(&account.mint, 8)
+            )
         );
         return (account.mint.clone(), true, None);
     }
@@ -779,7 +804,12 @@ async fn sell_single_token_with_retry(
         log(
             LogTag::System,
             "SELL_ATTEMPT",
-            &format!("Sell attempt {} of {} for token {}", attempt, MAX_SELL_RETRIES, safe_truncate(&account.mint, 8))
+            &format!(
+                "Sell attempt {} of {} for token {}",
+                attempt,
+                MAX_SELL_RETRIES,
+                safe_truncate(&account.mint, 8)
+            )
         );
 
         match attempt_single_sell(account).await {
@@ -791,11 +821,16 @@ async fn sell_single_token_with_retry(
                 log(
                     LogTag::System,
                     "SELL_ATTEMPT_FAILED",
-                    &format!("Sell attempt {} failed for {}: {}", attempt, safe_truncate(&account.mint, 8), error_msg)
+                    &format!(
+                        "Sell attempt {} failed for {}: {}",
+                        attempt,
+                        safe_truncate(&account.mint, 8),
+                        error_msg
+                    )
                 );
 
                 if attempt < MAX_SELL_RETRIES {
-                    let delay = Duration::from_millis(RETRY_DELAY_MS * attempt as u64);
+                    let delay = Duration::from_millis(RETRY_DELAY_MS * (attempt as u64));
                     log(
                         LogTag::System,
                         "SELL_RETRY_DELAY",
@@ -806,7 +841,11 @@ async fn sell_single_token_with_retry(
                     log(
                         LogTag::System,
                         "SELL_FAILED",
-                        &format!("All sell attempts failed for {}: {}", safe_truncate(&account.mint, 8), error_msg)
+                        &format!(
+                            "All sell attempts failed for {}: {}",
+                            safe_truncate(&account.mint, 8),
+                            error_msg
+                        )
                     );
                     return (account.mint.clone(), false, Some(error_msg));
                 }
@@ -822,8 +861,9 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
     let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
 
     // Double-check balance before selling
-    let actual_balance = get_token_balance(&wallet_address, &account.mint).await
-        .map_err(|e| format!("Failed to get token balance: {}", e))?;
+    let actual_balance = get_token_balance(&wallet_address, &account.mint).await.map_err(|e|
+        format!("Failed to get token balance: {}", e)
+    )?;
 
     if actual_balance == 0 {
         return Err("Token balance is zero, cannot sell".to_string());
@@ -848,7 +888,7 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
         symbol: format!("TOKEN_{}", safe_truncate(&account.mint, 8)),
         name: format!("Unknown Token {}", safe_truncate(&account.mint, 8)),
         chain: "solana".to_string(),
-        
+
         // Set all optional fields to defaults
         logo_url: None,
         coingecko_id: None,
@@ -898,11 +938,13 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
             .map(|lamports| (lamports as f64) / 1_000_000_000.0)
             .unwrap_or(0.0);
 
-        Ok(format!(
-            "Successfully sold {} for {:.6} SOL",
-            safe_truncate(&account.mint, 8),
-            sol_amount
-        ))
+        Ok(
+            format!(
+                "Successfully sold {} for {:.6} SOL",
+                safe_truncate(&account.mint, 8),
+                sol_amount
+            )
+        )
     } else {
         Err(swap_result.error.unwrap_or_else(|| "Unknown swap error".to_string()))
     }
@@ -962,7 +1004,12 @@ async fn close_all_atas_with_retry(
             let successfully_sold_mints = successfully_sold_mints.clone();
             async move {
                 let _permit = semaphore.acquire().await.unwrap();
-                close_single_ata_with_retry(&account, &successfully_sold_mints, &wallet_address, dry_run).await
+                close_single_ata_with_retry(
+                    &account,
+                    &successfully_sold_mints,
+                    &wallet_address,
+                    dry_run
+                ).await
             }
         })
         .buffer_unordered(3) // Process up to 3 concurrent ATA closes
@@ -980,11 +1027,7 @@ async fn close_all_atas_with_retry(
     log(
         LogTag::System,
         "ATA_SUMMARY",
-        &format!(
-            "ATA cleanup completed: {} success, {} failed",
-            successful_closes,
-            failed_closes
-        )
+        &format!("ATA cleanup completed: {} success, {} failed", successful_closes, failed_closes)
     );
 
     (successful_closes, failed_closes)
@@ -1020,7 +1063,12 @@ async fn close_single_ata_with_retry(
         log(
             LogTag::System,
             "ATA_ATTEMPT",
-            &format!("ATA close attempt {} of {} for token {}", attempt, MAX_ATA_CLOSE_RETRIES, safe_truncate(&account.mint, 8))
+            &format!(
+                "ATA close attempt {} of {} for token {}",
+                attempt,
+                MAX_ATA_CLOSE_RETRIES,
+                safe_truncate(&account.mint, 8)
+            )
         );
 
         match attempt_single_ata_close(&account.mint, wallet_address, recently_sold).await {
@@ -1031,7 +1079,7 @@ async fn close_single_ata_with_retry(
                     &format!(
                         "Successfully closed ATA for {}. TX: {}",
                         safe_truncate(&account.mint, 8),
-                        safe_truncate(&signature, 8)
+                        signature
                     )
                 );
                 return (account.mint.clone(), true, Some(signature));
@@ -1040,11 +1088,16 @@ async fn close_single_ata_with_retry(
                 log(
                     LogTag::System,
                     "ATA_ATTEMPT_FAILED",
-                    &format!("ATA close attempt {} failed for {}: {}", attempt, safe_truncate(&account.mint, 8), error_msg)
+                    &format!(
+                        "ATA close attempt {} failed for {}: {}",
+                        attempt,
+                        safe_truncate(&account.mint, 8),
+                        error_msg
+                    )
                 );
 
                 if attempt < MAX_ATA_CLOSE_RETRIES {
-                    let delay = Duration::from_millis(RETRY_DELAY_MS * attempt as u64);
+                    let delay = Duration::from_millis(RETRY_DELAY_MS * (attempt as u64));
                     log(
                         LogTag::System,
                         "ATA_RETRY_DELAY",
@@ -1055,7 +1108,11 @@ async fn close_single_ata_with_retry(
                     log(
                         LogTag::System,
                         "ATA_FAILED",
-                        &format!("All ATA close attempts failed for {}: {}", safe_truncate(&account.mint, 8), error_msg)
+                        &format!(
+                            "All ATA close attempts failed for {}: {}",
+                            safe_truncate(&account.mint, 8),
+                            error_msg
+                        )
                     );
                     return (account.mint.clone(), false, None);
                 }
@@ -1074,7 +1131,7 @@ async fn attempt_single_ata_close(
 ) -> Result<String, String> {
     // Verify the ATA actually exists before trying to close it
     let rpc_client = get_rpc_client();
-    
+
     match rpc_client.get_associated_token_account(wallet_address, mint).await {
         Ok(ata_address) => {
             // Double-check that the account still exists with fresh RPC data
@@ -1107,13 +1164,17 @@ async fn attempt_single_ata_close(
     // Use the library function to close the ATA
     match close_token_account_with_context(mint, wallet_address, recently_sold).await {
         Ok(signature) => Ok(signature),
-        Err(e) => Err(e.to_string())
+        Err(e) => Err(e.to_string()),
     }
 }
 
 /// Check comprehensive balance before and after operations
 async fn check_comprehensive_balance(wallet_address: &str, stage: &str) -> Result<(), String> {
-    log(LogTag::System, "BALANCE_CHECK", &format!("Checking comprehensive balance at stage: {}", stage));
+    log(
+        LogTag::System,
+        "BALANCE_CHECK",
+        &format!("Checking comprehensive balance at stage: {}", stage)
+    );
 
     // Check SOL balance
     match get_sol_balance(wallet_address).await {
@@ -1132,17 +1193,30 @@ async fn check_comprehensive_balance(wallet_address: &str, stage: &str) -> Resul
     // Check token accounts
     match get_all_token_accounts(wallet_address).await {
         Ok(token_accounts) => {
-            let non_zero_accounts = token_accounts.iter().filter(|a| a.balance > 0).count();
+            let non_zero_accounts = token_accounts
+                .iter()
+                .filter(|a| a.balance > 0)
+                .count();
             log(
                 LogTag::System,
                 "BALANCE_TOKENS",
-                &format!("{}: Found {} token accounts, {} with non-zero balance", stage, token_accounts.len(), non_zero_accounts)
+                &format!(
+                    "{}: Found {} token accounts, {} with non-zero balance",
+                    stage,
+                    token_accounts.len(),
+                    non_zero_accounts
+                )
             );
 
             if is_debug_ata_enabled() && !token_accounts.is_empty() {
                 log(LogTag::System, "DEBUG", &format!("Token accounts at {}:", stage));
-                for account in token_accounts.iter().take(10) { // Show max 10 to avoid spam
-                    let token_program = if account.is_token_2022 { "Token-2022" } else { "SPL Token" };
+                for account in token_accounts.iter().take(10) {
+                    // Show max 10 to avoid spam
+                    let token_program = if account.is_token_2022 {
+                        "Token-2022"
+                    } else {
+                        "SPL Token"
+                    };
                     log(
                         LogTag::System,
                         "DEBUG",
@@ -1155,12 +1229,20 @@ async fn check_comprehensive_balance(wallet_address: &str, stage: &str) -> Resul
                     );
                 }
                 if token_accounts.len() > 10 {
-                    log(LogTag::System, "DEBUG", &format!("  ... and {} more accounts", token_accounts.len() - 10));
+                    log(
+                        LogTag::System,
+                        "DEBUG",
+                        &format!("  ... and {} more accounts", token_accounts.len() - 10)
+                    );
                 }
             }
         }
         Err(e) => {
-            log(LogTag::System, "ERROR", &format!("Failed to get token accounts at {}: {}", stage, e));
+            log(
+                LogTag::System,
+                "ERROR",
+                &format!("Failed to get token accounts at {}: {}", stage, e)
+            );
         }
     }
 
