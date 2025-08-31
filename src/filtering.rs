@@ -1817,15 +1817,17 @@ pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, 
     let (tokens_to_process, pre_filtered_rejected) = if tokens.len()
         > MAX_TOKENS_FOR_DETAILED_FILTERING
     {
-        log(
-            LogTag::Filtering,
-            "PERFORMANCE",
-            &format!(
-                "⚡ Large token set detected: {} tokens. Limiting to top {} by liquidity to prevent timeout",
-                tokens.len(),
-                MAX_TOKENS_FOR_DETAILED_FILTERING
-            )
-        );
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "PERFORMANCE",
+                &format!(
+                    "⚡ Large token set detected: {} tokens. Limiting to top {} by liquidity to prevent timeout",
+                    tokens.len(),
+                    MAX_TOKENS_FOR_DETAILED_FILTERING
+                )
+            );
+        }
 
         // Sort by liquidity (highest first) and take top tokens
         let mut sorted_tokens = tokens.to_vec();
@@ -1852,7 +1854,8 @@ pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, 
             })
             .collect();
 
-        log(
+        if is_debug_filtering_enabled() {
+            log(
             LogTag::Filtering,
             "PERFORMANCE",
             &format!(
@@ -1861,6 +1864,7 @@ pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, 
                 excluded_tokens.len()
             )
         );
+        }
 
         (top_tokens, excluded_tokens)
     } else {

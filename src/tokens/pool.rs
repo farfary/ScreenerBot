@@ -1198,15 +1198,17 @@ impl PoolPriceService {
             actually_added += 1;
         }
 
-        log(
-            LogTag::Pool,
-            "WATCHLIST_BATCH_ADD",
-            &format!(
-                "Added {} tokens to watchlist (size: {})",
-                actually_added,
-                watchlist.len()
-            ),
-        );
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "WATCHLIST_BATCH_ADD",
+                &format!(
+                    "Added {} tokens to watchlist (size: {})",
+                    actually_added,
+                    watchlist.len()
+                ),
+            );
+        }
     }
 
     /// Get current priority tokens

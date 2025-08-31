@@ -1,6 +1,6 @@
 // Token database and rugcheck persistence module.
 // NOTE: Legacy in-memory PriceCache removed in favor of TokenPriceService (price.rs).
-use crate::global::TOKENS_DATABASE;
+use crate::global::{is_debug_monitor_enabled, TOKENS_DATABASE};
 use crate::logger::{log, LogTag};
 use crate::tokens::types::*;
 use chrono::{DateTime, Utc};
@@ -657,14 +657,16 @@ impl TokenDatabase {
                                 );
                             }
 
-                            log(
-                                LogTag::System,
-                                "CLEANUP",
-                                &format!(
+                            if is_debug_monitor_enabled() {
+                                log(
+                                    LogTag::System,
+                                    "CLEANUP",
+                                    &format!(
                                     "Deleted stale low liquidity token: {} ({}) - last updated: {}",
                                     symbol, mint, last_updated
                                 ),
-                            );
+                                );
+                            }
                         }
                     }
                     Err(e) => {

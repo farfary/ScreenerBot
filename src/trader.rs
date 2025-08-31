@@ -39,7 +39,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 3;
+pub const MAX_OPEN_POSITIONS: usize = 1;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
@@ -71,7 +71,7 @@ pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 pub const DEBUG_FORCE_SELL_MODE: bool = true;
 
 /// Debug mode: Force sell timeout in seconds
-pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 45.0;
+pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 20.0;
 
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding
@@ -525,21 +525,23 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
     };
 
     // 3. Log filtering statistics
-    log(
-        LogTag::Trader,
-        "FILTER_STATS",
-        &format!(
-            "Token filtering: {}/{} passed ({:.1}% pass rate) - processed {} tokens",
-            eligible_tokens.len(),
-            tokens.len(),
-            if tokens.len() > 0 {
-                ((eligible_tokens.len() as f64) / (tokens.len() as f64)) * 100.0
-            } else {
-                0.0
-            },
-            tokens.len()
-        ),
-    );
+    if is_debug_trader_enabled() {
+        log(
+            LogTag::Trader,
+            "FILTER_STATS",
+            &format!(
+                "Token filtering: {}/{} passed ({:.1}% pass rate) - processed {} tokens",
+                eligible_tokens.len(),
+                tokens.len(),
+                if tokens.len() > 0 {
+                    ((eligible_tokens.len() as f64) / (tokens.len() as f64)) * 100.0
+                } else {
+                    0.0
+                },
+                tokens.len()
+            ),
+        );
+    }
 
     // 4. Log transaction activity statistics (debug mode)
     if is_debug_trader_enabled() {
