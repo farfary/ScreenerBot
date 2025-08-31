@@ -196,6 +196,16 @@ pub fn is_run_enabled() -> bool {
     has_arg("--run")
 }
 
+/// Clear all mode - clears all data and resets the system
+pub fn is_clear_all_enabled() -> bool {
+    has_arg("--clear-all")
+}
+
+/// Positions sell all mode - sells all open positions
+pub fn is_positions_sell_all_enabled() -> bool {
+    has_arg("--positions-sell-all")
+}
+
 // =============================================================================
 // HELP SYSTEM
 // =============================================================================
@@ -207,10 +217,10 @@ pub fn print_help() {
     println!("USAGE:");
     println!("    screenerbot [FLAGS]");
     println!();
-    println!("REQUIRED FLAGS:");
-    println!("    --run                     Enable bot execution (required to start trading)");
-    println!();
     println!("CORE FLAGS:");
+    println!("    --run                     Enable bot execution (required to start trading)");
+    println!("    --clear-all               Clear all data and reset the system");
+    println!("    --positions-sell-all      Sell all open positions");
     println!("    --help, -h                Show this help message");
     println!("    --dry-run                 Simulate trading without executing transactions");
     println!("    --dashboard               Enable terminal UI mode");
@@ -244,6 +254,8 @@ pub fn print_help() {
     println!("    screenerbot --run --dashboard               # Start bot with terminal UI");
     println!("    screenerbot --run --summary                 # Start bot with console summary");
     println!("    screenerbot --run --debug-trader --dry-run  # Debug trader with simulation");
+    println!("    screenerbot --clear-all                     # Clear all data and reset");
+    println!("    screenerbot --positions-sell-all            # Sell all open positions");
     println!("    screenerbot --help                          # Show this help");
     println!();
     println!("For more information, visit: https://github.com/farfary/ScreenerBot");
@@ -346,6 +358,12 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     }
     if is_dashboard_enabled() {
         modes.push("dashboard");
+    }
+    if is_clear_all_enabled() {
+        modes.push("clear-all");
+    }
+    if is_positions_sell_all_enabled() {
+        modes.push("positions-sell-all");
     }
 
     modes

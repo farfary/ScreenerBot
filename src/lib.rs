@@ -16,6 +16,7 @@ pub mod positions_lib; // Position management library
 pub mod positions_types; // Position type definitions
 pub mod profit;
 pub mod rpc;
+pub mod run;
 pub mod summary;
 pub mod swaps;
 pub mod tokens;
@@ -26,4 +27,4 @@ pub mod transactions_debug; // Transaction debugging utilities
 pub mod transactions_lib; // Transaction analysis library
 pub mod transactions_types; // Transaction type definitions
 pub mod utils;
-pub mod wallet; // Wallet balance monitoring
+pub mod wallet; // Wallet balance monitoring // Bot execution module

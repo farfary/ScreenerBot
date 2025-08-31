@@ -125,7 +125,7 @@ const MINUTES_PER_SECOND: i64 = 60; // Time conversion
 // 📦 PRICE HISTORY FRESHNESS SAFEGUARDS (HARDCODED MINIMUM REQUIREMENTS)
 // ============================================================================
 // Hardcoded minimum price points required before allowing any entry
-const MIN_PRICE_POINTS_REQUIRED: usize = 10; // MINIMUM 30 price points before entry
+const MIN_PRICE_POINTS_REQUIRED: usize = 5; // MINIMUM 30 price points before entry
 const HISTORY_MAX_POINT_AGE_SEC: i64 = 1800; // Extended to 30m for more flexibility
 const HISTORY_MIN_POINTS_60S: usize = 0; // NO REQUIREMENT - allow fresh tokens
 const HISTORY_MIN_POINTS_300S: usize = 0; // NO REQUIREMENT - allow fresh tokens
