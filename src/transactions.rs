@@ -1077,23 +1077,23 @@ pub async fn get_global_transaction_manager() -> Option<std::sync::Arc<tokio::sy
 }
 
 /// Get transaction by signature (for positions.rs integration) - cache-first approach with status validation
-/// CRITICAL: Only returns transactions that are in Finalized or Confirmed status
-/// Pending/Failed transactions trigger fresh RPC fetch or return None
+/// CRITICAL: Only returns transactions that are in Finalized or Confirmed status with complete analysis
+/// This is the single function that handles ALL transaction requests properly
 pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, String> {
-    // Use global manager and database only
     let debug = is_debug_transactions_enabled();
     if debug {
         log(LogTag::Transactions, "GET_TX", &format!("{}", &signature[..8]));
     }
 
     if let Some(global) = get_global_transaction_manager().await {
-        // Add timeout to prevent hanging on slow lock acquisition (similar to priority transactions)
-        match tokio::time::timeout(Duration::from_secs(10), global.lock()).await {
-            Ok(manager_guard) => {
-                if let Some(manager) = manager_guard.as_ref() {
+        // Wait for manager with reasonable timeout to avoid hanging
+        match tokio::time::timeout(Duration::from_secs(15), global.lock()).await {
+            Ok(mut manager_guard) => {
+                if let Some(manager) = manager_guard.as_mut() {
                     if let Some(db) = &manager.transaction_database {
+                        // Step 1: Check if transaction exists in database
                         if let Some(raw) = db.get_raw_transaction(signature).await? {
-                            // Build Transaction skeleton and recalc analysis
+                            // Build Transaction skeleton from database
                             let mut tx = Transaction {
                                 signature: raw.signature.clone(),
                                 slot: raw.slot,
@@ -1141,63 +1141,199 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                 cached_analysis: None,
                             };
 
-                            // Always try to recalculate analysis for complete transaction data
-                            match tokio::time::timeout(Duration::from_secs(2), global.lock()).await {
-                                Ok(mut guard) => {
-                                    if let Some(manager_mut) = guard.as_mut() {
-                                        let _ = manager_mut.recalculate_transaction_analysis(
-                                            &mut tx
-                                        ).await;
+                            // Step 2: Check if transaction needs fresh analysis or blockchain update
+                            let needs_fresh_analysis =
+                                // Transaction is not finalized/confirmed
+                                !matches!(
+                                    tx.status,
+                                    TransactionStatus::Finalized | TransactionStatus::Confirmed
+                                ) ||
+                                // Transaction was successful but has no raw data (incomplete)
+                                (tx.success && tx.raw_transaction_data.is_none()) ||
+                                // Transaction status is pending (might be finalized now)
+                                matches!(tx.status, TransactionStatus::Pending) ||
+                                // Transaction type is Unknown (incomplete analysis)
+                                matches!(tx.transaction_type, TransactionType::Unknown);
+
+                            if needs_fresh_analysis {
+                                if debug {
+                                    log(
+                                        LogTag::Transactions,
+                                        "FRESH_FETCH_NEEDED",
+                                        &format!(
+                                            "Transaction {} needs fresh analysis - status: {:?}, success: {}, has_raw_data: {}",
+                                            &signature[..8],
+                                            tx.status,
+                                            tx.success,
+                                            tx.raw_transaction_data.is_some()
+                                        )
+                                    );
+                                }
+
+                                // Fetch fresh from blockchain and analyze completely
+                                match manager.process_transaction_direct(signature).await {
+                                    Ok(fresh_tx) => {
                                         if debug {
                                             log(
                                                 LogTag::Transactions,
-                                                "ANALYSIS_COMPLETE",
+                                                "FRESH_ANALYSIS_COMPLETE",
                                                 &format!(
-                                                    "Completed analysis for {} - type: {:?}",
+                                                    "Fresh analysis completed for {} - type: {:?}, status: {:?}",
                                                     &signature[..8],
-                                                    tx.transaction_type
+                                                    fresh_tx.transaction_type,
+                                                    fresh_tx.status
                                                 )
                                             );
                                         }
-                                    }
-                                }
-                                Err(_) => {
-                                    // Manager is busy - return transaction without forced analysis
-                                    // Creating new instances violates architecture - never do this!
-                                    if debug {
-                                        log(
-                                            LogTag::Transactions,
-                                            "MANAGER_BUSY_SKIP",
-                                            &format!(
-                                                "Manager busy - returning transaction {} without force analysis to avoid creating unauthorized instance",
-                                                &signature[..8]
-                                            )
-                                        );
-                                    }
 
-                                    // Transaction will be analyzed later when manager becomes available
-                                    // This preserves architectural integrity
+                                        // Only return if transaction is now finalized/confirmed and successful
+                                        if
+                                            matches!(
+                                                fresh_tx.status,
+                                                TransactionStatus::Finalized |
+                                                    TransactionStatus::Confirmed
+                                            )
+                                        {
+                                            return Ok(Some(fresh_tx));
+                                        } else {
+                                            if debug {
+                                                log(
+                                                    LogTag::Transactions,
+                                                    "FRESH_NOT_FINALIZED",
+                                                    &format!(
+                                                        "Fresh transaction {} still not finalized - status: {:?}",
+                                                        &signature[..8],
+                                                        fresh_tx.status
+                                                    )
+                                                );
+                                            }
+                                            return Ok(None);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        if debug {
+                                            log(
+                                                LogTag::Transactions,
+                                                "FRESH_FETCH_ERROR",
+                                                &format!(
+                                                    "Failed to fetch fresh transaction {}: {}",
+                                                    &signature[..8],
+                                                    e
+                                                )
+                                            );
+                                        }
+                                        return Ok(None);
+                                    }
                                 }
                             }
 
-                            return Ok(Some(tx));
+                            // Step 3: Transaction exists and is finalized/confirmed, but ensure analysis is complete
+                            if manager.recalculate_transaction_analysis(&mut tx).await.is_ok() {
+                                if debug {
+                                    log(
+                                        LogTag::Transactions,
+                                        "ANALYSIS_COMPLETE",
+                                        &format!(
+                                            "Analysis completed for {} - type: {:?}",
+                                            &signature[..8],
+                                            tx.transaction_type
+                                        )
+                                    );
+                                }
+
+                                // Store the updated analysis back to database
+                                if let Err(e) = manager.cache_processed_transaction(&tx).await {
+                                    if debug {
+                                        log(
+                                            LogTag::Transactions,
+                                            "WARN",
+                                            &format!("Failed to update processed transaction in DB: {}", e)
+                                        );
+                                    }
+                                }
+
+                                return Ok(Some(tx));
+                            } else {
+                                if debug {
+                                    log(
+                                        LogTag::Transactions,
+                                        "ANALYSIS_FAILED",
+                                        &format!(
+                                            "Failed to recalculate analysis for {}",
+                                            &signature[..8]
+                                        )
+                                    );
+                                }
+                                return Ok(None);
+                            }
+                        }
+
+                        // Step 4: Transaction not in database, fetch fresh from blockchain
+                        if debug {
+                            log(
+                                LogTag::Transactions,
+                                "NOT_IN_DB",
+                                &format!(
+                                    "Transaction {} not found in database, fetching fresh",
+                                    &signature[..8]
+                                )
+                            );
+                        }
+
+                        match manager.process_transaction(signature).await {
+                            Ok(fresh_tx) => {
+                                if debug {
+                                    log(
+                                        LogTag::Transactions,
+                                        "FRESH_PROCESS_COMPLETE",
+                                        &format!(
+                                            "Fresh process completed for {} - type: {:?}, status: {:?}",
+                                            &signature[..8],
+                                            fresh_tx.transaction_type,
+                                            fresh_tx.status
+                                        )
+                                    );
+                                }
+
+                                // Only return if transaction is finalized/confirmed
+                                if
+                                    matches!(
+                                        fresh_tx.status,
+                                        TransactionStatus::Finalized | TransactionStatus::Confirmed
+                                    )
+                                {
+                                    return Ok(Some(fresh_tx));
+                                } else {
+                                    return Ok(None);
+                                }
+                            }
+                            Err(e) => {
+                                if debug {
+                                    log(
+                                        LogTag::Transactions,
+                                        "FRESH_PROCESS_ERROR",
+                                        &format!(
+                                            "Failed to process fresh transaction {}: {}",
+                                            &signature[..8],
+                                            e
+                                        )
+                                    );
+                                }
+                                return Ok(None);
+                            }
                         }
                     }
                 }
             }
             Err(_) => {
-                // Timeout occurred - DO NOT create temporary manager (architecture violation)
-                log(
-                    LogTag::Transactions,
-                    "LOCK_TIMEOUT",
-                    &format!(
-                        "Global transaction manager busy - returning None for {} to preserve architecture",
-                        &signature[..8]
-                    )
-                );
-
-                // Return None instead of creating unauthorized instance
-                // The caller should retry later when the global manager is available
+                // Manager timeout - return None to trigger retry
+                if debug {
+                    log(
+                        LogTag::Transactions,
+                        "MANAGER_TIMEOUT",
+                        &format!("Manager timeout for {} - caller should retry", &signature[..8])
+                    );
+                }
                 return Ok(None);
             }
         }
