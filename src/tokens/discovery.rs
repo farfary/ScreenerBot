@@ -485,11 +485,13 @@ impl TokenDiscovery {
         use tokio::time::Duration;
 
         // Always log cycle start (visibility even without --debug-discovery)
-        log(
-            LogTag::Discovery,
-            "START",
-            "Starting comprehensive discovery cycle",
-        );
+        if is_debug_discovery_enabled() {
+            log(
+                LogTag::Discovery,
+                "START",
+                "Starting comprehensive discovery cycle",
+            );
+        }
 
         // Mark stats: cycle start (non-blocking)
         if let Some(stats_handle) = DISCOVERY_STATS.get() {
@@ -520,12 +522,14 @@ impl TokenDiscovery {
                 "API_START",
                 "About to fetch from profiles API",
             );
+
+            log(
+                LogTag::Discovery,
+                "DEBUG",
+                "Calling fetch_dexscreener_latest_token_profiles() function...",
+            );
         }
-        log(
-            LogTag::Discovery,
-            "DEBUG",
-            "Calling fetch_dexscreener_latest_token_profiles() function...",
-        );
+        
 
         // Fetch latest token profiles
         match fetch_dexscreener_latest_token_profiles().await {

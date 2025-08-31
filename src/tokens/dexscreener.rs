@@ -57,16 +57,20 @@ impl DexScreenerApi {
 
     /// Initialize the API client
     pub async fn initialize(&mut self) -> Result<(), String> {
-        log(
-            LogTag::Api,
-            "INIT",
-            "Initializing DexScreener API client...",
-        );
-        log(
-            LogTag::Api,
-            "SUCCESS",
-            "DexScreener API client initialized successfully",
-        );
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "INIT",
+                "Initializing DexScreener API client...",
+            );
+        }
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "SUCCESS",
+                "DexScreener API client initialized successfully",
+            );
+        }
         Ok(())
     }
 
@@ -82,11 +86,13 @@ impl DexScreenerApi {
             }
             Ok(None) => None,
             Err(e) => {
-                log(
-                    LogTag::Api,
-                    "ERROR",
-                    &format!("Failed to fetch price for {}: {}", mint, e),
-                );
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "ERROR",
+                        &format!("Failed to fetch price for {}: {}", mint, e),
+                    );
+                }
                 None
             }
         }
@@ -110,7 +116,7 @@ impl DexScreenerApi {
                 }
                 Err(e) => {
                     total_errors += 1;
-                    if total_errors <= 3 {
+                    if total_errors <= 3 && is_debug_api_enabled() {
                         // Only log first 3 errors to avoid spam
                         log(
                             LogTag::Api,
@@ -134,28 +140,32 @@ impl DexScreenerApi {
         let elapsed = start_time.elapsed().as_millis();
 
         if total_errors > 0 {
-            log(
-                LogTag::Api,
-                "WARN",
-                &format!(
-                    "Price batch completed with {} errors: {}/{} tokens in {}ms",
-                    total_errors,
-                    prices.len(),
-                    mints.len(),
-                    elapsed
-                ),
-            );
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "WARN",
+                    &format!(
+                        "Price batch completed with {} errors: {}/{} tokens in {}ms",
+                        total_errors,
+                        prices.len(),
+                        mints.len(),
+                        elapsed
+                    ),
+                );
+            }
         } else {
-            log(
-                LogTag::Api,
-                "SUCCESS",
-                &format!(
-                    "Price batch completed: {}/{} tokens in {}ms",
-                    prices.len(),
-                    mints.len(),
-                    elapsed
-                ),
-            );
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "SUCCESS",
+                    &format!(
+                        "Price batch completed: {}/{} tokens in {}ms",
+                        prices.len(),
+                        mints.len(),
+                        elapsed
+                    ),
+                );
+            }
         }
 
         prices
@@ -246,11 +256,13 @@ impl DexScreenerApi {
                             }
                         } else {
                             parsing_errors += 1;
-                            log(
-                                LogTag::Api,
-                                "WARN",
-                                &format!("Failed to parse token from batch: {}", e),
-                            );
+                            if is_debug_api_enabled() {
+                                log(
+                                    LogTag::Api,
+                                    "WARN",
+                                    &format!("Failed to parse token from batch: {}", e),
+                                );
+                            }
                         }
                     }
                 }
@@ -718,7 +730,9 @@ impl DexScreenerApi {
 
         if !success {
             let error_msg = format!("API request failed with status: {}", response.status());
-            log(LogTag::Api, "ERROR", &error_msg);
+            if is_debug_api_enabled() {
+                log(LogTag::Api, "ERROR", &error_msg);
+            }
             return Err(error_msg);
         }
 
@@ -774,7 +788,9 @@ pub async fn get_token_pairs_from_api(token_address: &str) -> Result<Vec<TokenPa
         Ok(mut api_instance) => api_instance.get_solana_token_pairs(token_address).await,
         Err(_) => {
             // Reduce log level to INFO since timeouts can be normal during shutdown
-            log(LogTag::Api, "INFO", "DexScreener API lock timeout in get_token_pairs_from_api (system may be shutting down)");
+            if is_debug_api_enabled() {
+                log(LogTag::Api, "INFO", "DexScreener API lock timeout in get_token_pairs_from_api (system may be shutting down)");
+            }
             Err("API lock timeout".to_string())
         }
     }
@@ -805,11 +821,13 @@ pub async fn init_dexscreener_api() -> Result<(), String> {
                 api_instance.initialize().await?;
             }
             Err(_) => {
-                log(
-                    LogTag::Api,
-                    "ERROR",
-                    "DexScreener API lock timeout during initialization",
-                );
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "ERROR",
+                        "DexScreener API lock timeout during initialization",
+                    );
+                }
                 return Err("API initialization lock timeout".to_string());
             }
         }
@@ -842,17 +860,21 @@ pub async fn get_token_price_from_global_api(mint: &str) -> Option<f64> {
             match result {
                 Ok(mut api_instance) => api_instance.get_token_price(mint).await,
                 Err(_) => {
-                    log(LogTag::Api, "INFO", "DexScreener API lock timeout in get_token_price_from_global_api (system may be shutting down)");
+                    if is_debug_api_enabled() {
+                        log(LogTag::Api, "INFO", "DexScreener API lock timeout in get_token_price_from_global_api (system may be shutting down)");
+                    }
                     None
                 }
             }
         }
         Err(e) => {
-            log(
-                LogTag::Api,
-                "ERROR",
-                &format!("Failed to get global API client: {}", e),
-            );
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "ERROR",
+                    &format!("Failed to get global API client: {}", e),
+                );
+            }
             None
         }
     }
@@ -867,21 +889,25 @@ pub async fn get_token_from_mint_global_api(mint: &str) -> Result<Option<Token>,
             match result {
                 Ok(mut api_instance) => api_instance.get_token_from_mint(mint).await,
                 Err(_) => {
-                    log(
-                        LogTag::Api,
-                        "ERROR",
-                        "DexScreener API lock timeout in get_token_from_mint_global_api",
-                    );
+                    if is_debug_api_enabled() {
+                        log(
+                            LogTag::Api,
+                            "ERROR",
+                            "DexScreener API lock timeout in get_token_from_mint_global_api",
+                        );
+                    }
                     Err("API lock timeout".to_string())
                 }
             }
         }
         Err(e) => {
-            log(
-                LogTag::Api,
-                "ERROR",
-                &format!("Failed to get global API client: {}", e),
-            );
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "ERROR",
+                    &format!("Failed to get global API client: {}", e),
+                );
+            }
             Err(e)
         }
     }
@@ -896,17 +922,21 @@ pub async fn get_multiple_token_prices_from_global_api(mints: &[String]) -> Hash
             match result {
                 Ok(mut api_instance) => api_instance.get_multiple_token_prices(mints).await,
                 Err(_) => {
-                    log(LogTag::Api, "INFO", "DexScreener API lock timeout in get_multiple_token_prices_from_global_api (system may be shutting down)");
+                    if is_debug_api_enabled() {
+                        log(LogTag::Api, "INFO", "DexScreener API lock timeout in get_multiple_token_prices_from_global_api (system may be shutting down)");
+                    }
                     HashMap::new()
                 }
             }
         }
         Err(e) => {
-            log(
-                LogTag::Api,
-                "ERROR",
-                &format!("Failed to get global API client: {}", e),
-            );
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "ERROR",
+                    &format!("Failed to get global API client: {}", e),
+                );
+            }
             HashMap::new()
         }
     }

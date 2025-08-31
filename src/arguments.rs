@@ -158,6 +158,11 @@ pub fn is_debug_ata_enabled() -> bool {
     has_arg("--debug-ata")
 }
 
+/// System operations debug mode
+pub fn is_debug_system_enabled() -> bool {
+    has_arg("--debug-system")
+}
+
 /// Dry-run mode - simulates trading without executing actual transactions
 pub fn is_dry_run_enabled() -> bool {
     has_arg("--dry-run")
@@ -228,6 +233,7 @@ pub fn print_help() {
     println!("    --debug-summary           Summary module debug mode");
     println!("    --debug-summary-logging   Write summary tables to log file");
     println!("    --debug-swaps             Swap operations debug mode");
+    println!("    --debug-system            System operations debug mode");
     println!("    --debug-trader            Trader module debug mode");
     println!("    --debug-transactions      Transactions module debug mode");
     println!("    --debug-wallet            Wallet operations debug mode");

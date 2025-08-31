@@ -75,7 +75,9 @@ async fn main() {
             .await
             {
                 // Avoid stderr prints in dashboard context; route to file logger
-                log(LogTag::System, "ERROR", &format!("Dashboard error: {}", e));
+                if screenerbot::arguments::is_debug_system_enabled() {
+                    log(LogTag::System, "ERROR", &format!("Dashboard error: {}", e));
+                }
             }
             // Clear global dashboard on exit
             screenerbot::dashboard::clear_global_dashboard();
@@ -103,7 +105,9 @@ async fn main() {
         let shutdown_trigger_os = shutdown_trigger.clone();
         tokio::spawn(async move {
             if tokio::signal::ctrl_c().await.is_ok() {
-                log(LogTag::System, "INFO", "Shutdown signal received (Ctrl+C)");
+                if screenerbot::arguments::is_debug_system_enabled() {
+                    log(LogTag::System, "INFO", "Shutdown signal received (Ctrl+C)");
+                }
                 shutdown_trigger_os.notify_waiters();
             }
         });
@@ -115,17 +119,21 @@ async fn main() {
             "Running in dashboard mode with terminal UI",
         );
     } else {
-        log(LogTag::System, "INFO", "Running in console mode");
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(LogTag::System, "INFO", "Running in console mode");
+        }
     }
 
     // Initialize centralized blacklist system with system/stable tokens
     screenerbot::tokens::initialize_system_stable_blacklist();
 
-    log(
-        LogTag::System,
-        "INFO",
-        "Starting ScreenerBot background tasks",
-    );
+    if screenerbot::arguments::is_debug_system_enabled() {
+        log(
+            LogTag::System,
+            "INFO",
+            "Starting ScreenerBot background tasks",
+        );
+    }
 
     // Emergency shutdown flag (used below after first Ctrl+C)
     let emergency_shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -134,11 +142,13 @@ async fn main() {
     let mut tokens_system = match screenerbot::tokens::initialize_tokens_system().await {
         Ok(system) => system,
         Err(e) => {
-            log(
-                LogTag::System,
-                "ERROR",
-                &format!("Failed to initialize tokens system: {}", e),
-            );
+            if screenerbot::arguments::is_debug_system_enabled() {
+                log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to initialize tokens system: {}", e),
+                );
+            }
             std::process::exit(1);
         }
     };
@@ -146,11 +156,13 @@ async fn main() {
     // Initialize and start pool service for real-time price calculations and history caching
     let pool_service = screenerbot::tokens::pool::init_pool_service();
     pool_service.start_monitoring().await;
-    log(
-        LogTag::System,
-        "INFO",
-        "Pool price service with disk caching initialized and monitoring started",
-    );
+    if screenerbot::arguments::is_debug_system_enabled() {
+        log(
+            LogTag::System,
+            "INFO",
+            "Pool price service with disk caching initialized and monitoring started",
+        );
+    }
 
     let shutdown_tokens = shutdown.clone();
     let _shutdown_pricing = shutdown.clone();
@@ -159,11 +171,13 @@ async fn main() {
     let database = match screenerbot::tokens::TokenDatabase::new() {
         Ok(db) => db,
         Err(e) => {
-            log(
-                LogTag::System,
-                "ERROR",
-                &format!("Failed to create database for rugcheck: {}", e),
-            );
+            if screenerbot::arguments::is_debug_system_enabled() {
+                log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to create database for rugcheck: {}", e),
+                );
+            }
             std::process::exit(1);
         }
     };
@@ -175,19 +189,23 @@ async fn main() {
         {
             Ok(handle) => handle,
             Err(e) => {
-                log(
-                    LogTag::System,
-                    "ERROR",
-                    &format!("Failed to initialize global rugcheck service: {}", e),
-                );
+                if screenerbot::arguments::is_debug_system_enabled() {
+                    log(
+                        LogTag::System,
+                        "ERROR",
+                        &format!("Failed to initialize global rugcheck service: {}", e),
+                    );
+                }
                 std::process::exit(1);
             }
         };
-    log(
-        LogTag::System,
-        "INFO",
-        "Global rugcheck service initialized successfully",
-    );
+    if screenerbot::arguments::is_debug_system_enabled() {
+        log(
+            LogTag::System,
+            "INFO",
+            "Global rugcheck service initialized successfully",
+        );
+    }
 
     // Start token monitoring service for database updates
     let shutdown_monitor = shutdown.clone();
@@ -200,37 +218,45 @@ async fn main() {
         match screenerbot::tokens::monitor::start_token_monitoring(shutdown_monitor).await {
             Ok(handle) => {
                 if let Err(e) = handle.await {
-                    log(
-                        LogTag::System,
-                        "ERROR",
-                        &format!("Token monitoring task failed: {:?}", e),
-                    );
+                    if screenerbot::arguments::is_debug_system_enabled() {
+                        log(
+                            LogTag::System,
+                            "ERROR",
+                            &format!("Token monitoring task failed: {:?}", e),
+                        );
+                    }
                 }
             }
             Err(e) => {
-                log(
-                    LogTag::System,
-                    "ERROR",
-                    &format!("Failed to start token monitoring: {}", e),
-                );
+                if screenerbot::arguments::is_debug_system_enabled() {
+                    log(
+                        LogTag::System,
+                        "ERROR",
+                        &format!("Failed to start token monitoring: {}", e),
+                    );
+                }
             }
         }
-        log(
-            LogTag::System,
-            "INFO",
-            "Token monitoring service task ended",
-        );
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(
+                LogTag::System,
+                "INFO",
+                "Token monitoring service task ended",
+            );
+        }
     });
 
     // Start tokens system background tasks (includes rugcheck service)
     let tokens_handles = match tokens_system.start_background_tasks(shutdown_tokens).await {
         Ok(handles) => handles,
         Err(e) => {
-            log(
-                LogTag::System,
-                "WARN",
-                &format!("Some tokens system tasks failed to start: {}", e),
-            );
+            if screenerbot::arguments::is_debug_system_enabled() {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Some tokens system tasks failed to start: {}", e),
+                );
+            }
             Vec::new()
         }
     };
@@ -238,25 +264,33 @@ async fn main() {
     // Start RPC stats auto-save background service
     let shutdown_rpc_stats = shutdown.clone();
     let rpc_stats_handle = tokio::spawn(async move {
-        log(
-            LogTag::System,
-            "INFO",
-            "RPC stats auto-save service task started",
-        );
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(
+                LogTag::System,
+                "INFO",
+                "RPC stats auto-save service task started",
+            );
+        }
         screenerbot::rpc::start_rpc_stats_auto_save_service(shutdown_rpc_stats).await;
-        log(
-            LogTag::System,
-            "INFO",
-            "RPC stats auto-save service task ended",
-        );
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(
+                LogTag::System,
+                "INFO",
+                "RPC stats auto-save service task ended",
+            );
+        }
     });
 
     // Start ATA cleanup background service
     let shutdown_ata_cleanup = shutdown.clone();
     let ata_cleanup_handle = tokio::spawn(async move {
-        log(LogTag::System, "INFO", "ATA cleanup service task started");
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(LogTag::System, "INFO", "ATA cleanup service task started");
+        }
         screenerbot::ata_cleanup::start_ata_cleanup_service(shutdown_ata_cleanup).await;
-        log(LogTag::System, "INFO", "ATA cleanup service task ended");
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(LogTag::System, "INFO", "ATA cleanup service task ended");
+        }
     });
 
     // Start wallet monitoring background service
@@ -276,37 +310,45 @@ async fn main() {
                     screenerbot::transactions::initialize_global_transaction_manager(wallet_pubkey)
                         .await
                 {
+                    if screenerbot::arguments::is_debug_system_enabled() {
+                        log(
+                            LogTag::System,
+                            "ERROR",
+                            &format!("Failed to initialize global transaction manager: {}", e),
+                        );
+                    }
+                    std::process::exit(1);
+                }
+                if screenerbot::arguments::is_debug_system_enabled() {
+                    log(
+                        LogTag::System,
+                        "INFO",
+                        "Global transaction manager initialized for swap monitoring",
+                    );
+                }
+            }
+            Err(e) => {
+                if screenerbot::arguments::is_debug_system_enabled() {
                     log(
                         LogTag::System,
                         "ERROR",
-                        &format!("Failed to initialize global transaction manager: {}", e),
+                        &format!(
+                            "Failed to load wallet keypair for transaction manager: {}",
+                            e
+                        ),
                     );
-                    std::process::exit(1);
                 }
-                log(
-                    LogTag::System,
-                    "INFO",
-                    "Global transaction manager initialized for swap monitoring",
-                );
-            }
-            Err(e) => {
-                log(
-                    LogTag::System,
-                    "ERROR",
-                    &format!(
-                        "Failed to load wallet keypair for transaction manager: {}",
-                        e
-                    ),
-                );
                 std::process::exit(1);
             }
         },
         Err(e) => {
-            log(
-                LogTag::System,
-                "ERROR",
-                &format!("Failed to read configs for transaction manager: {}", e),
-            );
+            if screenerbot::arguments::is_debug_system_enabled() {
+                log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to read configs for transaction manager: {}", e),
+                );
+            }
             std::process::exit(1);
         }
     }
@@ -314,19 +356,23 @@ async fn main() {
     // Start PositionsManager background service
     let shutdown_positions_manager = shutdown.clone();
     let positions_manager_handle = tokio::spawn(async move {
-        log(
-            LogTag::System,
-            "INFO",
-            "PositionsManager service task started",
-        );
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(
+                LogTag::System,
+                "INFO",
+                "PositionsManager service task started",
+            );
+        }
         let _sender =
             screenerbot::positions::start_positions_manager_service(shutdown_positions_manager)
                 .await;
-        log(
-            LogTag::System,
-            "INFO",
-            "PositionsManager service task ended",
-        );
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(
+                LogTag::System,
+                "INFO",
+                "PositionsManager service task ended",
+            );
+        }
     });
 
     let shutdown_entries = shutdown.clone();
@@ -367,68 +413,86 @@ async fn main() {
     // Start transaction manager background service
     let shutdown_transactions = shutdown.clone();
     let transaction_manager_handle = tokio::spawn(async move {
-        log(
-            LogTag::System,
-            "INFO",
-            "Transaction manager service task started",
-        );
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(
+                LogTag::System,
+                "INFO",
+                "Transaction manager service task started",
+            );
+        }
         screenerbot::transactions::start_transactions_service(shutdown_transactions).await;
-        log(
-            LogTag::System,
-            "INFO",
-            "Transaction manager service task ended",
-        );
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(
+                LogTag::System,
+                "INFO",
+                "Transaction manager service task ended",
+            );
+        }
     });
 
     if dashboard_mode {
-        log(
-            LogTag::System,
-            "INFO",
-            "Waiting for exit (q/Esc/Ctrl+C) to shutdown",
-        );
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(
+                LogTag::System,
+                "INFO",
+                "Waiting for exit (q/Esc/Ctrl+C) to shutdown",
+            );
+        }
         // Wait until dashboard requests shutdown or OS Ctrl+C arrives
         shutdown_trigger.notified().await;
         emergency_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
-        log(
-            LogTag::System,
-            "INFO",
-            "Shutdown requested, initiating graceful shutdown...",
-        );
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(
+                LogTag::System,
+                "INFO",
+                "Shutdown requested, initiating graceful shutdown...",
+            );
+        }
     } else {
-        log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
+        }
         // Set up Ctrl+C signal handler with better error handling
         match tokio::signal::ctrl_c().await {
             Ok(_) => {
                 emergency_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
-                log(
-                    LogTag::System,
-                    "INFO",
-                    "Shutdown signal received, initiating graceful shutdown...",
-                );
+                if screenerbot::arguments::is_debug_system_enabled() {
+                    log(
+                        LogTag::System,
+                        "INFO",
+                        "Shutdown signal received, initiating graceful shutdown...",
+                    );
+                }
             }
             Err(e) => {
-                log(
-                    LogTag::System,
-                    "ERROR",
-                    &format!("Failed to listen for shutdown signal: {}", e),
-                );
+                if screenerbot::arguments::is_debug_system_enabled() {
+                    log(
+                        LogTag::System,
+                        "ERROR",
+                        &format!("Failed to listen for shutdown signal: {}", e),
+                    );
+                }
                 std::process::exit(1);
             }
         }
     }
 
     // Notify all tasks to shutdown
-    log(
-        LogTag::System,
-        "INFO",
-        "📢 Starting shutdown notification to all background tasks...",
-    );
+    if screenerbot::arguments::is_debug_system_enabled() {
+        log(
+            LogTag::System,
+            "INFO",
+            "📢 Starting shutdown notification to all background tasks...",
+        );
+    }
     shutdown.notify_waiters();
-    log(
-        LogTag::System,
-        "INFO",
-        "✅ Shutdown notification sent to all background tasks",
-    );
+    if screenerbot::arguments::is_debug_system_enabled() {
+        log(
+            LogTag::System,
+            "INFO",
+            "✅ Shutdown notification sent to all background tasks",
+        );
+    }
     let shutdown_start_time = std::time::Instant::now();
 
     // CRITICAL PROTECTION: Check for active trading operations
@@ -461,7 +525,7 @@ async fn main() {
             }
 
             let remaining = screenerbot::trader::CriticalOperationGuard::get_active_count();
-            if remaining > 0 {
+            if remaining > 0 && screenerbot::arguments::is_debug_system_enabled() {
                 log(
                     LogTag::System,
                     "CRITICAL",
@@ -477,11 +541,13 @@ async fn main() {
         }
 
         if screenerbot::trader::CriticalOperationGuard::get_active_count() == 0 {
-            log(
-                LogTag::System,
-                "CRITICAL",
-                "✅ All critical trading operations completed safely",
-            );
+            if screenerbot::arguments::is_debug_system_enabled() {
+                log(
+                    LogTag::System,
+                    "CRITICAL",
+                    "✅ All critical trading operations completed safely",
+                );
+            }
         }
     }
 
@@ -490,31 +556,47 @@ async fn main() {
         // Stop pool monitoring service
         let pool_service = screenerbot::tokens::pool::get_pool_service();
         pool_service.stop_monitoring().await;
-        log(LogTag::System, "INFO", "Pool monitoring service stopped");
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(LogTag::System, "INFO", "Pool monitoring service stopped");
+        }
 
         // Decimals are now automatically saved to database
-        log(
-            LogTag::System,
-            "INFO",
-            "Decimals database persists automatically",
-        );
+        if screenerbot::arguments::is_debug_system_enabled() {
+            log(
+                LogTag::System,
+                "INFO",
+                "Decimals database persists automatically",
+            );
+        }
 
         // Save RPC statistics to disk
         if let Err(e) = screenerbot::rpc::save_global_rpc_stats() {
-            log(
-                LogTag::System,
-                "WARN",
-                &format!("Failed to save RPC statistics: {}", e),
-            );
+            if screenerbot::arguments::is_debug_system_enabled() {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Failed to save RPC statistics: {}", e),
+                );
+            }
         } else {
-            log(LogTag::System, "INFO", "RPC statistics saved to disk");
+            if screenerbot::arguments::is_debug_system_enabled() {
+                log(LogTag::System, "INFO", "RPC statistics saved to disk");
+            }
         }
     })
     .await;
 
     match cleanup_result {
-        Ok(_) => log(LogTag::System, "INFO", "Cleanup completed successfully"),
-        Err(_) => log(LogTag::System, "WARN", "Cleanup timed out after 3 seconds"),
+        Ok(_) => {
+            if screenerbot::arguments::is_debug_system_enabled() {
+                log(LogTag::System, "INFO", "Cleanup completed successfully");
+            }
+        }
+        Err(_) => {
+            if screenerbot::arguments::is_debug_system_enabled() {
+                log(LogTag::System, "WARN", "Cleanup timed out after 3 seconds");
+            }
+        }
     }
 
     // Wait for background tasks to finish with timeout that respects critical operations
@@ -537,14 +619,16 @@ async fn main() {
         task_timeout_seconds = task_timeout_seconds.max(22);
     }
 
-    log(
-        LogTag::System,
-        "INFO",
-        &format!(
-            "Waiting for background tasks to shutdown (max {} seconds)...",
-            task_timeout_seconds
-        ),
-    );
+    if screenerbot::arguments::is_debug_system_enabled() {
+        log(
+            LogTag::System,
+            "INFO",
+            &format!(
+                "Waiting for background tasks to shutdown (max {} seconds)...",
+                task_timeout_seconds
+            ),
+        );
+    }
 
     // Start a progress monitor task that runs in parallel
     let progress_shutdown = shutdown.clone();
@@ -557,7 +641,9 @@ async fn main() {
                 _ = progress_shutdown.notified() => break,
                 _ = progress_interval.tick() => {
                     elapsed += 2;
-                    log(LogTag::System, "INFO", &format!("⏳ Shutdown progress: {}s elapsed, still waiting for tasks...", elapsed));
+                    if screenerbot::arguments::is_debug_system_enabled() {
+                        log(LogTag::System, "INFO", &format!("⏳ Shutdown progress: {}s elapsed, still waiting for tasks...", elapsed));
+                    }
                 }
             }
         }
@@ -567,30 +653,38 @@ async fn main() {
         std::time::Duration::from_secs(task_timeout_seconds),
         async {
             // Wait for trader tasks
-            log(
-                LogTag::System,
-                "INFO",
-                "🔄 Waiting for entries monitor task to shutdown...",
-            );
-            if let Err(e) = entries_handle.await {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!("New entries monitor task failed to shutdown cleanly: {}", e),
-                );
-            } else {
+            if screenerbot::arguments::is_debug_system_enabled() {
                 log(
                     LogTag::System,
                     "INFO",
-                    "✅ Entries monitor task shutdown completed",
+                    "🔄 Waiting for entries monitor task to shutdown...",
                 );
             }
+            if let Err(e) = entries_handle.await {
+                if screenerbot::arguments::is_debug_system_enabled() {
+                    log(
+                        LogTag::System,
+                        "WARN",
+                        &format!("New entries monitor task failed to shutdown cleanly: {}", e),
+                    );
+                }
+            } else {
+                if screenerbot::arguments::is_debug_system_enabled() {
+                    log(
+                        LogTag::System,
+                        "INFO",
+                        "✅ Entries monitor task shutdown completed",
+                    );
+                }
+            }
 
-            log(
-                LogTag::System,
-                "INFO",
-                "🔄 Waiting for positions monitor task to shutdown...",
-            );
+            if screenerbot::arguments::is_debug_system_enabled() {
+                log(
+                    LogTag::System,
+                    "INFO",
+                    "🔄 Waiting for positions monitor task to shutdown...",
+                );
+            }
             if let Err(e) = positions_handle.await {
                 log(
                     LogTag::System,
