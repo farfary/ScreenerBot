@@ -540,14 +540,14 @@ async fn main() {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
 
-        if screenerbot::trader::CriticalOperationGuard::get_active_count() == 0 {
-            if screenerbot::arguments::is_debug_system_enabled() {
-                log(
-                    LogTag::System,
-                    "CRITICAL",
-                    "✅ All critical trading operations completed safely",
-                );
-            }
+        if screenerbot::trader::CriticalOperationGuard::get_active_count() == 0
+            && screenerbot::arguments::is_debug_system_enabled()
+        {
+            log(
+                LogTag::System,
+                "CRITICAL",
+                "✅ All critical trading operations completed safely",
+            );
         }
     }
 
@@ -668,14 +668,12 @@ async fn main() {
                         &format!("New entries monitor task failed to shutdown cleanly: {}", e),
                     );
                 }
-            } else {
-                if screenerbot::arguments::is_debug_system_enabled() {
-                    log(
-                        LogTag::System,
-                        "INFO",
-                        "✅ Entries monitor task shutdown completed",
-                    );
-                }
+            } else if screenerbot::arguments::is_debug_system_enabled() {
+                log(
+                    LogTag::System,
+                    "INFO",
+                    "✅ Entries monitor task shutdown completed",
+                );
             }
 
             if screenerbot::arguments::is_debug_system_enabled() {
