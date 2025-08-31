@@ -85,6 +85,14 @@ pub use dexscreener::{
     MAX_TOKENS_PER_API_CALL,
 };
 pub use discovery::{ discover_tokens_once, start_token_discovery, TokenDiscovery };
+pub use holders::{
+    get_count_holders,
+    get_holder_stats,
+    get_top_holders_analysis,
+    HolderStats,
+    TokenHolder,
+    TopHoldersAnalysis,
+};
 pub use ohlcvs::{
     get_latest_ohlcv,
     get_ohlcv_service_clone,
