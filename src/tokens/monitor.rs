@@ -166,11 +166,13 @@ impl TokenMonitor {
         match tokens_result {
             Ok(tokens) => {
                 if tokens.is_empty() {
-                    log(
-                        LogTag::Monitor,
-                        "WARN",
-                        "No token data returned from API for batch",
-                    );
+                    if is_debug_monitor_enabled() {
+                        log(
+                            LogTag::Monitor,
+                            "WARN",
+                            "No token data returned from API for batch",
+                        );
+                    }
                     return Ok(0);
                 }
 
@@ -269,14 +271,16 @@ impl TokenMonitor {
             }
         }
 
-        log(
-            LogTag::Monitor,
-            "COMPLETE",
-            &format!(
-                "Monitoring cycle completed: {} tokens updated",
-                total_updated
-            ),
-        );
+        if is_debug_monitor_enabled() {
+            log(
+                LogTag::Monitor,
+                "COMPLETE",
+                &format!(
+                    "Monitoring cycle completed: {} tokens updated",
+                    total_updated
+                ),
+            );
+        }
 
         if is_debug_monitor_enabled() {
             log(

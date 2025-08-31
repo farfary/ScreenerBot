@@ -1145,14 +1145,16 @@ impl RpcClient {
 
     /// Create a client specifically for main RPC (for lightweight operations like checking signatures)
     pub fn create_main_client(&self) -> Arc<SolanaRpcClient> {
-        log(
-            LogTag::Rpc,
-            "MAIN",
-            &format!(
-                "Using main RPC for lightweight operations: {}",
-                self.rpc_url
-            ),
-        );
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "MAIN",
+                &format!(
+                    "Using main RPC for lightweight operations: {}",
+                    self.rpc_url
+                ),
+            );
+        }
         let client = SolanaRpcClient::new_with_commitment(
             self.rpc_url.clone(),
             CommitmentConfig::confirmed(),
@@ -3967,11 +3969,13 @@ impl RpcClient {
         self.wait_for_rate_limit().await;
         self.record_call_for_url(&self.rpc_url, "get_signatures_for_address");
 
-        log(
-            LogTag::Rpc,
-            "MAIN",
-            &format!("Fetching {} signatures using main RPC", limit),
-        );
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "MAIN",
+                &format!("Fetching {} signatures using main RPC", limit),
+            );
+        }
 
         let signatures = main_client
             .get_signatures_for_address_with_config(wallet_pubkey, config)
