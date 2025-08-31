@@ -2985,13 +2985,6 @@ pub async fn get_open_positions() -> Vec<Position> {
     // Try database first, fallback to memory
     match db_get_open_positions().await {
         Ok(positions) => {
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DB_QUERY",
-                    &format!("Retrieved {} open positions from database", positions.len()),
-                );
-            }
             positions
         }
         Err(e) => {
@@ -3020,16 +3013,6 @@ pub async fn get_closed_positions() -> Vec<Position> {
     // Try database first, fallback to memory
     match db_get_closed_positions().await {
         Ok(positions) => {
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DB_QUERY",
-                    &format!(
-                        "Retrieved {} closed positions from database",
-                        positions.len()
-                    ),
-                );
-            }
             positions
         }
         Err(e) => {
