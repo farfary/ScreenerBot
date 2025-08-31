@@ -1,5 +1,5 @@
 use crate::global::is_debug_entry_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::get_pool_service;
 use crate::tokens::is_token_excluded_from_trading;
@@ -28,7 +28,7 @@ use chrono::Utc;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+use std::time::{ Duration, Instant };
 use tokio::sync::RwLock;
 
 // ============================================================================
@@ -43,7 +43,7 @@ const TARGET_LIQUIDITY_MIN: f64 = 100.0; // Reduced from 1000 to 100 - catch ver
 const TARGET_LIQUIDITY_MAX: f64 = 10_000_000.0; // Increased from 500k to 10M - allow big tokens
 
 // DROP PERCENTAGE RANGES (Less aggressive - catch smaller drops)
-const DROP_PERCENT_MIN: f64 = 8.0; // Reduced from 3% to 1% - catch micro drops
+const DROP_PERCENT_MIN: f64 = 6.0; // Slightly lower to allow earlier participation in emerging reversals (was 8)
 const DROP_PERCENT_MAX: f64 = 20.0; // Increased from 9% to 15% - wider range
 const DROP_PERCENT_ULTRA_MAX: f64 = 50.0; // Increased from 30% to 50% - allow deeper drops
 
@@ -55,8 +55,8 @@ const MEDIUM_DROP_TIME_WINDOW_SEC: i64 = 120; // Medium-term analysis (2 minutes
 const LONG_DROP_TIME_WINDOW_SEC: i64 = 300; // Long-term analysis (5 minutes)
 const EXTENDED_DROP_TIME_WINDOW_SEC: i64 = 600; // NEW: Extended analysis (10 minutes)
 const NEAR_TOP_ANALYSIS_WINDOW_SEC: i64 = 900; // Near-top analysis (15 minutes)
-                                               // Dynamic near-top floor/ceiling based on liquidity and volatility
-const NEAR_TOP_THRESHOLD_MIN: f64 = 8.0; // never below 8%
+// Dynamic near-top floor/ceiling based on liquidity and volatility
+const NEAR_TOP_THRESHOLD_MIN: f64 = 6.5; // Slightly lower to allow earlier post-peak entries (was 8)
 const NEAR_TOP_THRESHOLD_MAX: f64 = 20.0; // never above 20%
 
 // DYNAMIC TARGET RATIOS (Ultra-aggressive)
@@ -76,14 +76,14 @@ const VOLUME_SPIKE_MULTIPLIER: f64 = 2.0; // Reduced from 3.0x to 2.0x - easier 
 
 // NEAR-TOP FILTER PARAMETERS (Prevent buying at recent peaks)
 const NEAR_TOP_THRESHOLD_PERCENT: f64 = 10.0; // Must be MORE than 10% below 15-min high to enter
-                                              // Multi-window near-top minimums (stricter near fresh highs)
+// Multi-window near-top minimums (stricter near fresh highs)
 const NEAR_TOP_1M_MIN: f64 = 3.0; // at least 3% below 1m high
 const NEAR_TOP_5M_MIN: f64 = 6.0; // at least 6% below 5m high
-                                  // Cooldown after making a new window high to avoid buying the spike
+// Cooldown after making a new window high to avoid buying the spike
 const COOLDOWN_AFTER_NEW_HIGH_SEC: i64 = 45;
 // ATH proximity guard across all available history
 const ATH_PROXIMITY_PERCENT: f64 = 3.5; // avoid entries within ~3.5% of observed ATH
-                                        // Toggle risky ultra-fresh entries (disabled by default)
+// Toggle risky ultra-fresh entries (disabled by default)
 const ULTRA_FRESH_ENTRY_ENABLED: bool = false;
 
 // RE-ENTRY AGGRESSION PARAMETERS (be stricter about paying premiums after prior trades)
@@ -125,7 +125,7 @@ const MINUTES_PER_SECOND: i64 = 60; // Time conversion
 // 📦 PRICE HISTORY FRESHNESS SAFEGUARDS (HARDCODED MINIMUM REQUIREMENTS)
 // ============================================================================
 // Hardcoded minimum price points required before allowing any entry
-const MIN_PRICE_POINTS_REQUIRED: usize = 15; // MINIMUM 30 price points before entry
+const MIN_PRICE_POINTS_REQUIRED: usize = 10; // Lowered to reduce start latency (was 15)
 const HISTORY_MAX_POINT_AGE_SEC: i64 = 1800; // Extended to 30m for more flexibility
 const HISTORY_MIN_POINTS_60S: usize = 0; // NO REQUIREMENT - allow fresh tokens
 const HISTORY_MIN_POINTS_300S: usize = 0; // NO REQUIREMENT - allow fresh tokens
@@ -139,9 +139,7 @@ static BOT_START_INSTANT: once_cell::sync::OnceCell<Instant> = once_cell::sync::
 /// Returns (min_drop_percent, max_drop_percent, target_ratio) based on liquidity
 fn get_liquidity_based_thresholds(liquidity_usd: f64) -> (f64, f64, f64) {
     // Clamp liquidity to our target range
-    let clamped_liquidity = liquidity_usd
-        .max(TARGET_LIQUIDITY_MIN)
-        .min(TARGET_LIQUIDITY_MAX);
+    let clamped_liquidity = liquidity_usd.max(TARGET_LIQUIDITY_MIN).min(TARGET_LIQUIDITY_MAX);
 
     // Calculate liquidity ratio (0.0 = min liquidity, 1.0 = max liquidity)
     let liquidity_ratio =
@@ -161,7 +159,7 @@ fn get_liquidity_based_thresholds(liquidity_usd: f64) -> (f64, f64, f64) {
 fn is_near_recent_top(
     current_price: f64,
     price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
-    _liquidity_usd: f64, // Not used anymore, kept for compatibility
+    _liquidity_usd: f64 // Not used anymore, kept for compatibility
 ) -> bool {
     use chrono::Utc;
 
@@ -179,8 +177,8 @@ fn is_near_recent_top(
         .collect();
 
     if recent_prices.len() < MIN_PRICE_POINTS_REQUIRED {
-        // Not enough data points, reject entry
-        return true; // Reject entry due to insufficient price data
+        // Not enough data points to trust near-top logic – allow rather than reject to avoid blocking fresh tokens.
+        return false; // Do not classify as near top; other guards will decide
     }
 
     // Find the highest/lowest price in the 15-minute window and when it occurred
@@ -199,10 +197,11 @@ fn is_near_recent_top(
         }
     }
 
-    if recent_high <= 0.0
-        || !recent_high.is_finite()
-        || current_price <= 0.0
-        || !current_price.is_finite()
+    if
+        recent_high <= 0.0 ||
+        !recent_high.is_finite() ||
+        current_price <= 0.0 ||
+        !current_price.is_finite()
     {
         return false;
     }
@@ -228,9 +227,7 @@ fn is_near_recent_top(
         15.0
     };
     // Clamp to global min/max bounds
-    dynamic_threshold = dynamic_threshold
-        .max(NEAR_TOP_THRESHOLD_MIN)
-        .min(NEAR_TOP_THRESHOLD_MAX);
+    dynamic_threshold = dynamic_threshold.max(NEAR_TOP_THRESHOLD_MIN).min(NEAR_TOP_THRESHOLD_MAX);
 
     // STRICT RULE: Must be MORE than dynamic_threshold below 15-min high to allow entry
     let mut is_too_close_to_top = drop_from_high_percent < dynamic_threshold;
@@ -365,7 +362,7 @@ async fn check_position_cooldown(mint: &str) -> (bool, i64, String) {
                         "❌ Could not check position cooldown for {}: {}",
                         crate::utils::safe_truncate(mint, 8),
                         e
-                    ),
+                    )
                 );
             }
             (false, 0, format!("Database error: {}", e))
@@ -384,38 +381,31 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 "🔍 Analyzing {} ({})",
                 token.symbol,
                 crate::utils::safe_truncate(&token.mint, 8)
-            ),
+            )
         );
     }
 
     // Check blacklist first
     if is_token_excluded_from_trading(&token.mint) {
         if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "BLACKLIST_REJECT",
-                &format!("❌ {} blacklisted", token.symbol),
-            );
+            log(LogTag::Entry, "BLACKLIST_REJECT", &format!("❌ {} blacklisted", token.symbol));
         }
         return (false, 0.0, "Token blacklisted or excluded".to_string());
     }
 
     // Check 7-day re-entry cooldown
-    let (is_in_cooldown, remaining_minutes, cooldown_reason) =
-        check_position_cooldown(&token.mint).await;
+    let (is_in_cooldown, remaining_minutes, cooldown_reason) = check_position_cooldown(
+        &token.mint
+    ).await;
     if is_in_cooldown {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Entry,
                 "COOLDOWN_REJECT",
-                &format!("❌ {} in cooldown: {}", token.symbol, cooldown_reason),
+                &format!("❌ {} in cooldown: {}", token.symbol, cooldown_reason)
             );
         }
-        return (
-            false,
-            0.0,
-            format!("Token in cooldown: {}", cooldown_reason),
-        );
+        return (false, 0.0, format!("Token in cooldown: {}", cooldown_reason));
     }
 
     // Get transaction activity using centralized filtering system
@@ -427,8 +417,9 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             "TXN_ACTIVITY_INFO",
             &format!(
                 "📊 {} transaction activity: {} txns in 5min (already passed filtering)",
-                token.symbol, txn_5min_count
-            ),
+                token.symbol,
+                txn_5min_count
+            )
         );
     }
 
@@ -442,7 +433,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             log(
                 LogTag::Entry,
                 "POSITION_REJECT",
-                &format!("❌ {} already has an open position", token.symbol),
+                &format!("❌ {} already has an open position", token.symbol)
             );
         }
         return (false, 0.0, "Token already has an open position".to_string());
@@ -458,18 +449,19 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     }
 
     // Get current pool price with age validation AND liquidity data
-    let (current_pool_price, pool_data_age, liquidity_usd) = match crate::tokens::get_price(
-        &token.mint,
-        Some(crate::tokens::PriceOptions::pool_only()),
-        false,
-    )
-    .await
+    let (current_pool_price, pool_data_age, liquidity_usd) = match
+        crate::tokens::get_price(
+            &token.mint,
+            Some(crate::tokens::PriceOptions::pool_only()),
+            false
+        ).await
     {
         Some(price_result) => {
             match price_result.best_sol_price() {
                 Some(price) if price > 0.0 && price.is_finite() => {
-                    let data_age_minutes = (Utc::now() - price_result.calculated_at).num_seconds()
-                        / MINUTES_PER_SECOND;
+                    let data_age_minutes =
+                        (Utc::now() - price_result.calculated_at).num_seconds() /
+                        MINUTES_PER_SECOND;
 
                     if data_age_minutes > MAX_DATA_AGE_MINUTES {
                         if is_debug_entry_enabled() {
@@ -478,8 +470,10 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                                 "DATA_AGE_REJECT",
                                 &format!(
                                     "❌ {} data too old: {}min > {}min",
-                                    token.symbol, data_age_minutes, MAX_DATA_AGE_MINUTES
-                                ),
+                                    token.symbol,
+                                    data_age_minutes,
+                                    MAX_DATA_AGE_MINUTES
+                                )
                             );
                         }
                         return (
@@ -487,14 +481,18 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                             0.0,
                             format!(
                                 "Pool data too old: {}min > {}min",
-                                data_age_minutes, MAX_DATA_AGE_MINUTES
+                                data_age_minutes,
+                                MAX_DATA_AGE_MINUTES
                             ),
                         );
                     }
 
                     // Get liquidity or fallback to token data
                     let liquidity = price_result.liquidity_usd.unwrap_or_else(|| {
-                        token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0)
+                        token.liquidity
+                            .as_ref()
+                            .and_then(|l| l.usd)
+                            .unwrap_or(0.0)
                     });
 
                     if is_debug_entry_enabled() {
@@ -503,8 +501,11 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                             "POOL_DATA",
                             &format!(
                                 "📊 {} price: {:.12} SOL, liquidity: ${:.0}, age: {}min",
-                                token.symbol, price, liquidity, data_age_minutes
-                            ),
+                                token.symbol,
+                                price,
+                                liquidity,
+                                data_age_minutes
+                            )
                         );
                     }
 
@@ -515,7 +516,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                         log(
                             LogTag::Entry,
                             "PRICE_INVALID",
-                            &format!("❌ {} invalid pool price", token.symbol),
+                            &format!("❌ {} invalid pool price", token.symbol)
                         );
                     }
                     return (false, 0.0, "Invalid pool price".to_string());
@@ -527,7 +528,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 log(
                     LogTag::Entry,
                     "NO_POOL_DATA",
-                    &format!("❌ {} no pool data available", token.symbol),
+                    &format!("❌ {} no pool data available", token.symbol)
                 );
             }
             return (false, 0.0, "No pool data available".to_string());
@@ -544,15 +545,12 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                     "NANO_LIQUIDITY_REJECT",
                     &format!(
                         "❌ {} liquidity ${:.0} too small (under $10)",
-                        token.symbol, liquidity_usd
-                    ),
+                        token.symbol,
+                        liquidity_usd
+                    )
                 );
             }
-            return (
-                false,
-                0.0,
-                format!("Liquidity ${:.0} too small (under $10)", liquidity_usd),
-            );
+            return (false, 0.0, format!("Liquidity ${:.0} too small (under $10)", liquidity_usd));
         }
     } else if liquidity_usd > TARGET_LIQUIDITY_MAX {
         // Allow ALL tokens regardless of liquidity - no upper limit rejection
@@ -564,22 +562,24 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                     "📈 {} mega liquidity ${:.0}M detected - allowing",
                     token.symbol,
                     liquidity_usd / 1_000_000.0
-                ),
+                )
             );
         }
         // Don't reject, just log for visibility
     }
 
-    if is_debug_entry_enabled()
-        && (liquidity_usd < TARGET_LIQUIDITY_MIN || liquidity_usd > TARGET_LIQUIDITY_MAX)
+    if
+        is_debug_entry_enabled() &&
+        (liquidity_usd < TARGET_LIQUIDITY_MIN || liquidity_usd > TARGET_LIQUIDITY_MAX)
     {
         log(
             LogTag::Entry,
             "EXTENDED_LIQUIDITY_ACCEPT",
             &format!(
                 "✅ {} liquidity ${:.0} outside target but allowed",
-                token.symbol, liquidity_usd
-            ),
+                token.symbol,
+                liquidity_usd
+            )
         );
     }
 
@@ -651,7 +651,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                     token.symbol,
                     price_history.len(),
                     MIN_PRICE_POINTS_REQUIRED
-                ),
+                )
             );
         }
         return (
@@ -669,11 +669,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         log(
             LogTag::Entry,
             "PRICE_HISTORY",
-            &format!(
-                "📈 {} usable price points: {}",
-                token.symbol,
-                price_history.len()
-            ),
+            &format!("📈 {} usable price points: {}", token.symbol, price_history.len())
         );
     }
 
@@ -686,14 +682,10 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 &format!(
                     "🚫 {} rejected: price too close to 15-min high (safety filter)",
                     token.symbol
-                ),
+                )
             );
         }
-        return (
-            false,
-            0.0,
-            "Price too close to highs (multi-window/ATH guard)".to_string(),
-        );
+        return (false, 0.0, "Price too close to highs (multi-window/ATH guard)".to_string());
     }
 
     // Re-entry premium guard: avoid buying "very higher" than prior anchors
@@ -709,8 +701,11 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                         "REENTRY_PREMIUM_REJECT",
                         &format!(
                             "🚫 {} price {:.2}% above anchor {:.12} SOL (allowed ≤{:.1}%)",
-                            token.symbol, premium_pct, profile.anchor_price, allowed_premium
-                        ),
+                            token.symbol,
+                            premium_pct,
+                            profile.anchor_price,
+                            allowed_premium
+                        )
                     );
                 }
                 return (
@@ -718,7 +713,8 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                     0.0,
                     format!(
                         "Above prior anchor by {:.1}% (limit {:.1}%)",
-                        premium_pct, allowed_premium
+                        premium_pct,
+                        allowed_premium
                     ),
                 );
             }
@@ -734,9 +730,8 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         pool_data_age,
         liquidity_usd,
         volume_24h,
-        build_history_bias(&reentry_profile_opt, current_pool_price),
-    )
-    .await;
+        build_history_bias(&reentry_profile_opt, current_pool_price)
+    ).await;
 
     if let Some((drop_percent, entry_reason)) = deep_drop_result {
         if is_debug_entry_enabled() {
@@ -745,8 +740,12 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 "DYNAMIC_DROP_ENTRY",
                 &format!(
                     "🎯 {} DYNAMIC ENTRY: -{:.1}% {} (liquidity: ${:.0}, price: {:.12} SOL)",
-                    token.symbol, drop_percent, entry_reason, liquidity_usd, current_pool_price
-                ),
+                    token.symbol,
+                    drop_percent,
+                    entry_reason,
+                    liquidity_usd,
+                    current_pool_price
+                )
             );
         }
         // Confidence scoring (merged from should_buy_with_confidence)
@@ -755,14 +754,13 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         } else if liquidity_usd > TARGET_LIQUIDITY_MAX {
             CONFIDENCE_ABOVE_RANGE
         } else {
-            let position_in_range = (liquidity_usd - TARGET_LIQUIDITY_MIN)
-                / (TARGET_LIQUIDITY_MAX - TARGET_LIQUIDITY_MIN);
+            let position_in_range =
+                (liquidity_usd - TARGET_LIQUIDITY_MIN) /
+                (TARGET_LIQUIDITY_MAX - TARGET_LIQUIDITY_MIN);
             let distance_from_center = (position_in_range - 0.5).abs() * 2.0; // 0.0 = center, 1.0 = edges
             let base_confidence =
                 CONFIDENCE_CENTER_MAX - distance_from_center * CONFIDENCE_CENTER_ADJUSTMENT;
-            base_confidence
-                .max(CONFIDENCE_EDGE_MIN)
-                .min(CONFIDENCE_CENTER_MAX)
+            base_confidence.max(CONFIDENCE_EDGE_MIN).min(CONFIDENCE_CENTER_MAX)
         };
 
         if is_debug_entry_enabled() {
@@ -773,7 +771,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                     "🎯 Confidence: {:.1}% for ${:.0}k liquidity",
                     confidence,
                     liquidity_usd / THOUSAND_DIVISOR
-                ),
+                )
             );
         }
 
@@ -800,7 +798,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                         vol_24h / 1000.0,
                         liquidity_usd / 1000.0,
                         price_history.len()
-                    ),
+                    )
                 );
             }
             return (true, confidence, "High volume activity".to_string());
@@ -811,7 +809,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         log(
             LogTag::Entry,
             "NO_ENTRY_SIGNAL",
-            &format!("❌ {} no dynamic drop signal detected", token.symbol),
+            &format!("❌ {} no dynamic drop signal detected", token.symbol)
         );
     }
 
@@ -822,27 +820,31 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
 pub async fn get_profit_target(token: &Token) -> (f64, f64) {
     let pool_service = get_pool_service();
 
-    let liquidity_usd = if let Some(price_result) = crate::tokens::get_price(
-        &token.mint,
-        Some(crate::tokens::PriceOptions::pool_only()),
-        false,
-    )
-    .await
+    let liquidity_usd = if
+        let Some(price_result) = crate::tokens::get_price(
+            &token.mint,
+            Some(crate::tokens::PriceOptions::pool_only()),
+            false
+        ).await
     {
-        price_result
-            .liquidity_usd
-            .unwrap_or_else(|| token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0))
+        price_result.liquidity_usd.unwrap_or_else(||
+            token.liquidity
+                .as_ref()
+                .and_then(|l| l.usd)
+                .unwrap_or(0.0)
+        )
     } else {
-        token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0)
+        token.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0)
     };
 
     // DYNAMIC targets based on liquidity (INVERSE relationship like entry thresholds)
     // Higher liquidity = lower targets (safer), Lower liquidity = higher targets (more risk/reward)
 
     // Clamp to our target range
-    let clamped_liquidity = liquidity_usd
-        .max(TARGET_LIQUIDITY_MIN)
-        .min(TARGET_LIQUIDITY_MAX);
+    let clamped_liquidity = liquidity_usd.max(TARGET_LIQUIDITY_MIN).min(TARGET_LIQUIDITY_MAX);
     let liquidity_ratio =
         (clamped_liquidity - TARGET_LIQUIDITY_MIN) / (TARGET_LIQUIDITY_MAX - TARGET_LIQUIDITY_MIN);
 
@@ -859,8 +861,11 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
             "PROFIT_TARGET",
             &format!(
                 "🎯 {} targets: {:.1}%-{:.1}% (liquidity: ${:.0})",
-                token.symbol, min_target, max_target, liquidity_usd
-            ),
+                token.symbol,
+                min_target,
+                max_target,
+                liquidity_usd
+            )
         );
     }
 
@@ -869,8 +874,7 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
 
 /// Get dynamic entry threshold based on liquidity (not fixed)
 pub fn get_entry_threshold(token: &Token) -> f64 {
-    let liquidity_usd = token
-        .liquidity
+    let liquidity_usd = token.liquidity
         .as_ref()
         .and_then(|l| l.usd)
         .unwrap_or(TARGET_LIQUIDITY_MIN);
@@ -884,17 +888,19 @@ pub async fn get_rugcheck_score_for_token(mint: &str) -> Option<f64> {
     use crate::tokens::get_global_rugcheck_service;
 
     match get_global_rugcheck_service() {
-        Some(service) => match service.get_rugcheck_data(mint).await {
-            Ok(Some(rugcheck_data)) => rugcheck_data.score.map(|s| s as f64),
-            _ => None,
-        },
+        Some(service) =>
+            match service.get_rugcheck_data(mint).await {
+                Ok(Some(rugcheck_data)) => rugcheck_data.score.map(|s| s as f64),
+                _ => None,
+            }
         None => {
             // Fallback to direct database access if service not available
             match TokenDatabase::new() {
-                Ok(database) => match database.get_rugcheck_data(mint) {
-                    Ok(Some(rugcheck_data)) => rugcheck_data.score.map(|s| s as f64),
-                    _ => None,
-                },
+                Ok(database) =>
+                    match database.get_rugcheck_data(mint) {
+                        Ok(Some(rugcheck_data)) => rugcheck_data.score.map(|s| s as f64),
+                        _ => None,
+                    }
                 Err(_) => None,
             }
         }
@@ -904,13 +910,16 @@ pub async fn get_rugcheck_score_for_token(mint: &str) -> Option<f64> {
 /// Calculate price volatility from recent history
 fn calculate_price_volatility(
     price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
-    current_price: f64,
+    current_price: f64
 ) -> f64 {
     if price_history.len() < 2 {
         return 10.0; // Default volatility for new tokens
     }
 
-    let mut prices: Vec<f64> = price_history.iter().map(|(_, price)| *price).collect();
+    let mut prices: Vec<f64> = price_history
+        .iter()
+        .map(|(_, price)| *price)
+        .collect();
     prices.push(current_price);
 
     let min_price = prices.iter().fold(f64::INFINITY, |a, &b| a.min(b));
@@ -931,20 +940,20 @@ fn calculate_price_volatility(
 #[derive(Debug, Clone)]
 struct MomentumAnalysis {
     velocity_per_minute: f64, // Current velocity %/min (negative = dropping)
-    acceleration: f64,        // Acceleration %/min² (negative = decelerating drop)
-    is_accelerating: bool,    // Is drop still gaining momentum?
+    acceleration: f64, // Acceleration %/min² (negative = decelerating drop)
+    is_accelerating: bool, // Is drop still gaining momentum?
     is_bouncing_strong: bool, // Is price bouncing aggressively?
-    velocity_10s: f64,        // 10-second velocity
-    velocity_30s: f64,        // 30-second velocity
-    velocity_60s: f64,        // 60-second velocity
-    trend_consistency: f64,   // How consistent is the trend (0-1)
+    velocity_10s: f64, // 10-second velocity
+    velocity_30s: f64, // 30-second velocity
+    velocity_60s: f64, // 60-second velocity
+    trend_consistency: f64, // How consistent is the trend (0-1)
 }
 
 /// Analyze drop momentum across multiple timeframes for optimal entry timing
 fn analyze_drop_momentum(
     price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
     current_price: f64,
-    now: &chrono::DateTime<chrono::Utc>,
+    now: &chrono::DateTime<chrono::Utc>
 ) -> MomentumAnalysis {
     if price_history.len() < MIN_PRICE_POINTS_REQUIRED {
         return MomentumAnalysis {
@@ -980,10 +989,10 @@ fn analyze_drop_momentum(
         // 1. Recent velocity is more negative than older velocity
         // 2. Acceleration is negative (speeding up downward)
         // 3. Velocity magnitude is increasing
-        velocity_10s < velocity_30s
-            && velocity_30s < velocity_60s
-            && acceleration < -0.5
-            && velocity_per_minute < -2.0 // Meaningful downward velocity
+        velocity_10s < velocity_30s &&
+            velocity_30s < velocity_60s &&
+            acceleration < -0.5 &&
+            velocity_per_minute < -2.0 // Meaningful downward velocity
     };
 
     // Detect strong bounce (rapid upward movement)
@@ -1013,7 +1022,7 @@ fn calculate_velocity_for_window(
     price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
     current_price: f64,
     now: &chrono::DateTime<chrono::Utc>,
-    window_seconds: i64,
+    window_seconds: i64
 ) -> f64 {
     let now_owned = *now;
     let window_prices: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
@@ -1067,19 +1076,14 @@ fn calculate_trend_consistency(vel_10s: f64, vel_30s: f64, vel_60s: f64) -> f64 
     let magnitude_consistency = min_vel / max_vel;
 
     // Boost consistency for meaningful trends
-    (if max_vel > 2.0 {
-        magnitude_consistency * 1.2
-    } else {
-        magnitude_consistency * 0.8
-    })
-    .min(1.0)
+    (if max_vel > 2.0 { magnitude_consistency * 1.2 } else { magnitude_consistency * 0.8 }).min(1.0)
 }
 
 /// Calculate drop maturity score - higher score means better entry timing
 fn calculate_drop_maturity(
     momentum: &MomentumAnalysis,
     drop_percent: f64,
-    min_drop_threshold: f64,
+    min_drop_threshold: f64
 ) -> f64 {
     if drop_percent < min_drop_threshold * 0.5 {
         return 0.0; // Not enough of a drop yet
@@ -1132,7 +1136,7 @@ async fn analyze_deep_drop_entry(
     data_age_minutes: i64,
     liquidity_usd: f64,
     volume_24h: Option<f64>,
-    history_bias: Option<HistoryBias>,
+    history_bias: Option<HistoryBias>
 ) -> Option<(f64, String)> {
     use chrono::Utc;
 
@@ -1147,7 +1151,7 @@ async fn analyze_deep_drop_entry(
                     crate::utils::safe_truncate(mint, 8),
                     price_history.len(),
                     MIN_PRICE_POINTS_REQUIRED
-                ),
+                )
             );
         }
         return None;
@@ -1156,9 +1160,9 @@ async fn analyze_deep_drop_entry(
     // --- Adaptive tuner (runtime auto-tuning of min drop) -----------------
     // Lightweight, in-memory EMA-based scaler per token
     struct TunerState {
-        scale_ema: f64,      // threshold multiplier (0.6..1.4)
+        scale_ema: f64, // threshold multiplier (0.6..1.4)
         ema_volatility: f64, // smoothed volatility %
-        ema_velocity: f64,   // smoothed pct/minute (+/-)
+        ema_velocity: f64, // smoothed pct/minute (+/-)
         last_update: Instant,
     }
 
@@ -1289,11 +1293,7 @@ async fn analyze_deep_drop_entry(
             }
             new_scale
         } else if let Ok(map_ro) = tuner.inner.try_read() {
-            if let Some(st) = map_ro.get(mint) {
-                st.scale_ema
-            } else {
-                1.0
-            }
+            if let Some(st) = map_ro.get(mint) { st.scale_ema } else { 1.0 }
         } else {
             1.0
         }
@@ -1322,9 +1322,12 @@ async fn analyze_deep_drop_entry(
         1.0
     };
 
-    let effective_min_drop =
-        (min_drop_threshold * volatility_factor * adaptive_scale * history_scale)
-            .max(DROP_PERCENT_MIN * 0.5);
+    let effective_min_drop = (
+        min_drop_threshold *
+        volatility_factor *
+        adaptive_scale *
+        history_scale
+    ).max(DROP_PERCENT_MIN * 0.5);
 
     if is_debug_entry_enabled() {
         log(
@@ -1347,9 +1350,10 @@ async fn analyze_deep_drop_entry(
 
     // Strategy 1: (disabled by default) Ultra-fresh entry — risky near tops
     if ULTRA_FRESH_ENTRY_ENABLED {
-        if data_age_minutes == 0
-            && price_history.is_empty()
-            && liquidity_usd >= ULTRA_FRESH_MIN_LIQUIDITY
+        if
+            data_age_minutes == 0 &&
+            price_history.is_empty() &&
+            liquidity_usd >= ULTRA_FRESH_MIN_LIQUIDITY
         {
             if is_debug_entry_enabled() {
                 log(
@@ -1358,15 +1362,12 @@ async fn analyze_deep_drop_entry(
                     &format!(
                         "⚡ Ultra-fresh entry for ${:.0}k liquidity",
                         liquidity_usd / THOUSAND_DIVISOR
-                    ),
+                    )
                 );
             }
             return Some((
                 0.0,
-                format!(
-                    "ultra-fresh entry (${:.0}k liquidity)",
-                    liquidity_usd / THOUSAND_DIVISOR
-                ),
+                format!("ultra-fresh entry (${:.0}k liquidity)", liquidity_usd / THOUSAND_DIVISOR),
             ));
         }
     }
@@ -1378,10 +1379,7 @@ async fn analyze_deep_drop_entry(
             log(
                 LogTag::Entry,
                 "INSUFFICIENT_DATA",
-                &format!(
-                    "❌ Need at least {} price points for momentum analysis",
-                    MIN_PRICE_POINTS_REQUIRED
-                ),
+                &format!("❌ Need at least {} price points for momentum analysis", MIN_PRICE_POINTS_REQUIRED)
             );
         }
         return None;
@@ -1420,7 +1418,7 @@ async fn analyze_deep_drop_entry(
             log(
                 LogTag::Entry,
                 "INVALID_DROP",
-                &format!("❌ Invalid drop calculation: {:.2}%", drop_percent),
+                &format!("❌ Invalid drop calculation: {:.2}%", drop_percent)
             );
         }
         return None;
@@ -1432,8 +1430,11 @@ async fn analyze_deep_drop_entry(
             "DROP_ANALYSIS",
             &format!(
                 "📉 Drop: {:.2}% (high: {:.12} → current: {:.12}, low: {:.12})",
-                drop_percent, recent_high, current_price, recent_low
-            ),
+                drop_percent,
+                recent_high,
+                current_price,
+                recent_low
+            )
         );
     }
 
@@ -1470,15 +1471,18 @@ async fn analyze_deep_drop_entry(
                 &format!(
                     "🚫 Strong bounce detected (vel: +{:.1}%/min), avoiding late entry",
                     momentum_analysis.velocity_per_minute
-                ),
+                )
             );
         }
         return None;
     }
 
     // Drop maturity check - prefer entries when drop momentum is slowing
-    let drop_maturity_score =
-        calculate_drop_maturity(&momentum_analysis, drop_percent, effective_min_drop);
+    let drop_maturity_score = calculate_drop_maturity(
+        &momentum_analysis,
+        drop_percent,
+        effective_min_drop
+    );
 
     if is_debug_entry_enabled() {
         log(
@@ -1496,12 +1500,17 @@ async fn analyze_deep_drop_entry(
     }
 
     // Bounce suppression: if price has already retraced > 35% of the drop from low -> avoid chasing tops
-    if recent_low.is_finite() && recent_low > 0.0 && recent_high > 0.0 && current_price > recent_low
+    if
+        recent_low.is_finite() &&
+        recent_low > 0.0 &&
+        recent_high > 0.0 &&
+        current_price > recent_low
     {
         let total_drop_from_high = recent_high - recent_low;
         if total_drop_from_high.is_finite() && total_drop_from_high > 0.0 {
             let retrace = (current_price - recent_low) / total_drop_from_high; // 0..1
-            if retrace >= 0.35 {
+            if retrace >= 0.5 {
+                // was 35%, eased to 50% to allow entries during mid-range consolidations
                 if is_debug_entry_enabled() {
                     log(
                         LogTag::Entry,
@@ -1545,9 +1554,10 @@ async fn analyze_deep_drop_entry(
                     0.0
                 };
                 // Require a meaningful flush and slight recovery, but still below high enough
-                if flush_drop >= (effective_min_drop * 1.1).min(20.0)
-                    && recovered_from_low >= 1.0
-                    && drop_percent >= effective_min_drop * 0.5
+                if
+                    flush_drop >= (effective_min_drop * 1.1).min(20.0) &&
+                    recovered_from_low >= 1.0 &&
+                    drop_percent >= effective_min_drop * 0.5
                 {
                     if is_debug_entry_enabled() {
                         log(
@@ -1565,7 +1575,8 @@ async fn analyze_deep_drop_entry(
                         drop_percent.max(flush_drop),
                         format!(
                             "capitulation wick {:.1}% (eff≥{:.1}%)",
-                            flush_drop, effective_min_drop
+                            flush_drop,
+                            effective_min_drop
                         ),
                     ));
                 }
@@ -1577,9 +1588,9 @@ async fn analyze_deep_drop_entry(
     if drop_percent >= effective_min_drop && drop_percent <= max_drop_threshold {
         // Require minimum maturity score for main strategy (unless very deep drop)
         let min_maturity_required = if drop_percent >= effective_min_drop * 2.0 {
-            0.3 // Lower bar for very deep drops
+            0.25 // Lower bar for very deep drops (was 0.3)
         } else {
-            0.5 // Higher bar for marginal drops
+            0.4 // Slightly lower to enter earlier (was 0.5)
         };
 
         if drop_maturity_score >= min_maturity_required {
@@ -1595,7 +1606,7 @@ async fn analyze_deep_drop_entry(
                         max_drop_threshold,
                         drop_maturity_score * 100.0,
                         min_maturity_required * 100.0
-                    ),
+                    )
                 );
             }
             return Some((
@@ -1619,7 +1630,7 @@ async fn analyze_deep_drop_entry(
                         drop_percent,
                         drop_maturity_score * 100.0,
                         min_maturity_required * 100.0
-                    ),
+                    )
                 );
             }
             return None; // Wait for better timing
@@ -1637,8 +1648,9 @@ async fn analyze_deep_drop_entry(
                 "TARGET_RATIO_HIT",
                 &format!(
                     "✅ Target ratio hit: {:.6} ≥ {:.6} SOL",
-                    current_drop_absolute, target_drop_absolute
-                ),
+                    current_drop_absolute,
+                    target_drop_absolute
+                )
             );
         }
         return Some((
@@ -1674,17 +1686,18 @@ async fn analyze_deep_drop_entry(
             if ultra_drop >= fast_threshold && ultra_drop <= max_drop_threshold {
                 // For fast drops, require higher maturity OR very deep drop (due to speed)
                 let min_maturity_for_fast = if ultra_drop >= fast_threshold * 1.5 {
-                    0.4 // Lower bar for very fast deep drops
+                    0.35 // Lower bar for very fast deep drops (was 0.4)
                 } else {
-                    0.6 // Higher bar for fast but shallow drops
+                    0.55 // Slightly lower for fast shallow drops (was 0.6)
                 };
 
                 // Fast drops get some maturity bonus due to their speed
                 let adjusted_maturity = (drop_maturity_score + 0.1).min(1.0);
 
-                if adjusted_maturity >= min_maturity_for_fast
-                    || (!momentum_analysis.is_accelerating
-                        && momentum_analysis.velocity_per_minute < -8.0)
+                if
+                    adjusted_maturity >= min_maturity_for_fast ||
+                    (!momentum_analysis.is_accelerating &&
+                        momentum_analysis.velocity_per_minute < -8.0)
                 {
                     if is_debug_entry_enabled() {
                         log(
@@ -1719,7 +1732,7 @@ async fn analyze_deep_drop_entry(
                                 ultra_drop,
                                 adjusted_maturity * 100.0,
                                 min_maturity_for_fast * 100.0
-                            ),
+                            )
                         );
                     }
                 }
@@ -1737,7 +1750,7 @@ async fn analyze_deep_drop_entry(
                     "💰 Small drop {:.1}% for high liquidity ${:.0}k",
                     drop_percent,
                     liquidity_usd / THOUSAND_DIVISOR
-                ),
+                )
             );
         }
         return Some((
@@ -1776,8 +1789,9 @@ async fn analyze_deep_drop_entry(
                         "MEDIUM_DROP_HIT",
                         &format!(
                             "📊 Medium-term drop {:.1}% ≥ {:.1}% threshold",
-                            medium_drop, medium_threshold
-                        ),
+                            medium_drop,
+                            medium_threshold
+                        )
                     );
                 }
                 return Some((
@@ -1812,9 +1826,10 @@ async fn analyze_deep_drop_entry(
             // Long-term threshold is 0.6x the minimum (catch extended downtrends)
             let long_threshold = effective_min_drop * 0.6;
 
-            if long_drop >= long_threshold
-                && long_drop <= max_drop_threshold
-                && liquidity_usd >= LONG_TERM_MIN_LIQUIDITY
+            if
+                long_drop >= long_threshold &&
+                long_drop <= max_drop_threshold &&
+                liquidity_usd >= LONG_TERM_MIN_LIQUIDITY
             {
                 if is_debug_entry_enabled() {
                     log(
@@ -1822,8 +1837,9 @@ async fn analyze_deep_drop_entry(
                         "LONG_DROP_HIT",
                         &format!(
                             "📈 Long-term drop {:.1}% ≥ {:.1}% threshold",
-                            long_drop, long_threshold
-                        ),
+                            long_drop,
+                            long_threshold
+                        )
                     );
                 }
                 return Some((
@@ -1850,7 +1866,7 @@ async fn analyze_deep_drop_entry(
                         "🔥 Volume spike drop {:.1}% with {:.1}x volume",
                         drop_percent,
                         vol_24h / liquidity_usd
-                    ),
+                    )
                 );
             }
             return Some((
@@ -1874,16 +1890,14 @@ async fn analyze_deep_drop_entry(
                     "SMALL_TOKEN_BIG_DROP",
                     &format!(
                         "💎 Small token big drop {:.1}% for ${:.0}",
-                        drop_percent, liquidity_usd
-                    ),
+                        drop_percent,
+                        liquidity_usd
+                    )
                 );
             }
             return Some((
                 drop_percent,
-                format!(
-                    "small token big drop {:.1}% (${:.0})",
-                    drop_percent, liquidity_usd
-                ),
+                format!("small token big drop {:.1}% (${:.0})", drop_percent, liquidity_usd),
             ));
         }
 
@@ -1899,7 +1913,7 @@ async fn analyze_deep_drop_entry(
                                 "🚀 Large token drop {:.1}% with volume ${:.0}k",
                                 drop_percent,
                                 vol_24h / THOUSAND_DIVISOR
-                            ),
+                            )
                         );
                     }
                     return Some((
@@ -1945,9 +1959,10 @@ async fn analyze_deep_drop_entry(
                 0.0
             };
 
-            if instant_drop >= instant_threshold
-                && instant_drop <= max_drop_threshold
-                && one_min_drop_from_high >= NEAR_TOP_1M_MIN
+            if
+                instant_drop >= instant_threshold &&
+                instant_drop <= max_drop_threshold &&
+                one_min_drop_from_high >= NEAR_TOP_1M_MIN
             {
                 if is_debug_entry_enabled() {
                     log(
@@ -1959,7 +1974,7 @@ async fn analyze_deep_drop_entry(
                             instant_threshold,
                             one_min_drop_from_high,
                             NEAR_TOP_1M_MIN
-                        ),
+                        )
                     );
                 }
                 return Some((
@@ -1988,7 +2003,7 @@ async fn analyze_deep_drop_entry(
             let ma = ma_recent.iter().sum::<f64>() / (ma_recent.len() as f64);
             if ma > 0.0 && ma.is_finite() {
                 let ma_dev = ((ma - current_price) / ma) * 100.0; // how far below MA
-                                                                  // Liquidity-aware MA thresholds
+                // Liquidity-aware MA thresholds
                 let ma_threshold = if liquidity_usd >= 200_000.0 {
                     effective_min_drop * 0.5
                 } else {
@@ -2001,8 +2016,10 @@ async fn analyze_deep_drop_entry(
                             "MA_DEVIATION_HIT",
                             &format!(
                                 "📉 MA deviation {:.1}% ≥ {:.1}% (MA {:.12})",
-                                ma_dev, ma_threshold, ma
-                            ),
+                                ma_dev,
+                                ma_threshold,
+                                ma
+                            )
                         );
                     }
                     return Some((
@@ -2024,7 +2041,7 @@ async fn analyze_deep_drop_entry(
                     "💎 Micro drop {:.1}% for mega liquidity ${:.0}M",
                     drop_percent,
                     liquidity_usd / MILLION_DIVISOR
-                ),
+                )
             );
         }
         return Some((
@@ -2056,9 +2073,10 @@ async fn analyze_deep_drop_entry(
             // Extended threshold is very low (0.4x minimum) to catch slow bleeds
             let extended_threshold = min_drop_threshold * 0.4;
 
-            if extended_drop >= extended_threshold
-                && extended_drop <= max_drop_threshold
-                && liquidity_usd >= 5_000.0
+            if
+                extended_drop >= extended_threshold &&
+                extended_drop <= max_drop_threshold &&
+                liquidity_usd >= 5_000.0
             {
                 if is_debug_entry_enabled() {
                     log(
@@ -2066,8 +2084,9 @@ async fn analyze_deep_drop_entry(
                         "EXTENDED_DROP_HIT",
                         &format!(
                             "📉 Extended drop {:.1}% ≥ {:.1}% threshold",
-                            extended_drop, extended_threshold
-                        ),
+                            extended_drop,
+                            extended_threshold
+                        )
                     );
                 }
                 return Some((
@@ -2089,8 +2108,10 @@ async fn analyze_deep_drop_entry(
             "NO_DROP_SIGNAL",
             &format!(
                 "❌ No drop signals: {:.1}% (need {:.1}%-{:.1}%)",
-                drop_percent, effective_min_drop, max_drop_threshold
-            ),
+                drop_percent,
+                effective_min_drop,
+                max_drop_threshold
+            )
         );
 
         // Final debug: Entry criteria summary for expanded analysis
@@ -2169,16 +2190,8 @@ async fn get_reentry_profile(mint: &str) -> Option<ReentryProfile> {
         }
     }
 
-    let avg_entry = if cnt_entry > 0 {
-        Some(sum_entry / (cnt_entry as f64))
-    } else {
-        None
-    };
-    let avg_exit = if cnt_exit > 0 {
-        Some(sum_exit / (cnt_exit as f64))
-    } else {
-        None
-    };
+    let avg_entry = if cnt_entry > 0 { Some(sum_entry / (cnt_entry as f64)) } else { None };
+    let avg_exit = if cnt_exit > 0 { Some(sum_exit / (cnt_exit as f64)) } else { None };
 
     // Anchor: favor last exit (60%) blended with average exit (40%); fallback to entry prices
     let anchor = if let Some(le) = last_exit {
@@ -2216,10 +2229,11 @@ struct HistoryBias {
 
 fn build_history_bias(profile: &Option<ReentryProfile>, current_price: f64) -> Option<HistoryBias> {
     if let Some(p) = profile {
-        if p.anchor_price > 0.0
-            && p.anchor_price.is_finite()
-            && current_price.is_finite()
-            && current_price > 0.0
+        if
+            p.anchor_price > 0.0 &&
+            p.anchor_price.is_finite() &&
+            current_price.is_finite() &&
+            current_price > 0.0
         {
             let diff_pct = ((current_price - p.anchor_price) / p.anchor_price) * 100.0;
             let (premium_over, below_by) = if diff_pct >= 0.0 {
