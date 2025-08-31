@@ -413,13 +413,11 @@ async fn main() {
             &format!("🚨 {} CRITICAL OPERATIONS STILL ACTIVE - Extending task shutdown timeout to 120 seconds", final_critical_ops)
         );
         120 // Extended timeout when critical operations are active
+    } else if dashboard_mode {
+        20
     } else {
-        if dashboard_mode {
-            20
-        } else {
-            10
-        } // More time in dashboard mode to drain logs/UI
-    };
+        10
+    }; // More time in dashboard mode to drain logs/UI
 
     // If in dashboard mode, ensure timeout is at least as long as dashboard's max wait window
     if dashboard_mode {
