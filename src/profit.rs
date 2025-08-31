@@ -14,7 +14,7 @@
 //! * `crate::logger::log` and `crate::global::is_debug_profit_enabled()` are available.
 
 use crate::global::*;
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use crate::positions_lib::calculate_position_pnl;
 use crate::positions_types::Position;
 use chrono::Utc;
@@ -22,6 +22,7 @@ use chrono::Utc;
 /// ============================= Tunables =============================
 
 // Loss & risk (percent)
+
 pub const STOP_LOSS_PERCENT: f64 = -40.0; // Hard kill after initial grace
 pub const EXTREME_LOSS_PERCENT: f64 = -55.0; // Emergency immediate kill
 
@@ -45,17 +46,17 @@ pub const TRAIL_TIGHTEN_FULL: f64 = 90.0;
 pub const EXIT_ODDS_THRESHOLD: f64 = 0.65; // below this, favor exiting when EV not positive
 
 // Quick capture windows: (minutes, required profit %)
-const QUICK_WINDOWS: &[(f64, f64)] = &[(1.0, 30.0), (5.0, 50.0), (15.0, 80.0)];
+const QUICK_WINDOWS: &[(f64, f64)] = &[
+    (1.0, 30.0),
+    (5.0, 50.0),
+    (15.0, 80.0),
+];
 
 /// ============================= Helpers =============================
 
 #[inline]
 fn clamp01(v: f64) -> f64 {
-    if v.is_finite() {
-        v.max(0.0).min(1.0)
-    } else {
-        0.0
-    }
+    if v.is_finite() { v.max(0.0).min(1.0) } else { 0.0 }
 }
 
 /// Compute a dynamic trailing gap (in percentage points) from peak profit and time held.
@@ -66,11 +67,7 @@ fn clamp01(v: f64) -> f64 {
 /// - Returned value rounded to 2 decimals to reduce log churn.
 pub fn trailing_gap(peak_profit: f64, minutes_held: f64) -> f64 {
     // Sanitize inputs
-    let minutes = if minutes_held.is_finite() && minutes_held > 0.0 {
-        minutes_held
-    } else {
-        0.0
-    };
+    let minutes = if minutes_held.is_finite() && minutes_held > 0.0 { minutes_held } else { 0.0 };
 
     if !peak_profit.is_finite() || peak_profit <= 0.0 {
         return TRAIL_MIN_GAP;
@@ -79,13 +76,13 @@ pub fn trailing_gap(peak_profit: f64, minutes_held: f64) -> f64 {
     // Base: higher profits allow wider absolute gaps (but proportionally smaller).
     // We use piecewise factors to avoid wild swings in the small profit region.
     let mut gap = if peak_profit < 20.0 {
-        (peak_profit * 0.40)
+        peak_profit * 0.4
     } else if peak_profit < 50.0 {
-        (peak_profit * 0.30)
+        peak_profit * 0.3
     } else if peak_profit < 100.0 {
-        (peak_profit * 0.25)
+        peak_profit * 0.25
     } else {
-        (peak_profit * 0.20)
+        peak_profit * 0.2
     };
 
     // Clamp
@@ -93,15 +90,16 @@ pub fn trailing_gap(peak_profit: f64, minutes_held: f64) -> f64 {
 
     // Time tightening: from TRAIL_TIGHTEN_START -> TRAIL_TIGHTEN_FULL reduce gap by up to 30%
     if minutes >= TRAIL_TIGHTEN_START && TRAIL_TIGHTEN_FULL > TRAIL_TIGHTEN_START {
-        let progress = ((minutes - TRAIL_TIGHTEN_START)
-            / (TRAIL_TIGHTEN_FULL - TRAIL_TIGHTEN_START))
-            .clamp(0.0, 1.0);
-        let shrink = 0.30 * progress;
+        let progress = (
+            (minutes - TRAIL_TIGHTEN_START) /
+            (TRAIL_TIGHTEN_FULL - TRAIL_TIGHTEN_START)
+        ).clamp(0.0, 1.0);
+        let shrink = 0.3 * progress;
         gap *= 1.0 - shrink;
     }
 
     // Safety clamp + rounding to 2 decimals
-    ((gap.clamp(TRAIL_MIN_GAP, TRAIL_MAX_GAP)) * 100.0).round() / 100.0
+    (gap.clamp(TRAIL_MIN_GAP, TRAIL_MAX_GAP) * 100.0).round() / 100.0
 }
 
 /// A simple continuation odds estimator (0.0..1.0).
@@ -109,11 +107,7 @@ pub fn trailing_gap(peak_profit: f64, minutes_held: f64) -> f64 {
 /// - Odds decay with holding time and current profit (diminishing returns).
 /// - Very quick, large moves get a temporary early_boost.
 pub fn continuation_odds(profit_percent: f64, minutes_held: f64) -> f64 {
-    let minutes = if minutes_held.is_finite() && minutes_held >= 0.0 {
-        minutes_held
-    } else {
-        0.0
-    };
+    let minutes = if minutes_held.is_finite() && minutes_held >= 0.0 { minutes_held } else { 0.0 };
 
     // Minimal floor - a slight edge to holding small profiting positions
     if profit_percent <= 0.0 {
@@ -127,11 +121,7 @@ pub fn continuation_odds(profit_percent: f64, minutes_held: f64) -> f64 {
     let profit_decay = (-(profit_percent / 120.0).powf(1.1)).exp();
 
     // Early boost for very fast moves
-    let early_boost = if minutes < 5.0 && profit_percent > 40.0 {
-        0.10
-    } else {
-        0.0
-    };
+    let early_boost = if minutes < 5.0 && profit_percent > 40.0 { 0.1 } else { 0.0 };
 
     (time_decay * profit_decay + early_boost).clamp(0.0, 1.0)
 }
@@ -148,9 +138,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         return false;
     }
 
-    let entry = position
-        .effective_entry_price
-        .unwrap_or(position.entry_price);
+    let entry = position.effective_entry_price.unwrap_or(position.entry_price);
     if !entry.is_finite() || entry <= 0.0 {
         return false;
     }
@@ -186,11 +174,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     // Peak profit (percentage)
     let highest = position.price_highest.max(current_price);
-    let peak_profit = if entry > 0.0 {
-        ((highest - entry) / entry) * 100.0
-    } else {
-        0.0
-    };
+    let peak_profit = if entry > 0.0 { ((highest - entry) / entry) * 100.0 } else { 0.0 };
 
     // Drawdown from peak (how far we've come off the peak)
     let drawdown = peak_profit - pnl_percent;
@@ -206,13 +190,13 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
             EXIT_ODDS_THRESHOLD
         } else {
             // Move linearly down to 0.50 at full pressure (forces more exits)
-            let factor = 1.0 - ((time_pressure - 0.6) / (1.0 - 0.6)); // 1 -> 0 as pressure increases
-            let lowered = 0.50 + 0.15 * factor; // ranges roughly 0.50 .. 0.65
+            let factor = 1.0 - (time_pressure - 0.6) / (1.0 - 0.6); // 1 -> 0 as pressure increases
+            let lowered = 0.5 + 0.15 * factor; // ranges roughly 0.50 .. 0.65
             lowered.clamp(0.45, EXIT_ODDS_THRESHOLD)
         }
     };
 
-    let trailing_time_pressure_multiplier = 1.0 - (time_pressure * 0.35); // up to 35% tighter trailing gaps
+    let trailing_time_pressure_multiplier = 1.0 - time_pressure * 0.35; // up to 35% tighter trailing gaps
 
     // 1) Extreme loss immediate kill (no questions)
     if pnl_percent <= EXTREME_LOSS_PERCENT {
@@ -247,8 +231,42 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         }
     }
 
-    // 6) Gate: do not consider discretionary exits below minimum profit
-    if pnl_percent < BASE_MIN_PROFIT_PERCENT {
+    // 6) Adaptive minimum profit gate
+    // We reduce the min threshold over time (so we can exit smaller wins later instead of round-tripping)
+    // and also if volatility already produced a decent peak but we gave a lot back.
+    let dynamic_min_profit = {
+        // Base decays from BASE_MIN_PROFIT_PERCENT toward 0.5 * BASE over time pressure
+        let decay_component = BASE_MIN_PROFIT_PERCENT * (1.0 - 0.5 * time_pressure);
+        // After 25 minutes allow a further soft decay to encourage freeing capital
+        let long_hold_bonus = if minutes_held > 25.0 { BASE_MIN_PROFIT_PERCENT * 0.2 } else { 0.0 };
+        (decay_component - long_hold_bonus).max(3.0)
+    };
+
+    // Early round-trip protection: if we ever reached >= BASE_MIN_PROFIT_PERCENT (peak) but have now
+    // fallen back below a small fraction of that quickly (within 12m) -> exit to avoid full reversal.
+    if
+        peak_profit >= BASE_MIN_PROFIT_PERCENT &&
+        minutes_held <= 12.0 &&
+        pnl_percent < (peak_profit * 0.35).min(BASE_MIN_PROFIT_PERCENT * 0.6)
+    {
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Profit,
+                "EARLY_RETRACE_EXIT",
+                &format!(
+                    "{} pnl={:.2}% peak={:.2}% t={:.1}m retrace={:.2}%",
+                    position.symbol,
+                    pnl_percent,
+                    peak_profit,
+                    minutes_held,
+                    peak_profit - pnl_percent
+                )
+            );
+        }
+        return true;
+    }
+
+    if pnl_percent < dynamic_min_profit {
         // However, if time pressure is very high and we're above a small profit, close to avoid forced cap
         if time_pressure > 0.95 && pnl_percent > 2.0 {
             return true;
@@ -260,6 +278,14 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     if peak_profit >= BASE_MIN_PROFIT_PERCENT {
         // baseline gap derived from peak profit and age
         let mut gap = trailing_gap(peak_profit, minutes_held);
+
+        // Micro trailing for early modest profits (10% - 25% peak) to avoid giving back everything.
+        if peak_profit < 25.0 {
+            let micro_gap = (peak_profit * 0.35).clamp(3.0, 8.0); // 35% of peak with bounds
+            if micro_gap < gap {
+                gap = micro_gap;
+            }
+        }
 
         // Apply time-pressure multiplier (tighten gap as approaching max hold)
         gap *= trailing_time_pressure_multiplier;
@@ -284,7 +310,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                         gap,
                         minutes_held,
                         time_pressure
-                    ),
+                    )
                 );
             }
             return true;
@@ -300,8 +326,9 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     // Future gap is an estimate of how much downside we'd accept as the trailing gap if we continued.
     // Use max(pnl_percent, peak_profit) to avoid underestimating gap in certain edge cases.
-    let future_gap = trailing_gap(pnl_percent.max(peak_profit), minutes_held)
-        * trailing_time_pressure_multiplier;
+    let future_gap =
+        trailing_gap(pnl_percent.max(peak_profit), minutes_held) *
+        trailing_time_pressure_multiplier;
 
     // Expected edge: simplified EV proxy
     let expected_edge = odds * potential_gain - (1.0 - odds) * future_gap;
@@ -320,7 +347,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                     adaptive_odds_threshold,
                     expected_edge,
                     minutes_held
-                ),
+                )
             );
         }
         return true;
@@ -335,8 +362,11 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                 "TIME_PRESSURE_EXIT",
                 &format!(
                     "{} pnl={:.2}% t={:.1}m pressure={:.2}",
-                    position.symbol, pnl_percent, minutes_held, time_pressure
-                ),
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held,
+                    time_pressure
+                )
             );
         }
         return true;
@@ -348,7 +378,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
             LogTag::Profit,
             "DECISION",
             &format!(
-                "{} pnl={:.2}% ({:.6} SOL) peak={:.2}% dd={:.2}% t={:.1}m tp={:.2} odds={:.2} edge={:.2} thr={:.2}",
+                "{} pnl={:.2}% ({:.6} SOL) peak={:.2}% dd={:.2}% t={:.1}m tp={:.2} odds={:.2} edge={:.2} thr={:.2} dyn_min={:.2}",
                 position.symbol,
                 pnl_percent,
                 pnl_sol,
@@ -358,8 +388,9 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                 time_pressure,
                 odds,
                 expected_edge,
-                adaptive_odds_threshold
-            ),
+                adaptive_odds_threshold,
+                dynamic_min_profit
+            )
         );
     }
 
