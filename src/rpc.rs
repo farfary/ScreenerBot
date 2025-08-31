@@ -4609,164 +4609,15 @@ impl RpcClient {
             }
         }
 
-        // Normal mode: Try main RPC first
-        let mut should_fallback = false;
-
-        match
-            client
-                .post(&configs.rpc_url)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send().await
-        {
-            Ok(response) => {
-                // Check if response indicates rate limiting
-                if Self::is_rate_limit_response(&response) {
-                    should_fallback = true;
-                    self.record_429_error(Some(&configs.rpc_url));
-                    log(
-                        LogTag::Rpc,
-                        "WARNING",
-                        "Main RPC returned 429 rate limit for getProgramAccounts, falling back to premium"
-                    );
-                } else if !response.status().is_success() {
-                    let status = response.status();
-                    let error_text = response
-                        .text().await
-                        .unwrap_or_else(|_| "Unknown error".to_string());
-
-                    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                        should_fallback = true;
-                        self.record_429_error(Some(&configs.rpc_url));
-                        log(
-                            LogTag::Rpc,
-                            "WARNING",
-                            "Main RPC rate limited for getProgramAccounts, falling back to premium"
-                        );
-                    } else if status == reqwest::StatusCode::REQUEST_TIMEOUT {
-                        return Err(
-                            ScreenerBotError::Network(NetworkError::ConnectionTimeout {
-                                endpoint: configs.rpc_url.clone(),
-                                timeout_ms: timeout_seconds.unwrap_or(60) * 1000,
-                            })
-                        );
-                    } else if status.as_u16() == 410 {
-                        should_fallback = true;
-                        log(
-                            LogTag::Rpc,
-                            "WARNING",
-                            "Main RPC disabled getProgramAccounts (410), falling back to premium"
-                        );
-                    } else {
-                        return Err(
-                            ScreenerBotError::Network(NetworkError::HttpStatusError {
-                                endpoint: configs.rpc_url.clone(),
-                                status: status.as_u16(),
-                                body: Some(error_text),
-                            })
-                        );
-                    }
-                } else {
-                    let rpc_response = response.json::<serde_json::Value>().await.map_err(|e| {
-                        ScreenerBotError::Data(DataError::ParseError {
-                            data_type: "RPC response".to_string(),
-                            error: e.to_string(),
-                        })
-                    })?;
-
-                    // Check for RPC-level errors
-                    if let Some(error) = rpc_response.get("error") {
-                        if let Some(message) = error.get("message").and_then(|m| m.as_str()) {
-                            let error_msg = message.to_lowercase();
-
-                            if
-                                error_msg.contains("timeout") ||
-                                error_msg.contains("too many accounts")
-                            {
-                                return Err(
-                                    ScreenerBotError::Network(NetworkError::ConnectionTimeout {
-                                        endpoint: configs.rpc_url.clone(),
-                                        timeout_ms: timeout_seconds.unwrap_or(60) * 1000,
-                                    })
-                                );
-                            } else if error_msg.contains("rate limit") || error_msg.contains("429") {
-                                should_fallback = true;
-                                self.record_429_error(Some(&configs.rpc_url));
-                                log(
-                                    LogTag::Rpc,
-                                    "WARNING",
-                                    "Main RPC rate limited (error message), falling back to premium"
-                                );
-                            } else {
-                                return Err(
-                                    ScreenerBotError::RpcProvider(RpcProviderError::Generic {
-                                        provider_name: "main_rpc".to_string(),
-                                        message: format!("RPC error: {}", message),
-                                    })
-                                );
-                            }
-                        }
-                    } else if let Some(result) = rpc_response.get("result") {
-                        if let Some(accounts) = result.as_array() {
-                            self.record_call_for_url(&configs.rpc_url, "getProgramAccounts");
-                            self.record_success(Some(&configs.rpc_url));
-
-                            if is_debug_rpc_enabled() {
-                                log(
-                                    LogTag::Rpc,
-                                    "DEBUG",
-                                    &format!(
-                                        "Retrieved {} program accounts from main RPC",
-                                        accounts.len()
-                                    )
-                                );
-                            }
-
-                            return Ok(accounts.clone());
-                        }
-                    }
-
-                    if !should_fallback {
-                        return Err(
-                            ScreenerBotError::Data(DataError::ParseError {
-                                data_type: "program accounts".to_string(),
-                                error: "No accounts found or invalid response format".to_string(),
-                            })
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                let error_msg = e.to_string();
-                if Self::is_rate_limit_error(&error_msg) {
-                    should_fallback = true;
-                    self.record_429_error(Some(&configs.rpc_url));
-                    log(
-                        LogTag::Rpc,
-                        "WARNING",
-                        &format!("Main RPC rate limited for getProgramAccounts: {}, falling back to premium", error_msg)
-                    );
-                } else {
-                    return Err(
-                        ScreenerBotError::Network(NetworkError::Generic {
-                            message: format!("Failed to get program accounts from main RPC: {}", e),
-                        })
-                    );
-                }
-            }
-        }
-
-        // Only fallback to premium RPC on 429/rate limit errors
-        if !should_fallback {
-            return Err(
-                ScreenerBotError::RpcProvider(RpcProviderError::Generic {
-                    provider_name: "main_rpc".to_string(),
-                    message: "Failed to get program accounts from main RPC".to_string(),
-                })
+        // Use only premium RPC for getProgramAccounts
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "PREMIUM_ONLY",
+                "Using premium RPC for getProgramAccounts (main RPC calls removed)"
             );
         }
 
-        // Fallback to premium RPC
         match
             client
                 .post(&configs.rpc_url_premium)
@@ -4855,7 +4706,7 @@ impl RpcClient {
                                 LogTag::Rpc,
                                 "DEBUG",
                                 &format!(
-                                    "Retrieved {} program accounts from premium RPC (fallback)",
+                                    "Retrieved {} program accounts from premium RPC",
                                     accounts.len()
                                 )
                             );
@@ -4872,13 +4723,12 @@ impl RpcClient {
                     })
                 )
             }
-            Err(e) => {
+            Err(e) =>
                 Err(
                     ScreenerBotError::Network(NetworkError::Generic {
                         message: format!("Failed to get program accounts from premium RPC: {}", e),
                     })
-                )
-            }
+                ),
         }
     }
 }
