@@ -1,14 +1,14 @@
 //! Comprehensive profit system analyzer
 //! Deep analysis of profit decision logic, parameter sensitivity, and edge cases
 
+use chrono::{Duration as ChronoDuration, Utc};
 use screenerbot::positions_types::Position;
 use screenerbot::profit::*;
-use chrono::{ Utc, Duration as ChronoDuration };
 
 // Quick capture windows (from profit.rs - not exposed)
 const QUICK_WINDOWS: &[(f64, f64)] = &[
-    (1.0, 30.0), // 30% profit in 1 minute = instant exit
-    (5.0, 50.0), // 50% profit in 5 minutes = instant exit
+    (1.0, 30.0),  // 30% profit in 1 minute = instant exit
+    (5.0, 50.0),  // 50% profit in 5 minutes = instant exit
     (15.0, 80.0), // 80% profit in 15 minutes = instant exit
 ];
 
@@ -35,7 +35,7 @@ async fn analyze_decision_breakdown() {
         ("Slow 50% in 30min", 30.0, 1.0, 1.5, 1.0),
         ("Peak 100% now 80%", 45.0, 1.0, 2.0, 1.8),
         ("Loss -30%", 20.0, 1.0, 1.0, 0.7),
-        ("Stale 25% in 90min", 90.0, 1.0, 1.25, 1.25)
+        ("Stale 25% in 90min", 90.0, 1.0, 1.25, 1.25),
     ];
 
     for (name, minutes, entry, peak, current) in test_cases {
@@ -83,14 +83,12 @@ async fn analyze_parameter_sensitivity() {
 
     // Test odds sensitivity
     println!("\nContinuation Odds Analysis:");
-    for (profit, time) in [
-        (20.0, 30.0),
-        (50.0, 60.0),
-        (80.0, 90.0),
-        (100.0, 120.0),
-    ] {
+    for (profit, time) in [(20.0, 30.0), (50.0, 60.0), (80.0, 90.0), (100.0, 120.0)] {
         let odds = continuation_odds(profit, time);
-        println!("  {:.0}% profit at {:.0}min: {:.2} odds", profit, time, odds);
+        println!(
+            "  {:.0}% profit at {:.0}min: {:.2} odds",
+            profit, time, odds
+        );
     }
 
     // Test critical thresholds
@@ -103,12 +101,19 @@ async fn test_threshold_sensitivity() {
     let base_pos = create_test_position(1.0, 45.0, 1.5, 1.0);
 
     // Test around BASE_MIN_PROFIT_PERCENT
-    println!("  Base Min Profit Threshold ({:.0}%):", BASE_MIN_PROFIT_PERCENT);
+    println!(
+        "  Base Min Profit Threshold ({:.0}%):",
+        BASE_MIN_PROFIT_PERCENT
+    );
     for offset in [-2.0, -1.0, 0.0, 1.0, 2.0] {
         let test_profit = BASE_MIN_PROFIT_PERCENT + offset;
         let price = 1.0 * (1.0 + test_profit / 100.0);
         let decision = should_sell(&base_pos, price).await;
-        println!("    {:.1}%: {}", test_profit, if decision { "SELL" } else { "HOLD" });
+        println!(
+            "    {:.1}%: {}",
+            test_profit,
+            if decision { "SELL" } else { "HOLD" }
+        );
     }
 
     // Test around INSTANT_EXIT_LEVEL_1
@@ -117,7 +122,11 @@ async fn test_threshold_sensitivity() {
         let test_profit = INSTANT_EXIT_LEVEL_1 + offset;
         let price = 1.0 * (1.0 + test_profit / 100.0);
         let decision = should_sell(&base_pos, price).await;
-        println!("    {:.1}%: {}", test_profit, if decision { "SELL" } else { "HOLD" });
+        println!(
+            "    {:.1}%: {}",
+            test_profit,
+            if decision { "SELL" } else { "HOLD" }
+        );
     }
 }
 
@@ -132,7 +141,7 @@ async fn analyze_edge_cases() {
         ("Deep loss recovery", 60.0, 1.0, 1.2, 0.6),
         ("Price equal to entry", 30.0, 1.0, 1.3, 1.0),
         ("Negative price (invalid)", 30.0, 1.0, 1.3, -0.5),
-        ("Zero price (invalid)", 30.0, 1.0, 1.3, 0.0)
+        ("Zero price (invalid)", 30.0, 1.0, 1.3, 0.0),
     ];
 
     for (name, minutes, entry, peak, current) in edge_cases {
@@ -140,21 +149,17 @@ async fn analyze_edge_cases() {
         let decision = should_sell(&pos, current).await;
 
         if current <= 0.0 || !current.is_finite() {
-            println!("{}: {} (Invalid price handled correctly)", name, if decision {
-                "SELL"
-            } else {
-                "HOLD"
-            });
+            println!(
+                "{}: {} (Invalid price handled correctly)",
+                name,
+                if decision { "SELL" } else { "HOLD" }
+            );
         } else {
             let profit_pct = ((current - entry) / entry) * 100.0;
             println!(
                 "{}: {} | Profit: {:.1}%",
                 name,
-                if decision {
-                    "SELL"
-                } else {
-                    "HOLD"
-                },
+                if decision { "SELL" } else { "HOLD" },
                 profit_pct
             );
         }
@@ -167,7 +172,10 @@ async fn analyze_timing_windows() {
 
     println!("Quick Capture Windows:");
     for (window_min, required_profit) in QUICK_WINDOWS {
-        println!("  {:.0}min window requires {:.0}% profit", window_min, required_profit);
+        println!(
+            "  {:.0}min window requires {:.0}% profit",
+            window_min, required_profit
+        );
 
         // Test just below and above threshold
         for test_profit in [required_profit - 5.0, required_profit + 5.0] {
@@ -175,15 +183,16 @@ async fn analyze_timing_windows() {
                 1.0,
                 *window_min - 0.1,
                 1.0 + test_profit / 100.0,
-                1.0 + test_profit / 100.0
+                1.0 + test_profit / 100.0,
             );
             let price = 1.0 + test_profit / 100.0;
             let decision = should_sell(&pos, price).await;
-            println!("    {:.0}% at {:.1}min: {}", test_profit, window_min - 0.1, if decision {
-                "SELL"
-            } else {
-                "HOLD"
-            });
+            println!(
+                "    {:.0}% at {:.1}min: {}",
+                test_profit,
+                window_min - 0.1,
+                if decision { "SELL" } else { "HOLD" }
+            );
         }
     }
 }
@@ -210,7 +219,7 @@ async fn analyze_trailing_behavior() {
                 entry_price,
                 minutes,
                 peak_price,
-                current_price.min(entry_price)
+                current_price.min(entry_price),
             );
             let decision = should_sell(&pos, current_price).await;
 
@@ -222,11 +231,7 @@ async fn analyze_trailing_behavior() {
                     current_profit,
                     drawdown,
                     gap,
-                    if decision {
-                        "SELL"
-                    } else {
-                        "HOLD"
-                    }
+                    if decision { "SELL" } else { "HOLD" }
                 );
             }
         }
@@ -263,9 +268,10 @@ async fn analyze_decision_reasons(pos: &Position, current_price: f64, decision: 
     // Quick capture
     for (window_minutes, required_profit) in QUICK_WINDOWS {
         if minutes_held <= *window_minutes && pnl_percent >= *required_profit {
-            reasons.push(
-                format!("Quick capture ({:.0}min/{:.0}%)", window_minutes, required_profit)
-            );
+            reasons.push(format!(
+                "Quick capture ({:.0}min/{:.0}%)",
+                window_minutes, required_profit
+            ));
             break;
         }
     }

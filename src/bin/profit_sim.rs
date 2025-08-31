@@ -1,9 +1,9 @@
 //! Profit system simulation
 //! Simulates price paths to evaluate profiting logic.
 
+use chrono::{Duration as ChronoDuration, Utc};
 use screenerbot::positions_types::Position;
-use screenerbot::profit::{ should_sell, trailing_gap, continuation_odds };
-use chrono::{ Utc, Duration as ChronoDuration };
+use screenerbot::profit::{continuation_odds, should_sell, trailing_gap};
 
 #[tokio::main]
 async fn main() {
@@ -18,7 +18,7 @@ async fn main() {
             vec![
                 (0.0, 1.0),
                 (0.5, 1.15), // +15% in 30s
-                (1.0, 1.35) // +35% in 1m - should trigger quick capture
+                (1.0, 1.35), // +35% in 1m - should trigger quick capture
             ],
         ),
         (
@@ -28,9 +28,9 @@ async fn main() {
                 (10.0, 1.25), // +25% in 10m
                 (20.0, 1.45), // +45% in 20m
                 (30.0, 1.65), // +65% in 30m
-                (45.0, 1.8), // +80% in 45m
+                (45.0, 1.8),  // +80% in 45m
                 (60.0, 1.75), // Retrace to +75%
-                (90.0, 1.6) // Further retrace to +60%
+                (90.0, 1.6),  // Further retrace to +60%
             ],
         ),
         (
@@ -38,7 +38,7 @@ async fn main() {
             vec![
                 (0.0, 1.0),
                 (2.0, 1.8), // +80% in 2m
-                (5.0, 2.6) // +160% in 5m - should trigger instant exit
+                (5.0, 2.6), // +160% in 5m - should trigger instant exit
             ],
         ),
         (
@@ -46,40 +46,40 @@ async fn main() {
             vec![
                 (0.0, 1.0),
                 (10.0, 0.85), // -15%
-                (20.0, 0.7), // -30%
-                (30.0, 0.55) // -45% - should trigger stop loss
+                (20.0, 0.7),  // -30%
+                (30.0, 0.55), // -45% - should trigger stop loss
             ],
         ),
         (
             "Trailing Stop Capture",
             vec![
                 (0.0, 1.0),
-                (8.0, 1.4), // +40% in 8m
+                (8.0, 1.4),   // +40% in 8m
                 (16.0, 1.55), // +55%
-                (24.0, 1.7), // +70%
+                (24.0, 1.7),  // +70%
                 (32.0, 1.62), // - from peak -> drawdown triggers trailing maybe
-                (40.0, 1.55) // deeper pullback
+                (40.0, 1.55), // deeper pullback
             ],
         ),
         (
             "Odds Based Late Exit",
             vec![
                 (0.0, 1.0),
-                (50.0, 1.25), // +25% after long time
-                (80.0, 1.3), // +30%
+                (50.0, 1.25),  // +25% after long time
+                (80.0, 1.3),   // +30%
                 (100.0, 1.28), // slight retrace; odds should decay
-                (110.0, 1.27)
+                (110.0, 1.27),
             ],
         ),
         (
             "Time Cap",
             vec![
                 (0.0, 1.0),
-                (110.0, 1.5), // +50%
+                (110.0, 1.5),  // +50%
                 (119.0, 1.55), // +55%
-                (121.0, 1.53) // exceed MAX_HOLD_MINUTES
+                (121.0, 1.53), // exceed MAX_HOLD_MINUTES
             ],
-        )
+        ),
     ];
 
     for (scenario_name, path) in scenarios {
@@ -152,15 +152,14 @@ async fn main() {
                 drawdown,
                 gap,
                 odds,
-                if decision {
-                    "SELL"
-                } else {
-                    "HOLD"
-                }
+                if decision { "SELL" } else { "HOLD" }
             );
 
             if decision {
-                println!("-> EXIT at {:.1} minutes with {:.2}% profit", minute, profit_pct);
+                println!(
+                    "-> EXIT at {:.1} minutes with {:.2}% profit",
+                    minute, profit_pct
+                );
                 break;
             }
         }

@@ -62,14 +62,14 @@ const TOTAL_PREFIX_WIDTH: usize = TAG_WIDTH + LOG_TYPE_WIDTH + BRACKET_SPACE_WID
 /// Maximum line length before wrapping
 const MAX_LINE_LENGTH: usize = 175;
 
+use crate::arguments::is_dashboard_enabled;
 use chrono::Local;
 use colored::*;
-use std::fs::{ self, File, OpenOptions };
-use std::io::{ Write, BufWriter };
-use std::path::PathBuf;
-use std::sync::{ Arc, Mutex };
 use once_cell::sync::Lazy;
-use crate::arguments::is_dashboard_enabled;
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufWriter, Write};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 /// File logger state for thread-safe file operations
 struct FileLogger {
@@ -90,7 +90,10 @@ impl FileLogger {
         let log_file_name = format!("screenerbot_{}.log", timestamp);
         let log_file_path = log_dir.join(&log_file_name);
 
-        let file = OpenOptions::new().create(true).append(true).open(&log_file_path)?;
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file_path)?;
 
         // Use larger buffer for better performance with high-volume logging
         let file_writer = Some(BufWriter::with_capacity(FILE_BUFFER_SIZE, file));
@@ -136,14 +139,14 @@ impl FileLogger {
 
     // Static cleanup method that can be called from async context
     async fn cleanup_old_logs_static(
-        log_dir: &std::path::Path
+        log_dir: &std::path::Path,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Call blocking version in async context
-        match
-            tokio::task::spawn_blocking({
-                let log_dir = log_dir.to_path_buf();
-                move || Self::cleanup_old_logs_blocking(&log_dir)
-            }).await
+        match tokio::task::spawn_blocking({
+            let log_dir = log_dir.to_path_buf();
+            move || Self::cleanup_old_logs_blocking(&log_dir)
+        })
+        .await
         {
             Ok(result) => result.map_err(|e| format!("Cleanup error: {}", e).into()),
             Err(e) => Err(format!("Cleanup task failed: {}", e).into()),
@@ -286,12 +289,14 @@ fn write_to_file(message: &str) {
                 if let Err(_) = logger.write_to_file(&clean_message) {
                     // SAFETY: Don't spam stderr with file write errors during high-volume logging
                     // Only print error once per 1000 failures to avoid log spam
-                    static ERROR_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(
-                        0
-                    );
+                    static ERROR_COUNTER: std::sync::atomic::AtomicU64 =
+                        std::sync::atomic::AtomicU64::new(0);
                     let count = ERROR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     if count % 1000 == 0 {
-                        eprintln!("File logging errors (shown every 1000): count = {}", count + 1);
+                        eprintln!(
+                            "File logging errors (shown every 1000): count = {}",
+                            count + 1
+                        );
                     }
                 }
             }
@@ -299,9 +304,8 @@ fn write_to_file(message: &str) {
         Err(_) => {
             // PERFORMANCE: If lock is busy, drop the message rather than blocking
             // This prevents logging from becoming a bottleneck during high-volume periods
-            static DROP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(
-                0
-            );
+            static DROP_COUNTER: std::sync::atomic::AtomicU64 =
+                std::sync::atomic::AtomicU64::new(0);
             let count = DROP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             if count % 1000 == 0 && count > 0 {
                 eprintln!("Dropped {} log messages due to busy file logger", count + 1);
@@ -342,18 +346,18 @@ impl std::fmt::Display for LogTag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let tag_str = match self {
             LogTag::Monitor => format!("{:<8}", "MONITOR").bright_cyan().bold(), // 👁️ Watchful blue
-            LogTag::Trader => format!("{:<8}", "TRADER").bright_blue().bold(), // 💰 Money green
+            LogTag::Trader => format!("{:<8}", "TRADER").bright_blue().bold(),   // 💰 Money green
             LogTag::Wallet => format!("{:<8}", "WALLET").bright_magenta().bold(), // 💜 Rich purple for wealth
             LogTag::System => format!("{:<8}", "SYSTEM").bright_yellow().bold(), // ⚙️ Mechanical yellow
-            LogTag::Pool => format!("{:<8}", "POOL").bright_blue().bold(), // 🏊 Pool blue
+            LogTag::Pool => format!("{:<8}", "POOL").bright_blue().bold(),       // 🏊 Pool blue
             LogTag::Blacklist => format!("{:<8}", "BLACKLIST").bright_red().bold(), // 🚫 Warning red
             LogTag::Discovery => format!("{:<8}", "DISCOVER").bright_white().bold(), // 🔍 Search white
             LogTag::Filtering => format!("{:<8}", "FILTER").bright_yellow().bold(), // 🔄 Filter yellow
-            LogTag::Api => format!("{:<8}", "API").bright_purple().bold(), // 🌐 API purple
+            LogTag::Api => format!("{:<8}", "API").bright_purple().bold(),          // 🌐 API purple
             LogTag::Rugcheck => format!("{:<8}", "RUGCHECK").bright_red().bold(), // 🛡️ Security red
-            LogTag::Profit => format!("{:<8}", "PROFIT").bright_purple().bold(), // 💲 Profit green
+            LogTag::Profit => format!("{:<8}", "PROFIT").bright_purple().bold(),  // 💲 Profit green
             LogTag::PriceService => format!("{:<8}", "PRICE").bright_green().bold(), // 💹 Price service green
-            LogTag::Rpc => format!("{:<8}", "RPC").bright_cyan().bold(), // 🔗 RPC cyan
+            LogTag::Rpc => format!("{:<8}", "RPC").bright_cyan().bold(),             // 🔗 RPC cyan
             LogTag::Ohlcv => format!("{:<8}", "OHLCV").bright_green().bold(), // 📈 OHLCV chart green
             LogTag::Decimals => format!("{:<8}", "DECIMALS").bright_white().bold(), // 🔢 Decimals white
             LogTag::Swap => format!("{:<8}", "SWAP").bright_magenta().bold(), // 🔄 Swap magenta
@@ -382,158 +386,124 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
     } else if LOG_SHOW_TIME {
         prefix = format!("{} ", time);
     }
-    let prefix = if !prefix.is_empty() { prefix.dimmed().to_string() } else { String::new() };
+    let prefix = if !prefix.is_empty() {
+        prefix.dimmed().to_string()
+    } else {
+        String::new()
+    };
 
     // Fixed-width log tag
     let tag_str = match tag {
-        LogTag::Monitor =>
-            format!("{:<width$}", "MONITOR", width = TAG_WIDTH)
-                .bright_cyan()
-                .bold(),
-        LogTag::Trader =>
-            format!("{:<width$}", "TRADER", width = TAG_WIDTH)
-                .bright_green()
-                .bold(),
-        LogTag::Wallet =>
-            format!("{:<width$}", "WALLET", width = TAG_WIDTH)
-                .bright_magenta()
-                .bold(),
-        LogTag::System =>
-            format!("{:<width$}", "SYSTEM", width = TAG_WIDTH)
-                .bright_yellow()
-                .bold(),
-        LogTag::Pool =>
-            format!("{:<width$}", "POOL", width = TAG_WIDTH)
-                .bright_blue()
-                .bold(),
-        LogTag::Blacklist =>
-            format!("{:<width$}", "BLACKLIST", width = TAG_WIDTH)
-                .bright_red()
-                .bold(),
-        LogTag::Discovery =>
-            format!("{:<width$}", "DISCOVER", width = TAG_WIDTH)
-                .bright_white()
-                .bold(),
-        LogTag::Filtering =>
-            format!("{:<width$}", "FILTER", width = TAG_WIDTH)
-                .bright_yellow()
-                .bold(),
-        LogTag::Api =>
-            format!("{:<width$}", "API", width = TAG_WIDTH)
-                .bright_purple()
-                .bold(),
-        LogTag::Rugcheck =>
-            format!("{:<width$}", "RUGCHECK", width = TAG_WIDTH)
-                .bright_red()
-                .bold(),
-        LogTag::Profit =>
-            format!("{:<width$}", "PROFIT", width = TAG_WIDTH)
-                .bright_green()
-                .bold(),
-        LogTag::PriceService =>
-            format!("{:<width$}", "PRICE", width = TAG_WIDTH)
-                .bright_green()
-                .bold(),
-        LogTag::Rpc =>
-            format!("{:<width$}", "RPC", width = TAG_WIDTH)
-                .bright_cyan()
-                .bold(),
-        LogTag::Ohlcv =>
-            format!("{:<width$}", "OHLCV", width = TAG_WIDTH)
-                .bright_green()
-                .bold(),
-        LogTag::Decimals =>
-            format!("{:<width$}", "DECIMALS", width = TAG_WIDTH)
-                .bright_white()
-                .bold(),
-        LogTag::Swap =>
-            format!("{:<width$}", "SWAP", width = TAG_WIDTH)
-                .bright_magenta()
-                .bold(),
-        LogTag::Entry =>
-            format!("{:<width$}", "ENTRY", width = TAG_WIDTH)
-                .bright_yellow()
-                .bold(),
-        LogTag::RlLearn =>
-            format!("{:<width$}", "RL_LEARN", width = TAG_WIDTH)
-                .bright_cyan()
-                .bold(),
-        LogTag::Summary =>
-            format!("{:<width$}", "SUMMARY", width = TAG_WIDTH)
-                .bright_white()
-                .bold(),
-        LogTag::Transactions =>
-            format!("{:<width$}", "TX", width = TAG_WIDTH)
-                .bright_blue()
-                .bold(),
-        LogTag::Positions =>
-            format!("{:<width$}", "Positions", width = TAG_WIDTH)
-                .bright_yellow()
-                .bold(),
-        LogTag::Test =>
-            format!("{:<width$}", "TEST", width = TAG_WIDTH)
-                .bright_blue()
-                .bold(),
-        LogTag::Other(ref s) =>
-            format!("{:<width$}", s, width = TAG_WIDTH)
-                .white()
-                .bold(),
+        LogTag::Monitor => format!("{:<width$}", "MONITOR", width = TAG_WIDTH)
+            .bright_cyan()
+            .bold(),
+        LogTag::Trader => format!("{:<width$}", "TRADER", width = TAG_WIDTH)
+            .bright_green()
+            .bold(),
+        LogTag::Wallet => format!("{:<width$}", "WALLET", width = TAG_WIDTH)
+            .bright_magenta()
+            .bold(),
+        LogTag::System => format!("{:<width$}", "SYSTEM", width = TAG_WIDTH)
+            .bright_yellow()
+            .bold(),
+        LogTag::Pool => format!("{:<width$}", "POOL", width = TAG_WIDTH)
+            .bright_blue()
+            .bold(),
+        LogTag::Blacklist => format!("{:<width$}", "BLACKLIST", width = TAG_WIDTH)
+            .bright_red()
+            .bold(),
+        LogTag::Discovery => format!("{:<width$}", "DISCOVER", width = TAG_WIDTH)
+            .bright_white()
+            .bold(),
+        LogTag::Filtering => format!("{:<width$}", "FILTER", width = TAG_WIDTH)
+            .bright_yellow()
+            .bold(),
+        LogTag::Api => format!("{:<width$}", "API", width = TAG_WIDTH)
+            .bright_purple()
+            .bold(),
+        LogTag::Rugcheck => format!("{:<width$}", "RUGCHECK", width = TAG_WIDTH)
+            .bright_red()
+            .bold(),
+        LogTag::Profit => format!("{:<width$}", "PROFIT", width = TAG_WIDTH)
+            .bright_green()
+            .bold(),
+        LogTag::PriceService => format!("{:<width$}", "PRICE", width = TAG_WIDTH)
+            .bright_green()
+            .bold(),
+        LogTag::Rpc => format!("{:<width$}", "RPC", width = TAG_WIDTH)
+            .bright_cyan()
+            .bold(),
+        LogTag::Ohlcv => format!("{:<width$}", "OHLCV", width = TAG_WIDTH)
+            .bright_green()
+            .bold(),
+        LogTag::Decimals => format!("{:<width$}", "DECIMALS", width = TAG_WIDTH)
+            .bright_white()
+            .bold(),
+        LogTag::Swap => format!("{:<width$}", "SWAP", width = TAG_WIDTH)
+            .bright_magenta()
+            .bold(),
+        LogTag::Entry => format!("{:<width$}", "ENTRY", width = TAG_WIDTH)
+            .bright_yellow()
+            .bold(),
+        LogTag::RlLearn => format!("{:<width$}", "RL_LEARN", width = TAG_WIDTH)
+            .bright_cyan()
+            .bold(),
+        LogTag::Summary => format!("{:<width$}", "SUMMARY", width = TAG_WIDTH)
+            .bright_white()
+            .bold(),
+        LogTag::Transactions => format!("{:<width$}", "TX", width = TAG_WIDTH)
+            .bright_blue()
+            .bold(),
+        LogTag::Positions => format!("{:<width$}", "Positions", width = TAG_WIDTH)
+            .bright_yellow()
+            .bold(),
+        LogTag::Test => format!("{:<width$}", "TEST", width = TAG_WIDTH)
+            .bright_blue()
+            .bold(),
+        LogTag::Other(ref s) => format!("{:<width$}", s, width = TAG_WIDTH).white().bold(),
     };
 
     // Fixed-width log type
     let log_type_str = match log_type.to_uppercase().as_str() {
-        "ERROR" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_red()
-                .bold(),
-        "FAILED" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_red()
-                .bold(),
-        "WARN" | "WARNING" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_yellow()
-                .bold(),
-        "SUCCESS" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_green()
-                .bold(),
-        "INFO" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_blue()
-                .bold(),
-        "DEBUG" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_black()
-                .bold(),
-        "PROFIT" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_green()
-                .bold(),
-        "LOSS" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_red()
-                .bold(),
-        "BUY" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_cyan()
-                .bold(),
-        "SELL" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_magenta()
-                .bold(),
-        "BALANCE" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_yellow()
-                .bold(),
-        "PRICE" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_blue()
-                .bold(),
-        _ =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .white()
-                .bold(),
+        "ERROR" => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .bright_red()
+            .bold(),
+        "FAILED" => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .bright_red()
+            .bold(),
+        "WARN" | "WARNING" => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .bright_yellow()
+            .bold(),
+        "SUCCESS" => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .bright_green()
+            .bold(),
+        "INFO" => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .bright_blue()
+            .bold(),
+        "DEBUG" => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .bright_black()
+            .bold(),
+        "PROFIT" => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .bright_green()
+            .bold(),
+        "LOSS" => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .bright_red()
+            .bold(),
+        "BUY" => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .bright_cyan()
+            .bold(),
+        "SELL" => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .bright_magenta()
+            .bold(),
+        "BALANCE" => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .bright_yellow()
+            .bold(),
+        "PRICE" => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .bright_blue()
+            .bold(),
+        _ => format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+            .white()
+            .bold(),
     };
 
     // Build the base log line with strict discipline
@@ -566,10 +536,9 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             "FAILED" => message_chunks[0].bright_red().to_string(),
             _ => {
                 // Check if message contains error/failed keywords
-                if
-                    message.to_lowercase().contains("error") ||
-                    message.to_lowercase().contains("failed") ||
-                    message.to_lowercase().contains("fail")
+                if message.to_lowercase().contains("error")
+                    || message.to_lowercase().contains("failed")
+                    || message.to_lowercase().contains("fail")
                 {
                     message_chunks[0].bright_red().to_string()
                 } else {
@@ -612,7 +581,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Test => "TEST",
         LogTag::Other(ref s) => s,
     };
-    let file_line = format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, message_chunks[0]);
+    let file_line = format!(
+        "{} [{}] [{}] {}",
+        timestamp, tag_clean, log_type, message_chunks[0]
+    );
     write_to_file(&file_line);
 
     // Send to dashboard if dashboard mode is active
@@ -639,10 +611,9 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
                     "FAILED" => chunk.bright_red().to_string(),
                     _ => {
                         // Check if message contains error/failed keywords
-                        if
-                            message.to_lowercase().contains("error") ||
-                            message.to_lowercase().contains("failed") ||
-                            message.to_lowercase().contains("fail")
+                        if message.to_lowercase().contains("error")
+                            || message.to_lowercase().contains("failed")
+                            || message.to_lowercase().contains("fail")
                         {
                             chunk.bright_red().to_string()
                         } else {
@@ -658,13 +629,8 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             }
 
             // Write continuation lines to file as well
-            let file_continuation = format!(
-                "{} [{}] [{}] {}",
-                timestamp,
-                tag_clean,
-                log_type,
-                chunk
-            );
+            let file_continuation =
+                format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, chunk);
             write_to_file(&file_continuation);
         }
     }
@@ -769,7 +735,9 @@ fn break_long_word(word: &str, max_width: usize) -> Vec<String> {
             // 2. Assignment and value separators: =, :
             // 3. General separators: ., -, _
             // 4. JSON/data separators: {, }, [, ], ,
-            let break_chars = ['/', '?', '&', '=', ':', '.', '-', '_', '{', '}', '[', ']', ','];
+            let break_chars = [
+                '/', '?', '&', '=', ':', '.', '-', '_', '{', '}', '[', ']', ',',
+            ];
 
             if let Some(pos) = search_slice.find(&break_chars[..]) {
                 let actual_pos = chunk_length + pos + 1;
@@ -801,7 +769,7 @@ pub fn log_price_change(
     pool_type: Option<&str>,
     pool_address: Option<&str>,
     api_price: Option<f64>,
-    current_pnl: Option<(f64, f64)> // (pnl_sol, pnl_percent)
+    current_pnl: Option<(f64, f64)>, // (pnl_sol, pnl_percent)
 ) {
     let price_change = new_price - old_price;
     let price_change_percent = if old_price != 0.0 {
@@ -830,9 +798,10 @@ pub fn log_price_change(
                         let mut chars = word.chars();
                         match chars.next() {
                             None => String::new(),
-                            Some(first) =>
-                                first.to_uppercase().collect::<String>() +
-                                    &chars.as_str().to_uppercase(),
+                            Some(first) => {
+                                first.to_uppercase().collect::<String>()
+                                    + &chars.as_str().to_uppercase()
+                            }
                         }
                     })
                     .collect::<Vec<String>>()
@@ -906,13 +875,20 @@ pub fn log_price_change(
                 0.0
             };
 
-            line2_parts.push(format!("🏊 Pool: {}", format!("{:.10}", new_price).white().bold()));
-            line2_parts.push(
-                format!("🌐 API: {}", format!("{:.10}", api_price_val).white().bold())
-            );
+            line2_parts.push(format!(
+                "🏊 Pool: {}",
+                format!("{:.10}", new_price).white().bold()
+            ));
+            line2_parts.push(format!(
+                "🌐 API: {}",
+                format!("{:.10}", api_price_val).white().bold()
+            ));
 
             let diff_text = if diff > 0.0 {
-                format!("( Pool {} % )", format!("+{:.2}", diff_percent).green().bold())
+                format!(
+                    "( Pool {} % )",
+                    format!("+{:.2}", diff_percent).green().bold()
+                )
             } else if diff < 0.0 {
                 format!("( Pool {} % )", format!("{:.2}", diff_percent).red().bold())
             } else {
@@ -920,7 +896,11 @@ pub fn log_price_change(
             };
             line2_parts.push(diff_text);
         } else {
-            line2_parts.push(format!("🏊 {} Pool", formatted_pool_type).dimmed().to_string());
+            line2_parts.push(
+                format!("🏊 {} Pool", formatted_pool_type)
+                    .dimmed()
+                    .to_string(),
+            );
         }
     } else {
         line2_parts.push("🌐 API Price".dimmed().to_string());
@@ -928,7 +908,11 @@ pub fn log_price_change(
 
     // Pool details with better color
     if pool_address.is_some() {
-        line2_parts.push(format!("[ {} ]", formatted_pool_type).bright_yellow().to_string());
+        line2_parts.push(
+            format!("[ {} ]", formatted_pool_type)
+                .bright_yellow()
+                .to_string(),
+        );
     }
 
     // Join line2 parts with proper spacing

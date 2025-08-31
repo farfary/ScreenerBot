@@ -2,42 +2,53 @@
 ///
 /// This binary tests the new batch-based price system with background monitoring.
 /// It demonstrates watchlist management and read-only universal get_price function.
-
 use screenerbot::{
+    global::is_debug_pool_prices_enabled,
     logger::init_file_logging,
     tokens::{
+        dexscreener::get_global_dexscreener_api,
         initialize_tokens_system,
         pool::{
-            get_price,
-            PriceOptions,
-            PriceResult,
             // New watchlist management functions
             add_priority_token,
             add_watchlist_token,
             add_watchlist_tokens,
-            get_priority_tokens,
-            get_watchlist_tokens,
-            get_watchlist_status,
             clear_priority_tokens,
             clear_watchlist_tokens,
             get_pool_service,
+            get_price,
+            get_priority_tokens,
+            get_watchlist_status,
+            get_watchlist_tokens,
+            PriceOptions,
+            PriceResult,
         },
-        dexscreener::get_global_dexscreener_api,
     },
-    global::is_debug_pool_prices_enabled,
 };
 use std::time::Instant;
-use tokio::time::{ sleep, Duration };
+use tokio::time::{sleep, Duration};
 
 /// Test token for demonstrations (A8C3... pump token)
 const TEST_TOKEN: &str = "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump";
 
 /// Additional test tokens for comprehensive testing
 const TEST_TOKENS: &[(&str, &str)] = &[
-    ("A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump", "TANUKI (Pump.fun)"),
-    ("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "USDC (Stable)"),
-    ("So11111111111111111111111111111111111111112", "SOL (Native)"),
-    ("DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", "Bonk (Popular)"),
+    (
+        "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump",
+        "TANUKI (Pump.fun)",
+    ),
+    (
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "USDC (Stable)",
+    ),
+    (
+        "So11111111111111111111111111111111111111112",
+        "SOL (Native)",
+    ),
+    (
+        "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        "Bonk (Popular)",
+    ),
 ];
 
 #[tokio::main]
@@ -95,7 +106,8 @@ async fn test_watchlist_management() -> Result<(), Box<dyn std::error::Error>> {
     println!("✅ Added priority token: {}", TEST_TOKEN);
 
     // Test adding watchlist tokens
-    let watchlist_tokens: Vec<String> = TEST_TOKENS.iter()
+    let watchlist_tokens: Vec<String> = TEST_TOKENS
+        .iter()
         .map(|(addr, _)| addr.to_string())
         .collect();
     add_watchlist_tokens(&watchlist_tokens).await;
@@ -129,10 +141,7 @@ async fn test_batch_processing() -> Result<(), Box<dyn std::error::Error>> {
         let (total, never_updated, last_update) = get_watchlist_status().await;
         println!(
             "  Cycle {}: {} total, {} never updated, last: {:?}",
-            i,
-            total,
-            never_updated,
-            last_update
+            i, total, never_updated, last_update
         );
 
         if never_updated == 0 {
@@ -214,7 +223,10 @@ async fn test_performance_comparison() -> Result<(), Box<dyn std::error::Error>>
     println!("  Total calls: {}", iterations);
     println!("  Successful: {}", successful_calls);
     println!("  Average duration: {:?}", total_duration / iterations);
-    println!("  Success rate: {:.1}%", ((successful_calls as f64) / (iterations as f64)) * 100.0);
+    println!(
+        "  Success rate: {:.1}%",
+        ((successful_calls as f64) / (iterations as f64)) * 100.0
+    );
 
     Ok(())
 }
@@ -274,7 +286,7 @@ async fn run_price_options_tests() {
                 timeout_secs: Some(30),
                 min_liquidity_usd: Some(1_000_000.0), // 1M USD minimum
             },
-        )
+        ),
     ];
 
     for (test_name, options) in options_tests {
@@ -288,7 +300,7 @@ async fn run_price_options_tests() {
             Some(price_result) => {
                 display_price_result(
                     &price_result,
-                    &format!("{} ({}ms)", test_name, duration.as_millis())
+                    &format!("{} ({}ms)", test_name, duration.as_millis()),
                 );
             }
             None => {
@@ -314,7 +326,7 @@ async fn run_multiple_token_tests() {
             Some(price_result) => {
                 display_price_result(
                     &price_result,
-                    &format!("{} ({}ms)", token_name, duration.as_millis())
+                    &format!("{} ({}ms)", token_name, duration.as_millis()),
                 );
             }
             None => {
@@ -333,7 +345,10 @@ async fn run_performance_tests() {
     let mut total_duration = Duration::from_millis(0);
     let mut success_count = 0;
 
-    println!("🏃 Running {} iterations for performance testing...", iterations);
+    println!(
+        "🏃 Running {} iterations for performance testing...",
+        iterations
+    );
 
     for i in 1..=iterations {
         let start = Instant::now();
@@ -356,7 +371,10 @@ async fn run_performance_tests() {
     println!("\n📊 Performance Summary:");
     println!("   • Total iterations: {}", iterations);
     println!("   • Successful: {}", success_count);
-    println!("   • Success rate: {:.1}%", ((success_count as f64) / (iterations as f64)) * 100.0);
+    println!(
+        "   • Success rate: {:.1}%",
+        ((success_count as f64) / (iterations as f64)) * 100.0
+    );
     println!("   • Average duration: {}ms", avg_duration.as_millis());
     println!("   • Total duration: {}ms", total_duration.as_millis());
 }
@@ -368,9 +386,12 @@ async fn run_error_handling_tests() {
 
     let error_tests = vec![
         ("Invalid Token", "InvalidTokenAddress123"),
-        ("Non-existent Token", "11111111111111111111111111111111111111111"),
+        (
+            "Non-existent Token",
+            "11111111111111111111111111111111111111111",
+        ),
         ("Empty String", ""),
-        ("Too Short", "ABC")
+        ("Too Short", "ABC"),
     ];
 
     for (test_name, token_address) in error_tests {
@@ -410,9 +431,7 @@ async fn run_realtime_monitoring() {
 
     println!(
         "📡 Monitoring {} for {} seconds (checking every {}s)",
-        TEST_TOKEN,
-        monitoring_duration,
-        check_interval
+        TEST_TOKEN, monitoring_duration, check_interval
     );
 
     let mut previous_price: Option<f64> = None;
@@ -429,10 +448,8 @@ async fn run_realtime_monitoring() {
 
         match result {
             Some(price_result) => {
-                if
-                    let Some(current_price) = price_result.pool_price_sol.or(
-                        price_result.api_price_sol
-                    )
+                if let Some(current_price) =
+                    price_result.pool_price_sol.or(price_result.api_price_sol)
                 {
                     min_price = min_price.min(current_price);
                     max_price = max_price.max(current_price);
@@ -459,8 +476,7 @@ async fn run_realtime_monitoring() {
                     );
                     println!(
                         "   📊 Source: {} | Cached: {}",
-                        price_result.source,
-                        price_result.is_cached
+                        price_result.source, price_result.is_cached
                     );
 
                     if let Some(pool_addr) = &price_result.pool_address {
@@ -494,7 +510,10 @@ async fn run_realtime_monitoring() {
     println!("   • Total checks: {}", iterations);
     println!("   • Price changes: {}", price_changes);
     if min_price != f64::MAX && max_price != f64::MIN {
-        println!("   • Price range: {:.12} - {:.12} SOL", min_price, max_price);
+        println!(
+            "   • Price range: {:.12} - {:.12} SOL",
+            min_price, max_price
+        );
         println!(
             "   • Price spread: {:.12} SOL ({:.2}%)",
             max_price - min_price,
@@ -507,7 +526,10 @@ async fn run_realtime_monitoring() {
 fn display_price_result(result: &PriceResult, title: &str) {
     println!("💰 {}", title);
     println!("   ├─ Token: {}", &result.token_address[..8]);
-    println!("   ├─ Primary Price: {:.12} SOL", result.price_sol.unwrap_or(0.0));
+    println!(
+        "   ├─ Primary Price: {:.12} SOL",
+        result.price_sol.unwrap_or(0.0)
+    );
 
     if let Some(api_price) = result.api_price_sol {
         println!("   ├─ API Price: {:.12} SOL", api_price);
@@ -520,7 +542,10 @@ fn display_price_result(result: &PriceResult, title: &str) {
         if let Some(api_price) = result.api_price_sol {
             let diff = pool_price - api_price;
             let diff_percent = (diff / api_price) * 100.0;
-            println!("   ├─ Pool vs API: {:+.12} SOL ({:+.2}%)", diff, diff_percent);
+            println!(
+                "   ├─ Pool vs API: {:+.12} SOL ({:+.2}%)",
+                diff, diff_percent
+            );
         }
     }
 
@@ -530,10 +555,17 @@ fn display_price_result(result: &PriceResult, title: &str) {
 
     println!("   ├─ Source: {}", result.source);
     println!("   ├─ Cached: {}", result.is_cached);
-    println!("   ├─ Calculated: {}", result.calculated_at.format("%H:%M:%S"));
+    println!(
+        "   ├─ Calculated: {}",
+        result.calculated_at.format("%H:%M:%S")
+    );
 
     if let Some(pool_addr) = &result.pool_address {
-        println!("   ├─ Pool: {}...{}", &pool_addr[..8], &pool_addr[pool_addr.len() - 8..]);
+        println!(
+            "   ├─ Pool: {}...{}",
+            &pool_addr[..8],
+            &pool_addr[pool_addr.len() - 8..]
+        );
     }
 
     if let Some(dex_id) = &result.dex_id {

@@ -1,29 +1,28 @@
+use crate::global::{is_debug_pool_prices_enabled, CACHE_POOL_DIR};
 /// Pool Price System
 ///
 /// This module provides a comprehensive pool-based price calculation system with caching,
 /// background monitoring, and API fallback. It fetches pool data from DexScreener API
 /// and calculates prices from pool reserves. Token selection for monitoring now relies
 /// on the centralized price service priority list (no internal pool watch list).
-
-use crate::logger::{ log, LogTag };
-use crate::global::{ is_debug_pool_prices_enabled, CACHE_POOL_DIR };
-use crate::tokens::dexscreener::{ get_token_pairs_from_api, TokenPair };
-use crate::utils::safe_truncate;
-use crate::tokens::decimals::{ get_cached_decimals };
-use crate::tokens::is_system_or_stable_token;
+use crate::logger::{log, LogTag};
 use crate::rpc::get_rpc_client;
-use solana_sdk::{ account::Account, pubkey::Pubkey, commitment_config::CommitmentConfig };
-use std::collections::{ HashMap, HashSet };
-use std::str::FromStr;
-use std::time::{ Duration, Instant };
-use std::hash::{ Hash, Hasher };
-use tokio::sync::RwLock;
-use std::sync::Arc;
-use serde::{ Deserialize, Serialize };
-use chrono::{ DateTime, Utc };
-use std::fs;
-use std::path::Path;
+use crate::tokens::decimals::get_cached_decimals;
+use crate::tokens::dexscreener::{get_token_pairs_from_api, TokenPair};
+use crate::tokens::is_system_or_stable_token;
+use crate::utils::safe_truncate;
+use chrono::{DateTime, Utc};
 use futures;
+use serde::{Deserialize, Serialize};
+use solana_sdk::{account::Account, commitment_config::CommitmentConfig, pubkey::Pubkey};
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::hash::{Hash, Hasher};
+use std::path::Path;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 
 // =============================================================================
 // CONSTANTS
@@ -175,7 +174,7 @@ impl PoolMetadata {
         token_0_reserve: u64,
         token_1_reserve: u64,
         lp_supply: Option<u64>,
-        liquidity_usd: Option<f64>
+        liquidity_usd: Option<f64>,
     ) -> PoolInfo {
         PoolInfo {
             pool_address: self.pool_address,
@@ -248,11 +247,14 @@ pub struct CachedPoolInfo {
 
 impl CachedPoolInfo {
     pub fn from_token_pair(pair: &TokenPair) -> Result<Self, String> {
-        let price_native = pair.price_native
+        let price_native = pair
+            .price_native
             .parse::<f64>()
             .map_err(|e| format!("Invalid price_native: {}", e))?;
         let price_usd = if let Some(usd_str) = &pair.price_usd {
-            usd_str.parse::<f64>().map_err(|e| format!("Invalid price_usd: {}", e))?
+            usd_str
+                .parse::<f64>()
+                .map_err(|e| format!("Invalid price_usd: {}", e))?
         } else {
             0.0 // Default to 0.0 if no USD price available
         };
@@ -264,10 +266,7 @@ impl CachedPoolInfo {
             quote_token: pair.quote_token.address.clone(),
             price_native,
             price_usd,
-            liquidity_usd: pair.liquidity
-                .as_ref()
-                .map(|l| l.usd)
-                .unwrap_or(0.0),
+            liquidity_usd: pair.liquidity.as_ref().map(|l| l.usd).unwrap_or(0.0),
             volume_24h: pair.volume.h24.unwrap_or(0.0),
             created_at: pair.pair_created_at.unwrap_or(0), // Default to 0 if not available
             cached_at: Utc::now(),
@@ -344,7 +343,7 @@ impl PoolPriceHistoryCache {
         token_mint: String,
         pool_address: String,
         dex_id: String,
-        pool_type: Option<String>
+        pool_type: Option<String>,
     ) -> Self {
         let now = Utc::now();
         Self {
@@ -367,7 +366,7 @@ impl PoolPriceHistoryCache {
         reserves_sol: Option<f64>,
         liquidity_usd: f64,
         volume_24h: Option<f64>,
-        source: String
+        source: String,
     ) -> bool {
         // Check if price has changed from the last entry
         if let Some(last_entry) = self.entries.last() {
@@ -432,19 +431,29 @@ impl PoolPriceHistoryCache {
 
     /// Get detailed price history with all data
     pub fn get_detailed_price_history(
-        &self
-    ) -> Vec<(DateTime<Utc>, f64, Option<f64>, Option<f64>, Option<f64>, f64, Option<f64>)> {
+        &self,
+    ) -> Vec<(
+        DateTime<Utc>,
+        f64,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        f64,
+        Option<f64>,
+    )> {
         self.entries
             .iter()
-            .map(|entry| (
-                entry.timestamp,
-                entry.price_sol,
-                entry.price_usd,
-                entry.reserves_token,
-                entry.reserves_sol,
-                entry.liquidity_usd,
-                entry.volume_24h,
-            ))
+            .map(|entry| {
+                (
+                    entry.timestamp,
+                    entry.price_sol,
+                    entry.price_usd,
+                    entry.reserves_token,
+                    entry.reserves_sol,
+                    entry.liquidity_usd,
+                    entry.volume_24h,
+                )
+            })
             .collect()
     }
 
@@ -517,7 +526,8 @@ impl TokenAggregatedPriceHistoryCache {
             let last_entry_age = (Utc::now() - pool_cache.last_updated).num_seconds() as f64;
             let recency_score = 1.0 / (1.0 + last_entry_age / 3600.0); // Decay over hours
             let activity_score = pool_cache.entries.len() as f64;
-            let liquidity_score = pool_cache.entries
+            let liquidity_score = pool_cache
+                .entries
                 .last()
                 .map(|e| e.liquidity_usd.log10().max(0.0))
                 .unwrap_or(0.0);
@@ -535,7 +545,8 @@ impl TokenAggregatedPriceHistoryCache {
 
     /// Add or update a pool cache
     pub fn add_or_update_pool_cache(&mut self, pool_cache: PoolPriceHistoryCache) {
-        self.pool_caches.insert(pool_cache.pool_address.clone(), pool_cache);
+        self.pool_caches
+            .insert(pool_cache.pool_address.clone(), pool_cache);
         self.last_updated = Utc::now();
     }
 }
@@ -714,7 +725,7 @@ impl PoolPriceService {
 
     /// Internal cleanup helper: remove tokens whose pools infos are all expired
     async fn cleanup_expired_pools_infos_internal(
-        pool_cache: &Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>
+        pool_cache: &Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>,
     ) -> usize {
         let mut cache = pool_cache.write().await;
         let now = Utc::now();
@@ -762,7 +773,7 @@ impl PoolPriceService {
     pub async fn refresh_pools_infos_for_tokens(
         &self,
         mints: &[String],
-        max_tokens: usize
+        max_tokens: usize,
     ) -> usize {
         let now = Utc::now();
         // Determine which tokens need refresh
@@ -806,7 +817,11 @@ impl PoolPriceService {
         *monitoring_active = true;
         drop(monitoring_active);
 
-        log(LogTag::Pool, "START", "Starting pool price monitoring service with batch updates");
+        log(
+            LogTag::Pool,
+            "START",
+            "Starting pool price monitoring service with batch updates",
+        );
 
         // Clone all necessary Arc references for the background task
         let price_cache = self.price_cache.clone();
@@ -818,12 +833,10 @@ impl PoolPriceService {
 
         // Start main monitoring loop with batch processing
         tokio::spawn(async move {
-            let mut priority_interval = tokio::time::interval(
-                Duration::from_secs(PRIORITY_UPDATE_INTERVAL_SECS)
-            );
-            let mut watchlist_interval = tokio::time::interval(
-                Duration::from_secs(WATCHLIST_UPDATE_INTERVAL_SECS)
-            );
+            let mut priority_interval =
+                tokio::time::interval(Duration::from_secs(PRIORITY_UPDATE_INTERVAL_SECS));
+            let mut watchlist_interval =
+                tokio::time::interval(Duration::from_secs(WATCHLIST_UPDATE_INTERVAL_SECS));
 
             loop {
                 tokio::select! {
@@ -904,7 +917,11 @@ impl PoolPriceService {
                 }
             }
 
-            log(LogTag::Pool, "STOP", "Pool price monitoring service stopped");
+            log(
+                LogTag::Pool,
+                "STOP",
+                "Pool price monitoring service stopped",
+            );
         });
     }
 
@@ -913,7 +930,7 @@ impl PoolPriceService {
         tokens: &[String],
         price_cache: &Arc<RwLock<HashMap<String, PoolPriceResult>>>,
         stats_arc: &Arc<RwLock<PoolServiceStats>>,
-        batch_type: &str
+        batch_type: &str,
     ) {
         if tokens.is_empty() {
             return;
@@ -925,7 +942,11 @@ impl PoolPriceService {
             log(
                 LogTag::Pool,
                 "BATCH_START",
-                &format!("Starting {} batch update for {} tokens", batch_type, tokens.len())
+                &format!(
+                    "Starting {} batch update for {} tokens",
+                    batch_type,
+                    tokens.len()
+                ),
             );
         }
 
@@ -946,7 +967,7 @@ impl PoolPriceService {
                         chunk_idx + 1,
                         batch_prices.len(),
                         chunk.len()
-                    )
+                    ),
                 );
             }
 
@@ -982,7 +1003,7 @@ impl PoolPriceService {
                                     batch_type.to_lowercase(),
                                     price_sol,
                                     &token_address[..8]
-                                )
+                                ),
                             );
                         }
                     }
@@ -1015,7 +1036,7 @@ impl PoolPriceService {
                 batch_type,
                 tokens.len(),
                 duration
-            )
+            ),
         );
     }
 
@@ -1023,7 +1044,7 @@ impl PoolPriceService {
     async fn get_random_watchlist_batch(
         watchlist_tokens: &Arc<RwLock<HashSet<String>>>,
         watchlist_last_updated: &Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
-        batch_size: usize
+        batch_size: usize,
     ) -> Vec<String> {
         let watchlist = watchlist_tokens.read().await;
         let last_updated = watchlist_last_updated.read().await;
@@ -1078,7 +1099,7 @@ impl PoolPriceService {
             log(
                 LogTag::Pool,
                 "PRIORITY_ADD",
-                &format!("Added {} to priority tokens", &token_address[..8])
+                &format!("Added {} to priority tokens", &token_address[..8]),
             );
         }
     }
@@ -1092,7 +1113,7 @@ impl PoolPriceService {
             log(
                 LogTag::Pool,
                 "PRIORITY_REMOVE",
-                &format!("Removed {} from priority tokens", &token_address[..8])
+                &format!("Removed {} from priority tokens", &token_address[..8]),
             );
         }
     }
@@ -1106,7 +1127,7 @@ impl PoolPriceService {
             log(
                 LogTag::Pool,
                 "WATCHLIST_ADD",
-                &format!("Added {} to watchlist tokens", &token_address[..8])
+                &format!("Added {} to watchlist tokens", &token_address[..8]),
             );
         }
     }
@@ -1124,7 +1145,7 @@ impl PoolPriceService {
             log(
                 LogTag::Pool,
                 "WATCHLIST_REMOVE",
-                &format!("Removed {} from watchlist tokens", &token_address[..8])
+                &format!("Removed {} from watchlist tokens", &token_address[..8]),
             );
         }
     }
@@ -1166,7 +1187,7 @@ impl PoolPriceService {
                             "Evicted {} with {} requests to make room",
                             safe_truncate(&min_token, 8),
                             min_count
-                        )
+                        ),
                     );
                 }
             }
@@ -1180,7 +1201,11 @@ impl PoolPriceService {
         log(
             LogTag::Pool,
             "WATCHLIST_BATCH_ADD",
-            &format!("Added {} tokens to watchlist (size: {})", actually_added, watchlist.len())
+            &format!(
+                "Added {} tokens to watchlist (size: {})",
+                actually_added,
+                watchlist.len()
+            ),
         );
     }
 
@@ -1217,7 +1242,11 @@ impl PoolPriceService {
         let count = priority.len();
         priority.clear();
 
-        log(LogTag::Pool, "PRIORITY_CLEAR", &format!("Cleared {} priority tokens", count));
+        log(
+            LogTag::Pool,
+            "PRIORITY_CLEAR",
+            &format!("Cleared {} priority tokens", count),
+        );
     }
 
     /// Clear watchlist tokens (for testing/reset)
@@ -1229,12 +1258,17 @@ impl PoolPriceService {
         watchlist.clear();
         last_updated.clear();
 
-        log(LogTag::Pool, "WATCHLIST_CLEAR", &format!("Cleared {} watchlist tokens", count));
+        log(
+            LogTag::Pool,
+            "WATCHLIST_CLEAR",
+            &format!("Cleared {} watchlist tokens", count),
+        );
     }
 
     /// Public wrapper for stats recording (used by monitoring loop to count cache hits / availability failures)
     pub async fn record_stats_event(&self, success: bool, cache_hit: bool, blockchain: bool) {
-        self.record_price_request(success, cache_hit, blockchain).await;
+        self.record_price_request(success, cache_hit, blockchain)
+            .await;
     }
 
     /// Ensure stats reflect monitoring activity.
@@ -1259,7 +1293,7 @@ impl PoolPriceService {
                 log(
                     LogTag::Pool,
                     "MONITOR_CACHE_HIT",
-                    &format!("🛰️ Monitor cache hit for {}", token_address)
+                    &format!("🛰️ Monitor cache hit for {}", token_address),
                 );
             }
             return;
@@ -1272,19 +1306,24 @@ impl PoolPriceService {
                 log(
                     LogTag::Pool,
                     "MONITOR_UNAVAILABLE",
-                    &format!("🛰️ Monitor unavailable (liquidity gate) for {}", token_address)
+                    &format!(
+                        "🛰️ Monitor unavailable (liquidity gate) for {}",
+                        token_address
+                    ),
                 );
             }
             return;
         }
 
         // Perform full calculation (stats recorded inside get_pool_price)
-        let _ = self.get_pool_price(token_address, None, &PriceOptions::default()).await;
+        let _ = self
+            .get_pool_price(token_address, None, &PriceOptions::default())
+            .await;
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
                 "MONITOR_CALC",
-                &format!("🛰️ Monitor triggered calc for {}", token_address)
+                &format!("🛰️ Monitor triggered calc for {}", token_address),
             );
         }
     }
@@ -1293,7 +1332,11 @@ impl PoolPriceService {
     pub async fn stop_monitoring(&self) {
         let mut monitoring_active = self.monitoring_active.write().await;
         *monitoring_active = false;
-        log(LogTag::Pool, "STOP", "Stopping pool price monitoring service");
+        log(
+            LogTag::Pool,
+            "STOP",
+            "Stopping pool price monitoring service",
+        );
     }
 
     /// Request immediate priority price updates for specific tokens (used by positions system)
@@ -1307,7 +1350,10 @@ impl PoolPriceService {
             log(
                 LogTag::Pool,
                 "PRIORITY_UPDATE",
-                &format!("Requesting priority price updates for {} tokens", token_addresses.len())
+                &format!(
+                    "Requesting priority price updates for {} tokens",
+                    token_addresses.len()
+                ),
             );
         }
 
@@ -1322,21 +1368,22 @@ impl PoolPriceService {
 
                 async move {
                     // Acquire semaphore permit for concurrency control
-                    let _permit = match
-                        tokio::time::timeout(Duration::from_secs(2), semaphore.acquire()).await
-                    {
-                        Ok(Ok(permit)) => permit,
-                        _ => {
-                            return false;
-                        }
-                    };
+                    let _permit =
+                        match tokio::time::timeout(Duration::from_secs(2), semaphore.acquire())
+                            .await
+                        {
+                            Ok(Ok(permit)) => permit,
+                            _ => {
+                                return false;
+                            }
+                        };
 
                     // Force fresh price calculation by bypassing cache
-                    match
-                        tokio::time::timeout(
-                            Duration::from_secs(POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS),
-                            self.get_pool_price(&token_address, None, &PriceOptions::default())
-                        ).await
+                    match tokio::time::timeout(
+                        Duration::from_secs(POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS),
+                        self.get_pool_price(&token_address, None, &PriceOptions::default()),
+                    )
+                    .await
                     {
                         Ok(Some(_)) => {
                             if is_debug_pool_prices_enabled() {
@@ -1346,7 +1393,7 @@ impl PoolPriceService {
                                     &format!(
                                         "Priority update successful for {}",
                                         &token_address[..8]
-                                    )
+                                    ),
                                 );
                             }
                             true
@@ -1359,7 +1406,7 @@ impl PoolPriceService {
                                     &format!(
                                         "Priority update returned no price for {}",
                                         &token_address[..8]
-                                    )
+                                    ),
                                 );
                             }
                             false
@@ -1369,7 +1416,7 @@ impl PoolPriceService {
                                 log(
                                     LogTag::Pool,
                                     "PRIORITY_TIMEOUT",
-                                    &format!("Priority update timeout for {}", &token_address[..8])
+                                    &format!("Priority update timeout for {}", &token_address[..8]),
                                 );
                             }
                             false
@@ -1380,17 +1427,14 @@ impl PoolPriceService {
             .collect();
 
         // Execute all updates with overall timeout
-        match
-            tokio::time::timeout(
-                Duration::from_secs(10), // 10 second overall timeout for priority updates
-                futures::future::join_all(update_futures)
-            ).await
+        match tokio::time::timeout(
+            Duration::from_secs(10), // 10 second overall timeout for priority updates
+            futures::future::join_all(update_futures),
+        )
+        .await
         {
             Ok(results) => {
-                successful_updates = results
-                    .iter()
-                    .filter(|&&success| success)
-                    .count();
+                successful_updates = results.iter().filter(|&&success| success).count();
                 if is_debug_pool_prices_enabled() {
                     log(
                         LogTag::Pool,
@@ -1399,12 +1443,16 @@ impl PoolPriceService {
                             "Priority updates completed: {}/{} successful",
                             successful_updates,
                             token_addresses.len()
-                        )
+                        ),
                     );
                 }
             }
             Err(_) => {
-                log(LogTag::Pool, "WARN", "Priority price updates exceeded overall timeout");
+                log(
+                    LogTag::Pool,
+                    "WARN",
+                    "Priority price updates exceeded overall timeout",
+                );
             }
         }
 
@@ -1431,7 +1479,7 @@ impl PoolPriceService {
                                 "📊 Retrieved {} price history entries from memory cache for {}",
                                 history.len(),
                                 token_address
-                            )
+                            ),
                         );
                     }
                     return history;
@@ -1451,7 +1499,7 @@ impl PoolPriceService {
                     "📈 Retrieved {} price history entries from memory cache for {}",
                     fallback_history.len(),
                     token_address
-                )
+                ),
             );
         }
 
@@ -1461,7 +1509,7 @@ impl PoolPriceService {
     /// Get comprehensive price history for RL learning system
     pub async fn get_comprehensive_price_history(
         &self,
-        token_address: &str
+        token_address: &str,
     ) -> Vec<(DateTime<Utc>, f64)> {
         let cache = self.pool_price_history.read().await;
         if let Some(token_cache) = cache.get(token_address) {
@@ -1489,17 +1537,28 @@ impl PoolPriceService {
     /// Get detailed pool price history for a specific token
     pub async fn get_detailed_pool_price_history_for_token(
         &self,
-        token_address: &str
+        token_address: &str,
     ) -> HashMap<
         String,
-        Vec<(DateTime<Utc>, f64, Option<f64>, Option<f64>, Option<f64>, f64, Option<f64>)>
+        Vec<(
+            DateTime<Utc>,
+            f64,
+            Option<f64>,
+            Option<f64>,
+            Option<f64>,
+            f64,
+            Option<f64>,
+        )>,
     > {
         let mut result = HashMap::new();
 
         let cache = self.pool_price_history.read().await;
         if let Some(token_cache) = cache.get(token_address) {
             for (pool_address, pool_cache) in &token_cache.pool_caches {
-                result.insert(pool_address.clone(), pool_cache.get_detailed_price_history());
+                result.insert(
+                    pool_address.clone(),
+                    pool_cache.get_detailed_price_history(),
+                );
             }
         } else {
             // No cache available
@@ -1544,12 +1603,14 @@ impl PoolPriceService {
         reserves_sol: Option<f64>,
         liquidity_usd: f64,
         volume_24h: Option<f64>,
-        source: &str
+        source: &str,
     ) {
         // Update in-memory price history (for compatibility)
         {
             let mut history = self.price_history.write().await;
-            let entry = history.entry(token_address.to_string()).or_insert_with(Vec::new);
+            let entry = history
+                .entry(token_address.to_string())
+                .or_insert_with(Vec::new);
 
             entry.push((Utc::now(), price_sol));
 
@@ -1564,21 +1625,22 @@ impl PoolPriceService {
             let mut pool_cache = self.pool_price_history.write().await;
             let token_cache = pool_cache
                 .entry(token_address.to_string())
-                .or_insert_with(||
+                .or_insert_with(|| {
                     TokenAggregatedPriceHistoryCache::new(token_address.to_string())
-                );
+                });
 
             // Get or create pool-specific cache
-            let pool_specific_cache = token_cache.pool_caches
+            let pool_specific_cache = token_cache
+                .pool_caches
                 .entry(pool_address.to_string())
-                .or_insert_with(||
+                .or_insert_with(|| {
                     PoolPriceHistoryCache::new(
                         token_address.to_string(),
                         pool_address.to_string(),
                         dex_id.to_string(),
-                        pool_type.clone()
+                        pool_type.clone(),
                     )
-                );
+                });
 
             // Only add if price has changed significantly
             let price_added = pool_specific_cache.add_price_if_changed(
@@ -1588,7 +1650,7 @@ impl PoolPriceService {
                 reserves_sol,
                 liquidity_usd,
                 volume_24h,
-                source.to_string()
+                source.to_string(),
             );
 
             if price_added {
@@ -1604,7 +1666,7 @@ impl PoolPriceService {
                             token_address,
                             pool_address,
                             pool_specific_cache.entries.len()
-                        )
+                        ),
                     );
                 }
             }
@@ -1624,8 +1686,9 @@ impl PoolPriceService {
             None,
             0.0,
             None,
-            "pool_legacy"
-        ).await;
+            "pool_legacy",
+        )
+        .await;
     }
 
     /// Clean up old price history entries
@@ -1646,7 +1709,7 @@ impl PoolPriceService {
         &self,
         token_address: &str,
         api_price_sol: Option<f64>,
-        options: &PriceOptions
+        options: &PriceOptions,
     ) -> Option<PoolPriceResult> {
         if is_debug_pool_prices_enabled() {
             log(
@@ -1667,12 +1730,13 @@ impl PoolPriceService {
 
         // Check if token has available pools
         if !self.check_token_availability(token_address).await {
-            self.record_price_request(false, was_cache_hit, was_blockchain).await;
+            self.record_price_request(false, was_cache_hit, was_blockchain)
+                .await;
             if is_debug_pool_prices_enabled() {
                 log(
                     LogTag::Pool,
                     "NO_POOLS",
-                    &format!("❌ NO POOLS available for {}", token_address)
+                    &format!("❌ NO POOLS available for {}", token_address),
                 );
             }
             return None;
@@ -1687,11 +1751,15 @@ impl PoolPriceService {
         }
 
         // Calculate pool price
-        match self.calculate_pool_price(token_address, api_price_sol).await {
+        match self
+            .calculate_pool_price(token_address, api_price_sol)
+            .await
+        {
             Ok(pool_result) => {
                 let has_price = pool_result.price_sol.is_some();
                 was_blockchain = pool_result.source == "pool";
-                self.record_price_request(has_price, was_cache_hit, was_blockchain).await;
+                self.record_price_request(has_price, was_cache_hit, was_blockchain)
+                    .await;
 
                 if is_debug_pool_prices_enabled() {
                     if let Some(price_sol) = pool_result.price_sol {
@@ -1732,10 +1800,11 @@ impl PoolPriceService {
                                     price_diff,
                                     price_diff_percent,
                                     pool_result.pool_address,
-                                    pool_result.pool_type
+                                    pool_result
+                                        .pool_type
                                         .as_ref()
                                         .unwrap_or(&"Unknown Pool".to_string())
-                                )
+                                ),
                             );
 
                             // Flag significant differences
@@ -1798,7 +1867,7 @@ impl PoolPriceService {
                                 token_address,
                                 pool_result.price_sol.unwrap_or(0.0),
                                 pool_result.pool_address
-                            )
+                            ),
                         );
                     }
                 }
@@ -1817,8 +1886,9 @@ impl PoolPriceService {
                             None, // reserves_sol - not available in current PoolPriceResult
                             pool_result.liquidity_usd,
                             Some(pool_result.volume_24h),
-                            &pool_result.source
-                        ).await;
+                            &pool_result.source,
+                        )
+                        .await;
 
                         if is_debug_pool_prices_enabled() {
                             log(
@@ -1826,9 +1896,8 @@ impl PoolPriceService {
                                 "HISTORY_ADD",
                                 &format!(
                                     "📈 Added price {:.12} SOL to history for {}",
-                                    price_sol,
-                                    token_address
-                                )
+                                    price_sol, token_address
+                                ),
                             );
                         }
                     }
@@ -1837,12 +1906,13 @@ impl PoolPriceService {
                 Some(pool_result)
             }
             Err(e) => {
-                self.record_price_request(false, was_cache_hit, was_blockchain).await;
+                self.record_price_request(false, was_cache_hit, was_blockchain)
+                    .await;
                 if is_debug_pool_prices_enabled() {
                     log(
                         LogTag::Pool,
                         "CALC_ERROR",
-                        &format!("❌ CALCULATION ERROR for {}: {}", token_address, e)
+                        &format!("❌ CALCULATION ERROR for {}: {}", token_address, e),
                     );
                 }
                 None
@@ -1866,21 +1936,21 @@ impl PoolPriceService {
         match self.fetch_and_cache_pools(token_address).await {
             Ok(pools) => {
                 let has_pools = !pools.is_empty();
-                let best_pool = pools
-                    .iter()
-                    .max_by(|a, b|
-                        a.liquidity_usd
-                            .partial_cmp(&b.liquidity_usd)
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    );
+                let best_pool = pools.iter().max_by(|a, b| {
+                    a.liquidity_usd
+                        .partial_cmp(&b.liquidity_usd)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
 
                 let availability = TokenAvailability {
                     token_address: token_address.to_string(),
                     has_pools,
                     best_pool_address: best_pool.map(|p| p.pair_address.clone()),
                     best_liquidity_usd: best_pool.map(|p| p.liquidity_usd).unwrap_or(0.0),
-                    can_calculate_price: has_pools &&
-                    best_pool.map(|p| p.liquidity_usd > MIN_POOL_LIQUIDITY_USD).unwrap_or(false),
+                    can_calculate_price: has_pools
+                        && best_pool
+                            .map(|p| p.liquidity_usd > MIN_POOL_LIQUIDITY_USD)
+                            .unwrap_or(false),
                     last_checked: Utc::now(),
                 };
 
@@ -1890,17 +1960,14 @@ impl PoolPriceService {
                 }
 
                 if !availability.can_calculate_price && is_debug_pool_prices_enabled() {
-                    if let Some(liq) = availability.best_liquidity_usd.into() {
-                    }
+                    if let Some(liq) = availability.best_liquidity_usd.into() {}
                     log(
                         LogTag::Pool,
                         "LIQUIDITY_GATE",
                         &format!(
                             "⛔ Liquidity gate: {} best_liquidity=${:.2} < required ${:.2}",
-                            token_address,
-                            availability.best_liquidity_usd,
-                            MIN_POOL_LIQUIDITY_USD
-                        )
+                            token_address, availability.best_liquidity_usd, MIN_POOL_LIQUIDITY_USD
+                        ),
                     );
                 }
                 availability.can_calculate_price
@@ -1909,7 +1976,7 @@ impl PoolPriceService {
                 log(
                     LogTag::Pool,
                     "AVAILABILITY_ERROR",
-                    &format!("Failed to check availability for {}: {}", token_address, e)
+                    &format!("Failed to check availability for {}: {}", token_address, e),
                 );
                 false
             }
@@ -1919,13 +1986,13 @@ impl PoolPriceService {
     /// Fetch pools from API and cache them
     async fn fetch_and_cache_pools(
         &self,
-        token_address: &str
+        token_address: &str,
     ) -> Result<Vec<CachedPoolInfo>, String> {
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
                 "FETCH_START",
-                &format!("🌐 STARTING to fetch pools for {}", token_address)
+                &format!("🌐 STARTING to fetch pools for {}", token_address),
             );
         }
 
@@ -1945,7 +2012,7 @@ impl PoolPriceService {
                                 cached_pools.len(),
                                 age.num_seconds(),
                                 POOL_CACHE_TTL_SECONDS
-                            )
+                            ),
                         );
                     }
                     return Ok(cached_pools.clone());
@@ -1953,14 +2020,20 @@ impl PoolPriceService {
                     log(
                         LogTag::Pool,
                         "FETCH_CACHE_EXPIRED",
-                        &format!("⏰ Pool cache EXPIRED for {}, will fetch fresh pools from API", token_address)
+                        &format!(
+                            "⏰ Pool cache EXPIRED for {}, will fetch fresh pools from API",
+                            token_address
+                        ),
                     );
                 }
             } else if is_debug_pool_prices_enabled() {
                 log(
                     LogTag::Pool,
                     "FETCH_CACHE_MISS",
-                    &format!("❓ No cached pools for {}, will fetch from API", token_address)
+                    &format!(
+                        "❓ No cached pools for {}, will fetch from API",
+                        token_address
+                    ),
                 );
             }
         }
@@ -1970,7 +2043,10 @@ impl PoolPriceService {
             log(
                 LogTag::Pool,
                 "FETCH_API_START",
-                &format!("🔄 Fetching pools from DexScreener API for {}", token_address)
+                &format!(
+                    "🔄 Fetching pools from DexScreener API for {}",
+                    token_address
+                ),
             );
         }
 
@@ -1985,12 +2061,15 @@ impl PoolPriceService {
                         "INFO",
                         &format!(
                             "API timeout for {} (system may be shutting down): {}",
-                            token_address,
-                            e
-                        )
+                            token_address, e
+                        ),
                     );
                 } else {
-                    log(LogTag::Pool, "ERROR", &format!("API error for {}: {}", token_address, e));
+                    log(
+                        LogTag::Pool,
+                        "ERROR",
+                        &format!("API error for {}: {}", token_address, e),
+                    );
                 }
                 return Err(format!("Failed to fetch pools from API: {}", e));
             }
@@ -2006,7 +2085,7 @@ impl PoolPriceService {
                     token_address,
                     pairs.len(),
                     api_duration.num_milliseconds()
-                )
+                ),
             );
         }
 
@@ -2025,7 +2104,7 @@ impl PoolPriceService {
                                 cached_pool.pair_address,
                                 cached_pool.dex_id, // Keep API dex_id for debugging pool fetching
                                 cached_pool.liquidity_usd
-                            )
+                            ),
                         );
                     }
                     cached_pools.push(cached_pool);
@@ -2041,7 +2120,7 @@ impl PoolPriceService {
                                 token_address,
                                 pair.pair_address,
                                 e
-                            )
+                            ),
                         );
                     }
                 }
@@ -2049,9 +2128,11 @@ impl PoolPriceService {
         }
 
         // Sort by liquidity (highest first)
-        cached_pools.sort_by(|a, b|
-            b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
-        );
+        cached_pools.sort_by(|a, b| {
+            b.liquidity_usd
+                .partial_cmp(&a.liquidity_usd)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         if is_debug_pool_prices_enabled() {
             log(
@@ -2061,7 +2142,7 @@ impl PoolPriceService {
                     "📊 Sorted {} pools for {} by liquidity (highest first)",
                     cached_pools.len(),
                     token_address
-                )
+                ),
             );
 
             // Log top 3 pools for debugging
@@ -2076,7 +2157,7 @@ impl PoolPriceService {
                         pool.dex_id, // Keep API dex_id for debugging pool fetching
                         pool.liquidity_usd,
                         pool.price_native
-                    )
+                    ),
                 );
             }
         }
@@ -2096,7 +2177,7 @@ impl PoolPriceService {
                         token_address,
                         POOL_CACHE_TTL_SECONDS,
                         Utc::now().format("%H:%M:%S%.3f")
-                    )
+                    ),
                 );
             }
         }
@@ -2113,7 +2194,7 @@ impl PoolPriceService {
     /// Force refresh pools infos for a token (honors rate-limits internally)
     pub async fn refresh_pools_infos(
         &self,
-        token_address: &str
+        token_address: &str,
     ) -> Result<Vec<CachedPoolInfo>, String> {
         self.fetch_and_cache_pools(token_address).await
     }
@@ -2122,13 +2203,13 @@ impl PoolPriceService {
     async fn calculate_pool_price(
         &self,
         token_address: &str,
-        api_price_sol: Option<f64>
+        api_price_sol: Option<f64>,
     ) -> Result<PoolPriceResult, String> {
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
                 "CALC_START",
-                &format!("🔍 STARTING pool price calculation for {}", token_address)
+                &format!("🔍 STARTING pool price calculation for {}", token_address),
             );
         }
 
@@ -2150,7 +2231,7 @@ impl PoolPriceService {
                     "📊 Found {} pools for {}, selecting highest liquidity pool",
                     pools.len(),
                     token_address
-                )
+                ),
             );
         }
 
@@ -2168,16 +2249,14 @@ impl PoolPriceService {
                     best_pool.dex_id, // Keep API dex_id for debugging pool selection
                     best_pool.liquidity_usd,
                     best_pool.volume_24h
-                )
+                ),
             );
         }
 
         // Calculate REAL price from blockchain pool reserves instead of using API data
-        let (price_sol, actual_pool_type) = match
-            self.calculate_real_pool_price_from_reserves(
-                &best_pool.pair_address,
-                token_address
-            ).await
+        let (price_sol, actual_pool_type) = match self
+            .calculate_real_pool_price_from_reserves(&best_pool.pair_address, token_address)
+            .await
         {
             Ok(Some(pool_price_info)) => {
                 if is_debug_pool_prices_enabled() {
@@ -2193,7 +2272,10 @@ impl PoolPriceService {
                         )
                     );
                 }
-                (Some(pool_price_info.price_sol), Some(pool_price_info.pool_type))
+                (
+                    Some(pool_price_info.price_sol),
+                    Some(pool_price_info.pool_type),
+                )
             }
             Ok(None) => {
                 if is_debug_pool_prices_enabled() {
@@ -2233,8 +2315,7 @@ impl PoolPriceService {
             None => {
                 let error_msg = format!(
                     "Pool calculation failed for {} from pool {}",
-                    token_address,
-                    best_pool.pair_address
+                    token_address, best_pool.pair_address
                 );
                 if is_debug_pool_prices_enabled() {
                     log(LogTag::Pool, "CALC_FAILED", &format!("❌ {}", error_msg));
@@ -2247,11 +2328,11 @@ impl PoolPriceService {
         let result = PoolPriceResult {
             pool_address: best_pool.pair_address.clone(),
             dex_id: best_pool.dex_id.clone(), // Keep for internal tracking, but use pool_type for display
-            pool_type: actual_pool_type, // Use actual pool type from decoder, not API dex_id
+            pool_type: actual_pool_type,      // Use actual pool type from decoder, not API dex_id
             token_address: token_address.to_string(),
             price_sol: Some(price_sol),
             price_usd: None, // We don't calculate USD prices from pools - only SOL prices
-            api_price_sol, // Include API price for comparison
+            api_price_sol,   // Include API price for comparison
             liquidity_usd: best_pool.liquidity_usd,
             volume_24h: best_pool.volume_24h,
             source: "pool".to_string(),
@@ -2268,7 +2349,7 @@ impl PoolPriceService {
                     price_sol,
                     best_pool.pair_address,
                     result.calculated_at.format("%H:%M:%S%.3f")
-                )
+                ),
             );
 
             // Log detailed pool info for debugging
@@ -2294,7 +2375,7 @@ impl PoolPriceService {
                     best_pool.quote_token,
                     best_pool.price_native,
                     best_pool.created_at
-                )
+                ),
             );
         }
 
@@ -2305,7 +2386,7 @@ impl PoolPriceService {
     async fn calculate_real_pool_price_from_reserves(
         &self,
         pool_address: &str,
-        token_mint: &str
+        token_mint: &str,
     ) -> Result<Option<PoolPriceInfo>, String> {
         if is_debug_pool_prices_enabled() {
             log(
@@ -2313,9 +2394,8 @@ impl PoolPriceService {
                 "REAL_CALC_START",
                 &format!(
                     "🔗 STARTING REAL blockchain calculation for pool {} token {}",
-                    pool_address,
-                    token_mint
-                )
+                    pool_address, token_mint
+                ),
             );
         }
 
@@ -2323,7 +2403,10 @@ impl PoolPriceService {
         let calculator = get_global_pool_price_calculator();
         // (Debug flag is managed elsewhere; no need to recreate calculator repeatedly)
 
-        match calculator.calculate_token_price(pool_address, token_mint).await {
+        match calculator
+            .calculate_token_price(pool_address, token_mint)
+            .await
+        {
             Ok(Some(pool_price_info)) => {
                 if is_debug_pool_prices_enabled() {
                     log(
@@ -2350,9 +2433,8 @@ impl PoolPriceService {
                         "REAL_CALC_NONE",
                         &format!(
                             "❓ REAL calculation returned None for pool {} token {}",
-                            pool_address,
-                            token_mint
-                        )
+                            pool_address, token_mint
+                        ),
                     );
                 }
                 Ok(None)
@@ -2364,10 +2446,8 @@ impl PoolPriceService {
                         "REAL_CALC_ERROR",
                         &format!(
                             "❌ REAL calculation FAILED for pool {} token {}: {}",
-                            pool_address,
-                            token_mint,
-                            e
-                        )
+                            pool_address, token_mint, e
+                        ),
                     );
                 }
                 Err(e)
@@ -2379,7 +2459,7 @@ impl PoolPriceService {
     async fn update_token_price_internal(
         pool_cache: &Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>,
         price_cache: &Arc<RwLock<HashMap<String, PoolPriceResult>>>,
-        token_address: &str
+        token_address: &str,
     ) -> Result<bool, String> {
         // Check if we have cached pools available for this token
         let has_cached_pools = {
@@ -2417,7 +2497,11 @@ impl PoolPriceService {
         let price_cache = self.price_cache.read().await;
         let availability_cache = self.availability_cache.read().await;
 
-        (pool_cache.len(), price_cache.len(), availability_cache.len())
+        (
+            pool_cache.len(),
+            price_cache.len(),
+            availability_cache.len(),
+        )
     }
 
     /// Get enhanced pool service statistics
@@ -2427,10 +2511,7 @@ impl PoolPriceService {
         let price_history = self.price_history.read().await;
 
         stats.tokens_with_price_history = price_history.len() as u64;
-        stats.total_price_history_entries = price_history
-            .values()
-            .map(|v| v.len() as u64)
-            .sum();
+        stats.total_price_history_entries = price_history.values().map(|v| v.len() as u64).sum();
 
         stats.last_updated = Utc::now();
 
@@ -2465,7 +2546,7 @@ impl PoolPriceService {
         &self,
         pool_address: &str,
         token_mint: &str,
-        api_price_sol: Option<f64>
+        api_price_sol: Option<f64>,
     ) -> Option<PoolPriceResult> {
         if is_debug_pool_prices_enabled() {
             log(
@@ -2473,14 +2554,16 @@ impl PoolPriceService {
                 "DIRECT_CALC_START",
                 &format!(
                     "🎯 DIRECT pool calculation for pool {} token {} (bypassing API discovery)",
-                    pool_address,
-                    token_mint
-                )
+                    pool_address, token_mint
+                ),
             );
         }
 
         // Calculate REAL price directly from blockchain pool reserves
-        match self.calculate_real_pool_price_from_reserves(pool_address, token_mint).await {
+        match self
+            .calculate_real_pool_price_from_reserves(pool_address, token_mint)
+            .await
+        {
             Ok(Some(pool_price_info)) => {
                 if is_debug_pool_prices_enabled() {
                     log(
@@ -2492,7 +2575,7 @@ impl PoolPriceService {
                             token_mint,
                             pool_address,
                             pool_price_info.pool_type
-                        )
+                        ),
                     );
                 }
 
@@ -2504,7 +2587,7 @@ impl PoolPriceService {
                     token_address: token_mint.to_string(),
                     price_sol: Some(pool_price_info.price_sol),
                     price_usd: None, // We don't calculate USD prices from pools - only SOL prices
-                    api_price_sol, // Include API price for comparison
+                    api_price_sol,   // Include API price for comparison
                     liquidity_usd: 0.0, // No API data for liquidity in direct mode
                     volume_24h: 0.0, // No API data for volume in direct mode
                     source: "pool_direct".to_string(),
@@ -2522,10 +2605,8 @@ impl PoolPriceService {
                             "DIRECT_CACHE_STORED",
                             &format!(
                                 "💾 CACHED direct price for {}: {:.12} SOL from pool {}",
-                                token_mint,
-                                pool_price_info.price_sol,
-                                pool_address
-                            )
+                                token_mint, pool_price_info.price_sol, pool_address
+                            ),
                         );
                     }
                 }
@@ -2539,9 +2620,8 @@ impl PoolPriceService {
                         "DIRECT_CALC_NONE",
                         &format!(
                             "❓ DIRECT calculation returned None for pool {} token {}",
-                            pool_address,
-                            token_mint
-                        )
+                            pool_address, token_mint
+                        ),
                     );
                 }
                 None
@@ -2553,10 +2633,8 @@ impl PoolPriceService {
                         "DIRECT_CALC_ERROR",
                         &format!(
                             "❌ DIRECT calculation FAILED for pool {} token {}: {}",
-                            pool_address,
-                            token_mint,
-                            e
-                        )
+                            pool_address, token_mint, e
+                        ),
                     );
                 }
                 None
@@ -2573,7 +2651,10 @@ struct BackoffEntry {
 
 impl BackoffEntry {
     fn new() -> Self {
-        Self { consecutive_failures: 0, next_retry: Instant::now() }
+        Self {
+            consecutive_failures: 0,
+            next_retry: Instant::now(),
+        }
     }
     fn register_failure(&mut self) {
         self.consecutive_failures = self.consecutive_failures.saturating_add(1);
@@ -2604,7 +2685,11 @@ pub fn init_pool_service() -> &'static PoolPriceService {
         match GLOBAL_POOL_SERVICE.as_ref() {
             Some(svc) => svc,
             None => {
-                log(LogTag::Pool, "INIT_ERROR", "PoolPriceService failed to initialize");
+                log(
+                    LogTag::Pool,
+                    "INIT_ERROR",
+                    "PoolPriceService failed to initialize",
+                );
                 panic!("PoolPriceService failed to initialize");
             }
         }
@@ -2624,24 +2709,38 @@ pub fn get_pool_service() -> &'static PoolPriceService {
 /// Get comprehensive price history for analysis (global function)
 pub async fn get_price_history_for_analysis(token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
     let pool_service = get_pool_service();
-    pool_service.get_comprehensive_price_history(token_address).await
+    pool_service
+        .get_comprehensive_price_history(token_address)
+        .await
 }
 
 /// Get detailed pool price history for a specific token (NEW FUNCTION)
 pub async fn get_detailed_pool_price_history(
-    token_address: &str
+    token_address: &str,
 ) -> HashMap<
     String,
-    Vec<(DateTime<Utc>, f64, Option<f64>, Option<f64>, Option<f64>, f64, Option<f64>)>
+    Vec<(
+        DateTime<Utc>,
+        f64,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        f64,
+        Option<f64>,
+    )>,
 > {
     let pool_service = get_pool_service();
-    pool_service.get_detailed_pool_price_history_for_token(token_address).await
+    pool_service
+        .get_detailed_pool_price_history_for_token(token_address)
+        .await
 }
 
 /// Get all pool addresses that have price history for a token (NEW FUNCTION)
 pub async fn get_pools_with_price_history(token_address: &str) -> Vec<String> {
     let pool_service = get_pool_service();
-    pool_service.get_pools_with_price_history_for_token(token_address).await
+    pool_service
+        .get_pools_with_price_history_for_token(token_address)
+        .await
 }
 
 // =============================================================================
@@ -2663,13 +2762,17 @@ pub async fn refresh_pools_infos_safe(token_address: &str) -> Result<Vec<CachedP
 /// Get tokens which have pools infos within the last `window_seconds`
 pub async fn get_tokens_with_recent_pools_infos_safe(window_seconds: i64) -> Vec<String> {
     let service = get_pool_service();
-    service.get_tokens_with_recent_pools_infos(window_seconds).await
+    service
+        .get_tokens_with_recent_pools_infos(window_seconds)
+        .await
 }
 
 /// Refresh pools infos for a list of tokens (only those missing/expired). Returns count updated.
 pub async fn refresh_pools_infos_for_tokens_safe(mints: &[String], max_tokens: usize) -> usize {
     let service = get_pool_service();
-    service.refresh_pools_infos_for_tokens(mints, max_tokens).await
+    service
+        .refresh_pools_infos_for_tokens(mints, max_tokens)
+        .await
 }
 
 /// Request priority price updates for open positions (global function)
@@ -2688,7 +2791,10 @@ pub async fn request_priority_updates_for_open_positions() -> usize {
         log(
             LogTag::Pool,
             "PRIORITY_REQUEST",
-            &format!("Requesting priority updates for {} open position tokens", open_mints.len())
+            &format!(
+                "Requesting priority updates for {} open position tokens",
+                open_mints.len()
+            ),
         );
     }
 
@@ -2742,7 +2848,10 @@ impl PoolStats {
         }
 
         // Track by program ID
-        *self.pools_by_program.entry(program_id.to_string()).or_insert(0) += 1;
+        *self
+            .pools_by_program
+            .entry(program_id.to_string())
+            .or_insert(0) += 1;
 
         // Update average time
         let total_time =
@@ -2815,7 +2924,7 @@ impl PoolPriceCalculator {
     async fn refresh_pool_reserves(
         &self,
         pool_info: &PoolInfo,
-        account: &Account
+        account: &Account,
     ) -> Result<PoolInfo, String> {
         let mut updated_pool = pool_info.clone();
 
@@ -2825,9 +2934,8 @@ impl PoolPriceCalculator {
                 "REFRESH_RESERVES",
                 &format!(
                     "Refreshing reserves for pool {} ({})",
-                    pool_info.pool_address,
-                    pool_info.pool_type
-                )
+                    pool_info.pool_address, pool_info.pool_type
+                ),
             );
         }
 
@@ -2835,11 +2943,8 @@ impl PoolPriceCalculator {
         match pool_info.pool_program_id.as_str() {
             RAYDIUM_CPMM_PROGRAM_ID | METEORA_DAMM_V2_PROGRAM_ID | ORCA_WHIRLPOOL_PROGRAM_ID => {
                 // These pools use vault balances
-                if
-                    let (Some(vault_0), Some(vault_1)) = (
-                        &pool_info.token_0_vault,
-                        &pool_info.token_1_vault,
-                    )
+                if let (Some(vault_0), Some(vault_1)) =
+                    (&pool_info.token_0_vault, &pool_info.token_1_vault)
                 {
                     let (reserve_0, reserve_1) = self.get_vault_balances(vault_0, vault_1).await?;
                     updated_pool.token_0_reserve = reserve_0;
@@ -2848,27 +2953,19 @@ impl PoolPriceCalculator {
             }
             METEORA_DLMM_PROGRAM_ID => {
                 // DLMM uses different reserve accounts
-                if
-                    let (Some(vault_0), Some(vault_1)) = (
-                        &pool_info.token_0_vault,
-                        &pool_info.token_1_vault,
-                    )
+                if let (Some(vault_0), Some(vault_1)) =
+                    (&pool_info.token_0_vault, &pool_info.token_1_vault)
                 {
-                    let (reserve_0, reserve_1) = self.get_dlmm_vault_balances(
-                        vault_0,
-                        vault_1
-                    ).await?;
+                    let (reserve_0, reserve_1) =
+                        self.get_dlmm_vault_balances(vault_0, vault_1).await?;
                     updated_pool.token_0_reserve = reserve_0;
                     updated_pool.token_1_reserve = reserve_1;
                 }
             }
             RAYDIUM_LEGACY_AMM_PROGRAM_ID => {
                 // Legacy AMM may extract from pool data OR use vaults
-                if
-                    let (Some(vault_0), Some(vault_1)) = (
-                        &pool_info.token_0_vault,
-                        &pool_info.token_1_vault,
-                    )
+                if let (Some(vault_0), Some(vault_1)) =
+                    (&pool_info.token_0_vault, &pool_info.token_1_vault)
                 {
                     // Try vault balances first
                     match self.get_vault_balances(vault_0, vault_1).await {
@@ -2878,9 +2975,8 @@ impl PoolPriceCalculator {
                         }
                         Err(_) => {
                             // Fallback to pool data extraction
-                            if
-                                let Ok(reserve_pairs) =
-                                    self.extract_raydium_legacy_reserves_from_data(&account.data)
+                            if let Ok(reserve_pairs) =
+                                self.extract_raydium_legacy_reserves_from_data(&account.data)
                             {
                                 if let Some((reserve_0, reserve_1)) = reserve_pairs.first() {
                                     updated_pool.token_0_reserve = *reserve_0;
@@ -2893,10 +2989,8 @@ impl PoolPriceCalculator {
             }
             PUMP_FUN_AMM_PROGRAM_ID => {
                 // For Pump.fun, we need to re-extract vault addresses from pool data and fetch fresh balances
-                if
-                    let Ok((base_vault, quote_vault)) = self.extract_pump_fun_vault_addresses(
-                        &account.data
-                    )
+                if let Ok((base_vault, quote_vault)) =
+                    self.extract_pump_fun_vault_addresses(&account.data)
                 {
                     match self.get_vault_balances(&base_vault, &quote_vault).await {
                         Ok((base_reserve, quote_reserve)) => {
@@ -2922,7 +3016,7 @@ impl PoolPriceCalculator {
                                 log(
                                     LogTag::Pool,
                                     "PUMP_VAULT_ERROR",
-                                    &format!("Failed to refresh Pump.fun vault balances: {}", e)
+                                    &format!("Failed to refresh Pump.fun vault balances: {}", e),
                                 );
                             }
                         }
@@ -2932,7 +3026,7 @@ impl PoolPriceCalculator {
                         log(
                             LogTag::Pool,
                             "PUMP_EXTRACT_ERROR",
-                            "Failed to extract vault addresses from Pump.fun pool data"
+                            "Failed to extract vault addresses from Pump.fun pool data",
                         );
                     }
                 }
@@ -2945,7 +3039,7 @@ impl PoolPriceCalculator {
                         &format!(
                             "Unknown pool type for reserve refresh: {}",
                             pool_info.pool_program_id
-                        )
+                        ),
                     );
                 }
             }
@@ -2957,9 +3051,8 @@ impl PoolPriceCalculator {
                 "RESERVES_REFRESHED",
                 &format!(
                     "Fresh reserves: token_0={}, token_1={}",
-                    updated_pool.token_0_reserve,
-                    updated_pool.token_1_reserve
-                )
+                    updated_pool.token_0_reserve, updated_pool.token_1_reserve
+                ),
             );
         }
 
@@ -2973,9 +3066,8 @@ impl PoolPriceCalculator {
         let start_time = Instant::now();
 
         // Parse pool address
-        let pool_pubkey = Pubkey::from_str(pool_address).map_err(|e|
-            format!("Invalid pool address {}: {}", pool_address, e)
-        )?;
+        let pool_pubkey = Pubkey::from_str(pool_address)
+            .map_err(|e| format!("Invalid pool address {}: {}", pool_address, e))?;
 
         // Get account data via centralized async RPC - ALWAYS use processed commitment for freshest data
         let account = {
@@ -2983,15 +3075,19 @@ impl PoolPriceCalculator {
                 log(
                     LogTag::Pool,
                     "FRESH_ACCOUNT_DATA",
-                    &format!("🔍 Using PROCESSED commitment for absolutely fresh account data: {}", pool_address)
+                    &format!(
+                        "🔍 Using PROCESSED commitment for absolutely fresh account data: {}",
+                        pool_address
+                    ),
                 );
             }
             // Always use processed commitment for absolutely fresh data
             self.rpc_client
                 .get_account_with_commitment(
                     &pool_pubkey,
-                    solana_sdk::commitment_config::CommitmentConfig::processed()
-                ).await
+                    solana_sdk::commitment_config::CommitmentConfig::processed(),
+                )
+                .await
                 .map_err(|e| {
                     format!("Failed to get pool account {} (fresh): {}", pool_address, e)
                 })?
@@ -3009,7 +3105,7 @@ impl PoolPriceCalculator {
                     pool_address,
                     program_id,
                     account.data.len()
-                )
+                ),
             );
             log(
                 LogTag::Pool,
@@ -3030,37 +3126,55 @@ impl PoolPriceCalculator {
                 if self.debug_enabled {
                     log(LogTag::Pool, "DECODER_SELECT", "Using Raydium CPMM decoder");
                 }
-                self.decode_raydium_cpmm_pool(pool_address, &account).await?
+                self.decode_raydium_cpmm_pool(pool_address, &account)
+                    .await?
             }
             RAYDIUM_LEGACY_AMM_PROGRAM_ID => {
                 if self.debug_enabled {
-                    log(LogTag::Pool, "DECODER_SELECT", "Using Raydium Legacy AMM decoder");
+                    log(
+                        LogTag::Pool,
+                        "DECODER_SELECT",
+                        "Using Raydium Legacy AMM decoder",
+                    );
                 }
-                self.decode_raydium_legacy_amm_pool(pool_address, &account).await?
+                self.decode_raydium_legacy_amm_pool(pool_address, &account)
+                    .await?
             }
             METEORA_DAMM_V2_PROGRAM_ID => {
                 if self.debug_enabled {
-                    log(LogTag::Pool, "DECODER_SELECT", "Using Meteora DAMM v2 decoder");
+                    log(
+                        LogTag::Pool,
+                        "DECODER_SELECT",
+                        "Using Meteora DAMM v2 decoder",
+                    );
                 }
-                self.decode_meteora_damm_v2_pool(pool_address, &account).await?
+                self.decode_meteora_damm_v2_pool(pool_address, &account)
+                    .await?
             }
             METEORA_DLMM_PROGRAM_ID => {
                 if self.debug_enabled {
                     log(LogTag::Pool, "DECODER_SELECT", "Using Meteora DLMM decoder");
                 }
-                self.decode_meteora_dlmm_pool(pool_address, &account).await?
+                self.decode_meteora_dlmm_pool(pool_address, &account)
+                    .await?
             }
             ORCA_WHIRLPOOL_PROGRAM_ID => {
                 if self.debug_enabled {
-                    log(LogTag::Pool, "DECODER_SELECT", "Using Orca Whirlpool decoder");
+                    log(
+                        LogTag::Pool,
+                        "DECODER_SELECT",
+                        "Using Orca Whirlpool decoder",
+                    );
                 }
-                self.decode_orca_whirlpool_pool(pool_address, &account).await?
+                self.decode_orca_whirlpool_pool(pool_address, &account)
+                    .await?
             }
             PUMP_FUN_AMM_PROGRAM_ID => {
                 if self.debug_enabled {
                     log(LogTag::Pool, "DECODER_SELECT", "Using Pump.fun AMM decoder");
                 }
-                self.decode_pump_fun_amm_pool(pool_address, &account).await?
+                self.decode_pump_fun_amm_pool(pool_address, &account)
+                    .await?
             }
             _ => {
                 // Record failure before returning
@@ -3069,7 +3183,7 @@ impl PoolPriceCalculator {
                     stats.record_calculation(
                         false,
                         start_time.elapsed().as_millis() as f64,
-                        &program_id
+                        &program_id,
                     );
                 }
                 return Err(format!("Unsupported pool program ID: {}", program_id));
@@ -3088,7 +3202,10 @@ impl PoolPriceCalculator {
             log(
                 LogTag::Pool,
                 "SUCCESS",
-                &format!("Pool info decoded in {:.2}ms", start_time.elapsed().as_millis())
+                &format!(
+                    "Pool info decoded in {:.2}ms",
+                    start_time.elapsed().as_millis()
+                ),
             );
         }
 
@@ -3099,7 +3216,7 @@ impl PoolPriceCalculator {
     pub async fn calculate_token_price(
         &self,
         pool_address: &str,
-        token_mint: &str
+        token_mint: &str,
     ) -> Result<Option<PoolPriceInfo>, String> {
         let cache_key = format!("{}_{}", pool_address, token_mint);
 
@@ -3118,30 +3235,34 @@ impl PoolPriceCalculator {
         // Calculate price based on pool type
         let price_info = match pool_info.pool_program_id.as_str() {
             RAYDIUM_CPMM_PROGRAM_ID => {
-                self.calculate_raydium_cpmm_price(&pool_info, token_mint).await?
+                self.calculate_raydium_cpmm_price(&pool_info, token_mint)
+                    .await?
             }
             RAYDIUM_LEGACY_AMM_PROGRAM_ID => {
-                self.calculate_raydium_legacy_amm_price(&pool_info, token_mint).await?
+                self.calculate_raydium_legacy_amm_price(&pool_info, token_mint)
+                    .await?
             }
             METEORA_DAMM_V2_PROGRAM_ID => {
-                self.calculate_meteora_damm_v2_price(&pool_info, token_mint).await?
+                self.calculate_meteora_damm_v2_price(&pool_info, token_mint)
+                    .await?
             }
             METEORA_DLMM_PROGRAM_ID => {
-                self.calculate_meteora_dlmm_price(&pool_info, token_mint).await?
+                self.calculate_meteora_dlmm_price(&pool_info, token_mint)
+                    .await?
             }
             ORCA_WHIRLPOOL_PROGRAM_ID => {
-                self.calculate_orca_whirlpool_price(&pool_info, token_mint).await?
+                self.calculate_orca_whirlpool_price(&pool_info, token_mint)
+                    .await?
             }
             PUMP_FUN_AMM_PROGRAM_ID => {
-                self.calculate_pump_fun_amm_price(&pool_info, token_mint).await?
+                self.calculate_pump_fun_amm_price(&pool_info, token_mint)
+                    .await?
             }
             _ => {
-                return Err(
-                    format!(
-                        "Price calculation not supported for program: {}",
-                        pool_info.pool_program_id
-                    )
-                );
+                return Err(format!(
+                    "Price calculation not supported for program: {}",
+                    pool_info.pool_program_id
+                ));
             }
         };
 
@@ -3153,7 +3274,7 @@ impl PoolPriceCalculator {
             stats.record_calculation(
                 price_info.is_some(),
                 start_time.elapsed().as_millis() as f64,
-                &pool_info.pool_program_id
+                &pool_info.pool_program_id,
             );
         }
 
@@ -3166,7 +3287,7 @@ impl PoolPriceCalculator {
                     price_info.as_ref().unwrap().price_sol,
                     token_mint,
                     start_time.elapsed().as_millis()
-                )
+                ),
             );
         }
 
@@ -3176,7 +3297,7 @@ impl PoolPriceCalculator {
     /// Get multiple account data in a single RPC call (for future optimization)
     pub async fn get_multiple_pool_accounts(
         &self,
-        pool_addresses: &[String]
+        pool_addresses: &[String],
     ) -> Result<HashMap<String, Account>, String> {
         let pubkeys: Result<Vec<Pubkey>, _> = pool_addresses
             .iter()
@@ -3185,9 +3306,11 @@ impl PoolPriceCalculator {
 
         let pubkeys = pubkeys.map_err(|e| format!("Invalid pool address: {}", e))?;
 
-        let accounts = self.rpc_client
-            .get_multiple_accounts(&pubkeys).await
-            .map_err(|e| { format!("Failed to get multiple accounts: {}", e) })?;
+        let accounts = self
+            .rpc_client
+            .get_multiple_accounts(&pubkeys)
+            .await
+            .map_err(|e| format!("Failed to get multiple accounts: {}", e))?;
 
         let mut result = HashMap::new();
         for (i, account_opt) in accounts.into_iter().enumerate() {
@@ -3200,7 +3323,7 @@ impl PoolPriceCalculator {
             log(
                 LogTag::Pool,
                 "RPC",
-                &format!("Retrieved {} pool accounts in single call", result.len())
+                &format!("Retrieved {} pool accounts in single call", result.len()),
             );
         }
 
@@ -3215,14 +3338,17 @@ impl PoolPriceCalculator {
     /// Clear caches (NO-OP since no caching)
     pub async fn clear_caches(&self) {
         // NO CACHING - NO OPERATION NEEDED
-        log(LogTag::Pool, "CACHE", "No caches to clear - caching disabled for real-time prices");
+        log(
+            LogTag::Pool,
+            "CACHE",
+            "No caches to clear - caching disabled for real-time prices",
+        );
     }
 
     /// Get raw pool account data for debugging
     pub async fn get_raw_pool_data(&self, pool_address: &str) -> Result<Option<Vec<u8>>, String> {
-        let pool_pubkey = Pubkey::from_str(pool_address).map_err(|e|
-            format!("Invalid pool address: {}", e)
-        )?;
+        let pool_pubkey =
+            Pubkey::from_str(pool_address).map_err(|e| format!("Invalid pool address: {}", e))?;
 
         match self.rpc_client.get_account(&pool_pubkey).await {
             Ok(account) => Ok(Some(account.data)),
@@ -3240,7 +3366,7 @@ impl PoolPriceCalculator {
     /// NOTE: This function is now disabled since caching has been removed for real-time prices
     pub async fn batch_prefetch_pools_and_vaults(
         &self,
-        pool_addresses: &[String]
+        pool_addresses: &[String],
     ) -> Result<(), String> {
         // NO CACHING - NO PREFETCHING NEEDED
         if self.debug_enabled {
@@ -3250,7 +3376,7 @@ impl PoolPriceCalculator {
                 &format!(
                     "Batch prefetch disabled - {} pools will be fetched fresh on-demand",
                     pool_addresses.len()
-                )
+                ),
             );
         }
         Ok(())
@@ -3271,7 +3397,11 @@ pub fn init_global_pool_price_calculator() -> &'static PoolPriceCalculator {
         match GLOBAL_POOL_PRICE_CALCULATOR.as_ref() {
             Some(calc) => calc,
             None => {
-                log(LogTag::Pool, "INIT_ERROR", "PoolPriceCalculator failed to initialize");
+                log(
+                    LogTag::Pool,
+                    "INIT_ERROR",
+                    "PoolPriceCalculator failed to initialize",
+                );
                 panic!("PoolPriceCalculator failed to initialize");
             }
         }
@@ -3295,7 +3425,7 @@ impl PoolPriceCalculator {
     async fn decode_raydium_cpmm_pool(
         &self,
         pool_address: &str,
-        account: &Account
+        account: &Account,
     ) -> Result<PoolInfo, String> {
         if account.data.len() < 8 + 32 * 10 + 8 * 10 {
             return Err("Invalid Raydium CPMM pool account data length".to_string());
@@ -3323,12 +3453,10 @@ impl PoolPriceCalculator {
         let pool_mint_1_decimals = Self::read_u8_at_offset(data, &mut offset)?;
 
         // Use decimal cache system with pool data as fallback
-        let mint_0_decimals = get_cached_decimals(&token_0_mint.to_string()).unwrap_or(
-            pool_mint_0_decimals
-        );
-        let mint_1_decimals = get_cached_decimals(&token_1_mint.to_string()).unwrap_or(
-            pool_mint_1_decimals
-        );
+        let mint_0_decimals =
+            get_cached_decimals(&token_0_mint.to_string()).unwrap_or(pool_mint_0_decimals);
+        let mint_1_decimals =
+            get_cached_decimals(&token_1_mint.to_string()).unwrap_or(pool_mint_1_decimals);
 
         if is_debug_pool_prices_enabled() {
             log(
@@ -3346,7 +3474,7 @@ impl PoolPriceCalculator {
                     token_1_mint.to_string().chars().take(8).collect::<String>(),
                     mint_1_decimals,
                     pool_mint_1_decimals
-                )
+                ),
             );
 
             // Warning if cached and pool decimals don't match
@@ -3356,10 +3484,8 @@ impl PoolPriceCalculator {
                     "DECIMAL_MISMATCH",
                     &format!(
                         "DECIMAL MISMATCH Token0 {}: cache={}, pool={}",
-                        token_0_mint,
-                        mint_0_decimals,
-                        pool_mint_0_decimals
-                    )
+                        token_0_mint, mint_0_decimals, pool_mint_0_decimals
+                    ),
                 );
             }
             if mint_1_decimals != pool_mint_1_decimals {
@@ -3368,10 +3494,8 @@ impl PoolPriceCalculator {
                     "DECIMAL_MISMATCH",
                     &format!(
                         "DECIMAL MISMATCH Token1 {}: cache={}, pool={}",
-                        token_1_mint,
-                        mint_1_decimals,
-                        pool_mint_1_decimals
-                    )
+                        token_1_mint, mint_1_decimals, pool_mint_1_decimals
+                    ),
                 );
             }
         }
@@ -3387,10 +3511,9 @@ impl PoolPriceCalculator {
         let _open_time = Self::read_u64_at_offset(data, &mut offset)?;
 
         // Get vault balances to calculate reserves
-        let (token_0_reserve, token_1_reserve) = self.get_vault_balances(
-            &token_0_vault,
-            &token_1_vault
-        ).await?;
+        let (token_0_reserve, token_1_reserve) = self
+            .get_vault_balances(&token_0_vault, &token_1_vault)
+            .await?;
 
         if self.debug_enabled {
             log(
@@ -3426,7 +3549,7 @@ impl PoolPriceCalculator {
             creator: Some(pool_creator),
             status: Some(status.into()),
             liquidity_usd: None, // Will be calculated separately
-            sqrt_price: None, // Not applicable to AMM pools
+            sqrt_price: None,    // Not applicable to AMM pools
         })
     }
 
@@ -3434,31 +3557,32 @@ impl PoolPriceCalculator {
     async fn calculate_raydium_cpmm_price(
         &self,
         pool_info: &PoolInfo,
-        token_mint: &str
+        token_mint: &str,
     ) -> Result<Option<PoolPriceInfo>, String> {
         // Determine which token is SOL and which is the target token
-        let (sol_reserve, token_reserve, sol_decimals, token_decimals, is_token_0) = if
-            pool_info.token_0_mint == SOL_MINT &&
-            pool_info.token_1_mint == token_mint
-        {
-            (
-                pool_info.token_0_reserve,
-                pool_info.token_1_reserve,
-                pool_info.token_0_decimals,
-                pool_info.token_1_decimals,
-                false,
-            )
-        } else if pool_info.token_1_mint == SOL_MINT && pool_info.token_0_mint == token_mint {
-            (
-                pool_info.token_1_reserve,
-                pool_info.token_0_reserve,
-                pool_info.token_1_decimals,
-                pool_info.token_0_decimals,
-                true,
-            )
-        } else {
-            return Err(format!("Pool does not contain SOL or target token {}", token_mint));
-        };
+        let (sol_reserve, token_reserve, sol_decimals, token_decimals, is_token_0) =
+            if pool_info.token_0_mint == SOL_MINT && pool_info.token_1_mint == token_mint {
+                (
+                    pool_info.token_0_reserve,
+                    pool_info.token_1_reserve,
+                    pool_info.token_0_decimals,
+                    pool_info.token_1_decimals,
+                    false,
+                )
+            } else if pool_info.token_1_mint == SOL_MINT && pool_info.token_0_mint == token_mint {
+                (
+                    pool_info.token_1_reserve,
+                    pool_info.token_0_reserve,
+                    pool_info.token_1_decimals,
+                    pool_info.token_0_decimals,
+                    true,
+                )
+            } else {
+                return Err(format!(
+                    "Pool does not contain SOL or target token {}",
+                    token_mint
+                ));
+            };
 
         // Validate reserves
         if sol_reserve == 0 || token_reserve == 0 {
@@ -3491,7 +3615,7 @@ impl PoolPriceCalculator {
                     price_sol,
                     pool_info.pool_address,
                     pool_info.pool_type
-                )
+                ),
             );
 
             // Additional validation checks
@@ -3502,9 +3626,8 @@ impl PoolPriceCalculator {
                     &format!(
                         "WARNING: Zero or negative adjusted values detected! \
                          SOL_adj: {:.12}, Token_adj: {:.12}",
-                        sol_adjusted,
-                        token_adjusted
-                    )
+                        sol_adjusted, token_adjusted
+                    ),
                 );
             }
 
@@ -3516,27 +3639,23 @@ impl PoolPriceCalculator {
                     &format!(
                         "WARNING: Unusual price detected: {:.12} SOL. \
                          Check if decimals are correct (SOL: {}, Token: {})",
-                        price_sol,
-                        sol_decimals,
-                        token_decimals
-                    )
+                        price_sol, sol_decimals, token_decimals
+                    ),
                 );
             }
         }
 
-        Ok(
-            Some(PoolPriceInfo {
-                pool_address: pool_info.pool_address.clone(),
-                pool_program_id: pool_info.pool_program_id.clone(),
-                pool_type: pool_info.pool_type.clone(),
-                token_mint: token_mint.to_string(),
-                price_sol,
-                token_reserve,
-                sol_reserve,
-                token_decimals,
-                sol_decimals,
-            })
-        )
+        Ok(Some(PoolPriceInfo {
+            pool_address: pool_info.pool_address.clone(),
+            pool_program_id: pool_info.pool_program_id.clone(),
+            pool_type: pool_info.pool_type.clone(),
+            token_mint: token_mint.to_string(),
+            price_sol,
+            token_reserve,
+            sol_reserve,
+            token_decimals,
+            sol_decimals,
+        }))
     }
 
     /// Get vault token balances
@@ -3544,7 +3663,7 @@ impl PoolPriceCalculator {
     /// This is a fallback when vault addresses are incorrect or inaccessible
     fn extract_raydium_legacy_reserves_from_data(
         &self,
-        data: &[u8]
+        data: &[u8],
     ) -> Result<Vec<(u64, u64)>, String> {
         let mut reserve_pairs = Vec::new();
 
@@ -3552,7 +3671,7 @@ impl PoolPriceCalculator {
             log(
                 LogTag::Pool,
                 "LEGACY_EXTRACT_START",
-                "🔍 Starting Raydium Legacy reserve extraction from pool data"
+                "🔍 Starting Raydium Legacy reserve extraction from pool data",
             );
         }
 
@@ -3573,19 +3692,22 @@ impl PoolPriceCalculator {
         for &(offset1, offset2) in &promising_offsets {
             if offset1 + 8 <= data.len() && offset2 + 8 <= data.len() {
                 let reserve1 = u64::from_le_bytes(
-                    data[offset1..offset1 + 8].try_into().map_err(|_| "Failed to read reserve1")?
+                    data[offset1..offset1 + 8]
+                        .try_into()
+                        .map_err(|_| "Failed to read reserve1")?,
                 );
                 let reserve2 = u64::from_le_bytes(
-                    data[offset2..offset2 + 8].try_into().map_err(|_| "Failed to read reserve2")?
+                    data[offset2..offset2 + 8]
+                        .try_into()
+                        .map_err(|_| "Failed to read reserve2")?,
                 );
 
                 // For Raydium Legacy with ~$20M liquidity, reserves should be substantial
                 // but not astronomical
-                if
-                    reserve1 > 10_000_000 &&
-                    reserve1 < 1_000_000_000_000_000 &&
-                    reserve2 > 10_000_000 &&
-                    reserve2 < 1_000_000_000_000_000
+                if reserve1 > 10_000_000
+                    && reserve1 < 1_000_000_000_000_000
+                    && reserve2 > 10_000_000
+                    && reserve2 < 1_000_000_000_000_000
                 {
                     if self.debug_enabled {
                         log(
@@ -3593,11 +3715,8 @@ impl PoolPriceCalculator {
                             "LEGACY_RESERVES_FOUND",
                             &format!(
                                 "Found reserves at offsets {} and {}: {} and {}",
-                                offset1,
-                                offset2,
-                                reserve1,
-                                reserve2
-                            )
+                                offset1, offset2, reserve1, reserve2
+                            ),
                         );
                     }
 
@@ -3607,7 +3726,9 @@ impl PoolPriceCalculator {
         }
 
         if reserve_pairs.is_empty() {
-            return Err("No reasonable reserve pairs found in Raydium Legacy pool data".to_string());
+            return Err(
+                "No reasonable reserve pairs found in Raydium Legacy pool data".to_string(),
+            );
         }
 
         // Return the most promising pair first (offset 208-216)
@@ -3615,12 +3736,10 @@ impl PoolPriceCalculator {
     }
 
     async fn get_vault_balances(&self, vault_0: &str, vault_1: &str) -> Result<(u64, u64), String> {
-        let vault_0_pubkey = Pubkey::from_str(vault_0).map_err(|e|
-            format!("Invalid vault 0 address {}: {}", vault_0, e)
-        )?;
-        let vault_1_pubkey = Pubkey::from_str(vault_1).map_err(|e|
-            format!("Invalid vault 1 address {}: {}", vault_1, e)
-        )?;
+        let vault_0_pubkey = Pubkey::from_str(vault_0)
+            .map_err(|e| format!("Invalid vault 0 address {}: {}", vault_0, e))?;
+        let vault_1_pubkey = Pubkey::from_str(vault_1)
+            .map_err(|e| format!("Invalid vault 1 address {}: {}", vault_1, e))?;
 
         // Always fetch fresh vault balances - NO CACHING of balance values per requirements
         let pubkeys = vec![vault_0_pubkey, vault_1_pubkey];
@@ -3629,26 +3748,26 @@ impl PoolPriceCalculator {
             log(
                 LogTag::Pool,
                 "VAULT_FETCH_FRESH",
-                &format!("Fetching fresh vault balances for 2 accounts (no cache)")
+                &format!("Fetching fresh vault balances for 2 accounts (no cache)"),
             );
         }
 
-        let accounts = self.rpc_client
-            .get_multiple_accounts(&pubkeys).await
+        let accounts = self
+            .rpc_client
+            .get_multiple_accounts(&pubkeys)
+            .await
             .map_err(|e| format!("Failed to get vault accounts: {}", e))?;
 
         let balance_0 = if let Some(acct) = &accounts[0] {
-            Self::decode_token_account_amount(&acct.data).map_err(|e|
-                format!("Failed to decode vault 0 balance: {}", e)
-            )?
+            Self::decode_token_account_amount(&acct.data)
+                .map_err(|e| format!("Failed to decode vault 0 balance: {}", e))?
         } else {
             return Err("Vault 0 account not found".to_string());
         };
 
         let balance_1 = if let Some(acct) = &accounts[1] {
-            Self::decode_token_account_amount(&acct.data).map_err(|e|
-                format!("Failed to decode vault 1 balance: {}", e)
-            )?
+            Self::decode_token_account_amount(&acct.data)
+                .map_err(|e| format!("Failed to decode vault 1 balance: {}", e))?
         } else {
             return Err("Vault 1 account not found".to_string());
         };
@@ -3659,11 +3778,8 @@ impl PoolPriceCalculator {
                 "VAULT",
                 &format!(
                     "Vault balances - Vault0 ({}): {}, Vault1 ({}): {}",
-                    vault_0,
-                    balance_0,
-                    vault_1,
-                    balance_1
-                )
+                    vault_0, balance_0, vault_1, balance_1
+                ),
             );
         }
 
@@ -3703,15 +3819,13 @@ impl PoolPriceCalculator {
     async fn get_dlmm_vault_balances(
         &self,
         reserve_0: &str,
-        reserve_1: &str
+        reserve_1: &str,
     ) -> Result<(u64, u64), String> {
         // Always fetch fresh DLMM reserve balances - NO CACHING of balance values per requirements
-        let reserve_0_pubkey = Pubkey::from_str(reserve_0).map_err(|e|
-            format!("Invalid DLMM reserve 0 address {}: {}", reserve_0, e)
-        )?;
-        let reserve_1_pubkey = Pubkey::from_str(reserve_1).map_err(|e|
-            format!("Invalid DLMM reserve 1 address {}: {}", reserve_1, e)
-        )?;
+        let reserve_0_pubkey = Pubkey::from_str(reserve_0)
+            .map_err(|e| format!("Invalid DLMM reserve 0 address {}: {}", reserve_0, e))?;
+        let reserve_1_pubkey = Pubkey::from_str(reserve_1)
+            .map_err(|e| format!("Invalid DLMM reserve 1 address {}: {}", reserve_1, e))?;
 
         let pubkeys = vec![reserve_0_pubkey, reserve_1_pubkey];
 
@@ -3719,26 +3833,26 @@ impl PoolPriceCalculator {
             log(
                 LogTag::Pool,
                 "DLMM_FETCH_FRESH",
-                &format!("Fetching fresh DLMM reserve balances for 2 accounts (no cache)")
+                &format!("Fetching fresh DLMM reserve balances for 2 accounts (no cache)"),
             );
         }
 
-        let accounts = self.rpc_client
-            .get_multiple_accounts(&pubkeys).await
+        let accounts = self
+            .rpc_client
+            .get_multiple_accounts(&pubkeys)
+            .await
             .map_err(|e| format!("Failed to get DLMM reserve accounts: {}", e))?;
 
         let balance_0 = if let Some(acct) = &accounts[0] {
-            Self::decode_token_account_amount(&acct.data).map_err(|e|
-                format!("Failed to decode DLMM reserve 0 balance: {}", e)
-            )?
+            Self::decode_token_account_amount(&acct.data)
+                .map_err(|e| format!("Failed to decode DLMM reserve 0 balance: {}", e))?
         } else {
             return Err(format!("DLMM reserve 0 account {} not found", reserve_0));
         };
 
         let balance_1 = if let Some(acct) = &accounts[1] {
-            Self::decode_token_account_amount(&acct.data).map_err(|e|
-                format!("Failed to decode DLMM reserve 1 balance: {}", e)
-            )?
+            Self::decode_token_account_amount(&acct.data)
+                .map_err(|e| format!("Failed to decode DLMM reserve 1 balance: {}", e))?
         } else {
             return Err(format!("DLMM reserve 1 account {} not found", reserve_1));
         };
@@ -3749,11 +3863,8 @@ impl PoolPriceCalculator {
                 "DLMM_RESERVE",
                 &format!(
                     "DLMM reserve balances - Reserve0 ({}): {}, Reserve1 ({}): {}",
-                    reserve_0,
-                    balance_0,
-                    reserve_1,
-                    balance_1
-                )
+                    reserve_0, balance_0, reserve_1, balance_1
+                ),
             );
         }
 
@@ -3782,12 +3893,10 @@ impl PoolPriceCalculator {
         offset += 32;
 
         // Extract vault addresses
-        let base_vault = Self::read_pubkey_at_offset(data, &mut offset).map_err(|e|
-            format!("Failed to read base vault: {}", e)
-        )?;
-        let quote_vault = Self::read_pubkey_at_offset(data, &mut offset).map_err(|e|
-            format!("Failed to read quote vault: {}", e)
-        )?;
+        let base_vault = Self::read_pubkey_at_offset(data, &mut offset)
+            .map_err(|e| format!("Failed to read base vault: {}", e))?;
+        let quote_vault = Self::read_pubkey_at_offset(data, &mut offset)
+            .map_err(|e| format!("Failed to read quote vault: {}", e))?;
 
         if self.debug_enabled {
             log(
@@ -3795,9 +3904,8 @@ impl PoolPriceCalculator {
                 "PUMP_EXTRACT_VAULTS",
                 &format!(
                     "Extracted Pump.fun vault addresses: base={}, quote={}",
-                    base_vault,
-                    quote_vault
-                )
+                    base_vault, quote_vault
+                ),
             );
         }
 
@@ -3808,7 +3916,7 @@ impl PoolPriceCalculator {
     async fn decode_raydium_legacy_amm_pool(
         &self,
         pool_address: &str,
-        account: &Account
+        account: &Account,
     ) -> Result<PoolInfo, String> {
         if account.data.len() < 752 {
             return Err("Invalid Raydium Legacy AMM pool account data length".to_string());
@@ -3824,7 +3932,7 @@ impl PoolPriceCalculator {
                     "Raydium Legacy AMM pool {} - data length: {} bytes, analyzing structure...",
                     pool_address,
                     data.len()
-                )
+                ),
             );
 
             // Hex dump for structure analysis
@@ -3834,7 +3942,11 @@ impl PoolPriceCalculator {
                 .map(|b| format!("{:02x}", b))
                 .collect::<Vec<_>>()
                 .join(" ");
-            log(LogTag::Pool, "LEGACY_HEX", &format!("First 200 bytes: {}", hex_sample));
+            log(
+                LogTag::Pool,
+                "LEGACY_HEX",
+                &format!("First 200 bytes: {}", hex_sample),
+            );
         }
 
         // Raydium Legacy AMM structure (based on actual data analysis)
@@ -3849,7 +3961,7 @@ impl PoolPriceCalculator {
                 &format!(
                     "Starting Legacy AMM parsing at offset 0x{:x} (based on pubkey scan)",
                     offset
-                )
+                ),
             );
         }
 
@@ -3887,21 +3999,27 @@ impl PoolPriceCalculator {
                     token_1_decimals,
                     coin_vault,
                     pc_vault
-                )
+                ),
             );
 
             // Additional debugging: scan for pubkeys at various offsets
-            log(LogTag::Pool, "LEGACY_PUBKEY_SCAN", "Scanning for pubkeys at various offsets:");
+            log(
+                LogTag::Pool,
+                "LEGACY_PUBKEY_SCAN",
+                "Scanning for pubkeys at various offsets:",
+            );
             for test_offset in [
                 0x150, 0x160, 0x170, 0x180, 0x190, 0x1a0, 0x1b0, 0x1c0, 0x1d0, 0x1e0, 0x1f0, 0x200,
-            ].iter() {
+            ]
+            .iter()
+            {
                 if *test_offset + 32 <= data.len() {
                     if let Ok(pubkey_bytes) = data[*test_offset..*test_offset + 32].try_into() {
                         let test_pubkey = Pubkey::new_from_array(pubkey_bytes);
                         log(
                             LogTag::Pool,
                             "LEGACY_PUBKEY_SCAN",
-                            &format!("  Offset 0x{:x}: {}", test_offset, test_pubkey)
+                            &format!("  Offset 0x{:x}: {}", test_offset, test_pubkey),
                         );
                     }
                 }
@@ -3914,16 +4032,16 @@ impl PoolPriceCalculator {
                 log(
                     LogTag::Pool,
                     "LEGACY_VAULT_PRIORITY",
-                    "Vault balances are the actual trading reserves, not PnL values from pool data"
+                    "Vault balances are the actual trading reserves, not PnL values from pool data",
                 );
             }
 
             // ALWAYS try vault balance fetch first - this is the accurate method
-            match
-                tokio::time::timeout(
-                    Duration::from_secs(10), // Increased timeout for better reliability
-                    self.get_vault_balances(&coin_vault.to_string(), &pc_vault.to_string())
-                ).await
+            match tokio::time::timeout(
+                Duration::from_secs(10), // Increased timeout for better reliability
+                self.get_vault_balances(&coin_vault.to_string(), &pc_vault.to_string()),
+            )
+            .await
             {
                 Ok(Ok((coin_reserve, pc_reserve))) => {
                     if self.debug_enabled {
@@ -3934,13 +4052,8 @@ impl PoolPriceCalculator {
                                 "Vault balances fetched successfully:\n  \
                                      - Coin Vault ({}): {} {} tokens\n  \
                                      - PC Vault ({}): {} {} tokens",
-                                coin_vault,
-                                coin_reserve,
-                                coin_mint,
-                                pc_vault,
-                                pc_reserve,
-                                pc_mint
-                            )
+                                coin_vault, coin_reserve, coin_mint, pc_vault, pc_reserve, pc_mint
+                            ),
                         );
                     }
                     (coin_reserve, pc_reserve)
@@ -3977,17 +4090,17 @@ impl PoolPriceCalculator {
                                         "Using PnL values as fallback:\n  \
                                              - Coin (token): {}\n  \
                                              - PC (SOL): {} (assigned larger value)",
-                                        coin_reserve,
-                                        pc_reserve
-                                    )
+                                        coin_reserve, pc_reserve
+                                    ),
                                 );
                             }
                             (coin_reserve, pc_reserve)
                         }
                         _ => {
-                            return Err(
-                                format!("Both vault balance fetch and PnL extraction failed: {}", e)
-                            );
+                            return Err(format!(
+                                "Both vault balance fetch and PnL extraction failed: {}",
+                                e
+                            ));
                         }
                     }
                 }
@@ -4005,12 +4118,8 @@ impl PoolPriceCalculator {
                     "Raydium Legacy AMM {} reserves:\n  \
                      - Coin Reserve: {} (vault: {})\n  \
                      - PC Reserve: {} (vault: {})",
-                    pool_address,
-                    token_0_reserve,
-                    coin_vault,
-                    token_1_reserve,
-                    pc_vault
-                )
+                    pool_address, token_0_reserve, coin_vault, token_1_reserve, pc_vault
+                ),
             );
         }
 
@@ -4042,7 +4151,7 @@ impl PoolPriceCalculator {
     async fn calculate_raydium_legacy_amm_price(
         &self,
         pool_info: &PoolInfo,
-        token_mint: &str
+        token_mint: &str,
     ) -> Result<Option<PoolPriceInfo>, String> {
         if self.debug_enabled {
             log(
@@ -4050,37 +4159,35 @@ impl PoolPriceCalculator {
                 "LEGACY_PRICE_CALC",
                 &format!(
                     "Calculating Raydium Legacy AMM price for token {} in pool {}",
-                    token_mint,
-                    pool_info.pool_address
-                )
+                    token_mint, pool_info.pool_address
+                ),
             );
         }
 
         // Determine which token is SOL and which is the target token
-        let (sol_reserve, token_reserve, sol_decimals, token_decimals, is_token_0) = if
-            pool_info.token_0_mint == SOL_MINT &&
-            pool_info.token_1_mint == token_mint
-        {
-            (
-                pool_info.token_0_reserve,
-                pool_info.token_1_reserve,
-                pool_info.token_0_decimals,
-                pool_info.token_1_decimals,
-                false,
-            )
-        } else if pool_info.token_1_mint == SOL_MINT && pool_info.token_0_mint == token_mint {
-            (
-                pool_info.token_1_reserve,
-                pool_info.token_0_reserve,
-                pool_info.token_1_decimals,
-                pool_info.token_0_decimals,
-                true,
-            )
-        } else {
-            return Err(
-                format!("Legacy AMM pool does not contain SOL or target token {}", token_mint)
-            );
-        };
+        let (sol_reserve, token_reserve, sol_decimals, token_decimals, is_token_0) =
+            if pool_info.token_0_mint == SOL_MINT && pool_info.token_1_mint == token_mint {
+                (
+                    pool_info.token_0_reserve,
+                    pool_info.token_1_reserve,
+                    pool_info.token_0_decimals,
+                    pool_info.token_1_decimals,
+                    false,
+                )
+            } else if pool_info.token_1_mint == SOL_MINT && pool_info.token_0_mint == token_mint {
+                (
+                    pool_info.token_1_reserve,
+                    pool_info.token_0_reserve,
+                    pool_info.token_1_decimals,
+                    pool_info.token_0_decimals,
+                    true,
+                )
+            } else {
+                return Err(format!(
+                    "Legacy AMM pool does not contain SOL or target token {}",
+                    token_mint
+                ));
+            };
 
         // Validate reserves
         if sol_reserve == 0 || token_reserve == 0 {
@@ -4111,7 +4218,7 @@ impl PoolPriceCalculator {
                     sol_adjusted,
                     token_adjusted,
                     price_sol
-                )
+                ),
             );
         }
 
@@ -4119,39 +4226,35 @@ impl PoolPriceCalculator {
             log(
                 LogTag::Pool,
                 "LEGACY_SUCCESS",
-                &format!("Raydium Legacy AMM price calculated: {:.12} SOL", price_sol)
+                &format!("Raydium Legacy AMM price calculated: {:.12} SOL", price_sol),
             );
         }
 
-        Ok(
-            Some(PoolPriceInfo {
-                pool_address: pool_info.pool_address.clone(),
-                pool_program_id: pool_info.pool_program_id.clone(),
-                pool_type: pool_info.pool_type.clone(),
-                token_mint: token_mint.to_string(),
-                price_sol,
-                token_reserve,
-                sol_reserve,
-                token_decimals,
-                sol_decimals,
-            })
-        )
+        Ok(Some(PoolPriceInfo {
+            pool_address: pool_info.pool_address.clone(),
+            pool_program_id: pool_info.pool_program_id.clone(),
+            pool_type: pool_info.pool_type.clone(),
+            token_mint: token_mint.to_string(),
+            price_sol,
+            token_reserve,
+            sol_reserve,
+            token_decimals,
+            sol_decimals,
+        }))
     }
 
     /// Decode Meteora DAMM v2 pool data from account bytes
     async fn decode_meteora_damm_v2_pool(
         &self,
         pool_address: &str,
-        account: &Account
+        account: &Account,
     ) -> Result<PoolInfo, String> {
         if account.data.len() < 1112 {
             // Meteora pools should be at least 1112 bytes based on your data
-            return Err(
-                format!(
-                    "Invalid Meteora DAMM v2 pool account data length: {} (expected >= 1112)",
-                    account.data.len()
-                )
-            );
+            return Err(format!(
+                "Invalid Meteora DAMM v2 pool account data length: {} (expected >= 1112)",
+                account.data.len()
+            ));
         }
 
         let data = &account.data;
@@ -4164,7 +4267,7 @@ impl PoolPriceCalculator {
                     "Starting Meteora DAMM v2 decode for pool {}, data length: {}",
                     pool_address,
                     data.len()
-                )
+                ),
             );
         }
 
@@ -4218,11 +4321,8 @@ impl PoolPriceCalculator {
                 "METEORA_TOKENS",
                 &format!(
                     "Token A: {}, Token B: {}, Vaults A: {}, B: {}",
-                    token_a_mint,
-                    token_b_mint,
-                    token_a_vault,
-                    token_b_vault
-                )
+                    token_a_mint, token_b_mint, token_a_vault, token_b_vault
+                ),
             );
 
             log(
@@ -4230,10 +4330,8 @@ impl PoolPriceCalculator {
                 "METEORA_PRICE",
                 &format!(
                     "sqrt_price: {}, liquidity: {}, status: {}",
-                    sqrt_price,
-                    liquidity,
-                    pool_status
-                )
+                    sqrt_price, liquidity, pool_status
+                ),
             );
         }
 
@@ -4245,22 +4343,27 @@ impl PoolPriceCalculator {
         let token_a_decimals = match token_a_decimals_opt {
             Some(decimals) => decimals,
             None => {
-                return Err(format!("Cannot determine decimals for token A: {}", token_a_mint));
+                return Err(format!(
+                    "Cannot determine decimals for token A: {}",
+                    token_a_mint
+                ));
             }
         };
 
         let token_b_decimals = match token_b_decimals_opt {
             Some(decimals) => decimals,
             None => {
-                return Err(format!("Cannot determine decimals for token B: {}", token_b_mint));
+                return Err(format!(
+                    "Cannot determine decimals for token B: {}",
+                    token_b_mint
+                ));
             }
         };
 
         // Get vault balances to calculate reserves
-        let (token_a_reserve, token_b_reserve) = self.get_vault_balances(
-            &token_a_vault,
-            &token_b_vault
-        ).await?;
+        let (token_a_reserve, token_b_reserve) = self
+            .get_vault_balances(&token_a_vault, &token_b_vault)
+            .await?;
 
         if self.debug_enabled {
             log(
@@ -4268,11 +4371,8 @@ impl PoolPriceCalculator {
                 "METEORA_RESERVES",
                 &format!(
                     "Token A reserve: {} (decimals: {}), Token B reserve: {} (decimals: {})",
-                    token_a_reserve,
-                    token_a_decimals,
-                    token_b_reserve,
-                    token_b_decimals
-                )
+                    token_a_reserve, token_a_decimals, token_b_reserve, token_b_decimals
+                ),
             );
         }
 
@@ -4293,7 +4393,7 @@ impl PoolPriceCalculator {
             creator: None,
             status: Some(pool_status as u32),
             liquidity_usd: None, // Will be calculated separately
-            sqrt_price: None, // Not applicable to AMM pools
+            sqrt_price: None,    // Not applicable to AMM pools
         })
     }
 
@@ -4301,31 +4401,32 @@ impl PoolPriceCalculator {
     async fn calculate_meteora_damm_v2_price(
         &self,
         pool_info: &PoolInfo,
-        token_mint: &str
+        token_mint: &str,
     ) -> Result<Option<PoolPriceInfo>, String> {
         // Determine which token is SOL and which is the target token
-        let (sol_reserve, token_reserve, sol_decimals, token_decimals, _is_token_a) = if
-            pool_info.token_0_mint == SOL_MINT &&
-            pool_info.token_1_mint == token_mint
-        {
-            (
-                pool_info.token_0_reserve,
-                pool_info.token_1_reserve,
-                pool_info.token_0_decimals,
-                pool_info.token_1_decimals,
-                false,
-            )
-        } else if pool_info.token_1_mint == SOL_MINT && pool_info.token_0_mint == token_mint {
-            (
-                pool_info.token_1_reserve,
-                pool_info.token_0_reserve,
-                pool_info.token_1_decimals,
-                pool_info.token_0_decimals,
-                true,
-            )
-        } else {
-            return Err(format!("Pool does not contain SOL or target token {}", token_mint));
-        };
+        let (sol_reserve, token_reserve, sol_decimals, token_decimals, _is_token_a) =
+            if pool_info.token_0_mint == SOL_MINT && pool_info.token_1_mint == token_mint {
+                (
+                    pool_info.token_0_reserve,
+                    pool_info.token_1_reserve,
+                    pool_info.token_0_decimals,
+                    pool_info.token_1_decimals,
+                    false,
+                )
+            } else if pool_info.token_1_mint == SOL_MINT && pool_info.token_0_mint == token_mint {
+                (
+                    pool_info.token_1_reserve,
+                    pool_info.token_0_reserve,
+                    pool_info.token_1_decimals,
+                    pool_info.token_0_decimals,
+                    true,
+                )
+            } else {
+                return Err(format!(
+                    "Pool does not contain SOL or target token {}",
+                    token_mint
+                ));
+            };
 
         // Validate reserves
         if sol_reserve == 0 || token_reserve == 0 {
@@ -4358,30 +4459,28 @@ impl PoolPriceCalculator {
                     price_sol,
                     pool_info.pool_address,
                     pool_info.pool_type
-                )
+                ),
             );
         }
 
-        Ok(
-            Some(PoolPriceInfo {
-                pool_address: pool_info.pool_address.clone(),
-                pool_program_id: pool_info.pool_program_id.clone(),
-                pool_type: pool_info.pool_type.clone(),
-                token_mint: token_mint.to_string(),
-                price_sol,
-                token_reserve,
-                sol_reserve,
-                token_decimals,
-                sol_decimals,
-            })
-        )
+        Ok(Some(PoolPriceInfo {
+            pool_address: pool_info.pool_address.clone(),
+            pool_program_id: pool_info.pool_program_id.clone(),
+            pool_type: pool_info.pool_type.clone(),
+            token_mint: token_mint.to_string(),
+            price_sol,
+            token_reserve,
+            sol_reserve,
+            token_decimals,
+            sol_decimals,
+        }))
     }
 
     /// Decode Meteora DLMM pool data from account bytes
     async fn decode_meteora_dlmm_pool(
         &self,
         pool_address: &str,
-        account: &Account
+        account: &Account,
     ) -> Result<PoolInfo, String> {
         let data = &account.data;
 
@@ -4393,7 +4492,7 @@ impl PoolPriceCalculator {
                     "Starting Meteora DLMM decode for pool {}, data length: {}",
                     pool_address,
                     data.len()
-                )
+                ),
             );
         }
 
@@ -4406,7 +4505,7 @@ impl PoolPriceCalculator {
             log(
                 LogTag::Pool,
                 "METEORA_DLMM_EXTRACT",
-                &format!("Extracting pubkeys from data length {}", data.len())
+                &format!("Extracting pubkeys from data length {}", data.len()),
             );
         }
 
@@ -4415,7 +4514,7 @@ impl PoolPriceCalculator {
             log(
                 LogTag::Pool,
                 "METEORA_DLMM_TOKEN_X",
-                &format!("Extracted token_x_mint: {}", token_x_mint)
+                &format!("Extracted token_x_mint: {}", token_x_mint),
             );
         }
 
@@ -4424,7 +4523,7 @@ impl PoolPriceCalculator {
             log(
                 LogTag::Pool,
                 "METEORA_DLMM_TOKEN_Y",
-                &format!("Extracted token_y_mint: {}", token_y_mint)
+                &format!("Extracted token_y_mint: {}", token_y_mint),
             );
         }
 
@@ -4433,7 +4532,7 @@ impl PoolPriceCalculator {
             log(
                 LogTag::Pool,
                 "METEORA_DLMM_RESERVE_X",
-                &format!("Extracted reserve_x: {}", reserve_x)
+                &format!("Extracted reserve_x: {}", reserve_x),
             );
         }
 
@@ -4442,7 +4541,7 @@ impl PoolPriceCalculator {
             log(
                 LogTag::Pool,
                 "METEORA_DLMM_RESERVE_Y",
-                &format!("Extracted reserve_y: {}", reserve_y)
+                &format!("Extracted reserve_y: {}", reserve_y),
             );
         }
 
@@ -4452,33 +4551,39 @@ impl PoolPriceCalculator {
                 "METEORA_DLMM_STRUCT",
                 &format!(
                     "DLMM Pool Structure - token_x: {}, token_y: {}, reserve_x: {}, reserve_y: {}",
-                    token_x_mint,
-                    token_y_mint,
-                    reserve_x,
-                    reserve_y
-                )
+                    token_x_mint, token_y_mint, reserve_x, reserve_y
+                ),
             );
         }
 
         // Verify we have SOL as one of the tokens
         let sol_mint = "So11111111111111111111111111111111111111112";
-        let (token_mint, sol_reserve, token_reserve, token_decimals_to_use) = if
-            token_y_mint.to_string() == sol_mint
-        {
-            // token_x is the custom token, token_y is SOL
-            let token_decimals = get_token_decimals_with_cache(
-                &token_x_mint.to_string()
-            ).await.unwrap_or(9);
-            (token_x_mint.to_string(), reserve_y.to_string(), reserve_x.to_string(), token_decimals)
-        } else if token_x_mint.to_string() == sol_mint {
-            // token_x is SOL, token_y is the custom token
-            let token_decimals = get_token_decimals_with_cache(
-                &token_y_mint.to_string()
-            ).await.unwrap_or(9);
-            (token_y_mint.to_string(), reserve_x.to_string(), reserve_y.to_string(), token_decimals)
-        } else {
-            return Err("Pool doesn't contain SOL".to_string());
-        };
+        let (token_mint, sol_reserve, token_reserve, token_decimals_to_use) =
+            if token_y_mint.to_string() == sol_mint {
+                // token_x is the custom token, token_y is SOL
+                let token_decimals = get_token_decimals_with_cache(&token_x_mint.to_string())
+                    .await
+                    .unwrap_or(9);
+                (
+                    token_x_mint.to_string(),
+                    reserve_y.to_string(),
+                    reserve_x.to_string(),
+                    token_decimals,
+                )
+            } else if token_x_mint.to_string() == sol_mint {
+                // token_x is SOL, token_y is the custom token
+                let token_decimals = get_token_decimals_with_cache(&token_y_mint.to_string())
+                    .await
+                    .unwrap_or(9);
+                (
+                    token_y_mint.to_string(),
+                    reserve_x.to_string(),
+                    reserve_y.to_string(),
+                    token_decimals,
+                )
+            } else {
+                return Err("Pool doesn't contain SOL".to_string());
+            };
 
         if self.debug_enabled {
             log(
@@ -4486,27 +4591,23 @@ impl PoolPriceCalculator {
                 "METEORA_DLMM_PAIR",
                 &format!(
                     "Identified token: {}, SOL reserve: {}, Token reserve: {}",
-                    token_mint,
-                    sol_reserve,
-                    token_reserve
-                )
+                    token_mint, sol_reserve, token_reserve
+                ),
             );
         }
 
         // Get reserve balances from vault accounts
         let (sol_balance, token_balance) = if token_y_mint.to_string() == sol_mint {
             // token_x is the custom token, token_y is SOL -> (sol_balance, token_balance)
-            let (token_bal, sol_bal) = self.get_vault_balances(
-                &reserve_x.to_string(),
-                &reserve_y.to_string()
-            ).await?;
+            let (token_bal, sol_bal) = self
+                .get_vault_balances(&reserve_x.to_string(), &reserve_y.to_string())
+                .await?;
             (sol_bal, token_bal)
         } else {
             // token_x is SOL, token_y is the custom token -> (sol_balance, token_balance)
-            let (sol_bal, token_bal) = self.get_vault_balances(
-                &reserve_x.to_string(),
-                &reserve_y.to_string()
-            ).await?;
+            let (sol_bal, token_bal) = self
+                .get_vault_balances(&reserve_x.to_string(), &reserve_y.to_string())
+                .await?;
             (sol_bal, token_bal)
         };
 
@@ -4516,9 +4617,8 @@ impl PoolPriceCalculator {
                 "METEORA_DLMM_BALANCES",
                 &format!(
                     "SOL balance: {} lamports, Token balance: {} raw units",
-                    sol_balance,
-                    token_balance
-                )
+                    sol_balance, token_balance
+                ),
             );
         }
 
@@ -4526,7 +4626,10 @@ impl PoolPriceCalculator {
             log(
                 LogTag::Pool,
                 "METEORA_DLMM_DECIMALS",
-                &format!("Token {} has {} decimals", token_mint, token_decimals_to_use)
+                &format!(
+                    "Token {} has {} decimals",
+                    token_mint, token_decimals_to_use
+                ),
             );
         }
 
@@ -4537,16 +4640,15 @@ impl PoolPriceCalculator {
             return Err("Token reserve is empty".to_string());
         }
 
-        let price_sol =
-            (sol_balance as f64) /
-            (10_f64).powi(sol_decimals as i32) /
-            ((token_balance as f64) / (10_f64).powi(token_decimals_to_use as i32));
+        let price_sol = (sol_balance as f64)
+            / (10_f64).powi(sol_decimals as i32)
+            / ((token_balance as f64) / (10_f64).powi(token_decimals_to_use as i32));
 
         if self.debug_enabled {
             log(
                 LogTag::Pool,
                 "METEORA_DLMM_PRICE",
-                &format!("Calculated price: {:.12} SOL per token", price_sol)
+                &format!("Calculated price: {:.12} SOL per token", price_sol),
             );
         }
 
@@ -4591,12 +4693,13 @@ impl PoolPriceCalculator {
     async fn calculate_meteora_dlmm_price(
         &self,
         pool_info: &PoolInfo,
-        token_mint: &str
+        token_mint: &str,
     ) -> Result<Option<PoolPriceInfo>, String> {
         // Determine which token is SOL and which is the target token
-        let (sol_reserve, token_reserve, sol_decimals, token_decimals, _is_token_x) = if
-            pool_info.token_0_mint == SOL_MINT &&
-            pool_info.token_1_mint == token_mint
+        let (sol_reserve, token_reserve, sol_decimals, token_decimals, _is_token_x) = if pool_info
+            .token_0_mint
+            == SOL_MINT
+            && pool_info.token_1_mint == token_mint
         {
             (
                 pool_info.token_0_reserve,
@@ -4614,33 +4717,23 @@ impl PoolPriceCalculator {
                 false,
             )
         } else {
-            return Err(
-                format!(
-                    "DLMM pool {} does not contain SOL mint. Token0: {}, Token1: {}, Target: {}",
-                    pool_info.pool_address,
-                    pool_info.token_0_mint,
-                    pool_info.token_1_mint,
-                    token_mint
-                )
-            );
+            return Err(format!(
+                "DLMM pool {} does not contain SOL mint. Token0: {}, Token1: {}, Target: {}",
+                pool_info.pool_address, pool_info.token_0_mint, pool_info.token_1_mint, token_mint
+            ));
         };
 
         // Validate reserves
         if sol_reserve == 0 || token_reserve == 0 {
-            return Err(
-                format!(
-                    "DLMM pool {} has zero reserves. SOL: {}, Token: {}",
-                    pool_info.pool_address,
-                    sol_reserve,
-                    token_reserve
-                )
-            );
+            return Err(format!(
+                "DLMM pool {} has zero reserves. SOL: {}, Token: {}",
+                pool_info.pool_address, sol_reserve, token_reserve
+            ));
         }
 
         // Calculate price in SOL: price = (SOL reserves * 10^token_decimals) / (token reserves * 10^SOL_decimals)
-        let price_sol =
-            ((sol_reserve as f64) * (10f64).powi(token_decimals as i32)) /
-            ((token_reserve as f64) * (10f64).powi(sol_decimals as i32));
+        let price_sol = ((sol_reserve as f64) * (10f64).powi(token_decimals as i32))
+            / ((token_reserve as f64) * (10f64).powi(sol_decimals as i32));
 
         if self.debug_enabled {
             log(
@@ -4651,28 +4744,22 @@ impl PoolPriceCalculator {
                     - SOL Reserve: {} (decimals: {})\n\
                     - Token Reserve: {} (decimals: {})\n\
                     - Price SOL: {:.12}",
-                    sol_reserve,
-                    sol_decimals,
-                    token_reserve,
-                    token_decimals,
-                    price_sol
-                )
+                    sol_reserve, sol_decimals, token_reserve, token_decimals, price_sol
+                ),
             );
         }
 
-        Ok(
-            Some(PoolPriceInfo {
-                pool_address: pool_info.pool_address.clone(),
-                pool_program_id: pool_info.pool_program_id.clone(),
-                pool_type: pool_info.pool_type.clone(),
-                token_mint: token_mint.to_string(),
-                price_sol,
-                token_reserve,
-                sol_reserve,
-                token_decimals,
-                sol_decimals,
-            })
-        )
+        Ok(Some(PoolPriceInfo {
+            pool_address: pool_info.pool_address.clone(),
+            pool_program_id: pool_info.pool_program_id.clone(),
+            pool_type: pool_info.pool_type.clone(),
+            token_mint: token_mint.to_string(),
+            price_sol,
+            token_reserve,
+            sol_reserve,
+            token_decimals,
+            sol_decimals,
+        }))
     }
 
     /// Calculate token price for Orca Whirlpool pools
@@ -4682,7 +4769,7 @@ impl PoolPriceCalculator {
     async fn calculate_orca_whirlpool_price(
         &self,
         pool_info: &PoolInfo,
-        token_mint: &str
+        token_mint: &str,
     ) -> Result<Option<PoolPriceInfo>, String> {
         if self.debug_enabled {
             log(
@@ -4690,9 +4777,8 @@ impl PoolPriceCalculator {
                 "WHIRLPOOL_PRICE_CALC",
                 &format!(
                     "Calculating Orca Whirlpool price for token {} in pool {}",
-                    token_mint,
-                    pool_info.pool_address
-                )
+                    token_mint, pool_info.pool_address
+                ),
             );
         }
 
@@ -4701,8 +4787,9 @@ impl PoolPriceCalculator {
         let sol_decimals = 9;
 
         // For Orca Whirlpool, token_0 is SOL, token_1 is the target token
-        let (sol_reserve, token_reserve, final_sol_decimals, final_token_decimals) = if
-            pool_info.token_0_mint == SOL_MINT
+        let (sol_reserve, token_reserve, final_sol_decimals, final_token_decimals) = if pool_info
+            .token_0_mint
+            == SOL_MINT
         {
             if self.debug_enabled {
                 log(
@@ -4742,14 +4829,10 @@ impl PoolPriceCalculator {
                 target_token_decimals, // Use correct decimals for target token
             )
         } else {
-            return Err(
-                format!(
-                    "Orca Whirlpool pool {} does not contain SOL. Token0: {}, Token1: {}",
-                    pool_info.pool_address,
-                    pool_info.token_0_mint,
-                    pool_info.token_1_mint
-                )
-            );
+            return Err(format!(
+                "Orca Whirlpool pool {} does not contain SOL. Token0: {}, Token1: {}",
+                pool_info.pool_address, pool_info.token_0_mint, pool_info.token_1_mint
+            ));
         };
 
         // Validate reserves
@@ -4761,7 +4844,7 @@ impl PoolPriceCalculator {
                     &format!(
                         "Orca Whirlpool pool {} has zero reserves, cannot calculate price",
                         pool_info.pool_address
-                    )
+                    ),
                 );
             }
             return Ok(None);
@@ -4785,9 +4868,8 @@ impl PoolPriceCalculator {
             // Adjust for decimal differences
             // If SOL has 9 decimals and token has 6 decimals:
             // We need to multiply by (10^6 / 10^9) = 0.001
-            let decimal_adjustment =
-                (10_f64).powi(final_token_decimals as i32) /
-                (10_f64).powi(final_sol_decimals as i32);
+            let decimal_adjustment = (10_f64).powi(final_token_decimals as i32)
+                / (10_f64).powi(final_sol_decimals as i32);
             let adjusted_price = inverted_price * decimal_adjustment;
 
             if self.debug_enabled {
@@ -4810,7 +4892,7 @@ impl PoolPriceCalculator {
                         final_token_decimals,
                         final_sol_decimals,
                         adjusted_price
-                    )
+                    ),
                 );
             }
 
@@ -4830,12 +4912,8 @@ impl PoolPriceCalculator {
                         - SOL Reserve: {} (adjusted: {:.12})\n\
                         - Token Reserve: {} (adjusted: {:.12})\n\
                         - Fallback Price: {:.12} SOL",
-                        sol_reserve,
-                        sol_adjusted,
-                        token_reserve,
-                        token_adjusted,
-                        fallback_price
-                    )
+                        sol_reserve, sol_adjusted, token_reserve, token_adjusted, fallback_price
+                    ),
                 );
             }
 
@@ -4860,23 +4938,21 @@ impl PoolPriceCalculator {
                     pool_info.sqrt_price.is_some(),
                     price_sol,
                     token_mint
-                )
+                ),
             );
         }
 
-        Ok(
-            Some(PoolPriceInfo {
-                pool_address: pool_info.pool_address.clone(),
-                pool_program_id: pool_info.pool_program_id.clone(),
-                pool_type: pool_info.pool_type.clone(),
-                token_mint: token_mint.to_string(),
-                price_sol,
-                token_reserve,
-                sol_reserve,
-                token_decimals: final_token_decimals,
-                sol_decimals: final_sol_decimals,
-            })
-        )
+        Ok(Some(PoolPriceInfo {
+            pool_address: pool_info.pool_address.clone(),
+            pool_program_id: pool_info.pool_program_id.clone(),
+            pool_type: pool_info.pool_type.clone(),
+            token_mint: token_mint.to_string(),
+            price_sol,
+            token_reserve,
+            sol_reserve,
+            token_decimals: final_token_decimals,
+            sol_decimals: final_sol_decimals,
+        }))
     }
 
     /// Calculate token price for Pump.fun AMM pools
@@ -4886,7 +4962,7 @@ impl PoolPriceCalculator {
     async fn calculate_pump_fun_amm_price(
         &self,
         pool_info: &PoolInfo,
-        token_mint: &str
+        token_mint: &str,
     ) -> Result<Option<PoolPriceInfo>, String> {
         if self.debug_enabled {
             log(
@@ -4894,9 +4970,8 @@ impl PoolPriceCalculator {
                 "PUMP_PRICE_CALC",
                 &format!(
                     "Calculating Pump.fun price for token {} in pool {}",
-                    token_mint,
-                    pool_info.pool_address
-                )
+                    token_mint, pool_info.pool_address
+                ),
             );
         }
 
@@ -4906,8 +4981,9 @@ impl PoolPriceCalculator {
         let sol_decimals = 9;
 
         // For PUMP.FUN pools, token_0 is always the target token, token_1 is always SOL
-        let (sol_reserve, token_reserve, final_sol_decimals, final_token_decimals) = if
-            pool_info.token_1_mint == SOL_MINT
+        let (sol_reserve, token_reserve, final_sol_decimals, final_token_decimals) = if pool_info
+            .token_1_mint
+            == SOL_MINT
         {
             if self.debug_enabled {
                 log(
@@ -4928,22 +5004,17 @@ impl PoolPriceCalculator {
                 target_token_decimals, // Use correct decimals for target token
             )
         } else {
-            return Err(
-                format!(
-                    "PUMP.FUN pool {} does not contain SOL as token_1. Token0: {}, Token1: {}",
-                    pool_info.pool_address,
-                    pool_info.token_0_mint,
-                    pool_info.token_1_mint
-                )
-            );
+            return Err(format!(
+                "PUMP.FUN pool {} does not contain SOL as token_1. Token0: {}, Token1: {}",
+                pool_info.pool_address, pool_info.token_0_mint, pool_info.token_1_mint
+            ));
         };
 
         // Validate reserves - for pump.fun, we might have placeholder values
         // If reserves are the placeholders we set (1000000 and 1000), calculate from API native price
-        if
-            (sol_reserve == 1000 && token_reserve == 1_000_000) ||
-            sol_reserve == 0 ||
-            token_reserve == 0
+        if (sol_reserve == 1000 && token_reserve == 1_000_000)
+            || sol_reserve == 0
+            || token_reserve == 0
         {
             if self.debug_enabled {
                 log(
@@ -4984,23 +5055,21 @@ impl PoolPriceCalculator {
                     token_adjusted,
                     price_sol,
                     token_mint
-                )
+                ),
             );
         }
 
-        Ok(
-            Some(PoolPriceInfo {
-                pool_address: pool_info.pool_address.clone(),
-                pool_program_id: pool_info.pool_program_id.clone(),
-                pool_type: pool_info.pool_type.clone(),
-                token_mint: token_mint.to_string(),
-                price_sol,
-                token_reserve,
-                sol_reserve,
-                token_decimals: final_token_decimals,
-                sol_decimals: final_sol_decimals,
-            })
-        )
+        Ok(Some(PoolPriceInfo {
+            pool_address: pool_info.pool_address.clone(),
+            pool_program_id: pool_info.pool_program_id.clone(),
+            pool_type: pool_info.pool_type.clone(),
+            token_mint: token_mint.to_string(),
+            price_sol,
+            token_reserve,
+            sol_reserve,
+            token_decimals: final_token_decimals,
+            sol_decimals: final_sol_decimals,
+        }))
     }
 
     /// Decode token account amount from account data
@@ -5012,7 +5081,9 @@ impl PoolPriceCalculator {
         // Token account amount is at offset 64 (8 bytes)
         let amount_bytes = &data[64..72];
         let amount = u64::from_le_bytes(
-            amount_bytes.try_into().map_err(|_| "Failed to parse token account amount".to_string())?
+            amount_bytes
+                .try_into()
+                .map_err(|_| "Failed to parse token account amount".to_string())?,
         );
 
         Ok(amount)
@@ -5028,7 +5099,9 @@ impl PoolPriceCalculator {
         *offset += 32;
 
         let pubkey = Pubkey::new_from_array(
-            pubkey_bytes.try_into().map_err(|_| "Failed to parse pubkey".to_string())?
+            pubkey_bytes
+                .try_into()
+                .map_err(|_| "Failed to parse pubkey".to_string())?,
         );
 
         Ok(pubkey.to_string())
@@ -5053,7 +5126,9 @@ impl PoolPriceCalculator {
         *offset += 8;
 
         let value = u64::from_le_bytes(
-            bytes.try_into().map_err(|_| "Failed to parse u64".to_string())?
+            bytes
+                .try_into()
+                .map_err(|_| "Failed to parse u64".to_string())?,
         );
 
         Ok(value)
@@ -5068,7 +5143,9 @@ impl PoolPriceCalculator {
         *offset += 16;
 
         let value = u128::from_le_bytes(
-            bytes.try_into().map_err(|_| "Failed to parse u128".to_string())?
+            bytes
+                .try_into()
+                .map_err(|_| "Failed to parse u128".to_string())?,
         );
 
         Ok(value)
@@ -5081,7 +5158,7 @@ impl PoolPriceCalculator {
     async fn decode_orca_whirlpool_pool(
         &self,
         pool_address: &str,
-        account: &Account
+        account: &Account,
     ) -> Result<PoolInfo, String> {
         if account.data.len() < 300 {
             return Err("Invalid Orca Whirlpool pool account data length".to_string());
@@ -5098,7 +5175,7 @@ impl PoolPriceCalculator {
                     "Orca Whirlpool pool {} - data length: {} bytes, decoding structure...",
                     pool_address,
                     data.len()
-                )
+                ),
             );
         }
 
@@ -5115,9 +5192,8 @@ impl PoolPriceCalculator {
         let _whirlpool_bump = data[offset]; // whirlpoolBump [u8;1]
         offset += 1;
 
-        let _tick_spacing = u16::from_le_bytes(
-            data[offset..offset + 2].try_into().unwrap_or([0; 2])
-        ); // tickSpacing
+        let _tick_spacing =
+            u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap_or([0; 2])); // tickSpacing
         offset += 2;
 
         let _fee_tier_index_seed = [data[offset], data[offset + 1]]; // feeTierIndexSeed [u8;2]
@@ -5126,42 +5202,35 @@ impl PoolPriceCalculator {
         let _fee_rate = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap_or([0; 2])); // feeRate
         offset += 2;
 
-        let _protocol_fee_rate = u16::from_le_bytes(
-            data[offset..offset + 2].try_into().unwrap_or([0; 2])
-        ); // protocolFeeRate
+        let _protocol_fee_rate =
+            u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap_or([0; 2])); // protocolFeeRate
         offset += 2;
 
-        let liquidity = u128::from_le_bytes(
-            data[offset..offset + 16].try_into().unwrap_or([0; 16])
-        ); // liquidity
+        let liquidity =
+            u128::from_le_bytes(data[offset..offset + 16].try_into().unwrap_or([0; 16])); // liquidity
         offset += 16;
 
-        let sqrt_price = u128::from_le_bytes(
-            data[offset..offset + 16].try_into().unwrap_or([0; 16])
-        ); // sqrtPrice
+        let sqrt_price =
+            u128::from_le_bytes(data[offset..offset + 16].try_into().unwrap_or([0; 16])); // sqrtPrice
         offset += 16;
 
-        let _tick_current_index = i32::from_le_bytes(
-            data[offset..offset + 4].try_into().unwrap_or([0; 4])
-        ); // tickCurrentIndex
+        let _tick_current_index =
+            i32::from_le_bytes(data[offset..offset + 4].try_into().unwrap_or([0; 4])); // tickCurrentIndex
         offset += 4;
 
-        let _protocol_fee_owed_a = u64::from_le_bytes(
-            data[offset..offset + 8].try_into().unwrap_or([0; 8])
-        ); // protocolFeeOwedA
+        let _protocol_fee_owed_a =
+            u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap_or([0; 8])); // protocolFeeOwedA
         offset += 8;
 
-        let _protocol_fee_owed_b = u64::from_le_bytes(
-            data[offset..offset + 8].try_into().unwrap_or([0; 8])
-        ); // protocolFeeOwedB
+        let _protocol_fee_owed_b =
+            u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap_or([0; 8])); // protocolFeeOwedB
         offset += 8;
 
         let token_mint_a = Self::read_pubkey_at_offset(data, &mut offset)?; // tokenMintA (SOL)
         let token_vault_a = Self::read_pubkey_at_offset(data, &mut offset)?; // tokenVaultA (SOL vault)
 
-        let _fee_growth_global_a = u128::from_le_bytes(
-            data[offset..offset + 16].try_into().unwrap_or([0; 16])
-        ); // feeGrowthGlobalA
+        let _fee_growth_global_a =
+            u128::from_le_bytes(data[offset..offset + 16].try_into().unwrap_or([0; 16])); // feeGrowthGlobalA
         offset += 16;
 
         let token_mint_b = Self::read_pubkey_at_offset(data, &mut offset)?; // tokenMintB (our token)
@@ -5179,13 +5248,8 @@ impl PoolPriceCalculator {
                     - Token Vault B (target): {}\n\
                     - Liquidity: {}\n\
                     - Sqrt Price: {}",
-                    token_mint_a,
-                    token_mint_b,
-                    token_vault_a,
-                    token_vault_b,
-                    liquidity,
-                    sqrt_price
-                )
+                    token_mint_a, token_mint_b, token_vault_a, token_vault_b, liquidity, sqrt_price
+                ),
             );
         }
 
@@ -5193,8 +5257,9 @@ impl PoolPriceCalculator {
         let token_vault_a_str = token_vault_a.to_string();
         let token_vault_b_str = token_vault_b.to_string();
 
-        let (vault_a_balance, vault_b_balance) = match
-            self.get_vault_balances(&token_vault_a_str, &token_vault_b_str).await
+        let (vault_a_balance, vault_b_balance) = match self
+            .get_vault_balances(&token_vault_a_str, &token_vault_b_str)
+            .await
         {
             Ok((va, vb)) => {
                 if self.debug_enabled {
@@ -5205,11 +5270,8 @@ impl PoolPriceCalculator {
                             "Successfully fetched Orca Whirlpool vault balances:\n\
                             - Vault A {} (SOL) balance: {}\n\
                             - Vault B {} (token) balance: {}",
-                            token_vault_a_str,
-                            va,
-                            token_vault_b_str,
-                            vb
-                        )
+                            token_vault_a_str, va, token_vault_b_str, vb
+                        ),
                     );
                 }
                 (va, vb)
@@ -5219,10 +5281,13 @@ impl PoolPriceCalculator {
                     log(
                         LogTag::Pool,
                         "WHIRLPOOL_VAULT_ERROR",
-                        &format!("Vault balance fetch failed: {}", e)
+                        &format!("Vault balance fetch failed: {}", e),
                     );
                 }
-                return Err(format!("Failed to get vault balances for Orca Whirlpool pool: {}", e));
+                return Err(format!(
+                    "Failed to get vault balances for Orca Whirlpool pool: {}",
+                    e
+                ));
             }
         };
 
@@ -5253,7 +5318,7 @@ impl PoolPriceCalculator {
                     token_vault_b,
                     liquidity,
                     sqrt_price
-                )
+                ),
             );
         }
 
@@ -5269,7 +5334,7 @@ impl PoolPriceCalculator {
             token_1_reserve: vault_b_balance, // Token reserve
             token_0_decimals: sol_decimals,
             token_1_decimals: token_decimals,
-            lp_mint: None, // Whirlpool uses concentrated liquidity
+            lp_mint: None,                     // Whirlpool uses concentrated liquidity
             lp_supply: Some(liquidity as u64), // Use liquidity value
             creator: None,
             status: None,
@@ -5285,7 +5350,7 @@ impl PoolPriceCalculator {
     async fn decode_pump_fun_amm_pool(
         &self,
         pool_address: &str,
-        account: &Account
+        account: &Account,
     ) -> Result<PoolInfo, String> {
         if account.data.len() < 200 {
             return Err("Invalid Pump.fun AMM pool account data length".to_string());
@@ -5302,7 +5367,7 @@ impl PoolPriceCalculator {
                     "Pump.fun pool {} - data length: {} bytes, decoding structure...",
                     pool_address,
                     data.len()
-                )
+                ),
             );
         }
 
@@ -5349,7 +5414,7 @@ impl PoolPriceCalculator {
                     pool_base_token_account,
                     pool_quote_token_account,
                     lp_supply
-                )
+                ),
             );
         }
 
@@ -5364,8 +5429,9 @@ impl PoolPriceCalculator {
         let token_vault_str = pool_base_token_account.to_string();
         let sol_vault_str = pool_quote_token_account.to_string();
 
-        let (token_reserve, sol_reserve) = match
-            self.get_vault_balances(&token_vault_str, &sol_vault_str).await
+        let (token_reserve, sol_reserve) = match self
+            .get_vault_balances(&token_vault_str, &sol_vault_str)
+            .await
         {
             Ok((tr, sr)) => {
                 if self.debug_enabled {
@@ -5376,11 +5442,8 @@ impl PoolPriceCalculator {
                             "Successfully fetched PUMP.FUN vault balances:\n\
                             - Token vault {} balance: {}\n\
                             - SOL vault {} balance: {}",
-                            token_vault_str,
-                            tr,
-                            sol_vault_str,
-                            sr
-                        )
+                            token_vault_str, tr, sol_vault_str, sr
+                        ),
                     );
                 }
                 (tr, sr)
@@ -5390,10 +5453,13 @@ impl PoolPriceCalculator {
                     log(
                         LogTag::Pool,
                         "PUMP_VAULT_ERROR",
-                        &format!("Vault balance fetch failed: {}", e)
+                        &format!("Vault balance fetch failed: {}", e),
                     );
                 }
-                return Err(format!("Failed to get vault balances for PUMP.FUN pool: {}", e));
+                return Err(format!(
+                    "Failed to get vault balances for PUMP.FUN pool: {}",
+                    e
+                ));
             }
         };
 
@@ -5418,7 +5484,7 @@ impl PoolPriceCalculator {
                     pool_base_token_account,
                     pool_quote_token_account,
                     lp_supply
-                )
+                ),
             );
         }
 
@@ -5431,15 +5497,15 @@ impl PoolPriceCalculator {
             token_0_vault: Some(pool_base_token_account.to_string()),
             token_1_vault: Some(pool_quote_token_account.to_string()),
             token_0_reserve: token_reserve, // Base token reserve
-            token_1_reserve: sol_reserve, // Quote token (SOL) reserve
+            token_1_reserve: sol_reserve,   // Quote token (SOL) reserve
             token_0_decimals: token_decimals,
             token_1_decimals: sol_decimals,
             lp_mint: None, // Pump.fun doesn't use standard LP tokens
             lp_supply: Some(lp_supply),
             creator: None,
-            status: Some(1), // Active
+            status: Some(1),     // Active
             liquidity_usd: None, // Will be calculated elsewhere
-            sqrt_price: None, // Not applicable to bonding curve AMM
+            sqrt_price: None,    // Not applicable to bonding curve AMM
         })
     }
 }
@@ -5447,7 +5513,10 @@ impl PoolPriceCalculator {
 /// Helper function to extract a pubkey from raw data at a specific offset
 fn extract_pubkey_at_offset(data: &[u8], offset: usize) -> Result<Pubkey, String> {
     if data.len() < offset + 32 {
-        return Err(format!("Insufficient data length for pubkey at offset {}", offset));
+        return Err(format!(
+            "Insufficient data length for pubkey at offset {}",
+            offset
+        ));
     }
 
     let pubkey_bytes: [u8; 32] = data[offset..offset + 32]
@@ -5492,7 +5561,11 @@ impl PriceCacheEntry {
 pub async fn initialize_price_service() -> Result<(), Box<dyn std::error::Error>> {
     // Pool service is already initialized via init_pool_service
     let pool_service = get_pool_service();
-    log(LogTag::Pool, "INIT", "✅ Unified price service initialized (using pool service)");
+    log(
+        LogTag::Pool,
+        "INIT",
+        "✅ Unified price service initialized (using pool service)",
+    );
     Ok(())
 }
 
@@ -5504,24 +5577,26 @@ pub async fn initialize_price_service() -> Result<(), Box<dyn std::error::Error>
 #[derive(Debug, Clone)]
 pub struct PriceResult {
     pub token_address: String,
-    pub price_sol: Option<f64>, // Primary SOL price (pool or API)
-    pub price_usd: Option<f64>, // USD price (if available)
-    pub api_price_sol: Option<f64>, // API-sourced SOL price
-    pub pool_price_sol: Option<f64>, // Pool-calculated SOL price
+    pub price_sol: Option<f64>,       // Primary SOL price (pool or API)
+    pub price_usd: Option<f64>,       // USD price (if available)
+    pub api_price_sol: Option<f64>,   // API-sourced SOL price
+    pub pool_price_sol: Option<f64>,  // Pool-calculated SOL price
     pub pool_address: Option<String>, // Pool address (if pool source)
-    pub dex_id: Option<String>, // DEX identifier (if pool source)
-    pub pool_type: Option<String>, // Pool type (if pool source)
-    pub liquidity_usd: Option<f64>, // Pool liquidity (if pool source)
-    pub volume_24h: Option<f64>, // 24h volume (if pool source)
-    pub source: String, // "pool", "api", "both", or "cache"
+    pub dex_id: Option<String>,       // DEX identifier (if pool source)
+    pub pool_type: Option<String>,    // Pool type (if pool source)
+    pub liquidity_usd: Option<f64>,   // Pool liquidity (if pool source)
+    pub volume_24h: Option<f64>,      // 24h volume (if pool source)
+    pub source: String,               // "pool", "api", "both", or "cache"
     pub calculated_at: DateTime<Utc>, // When calculated
-    pub is_cached: bool, // Whether result came from cache
+    pub is_cached: bool,              // Whether result came from cache
 }
 
 impl PriceResult {
     /// Get the best available SOL price (prioritizes pool over API)
     pub fn best_sol_price(&self) -> Option<f64> {
-        self.pool_price_sol.or(self.api_price_sol).or(self.price_sol)
+        self.pool_price_sol
+            .or(self.api_price_sol)
+            .or(self.price_sol)
     }
 
     /// Get simple SOL price for backward compatibility
@@ -5646,15 +5721,14 @@ impl PriceOptions {
 pub async fn get_price(
     token_address: &str,
     options: Option<PriceOptions>,
-    sync: bool
+    sync: bool,
 ) -> Option<PriceResult> {
     let options = options.unwrap_or_default();
 
     // Handle sync execution by wrapping in block_in_place
     if sync {
         return tokio::task::block_in_place(|| {
-            tokio::runtime::Handle
-                ::current()
+            tokio::runtime::Handle::current()
                 .block_on(async { get_price_async(token_address, options).await })
         });
     }
@@ -5669,12 +5743,12 @@ async fn get_price_async(token_address: &str, options: PriceOptions) -> Option<P
 
     // Apply timeout if specified
     let result = if let Some(timeout_secs) = options.timeout_secs {
-        tokio::time
-            ::timeout(
-                Duration::from_secs(timeout_secs),
-                get_price_internal(token_address, &options, calculated_at)
-            ).await
-            .unwrap_or(None)
+        tokio::time::timeout(
+            Duration::from_secs(timeout_secs),
+            get_price_internal(token_address, &options, calculated_at),
+        )
+        .await
+        .unwrap_or(None)
     } else {
         get_price_internal(token_address, &options, calculated_at).await
     };
@@ -5682,19 +5756,21 @@ async fn get_price_async(token_address: &str, options: PriceOptions) -> Option<P
     if is_debug_pool_prices_enabled() {
         let duration = start_time.elapsed();
         let result_info = match &result {
-            Some(r) =>
-                format!(
-                    "source={}, pool={:?}, api={:?}",
-                    r.source,
-                    r.pool_price_sol,
-                    r.api_price_sol
-                ),
+            Some(r) => format!(
+                "source={}, pool={:?}, api={:?}",
+                r.source, r.pool_price_sol, r.api_price_sol
+            ),
             None => "failed".to_string(),
         };
         log(
             LogTag::Pool,
             "PRICE_RESULT",
-            &format!("get_price({}) -> {} in {:?}", &token_address[..8], result_info, duration)
+            &format!(
+                "get_price({}) -> {} in {:?}",
+                &token_address[..8],
+                result_info,
+                duration
+            ),
         );
     }
 
@@ -5705,7 +5781,7 @@ async fn get_price_async(token_address: &str, options: PriceOptions) -> Option<P
 async fn get_price_internal(
     token_address: &str,
     options: &PriceOptions,
-    calculated_at: DateTime<Utc>
+    calculated_at: DateTime<Utc>,
 ) -> Option<PriceResult> {
     // NEW ARCHITECTURE: Universal function is READ-ONLY from service cache
     // No API calls, no pool calculations - just read from background service results
@@ -5772,7 +5848,7 @@ async fn get_price_internal(
             &format!(
                 "No fresh cached price for {} (not in active monitoring or cache expired)",
                 &token_address[..8]
-            )
+            ),
         );
     }
 

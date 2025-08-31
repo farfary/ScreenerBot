@@ -1,6 +1,6 @@
+use chrono::{DateTime, Utc};
 /// Data types for the centralized pricing system
-use serde::{ Deserialize, Serialize };
-use chrono::{ DateTime, Utc };
+use serde::{Deserialize, Serialize};
 
 /// Token information from API sources
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,7 +204,8 @@ impl From<ApiToken> for Token {
             logo_url: api_token.info.as_ref().and_then(|i| i.image_url.clone()),
             coingecko_id: None,
             // Extract the first website URL from info.websites if available
-            website: api_token.info
+            website: api_token
+                .info
                 .as_ref()
                 .and_then(|i| i.websites.as_ref())
                 .and_then(|websites| websites.first())
@@ -213,7 +214,9 @@ impl From<ApiToken> for Token {
             tags: Vec::new(),
             is_verified: false,
             created_at: api_token.pair_created_at.map(|ts| {
-                DateTime::from_timestamp_millis(ts).unwrap_or_default().with_timezone(&Utc)
+                DateTime::from_timestamp_millis(ts)
+                    .unwrap_or_default()
+                    .with_timezone(&Utc)
             }),
 
             price_dexscreener_sol: api_token.price_sol,
@@ -235,7 +238,8 @@ impl From<ApiToken> for Token {
                 image_url: info.image_url,
                 header: None,
                 open_graph: None,
-                websites: info.websites
+                websites: info
+                    .websites
                     .unwrap_or_default()
                     .into_iter()
                     .map(|w| WebsiteLink {
@@ -243,7 +247,8 @@ impl From<ApiToken> for Token {
                         url: w.url,
                     })
                     .collect(),
-                socials: info.socials
+                socials: info
+                    .socials
                     .unwrap_or_default()
                     .into_iter()
                     .map(|s| SocialLink {
@@ -287,10 +292,8 @@ impl From<Token> for ApiToken {
                 websites: Some(
                     info.websites
                         .into_iter()
-                        .map(|w| WebsiteInfo {
-                            url: w.url,
-                        })
-                        .collect()
+                        .map(|w| WebsiteInfo { url: w.url })
+                        .collect(),
                 ),
                 socials: Some(
                     info.socials
@@ -299,7 +302,7 @@ impl From<Token> for ApiToken {
                             platform: s.link_type,
                             handle: s.url,
                         })
-                        .collect()
+                        .collect(),
                 ),
             }),
             labels: Some(token.labels),

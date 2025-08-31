@@ -1,3 +1,5 @@
+use crate::global::is_debug_trader_enabled;
+use crate::logger::{log, LogTag};
 /// Advanced OHLCV Technical Analysis Module for ScreenerBot
 ///
 /// This module provides sophisticated technical analysis using real OHLCV data
@@ -11,11 +13,8 @@
 /// - **Support/Resistance**: Real historical levels with volume confirmation
 /// - **Multi-Timeframe**: Analysis across 7 different timeframes
 /// - **ATH Detection**: Real historical highs with volume and age analysis
-
-use crate::tokens::ohlcvs::{ OhlcvDataPoint, Timeframe, get_latest_ohlcv, is_ohlcv_data_available };
+use crate::tokens::ohlcvs::{get_latest_ohlcv, is_ohlcv_data_available, OhlcvDataPoint, Timeframe};
 use crate::tokens::Token;
-use crate::logger::{ log, LogTag };
-use crate::global::is_debug_trader_enabled;
 use std::collections::HashMap;
 
 // =============================================================================
@@ -26,7 +25,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct RsiResult {
     pub value: f64,
-    pub is_oversold: bool, // RSI < 30
+    pub is_oversold: bool,   // RSI < 30
     pub is_overbought: bool, // RSI > 70
     pub trend: RsiTrend,
 }
@@ -111,14 +110,14 @@ pub struct BollingerBands {
     pub lower_band: f64,
     pub bandwidth: f64, // (upper - lower) / middle
     pub percent_b: f64, // Where current price sits in bands
-    pub squeeze: bool, // Low volatility period
+    pub squeeze: bool,  // Low volatility period
 }
 
 /// Calculate Bollinger Bands
 pub fn calculate_bollinger_bands(
     prices: &[f64],
     period: usize,
-    std_dev_multiplier: f64
+    std_dev_multiplier: f64,
 ) -> Option<BollingerBands> {
     if prices.len() < period {
         return None;
@@ -128,11 +127,11 @@ pub fn calculate_bollinger_bands(
     let sma = recent_prices.iter().sum::<f64>() / (period as f64);
 
     // Calculate standard deviation
-    let variance =
-        recent_prices
-            .iter()
-            .map(|price| (price - sma).powi(2))
-            .sum::<f64>() / (period as f64);
+    let variance = recent_prices
+        .iter()
+        .map(|price| (price - sma).powi(2))
+        .sum::<f64>()
+        / (period as f64);
     let std_dev = variance.sqrt();
 
     let upper_band = sma + std_dev * std_dev_multiplier;
@@ -164,7 +163,7 @@ pub fn calculate_bollinger_bands(
 pub struct VolumeAnalysis {
     pub avg_volume: f64,
     pub current_volume: f64,
-    pub volume_ratio: f64, // current / average
+    pub volume_ratio: f64,     // current / average
     pub is_volume_spike: bool, // >2x average
     pub volume_trend: VolumeTrend,
 }
@@ -182,15 +181,16 @@ pub fn analyze_volume(ohlcv_data: &[OhlcvDataPoint], lookback: usize) -> Option<
         return None;
     }
 
-    let volumes: Vec<f64> = ohlcv_data
-        .iter()
-        .map(|d| d.volume)
-        .collect();
+    let volumes: Vec<f64> = ohlcv_data.iter().map(|d| d.volume).collect();
     let recent_volumes = &volumes[volumes.len() - lookback..];
     let avg_volume = recent_volumes.iter().sum::<f64>() / (lookback as f64);
     let current_volume = volumes[volumes.len() - 1];
 
-    let volume_ratio = if avg_volume > 0.0 { current_volume / avg_volume } else { 1.0 };
+    let volume_ratio = if avg_volume > 0.0 {
+        current_volume / avg_volume
+    } else {
+        1.0
+    };
 
     let is_volume_spike = volume_ratio > 2.0;
 
@@ -256,7 +256,11 @@ pub fn detect_candlestick_patterns(ohlcv_data: &[OhlcvDataPoint]) -> Vec<Pattern
     let len = ohlcv_data.len();
     let current = &ohlcv_data[len - 1];
     let previous = &ohlcv_data[len - 2];
-    let before_previous = if len >= 3 { Some(&ohlcv_data[len - 3]) } else { None };
+    let before_previous = if len >= 3 {
+        Some(&ohlcv_data[len - 3])
+    } else {
+        None
+    };
 
     // Helper function to calculate body and shadow sizes
     let body_size = |candle: &OhlcvDataPoint| (candle.close - candle.open).abs();
@@ -272,10 +276,9 @@ pub fn detect_candlestick_patterns(ohlcv_data: &[OhlcvDataPoint]) -> Vec<Pattern
 
     if current_range > 0.0 {
         // Hammer: small body, long lower shadow, small upper shadow
-        if
-            current_body < current_range * 0.3 &&
-            current_lower_shadow > current_body * 2.0 &&
-            current_upper_shadow < current_body * 0.5
+        if current_body < current_range * 0.3
+            && current_lower_shadow > current_body * 2.0
+            && current_upper_shadow < current_body * 0.5
         {
             patterns.push(PatternResult {
                 pattern: CandlestickPattern::Hammer,
@@ -298,8 +301,7 @@ pub fn detect_candlestick_patterns(ohlcv_data: &[OhlcvDataPoint]) -> Vec<Pattern
 
     // Bullish Engulfing pattern (requires previous candle)
     let prev_body = body_size(previous);
-    if
-        current.close > current.open &&
+    if current.close > current.open &&
         previous.close < previous.open && // Current green, previous red
         current.open < previous.close &&
         current.close > previous.open
@@ -315,12 +317,11 @@ pub fn detect_candlestick_patterns(ohlcv_data: &[OhlcvDataPoint]) -> Vec<Pattern
 
     // Three White Soldiers (requires 3 candles)
     if let Some(before_prev) = before_previous {
-        if
-            current.close > current.open &&
-            previous.close > previous.open &&
-            before_prev.close > before_prev.open &&
-            current.close > previous.close &&
-            previous.close > before_prev.close
+        if current.close > current.open
+            && previous.close > previous.open
+            && before_prev.close > before_prev.open
+            && current.close > previous.close
+            && previous.close > before_prev.close
         {
             patterns.push(PatternResult {
                 pattern: CandlestickPattern::ThreeWhiteSoldiers,
@@ -352,7 +353,7 @@ pub struct SupportResistanceLevel {
 /// Find support and resistance levels from OHLCV data
 pub fn find_support_resistance_levels(
     ohlcv_data: &[OhlcvDataPoint],
-    price_tolerance: f64
+    price_tolerance: f64,
 ) -> Vec<SupportResistanceLevel> {
     if ohlcv_data.len() < 10 {
         return Vec::new();
@@ -377,14 +378,17 @@ pub fn find_support_resistance_levels(
                     existing_level.volume_at_level += candle.volume;
                     existing_level.last_touch_age = candle.timestamp;
                 } else {
-                    potential_levels.insert(level_key, SupportResistanceLevel {
-                        price: candle.low,
-                        strength: 0.0, // Will calculate later
-                        touches: 1,
-                        is_support: true,
-                        volume_at_level: candle.volume,
-                        last_touch_age: candle.timestamp,
-                    });
+                    potential_levels.insert(
+                        level_key,
+                        SupportResistanceLevel {
+                            price: candle.low,
+                            strength: 0.0, // Will calculate later
+                            touches: 1,
+                            is_support: true,
+                            volume_at_level: candle.volume,
+                            last_touch_age: candle.timestamp,
+                        },
+                    );
                 }
             }
 
@@ -400,14 +404,17 @@ pub fn find_support_resistance_levels(
                     existing_level.volume_at_level += candle.volume;
                     existing_level.last_touch_age = candle.timestamp;
                 } else {
-                    potential_levels.insert(level_key, SupportResistanceLevel {
-                        price: candle.high,
-                        strength: 0.0, // Will calculate later
-                        touches: 1,
-                        is_support: false,
-                        volume_at_level: candle.volume,
-                        last_touch_age: candle.timestamp,
-                    });
+                    potential_levels.insert(
+                        level_key,
+                        SupportResistanceLevel {
+                            price: candle.high,
+                            strength: 0.0, // Will calculate later
+                            touches: 1,
+                            is_support: false,
+                            volume_at_level: candle.volume,
+                            last_touch_age: candle.timestamp,
+                        },
+                    );
                 }
             }
         }
@@ -415,10 +422,7 @@ pub fn find_support_resistance_levels(
 
     // Calculate strength and filter significant levels
     let avg_volume: f64 =
-        ohlcv_data
-            .iter()
-            .map(|d| d.volume)
-            .sum::<f64>() / (ohlcv_data.len() as f64);
+        ohlcv_data.iter().map(|d| d.volume).sum::<f64>() / (ohlcv_data.len() as f64);
 
     for mut level in potential_levels.into_values() {
         // Strength based on touches, volume, and recency
@@ -450,7 +454,7 @@ pub fn find_support_resistance_levels(
 #[derive(Debug, Clone)]
 pub struct OhlcvDipSignal {
     pub strategy_name: String,
-    pub urgency: f64, // 0.0 to 2.0
+    pub urgency: f64,    // 0.0 to 2.0
     pub confidence: f64, // 0.0 to 1.0
     pub drop_percent: f64,
     pub timeframe: Timeframe,
@@ -494,22 +498,17 @@ pub async fn detect_candlestick_pattern_dip(mint: &str) -> Option<OhlcvDipSignal
                     if drop_percent < -3.0 {
                         let volume_confirmation = volume_analysis
                             .as_ref()
-                            .map(
-                                |va|
-                                    va.is_volume_spike || va.volume_trend == VolumeTrend::Increasing
-                            )
+                            .map(|va| {
+                                va.is_volume_spike || va.volume_trend == VolumeTrend::Increasing
+                            })
                             .unwrap_or(false);
 
                         let mut technical_indicators = HashMap::new();
-                        technical_indicators.insert(
-                            "pattern_confidence".to_string(),
-                            pattern.confidence
-                        );
+                        technical_indicators
+                            .insert("pattern_confidence".to_string(), pattern.confidence);
                         if let Some(va) = &volume_analysis {
-                            technical_indicators.insert(
-                                "volume_ratio".to_string(),
-                                va.volume_ratio
-                            );
+                            technical_indicators
+                                .insert("volume_ratio".to_string(), va.volume_ratio);
                         }
 
                         let signal = OhlcvDipSignal {
@@ -520,8 +519,7 @@ pub async fn detect_candlestick_pattern_dip(mint: &str) -> Option<OhlcvDipSignal
                             timeframe: timeframe.clone(),
                             analysis_details: format!(
                                 "{} on {} timeframe",
-                                pattern.description,
-                                timeframe
+                                pattern.description, timeframe
                             ),
                             volume_confirmation,
                             technical_indicators,
@@ -564,14 +562,10 @@ pub async fn detect_volume_price_divergence_dip(mint: &str) -> Option<OhlcvDipSi
 
                 if confidence > 0.4 {
                     let mut technical_indicators = HashMap::new();
-                    technical_indicators.insert(
-                        "volume_ratio".to_string(),
-                        volume_analysis.volume_ratio
-                    );
-                    technical_indicators.insert(
-                        "avg_volume".to_string(),
-                        volume_analysis.avg_volume
-                    );
+                    technical_indicators
+                        .insert("volume_ratio".to_string(), volume_analysis.volume_ratio);
+                    technical_indicators
+                        .insert("avg_volume".to_string(), volume_analysis.avg_volume);
 
                     return Some(OhlcvDipSignal {
                         strategy_name: "Volume-Price Divergence".to_string(),
@@ -581,8 +575,7 @@ pub async fn detect_volume_price_divergence_dip(mint: &str) -> Option<OhlcvDipSi
                         timeframe,
                         analysis_details: format!(
                             "Volume spike {:.1}x during {:.1}% drop",
-                            volume_analysis.volume_ratio,
-                            -drop_percent
+                            volume_analysis.volume_ratio, -drop_percent
                         ),
                         volume_confirmation: true,
                         technical_indicators,
@@ -609,10 +602,7 @@ pub async fn detect_bollinger_band_dip(mint: &str) -> Option<OhlcvDipSignal> {
                 continue;
             }
 
-            let prices: Vec<f64> = ohlcv_data
-                .iter()
-                .map(|d| d.close)
-                .collect();
+            let prices: Vec<f64> = ohlcv_data.iter().map(|d| d.close).collect();
             let bb = calculate_bollinger_bands(&prices, 20, 2.0)?;
             let current_price = prices[prices.len() - 1];
 
@@ -672,10 +662,7 @@ pub async fn detect_rsi_oversold_dip(mint: &str) -> Option<OhlcvDipSignal> {
                 continue;
             }
 
-            let prices: Vec<f64> = ohlcv_data
-                .iter()
-                .map(|d| d.close)
-                .collect();
+            let prices: Vec<f64> = ohlcv_data.iter().map(|d| d.close).collect();
             let rsi = calculate_rsi(&prices, 14)?;
 
             // Look for oversold conditions with potential reversal
@@ -717,8 +704,7 @@ pub async fn detect_rsi_oversold_dip(mint: &str) -> Option<OhlcvDipSignal> {
                         timeframe,
                         analysis_details: format!(
                             "RSI {:.1} oversold with {:?} trend",
-                            rsi.value,
-                            rsi.trend
+                            rsi.value, rsi.trend
                         ),
                         volume_confirmation,
                         technical_indicators,
@@ -776,18 +762,12 @@ pub async fn detect_support_level_precision_dip(mint: &str) -> Option<OhlcvDipSi
                         let volume_confirmation = support.volume_at_level > 0.0;
 
                         let mut technical_indicators = HashMap::new();
-                        technical_indicators.insert(
-                            "support_strength".to_string(),
-                            support.strength
-                        );
-                        technical_indicators.insert(
-                            "distance_to_support".to_string(),
-                            distance_to_support
-                        );
-                        technical_indicators.insert(
-                            "support_touches".to_string(),
-                            support.touches as f64
-                        );
+                        technical_indicators
+                            .insert("support_strength".to_string(), support.strength);
+                        technical_indicators
+                            .insert("distance_to_support".to_string(), distance_to_support);
+                        technical_indicators
+                            .insert("support_touches".to_string(), support.touches as f64);
 
                         return Some(OhlcvDipSignal {
                             strategy_name: "Support Level Precision".to_string(),
@@ -797,9 +777,7 @@ pub async fn detect_support_level_precision_dip(mint: &str) -> Option<OhlcvDipSi
                             timeframe,
                             analysis_details: format!(
                                 "Near support at {:.8} ({:.1}% away, strength {:.2})",
-                                support.price,
-                                distance_to_support,
-                                support.strength
+                                support.price, distance_to_support, support.strength
                             ),
                             volume_confirmation,
                             technical_indicators,
@@ -835,16 +813,16 @@ pub struct AthInfo {
     pub ath_timestamp: i64,
     pub distance_from_ath: f64, // Percentage
     pub volume_at_ath: f64,
-    pub ath_confirmed: bool, // High volume at ATH
+    pub ath_confirmed: bool,     // High volume at ATH
     pub breakout_potential: f64, // 0.0 to 1.0
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AthDangerLevel {
-    Safe, // >40% from any recent ATH
+    Safe,    // >40% from any recent ATH
     Caution, // 25-40% from ATH
     Warning, // 15-25% from ATH
-    Danger, // <15% from recent ATH
+    Danger,  // <15% from recent ATH
 }
 
 /// Comprehensive ATH analysis using real OHLCV data
@@ -853,7 +831,7 @@ pub async fn analyze_ath_with_ohlcv(mint: &str, current_price: f64) -> Option<Oh
         ("1h", Timeframe::Hour1),
         ("4h", Timeframe::Hour4),
         ("12h", Timeframe::Hour12),
-        ("1d", Timeframe::Day1)
+        ("1d", Timeframe::Day1),
     ];
 
     let mut timeframe_aths = HashMap::new();
@@ -914,26 +892,19 @@ fn find_ath_in_timeframe(ohlcv_data: &[OhlcvDataPoint], current_price: f64) -> O
     }
 
     // Find the highest high in the dataset
-    let ath_candle = ohlcv_data.iter().max_by(|a, b| a.high.partial_cmp(&b.high).unwrap())?;
+    let ath_candle = ohlcv_data
+        .iter()
+        .max_by(|a, b| a.high.partial_cmp(&b.high).unwrap())?;
 
     let ath_price = ath_candle.high;
     let distance_from_ath = ((ath_price - current_price) / ath_price) * 100.0;
 
     // Calculate average volume to determine if ATH was volume-confirmed
-    let avg_volume =
-        ohlcv_data
-            .iter()
-            .map(|d| d.volume)
-            .sum::<f64>() / (ohlcv_data.len() as f64);
+    let avg_volume = ohlcv_data.iter().map(|d| d.volume).sum::<f64>() / (ohlcv_data.len() as f64);
     let ath_confirmed = ath_candle.volume > avg_volume * 1.5; // 1.5x average volume
 
     // Calculate breakout potential based on recent price action
-    let recent_highs: Vec<f64> = ohlcv_data
-        .iter()
-        .rev()
-        .take(10)
-        .map(|d| d.high)
-        .collect();
+    let recent_highs: Vec<f64> = ohlcv_data.iter().rev().take(10).map(|d| d.high).collect();
     let recent_avg_high = recent_highs.iter().sum::<f64>() / (recent_highs.len() as f64);
     let breakout_potential = (recent_avg_high / ath_price).min(1.0);
 
@@ -957,7 +928,7 @@ pub struct ComprehensiveOhlcvAnalysis {
     pub dip_signals: Vec<OhlcvDipSignal>,
     pub ath_analysis: Option<OhlcvAthAnalysis>,
     pub overall_buy_urgency: f64, // 0.0 to 2.0
-    pub overall_confidence: f64, // 0.0 to 1.0
+    pub overall_confidence: f64,  // 0.0 to 1.0
     pub is_safe_for_entry: bool,
     pub analysis_summary: String,
 }
@@ -1001,10 +972,7 @@ pub async fn perform_comprehensive_ohlcv_analysis(token: &Token) -> Comprehensiv
             .iter()
             .map(|signal| signal.urgency * signal.confidence)
             .sum();
-        let total_weight: f64 = dip_signals
-            .iter()
-            .map(|signal| signal.confidence)
-            .sum();
+        let total_weight: f64 = dip_signals.iter().map(|signal| signal.confidence).sum();
 
         if total_weight > 0.0 {
             (weighted_urgency / total_weight).min(2.0)
@@ -1016,17 +984,14 @@ pub async fn perform_comprehensive_ohlcv_analysis(token: &Token) -> Comprehensiv
     let overall_confidence = if dip_signals.is_empty() {
         0.0
     } else {
-        dip_signals
-            .iter()
-            .map(|s| s.confidence)
-            .sum::<f64>() / (dip_signals.len() as f64)
+        dip_signals.iter().map(|s| s.confidence).sum::<f64>() / (dip_signals.len() as f64)
     };
 
-    let is_safe_for_entry =
-        ath_analysis
-            .as_ref()
-            .map(|ath| ath.is_safe_for_entry)
-            .unwrap_or(true) && overall_confidence > 0.3;
+    let is_safe_for_entry = ath_analysis
+        .as_ref()
+        .map(|ath| ath.is_safe_for_entry)
+        .unwrap_or(true)
+        && overall_confidence > 0.3;
 
     let analysis_summary = format!(
         "OHLCV Analysis: {} dip signals, urgency {:.2}, confidence {:.2}, ATH safety: {}",
@@ -1040,7 +1005,7 @@ pub async fn perform_comprehensive_ohlcv_analysis(token: &Token) -> Comprehensiv
         log(
             LogTag::Trader,
             "OHLCV_ANALYSIS",
-            &format!("🔬 {} for {}", analysis_summary, token.symbol.as_str())
+            &format!("🔬 {} for {}", analysis_summary, token.symbol.as_str()),
         );
     }
 

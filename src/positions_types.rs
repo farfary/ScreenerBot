@@ -1,5 +1,5 @@
-use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 // ==================== POSITION STRUCTURES ====================
 
@@ -31,10 +31,10 @@ pub struct Position {
     pub liquidity_tier: Option<String>, // Liquidity tier for reference
     // Verification status
     pub transaction_entry_verified: bool, // Whether entry transaction is fully verified
-    pub transaction_exit_verified: bool, // Whether exit transaction is fully verified
+    pub transaction_exit_verified: bool,  // Whether exit transaction is fully verified
     // Fee tracking
     pub entry_fee_lamports: Option<u64>, // Actual entry transaction fee
-    pub exit_fee_lamports: Option<u64>, // Actual exit transaction fee
+    pub exit_fee_lamports: Option<u64>,  // Actual exit transaction fee
     // Price tracking
     pub current_price: Option<f64>, // Current market price (updated by monitoring system)
     pub current_price_updated: Option<DateTime<Utc>>, // When current_price was last updated
@@ -42,6 +42,6 @@ pub struct Position {
     pub phantom_remove: bool,
     pub phantom_confirmations: u32, // How many times we confirmed zero wallet balance while still open
     pub phantom_first_seen: Option<DateTime<Utc>>, // When first confirmed phantom
-    pub synthetic_exit: bool, // True if we synthetically closed due to missing exit tx
+    pub synthetic_exit: bool,       // True if we synthetically closed due to missing exit tx
     pub closed_reason: Option<String>, // Optional reason for closure (e.g., "synthetic_phantom_closure")
 }

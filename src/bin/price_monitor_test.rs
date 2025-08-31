@@ -1,10 +1,10 @@
+use chrono::Utc;
+use screenerbot::logger::init_file_logging;
+use screenerbot::tokens;
+use screenerbot::tokens::decimals::get_cached_decimals;
+use screenerbot::tokens::pool::{get_pool_service, get_price, PriceOptions};
 use std::time::Duration;
 use tokio::time::sleep;
-use chrono::Utc;
-use screenerbot::tokens::pool::{ get_pool_service, get_price, PriceOptions };
-use screenerbot::tokens;
-use screenerbot::logger::init_file_logging;
-use screenerbot::tokens::decimals::get_cached_decimals;
 
 /// Test token address to monitor
 const TEST_TOKEN: &str = "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump";
@@ -72,7 +72,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Check actual token decimals from the system
         let token_decimals = get_cached_decimals(TEST_TOKEN).unwrap_or(6);
         let sol_decimals = 9; // SOL is always 9 decimals
-        println!("   🔢 Token decimals: {} | SOL decimals: {}", token_decimals, sol_decimals);
+        println!(
+            "   🔢 Token decimals: {} | SOL decimals: {}",
+            token_decimals, sol_decimals
+        );
 
         // Try comprehensive price first with debug pool calculation enabled and force fresh
         let mut price_options = PriceOptions::comprehensive();
@@ -84,7 +87,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("   🔍 DEBUG: Full result = {:?}", result);
 
                 // Use API price when available (more accurate), fallback to pool price
-                let best_price = result.api_price_sol
+                let best_price = result
+                    .api_price_sol
                     .or(result.pool_price_sol)
                     .or(result.price_sol);
 
@@ -102,9 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         println!(
                             "   💰 Price: {:.9} SOL {} ({:+.2}%)",
-                            price_sol,
-                            change_icon,
-                            change_pct
+                            price_sol, change_icon, change_pct
                         );
 
                         if change_pct.abs() >= 1.0 {
@@ -119,9 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let ratio = pool / api;
                         println!(
                             "   ⚖️  API: {:.9} SOL | Pool: {:.9} SOL (ratio: {:.1}x)",
-                            api,
-                            pool,
-                            ratio
+                            api, pool, ratio
                         );
                     }
 
@@ -164,7 +164,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Show availability status
         let availability = pool_service.check_token_availability(TEST_TOKEN).await;
-        println!("   🎯 Pools available: {}", if availability { "✅" } else { "❌" });
+        println!(
+            "   🎯 Pools available: {}",
+            if availability { "✅" } else { "❌" }
+        );
 
         // Show history count with more detail
         let history = pool_service.get_recent_price_history(TEST_TOKEN).await;
@@ -209,7 +212,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let stats = pool_service.get_enhanced_stats().await;
             println!("📊 SERVICE STATS (after {} checks):", iteration);
             println!("   Success rate: {:.1}%", stats.get_success_rate() * 100.0);
-            println!("   Cache hit rate: {:.1}%", stats.get_cache_hit_rate() * 100.0);
+            println!(
+                "   Cache hit rate: {:.1}%",
+                stats.get_cache_hit_rate() * 100.0
+            );
             println!("   Total requests: {}", stats.total_price_requests);
             println!();
         }

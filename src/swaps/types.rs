@@ -1,7 +1,6 @@
 /// Common swap structures and types used across different swap modules
 /// This module contains shared data structures for swap operations
-
-use serde::{Deserialize, Serialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Router types for swap operations
 #[derive(Debug, Clone, PartialEq)]
@@ -22,27 +21,28 @@ pub struct SwapResult {
     pub fee_lamports: u64,
     pub execution_time: f64,
     pub effective_price: Option<f64>, // Price per token in SOL
-    pub swap_data: Option<SwapData>, // Complete swap data for reference
+    pub swap_data: Option<SwapData>,  // Complete swap data for reference
     pub error: Option<String>,
 }
 
 /// Configuration constants for swap operations (re-exported from config)
 pub use super::config::{
-    SOL_MINT, 
-    GMGN_ANTI_MEV as ANTI_MEV, 
-    GMGN_PARTNER as PARTNER,
+    GMGN_ANTI_MEV as ANTI_MEV,
     GMGN_DEFAULT_SWAP_MODE,
-    JUPITER_DEFAULT_SWAP_MODE,
     GMGN_FEE_SOL,
-    QUOTE_SLIPPAGE_PERCENT,
+    GMGN_PARTNER as PARTNER,
     INTERNAL_SLIPPAGE_PERCENT,
+    JUPITER_DEFAULT_SWAP_MODE,
+    QUOTE_SLIPPAGE_PERCENT,
     // Legacy alias for backward compatibility in types
-    QUOTE_SLIPPAGE_PERCENT as SLIPPAGE_TOLERANCE_PERCENT
+    QUOTE_SLIPPAGE_PERCENT as SLIPPAGE_TOLERANCE_PERCENT,
+    SOL_MINT,
 };
 
 /// Custom deserializer for fields that can be either string or number
 pub fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
-    where D: Deserializer<'de>
+where
+    D: Deserializer<'de>,
 {
     use serde::de::{self, Visitor};
     use std::fmt;
@@ -56,19 +56,31 @@ pub fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<String, D
             formatter.write_str("a string or number")
         }
 
-        fn visit_str<E>(self, value: &str) -> Result<String, E> where E: de::Error {
+        fn visit_str<E>(self, value: &str) -> Result<String, E>
+        where
+            E: de::Error,
+        {
             Ok(value.to_owned())
         }
 
-        fn visit_i64<E>(self, value: i64) -> Result<String, E> where E: de::Error {
+        fn visit_i64<E>(self, value: i64) -> Result<String, E>
+        where
+            E: de::Error,
+        {
             Ok(value.to_string())
         }
 
-        fn visit_u64<E>(self, value: u64) -> Result<String, E> where E: de::Error {
+        fn visit_u64<E>(self, value: u64) -> Result<String, E>
+        where
+            E: de::Error,
+        {
             Ok(value.to_string())
         }
 
-        fn visit_f64<E>(self, value: f64) -> Result<String, E> where E: de::Error {
+        fn visit_f64<E>(self, value: f64) -> Result<String, E>
+        where
+            E: de::Error,
+        {
             Ok(value.to_string())
         }
     }
@@ -78,9 +90,10 @@ pub fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<String, D
 
 /// Custom deserializer for optional fields that can be either string or number
 pub fn deserialize_optional_string_or_number<'de, D>(
-    deserializer: D
+    deserializer: D,
 ) -> Result<Option<String>, D::Error>
-    where D: Deserializer<'de>
+where
+    D: Deserializer<'de>,
 {
     use serde::de::{self, Visitor};
     use std::fmt;
@@ -94,33 +107,52 @@ pub fn deserialize_optional_string_or_number<'de, D>(
             formatter.write_str("an optional string or number")
         }
 
-        fn visit_none<E>(self) -> Result<Option<String>, E> where E: de::Error {
+        fn visit_none<E>(self) -> Result<Option<String>, E>
+        where
+            E: de::Error,
+        {
             Ok(None)
         }
 
         fn visit_some<D>(self, deserializer: D) -> Result<Option<String>, D::Error>
-            where D: Deserializer<'de>
+        where
+            D: Deserializer<'de>,
         {
             deserialize_string_or_number(deserializer).map(Some)
         }
 
-        fn visit_str<E>(self, value: &str) -> Result<Option<String>, E> where E: de::Error {
+        fn visit_str<E>(self, value: &str) -> Result<Option<String>, E>
+        where
+            E: de::Error,
+        {
             Ok(Some(value.to_owned()))
         }
 
-        fn visit_i64<E>(self, value: i64) -> Result<Option<String>, E> where E: de::Error {
+        fn visit_i64<E>(self, value: i64) -> Result<Option<String>, E>
+        where
+            E: de::Error,
+        {
             Ok(Some(value.to_string()))
         }
 
-        fn visit_u64<E>(self, value: u64) -> Result<Option<String>, E> where E: de::Error {
+        fn visit_u64<E>(self, value: u64) -> Result<Option<String>, E>
+        where
+            E: de::Error,
+        {
             Ok(Some(value.to_string()))
         }
 
-        fn visit_f64<E>(self, value: f64) -> Result<Option<String>, E> where E: de::Error {
+        fn visit_f64<E>(self, value: f64) -> Result<Option<String>, E>
+        where
+            E: de::Error,
+        {
             Ok(Some(value.to_string()))
         }
 
-        fn visit_unit<E>(self) -> Result<Option<String>, E> where E: de::Error {
+        fn visit_unit<E>(self) -> Result<Option<String>, E>
+        where
+            E: de::Error,
+        {
             Ok(None)
         }
     }
@@ -147,7 +179,10 @@ pub struct SwapQuote {
     pub out_decimals: u8,
     #[serde(rename = "swapMode")]
     pub swap_mode: String,
-    #[serde(rename = "slippageBps", deserialize_with = "deserialize_string_or_number")]
+    #[serde(
+        rename = "slippageBps",
+        deserialize_with = "deserialize_string_or_number"
+    )]
     pub slippage_bps: String,
     #[serde(rename = "platformFee")]
     pub platform_fee: Option<String>,

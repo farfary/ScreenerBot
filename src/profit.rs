@@ -13,11 +13,11 @@
 //! * `Position` type and `calculate_position_pnl(position, Some(price)).await` exist in `crate::positions`.
 //! * `crate::logger::log` and `crate::global::is_debug_profit_enabled()` are available.
 
-use chrono::Utc;
-use crate::logger::{log, LogTag};
-use crate::positions_types::Position;
-use crate::positions_lib::calculate_position_pnl;
 use crate::global::*;
+use crate::logger::{log, LogTag};
+use crate::positions_lib::calculate_position_pnl;
+use crate::positions_types::Position;
+use chrono::Utc;
 
 /// ============================= Tunables =============================
 
@@ -34,8 +34,8 @@ pub const INSTANT_EXIT_LEVEL_1: f64 = 100.0; // Strong immediate take
 pub const INSTANT_EXIT_LEVEL_2: f64 = 150.0; // Very strong immediate take
 
 // Trailing stop dynamics (gaps are in percentage points of profit)
-pub const TRAIL_MIN_GAP: f64 = 5.0;   // Tightest trailing gap (% of profit)
-pub const TRAIL_MAX_GAP: f64 = 35.0;  // Widest trailing gap
+pub const TRAIL_MIN_GAP: f64 = 5.0; // Tightest trailing gap (% of profit)
+pub const TRAIL_MAX_GAP: f64 = 35.0; // Widest trailing gap
 
 // Trailing tighten schedule (minutes)
 pub const TRAIL_TIGHTEN_START: f64 = 45.0;
@@ -45,11 +45,7 @@ pub const TRAIL_TIGHTEN_FULL: f64 = 90.0;
 pub const EXIT_ODDS_THRESHOLD: f64 = 0.65; // below this, favor exiting when EV not positive
 
 // Quick capture windows: (minutes, required profit %)
-const QUICK_WINDOWS: &[(f64, f64)] = &[
-    (1.0, 30.0),
-    (5.0, 50.0),
-    (15.0, 80.0),
-];
+const QUICK_WINDOWS: &[(f64, f64)] = &[(1.0, 30.0), (5.0, 50.0), (15.0, 80.0)];
 
 /// ============================= Helpers =============================
 
@@ -70,7 +66,11 @@ fn clamp01(v: f64) -> f64 {
 /// - Returned value rounded to 2 decimals to reduce log churn.
 pub fn trailing_gap(peak_profit: f64, minutes_held: f64) -> f64 {
     // Sanitize inputs
-    let minutes = if minutes_held.is_finite() && minutes_held > 0.0 { minutes_held } else { 0.0 };
+    let minutes = if minutes_held.is_finite() && minutes_held > 0.0 {
+        minutes_held
+    } else {
+        0.0
+    };
 
     if !peak_profit.is_finite() || peak_profit <= 0.0 {
         return TRAIL_MIN_GAP;
@@ -93,7 +93,9 @@ pub fn trailing_gap(peak_profit: f64, minutes_held: f64) -> f64 {
 
     // Time tightening: from TRAIL_TIGHTEN_START -> TRAIL_TIGHTEN_FULL reduce gap by up to 30%
     if minutes >= TRAIL_TIGHTEN_START && TRAIL_TIGHTEN_FULL > TRAIL_TIGHTEN_START {
-        let progress = ((minutes - TRAIL_TIGHTEN_START) / (TRAIL_TIGHTEN_FULL - TRAIL_TIGHTEN_START)).clamp(0.0, 1.0);
+        let progress = ((minutes - TRAIL_TIGHTEN_START)
+            / (TRAIL_TIGHTEN_FULL - TRAIL_TIGHTEN_START))
+            .clamp(0.0, 1.0);
         let shrink = 0.30 * progress;
         gap *= 1.0 - shrink;
     }
@@ -107,7 +109,11 @@ pub fn trailing_gap(peak_profit: f64, minutes_held: f64) -> f64 {
 /// - Odds decay with holding time and current profit (diminishing returns).
 /// - Very quick, large moves get a temporary early_boost.
 pub fn continuation_odds(profit_percent: f64, minutes_held: f64) -> f64 {
-    let minutes = if minutes_held.is_finite() && minutes_held >= 0.0 { minutes_held } else { 0.0 };
+    let minutes = if minutes_held.is_finite() && minutes_held >= 0.0 {
+        minutes_held
+    } else {
+        0.0
+    };
 
     // Minimal floor - a slight edge to holding small profiting positions
     if profit_percent <= 0.0 {
@@ -121,7 +127,11 @@ pub fn continuation_odds(profit_percent: f64, minutes_held: f64) -> f64 {
     let profit_decay = (-(profit_percent / 120.0).powf(1.1)).exp();
 
     // Early boost for very fast moves
-    let early_boost = if minutes < 5.0 && profit_percent > 40.0 { 0.10 } else { 0.0 };
+    let early_boost = if minutes < 5.0 && profit_percent > 40.0 {
+        0.10
+    } else {
+        0.0
+    };
 
     (time_decay * profit_decay + early_boost).clamp(0.0, 1.0)
 }
@@ -138,7 +148,9 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         return false;
     }
 
-    let entry = position.effective_entry_price.unwrap_or(position.entry_price);
+    let entry = position
+        .effective_entry_price
+        .unwrap_or(position.entry_price);
     if !entry.is_finite() || entry <= 0.0 {
         return false;
     }
@@ -165,14 +177,20 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     let minutes_held = {
         let secs = (Utc::now() - position.entry_time).num_seconds();
         let m = (secs as f64) / 60.0;
-        if m.is_sign_negative() { 0.0 } else { m }
+        if m.is_sign_negative() {
+            0.0
+        } else {
+            m
+        }
     };
 
     // Peak profit (percentage)
     let highest = position.price_highest.max(current_price);
     let peak_profit = if entry > 0.0 {
         ((highest - entry) / entry) * 100.0
-    } else { 0.0 };
+    } else {
+        0.0
+    };
 
     // Drawdown from peak (how far we've come off the peak)
     let drawdown = peak_profit - pnl_percent;
@@ -259,7 +277,13 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                     "TRAIL_EXIT",
                     &format!(
                         "{} pnl={:.2}% peak={:.2}% drawdown={:.2}% gap={:.2}% t={:.1}m tp={:.2}",
-                        position.symbol, pnl_percent, peak_profit, drawdown, gap, minutes_held, time_pressure
+                        position.symbol,
+                        pnl_percent,
+                        peak_profit,
+                        drawdown,
+                        gap,
+                        minutes_held,
+                        time_pressure
                     ),
                 );
             }
@@ -276,7 +300,8 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     // Future gap is an estimate of how much downside we'd accept as the trailing gap if we continued.
     // Use max(pnl_percent, peak_profit) to avoid underestimating gap in certain edge cases.
-    let future_gap = trailing_gap(pnl_percent.max(peak_profit), minutes_held) * trailing_time_pressure_multiplier;
+    let future_gap = trailing_gap(pnl_percent.max(peak_profit), minutes_held)
+        * trailing_time_pressure_multiplier;
 
     // Expected edge: simplified EV proxy
     let expected_edge = odds * potential_gain - (1.0 - odds) * future_gap;
@@ -289,7 +314,12 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                 "ODDS_EXIT",
                 &format!(
                     "{} pnl={:.2}% odds={:.2} thr={:.2} edge={:.2} t={:.1}m",
-                    position.symbol, pnl_percent, odds, adaptive_odds_threshold, expected_edge, minutes_held
+                    position.symbol,
+                    pnl_percent,
+                    odds,
+                    adaptive_odds_threshold,
+                    expected_edge,
+                    minutes_held
                 ),
             );
         }

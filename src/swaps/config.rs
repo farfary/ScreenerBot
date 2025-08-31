@@ -87,7 +87,7 @@ pub const GMGN_FEE_SOL: f64 = 0.0;
 pub const GMGN_DEFAULT_SWAP_MODE: &str = "ExactIn";
 
 // =============================================================================
-// JUPITER ROUTER SPECIFIC CONFIGURATION  
+// JUPITER ROUTER SPECIFIC CONFIGURATION
 // =============================================================================
 
 /// Jupiter quote API URL

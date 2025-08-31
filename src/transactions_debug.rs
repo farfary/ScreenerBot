@@ -1,22 +1,24 @@
+use crate::logger::{log, LogTag};
+use crate::rpc::get_rpc_client;
 use crate::transactions::TransactionsManager;
 use crate::transactions_types::*;
-use crate::logger::{ log, LogTag };
-use crate::rpc::get_rpc_client;
-use tabled::{ Table, Tabled, settings::{ Style, Modify, object::Rows, Alignment } };
-use std::collections::HashMap;
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use solana_sdk::pubkey::Pubkey;
+use std::collections::HashMap;
+use tabled::{
+    settings::{object::Rows, Alignment, Modify, Style},
+    Table, Tabled,
+};
 use tokio::time::Duration;
 
 impl TransactionsManager {
-
     /// Update transaction status in database when status changes
     pub async fn update_transaction_status_in_db(
         &self,
         signature: &str,
         status: &TransactionStatus,
         success: bool,
-        error_message: Option<&str>
+        error_message: Option<&str>,
     ) -> Result<(), String> {
         if let Some(ref db) = self.transaction_database {
             let status_str = match status {
@@ -26,7 +28,8 @@ impl TransactionsManager {
                 TransactionStatus::Failed(ref msg) => "Failed",
             };
 
-            db.update_transaction_status(signature, status_str, success, error_message).await?;
+            db.update_transaction_status(signature, status_str, success, error_message)
+                .await?;
 
             if self.debug_enabled {
                 log(
@@ -36,25 +39,27 @@ impl TransactionsManager {
                         "Updated transaction {} status to {} in database",
                         &signature[..8],
                         status_str
-                    )
+                    ),
                 );
             }
         }
         Ok(())
     }
 
-    
     /// Process transaction directly from blockchain (bypassing cache)
     /// This is similar to process_transaction but forces fresh fetch from RPC
     pub async fn process_transaction_direct(
         &mut self,
-        signature: &str
+        signature: &str,
     ) -> Result<Transaction, String> {
         if self.debug_enabled {
             log(
                 LogTag::Transactions,
                 "DIRECT",
-                &format!("Processing transaction directly from blockchain: {}", &signature[..8])
+                &format!(
+                    "Processing transaction directly from blockchain: {}",
+                    &signature[..8]
+                ),
             );
         }
 
@@ -92,7 +97,9 @@ impl TransactionsManager {
         };
 
         // Fetch fresh transaction data from blockchain
-        let raw_blockchain_transaction_data = self.get_or_fetch_transaction_data(&transaction.signature).await?;
+        let raw_blockchain_transaction_data = self
+            .get_or_fetch_transaction_data(&transaction.signature)
+            .await?;
         transaction.raw_transaction_data = Some(raw_blockchain_transaction_data);
 
         // Perform comprehensive analysis
@@ -102,26 +109,26 @@ impl TransactionsManager {
             transaction.status = TransactionStatus::Finalized;
 
             // Update status in database
-            if
-                let Err(e) = self.update_transaction_status_in_db(
+            if let Err(e) = self
+                .update_transaction_status_in_db(
                     &transaction.signature,
                     &transaction.status,
                     transaction.success,
-                    transaction.error_message.as_deref()
-                ).await
+                    transaction.error_message.as_deref(),
+                )
+                .await
             {
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to update transaction status in DB: {}", e)
+                    &format!("Failed to update transaction status in DB: {}", e),
                 );
             }
         }
 
         // Persist a snapshot for finalized transactions to avoid future re-analysis
-        if
-            matches!(transaction.status, TransactionStatus::Finalized) &&
-            transaction.raw_transaction_data.is_some()
+        if matches!(transaction.status, TransactionStatus::Finalized)
+            && transaction.raw_transaction_data.is_some()
         {
             transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
         }
@@ -135,18 +142,64 @@ impl TransactionsManager {
         Ok(transaction)
     }
 
+    /// Get transaction data from cache first, fetch from blockchain only if needed
+    pub async fn get_or_fetch_transaction_data(
+        &self,
+        signature: &str,
+    ) -> Result<serde_json::Value, String> {
+        // Try database first
+        if let Some(db) = &self.transaction_database {
+            if let Some(raw) = db.get_raw_transaction(signature).await? {
+                if let Some(json_str) = raw.raw_transaction_data {
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "DB_HIT",
+                            &format!("Raw {}", &signature[..8]),
+                        );
+                    }
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                        return Ok(val);
+                    }
+                }
+            }
+        }
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "DB_MISS",
+                &format!("RPC fetch {}", &signature[..8]),
+            );
+        }
+
+        let rpc_client = get_rpc_client();
+        let tx_details = rpc_client
+            .get_transaction_details(signature)
+            .await
+            .map_err(|e| format!("RPC error: {}", e))?;
+
+        // Convert TransactionDetails to JSON for storage
+        let raw_blockchain_transaction_data = serde_json::to_value(tx_details)
+            .map_err(|e| format!("Failed to serialize transaction data: {}", e))?;
+
+        Ok(raw_blockchain_transaction_data)
+    }
+
     /// Process transaction from encoded data (used for batch processing)
     /// This is optimized for batch processing where we already have the transaction data
     async fn process_transaction_from_encoded_data(
         &mut self,
         signature: &str,
-        encoded_tx: solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta
+        encoded_tx: solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta,
     ) -> Result<Transaction, String> {
         if self.debug_enabled {
             log(
                 LogTag::Transactions,
                 "BATCH_PROCESS",
-                &format!("Processing transaction from batch data: {}", &signature[..8])
+                &format!(
+                    "Processing transaction from batch data: {}",
+                    &signature[..8]
+                ),
             );
         }
 
@@ -184,8 +237,7 @@ impl TransactionsManager {
         };
 
         // Convert encoded transaction to raw data format
-        let raw_blockchain_transaction_data = serde_json
-            ::to_value(&encoded_tx)
+        let raw_blockchain_transaction_data = serde_json::to_value(&encoded_tx)
             .map_err(|e| format!("Failed to serialize encoded transaction data: {}", e))?;
 
         transaction.raw_transaction_data = Some(raw_blockchain_transaction_data);
@@ -197,26 +249,26 @@ impl TransactionsManager {
             transaction.status = TransactionStatus::Finalized;
 
             // Update status in database
-            if
-                let Err(e) = self.update_transaction_status_in_db(
+            if let Err(e) = self
+                .update_transaction_status_in_db(
                     &transaction.signature,
                     &transaction.status,
                     transaction.success,
-                    transaction.error_message.as_deref()
-                ).await
+                    transaction.error_message.as_deref(),
+                )
+                .await
             {
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to update transaction status in DB: {}", e)
+                    &format!("Failed to update transaction status in DB: {}", e),
                 );
             }
         }
 
         // Persist a snapshot for finalized transactions to avoid future re-analysis
-        if
-            matches!(transaction.status, TransactionStatus::Finalized) &&
-            transaction.raw_transaction_data.is_some()
+        if matches!(transaction.status, TransactionStatus::Finalized)
+            && transaction.raw_transaction_data.is_some()
         {
             transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
         }
@@ -229,8 +281,8 @@ impl TransactionsManager {
 
         Ok(transaction)
     }
-    
-     /// Fetch and analyze ALL wallet transactions from blockchain (unlimited)
+
+    /// Fetch and analyze ALL wallet transactions from blockchain (unlimited)
     /// This method fetches comprehensive transaction history directly from the blockchain
     /// and processes each transaction with full analysis, bypassing the cache
     pub async fn fetch_all_wallet_transactions(&mut self) -> Result<Vec<Transaction>, String> {
@@ -240,7 +292,7 @@ impl TransactionsManager {
             &format!(
                 "Starting comprehensive blockchain fetch for wallet {} (no limit)",
                 self.wallet_pubkey
-            )
+            ),
         );
 
         // Initialize known signatures from cache so we can skip existing ones
@@ -248,7 +300,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "ERROR",
-                &format!("Failed to initialize known signatures: {}", e)
+                &format!("Failed to initialize known signatures: {}", e),
             );
         } else if self.debug_enabled {
             log(
@@ -257,7 +309,7 @@ impl TransactionsManager {
                 &format!(
                     "Cache has {} transactions; will skip these during fetch",
                     self.known_signatures.len()
-                )
+                ),
             );
         }
 
@@ -271,24 +323,25 @@ impl TransactionsManager {
         log(
             LogTag::Transactions,
             "FETCH",
-            "Fetching ALL transaction signatures from blockchain..."
+            "Fetching ALL transaction signatures from blockchain...",
         );
 
         // Fetch transaction signatures in batches until exhausted
         loop {
-            let signatures = match
-                rpc_client.get_wallet_signatures_main_rpc(
+            let signatures = match rpc_client
+                .get_wallet_signatures_main_rpc(
                     &self.wallet_pubkey,
                     batch_size,
-                    before_signature.as_deref()
-                ).await
+                    before_signature.as_deref(),
+                )
+                .await
             {
                 Ok(sigs) => sigs,
                 Err(e) => {
                     log(
                         LogTag::Transactions,
                         "ERROR",
-                        &format!("Failed to fetch signatures batch: {}", e)
+                        &format!("Failed to fetch signatures batch: {}", e),
                     );
                     break;
                 }
@@ -298,7 +351,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "INFO",
-                    "No more signatures available - completed full fetch"
+                    "No more signatures available - completed full fetch",
                 );
                 break;
             }
@@ -333,11 +386,17 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "BATCH",
-                    &format!("Processing batch of {} transactions using batch RPC call", chunk_size)
+                    &format!(
+                        "Processing batch of {} transactions using batch RPC call",
+                        chunk_size
+                    ),
                 );
 
                 // Use batch RPC call to fetch all transactions in this chunk at once
-                match rpc_client.batch_get_transaction_details_premium_rpc(chunk).await {
+                match rpc_client
+                    .batch_get_transaction_details_premium_rpc(chunk)
+                    .await
+                {
                     Ok(batch_results) => {
                         log(
                             LogTag::Transactions,
@@ -346,7 +405,7 @@ impl TransactionsManager {
                                 "✅ Batch fetched {}/{} transactions successfully",
                                 batch_results.len(),
                                 chunk_size
-                            )
+                            ),
                         );
 
                         // Process each transaction from the batch results
@@ -358,15 +417,13 @@ impl TransactionsManager {
                                     &format!(
                                         "Processing transaction from batch: {}",
                                         &signature[..8]
-                                    )
+                                    ),
                                 );
                             }
 
-                            match
-                                self.process_transaction_from_encoded_data(
-                                    &signature,
-                                    encoded_tx
-                                ).await
+                            match self
+                                .process_transaction_from_encoded_data(&signature, encoded_tx)
+                                .await
                             {
                                 Ok(transaction) => {
                                     all_transactions.push(transaction);
@@ -377,7 +434,7 @@ impl TransactionsManager {
                                             &format!(
                                                 "✅ Processed transaction: {}",
                                                 &signature[..8]
-                                            )
+                                            ),
                                         );
                                     }
                                 }
@@ -389,7 +446,7 @@ impl TransactionsManager {
                                             "Failed to process transaction {}: {}",
                                             &signature[..8],
                                             e
-                                        )
+                                        ),
                                     );
                                 }
                             }
@@ -399,14 +456,14 @@ impl TransactionsManager {
                         log(
                             LogTag::Transactions,
                             "ERROR",
-                            &format!("Failed to batch fetch {} transactions: {}", chunk_size, e)
+                            &format!("Failed to batch fetch {} transactions: {}", chunk_size, e),
                         );
 
                         // Fallback to individual processing if batch fails
                         log(
                             LogTag::Transactions,
                             "FALLBACK",
-                            "Falling back to individual transaction processing"
+                            "Falling back to individual transaction processing",
                         );
                         for signature in chunk {
                             match self.process_transaction_direct(&signature).await {
@@ -421,7 +478,7 @@ impl TransactionsManager {
                                             "Failed to process transaction {}: {}",
                                             &signature[..8],
                                             e
-                                        )
+                                        ),
                                     );
                                 }
                             }
@@ -443,7 +500,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    "Empty signatures list in startup discovery batch"
+                    "Empty signatures list in startup discovery batch",
                 );
                 break;
             }
@@ -459,7 +516,7 @@ impl TransactionsManager {
                 "Completed comprehensive fetch: {} new transactions processed | {} cached skipped",
                 all_transactions.len(),
                 total_skipped_cached
-            )
+            ),
         );
 
         Ok(all_transactions)
@@ -469,16 +526,15 @@ impl TransactionsManager {
     /// This method fetches a specific number of transactions for testing purposes
     pub async fn fetch_limited_wallet_transactions(
         &mut self,
-        max_count: usize
+        max_count: usize,
     ) -> Result<Vec<Transaction>, String> {
         log(
             LogTag::Transactions,
             "INFO",
             &format!(
                 "Starting limited blockchain fetch for wallet {} (max {} transactions)",
-                self.wallet_pubkey,
-                max_count
-            )
+                self.wallet_pubkey, max_count
+            ),
         );
 
         // Initialize known signatures from cache so we can skip existing ones
@@ -486,7 +542,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "ERROR",
-                &format!("Failed to initialize known signatures: {}", e)
+                &format!("Failed to initialize known signatures: {}", e),
             );
         } else if self.debug_enabled {
             log(
@@ -495,7 +551,7 @@ impl TransactionsManager {
                 &format!(
                     "Cache has {} transactions; will skip these during limited fetch",
                     self.known_signatures.len()
-                )
+                ),
             );
         }
 
@@ -507,23 +563,28 @@ impl TransactionsManager {
         let mut total_skipped_cached = 0usize;
         let mut total_to_process = 0usize; // count of new (not cached) we attempted to process
 
-        log(LogTag::Transactions, "FETCH", "Fetching transaction signatures from blockchain...");
+        log(
+            LogTag::Transactions,
+            "FETCH",
+            "Fetching transaction signatures from blockchain...",
+        );
 
         // Fetch transaction signatures in batches
         while total_to_process < max_count {
-            let signatures = match
-                rpc_client.get_wallet_signatures_main_rpc(
+            let signatures = match rpc_client
+                .get_wallet_signatures_main_rpc(
                     &self.wallet_pubkey,
                     batch_size,
-                    before_signature.as_deref()
-                ).await
+                    before_signature.as_deref(),
+                )
+                .await
             {
                 Ok(sigs) => sigs,
                 Err(e) => {
                     log(
                         LogTag::Transactions,
                         "ERROR",
-                        &format!("Failed to fetch signatures batch: {}", e)
+                        &format!("Failed to fetch signatures batch: {}", e),
                     );
                     break;
                 }
@@ -567,11 +628,17 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "BATCH",
-                    &format!("Processing batch of {} transactions using batch RPC call", chunk_size)
+                    &format!(
+                        "Processing batch of {} transactions using batch RPC call",
+                        chunk_size
+                    ),
                 );
 
                 // Use batch RPC call to fetch all transactions in this chunk at once
-                match rpc_client.batch_get_transaction_details_premium_rpc(chunk).await {
+                match rpc_client
+                    .batch_get_transaction_details_premium_rpc(chunk)
+                    .await
+                {
                     Ok(batch_results) => {
                         log(
                             LogTag::Transactions,
@@ -580,7 +647,7 @@ impl TransactionsManager {
                                 "✅ Batch fetched {}/{} transactions successfully",
                                 batch_results.len(),
                                 chunk_size
-                            )
+                            ),
                         );
 
                         // Process each transaction from the batch results
@@ -592,15 +659,13 @@ impl TransactionsManager {
                                     &format!(
                                         "Processing transaction from batch: {}",
                                         &signature[..8]
-                                    )
+                                    ),
                                 );
                             }
 
-                            match
-                                self.process_transaction_from_encoded_data(
-                                    &signature,
-                                    encoded_tx
-                                ).await
+                            match self
+                                .process_transaction_from_encoded_data(&signature, encoded_tx)
+                                .await
                             {
                                 Ok(transaction) => {
                                     all_transactions.push(transaction);
@@ -611,7 +676,7 @@ impl TransactionsManager {
                                             &format!(
                                                 "✅ Processed transaction: {}",
                                                 &signature[..8]
-                                            )
+                                            ),
                                         );
                                     }
                                 }
@@ -623,7 +688,7 @@ impl TransactionsManager {
                                             "Failed to process transaction {}: {}",
                                             &signature[..8],
                                             e
-                                        )
+                                        ),
                                     );
                                 }
                             }
@@ -633,14 +698,14 @@ impl TransactionsManager {
                         log(
                             LogTag::Transactions,
                             "ERROR",
-                            &format!("Failed to batch fetch {} transactions: {}", chunk_size, e)
+                            &format!("Failed to batch fetch {} transactions: {}", chunk_size, e),
                         );
 
                         // Fallback to individual processing if batch fails
                         log(
                             LogTag::Transactions,
                             "FALLBACK",
-                            "Falling back to individual transaction processing"
+                            "Falling back to individual transaction processing",
                         );
                         for signature in chunk {
                             match self.process_transaction_direct(&signature).await {
@@ -655,7 +720,7 @@ impl TransactionsManager {
                                             "Failed to process transaction {}: {}",
                                             &signature[..8],
                                             e
-                                        )
+                                        ),
                                     );
                                 }
                             }
@@ -674,7 +739,11 @@ impl TransactionsManager {
                 before_signature = Some(last_sig.signature.clone());
             } else {
                 // Empty signatures list - should not happen but handle safely
-                log(LogTag::Transactions, "WARN", "Empty signatures list in gap backfill batch");
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    "Empty signatures list in gap backfill batch",
+                );
                 break;
             }
 
@@ -689,7 +758,7 @@ impl TransactionsManager {
                 "Completed limited fetch: {} new transactions processed | {} cached skipped",
                 all_transactions.len(),
                 total_skipped_cached
-            )
+            ),
         );
 
         Ok(all_transactions)
@@ -707,7 +776,7 @@ impl TransactionsManager {
         log(
             LogTag::Transactions,
             "TABLE",
-            "=== COMPREHENSIVE SWAP ANALYSIS WITH SHORTENED SIGNATURES ==="
+            "=== COMPREHENSIVE SWAP ANALYSIS WITH SHORTENED SIGNATURES ===",
         );
 
         // Convert swaps to display rows with full signatures
@@ -851,7 +920,11 @@ impl TransactionsManager {
             return;
         }
 
-        log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE SWAP ANALYSIS ===");
+        log(
+            LogTag::Transactions,
+            "TABLE",
+            "=== COMPREHENSIVE SWAP ANALYSIS ===",
+        );
 
         // Convert swaps to display rows
         let mut display_rows: Vec<SwapDisplayRow> = Vec::new();
@@ -991,7 +1064,11 @@ impl TransactionsManager {
             return;
         }
 
-        log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE POSITION ANALYSIS ===");
+        log(
+            LogTag::Transactions,
+            "TABLE",
+            "=== COMPREHENSIVE POSITION ANALYSIS ===",
+        );
 
         // Print header
         println!("=== COMPREHENSIVE POSITION ANALYSIS ===");
@@ -1064,7 +1141,11 @@ impl TransactionsManager {
                 token: position.token_symbol[..(15).min(position.token_symbol.len())].to_string(),
                 status: status_display,
                 opened: if let Some(timestamp) = position.first_buy_timestamp {
-                    format!("{} {}", timestamp.format("%m-%d"), timestamp.format("%H:%M"))
+                    format!(
+                        "{} {}",
+                        timestamp.format("%m-%d"),
+                        timestamp.format("%H:%M")
+                    )
                 } else {
                     "N/A".to_string()
                 },
@@ -1072,14 +1153,16 @@ impl TransactionsManager {
                     PositionStatus::Closed | PositionStatus::Oversold => {
                         // For closed positions, use the last activity timestamp (when position was actually closed)
                         if let Some(timestamp) = position.last_activity_timestamp {
-                            format!("{} {}", timestamp.format("%m-%d"), timestamp.format("%H:%M"))
+                            format!(
+                                "{} {}",
+                                timestamp.format("%m-%d"),
+                                timestamp.format("%H:%M")
+                            )
                         } else {
                             "N/A".to_string()
                         }
                     }
-                    PositionStatus::Open | PositionStatus::PartiallyReduced => {
-                        "Open".to_string()
-                    }
+                    PositionStatus::Open | PositionStatus::PartiallyReduced => "Open".to_string(),
                 },
                 buys: bought_display,
                 sold: sold_display,
@@ -1150,7 +1233,11 @@ impl TransactionsManager {
                 net_pnl_display
             )
         );
-        log(LogTag::Transactions, "TABLE", "=== END POSITION ANALYSIS ===");
+        log(
+            LogTag::Transactions,
+            "TABLE",
+            "=== END POSITION ANALYSIS ===",
+        );
     }
 
     /// Analyze and display position lifecycle with PnL calculations
@@ -1176,19 +1263,20 @@ impl TransactionsManager {
 
         // Sort swaps by slot for proper chronological processing
         let mut sorted_swaps = swaps.to_vec();
-        sorted_swaps.sort_by(|a, b| {
-            match (a.slot, b.slot) {
-                (Some(a_slot), Some(b_slot)) => a_slot.cmp(&b_slot),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => a.timestamp.cmp(&b.timestamp),
-            }
+        sorted_swaps.sort_by(|a, b| match (a.slot, b.slot) {
+            (Some(a_slot), Some(b_slot)) => a_slot.cmp(&b_slot),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => a.timestamp.cmp(&b.timestamp),
         });
 
         log(
             LogTag::Transactions,
             "POSITION_CALC",
-            &format!("Processing {} swaps for position analysis", sorted_swaps.len())
+            &format!(
+                "Processing {} swaps for position analysis",
+                sorted_swaps.len()
+            ),
         );
 
         for swap in &sorted_swaps {
@@ -1197,25 +1285,26 @@ impl TransactionsManager {
                 continue;
             }
 
-            let position_state = positions.entry(swap.token_mint.clone()).or_insert_with(|| {
-                PositionState {
-                    token_mint: swap.token_mint.clone(),
-                    token_symbol: swap.token_symbol.clone(),
-                    total_tokens: 0.0,
-                    total_sol_invested: 0.0,
-                    total_sol_received: 0.0,
-                    total_fees: 0.0,
-                    total_ata_rents: 0.0,
-                    buy_count: 0,
-                    sell_count: 0,
-                    first_buy_slot: None,
-                    last_activity_slot: None,
-                    first_buy_timestamp: None,
-                    last_activity_timestamp: None,
-                    average_buy_price: 0.0,
-                    transactions: Vec::new(),
-                }
-            });
+            let position_state =
+                positions
+                    .entry(swap.token_mint.clone())
+                    .or_insert_with(|| PositionState {
+                        token_mint: swap.token_mint.clone(),
+                        token_symbol: swap.token_symbol.clone(),
+                        total_tokens: 0.0,
+                        total_sol_invested: 0.0,
+                        total_sol_received: 0.0,
+                        total_fees: 0.0,
+                        total_ata_rents: 0.0,
+                        buy_count: 0,
+                        sell_count: 0,
+                        first_buy_slot: None,
+                        last_activity_slot: None,
+                        first_buy_timestamp: None,
+                        last_activity_timestamp: None,
+                        average_buy_price: 0.0,
+                        transactions: Vec::new(),
+                    });
 
             // Track transaction
             position_state.transactions.push(PositionTransaction {
@@ -1258,9 +1347,8 @@ impl TransactionsManager {
                                 "DEBUG_POSITION",
                                 &format!(
                                     "New position opened for {} at {}",
-                                    swap.token_symbol,
-                                    swap.timestamp
-                                )
+                                    swap.token_symbol, swap.timestamp
+                                ),
                             );
                         }
                     }
@@ -1323,7 +1411,7 @@ impl TransactionsManager {
                             &format!(
                                 "Position completed for {} - now managed by positions manager",
                                 swap.token_symbol
-                            )
+                            ),
                         );
 
                         // Reset the position state for potential future reopening
@@ -1342,7 +1430,8 @@ impl TransactionsManager {
                             first_buy_timestamp: None,
                             last_activity_timestamp: Some(swap.timestamp),
                             average_buy_price: 0.0,
-                            transactions: if let Some(last_tx) = position_state.transactions.last() {
+                            transactions: if let Some(last_tx) = position_state.transactions.last()
+                            {
                                 vec![last_tx.clone()]
                             } else {
                                 Vec::new() // Handle empty transactions list safely
@@ -1367,7 +1456,7 @@ impl TransactionsManager {
                     &format!(
                         "Open position for {} - now managed by positions manager",
                         position_state.token_symbol
-                    )
+                    ),
                 );
             }
         }
@@ -1377,7 +1466,7 @@ impl TransactionsManager {
         log(
             LogTag::Transactions,
             "DEPRECATED",
-            "Position analysis moved to positions manager - returning empty result"
+            "Position analysis moved to positions manager - returning empty result",
         );
 
         Vec::new() // Return empty vector as positions are now managed elsewhere
@@ -1386,11 +1475,27 @@ impl TransactionsManager {
     /// Get transaction summary for logging
     pub fn get_transaction_summary(&self, transaction: &Transaction) -> String {
         match &transaction.transaction_type {
-            TransactionType::SwapSolToToken { token_mint, sol_amount, token_amount, router } => {
-                format!("BUY {} SOL → {} tokens via {}", sol_amount, token_amount, router)
+            TransactionType::SwapSolToToken {
+                token_mint,
+                sol_amount,
+                token_amount,
+                router,
+            } => {
+                format!(
+                    "BUY {} SOL → {} tokens via {}",
+                    sol_amount, token_amount, router
+                )
             }
-            TransactionType::SwapTokenToSol { token_mint, token_amount, sol_amount, router } => {
-                format!("SELL {} tokens → {} SOL via {}", token_amount, sol_amount, router)
+            TransactionType::SwapTokenToSol {
+                token_mint,
+                token_amount,
+                sol_amount,
+                router,
+            } => {
+                format!(
+                    "SELL {} tokens → {} SOL via {}",
+                    token_amount, sol_amount, router
+                )
             }
             TransactionType::SwapTokenToToken {
                 from_mint,
@@ -1414,10 +1519,19 @@ impl TransactionsManager {
             TransactionType::TokenTransfer { mint, amount, .. } => {
                 format!("Token Transfer: {} of {}", amount, &mint[..8])
             }
-            TransactionType::AtaClose { recovered_sol, token_mint } => {
-                format!("ATA Close: Recovered {} SOL from {}", recovered_sol, &token_mint[..8])
+            TransactionType::AtaClose {
+                recovered_sol,
+                token_mint,
+            } => {
+                format!(
+                    "ATA Close: Recovered {} SOL from {}",
+                    recovered_sol,
+                    &token_mint[..8]
+                )
             }
-            TransactionType::Other { description, .. } => { format!("Other: {}", description) }
+            TransactionType::Other { description, .. } => {
+                format!("Other: {}", description)
+            }
             TransactionType::Unknown => "Unknown Transaction".to_string(),
         }
     }

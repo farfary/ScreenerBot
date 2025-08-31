@@ -74,8 +74,6 @@ impl TransactionsManager {
         &self.known_signatures
     }
 
-
-
     /// Store deferred retry using database (if available) or fallback to HashMap
     pub async fn store_deferred_retry(&mut self, retry: &DeferredRetry) -> Result<(), String> {
         if let Some(ref db) = self.transaction_database {
@@ -84,11 +82,13 @@ impl TransactionsManager {
                 &retry.next_retry_at,
                 retry.remaining_attempts,
                 retry.current_delay_secs,
-                retry.last_error.as_deref()
-            ).await?;
+                retry.last_error.as_deref(),
+            )
+            .await?;
         } else {
             // Fallback to in-memory HashMap
-            self.deferred_retries.insert(retry.signature.clone(), retry.clone());
+            self.deferred_retries
+                .insert(retry.signature.clone(), retry.clone());
         }
         Ok(())
     }
@@ -117,7 +117,8 @@ impl TransactionsManager {
         } else {
             // Fallback to in-memory HashMap - filter for ready retries
             let now = Utc::now();
-            let ready_retries: Vec<DeferredRetry> = self.deferred_retries
+            let ready_retries: Vec<DeferredRetry> = self
+                .deferred_retries
                 .values()
                 .filter(|retry| retry.next_retry_at <= now && retry.remaining_attempts > 0)
                 .cloned()
@@ -163,10 +164,15 @@ impl TransactionsManager {
         } else {
             // Cleanup in-memory HashMap - simple size-based cleanup
             if self.deferred_retries.len() > 1000 {
-                let expired_signatures: Vec<String> = self.deferred_retries
+                let expired_signatures: Vec<String> = self
+                    .deferred_retries
                     .iter()
                     .filter_map(|(signature, retry)| {
-                        if retry.remaining_attempts <= 0 { Some(signature.clone()) } else { None }
+                        if retry.remaining_attempts <= 0 {
+                            Some(signature.clone())
+                        } else {
+                            None
+                        }
                     })
                     .take(100) // Remove up to 100 at a time
                     .collect();
@@ -182,7 +188,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "CLEANUP",
-                &format!("Cleaned up {} expired deferred retries", cleaned_count)
+                &format!("Cleaned up {} expired deferred retries", cleaned_count),
             );
         }
 
@@ -190,7 +196,10 @@ impl TransactionsManager {
     }
 
     /// Store processed transaction analysis in database (if available)
-    pub async fn cache_processed_transaction(&self, transaction: &Transaction) -> Result<(), String> {
+    pub async fn cache_processed_transaction(
+        &self,
+        transaction: &Transaction,
+    ) -> Result<(), String> {
         if let Some(ref db) = self.transaction_database {
             // Use the new store_full_transaction_analysis method for complete data
             db.store_full_transaction_analysis(transaction).await?;
@@ -202,7 +211,7 @@ impl TransactionsManager {
                     &format!(
                         "Cached processed transaction analysis {} to database",
                         &transaction.signature[..8]
-                    )
+                    ),
                 );
             }
         }
@@ -210,32 +219,34 @@ impl TransactionsManager {
         Ok(())
     }
 
-
     /// Save failed transaction state to database when processing fails
     pub async fn save_failed_transaction_state(
         &self,
         signature: &str,
-        error: &str
+        error: &str,
     ) -> Result<(), String> {
         if let Some(ref db) = self.transaction_database {
             // Store minimal raw transaction record with failed status
             let now = Utc::now();
 
             // Try to store raw transaction record if it doesn't exist
-            let raw_result = db.store_raw_transaction(
-                signature,
-                None, // no slot
-                None, // no block_time
-                &now,
-                "Failed",
-                false, // not successful
-                Some(error),
-                None // no raw data
-            ).await;
+            let raw_result = db
+                .store_raw_transaction(
+                    signature,
+                    None, // no slot
+                    None, // no block_time
+                    &now,
+                    "Failed",
+                    false, // not successful
+                    Some(error),
+                    None, // no raw data
+                )
+                .await;
 
             if raw_result.is_err() {
                 // Raw transaction might already exist, try to update status only
-                db.update_transaction_status(signature, "Failed", false, Some(error)).await?;
+                db.update_transaction_status(signature, "Failed", false, Some(error))
+                    .await?;
             }
 
             if self.debug_enabled {
@@ -244,9 +255,8 @@ impl TransactionsManager {
                     "FAILED_STATE_SAVED",
                     &format!(
                         "Saved failed transaction state for {} to database: {}",
-                        signature,
-                        error
-                    )
+                        signature, error
+                    ),
                 );
             }
         }
@@ -264,14 +274,15 @@ impl TransactionsManager {
                 &format!(
                     "Checking for new transactions (known: {}, using latest 50)",
                     self.get_known_signatures_count().await
-                )
+                ),
             );
         }
 
         // Get recent signatures from wallet
         // IMPORTANT: Always fetch most recent page (no 'before' cursor) to avoid missing new txs
         let signatures = rpc_client
-            .get_wallet_signatures_main_rpc(&self.wallet_pubkey, 50, None).await
+            .get_wallet_signatures_main_rpc(&self.wallet_pubkey, 50, None)
+            .await
             .map_err(|e| format!("Failed to fetch wallet signatures: {}", e))?;
 
         let mut new_signatures = Vec::new();
@@ -298,7 +309,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "NEW",
-                    &format!("Found {} new transactions to process", new_signatures.len())
+                    &format!("Found {} new transactions to process", new_signatures.len()),
                 );
             }
         }
@@ -312,7 +323,7 @@ impl TransactionsManager {
         log(
             LogTag::Transactions,
             "GAP_DETECTION",
-            "🕵️ Starting periodic gap detection and backfill"
+            "🕵️ Starting periodic gap detection and backfill",
         );
 
         let rpc_client = get_rpc_client();
@@ -328,7 +339,10 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "GAP_DETECTION",
-                    &format!("📦 Checking gap detection batch {} (1000 signatures)", batch_number)
+                    &format!(
+                        "📦 Checking gap detection batch {} (1000 signatures)",
+                        batch_number
+                    ),
                 );
             }
 
@@ -337,18 +351,22 @@ impl TransactionsManager {
                 .get_wallet_signatures_main_rpc(
                     &self.wallet_pubkey,
                     1000,
-                    before_signature.as_deref()
-                ).await
-                .map_err(|e|
-                    format!("Failed to fetch gap detection batch {}: {}", batch_number, e)
-                )?;
+                    before_signature.as_deref(),
+                )
+                .await
+                .map_err(|e| {
+                    format!(
+                        "Failed to fetch gap detection batch {}: {}",
+                        batch_number, e
+                    )
+                })?;
 
             if signatures.is_empty() {
                 if self.debug_enabled {
                     log(
                         LogTag::Transactions,
                         "GAP_DETECTION",
-                        "📭 No more signatures found - gap detection complete"
+                        "📭 No more signatures found - gap detection complete",
                     );
                 }
                 break;
@@ -379,11 +397,8 @@ impl TransactionsManager {
                         log(LogTag::Transactions, "WARN", &error_msg);
 
                         // Save failed state to database for gap-fill processing
-                        if
-                            let Err(db_err) = self.save_failed_transaction_state(
-                                &signature,
-                                &e
-                            ).await
+                        if let Err(db_err) =
+                            self.save_failed_transaction_state(&signature, &e).await
                         {
                             log(
                                 LogTag::Transactions,
@@ -392,7 +407,7 @@ impl TransactionsManager {
                                     "Failed to save gap-fill transaction failure state for {}: {}",
                                     &signature[..8],
                                     db_err
-                                )
+                                ),
                             );
                         }
                     }
@@ -406,7 +421,10 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "GAP_DETECTION",
-                    &format!("📊 Batch {} complete: {} gaps filled", batch_number, new_in_batch)
+                    &format!(
+                        "📊 Batch {} complete: {} gaps filled",
+                        batch_number, new_in_batch
+                    ),
                 );
             }
 
@@ -416,7 +434,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "GAP_DETECTION",
-                    "✅ No more gaps found - backfill complete"
+                    "✅ No more gaps found - backfill complete",
                 );
                 break;
             } else if batch_number >= 5 {
@@ -424,7 +442,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "GAP_DETECTION",
-                    "⚠️ Reached safety limit of 5 batches - stopping gap detection"
+                    "⚠️ Reached safety limit of 5 batches - stopping gap detection",
                 );
                 break;
             }
@@ -437,7 +455,10 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "GAP_DETECTION",
-                &format!("🔧 Gap detection complete: backfilled {} missing transactions", total_backfilled)
+                &format!(
+                    "🔧 Gap detection complete: backfilled {} missing transactions",
+                    total_backfilled
+                ),
             );
 
             // Update statistics
@@ -446,7 +467,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "GAP_DETECTION",
-                "✨ No gaps found - transaction history is complete"
+                "✨ No gaps found - transaction history is complete",
             );
         }
 

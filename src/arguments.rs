@@ -9,12 +9,12 @@
 /// - Unified argument parsing utilities
 /// - Support for both binary-specific and main application arguments
 use once_cell::sync::Lazy;
-use std::sync::Mutex;
 use std::env;
+use std::sync::Mutex;
 
 /// Global command-line arguments storage
 /// Thread-safe singleton that stores arguments for access throughout the application
-pub static CMD_ARGS: Lazy<Mutex<Vec<String>>> = Lazy::new(|| { Mutex::new(env::args().collect()) });
+pub static CMD_ARGS: Lazy<Mutex<Vec<String>>> = Lazy::new(|| Mutex::new(env::args().collect()));
 
 /// Sets the global command-line arguments
 /// Used by binaries and tests to override the default env::args() collection
@@ -38,9 +38,7 @@ pub fn get_cmd_args() -> Vec<String> {
 
 /// Checks if a specific argument is present in the command line
 pub fn has_arg(arg: &str) -> bool {
-    get_cmd_args()
-        .iter()
-        .any(|a| a == arg)
+    get_cmd_args().iter().any(|a| a == arg)
 }
 
 /// Gets the value of a command-line argument that follows a flag
@@ -251,26 +249,26 @@ pub fn print_help() {
 
 /// Checks if any debug mode is enabled
 pub fn is_any_debug_enabled() -> bool {
-    is_debug_filtering_enabled() ||
-        is_debug_profit_enabled() ||
-        is_debug_pool_prices_enabled() ||
-        is_debug_trader_enabled() ||
-        is_debug_api_enabled() ||
-        is_debug_monitor_enabled() ||
-        is_debug_discovery_enabled() ||
-        is_debug_price_service_enabled() ||
-        is_debug_rugcheck_enabled() ||
-        is_debug_entry_enabled() ||
-        is_debug_ohlcv_enabled() ||
-        is_debug_wallet_enabled() ||
-        is_debug_swaps_enabled() ||
-        is_debug_decimals_enabled() ||
-        is_debug_summary_enabled() ||
-        is_debug_summary_logging_enabled() ||
-        is_debug_transactions_enabled() ||
-        is_debug_rpc_enabled() ||
-        is_debug_positions_enabled() ||
-        is_debug_ata_enabled()
+    is_debug_filtering_enabled()
+        || is_debug_profit_enabled()
+        || is_debug_pool_prices_enabled()
+        || is_debug_trader_enabled()
+        || is_debug_api_enabled()
+        || is_debug_monitor_enabled()
+        || is_debug_discovery_enabled()
+        || is_debug_price_service_enabled()
+        || is_debug_rugcheck_enabled()
+        || is_debug_entry_enabled()
+        || is_debug_ohlcv_enabled()
+        || is_debug_wallet_enabled()
+        || is_debug_swaps_enabled()
+        || is_debug_decimals_enabled()
+        || is_debug_summary_enabled()
+        || is_debug_summary_logging_enabled()
+        || is_debug_transactions_enabled()
+        || is_debug_rpc_enabled()
+        || is_debug_positions_enabled()
+        || is_debug_ata_enabled()
 }
 
 /// Gets a list of all enabled debug modes
@@ -418,7 +416,7 @@ mod tests {
             "screenerbot".to_string(),
             "--debug-trader".to_string(),
             "--mint".to_string(),
-            "test_mint_address".to_string()
+            "test_mint_address".to_string(),
         ];
 
         set_cmd_args(test_args.clone());
@@ -429,7 +427,10 @@ mod tests {
 
     #[test]
     fn test_has_arg() {
-        set_cmd_args(vec!["screenerbot".to_string(), "--debug-trader".to_string()]);
+        set_cmd_args(vec![
+            "screenerbot".to_string(),
+            "--debug-trader".to_string(),
+        ]);
 
         assert!(has_arg("--debug-trader"));
         assert!(!has_arg("--debug-profit"));
@@ -437,25 +438,28 @@ mod tests {
 
     #[test]
     fn test_get_arg_value() {
-        set_cmd_args(
-            vec!["screenerbot".to_string(), "--mint".to_string(), "test_mint_address".to_string()]
-        );
+        set_cmd_args(vec![
+            "screenerbot".to_string(),
+            "--mint".to_string(),
+            "test_mint_address".to_string(),
+        ]);
 
-        assert_eq!(get_arg_value("--mint"), Some("test_mint_address".to_string()));
+        assert_eq!(
+            get_arg_value("--mint"),
+            Some("test_mint_address".to_string())
+        );
         assert_eq!(get_arg_value("--symbol"), None);
     }
 
     #[test]
     fn test_debug_flags() {
-        set_cmd_args(
-            vec![
-                "screenerbot".to_string(),
-                "--debug-trader".to_string(),
-                "--debug-profit".to_string(),
-                "--debug-summary-logging".to_string(),
-                "--dry-run".to_string()
-            ]
-        );
+        set_cmd_args(vec![
+            "screenerbot".to_string(),
+            "--debug-trader".to_string(),
+            "--debug-profit".to_string(),
+            "--debug-summary-logging".to_string(),
+            "--dry-run".to_string(),
+        ]);
 
         assert!(is_debug_trader_enabled());
         assert!(is_debug_profit_enabled());
@@ -474,14 +478,12 @@ mod tests {
 
     #[test]
     fn test_patterns() {
-        set_cmd_args(
-            vec![
-                "screenerbot".to_string(),
-                "--help".to_string(),
-                "--duration".to_string(),
-                "300".to_string()
-            ]
-        );
+        set_cmd_args(vec![
+            "screenerbot".to_string(),
+            "--help".to_string(),
+            "--duration".to_string(),
+            "300".to_string(),
+        ]);
 
         assert!(patterns::is_help_requested());
         assert_eq!(patterns::get_duration_seconds(), Some(300));

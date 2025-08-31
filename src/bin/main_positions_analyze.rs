@@ -1,3 +1,6 @@
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use clap::{Arg, Command};
+use serde::{Deserialize, Serialize};
 /// Smart Positions Analysis Tool
 ///
 /// This tool provides comprehensive analysis of trading positions including:
@@ -11,26 +14,20 @@
 /// - Token similarity scoring based on multiple attributes
 /// - Pattern recognition for profitable trades
 /// - Risk assessment and recommendation generation
-
 use std::collections::HashMap;
-use chrono::{ DateTime, Utc, Duration as ChronoDuration };
-use serde::{ Serialize, Deserialize };
-use clap::{ Arg, Command };
 use std::sync::Arc;
 use tokio::sync::Notify;
 
 use screenerbot::{
-    positions::{ get_open_positions, get_closed_positions },
-    positions_types::Position,
-    positions_lib::calculate_position_pnl,
-    positions_db::{ get_token_snapshots, initialize_positions_database },
-    tokens::{
-        rugcheck::RugcheckResponse,
-        get_global_rugcheck_service,
-        initialize_global_rugcheck_service,
-        cache::TokenDatabase,
-    },
     logger::init_file_logging,
+    positions::{get_closed_positions, get_open_positions},
+    positions_db::{get_token_snapshots, initialize_positions_database},
+    positions_lib::calculate_position_pnl,
+    positions_types::Position,
+    tokens::{
+        cache::TokenDatabase, get_global_rugcheck_service, initialize_global_rugcheck_service,
+        rugcheck::RugcheckResponse,
+    },
 };
 
 /// Safe wrapper for rugcheck data retrieval
@@ -51,7 +48,7 @@ fn calculate_transaction_activity_score(
     txns_h24_total: Option<i64>,
     txns_h6_total: Option<i64>,
     txns_h1_total: Option<i64>,
-    buy_sell_ratio_24h: Option<f64>
+    buy_sell_ratio_24h: Option<f64>,
 ) -> Option<f64> {
     let mut score = 0.0;
     let mut factors = 0;
@@ -59,11 +56,11 @@ fn calculate_transaction_activity_score(
     // Factor 1: 24h transaction volume (0-40 points)
     if let Some(txns_24h) = txns_h24_total {
         let activity_score = match txns_24h {
-            0..=10 => 0.0, // Very low activity
-            11..=50 => 10.0, // Low activity
-            51..=200 => 25.0, // Moderate activity
+            0..=10 => 0.0,      // Very low activity
+            11..=50 => 10.0,    // Low activity
+            51..=200 => 25.0,   // Moderate activity
             201..=1000 => 35.0, // High activity
-            _ => 40.0, // Very high activity
+            _ => 40.0,          // Very high activity
         };
         score += activity_score;
         factors += 1;
@@ -85,12 +82,8 @@ fn calculate_transaction_activity_score(
     }
 
     // Factor 3: Recent activity trend (0-20 points)
-    if
-        let (Some(txns_1h), Some(_txns_6h), Some(txns_24h)) = (
-            txns_h1_total,
-            txns_h6_total,
-            txns_h24_total,
-        )
+    if let (Some(txns_1h), Some(_txns_6h), Some(txns_24h)) =
+        (txns_h1_total, txns_h6_total, txns_h24_total)
     {
         let trend_score = if txns_24h == 0 {
             0.0
@@ -265,9 +258,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize rugcheck service for accessing rugcheck data
     if get_global_rugcheck_service().is_none() {
         println!("🔧 Initializing rugcheck service for token analysis...");
-        let database = TokenDatabase::new().map_err(|e|
-            format!("Failed to initialize token database: {}", e)
-        )?;
+        let database = TokenDatabase::new()
+            .map_err(|e| format!("Failed to initialize token database: {}", e))?;
         let shutdown_notify = Arc::new(Notify::new());
 
         if let Err(e) = initialize_global_rugcheck_service(database, shutdown_notify).await {
@@ -286,40 +278,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Arg::new("detailed")
                 .long("detailed")
                 .help("Show detailed analysis including individual position breakdowns")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             Arg::new("similarity-threshold")
                 .long("similarity-threshold")
                 .help("Minimum similarity score for token comparison (0.0-1.0)")
                 .value_name("THRESHOLD")
-                .default_value("0.7")
+                .default_value("0.7"),
         )
         .arg(
             Arg::new("min-positions")
                 .long("min-positions")
                 .help("Minimum positions required for pattern analysis")
                 .value_name("COUNT")
-                .default_value("3")
+                .default_value("3"),
         )
         .arg(
             Arg::new("export-json")
                 .long("export-json")
                 .help("Export analysis results to JSON file")
-                .value_name("FILE")
+                .value_name("FILE"),
         )
         .arg(
             Arg::new("top-similar")
                 .long("top-similar")
                 .help("Number of top similar token pairs to show")
                 .value_name("COUNT")
-                .default_value("10")
+                .default_value("10"),
         )
         .arg(
             Arg::new("profitable-only")
                 .long("profitable-only")
                 .help("Only analyze profitable positions")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .get_matches();
 
@@ -328,7 +320,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get_one::<String>("similarity-threshold")
         .unwrap()
         .parse()?;
-    let min_positions: usize = matches.get_one::<String>("min-positions").unwrap().parse()?;
+    let min_positions: usize = matches
+        .get_one::<String>("min-positions")
+        .unwrap()
+        .parse()?;
     let export_json = matches.get_one::<String>("export-json");
     let top_similar: usize = matches.get_one::<String>("top-similar").unwrap().parse()?;
     let profitable_only = matches.get_flag("profitable-only");
@@ -352,11 +347,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Find similar tokens
     println!("\n🔗 Finding similar profitable tokens...");
-    let similarities = find_similar_tokens(
-        &token_characteristics,
-        similarity_threshold,
-        top_similar
-    );
+    let similarities =
+        find_similar_tokens(&token_characteristics, similarity_threshold, top_similar);
     print_token_similarities(&similarities);
 
     // Identify profitable patterns
@@ -376,7 +368,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &similarities,
             &patterns,
             &recommendations,
-            export_file
+            export_file,
         )?;
         println!("\n📁 Analysis exported to: {}", export_file);
     }
@@ -386,7 +378,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Analyze all positions and generate comprehensive statistics
 async fn analyze_positions(
-    profitable_only: bool
+    profitable_only: bool,
 ) -> Result<PositionAnalysis, Box<dyn std::error::Error>> {
     let open_positions = get_open_positions().await;
     let closed_positions = get_closed_positions().await;
@@ -397,9 +389,8 @@ async fn analyze_positions(
 
     if profitable_only {
         all_positions.retain(|pos| {
-            let (pnl, _) = futures::executor::block_on(async {
-                calculate_position_pnl(pos, None).await
-            });
+            let (pnl, _) =
+                futures::executor::block_on(async { calculate_position_pnl(pos, None).await });
             pnl > 0.0
         });
     }
@@ -426,7 +417,12 @@ async fn analyze_positions(
         total_fees += entry_fee + exit_fee;
 
         let duration_hours = if let Some(exit_time) = position.exit_time {
-            Some((exit_time.signed_duration_since(position.entry_time).num_minutes() as f64) / 60.0)
+            Some(
+                (exit_time
+                    .signed_duration_since(position.entry_time)
+                    .num_minutes() as f64)
+                    / 60.0,
+            )
         } else {
             None
         };
@@ -536,7 +532,7 @@ async fn calculate_time_based_performance(positions: &[Position]) -> Vec<TimeBas
     let periods = vec![
         ("last_24h", ChronoDuration::hours(24)),
         ("last_7d", ChronoDuration::days(7)),
-        ("last_30d", ChronoDuration::days(30))
+        ("last_30d", ChronoDuration::days(30)),
     ];
 
     let mut results = Vec::new();
@@ -566,9 +562,10 @@ async fn calculate_time_based_performance(positions: &[Position]) -> Vec<TimeBas
             }
 
             if let Some(exit_time) = position.exit_time {
-                let duration =
-                    (exit_time.signed_duration_since(position.entry_time).num_minutes() as f64) /
-                    60.0;
+                let duration = (exit_time
+                    .signed_duration_since(position.entry_time)
+                    .num_minutes() as f64)
+                    / 60.0;
                 durations_sum += duration;
                 duration_count += 1;
             }
@@ -595,7 +592,7 @@ async fn calculate_time_based_performance(positions: &[Position]) -> Vec<TimeBas
 
 /// Collect comprehensive characteristics for all tokens
 async fn collect_token_characteristics(
-    profitable_only: bool
+    profitable_only: bool,
 ) -> Result<Vec<TokenCharacteristics>, Box<dyn std::error::Error>> {
     let open_positions = get_open_positions().await;
     let closed_positions = get_closed_positions().await;
@@ -626,17 +623,19 @@ async fn collect_token_characteristics(
         let rugcheck_data = get_token_rugcheck_data_safe(&position.mint).await;
 
         let duration_hours = if let Some(exit_time) = position.exit_time {
-            Some((exit_time.signed_duration_since(position.entry_time).num_minutes() as f64) / 60.0)
+            Some(
+                (exit_time
+                    .signed_duration_since(position.entry_time)
+                    .num_minutes() as f64)
+                    / 60.0,
+            )
         } else {
             None
         };
 
         let creator_balance_pct = if let Some(rugcheck) = &rugcheck_data {
-            if
-                let (Some(creator_balance_str), Some(total_holders)) = (
-                    &rugcheck.creator_balance,
-                    rugcheck.total_holders,
-                )
+            if let (Some(creator_balance_str), Some(total_holders)) =
+                (&rugcheck.creator_balance, rugcheck.total_holders)
             {
                 if let Ok(creator_balance) = creator_balance_str.parse::<f64>() {
                     Some((creator_balance / (total_holders as f64)) * 100.0)
@@ -651,18 +650,18 @@ async fn collect_token_characteristics(
         };
 
         // Calculate transaction metrics from snapshots
-        let (txns_h24_buys, txns_h24_sells, txns_h24_total) = if
-            let Some(snapshot) = opening_snapshot
-        {
-            let buys = snapshot.txns_h24_buys.unwrap_or(0);
-            let sells = snapshot.txns_h24_sells.unwrap_or(0);
-            let total = buys + sells;
-            (Some(buys), Some(sells), Some(total))
-        } else {
-            (None, None, None)
-        };
+        let (txns_h24_buys, txns_h24_sells, txns_h24_total) =
+            if let Some(snapshot) = opening_snapshot {
+                let buys = snapshot.txns_h24_buys.unwrap_or(0);
+                let sells = snapshot.txns_h24_sells.unwrap_or(0);
+                let total = buys + sells;
+                (Some(buys), Some(sells), Some(total))
+            } else {
+                (None, None, None)
+            };
 
-        let (txns_h6_buys, txns_h6_sells, txns_h6_total) = if let Some(snapshot) = opening_snapshot {
+        let (txns_h6_buys, txns_h6_sells, txns_h6_total) = if let Some(snapshot) = opening_snapshot
+        {
             let buys = snapshot.txns_h6_buys.unwrap_or(0);
             let sells = snapshot.txns_h6_sells.unwrap_or(0);
             let total = buys + sells;
@@ -671,7 +670,8 @@ async fn collect_token_characteristics(
             (None, None, None)
         };
 
-        let (txns_h1_buys, txns_h1_sells, txns_h1_total) = if let Some(snapshot) = opening_snapshot {
+        let (txns_h1_buys, txns_h1_sells, txns_h1_total) = if let Some(snapshot) = opening_snapshot
+        {
             let buys = snapshot.txns_h1_buys.unwrap_or(0);
             let sells = snapshot.txns_h1_sells.unwrap_or(0);
             let total = buys + sells;
@@ -681,7 +681,8 @@ async fn collect_token_characteristics(
         };
 
         // Calculate buy/sell ratio for 24h
-        let buy_sell_ratio_24h = if let (Some(buys), Some(sells)) = (txns_h24_buys, txns_h24_sells) {
+        let buy_sell_ratio_24h = if let (Some(buys), Some(sells)) = (txns_h24_buys, txns_h24_sells)
+        {
             if sells > 0 {
                 Some((buys as f64) / (sells as f64))
             } else if buys > 0 {
@@ -698,7 +699,7 @@ async fn collect_token_characteristics(
             txns_h24_total,
             txns_h6_total,
             txns_h1_total,
-            buy_sell_ratio_24h
+            buy_sell_ratio_24h,
         );
 
         let characteristics_entry = TokenCharacteristics {
@@ -769,7 +770,7 @@ async fn collect_token_characteristics(
 fn find_similar_tokens(
     characteristics: &[TokenCharacteristics],
     threshold: f64,
-    top_count: usize
+    top_count: usize,
 ) -> Vec<TokenSimilarity> {
     let mut similarities = Vec::new();
 
@@ -868,12 +869,10 @@ fn calculate_similarity_score(char1: &TokenCharacteristics, char2: &TokenCharact
     }
 
     // Transaction activity score similarity
-    if
-        let (Some(score1), Some(score2)) = (
-            char1.transaction_activity_score,
-            char2.transaction_activity_score,
-        )
-    {
+    if let (Some(score1), Some(score2)) = (
+        char1.transaction_activity_score,
+        char2.transaction_activity_score,
+    ) {
         total_comparisons += 1;
         if (score1 - score2).abs() < 20.0 {
             matches += 1; // Within 20 points
@@ -890,12 +889,10 @@ fn calculate_similarity_score(char1: &TokenCharacteristics, char2: &TokenCharact
     }
 
     // Rugcheck normalized score similarity
-    if
-        let (Some(norm1), Some(norm2)) = (
-            char1.rugcheck_score_normalized,
-            char2.rugcheck_score_normalized,
-        )
-    {
+    if let (Some(norm1), Some(norm2)) = (
+        char1.rugcheck_score_normalized,
+        char2.rugcheck_score_normalized,
+    ) {
         total_comparisons += 1;
         if (norm1 - norm2).abs() <= 2 {
             // Within 2 points
@@ -938,7 +935,7 @@ fn calculate_similarity_score(char1: &TokenCharacteristics, char2: &TokenCharact
 /// Get list of matching attributes between two tokens
 fn get_matching_attributes(
     char1: &TokenCharacteristics,
-    char2: &TokenCharacteristics
+    char2: &TokenCharacteristics,
 ) -> Vec<String> {
     let mut attributes = Vec::new();
 
@@ -979,12 +976,10 @@ fn get_matching_attributes(
     }
 
     // Transaction activity score matching
-    if
-        let (Some(score1), Some(score2)) = (
-            char1.transaction_activity_score,
-            char2.transaction_activity_score,
-        )
-    {
+    if let (Some(score1), Some(score2)) = (
+        char1.transaction_activity_score,
+        char2.transaction_activity_score,
+    ) {
         if (score1 - score2).abs() < 20.0 {
             if score1 >= 70.0 && score2 >= 70.0 {
                 attributes.push("Both High Activity".to_string());
@@ -1002,12 +997,10 @@ fn get_matching_attributes(
         }
     }
 
-    if
-        let (Some(norm1), Some(norm2)) = (
-            char1.rugcheck_score_normalized,
-            char2.rugcheck_score_normalized,
-        )
-    {
+    if let (Some(norm1), Some(norm2)) = (
+        char1.rugcheck_score_normalized,
+        char2.rugcheck_score_normalized,
+    ) {
         if (norm1 - norm2).abs() <= 2 {
             attributes.push("Similar Normalized Rugcheck Score".to_string());
         }
@@ -1030,7 +1023,7 @@ fn get_matching_attributes(
 /// Get list of differing attributes between two tokens
 fn get_differing_attributes(
     char1: &TokenCharacteristics,
-    char2: &TokenCharacteristics
+    char2: &TokenCharacteristics,
 ) -> Vec<String> {
     let mut attributes = Vec::new();
 
@@ -1044,12 +1037,10 @@ fn get_differing_attributes(
         }
     }
 
-    if
-        let (Some(norm1), Some(norm2)) = (
-            char1.rugcheck_score_normalized,
-            char2.rugcheck_score_normalized,
-        )
-    {
+    if let (Some(norm1), Some(norm2)) = (
+        char1.rugcheck_score_normalized,
+        char2.rugcheck_score_normalized,
+    ) {
         if (norm1 - norm2).abs() > 2 {
             attributes.push("Normalized Rugcheck Score".to_string());
         }
@@ -1065,7 +1056,7 @@ fn get_differing_attributes(
 /// Identify profitable patterns across multiple positions
 fn identify_profitable_patterns(
     characteristics: &[TokenCharacteristics],
-    min_positions: usize
+    min_positions: usize,
 ) -> Vec<ProfitablePattern> {
     let mut patterns = Vec::new();
 
@@ -1076,36 +1067,32 @@ fn identify_profitable_patterns(
         .collect();
 
     if high_activity_profitable.len() >= min_positions {
-        patterns.push(
-            create_pattern(
-                "High Activity Winners",
-                "Tokens with high transaction activity (score >= 70) that were profitable",
-                &high_activity_profitable,
-                vec![("min_activity_score".to_string(), "70".to_string())]
-            )
-        );
+        patterns.push(create_pattern(
+            "High Activity Winners",
+            "Tokens with high transaction activity (score >= 70) that were profitable",
+            &high_activity_profitable,
+            vec![("min_activity_score".to_string(), "70".to_string())],
+        ));
     }
 
     // Pattern 2: Balanced buy/sell ratio profitable tokens
     let balanced_trading_profitable: Vec<_> = characteristics
         .iter()
         .filter(|c| {
-            c.is_profitable &&
-                c.buy_sell_ratio_24h.map_or(false, |ratio| {
+            c.is_profitable
+                && c.buy_sell_ratio_24h.map_or(false, |ratio| {
                     !ratio.is_infinite() && ratio >= 0.3 && ratio <= 3.0
                 })
         })
         .collect();
 
     if balanced_trading_profitable.len() >= min_positions {
-        patterns.push(
-            create_pattern(
-                "Balanced Trading Winners",
-                "Tokens with balanced buy/sell ratios (0.3-3.0) that were profitable",
-                &balanced_trading_profitable,
-                vec![("balanced_trading".to_string(), "true".to_string())]
-            )
-        );
+        patterns.push(create_pattern(
+            "Balanced Trading Winners",
+            "Tokens with balanced buy/sell ratios (0.3-3.0) that were profitable",
+            &balanced_trading_profitable,
+            vec![("balanced_trading".to_string(), "true".to_string())],
+        ));
     }
 
     // Pattern 3: High volume profitable tokens (24h transactions)
@@ -1115,14 +1102,12 @@ fn identify_profitable_patterns(
         .collect();
 
     if high_volume_profitable.len() >= min_positions {
-        patterns.push(
-            create_pattern(
-                "High Volume Winners",
-                "Tokens with high 24h transaction volume (>=200) that were profitable",
-                &high_volume_profitable,
-                vec![("min_txns_24h".to_string(), "200".to_string())]
-            )
-        );
+        patterns.push(create_pattern(
+            "High Volume Winners",
+            "Tokens with high 24h transaction volume (>=200) that were profitable",
+            &high_volume_profitable,
+            vec![("min_txns_24h".to_string(), "200".to_string())],
+        ));
     }
 
     // Pattern 4: High rugcheck score profitable tokens
@@ -1132,14 +1117,12 @@ fn identify_profitable_patterns(
         .collect();
 
     if high_rugcheck_profitable.len() >= min_positions {
-        patterns.push(
-            create_pattern(
-                "High Rugcheck Score Winners",
-                "Tokens with rugcheck score >= 7 that were profitable",
-                &high_rugcheck_profitable,
-                vec![("min_rugcheck_score".to_string(), "7".to_string())]
-            )
-        );
+        patterns.push(create_pattern(
+            "High Rugcheck Score Winners",
+            "Tokens with rugcheck score >= 7 that were profitable",
+            &high_rugcheck_profitable,
+            vec![("min_rugcheck_score".to_string(), "7".to_string())],
+        ));
     }
 
     // Pattern 4b: High normalized rugcheck score profitable tokens
@@ -1149,38 +1132,34 @@ fn identify_profitable_patterns(
         .collect();
 
     if high_normalized_rugcheck_profitable.len() >= min_positions {
-        patterns.push(
-            create_pattern(
-                "High Normalized Rugcheck Score Winners",
-                "Tokens with normalized rugcheck score >= 7 that were profitable",
-                &high_normalized_rugcheck_profitable,
-                vec![("min_normalized_rugcheck_score".to_string(), "7".to_string())]
-            )
-        );
+        patterns.push(create_pattern(
+            "High Normalized Rugcheck Score Winners",
+            "Tokens with normalized rugcheck score >= 7 that were profitable",
+            &high_normalized_rugcheck_profitable,
+            vec![("min_normalized_rugcheck_score".to_string(), "7".to_string())],
+        ));
     }
 
     // Pattern 4c: Excellent rugcheck scores (both metrics high)
     let excellent_rugcheck_profitable: Vec<_> = characteristics
         .iter()
         .filter(|c| {
-            c.is_profitable &&
-                c.rugcheck_score.unwrap_or(0) >= 8 &&
-                c.rugcheck_score_normalized.unwrap_or(0) >= 8
+            c.is_profitable
+                && c.rugcheck_score.unwrap_or(0) >= 8
+                && c.rugcheck_score_normalized.unwrap_or(0) >= 8
         })
         .collect();
 
     if excellent_rugcheck_profitable.len() >= min_positions {
-        patterns.push(
-            create_pattern(
-                "Excellent Rugcheck Winners",
-                "Tokens with both original (>=8) and normalized (>=8) rugcheck scores high",
-                &excellent_rugcheck_profitable,
-                vec![
-                    ("min_rugcheck_score".to_string(), "8".to_string()),
-                    ("min_normalized_rugcheck_score".to_string(), "8".to_string())
-                ]
-            )
-        );
+        patterns.push(create_pattern(
+            "Excellent Rugcheck Winners",
+            "Tokens with both original (>=8) and normalized (>=8) rugcheck scores high",
+            &excellent_rugcheck_profitable,
+            vec![
+                ("min_rugcheck_score".to_string(), "8".to_string()),
+                ("min_normalized_rugcheck_score".to_string(), "8".to_string()),
+            ],
+        ));
     }
 
     // Pattern 5: Jupiter verified profitable tokens
@@ -1190,14 +1169,12 @@ fn identify_profitable_patterns(
         .collect();
 
     if jup_verified_profitable.len() >= min_positions {
-        patterns.push(
-            create_pattern(
-                "Jupiter Verified Winners",
-                "Jupiter verified tokens that were profitable",
-                &jup_verified_profitable,
-                vec![("jupiter_verified".to_string(), "true".to_string())]
-            )
-        );
+        patterns.push(create_pattern(
+            "Jupiter Verified Winners",
+            "Jupiter verified tokens that were profitable",
+            &jup_verified_profitable,
+            vec![("jupiter_verified".to_string(), "true".to_string())],
+        ));
     }
 
     // Pattern 6: High liquidity profitable tokens
@@ -1207,14 +1184,12 @@ fn identify_profitable_patterns(
         .collect();
 
     if high_liquidity_profitable.len() >= min_positions {
-        patterns.push(
-            create_pattern(
-                "High Liquidity Winners",
-                "Tokens with liquidity >= $50K that were profitable",
-                &high_liquidity_profitable,
-                vec![("min_liquidity_usd".to_string(), "50000".to_string())]
-            )
-        );
+        patterns.push(create_pattern(
+            "High Liquidity Winners",
+            "Tokens with liquidity >= $50K that were profitable",
+            &high_liquidity_profitable,
+            vec![("min_liquidity_usd".to_string(), "50000".to_string())],
+        ));
     }
 
     // Pattern 7: Quick profit pattern (< 2 hours)
@@ -1224,14 +1199,12 @@ fn identify_profitable_patterns(
         .collect();
 
     if quick_profit.len() >= min_positions {
-        patterns.push(
-            create_pattern(
-                "Quick Profit Pattern",
-                "Profitable positions closed within 2 hours",
-                &quick_profit,
-                vec![("max_duration_hours".to_string(), "2".to_string())]
-            )
-        );
+        patterns.push(create_pattern(
+            "Quick Profit Pattern",
+            "Profitable positions closed within 2 hours",
+            &quick_profit,
+            vec![("max_duration_hours".to_string(), "2".to_string())],
+        ));
     }
 
     // Pattern 8: LP locked tokens
@@ -1241,14 +1214,12 @@ fn identify_profitable_patterns(
         .collect();
 
     if lp_locked_profitable.len() >= min_positions {
-        patterns.push(
-            create_pattern(
-                "LP Locked Winners",
-                "Tokens with LP locked >= 50% that were profitable",
-                &lp_locked_profitable,
-                vec![("min_lp_locked_pct".to_string(), "50".to_string())]
-            )
-        );
+        patterns.push(create_pattern(
+            "LP Locked Winners",
+            "Tokens with LP locked >= 50% that were profitable",
+            &lp_locked_profitable,
+            vec![("min_lp_locked_pct".to_string(), "50".to_string())],
+        ));
     }
 
     patterns
@@ -1259,18 +1230,12 @@ fn create_pattern(
     name: &str,
     description: &str,
     characteristics: &[&TokenCharacteristics],
-    attributes: Vec<(String, String)>
+    attributes: Vec<(String, String)>,
 ) -> ProfitablePattern {
     let positions_count = characteristics.len();
-    let total_pnl: f64 = characteristics
-        .iter()
-        .map(|c| c.pnl)
-        .sum();
+    let total_pnl: f64 = characteristics.iter().map(|c| c.pnl).sum();
     let average_pnl = total_pnl / (positions_count as f64);
-    let profitable_count = characteristics
-        .iter()
-        .filter(|c| c.is_profitable)
-        .count();
+    let profitable_count = characteristics.iter().filter(|c| c.is_profitable).count();
     let win_rate = ((profitable_count as f64) / (positions_count as f64)) * 100.0;
 
     // Confidence score based on win rate and sample size
@@ -1300,7 +1265,7 @@ fn create_pattern(
 fn generate_recommendations(
     analysis: &PositionAnalysis,
     similarities: &[TokenSimilarity],
-    patterns: &[ProfitablePattern]
+    patterns: &[ProfitablePattern],
 ) -> Vec<String> {
     let mut recommendations = Vec::new();
 
@@ -1313,22 +1278,22 @@ fn generate_recommendations(
             )
         );
     } else if analysis.win_rate > 70.0 {
-        recommendations.push(
-            format!(
-                "✅ Excellent win rate ({:.1}%) - Current strategy is working well",
-                analysis.win_rate
-            )
-        );
+        recommendations.push(format!(
+            "✅ Excellent win rate ({:.1}%) - Current strategy is working well",
+            analysis.win_rate
+        ));
     }
 
     // Average duration recommendations
     if analysis.position_duration_stats.average_duration_hours > 24.0 {
         recommendations.push(
-            "📅 Long average hold time - Consider implementing profit-taking at key levels".to_string()
+            "📅 Long average hold time - Consider implementing profit-taking at key levels"
+                .to_string(),
         );
     } else if analysis.position_duration_stats.average_duration_hours < 1.0 {
         recommendations.push(
-            "⚡ Very short hold times - Ensure you're not over-trading or missing bigger moves".to_string()
+            "⚡ Very short hold times - Ensure you're not over-trading or missing bigger moves"
+                .to_string(),
         );
     }
 
@@ -1339,30 +1304,21 @@ fn generate_recommendations(
         .collect();
 
     if !high_confidence_patterns.is_empty() {
-        recommendations.push(
-            format!(
-                "🎯 {} high-confidence profitable patterns identified - Focus on these characteristics",
-                high_confidence_patterns.len()
-            )
-        );
+        recommendations.push(format!(
+            "🎯 {} high-confidence profitable patterns identified - Focus on these characteristics",
+            high_confidence_patterns.len()
+        ));
 
         for pattern in high_confidence_patterns {
-            recommendations.push(
-                format!(
-                    "  • {}: {:.1}% win rate with {:.3} SOL average profit",
-                    pattern.pattern_name,
-                    pattern.win_rate,
-                    pattern.average_pnl
-                )
-            );
+            recommendations.push(format!(
+                "  • {}: {:.1}% win rate with {:.3} SOL average profit",
+                pattern.pattern_name, pattern.win_rate, pattern.average_pnl
+            ));
         }
     }
 
     // Similarity recommendations
-    let profitable_similarities = similarities
-        .iter()
-        .filter(|s| s.both_profitable)
-        .count();
+    let profitable_similarities = similarities.iter().filter(|s| s.both_profitable).count();
 
     if profitable_similarities > 0 {
         recommendations.push(
@@ -1374,25 +1330,20 @@ fn generate_recommendations(
     if let Some(worst) = &analysis.worst_position {
         if worst.pnl < -0.1 {
             // More than 0.1 SOL loss
-            recommendations.push(
-                format!(
-                    "🛡️  Largest loss: {:.3} SOL on {} - Review stop-loss strategy",
-                    worst.pnl,
-                    worst.symbol
-                )
-            );
+            recommendations.push(format!(
+                "🛡️  Largest loss: {:.3} SOL on {} - Review stop-loss strategy",
+                worst.pnl, worst.symbol
+            ));
         }
     }
 
     // Fees analysis
     let fee_ratio = analysis.total_fees / analysis.total_pnl.abs();
     if fee_ratio > 0.2 {
-        recommendations.push(
-            format!(
-                "💰 Transaction fees are {:.1}% of P&L - Consider optimizing for larger position sizes",
-                fee_ratio * 100.0
-            )
-        );
+        recommendations.push(format!(
+            "💰 Transaction fees are {:.1}% of P&L - Consider optimizing for larger position sizes",
+            fee_ratio * 100.0
+        ));
     }
 
     recommendations
@@ -1405,13 +1356,15 @@ fn print_position_analysis(analysis: &PositionAnalysis, _detailed: bool) {
     println!("Total Positions: {}", analysis.total_positions);
     println!("  • Open: {}", analysis.open_positions);
     println!("  • Closed: {}", analysis.closed_positions);
-    println!("  • Profitable: {} ({:.1}%)", analysis.profitable_positions, if
-        analysis.total_positions > 0
-    {
-        ((analysis.profitable_positions as f64) / (analysis.total_positions as f64)) * 100.0
-    } else {
-        0.0
-    });
+    println!(
+        "  • Profitable: {} ({:.1}%)",
+        analysis.profitable_positions,
+        if analysis.total_positions > 0 {
+            ((analysis.profitable_positions as f64) / (analysis.total_positions as f64)) * 100.0
+        } else {
+            0.0
+        }
+    );
     println!("  • Losing: {}", analysis.losing_positions);
     println!();
 
@@ -1419,7 +1372,10 @@ fn print_position_analysis(analysis: &PositionAnalysis, _detailed: bool) {
     println!("──────────────────────");
     println!("Total P&L: {:.6} SOL", analysis.total_pnl);
     println!("Total Fees: {:.6} SOL", analysis.total_fees);
-    println!("Net P&L: {:.6} SOL", analysis.total_pnl - analysis.total_fees);
+    println!(
+        "Net P&L: {:.6} SOL",
+        analysis.total_pnl - analysis.total_fees
+    );
     println!("Win Rate: {:.1}%", analysis.win_rate);
     println!("Average Profit: {:.6} SOL", analysis.average_profit);
     println!("Average Loss: {:.6} SOL", analysis.average_loss);
@@ -1428,18 +1384,14 @@ fn print_position_analysis(analysis: &PositionAnalysis, _detailed: bool) {
     if let Some(best) = &analysis.best_position {
         println!(
             "🏆 Best Position: {} ({:.6} SOL, {:.1}%)",
-            best.symbol,
-            best.pnl,
-            best.pnl_percentage
+            best.symbol, best.pnl, best.pnl_percentage
         );
     }
 
     if let Some(worst) = &analysis.worst_position {
         println!(
             "📉 Worst Position: {} ({:.6} SOL, {:.1}%)",
-            worst.symbol,
-            worst.pnl,
-            worst.pnl_percentage
+            worst.symbol, worst.pnl, worst.pnl_percentage
         );
     }
     println!();
@@ -1454,8 +1406,14 @@ fn print_position_analysis(analysis: &PositionAnalysis, _detailed: bool) {
         "Median Duration: {:.1} hours",
         analysis.position_duration_stats.median_duration_hours
     );
-    println!("Shortest: {:.1} hours", analysis.position_duration_stats.shortest_duration_hours);
-    println!("Longest: {:.1} hours", analysis.position_duration_stats.longest_duration_hours);
+    println!(
+        "Shortest: {:.1} hours",
+        analysis.position_duration_stats.shortest_duration_hours
+    );
+    println!(
+        "Longest: {:.1} hours",
+        analysis.position_duration_stats.longest_duration_hours
+    );
     println!();
 
     if !analysis.performance_by_time.is_empty() {
@@ -1464,10 +1422,7 @@ fn print_position_analysis(analysis: &PositionAnalysis, _detailed: bool) {
         for perf in &analysis.performance_by_time {
             println!(
                 "{}: {} positions, {:.6} SOL P&L, {:.1}% win rate",
-                perf.period,
-                perf.positions_count,
-                perf.total_pnl,
-                perf.win_rate
+                perf.period, perf.positions_count, perf.total_pnl, perf.win_rate
             );
         }
         println!();
@@ -1514,9 +1469,7 @@ fn print_profitable_patterns(patterns: &[ProfitablePattern]) {
         println!("   Description: {}", pattern.description);
         println!(
             "   Positions: {} | Win Rate: {:.1}% | Avg P&L: {:.6} SOL",
-            pattern.positions_count,
-            pattern.win_rate,
-            pattern.average_pnl
+            pattern.positions_count, pattern.win_rate, pattern.average_pnl
         );
         println!("   Confidence: {:.1}%", pattern.confidence_score * 100.0);
         println!("   Examples: {}", pattern.example_tokens.join(", "));
@@ -1524,7 +1477,8 @@ fn print_profitable_patterns(patterns: &[ProfitablePattern]) {
         if !pattern.attributes.is_empty() {
             println!(
                 "   Criteria: {}",
-                pattern.attributes
+                pattern
+                    .attributes
                     .iter()
                     .map(|(k, v)| format!("{}={}", k, v))
                     .collect::<Vec<_>>()
@@ -1556,7 +1510,7 @@ fn export_analysis_to_json(
     similarities: &[TokenSimilarity],
     patterns: &[ProfitablePattern],
     recommendations: &[String],
-    filename: &str
+    filename: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     #[derive(Serialize)]
     struct ExportData {
