@@ -242,28 +242,52 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         (decay_component - long_hold_bonus).max(3.0)
     };
 
-    // Early round-trip protection: if we ever reached >= BASE_MIN_PROFIT_PERCENT (peak) but have now
-    // fallen back below a small fraction of that quickly (within 12m) -> exit to avoid full reversal.
-    if
-        peak_profit >= BASE_MIN_PROFIT_PERCENT &&
-        minutes_held <= 12.0 &&
-        pnl_percent < (peak_profit * 0.35).min(BASE_MIN_PROFIT_PERCENT * 0.6)
+    // Early round-trip protection (re-tuned):
+    // Original logic was triggering too aggressively on modest early peaks (e.g. 12-18%) causing
+    // exits at tiny retained profits after a quick spike + pullback. We now:
+    // * Require a more meaningful peak (>= ~1.8x BASE) OR enough elapsed time before considering.
+    // * Impose a warm-up (>= 2.5m) so very early noise doesn't force an exit.
+    // * Demand a substantial absolute drawdown (>= 8%) AND large relative give-back (current < 25% of peak).
+    // * Still cap window to first 10 minutes (after that trailing / odds logic govern).
+    // * Ensure we aren't still sitting on a solid base profit (skip if pnl >= 0.8 * BASE_MIN_PROFIT_PERCENT).
     {
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "EARLY_RETRACE_EXIT",
-                &format!(
-                    "{} pnl={:.2}% peak={:.2}% t={:.1}m retrace={:.2}%",
-                    position.symbol,
-                    pnl_percent,
-                    peak_profit,
-                    minutes_held,
-                    peak_profit - pnl_percent
-                )
-            );
+        let meaningful_peak = peak_profit >= BASE_MIN_PROFIT_PERCENT * 1.8; // ~18% with BASE=10
+        let warmup_passed = minutes_held >= 2.5;
+        let within_window = minutes_held <= 10.0; // tighter than prior 12m
+        let large_absolute_drawdown = peak_profit - pnl_percent >= 8.0; // avoid micro noise
+        let large_relative_giveback = pnl_percent < peak_profit * 0.25; // retain <25% of peak
+        let not_still_ok_profit = pnl_percent < BASE_MIN_PROFIT_PERCENT * 0.8; // <8% with BASE=10
+
+        if
+            meaningful_peak &&
+            warmup_passed &&
+            within_window &&
+            large_absolute_drawdown &&
+            large_relative_giveback &&
+            not_still_ok_profit
+        {
+            if is_debug_profit_enabled() {
+                log(
+                    LogTag::Profit,
+                    "EARLY_RETRACE_EXIT",
+                    &format!(
+                        "{} pnl={:.2}% peak={:.2}% t={:.1}m retrace={:.2}% cond=mp:{} wa:{} win:{} abs_dd:{} rel:{} ok:{}",
+                        position.symbol,
+                        pnl_percent,
+                        peak_profit,
+                        minutes_held,
+                        peak_profit - pnl_percent,
+                        meaningful_peak,
+                        warmup_passed,
+                        within_window,
+                        large_absolute_drawdown,
+                        large_relative_giveback,
+                        not_still_ok_profit
+                    )
+                );
+            }
+            return true;
         }
-        return true;
     }
 
     if pnl_percent < dynamic_min_profit {
