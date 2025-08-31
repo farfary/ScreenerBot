@@ -208,6 +208,33 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         return true;
     }
 
+    // 2b) Time-scaled soft stop for positions that never showed a meaningful peak.
+    // Rationale: If we haven't reached even a small positive peak, accept smaller losses sooner
+    // to avoid being trapped for long periods waiting for the hard stop. This is deliberately
+    // simple and avoids new functions/complexity.
+    if peak_profit < 5.0 {
+        let trigger =
+            (minutes_held >= 6.0 && pnl_percent <= -18.0) ||
+            (minutes_held >= 15.0 && pnl_percent <= -25.0) ||
+            (minutes_held >= 30.0 && pnl_percent <= -32.0);
+        if trigger {
+            if is_debug_profit_enabled() {
+                log(
+                    LogTag::Profit,
+                    "LOSS_SOFT_STOP",
+                    &format!(
+                        "{} pnl={:.2}% peak={:.2}% t={:.1}m (soft stop)",
+                        position.symbol,
+                        pnl_percent,
+                        peak_profit,
+                        minutes_held
+                    )
+                );
+            }
+            return true;
+        }
+    }
+
     // 3) Absolute time cap: must close
     if minutes_held >= MAX_HOLD_MINUTES {
         return true;
