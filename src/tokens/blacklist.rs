@@ -60,6 +60,7 @@ pub enum BlacklistReason {
     ManualBlacklist,
     SystemToken, // System/program tokens
     StableToken, // Stable coins and major tokens
+    ApiError,    // Tokens that return API errors (502, etc.)
 }
 
 /// Individual liquidity check record
@@ -174,6 +175,7 @@ impl TokenBlacklist {
             BlacklistReason::ManualBlacklist => "Manual",
             BlacklistReason::SystemToken => "System Token",
             BlacklistReason::StableToken => "Stable Token",
+            BlacklistReason::ApiError => "API Error",
         };
 
         let entry = BlacklistEntry {
@@ -283,6 +285,7 @@ impl TokenBlacklist {
                 BlacklistReason::ManualBlacklist => "ManualBlacklist",
                 BlacklistReason::SystemToken => "SystemToken",
                 BlacklistReason::StableToken => "StableToken",
+                BlacklistReason::ApiError => "ApiError",
             };
             *reason_counts.entry(reason_str.to_string()).or_insert(0) += 1;
         }
@@ -511,6 +514,37 @@ pub fn add_stable_token_to_blacklist(mint: &str, symbol: &str) -> bool {
                 LogTag::Blacklist,
                 "WARN",
                 "Could not acquire blacklist lock for stable token",
+            );
+            false
+        }
+    }
+}
+
+/// Add token to blacklist due to API errors (502, etc.)
+pub fn add_api_error_token_to_blacklist(mint: &str, symbol: &str) -> bool {
+    match TOKEN_BLACKLIST.try_lock() {
+        Ok(mut blacklist) => {
+            blacklist.add_to_blacklist(mint, symbol, BlacklistReason::ApiError);
+
+            if let Err(e) = blacklist.save() {
+                log(
+                    LogTag::Blacklist,
+                    "WARN",
+                    &format!(
+                        "Failed to save blacklist after adding API error token: {}",
+                        e
+                    ),
+                );
+                false
+            } else {
+                true
+            }
+        }
+        Err(_) => {
+            log(
+                LogTag::Blacklist,
+                "WARN",
+                "Could not acquire blacklist lock for API error token",
             );
             false
         }

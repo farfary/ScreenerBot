@@ -4,6 +4,7 @@ use crate::global::is_debug_rugcheck_enabled;
 /// This module provides a background service for fetching and updating rugcheck data.
 /// It handles rate limiting, database storage, and provides fresh data to the trading system.
 use crate::logger::{log, LogTag};
+use crate::tokens::blacklist;
 use crate::tokens::cache::TokenDatabase;
 use chrono::{DateTime, Utc};
 use reqwest::Client;
@@ -787,6 +788,14 @@ impl RugcheckService {
                     );
                     // Return Ok to avoid treating this as an error - this is normal
                     return Ok(());
+                } else if error == "TOKEN_BLACKLISTED_502" {
+                    log(
+                        LogTag::Rugcheck,
+                        "SKIP_BLACKLISTED",
+                        &format!("Skipping {} - token blacklisted due to 502 error", mint),
+                    );
+                    // Return Ok to avoid treating this as an error - token is now blacklisted
+                    return Ok(());
                 } else if error == "CANCELLED" {
                     // Propagate cancellation upwards so callers can stop immediately
                     return Err(error);
@@ -872,6 +881,24 @@ impl RugcheckService {
                     let status = response.status();
 
                     if !status.is_success() {
+                        // Handle 502 Bad Gateway - blacklist token and skip retries
+                        if status.as_u16() == 502 {
+                            log(
+                                LogTag::Rugcheck,
+                                "BLACKLIST_502",
+                                &format!(
+                                    "502 Bad Gateway for {} - blacklisting token and skipping retries",
+                                    mint
+                                ),
+                            );
+
+                            // Blacklist the token due to API error
+                            let _ = blacklist::add_api_error_token_to_blacklist(mint, mint);
+
+                            // Return special error to indicate token should be skipped
+                            return Err("TOKEN_BLACKLISTED_502".to_string());
+                        }
+
                         // Handle special case: 400 "unable to generate report" - this is normal for some tokens
                         if status.as_u16() == 400 {
                             // Get the response body to check for "unable to generate report"
@@ -958,6 +985,19 @@ impl RugcheckService {
                                 attempt, max_retries, mint, last_error
                             ),
                         );
+
+                        // For 502 errors, don't retry - token is already blacklisted
+                        if last_error.contains("502 Bad Gateway") {
+                            log(
+                                LogTag::Rugcheck,
+                                "NO_RETRY_502",
+                                &format!(
+                                    "Skipping retries for {} - token blacklisted due to 502",
+                                    mint
+                                ),
+                            );
+                            return Err("TOKEN_BLACKLISTED_502".to_string());
+                        }
                     } else {
                         // Parse JSON with shutdown-aware cancellation
                         let json_fut = response.json::<RugcheckResponse>();
