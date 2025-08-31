@@ -578,10 +578,8 @@ async fn main() {
                     &format!("Failed to save RPC statistics: {}", e),
                 );
             }
-        } else {
-            if screenerbot::arguments::is_debug_system_enabled() {
-                log(LogTag::System, "INFO", "RPC statistics saved to disk");
-            }
+        } else if screenerbot::arguments::is_debug_system_enabled() {
+            log(LogTag::System, "INFO", "RPC statistics saved to disk");
         }
     })
     .await;
@@ -973,5 +971,3 @@ async fn main() {
         let _ = tokio::time::timeout(std::time::Duration::from_secs(3), handle).await;
     }
 }
-
-// Access CMD_ARGS anywhere via CMD_ARGS.lock().unwrap()
