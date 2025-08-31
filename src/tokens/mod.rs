@@ -40,6 +40,7 @@ pub mod decimals;
 pub mod dexscreener;
 pub mod discovery;
 pub mod holders;
+pub mod lp_lock;
 pub mod monitor;
 pub mod ohlcvs;
 pub mod pool;
@@ -92,6 +93,15 @@ pub use holders::{
     HolderStats,
     TokenHolder,
     TopHoldersAnalysis,
+};
+pub use lp_lock::{
+    check_lp_lock_status,
+    check_multiple_lp_locks,
+    get_lp_lock_summary,
+    is_lp_safe,
+    LockPrograms,
+    LpLockAnalysis,
+    LpLockStatus,
 };
 pub use ohlcvs::{
     get_latest_ohlcv,
