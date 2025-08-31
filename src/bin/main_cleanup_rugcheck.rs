@@ -1,10 +1,9 @@
+use rusqlite::{params, Connection};
+use screenerbot::global::TOKENS_DATABASE;
 /// Cleanup tool to remove orphaned rugcheck data for tokens that no longer exist
 /// This tool removes rugcheck entries for tokens that have been deleted from the tokens table
-
-use screenerbot::logger::{ init_file_logging, log, LogTag };
-use screenerbot::global::TOKENS_DATABASE;
-use rusqlite::{ Connection, params };
-use std::sync::{ Arc, Mutex };
+use screenerbot::logger::{init_file_logging, log, LogTag};
+use std::sync::{Arc, Mutex};
 
 struct RugcheckCleaner {
     connection: Arc<Mutex<Connection>>,
@@ -34,14 +33,14 @@ impl RugcheckCleaner {
     /// Get some examples of orphaned rugcheck entries
     pub fn get_orphaned_rugcheck_examples(
         &self,
-        limit: i64
+        limit: i64,
     ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let connection = self.connection.lock().unwrap();
         let mut stmt = connection.prepare(
             "SELECT r.mint FROM rugcheck_data r WHERE NOT EXISTS (SELECT 1 FROM tokens t WHERE t.mint = r.mint) LIMIT ?1"
         )?;
 
-        let rows = stmt.query_map(params![limit], |row| { Ok(row.get::<usize, String>(0)?) })?;
+        let rows = stmt.query_map(params![limit], |row| Ok(row.get::<usize, String>(0)?))?;
 
         let mut examples = Vec::new();
         for row in rows {
@@ -54,7 +53,7 @@ impl RugcheckCleaner {
     /// Remove all orphaned rugcheck entries
     pub fn cleanup_orphaned_rugcheck_data(
         &self,
-        dry_run: bool
+        dry_run: bool,
     ) -> Result<i64, Box<dyn std::error::Error>> {
         let connection = self.connection.lock().unwrap();
 
@@ -135,24 +134,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "STATS",
         &format!(
             "Database stats: {} tokens, {} rugcheck entries, {} orphaned rugcheck entries",
-            tokens_count,
-            rugcheck_count,
-            orphaned_count
-        )
+            tokens_count, rugcheck_count, orphaned_count
+        ),
     );
 
     if orphaned_count == 0 {
-        log(LogTag::System, "COMPLETE", "No orphaned rugcheck entries found, nothing to clean up");
+        log(
+            LogTag::System,
+            "COMPLETE",
+            "No orphaned rugcheck entries found, nothing to clean up",
+        );
         return Ok(());
     }
 
     if show_examples {
-        log(LogTag::System, "EXAMPLES", "Fetching examples of orphaned rugcheck entries...");
+        log(
+            LogTag::System,
+            "EXAMPLES",
+            "Fetching examples of orphaned rugcheck entries...",
+        );
         let examples = cleaner.get_orphaned_rugcheck_examples(10)?;
         log(
             LogTag::System,
             "EXAMPLES",
-            &format!("First 10 orphaned rugcheck entries: {:?}", examples)
+            &format!("First 10 orphaned rugcheck entries: {:?}", examples),
         );
     }
 
@@ -161,9 +166,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log(
             LogTag::System,
             "DRY_RUN",
-            &format!("Would delete {} orphaned rugcheck entries", would_delete)
+            &format!("Would delete {} orphaned rugcheck entries", would_delete),
         );
-        log(LogTag::System, "DRY_RUN", "Use --force-cleanup to actually perform the deletion");
+        log(
+            LogTag::System,
+            "DRY_RUN",
+            "Use --force-cleanup to actually perform the deletion",
+        );
         return Ok(());
     }
 
@@ -171,7 +180,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log(
             LogTag::System,
             "CLEANUP",
-            &format!("Starting cleanup of {} orphaned rugcheck entries...", orphaned_count)
+            &format!(
+                "Starting cleanup of {} orphaned rugcheck entries...",
+                orphaned_count
+            ),
         );
 
         let start_time = std::time::Instant::now();
@@ -185,7 +197,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "Deleted {} orphaned rugcheck entries in {:.2} seconds",
                 deleted_count,
                 duration.as_secs_f64()
-            )
+            ),
         );
 
         // Get final stats
@@ -195,16 +207,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "FINAL_STATS",
             &format!(
                 "Final database stats: {} tokens, {} rugcheck entries",
-                final_tokens_count,
-                final_rugcheck_count
-            )
+                final_tokens_count, final_rugcheck_count
+            ),
         );
 
-        log(LogTag::System, "COMPLETE", "Rugcheck cleanup completed successfully");
+        log(
+            LogTag::System,
+            "COMPLETE",
+            "Rugcheck cleanup completed successfully",
+        );
     } else {
-        log(LogTag::System, "INFO", "Use --dry-run to see what would be deleted");
-        log(LogTag::System, "INFO", "Use --force-cleanup to actually perform the deletion");
-        log(LogTag::System, "INFO", "Use --show-examples to see examples of orphaned entries");
+        log(
+            LogTag::System,
+            "INFO",
+            "Use --dry-run to see what would be deleted",
+        );
+        log(
+            LogTag::System,
+            "INFO",
+            "Use --force-cleanup to actually perform the deletion",
+        );
+        log(
+            LogTag::System,
+            "INFO",
+            "Use --show-examples to see examples of orphaned entries",
+        );
     }
 
     Ok(())
