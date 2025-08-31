@@ -109,11 +109,13 @@ impl TokenDatabase {
             self.insert_or_update_token(token)?;
         }
 
-        log(
-            LogTag::System,
-            "DATABASE",
-            &format!("Added/updated {} tokens", tokens.len()),
-        );
+        if is_debug_monitor_enabled() {
+            log(
+                LogTag::System,
+                "DATABASE",
+                &format!("Added/updated {} tokens", tokens.len()),
+            );
+        }
 
         Ok(())
     }

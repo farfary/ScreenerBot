@@ -238,14 +238,17 @@ impl TokenMonitor {
             return Ok(());
         }
 
-        log(
-            LogTag::Monitor,
-            "START",
-            &format!(
-                "Starting monitoring cycle for {} tokens",
-                tokens_to_update.len()
-            ),
-        );
+        if is_debug_monitor_enabled(){
+            log(
+                LogTag::Monitor,
+                "START",
+                &format!(
+                    "Starting monitoring cycle for {} tokens",
+                    tokens_to_update.len()
+                ),
+            );
+        }
+        
 
         let mut total_updated = 0;
 
