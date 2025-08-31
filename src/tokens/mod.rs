@@ -38,6 +38,7 @@ pub mod cache;
 pub mod decimals;
 pub mod dexscreener;
 pub mod discovery;
+pub mod holders;
 pub mod monitor;
 pub mod ohlcvs;
 pub mod pool;

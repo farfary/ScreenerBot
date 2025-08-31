@@ -29,23 +29,26 @@ const FORCE_PREMIUM_RPC_ONLY: bool = false;
 const MAX_RPC_CALLS_PER_SECOND: u64 = 4;
 
 use crate::errors::blockchain::CommitmentLevel;
-use crate::errors::{parse_solana_error, BlockchainError, ScreenerBotError};
-use crate::errors::{ConfigurationError, DataError, NetworkError, RpcProviderError};
+use crate::errors::{ parse_solana_error, BlockchainError, ScreenerBotError };
+use crate::errors::{ ConfigurationError, DataError, NetworkError, RpcProviderError };
 use crate::global::{
-    is_debug_rpc_enabled, is_debug_transactions_enabled, is_debug_wallet_enabled, read_configs,
+    is_debug_rpc_enabled,
+    is_debug_transactions_enabled,
+    is_debug_wallet_enabled,
+    read_configs,
     RPC_STATS,
 };
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use crate::tokens::decimals::LAMPORTS_PER_SOL;
 use crate::utils::safe_truncate;
 use base64::Engine as _;
 use bincode;
 use bs58;
-use chrono::{DateTime, Utc};
+use chrono::{ DateTime, Utc };
 use futures;
 use once_cell::sync::Lazy;
 use reqwest;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 use serde_json;
 use solana_client::rpc_client::RpcClient as SolanaRpcClient;
 use solana_sdk::{
@@ -54,17 +57,17 @@ use solana_sdk::{
     commitment_config::CommitmentConfig,
     hash::Hash,
     pubkey::Pubkey,
-    signature::{Keypair, Signature},
+    signature::{ Keypair, Signature },
     signer::Signer,
     transaction::Transaction,
     transaction::VersionedTransaction,
 };
-use solana_transaction_status::{EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding};
+use solana_transaction_status::{ EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding };
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::sync::{Arc as StdArc, Mutex as StdMutex};
-use std::time::{Duration, Instant};
+use std::sync::{ Arc as StdArc, Mutex as StdMutex };
+use std::time::{ Duration, Instant };
 use url::Url;
 
 /// Structure to hold token account information
@@ -162,8 +165,9 @@ pub struct AtaRentInfo {
 }
 
 /// Global cache for ATA rent amounts (10-second cache)
-static ATA_RENT_CACHE: Lazy<StdArc<StdMutex<Option<AtaRentInfo>>>> =
-    Lazy::new(|| StdArc::new(StdMutex::new(None)));
+static ATA_RENT_CACHE: Lazy<StdArc<StdMutex<Option<AtaRentInfo>>>> = Lazy::new(||
+    StdArc::new(StdMutex::new(None))
+);
 
 /// Check if premium RPC only mode is active
 fn is_premium_rpc_only() -> bool {
@@ -178,11 +182,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
             Ok(cache) => cache,
             Err(_) => {
                 // If we can't get the cache lock, fall back to default value
-                log(
-                    LogTag::Rpc,
-                    "WARN",
-                    "ATA rent cache lock contention - using default ATA rent",
-                );
+                log(LogTag::Rpc, "WARN", "ATA rent cache lock contention - using default ATA rent");
                 return Ok(2039280); // Default ATA rent: 0.00203928 SOL
             }
         };
@@ -196,7 +196,8 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
     // Cache miss or expired, fetch from chain
     let rpc_client = get_rpc_client();
 
-    let rpc_payload = serde_json::json!({
+    let rpc_payload =
+        serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
         "method": "getMinimumBalanceForRentExemption",
@@ -216,7 +217,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
             log(
                 LogTag::Rpc,
                 "PREMIUM_ONLY",
-                "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for ATA rent",
+                "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for ATA rent"
             );
         }
 
@@ -224,8 +225,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
             .post(&configs.rpc_url_premium)
             .header("Content-Type", "application/json")
             .json(&rpc_payload)
-            .send()
-            .await?;
+            .send().await?;
 
         if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
             if let Some(result) = rpc_response.get("result") {
@@ -241,7 +241,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
                             log(
                                 LogTag::Rpc,
                                 "WARN",
-                                "Failed to update ATA rent cache - lock contention",
+                                "Failed to update ATA rent cache - lock contention"
                             );
                         }
                     }
@@ -253,7 +253,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
                             "Retrieved ATA rent from premium RPC: {} lamports ({:.9} SOL)",
                             rent_lamports,
                             lamports_to_sol(rent_lamports)
-                        ),
+                        )
                     );
 
                     return Ok(rent_lamports);
@@ -266,10 +266,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
         log(
             LogTag::Rpc,
             "ATA_RENT_FALLBACK",
-            &format!(
-                "Premium RPC failed in premium-only mode, using fallback: {} lamports",
-                FALLBACK_ATA_RENT
-            ),
+            &format!("Premium RPC failed in premium-only mode, using fallback: {} lamports", FALLBACK_ATA_RENT)
         );
 
         return Ok(FALLBACK_ATA_RENT);
@@ -280,8 +277,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
         .post(&configs.rpc_url_premium)
         .header("Content-Type", "application/json")
         .json(&rpc_payload)
-        .send()
-        .await?;
+        .send().await?;
 
     if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
         if let Some(result) = rpc_response.get("result") {
@@ -299,7 +295,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
                             log(
                                 LogTag::Rpc,
                                 "WARN",
-                                "ATA_RENT_CACHE lock contention during update - cache not updated",
+                                "ATA_RENT_CACHE lock contention during update - cache not updated"
                             );
                         }
                     }
@@ -312,7 +308,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
                         "Retrieved ATA rent from chain: {} lamports ({:.9} SOL)",
                         rent_lamports,
                         lamports_to_sol(rent_lamports)
-                    ),
+                    )
                 );
 
                 return Ok(rent_lamports);
@@ -325,8 +321,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
         .post(&configs.rpc_url)
         .header("Content-Type", "application/json")
         .json(&rpc_payload)
-        .send()
-        .await?;
+        .send().await?;
 
     if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
         if let Some(result) = rpc_response.get("result") {
@@ -357,7 +352,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
                         "Retrieved ATA rent from chain (fallback): {} lamports ({:.9} SOL)",
                         rent_lamports,
                         lamports_to_sol(rent_lamports)
-                    ),
+                    )
                 );
 
                 return Ok(rent_lamports);
@@ -370,7 +365,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
     log(
         LogTag::Rpc,
         "ATA_RENT_FALLBACK",
-        &format!("Using fallback ATA rent: {} lamports", FALLBACK_ATA_RENT),
+        &format!("Using fallback ATA rent: {} lamports", FALLBACK_ATA_RENT)
     );
 
     Ok(FALLBACK_ATA_RENT)
@@ -408,7 +403,7 @@ pub fn get_websocket_url() -> Result<String, ScreenerBotError> {
                 log(
                     LogTag::Rpc,
                     "WS_URL_SCHEME_WARN",
-                    &format!("Unknown scheme '{}', defaulting to wss", other),
+                    &format!("Unknown scheme '{}', defaulting to wss", other)
                 );
             }
             "wss"
@@ -449,10 +444,7 @@ pub fn get_premium_websocket_url() -> Result<String, ScreenerBotError> {
                 log(
                     LogTag::Rpc,
                     "WS_URL_SCHEME_WARN",
-                    &format!(
-                        "Unknown scheme '{}' for premium URL, defaulting to wss",
-                        other
-                    ),
+                    &format!("Unknown scheme '{}' for premium URL, defaulting to wss", other)
                 );
             }
             "wss"
@@ -488,8 +480,8 @@ pub fn logs_contains_initialize_mint(logs: &[String]) -> bool {
 
 /// Check if a logs array contains an InitializeAccount instruction (including v3)
 pub fn logs_contains_initialize_account(logs: &[String]) -> bool {
-    logs.iter().any(|l| l.contains("InitializeAccount"))
-        || logs.iter().any(|l| l.contains("InitializeAccount3"))
+    logs.iter().any(|l| l.contains("InitializeAccount")) ||
+        logs.iter().any(|l| l.contains("InitializeAccount3"))
 }
 
 /// Converts lamports to SOL amount
@@ -564,10 +556,7 @@ impl RpcStats {
 
     /// Get method calls for a specific URL
     pub fn get_method_calls_for_url(&self, url: &str) -> HashMap<String, u64> {
-        self.calls_per_url_per_method
-            .get(url)
-            .cloned()
-            .unwrap_or_default()
+        self.calls_per_url_per_method.get(url).cloned().unwrap_or_default()
     }
 
     /// Get all URLs that have method call data
@@ -585,10 +574,12 @@ impl RpcStats {
     /// Save stats to disk
     pub fn save_to_disk(&mut self) -> Result<(), String> {
         self.last_save_time = Utc::now();
-        let json_data = serde_json::to_string_pretty(self)
+        let json_data = serde_json
+            ::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize RPC stats: {}", e))?;
 
-        std::fs::write(RPC_STATS, json_data)
+        std::fs
+            ::write(RPC_STATS, json_data)
             .map_err(|e| format!("Failed to write RPC stats file: {}", e))?;
 
         Ok(())
@@ -617,8 +608,7 @@ impl RpcStats {
 
                         // Merge method calls per URL stats
                         for (url, method_counts) in loaded_stats.calls_per_url_per_method {
-                            let url_entry = self
-                                .calls_per_url_per_method
+                            let url_entry = self.calls_per_url_per_method
                                 .entry(url)
                                 .or_insert_with(HashMap::new);
                             for (method, count) in method_counts {
@@ -631,8 +621,10 @@ impl RpcStats {
                             "STATS",
                             &format!(
                                 "Loaded RPC stats from disk: {} total calls, {} URLs, {} methods",
-                                total_calls, url_count, method_count
-                            ),
+                                total_calls,
+                                url_count,
+                                method_count
+                            )
                         );
                         Ok(())
                     }
@@ -640,18 +632,14 @@ impl RpcStats {
                         log(
                             LogTag::Rpc,
                             "WARNING",
-                            &format!("Failed to parse RPC stats file, starting fresh: {}", e),
+                            &format!("Failed to parse RPC stats file, starting fresh: {}", e)
                         );
                         Ok(())
                     }
                 }
             }
             Err(_) => {
-                log(
-                    LogTag::Rpc,
-                    "INFO",
-                    "No existing RPC stats file found, starting fresh",
-                );
+                log(LogTag::Rpc, "INFO", "No existing RPC stats file found, starting fresh");
                 Ok(())
             }
         }
@@ -727,11 +715,7 @@ impl RpcRateLimiter {
 
     /// Wait for rate limit for a specific URL
     pub async fn wait_for_url(&mut self, url: &str) {
-        let url_interval = self
-            .url_intervals
-            .get(url)
-            .unwrap_or(&self.current_interval)
-            .clone();
+        let url_interval = self.url_intervals.get(url).unwrap_or(&self.current_interval).clone();
 
         if let Some(last_call) = self.url_last_calls.get(url) {
             let elapsed = last_call.elapsed();
@@ -744,7 +728,7 @@ impl RpcRateLimiter {
                         "Rate limiting URL {}: waiting {:.2}ms",
                         url,
                         wait_duration.as_millis()
-                    ),
+                    )
                 );
                 tokio::time::sleep(wait_duration).await;
             }
@@ -769,8 +753,7 @@ impl RpcRateLimiter {
 
         if let Some(url) = url {
             // Also update per-URL interval
-            self.url_intervals
-                .insert(url.to_string(), self.current_interval);
+            self.url_intervals.insert(url.to_string(), self.current_interval);
         }
 
         log(
@@ -781,7 +764,7 @@ impl RpcRateLimiter {
                 self.consecutive_429s,
                 self.current_interval.as_millis(),
                 self.max_interval.as_millis()
-            ),
+            )
         );
     }
 
@@ -796,15 +779,11 @@ impl RpcRateLimiter {
 
             if self.consecutive_429s == 0 {
                 self.current_interval = self.base_interval;
-                log(
-                    LogTag::Rpc,
-                    "RATE_LIMIT",
-                    "Rate limit backoff reset to normal",
-                );
+                log(LogTag::Rpc, "RATE_LIMIT", "Rate limit backoff reset to normal");
             } else {
                 let backoff_factor = self.backoff_multiplier.powi(self.consecutive_429s as i32);
-                let new_interval_ms =
-                    ((self.base_interval.as_millis() as f64) * backoff_factor) as u64;
+                let new_interval_ms = ((self.base_interval.as_millis() as f64) *
+                    backoff_factor) as u64;
                 self.current_interval = Duration::from_millis(new_interval_ms);
                 log(
                     LogTag::Rpc,
@@ -813,13 +792,12 @@ impl RpcRateLimiter {
                         "Reduced rate limit backoff to {:.2}ms (429s remaining: {})",
                         self.current_interval.as_millis(),
                         self.consecutive_429s
-                    ),
+                    )
                 );
             }
 
             if let Some(url) = url {
-                self.url_intervals
-                    .insert(url.to_string(), self.current_interval);
+                self.url_intervals.insert(url.to_string(), self.current_interval);
             }
         }
     }
@@ -857,11 +835,7 @@ impl RpcRateLimiter {
         log(
             LogTag::Rpc,
             "RATE_LIMIT",
-            &format!(
-                "Set custom interval for {}: {:.2}ms",
-                url,
-                interval.as_millis()
-            ),
+            &format!("Set custom interval for {}: {:.2}ms", url, interval.as_millis())
         );
     }
 }
@@ -906,42 +880,31 @@ impl RpcClient {
                 all_urls.len(),
                 configs.rpc_fallbacks.len(),
                 configs.rpc_url_premium
-            ),
+            )
         );
 
         if !configs.rpc_fallbacks.is_empty() {
             log(
                 LogTag::Rpc,
                 "FALLBACKS",
-                &format!(
-                    "Available fallback URLs: {}",
-                    configs.rpc_fallbacks.join(", ")
-                ),
+                &format!("Available fallback URLs: {}", configs.rpc_fallbacks.join(", "))
             );
         }
 
-        Self::new_with_urls(
-            &configs.rpc_url,
-            Some(configs.rpc_url_premium),
-            configs.rpc_fallbacks,
-        )
+        Self::new_with_urls(&configs.rpc_url, Some(configs.rpc_url_premium), configs.rpc_fallbacks)
     }
 
     /// Create new RPC client with primary URL and fallbacks
     pub fn new_with_urls(
         primary_url: &str,
         premium_url: Option<String>,
-        fallback_urls: Vec<String>,
+        fallback_urls: Vec<String>
     ) -> Result<Self, String> {
-        log(
-            LogTag::Rpc,
-            "INIT",
-            &format!("Initializing RPC client with primary: {}", primary_url),
-        );
+        log(LogTag::Rpc, "INIT", &format!("Initializing RPC client with primary: {}", primary_url));
 
         let client = SolanaRpcClient::new_with_commitment(
             primary_url.to_string(),
-            CommitmentConfig::confirmed(),
+            CommitmentConfig::confirmed()
         );
 
         let mut stats = RpcStats::default();
@@ -960,15 +923,11 @@ impl RpcClient {
 
     /// Create new RPC client with custom URL (legacy method)
     pub fn new_with_url(rpc_url: &str) -> Self {
-        log(
-            LogTag::Rpc,
-            "INIT",
-            &format!("Initializing RPC client with URL: {}", rpc_url),
-        );
+        log(LogTag::Rpc, "INIT", &format!("Initializing RPC client with URL: {}", rpc_url));
 
         let client = SolanaRpcClient::new_with_commitment(
             rpc_url.to_string(),
-            CommitmentConfig::confirmed(),
+            CommitmentConfig::confirmed()
         );
 
         let mut stats = RpcStats::default();
@@ -1005,11 +964,7 @@ impl RpcClient {
         match self.stats.try_lock() {
             Ok(stats) => stats.clone(),
             Err(_) => {
-                log(
-                    LogTag::Rpc,
-                    "WARN",
-                    "RPC stats lock contention - returning default stats",
-                );
+                log(LogTag::Rpc, "WARN", "RPC stats lock contention - returning default stats");
                 RpcStats::default()
             }
         }
@@ -1020,11 +975,7 @@ impl RpcClient {
         match self.stats.try_lock() {
             Ok(mut stats) => stats.save_to_disk(),
             Err(_) => {
-                log(
-                    LogTag::Rpc,
-                    "WARN",
-                    "RPC stats lock contention during save - stats not saved",
-                );
+                log(LogTag::Rpc, "WARN", "RPC stats lock contention during save - stats not saved");
                 Err("Failed to acquire stats lock for saving".to_string())
             }
         }
@@ -1050,11 +1001,7 @@ impl RpcClient {
 
     /// Check if current URL is a premium RPC (no rate limiting)
     fn is_current_url_premium(&self) -> bool {
-        if let Some(premium_url) = &self.premium_url {
-            self.rpc_url == *premium_url
-        } else {
-            false
-        }
+        if let Some(premium_url) = &self.premium_url { self.rpc_url == *premium_url } else { false }
     }
 
     /// Wait for rate limit if using main RPC (excludes premium RPC) with adaptive backoff
@@ -1131,11 +1078,11 @@ impl RpcClient {
             log(
                 LogTag::Rpc,
                 "PREMIUM",
-                &format!("Using premium RPC (no rate limits): {}", premium_url),
+                &format!("Using premium RPC (no rate limits): {}", premium_url)
             );
             let client = SolanaRpcClient::new_with_commitment(
                 premium_url.clone(),
-                CommitmentConfig::confirmed(),
+                CommitmentConfig::confirmed()
             );
             Some(Arc::new(client))
         } else {
@@ -1149,15 +1096,12 @@ impl RpcClient {
             log(
                 LogTag::Rpc,
                 "MAIN",
-                &format!(
-                    "Using main RPC for lightweight operations: {}",
-                    self.rpc_url
-                ),
+                &format!("Using main RPC for lightweight operations: {}", self.rpc_url)
             );
         }
         let client = SolanaRpcClient::new_with_commitment(
             self.rpc_url.clone(),
-            CommitmentConfig::confirmed(),
+            CommitmentConfig::confirmed()
         );
         Arc::new(client)
     }
@@ -1167,20 +1111,22 @@ impl RpcClient {
         let error_lower = error.to_lowercase();
 
         // Rate limiting and temporary issues - should fallback
-        if error_lower.contains("429")
-            || error_lower.contains("too many requests")
-            || error_lower.contains("rate limit")
-            || error_lower.contains("timeout")
-            || error_lower.contains("connection")
-            || error_lower.contains("network")
+        if
+            error_lower.contains("429") ||
+            error_lower.contains("too many requests") ||
+            error_lower.contains("rate limit") ||
+            error_lower.contains("timeout") ||
+            error_lower.contains("connection") ||
+            error_lower.contains("network")
         {
             return true;
         }
 
         // Real blockchain state - don't fallback, cache as failed
-        if error_lower.contains("account not found")
-            || error_lower.contains("invalid account")
-            || error_lower.contains("account does not exist")
+        if
+            error_lower.contains("account not found") ||
+            error_lower.contains("invalid account") ||
+            error_lower.contains("account does not exist")
         {
             return false;
         }
@@ -1192,9 +1138,9 @@ impl RpcClient {
     /// Check if error is specifically a 429 rate limit error
     fn is_rate_limit_error(error: &str) -> bool {
         let error_lower = error.to_lowercase();
-        error_lower.contains("429")
-            || error_lower.contains("too many requests")
-            || error_lower.contains("rate limit")
+        error_lower.contains("429") ||
+            error_lower.contains("too many requests") ||
+            error_lower.contains("rate limit")
     }
 
     /// Check if HTTP response indicates rate limiting
@@ -1223,14 +1169,12 @@ impl RpcClient {
             self.fallback_urls[self.current_url_index - 1].clone()
         };
 
-        log(
-            LogTag::Rpc,
-            "FALLBACK",
-            &format!("Switching to URL: {}", new_url),
-        );
+        log(LogTag::Rpc, "FALLBACK", &format!("Switching to URL: {}", new_url));
 
-        let new_client =
-            SolanaRpcClient::new_with_commitment(new_url.clone(), CommitmentConfig::confirmed());
+        let new_client = SolanaRpcClient::new_with_commitment(
+            new_url.clone(),
+            CommitmentConfig::confirmed()
+        );
 
         self.client = Arc::new(new_client);
 
@@ -1250,69 +1194,69 @@ impl RpcClient {
         self.wait_for_rate_limit().await;
         self.record_call("get_account");
         let url = self.url().to_string();
-        tokio::task::spawn_blocking({
-            let client = self.client.clone();
-            let pubkey = *pubkey;
-            let url = url.clone();
-            move || {
-                client.get_account(&pubkey).map_err(|e| {
-                    let es = e.to_string();
-                    if es.contains("AccountNotFound") || es.contains("could not find account") {
-                        let blockchain_error = BlockchainError::AccountNotFound {
-                            pubkey: pubkey.to_string(),
-                            context: "get_account".to_string(),
-                            rpc_endpoint: Some(url.clone()),
-                        };
-                        format!("blockchain_error:{}:{}:{}", pubkey, url, blockchain_error)
-                    } else {
-                        let blockchain_error = parse_solana_error(&es, None, "rpc_call");
-                        format!("blockchain_error:{}:{}:{}", pubkey, url, blockchain_error)
-                    }
-                })
-            }
-        })
-        .await
-        .map_err(|e| format!("Task error: {}", e))?
+        tokio::task
+            ::spawn_blocking({
+                let client = self.client.clone();
+                let pubkey = *pubkey;
+                let url = url.clone();
+                move || {
+                    client.get_account(&pubkey).map_err(|e| {
+                        let es = e.to_string();
+                        if es.contains("AccountNotFound") || es.contains("could not find account") {
+                            let blockchain_error = BlockchainError::AccountNotFound {
+                                pubkey: pubkey.to_string(),
+                                context: "get_account".to_string(),
+                                rpc_endpoint: Some(url.clone()),
+                            };
+                            format!("blockchain_error:{}:{}:{}", pubkey, url, blockchain_error)
+                        } else {
+                            let blockchain_error = parse_solana_error(&es, None, "rpc_call");
+                            format!("blockchain_error:{}:{}:{}", pubkey, url, blockchain_error)
+                        }
+                    })
+                }
+            }).await
+            .map_err(|e| format!("Task error: {}", e))?
     }
 
     /// Get single account data with custom commitment level (for debugging)
     pub async fn get_account_with_commitment(
         &self,
         pubkey: &Pubkey,
-        commitment: CommitmentConfig,
+        commitment: CommitmentConfig
     ) -> Result<Account, String> {
         self.wait_for_rate_limit().await;
         self.record_call("get_account_with_commitment");
         let url = self.url().to_string();
-        tokio::task::spawn_blocking({
-            let client = SolanaRpcClient::new_with_commitment(url.clone(), commitment);
-            let pubkey = *pubkey;
-            let url = url.clone();
-            move || {
-                client.get_account(&pubkey).map_err(|e| {
-                    let es = e.to_string();
-                    if es.contains("AccountNotFound") || es.contains("could not find account") {
-                        let blockchain_error = BlockchainError::AccountNotFound {
-                            pubkey: pubkey.to_string(),
-                            context: "get_account_with_commitment".to_string(),
-                            rpc_endpoint: Some(url.clone()),
-                        };
-                        format!("blockchain_error:{}:{}:{}", pubkey, url, blockchain_error)
-                    } else {
-                        let blockchain_error = parse_solana_error(&es, None, "rpc_call");
-                        format!("blockchain_error:{}:{}:{}", pubkey, url, blockchain_error)
-                    }
-                })
-            }
-        })
-        .await
-        .map_err(|e| format!("Task error: {}", e))?
+        tokio::task
+            ::spawn_blocking({
+                let client = SolanaRpcClient::new_with_commitment(url.clone(), commitment);
+                let pubkey = *pubkey;
+                let url = url.clone();
+                move || {
+                    client.get_account(&pubkey).map_err(|e| {
+                        let es = e.to_string();
+                        if es.contains("AccountNotFound") || es.contains("could not find account") {
+                            let blockchain_error = BlockchainError::AccountNotFound {
+                                pubkey: pubkey.to_string(),
+                                context: "get_account_with_commitment".to_string(),
+                                rpc_endpoint: Some(url.clone()),
+                            };
+                            format!("blockchain_error:{}:{}:{}", pubkey, url, blockchain_error)
+                        } else {
+                            let blockchain_error = parse_solana_error(&es, None, "rpc_call");
+                            format!("blockchain_error:{}:{}:{}", pubkey, url, blockchain_error)
+                        }
+                    })
+                }
+            }).await
+            .map_err(|e| format!("Task error: {}", e))?
     }
 
     /// Get multiple accounts data (batch request for efficiency)
     pub async fn get_multiple_accounts(
         &self,
-        pubkeys: &[Pubkey],
+        pubkeys: &[Pubkey]
     ) -> Result<Vec<Option<Account>>, String> {
         if pubkeys.is_empty() {
             return Ok(Vec::new());
@@ -1322,19 +1266,22 @@ impl RpcClient {
         self.record_call("get_multiple_accounts");
 
         let url = self.url().to_string();
-        tokio::task::spawn_blocking({
-            let client = self.client.clone();
-            let keys = pubkeys.to_vec();
-            move || {
-                client.get_multiple_accounts(&keys).map_err(|e| {
-                    let blockchain_error =
-                        parse_solana_error(&e.to_string(), None, "get_multiple_accounts");
-                    format!("blockchain_error:multi:{}:{}", url, blockchain_error)
-                })
-            }
-        })
-        .await
-        .map_err(|e| format!("Task error: {}", e))?
+        tokio::task
+            ::spawn_blocking({
+                let client = self.client.clone();
+                let keys = pubkeys.to_vec();
+                move || {
+                    client.get_multiple_accounts(&keys).map_err(|e| {
+                        let blockchain_error = parse_solana_error(
+                            &e.to_string(),
+                            None,
+                            "get_multiple_accounts"
+                        );
+                        format!("blockchain_error:multi:{}:{}", url, blockchain_error)
+                    })
+                }
+            }).await
+            .map_err(|e| format!("Task error: {}", e))?
     }
 
     /// Get account data with automatic fallback support
@@ -1349,18 +1296,14 @@ impl RpcClient {
                 }
                 Err(e) => {
                     last_error = e.clone();
-                    log(
-                        LogTag::Rpc,
-                        "ERROR",
-                        &format!("RPC call failed on {}: {}", self.url(), e),
-                    );
+                    log(LogTag::Rpc, "ERROR", &format!("RPC call failed on {}: {}", self.url(), e));
 
                     if attempt < max_attempts - 1 {
                         if let Err(switch_err) = self.switch_to_fallback().await {
                             log(
                                 LogTag::Rpc,
                                 "ERROR",
-                                &format!("Failed to switch fallback: {}", switch_err),
+                                &format!("Failed to switch fallback: {}", switch_err)
                             );
                             break;
                         }
@@ -1369,16 +1312,13 @@ impl RpcClient {
             }
         }
 
-        Err(format!(
-            "Failed on all {} RPC endpoints: {}",
-            max_attempts, last_error
-        ))
+        Err(format!("Failed on all {} RPC endpoints: {}", max_attempts, last_error))
     }
 
     /// Get multiple accounts with automatic fallback support
     pub async fn get_multiple_accounts_with_fallback(
         &mut self,
-        pubkeys: &[Pubkey],
+        pubkeys: &[Pubkey]
     ) -> Result<Vec<Option<Account>>, String> {
         if pubkeys.is_empty() {
             return Ok(Vec::new());
@@ -1397,7 +1337,7 @@ impl RpcClient {
                     log(
                         LogTag::Rpc,
                         "ERROR",
-                        &format!("RPC batch call failed on {}: {}", self.url(), e),
+                        &format!("RPC batch call failed on {}: {}", self.url(), e)
                     );
 
                     if attempt < max_attempts - 1 {
@@ -1405,7 +1345,7 @@ impl RpcClient {
                             log(
                                 LogTag::Rpc,
                                 "ERROR",
-                                &format!("Failed to switch fallback: {}", switch_err),
+                                &format!("Failed to switch fallback: {}", switch_err)
                             );
                             break;
                         }
@@ -1414,10 +1354,7 @@ impl RpcClient {
             }
         }
 
-        Err(format!(
-            "Failed batch request on all {} RPC endpoints: {}",
-            max_attempts, last_error
-        ))
+        Err(format!("Failed batch request on all {} RPC endpoints: {}", max_attempts, last_error))
     }
 
     /// Test connection with automatic fallback
@@ -1431,7 +1368,7 @@ impl RpcClient {
                     log(
                         LogTag::Rpc,
                         "SUCCESS",
-                        &format!("RPC connection test passed on {}", self.url()),
+                        &format!("RPC connection test passed on {}", self.url())
                     );
                     return Ok(());
                 }
@@ -1440,7 +1377,7 @@ impl RpcClient {
                     log(
                         LogTag::Rpc,
                         "ERROR",
-                        &format!("RPC connection test failed on {}: {}", self.url(), e),
+                        &format!("RPC connection test failed on {}: {}", self.url(), e)
                     );
 
                     if attempt < max_attempts - 1 {
@@ -1448,7 +1385,7 @@ impl RpcClient {
                             log(
                                 LogTag::Rpc,
                                 "ERROR",
-                                &format!("Failed to switch fallback: {}", switch_err),
+                                &format!("Failed to switch fallback: {}", switch_err)
                             );
                             break;
                         }
@@ -1457,10 +1394,7 @@ impl RpcClient {
             }
         }
 
-        Err(format!(
-            "Connection test failed on all {} RPC endpoints: {}",
-            max_attempts, last_error
-        ))
+        Err(format!("Connection test failed on all {} RPC endpoints: {}", max_attempts, last_error))
     }
 
     /// Test RPC connection
@@ -1468,17 +1402,17 @@ impl RpcClient {
         self.wait_for_rate_limit().await;
         self.record_call("get_slot");
 
-        tokio::task::spawn_blocking({
-            let client = self.client.clone();
-            move || {
-                client
-                    .get_slot()
-                    .map_err(|e| format!("RPC connection test failed: {}", e))
-                    .map(|_| ())
-            }
-        })
-        .await
-        .map_err(|e| format!("Task error: {}", e))?
+        tokio::task
+            ::spawn_blocking({
+                let client = self.client.clone();
+                move || {
+                    client
+                        .get_slot()
+                        .map_err(|e| format!("RPC connection test failed: {}", e))
+                        .map(|_| ())
+                }
+            }).await
+            .map_err(|e| format!("Task error: {}", e))?
     }
 
     /// Get current slot
@@ -1486,16 +1420,12 @@ impl RpcClient {
         self.wait_for_rate_limit().await;
         self.record_call("get_slot");
 
-        tokio::task::spawn_blocking({
-            let client = self.client.clone();
-            move || {
-                client
-                    .get_slot()
-                    .map_err(|e| format!("Failed to get slot: {}", e))
-            }
-        })
-        .await
-        .map_err(|e| format!("Task error: {}", e))?
+        tokio::task
+            ::spawn_blocking({
+                let client = self.client.clone();
+                move || { client.get_slot().map_err(|e| format!("Failed to get slot: {}", e)) }
+            }).await
+            .map_err(|e| format!("Task error: {}", e))?
     }
 
     /// Get SOL balance for wallet address using main RPC first
@@ -1509,11 +1439,12 @@ impl RpcClient {
                 &format!(
                     "Checking SOL balance for wallet: {}",
                     crate::utils::safe_truncate(wallet_address, 8)
-                ),
+                )
             );
         }
 
-        let rpc_payload = serde_json::json!({
+        let rpc_payload =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getBalance",
@@ -1533,16 +1464,16 @@ impl RpcClient {
                 log(
                     LogTag::Rpc,
                     "PREMIUM_ONLY",
-                    "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for SOL balance",
+                    "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for SOL balance"
                 );
             }
 
-            match client
-                .post(&configs.rpc_url_premium)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send()
-                .await
+            match
+                client
+                    .post(&configs.rpc_url_premium)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
             {
                 Ok(response) => {
                     if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
@@ -1563,7 +1494,7 @@ impl RpcClient {
                                     }
                                     self.record_call_for_url(
                                         &configs.rpc_url_premium,
-                                        "get_balance",
+                                        "get_balance"
                                     );
                                     self.record_success(Some(&configs.rpc_url_premium));
                                     return Ok(balance_sol);
@@ -1573,29 +1504,31 @@ impl RpcClient {
                     }
                 }
                 Err(e) => {
-                    return Err(ScreenerBotError::Network(NetworkError::Generic {
-                        message: format!("Failed to get SOL balance from premium RPC: {}", e),
-                    }));
+                    return Err(
+                        ScreenerBotError::Network(NetworkError::Generic {
+                            message: format!("Failed to get SOL balance from premium RPC: {}", e),
+                        })
+                    );
                 }
             }
 
-            return Err(ScreenerBotError::RpcProvider(
-                crate::errors::RpcProviderError::ProviderDown {
+            return Err(
+                ScreenerBotError::RpcProvider(crate::errors::RpcProviderError::ProviderDown {
                     provider_name: "premium_rpc".to_string(),
                     since: chrono::Utc::now(),
-                },
-            ));
+                })
+            );
         }
 
         // Normal mode: Use main RPC first
         let mut should_fallback = false;
 
-        match client
-            .post(&configs.rpc_url)
-            .header("Content-Type", "application/json")
-            .json(&rpc_payload)
-            .send()
-            .await
+        match
+            client
+                .post(&configs.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
         {
             Ok(response) => {
                 // Check if response indicates rate limiting
@@ -1605,7 +1538,7 @@ impl RpcClient {
                     log(
                         LogTag::Rpc,
                         "WARNING",
-                        "Main RPC returned 429 rate limit, falling back to premium",
+                        "Main RPC returned 429 rate limit, falling back to premium"
                     );
                 } else if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
                     if let Some(result) = rpc_response.get("result") {
@@ -1640,48 +1573,42 @@ impl RpcClient {
                     log(
                         LogTag::Rpc,
                         "WARNING",
-                        &format!(
-                            "Main RPC rate limited: {}, falling back to premium",
-                            error_msg
-                        ),
+                        &format!("Main RPC rate limited: {}, falling back to premium", error_msg)
                     );
                 } else {
                     log(
                         LogTag::Rpc,
                         "ERROR",
-                        &format!(
-                            "Failed to get balance from main RPC (non-rate-limit): {}",
-                            error_msg
-                        ),
+                        &format!("Failed to get balance from main RPC (non-rate-limit): {}", error_msg)
                     );
-                    return Err(ScreenerBotError::Network(
-                        crate::errors::NetworkError::Generic {
+                    return Err(
+                        ScreenerBotError::Network(crate::errors::NetworkError::Generic {
                             message: format!("Failed to get balance from main RPC: {}", e),
-                        },
-                    ));
+                        })
+                    );
                 }
             }
         }
 
         // Only fallback to premium RPC on 429/rate limit errors
         if !should_fallback {
-            return Err(ScreenerBotError::RpcProvider(
-                crate::errors::RpcProviderError::Generic {
+            return Err(
+                ScreenerBotError::RpcProvider(crate::errors::RpcProviderError::Generic {
                     provider_name: "main_rpc".to_string(),
                     message: "Failed to get balance from main RPC".to_string(),
-                },
-            ));
+                })
+            );
         }
 
         // Fallback to premium RPC
         let premium_rpc = &configs.rpc_url_premium;
 
-        match client
-            .post(premium_rpc)
-            .header("Content-Type", "application/json")
-            .json(&rpc_payload)
-            .send()
-            .await
+        match
+            client
+                .post(premium_rpc)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
         {
             Ok(response) => {
                 if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
@@ -1710,30 +1637,31 @@ impl RpcClient {
                 }
             }
             Err(e) => {
-                return Err(ScreenerBotError::Network(
-                    crate::errors::NetworkError::Generic {
+                return Err(
+                    ScreenerBotError::Network(crate::errors::NetworkError::Generic {
                         message: format!("Failed to get balance from premium RPC: {}", e),
-                    },
-                ));
+                    })
+                );
             }
         }
-        Err(ScreenerBotError::RpcProvider(
-            crate::errors::RpcProviderError::Generic {
+        Err(
+            ScreenerBotError::RpcProvider(crate::errors::RpcProviderError::Generic {
                 provider_name: "all_rpc_endpoints".to_string(),
                 message: "Failed to get balance from all RPC endpoints".to_string(),
-            },
-        ))
+            })
+        )
     }
 
     /// Get token balance for wallet address using main RPC first
     pub async fn get_token_balance(
         &self,
         wallet_address: &str,
-        mint: &str,
+        mint: &str
     ) -> Result<u64, ScreenerBotError> {
         // Premium-only implementation: always use premium RPC endpoint, skip main + fallback logic
         // We purposefully skip wait_for_rate_limit because premium is assumed unthrottled
-        let rpc_payload = serde_json::json!({
+        let rpc_payload =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getTokenAccountsByOwner",
@@ -1760,16 +1688,16 @@ impl RpcClient {
                     "Using premium RPC only for token balance (mint {} wallet {})",
                     crate::utils::safe_truncate(mint, 8),
                     crate::utils::safe_truncate(wallet_address, 8)
-                ),
+                )
             );
         }
 
-        match client
-            .post(premium_url)
-            .header("Content-Type", "application/json")
-            .json(&rpc_payload)
-            .send()
-            .await
+        match
+            client
+                .post(premium_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
         {
             Ok(response) => {
                 if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
@@ -1781,17 +1709,21 @@ impl RpcClient {
                                         if let Some(data) = account_data.get("data") {
                                             if let Some(parsed) = data.get("parsed") {
                                                 if let Some(info) = parsed.get("info") {
-                                                    if let Some(token_amount) =
-                                                        info.get("tokenAmount")
+                                                    if
+                                                        let Some(token_amount) =
+                                                            info.get("tokenAmount")
                                                     {
-                                                        if let Some(amount_str) =
-                                                            token_amount.get("amount")
+                                                        if
+                                                            let Some(amount_str) =
+                                                                token_amount.get("amount")
                                                         {
-                                                            if let Some(amount_str) =
-                                                                amount_str.as_str()
+                                                            if
+                                                                let Some(amount_str) =
+                                                                    amount_str.as_str()
                                                             {
-                                                                if let Ok(amount) =
-                                                                    amount_str.parse::<u64>()
+                                                                if
+                                                                    let Ok(amount) =
+                                                                        amount_str.parse::<u64>()
                                                                 {
                                                                     self.record_call_for_url(
                                                                         premium_url,
@@ -1819,7 +1751,7 @@ impl RpcClient {
                 log(
                     LogTag::Rpc,
                     "ERROR",
-                    &format!("Premium RPC request failed for token balance: {}", e),
+                    &format!("Premium RPC request failed for token balance: {}", e)
                 );
                 return Ok(0);
             }
@@ -1832,7 +1764,8 @@ impl RpcClient {
     pub async fn get_latest_blockhash(&self) -> Result<Hash, ScreenerBotError> {
         self.wait_for_rate_limit().await;
 
-        let rpc_payload = serde_json::json!({
+        let rpc_payload =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getLatestBlockhash",
@@ -1856,23 +1789,25 @@ impl RpcClient {
                 log(
                     LogTag::Rpc,
                     "PREMIUM_ONLY",
-                    "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for blockhash",
+                    "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for blockhash"
                 );
             }
 
-            match client
-                .post(&configs.rpc_url_premium)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send()
-                .await
+            match
+                client
+                    .post(&configs.rpc_url_premium)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
             {
                 Ok(response) => {
                     if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
                         if let Some(result) = rpc_response.get("result") {
                             if let Some(value) = result.get("value") {
-                                if let Some(blockhash_str) =
-                                    value.get("blockhash").and_then(|b| b.as_str())
+                                if
+                                    let Some(blockhash_str) = value
+                                        .get("blockhash")
+                                        .and_then(|b| b.as_str())
                                 {
                                     if let Ok(blockhash) = Hash::from_str(blockhash_str) {
                                         return Ok(blockhash);
@@ -1883,29 +1818,31 @@ impl RpcClient {
                     }
                 }
                 Err(e) => {
-                    return Err(ScreenerBotError::Network(NetworkError::Generic {
-                        message: format!("Failed to get latest blockhash from premium RPC: {}", e),
-                    }));
+                    return Err(
+                        ScreenerBotError::Network(NetworkError::Generic {
+                            message: format!("Failed to get latest blockhash from premium RPC: {}", e),
+                        })
+                    );
                 }
             }
 
-            return Err(ScreenerBotError::RpcProvider(
-                crate::errors::RpcProviderError::ProviderDown {
+            return Err(
+                ScreenerBotError::RpcProvider(crate::errors::RpcProviderError::ProviderDown {
                     provider_name: "premium_rpc".to_string(),
                     since: chrono::Utc::now(),
-                },
-            ));
+                })
+            );
         }
 
         // Normal mode: Use main RPC first
         let mut should_fallback = false;
 
-        match client
-            .post(&configs.rpc_url)
-            .header("Content-Type", "application/json")
-            .json(&rpc_payload)
-            .send()
-            .await
+        match
+            client
+                .post(&configs.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
         {
             Ok(response) => {
                 // Check if response indicates rate limiting
@@ -1914,13 +1851,15 @@ impl RpcClient {
                     log(
                         LogTag::Rpc,
                         "WARNING",
-                        "Main RPC returned 429 rate limit for blockhash, falling back to premium",
+                        "Main RPC returned 429 rate limit for blockhash, falling back to premium"
                     );
                 } else if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
                     if let Some(result) = rpc_response.get("result") {
                         if let Some(value) = result.get("value") {
-                            if let Some(blockhash_str) =
-                                value.get("blockhash").and_then(|b| b.as_str())
+                            if
+                                let Some(blockhash_str) = value
+                                    .get("blockhash")
+                                    .and_then(|b| b.as_str())
                             {
                                 if let Ok(blockhash) = Hash::from_str(blockhash_str) {
                                     return Ok(blockhash);
@@ -1937,56 +1876,51 @@ impl RpcClient {
                     log(
                         LogTag::Rpc,
                         "WARNING",
-                        &format!(
-                            "Main RPC rate limited for blockhash: {}, falling back to premium",
-                            error_msg
-                        ),
+                        &format!("Main RPC rate limited for blockhash: {}, falling back to premium", error_msg)
                     );
                 } else {
                     log(
                         LogTag::Rpc,
                         "ERROR",
-                        &format!(
-                            "Failed to get latest blockhash from main RPC (non-rate-limit): {}",
-                            error_msg
-                        ),
+                        &format!("Failed to get latest blockhash from main RPC (non-rate-limit): {}", error_msg)
                     );
-                    return Err(ScreenerBotError::Network(NetworkError::Generic {
-                        message: format!(
-                            "Failed to get latest blockhash from main RPC: {}",
-                            error_msg
-                        ),
-                    }));
+                    return Err(
+                        ScreenerBotError::Network(NetworkError::Generic {
+                            message: format!("Failed to get latest blockhash from main RPC: {}", error_msg),
+                        })
+                    );
                 }
             }
         }
 
         // Only fallback to premium RPC on 429/rate limit errors
         if !should_fallback {
-            return Err(ScreenerBotError::RpcProvider(
-                RpcProviderError::ProviderDown {
+            return Err(
+                ScreenerBotError::RpcProvider(RpcProviderError::ProviderDown {
                     provider_name: "main RPC".to_string(),
                     since: chrono::Utc::now(),
-                },
-            ));
+                })
+            );
         }
 
         // Fallback to premium RPC
         let premium_rpc = &configs.rpc_url_premium;
 
-        match client
-            .post(premium_rpc)
-            .header("Content-Type", "application/json")
-            .json(&rpc_payload)
-            .send()
-            .await
+        match
+            client
+                .post(premium_rpc)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
         {
             Ok(response) => {
                 if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
                     if let Some(result) = rpc_response.get("result") {
                         if let Some(value) = result.get("value") {
-                            if let Some(blockhash_str) =
-                                value.get("blockhash").and_then(|b| b.as_str())
+                            if
+                                let Some(blockhash_str) = value
+                                    .get("blockhash")
+                                    .and_then(|b| b.as_str())
                             {
                                 if let Ok(blockhash) = Hash::from_str(blockhash_str) {
                                     return Ok(blockhash);
@@ -1997,26 +1931,26 @@ impl RpcClient {
                 }
             }
             Err(e) => {
-                return Err(ScreenerBotError::Network(
-                    crate::errors::NetworkError::Generic {
+                return Err(
+                    ScreenerBotError::Network(crate::errors::NetworkError::Generic {
                         message: format!("Failed to get latest blockhash from premium RPC: {}", e),
-                    },
-                ));
+                    })
+                );
             }
         }
 
-        Err(ScreenerBotError::RpcProvider(
-            crate::errors::RpcProviderError::Generic {
+        Err(
+            ScreenerBotError::RpcProvider(crate::errors::RpcProviderError::Generic {
                 provider_name: "all_rpc_endpoints".to_string(),
                 message: "Failed to get latest blockhash from all RPC endpoints".to_string(),
-            },
-        ))
+            })
+        )
     }
 
     /// Send transaction using premium RPC
     pub async fn send_transaction(
         &self,
-        transaction: &Transaction,
+        transaction: &Transaction
     ) -> Result<String, ScreenerBotError> {
         self.wait_for_rate_limit().await;
 
@@ -2030,7 +1964,8 @@ impl RpcClient {
 
         let tx_base64 = base64::engine::general_purpose::STANDARD.encode(&serialized_tx);
 
-        let rpc_payload = serde_json::json!({
+        let rpc_payload =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "sendTransaction",
@@ -2058,16 +1993,16 @@ impl RpcClient {
                 log(
                     LogTag::Rpc,
                     "PREMIUM_ONLY",
-                    "FORCE_PREMIUM_RPC_ONLY is active - sending transaction to premium RPC only",
+                    "FORCE_PREMIUM_RPC_ONLY is active - sending transaction to premium RPC only"
                 );
             }
 
-            match client
-                .post(&configs.rpc_url_premium)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send()
-                .await
+            match
+                client
+                    .post(&configs.rpc_url_premium)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
             {
                 Ok(response) => {
                     if response.status().is_success() {
@@ -2090,8 +2025,11 @@ impl RpcClient {
                                     .unwrap_or("Unknown RPC error");
 
                                 // Parse Solana-specific error using new structured approach
-                                let blockchain_error =
-                                    parse_solana_error(error_msg, None, "transaction_send");
+                                let blockchain_error = parse_solana_error(
+                                    error_msg,
+                                    None,
+                                    "transaction_send"
+                                );
 
                                 return Err(ScreenerBotError::Blockchain(blockchain_error));
                             }
@@ -2099,20 +2037,20 @@ impl RpcClient {
                     }
                 }
                 Err(e) => {
-                    return Err(ScreenerBotError::Network(
-                        crate::errors::NetworkError::Generic {
+                    return Err(
+                        ScreenerBotError::Network(crate::errors::NetworkError::Generic {
                             message: format!("Failed to send transaction to premium RPC: {}", e),
-                        },
-                    ));
+                        })
+                    );
                 }
             }
 
-            return Err(ScreenerBotError::RpcProvider(
-                crate::errors::RpcProviderError::ProviderDown {
+            return Err(
+                ScreenerBotError::RpcProvider(crate::errors::RpcProviderError::ProviderDown {
                     provider_name: "premium_rpc".to_string(),
                     since: chrono::Utc::now(),
-                },
-            ));
+                })
+            );
         }
 
         // Normal mode: Use premium RPC URL first
@@ -2120,12 +2058,12 @@ impl RpcClient {
 
         log(LogTag::Rpc, "INFO", "Sending transaction to premium RPC...");
 
-        match client
-            .post(premium_rpc)
-            .header("Content-Type", "application/json")
-            .json(&rpc_payload)
-            .send()
-            .await
+        match
+            client
+                .post(premium_rpc)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
         {
             Ok(response) => {
                 if response.status().is_success() {
@@ -2135,10 +2073,7 @@ impl RpcClient {
                                 log(
                                     LogTag::Rpc,
                                     "SUCCESS",
-                                    &format!(
-                                        "Transaction sent successfully via premium RPC: {}",
-                                        signature
-                                    ),
+                                    &format!("Transaction sent successfully via premium RPC: {}", signature)
                                 );
                                 return Ok(signature.to_string());
                             }
@@ -2149,11 +2084,7 @@ impl RpcClient {
                                 .get("message")
                                 .and_then(|m| m.as_str())
                                 .unwrap_or("Unknown RPC error");
-                            log(
-                                LogTag::Rpc,
-                                "ERROR",
-                                &format!("Premium RPC error: {}", error_msg),
-                            );
+                            log(LogTag::Rpc, "ERROR", &format!("Premium RPC error: {}", error_msg));
                         }
                     }
                 }
@@ -2162,24 +2093,20 @@ impl RpcClient {
                 log(
                     LogTag::Rpc,
                     "ERROR",
-                    &format!("Failed to send transaction to premium RPC: {}", e),
+                    &format!("Failed to send transaction to premium RPC: {}", e)
                 );
             }
         }
 
         // Fallback to main RPC
-        log(
-            LogTag::Rpc,
-            "INFO",
-            "Fallback: Sending transaction to main RPC...",
-        );
+        log(LogTag::Rpc, "INFO", "Fallback: Sending transaction to main RPC...");
 
-        match client
-            .post(&configs.rpc_url)
-            .header("Content-Type", "application/json")
-            .json(&rpc_payload)
-            .send()
-            .await
+        match
+            client
+                .post(&configs.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
         {
             Ok(response) => {
                 if response.status().is_success() {
@@ -2189,10 +2116,7 @@ impl RpcClient {
                                 log(
                                     LogTag::Rpc,
                                     "SUCCESS",
-                                    &format!(
-                                        "Transaction sent successfully via main RPC: {}",
-                                        signature
-                                    ),
+                                    &format!("Transaction sent successfully via main RPC: {}", signature)
                                 );
                                 return Ok(signature.to_string());
                             }
@@ -2203,35 +2127,39 @@ impl RpcClient {
                                 .get("message")
                                 .and_then(|m| m.as_str())
                                 .unwrap_or("Unknown RPC error");
-                            return Err(ScreenerBotError::RpcProvider(RpcProviderError::Generic {
-                                provider_name: "main RPC".to_string(),
-                                message: format!("RPC error: {}", error_msg),
-                            }));
+                            return Err(
+                                ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                                    provider_name: "main RPC".to_string(),
+                                    message: format!("RPC error: {}", error_msg),
+                                })
+                            );
                         }
                     }
                 }
             }
             Err(e) => {
-                return Err(ScreenerBotError::Network(NetworkError::Generic {
-                    message: format!("Failed to send transaction to main RPC: {}", e),
-                }));
+                return Err(
+                    ScreenerBotError::Network(NetworkError::Generic {
+                        message: format!("Failed to send transaction to main RPC: {}", e),
+                    })
+                );
             }
         }
 
-        Err(ScreenerBotError::Blockchain(
-            crate::errors::BlockchainError::TransactionDropped {
+        Err(
+            ScreenerBotError::Blockchain(crate::errors::BlockchainError::TransactionDropped {
                 signature: "unknown".to_string(),
                 reason: "Failed to send transaction to all RPC endpoints".to_string(),
                 fee_paid: None,
                 attempts: 2, // main + premium
-            },
-        ))
+            })
+        )
     }
 
     /// Sign and send transaction using premium RPC
     pub async fn sign_and_send_transaction(
         &self,
-        swap_transaction_base64: &str,
+        swap_transaction_base64: &str
     ) -> Result<String, ScreenerBotError> {
         self.wait_for_rate_limit().await;
 
@@ -2248,7 +2176,7 @@ impl RpcClient {
                 &format!(
                     "Starting transaction signing: tx_length={} bytes",
                     swap_transaction_base64.len()
-                ),
+                )
             );
         }
 
@@ -2258,7 +2186,7 @@ impl RpcClient {
             &format!(
                 "Signing transaction with wallet (length: {} bytes)",
                 swap_transaction_base64.len()
-            ),
+            )
         );
 
         if is_debug_transactions_enabled() {
@@ -2268,7 +2196,7 @@ impl RpcClient {
                 &format!(
                     "🚀 Starting sign_and_send_transaction process with {} byte transaction",
                     swap_transaction_base64.len()
-                ),
+                )
             );
         }
 
@@ -2283,7 +2211,8 @@ impl RpcClient {
             })?;
 
         // Deserialize the VersionedTransaction
-        let mut transaction: VersionedTransaction = bincode::deserialize(&original_tx_bytes)
+        let mut transaction: VersionedTransaction = bincode
+            ::deserialize(&original_tx_bytes)
             .map_err(|e| {
                 ScreenerBotError::Data(crate::errors::DataError::ParseError {
                     data_type: "VersionedTransaction".to_string(),
@@ -2292,13 +2221,14 @@ impl RpcClient {
             })?;
 
         // Create keypair from private key
-        let private_key_bytes = bs58::decode(&configs.main_wallet_private)
+        let private_key_bytes = bs58
+            ::decode(&configs.main_wallet_private)
             .into_vec()
             .map_err(|e| {
                 ScreenerBotError::Configuration(
                     crate::errors::ConfigurationError::InvalidPrivateKey {
                         error: format!("Invalid private key format: {}", e),
-                    },
+                    }
                 )
             })?;
 
@@ -2309,33 +2239,34 @@ impl RpcClient {
         })?;
 
         // Helper to (re)sign & serialize current transaction state
-        let mut sign_and_serialize =
-            |tx: &mut VersionedTransaction| -> Result<String, ScreenerBotError> {
-                let sig = keypair.sign_message(&tx.message.serialize());
-                if tx.signatures.is_empty() {
-                    tx.signatures.push(sig);
-                } else {
-                    tx.signatures[0] = sig;
-                }
-                if is_debug_wallet_enabled() {
-                    log(
-                        LogTag::Rpc,
-                        "DEBUG",
-                        &format!(
-                            "Transaction signed: wallet_pubkey={}, signature={}",
-                            keypair.pubkey(),
-                            sig
-                        ),
-                    );
-                }
-                let bytes = bincode::serialize(tx).map_err(|e| {
-                    ScreenerBotError::Data(crate::errors::DataError::ParseError {
-                        data_type: "signed_transaction".to_string(),
-                        error: format!("Failed to serialize signed transaction: {}", e),
-                    })
-                })?;
-                Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
-            };
+        let mut sign_and_serialize = |
+            tx: &mut VersionedTransaction
+        | -> Result<String, ScreenerBotError> {
+            let sig = keypair.sign_message(&tx.message.serialize());
+            if tx.signatures.is_empty() {
+                tx.signatures.push(sig);
+            } else {
+                tx.signatures[0] = sig;
+            }
+            if is_debug_wallet_enabled() {
+                log(
+                    LogTag::Rpc,
+                    "DEBUG",
+                    &format!(
+                        "Transaction signed: wallet_pubkey={}, signature={}",
+                        keypair.pubkey(),
+                        sig
+                    )
+                );
+            }
+            let bytes = bincode::serialize(tx).map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::ParseError {
+                    data_type: "signed_transaction".to_string(),
+                    error: format!("Failed to serialize signed transaction: {}", e),
+                })
+            })?;
+            Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+        };
 
         // Extract current recent blockhash (for logging / comparison)
         let initial_blockhash = match &transaction.message {
@@ -2346,7 +2277,7 @@ impl RpcClient {
             log(
                 LogTag::Rpc,
                 "TX_DEBUG_BLOCKHASH",
-                &format!("Initial tx blockhash: {}", initial_blockhash),
+                &format!("Initial tx blockhash: {}", initial_blockhash)
             );
         }
 
@@ -2362,7 +2293,7 @@ impl RpcClient {
                 log(
                     LogTag::Rpc,
                     "RETRY",
-                    &format!("Retrying transaction send attempt {}", attempt + 1),
+                    &format!("Retrying transaction send attempt {}", attempt + 1)
                 );
             }
 
@@ -2370,7 +2301,8 @@ impl RpcClient {
             let signed_transaction_base64 = sign_and_serialize(&mut transaction)?;
 
             // Build payload each attempt (fresh signed tx)
-            let rpc_payload = serde_json::json!({
+            let rpc_payload =
+                serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "sendTransaction",
@@ -2395,15 +2327,14 @@ impl RpcClient {
                     log(
                         LogTag::Rpc,
                         "TX_DEBUG_SEND",
-                        &format!("Attempt {} -> Endpoint {}: {}", attempt + 1, idx + 1, url),
+                        &format!("Attempt {} -> Endpoint {}: {}", attempt + 1, idx + 1, url)
                     );
                 }
                 let send_result = client
                     .post(&url)
                     .header("Content-Type", "application/json")
                     .json(&rpc_payload)
-                    .send()
-                    .await;
+                    .send().await;
                 match send_result {
                     Ok(resp) => {
                         if resp.status().is_success() {
@@ -2415,8 +2346,9 @@ impl RpcClient {
                                             "SUCCESS",
                                             &format!(
                                                 "Transaction sent successfully via {}: {}",
-                                                url, result
-                                            ),
+                                                url,
+                                                result
+                                            )
                                         );
                                         self.record_call_for_url(&url, "send_transaction");
                                         return Ok(result.to_string());
@@ -2431,12 +2363,15 @@ impl RpcClient {
                                             log(
                                                 LogTag::Rpc,
                                                 "TX_DEBUG_ERROR",
-                                                &format!("Endpoint {} error: {}", url, msg),
+                                                &format!("Endpoint {} error: {}", url, msg)
                                             );
                                         }
                                         // Parse Solana-specific error using new structured approach
-                                        let blockchain_error =
-                                            parse_solana_error(msg, None, "transaction_send");
+                                        let blockchain_error = parse_solana_error(
+                                            msg,
+                                            None,
+                                            "transaction_send"
+                                        );
 
                                         match blockchain_error {
                                             BlockchainError::BlockhashExpired { .. } => {
@@ -2487,52 +2422,56 @@ impl RpcClient {
                                                     }
                                                 }
                                                 // Break to outer retry loop
-                                                last_err = Some(ScreenerBotError::Blockchain(
-                                                    blockchain_error,
-                                                ));
+                                                last_err = Some(
+                                                    ScreenerBotError::Blockchain(blockchain_error)
+                                                );
                                             }
                                             _ => {
-                                                last_err = Some(ScreenerBotError::Blockchain(
-                                                    blockchain_error,
-                                                ));
+                                                last_err = Some(
+                                                    ScreenerBotError::Blockchain(blockchain_error)
+                                                );
                                             }
                                         }
                                     } else {
-                                        last_err = Some(ScreenerBotError::RpcProvider(
-                                            crate::errors::RpcProviderError::MalformedResponse {
-                                                provider_name: url.clone(),
-                                                endpoint: "send_transaction".to_string(),
-                                                response_body:
-                                                    "Missing result or error in RPC response"
-                                                        .to_string(),
-                                            },
-                                        ));
+                                        last_err = Some(
+                                            ScreenerBotError::RpcProvider(
+                                                crate::errors::RpcProviderError::MalformedResponse {
+                                                    provider_name: url.clone(),
+                                                    endpoint: "send_transaction".to_string(),
+                                                    response_body: "Missing result or error in RPC response".to_string(),
+                                                }
+                                            )
+                                        );
                                     }
                                 }
                                 Err(e) => {
-                                    last_err = Some(ScreenerBotError::Data(
-                                        crate::errors::DataError::ParseError {
-                                            data_type: "RPC_JSON".to_string(),
-                                            error: format!("Failed parsing RPC JSON: {}", e),
-                                        },
-                                    ));
+                                    last_err = Some(
+                                        ScreenerBotError::Data(
+                                            crate::errors::DataError::ParseError {
+                                                data_type: "RPC_JSON".to_string(),
+                                                error: format!("Failed parsing RPC JSON: {}", e),
+                                            }
+                                        )
+                                    );
                                 }
                             }
                         } else {
-                            last_err = Some(ScreenerBotError::RpcProvider(
-                                crate::errors::RpcProviderError::Generic {
-                                    provider_name: url.clone(),
-                                    message: format!("HTTP status {}", resp.status()),
-                                },
-                            ));
+                            last_err = Some(
+                                ScreenerBotError::RpcProvider(
+                                    crate::errors::RpcProviderError::Generic {
+                                        provider_name: url.clone(),
+                                        message: format!("HTTP status {}", resp.status()),
+                                    }
+                                )
+                            );
                         }
                     }
                     Err(e) => {
-                        last_err = Some(ScreenerBotError::Network(
-                            crate::errors::NetworkError::Generic {
+                        last_err = Some(
+                            ScreenerBotError::Network(crate::errors::NetworkError::Generic {
                                 message: format!("Failed to send transaction: {}", e),
-                            },
-                        ));
+                            })
+                        );
                     }
                 }
                 // If we flagged retry due to blockhash error, break endpoint loop
@@ -2555,27 +2494,30 @@ impl RpcClient {
             break; // no retry condition met
         }
 
-        return Err(last_err.unwrap_or_else(|| {
-            ScreenerBotError::Blockchain(crate::errors::BlockchainError::TransactionDropped {
-                signature: "unknown".to_string(),
-                reason: "Failed to send transaction after retries".to_string(),
-                fee_paid: None,
-                attempts: 3,
+        return Err(
+            last_err.unwrap_or_else(|| {
+                ScreenerBotError::Blockchain(crate::errors::BlockchainError::TransactionDropped {
+                    signature: "unknown".to_string(),
+                    reason: "Failed to send transaction after retries".to_string(),
+                    fee_paid: None,
+                    attempts: 3,
+                })
             })
-        }));
+        );
     }
 
     /// Gets all token accounts for a wallet (both SPL Token and Token-2022)
     pub async fn get_all_token_accounts(
         &self,
-        wallet_address: &str,
+        wallet_address: &str
     ) -> Result<Vec<TokenAccountInfo>, ScreenerBotError> {
         // Record call in stats
         if let Ok(mut stats) = self.stats.lock() {
             stats.record_call(&self.rpc_url, "getTokenAccountsByOwner");
         }
 
-        let spl_token_payload = serde_json::json!({
+        let spl_token_payload =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getTokenAccountsByOwner",
@@ -2590,7 +2532,8 @@ impl RpcClient {
             ]
         });
 
-        let token_2022_payload = serde_json::json!({
+        let token_2022_payload =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getTokenAccountsByOwner",
@@ -2611,12 +2554,12 @@ impl RpcClient {
 
         // Try main RPC first
         for payload in [&spl_token_payload, &token_2022_payload] {
-            match client
-                .post(&self.rpc_url)
-                .header("Content-Type", "application/json")
-                .json(payload)
-                .send()
-                .await
+            match
+                client
+                    .post(&self.rpc_url)
+                    .header("Content-Type", "application/json")
+                    .json(payload)
+                    .send().await
             {
                 Ok(response) => {
                     // Check if response indicates rate limiting
@@ -2634,8 +2577,11 @@ impl RpcClient {
                                 if let Some(accounts) = value.as_array() {
                                     let is_token_2022 = payload == &token_2022_payload;
                                     for account in accounts {
-                                        if let Some(parsed_info) =
-                                            extract_token_account_info(account, is_token_2022)
+                                        if
+                                            let Some(parsed_info) = extract_token_account_info(
+                                                account,
+                                                is_token_2022
+                                            )
                                         {
                                             all_accounts.push(parsed_info);
                                         }
@@ -2659,19 +2605,13 @@ impl RpcClient {
                         log(
                             LogTag::Rpc,
                             "ERROR",
-                            &format!(
-                                "Failed to get token accounts from main RPC (non-rate-limit): {}",
-                                error_msg
-                            ),
+                            &format!("Failed to get token accounts from main RPC (non-rate-limit): {}", error_msg)
                         );
-                        return Err(ScreenerBotError::Network(
-                            crate::errors::NetworkError::Generic {
-                                message: format!(
-                                    "Failed to get token accounts from main RPC: {}",
-                                    e
-                                ),
-                            },
-                        ));
+                        return Err(
+                            ScreenerBotError::Network(crate::errors::NetworkError::Generic {
+                                message: format!("Failed to get token accounts from main RPC: {}", e),
+                            })
+                        );
                     }
                 }
             }
@@ -2679,19 +2619,15 @@ impl RpcClient {
 
         // Only fallback to premium RPC on 429/rate limit errors
         if should_fallback {
-            log(
-                LogTag::Rpc,
-                "INFO",
-                "Falling back to premium RPC for token accounts",
-            );
+            log(LogTag::Rpc, "INFO", "Falling back to premium RPC for token accounts");
             if let Some(premium_url) = &self.premium_url {
                 for payload in [&spl_token_payload, &token_2022_payload] {
-                    if let Ok(response) = client
-                        .post(premium_url)
-                        .header("Content-Type", "application/json")
-                        .json(payload)
-                        .send()
-                        .await
+                    if
+                        let Ok(response) = client
+                            .post(premium_url)
+                            .header("Content-Type", "application/json")
+                            .json(payload)
+                            .send().await
                     {
                         if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
                             if let Some(result) = rpc_response.get("result") {
@@ -2699,8 +2635,11 @@ impl RpcClient {
                                     if let Some(accounts) = value.as_array() {
                                         let is_token_2022 = payload == &token_2022_payload;
                                         for account in accounts {
-                                            if let Some(parsed_info) =
-                                                extract_token_account_info(account, is_token_2022)
+                                            if
+                                                let Some(parsed_info) = extract_token_account_info(
+                                                    account,
+                                                    is_token_2022
+                                                )
                                             {
                                                 all_accounts.push(parsed_info);
                                             }
@@ -2717,10 +2656,7 @@ impl RpcClient {
         log(
             LogTag::Rpc,
             "ATA",
-            &format!(
-                "Found {} total token accounts for wallet via RPC",
-                all_accounts.len()
-            ),
+            &format!("Found {} total token accounts for wallet via RPC", all_accounts.len())
         );
         Ok(all_accounts)
     }
@@ -2728,14 +2664,15 @@ impl RpcClient {
     /// Checks if a token account (not mint) is a Token-2022 account by checking the account owner
     pub async fn is_token_account_token_2022(
         &self,
-        token_account: &str,
+        token_account: &str
     ) -> Result<bool, ScreenerBotError> {
         // Record call in stats
         if let Ok(mut stats) = self.stats.lock() {
             stats.record_call(&self.rpc_url, "getAccountInfo");
         }
 
-        let rpc_payload = serde_json::json!({
+        let rpc_payload =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getAccountInfo",
@@ -2751,12 +2688,12 @@ impl RpcClient {
         let mut should_fallback = false;
 
         // Try main RPC first
-        match client
-            .post(&self.rpc_url)
-            .header("Content-Type", "application/json")
-            .json(&rpc_payload)
-            .send()
-            .await
+        match
+            client
+                .post(&self.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
         {
             Ok(response) => {
                 // Check if response indicates rate limiting
@@ -2795,10 +2732,7 @@ impl RpcClient {
                     log(
                         LogTag::Rpc,
                         "ERROR",
-                        &format!(
-                            "Failed to get token account info from main RPC (non-rate-limit): {}",
-                            error_msg
-                        ),
+                        &format!("Failed to get token account info from main RPC (non-rate-limit): {}", error_msg)
                     );
                     return Ok(false); // Default to false for non-rate-limit errors
                 }
@@ -2808,12 +2742,12 @@ impl RpcClient {
         // Only fallback to premium RPC on 429/rate limit errors
         if should_fallback {
             if let Some(premium_url) = &self.premium_url {
-                match client
-                    .post(premium_url)
-                    .header("Content-Type", "application/json")
-                    .json(&rpc_payload)
-                    .send()
-                    .await
+                match
+                    client
+                        .post(premium_url)
+                        .header("Content-Type", "application/json")
+                        .json(&rpc_payload)
+                        .send().await
                 {
                     Ok(response) => {
                         if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
@@ -2822,8 +2756,10 @@ impl RpcClient {
                                     if let Some(owner) = value.get("owner") {
                                         if let Some(owner_str) = owner.as_str() {
                                             // Token Extensions Program ID (Token-2022)
-                                            return Ok(owner_str
-                                                == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+                                            return Ok(
+                                                owner_str ==
+                                                    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                                            );
                                         }
                                     }
                                 }
@@ -2834,7 +2770,7 @@ impl RpcClient {
                         log(
                             LogTag::Rpc,
                             "WARNING",
-                            &format!("Failed to get token account info from premium RPC: {}", e),
+                            &format!("Failed to get token account info from premium RPC: {}", e)
                         );
                     }
                 }
@@ -2852,7 +2788,8 @@ impl RpcClient {
             stats.record_call(&self.rpc_url, "getAccountInfo");
         }
 
-        let rpc_payload = serde_json::json!({
+        let rpc_payload =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getAccountInfo",
@@ -2868,12 +2805,12 @@ impl RpcClient {
         let mut should_fallback = false;
 
         // Try main RPC first
-        match client
-            .post(&self.rpc_url)
-            .header("Content-Type", "application/json")
-            .json(&rpc_payload)
-            .send()
-            .await
+        match
+            client
+                .post(&self.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
         {
             Ok(response) => {
                 // Check if response indicates rate limiting
@@ -2906,19 +2843,13 @@ impl RpcClient {
                     log(
                         LogTag::Rpc,
                         "WARNING",
-                        &format!(
-                            "Main RPC rate limited for account info: {}, falling back to premium",
-                            error_msg
-                        ),
+                        &format!("Main RPC rate limited for account info: {}, falling back to premium", error_msg)
                     );
                 } else {
                     log(
                         LogTag::Rpc,
                         "ERROR",
-                        &format!(
-                            "Failed to get account info from main RPC (non-rate-limit): {}",
-                            error_msg
-                        ),
+                        &format!("Failed to get account info from main RPC (non-rate-limit): {}", error_msg)
                     );
                     return Ok(false); // Default to false for non-rate-limit errors
                 }
@@ -2928,12 +2859,12 @@ impl RpcClient {
         // Only fallback to premium RPC on 429/rate limit errors
         if should_fallback {
             if let Some(premium_url) = &self.premium_url {
-                match client
-                    .post(premium_url)
-                    .header("Content-Type", "application/json")
-                    .json(&rpc_payload)
-                    .send()
-                    .await
+                match
+                    client
+                        .post(premium_url)
+                        .header("Content-Type", "application/json")
+                        .json(&rpc_payload)
+                        .send().await
                 {
                     Ok(response) => {
                         if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
@@ -2942,8 +2873,10 @@ impl RpcClient {
                                     if let Some(owner) = value.get("owner") {
                                         if let Some(owner_str) = owner.as_str() {
                                             // Token Extensions Program ID (Token-2022)
-                                            return Ok(owner_str
-                                                == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+                                            return Ok(
+                                                owner_str ==
+                                                    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                                            );
                                         }
                                     }
                                 }
@@ -2954,7 +2887,7 @@ impl RpcClient {
                         log(
                             LogTag::Rpc,
                             "WARNING",
-                            &format!("Failed to get account info from premium RPC: {}", e),
+                            &format!("Failed to get account info from premium RPC: {}", e)
                         );
                     }
                 }
@@ -2968,9 +2901,10 @@ impl RpcClient {
     /// Gets transaction details from RPC to analyze balance changes
     pub async fn get_transaction_details(
         &self,
-        transaction_signature: &str,
+        transaction_signature: &str
     ) -> Result<TransactionDetails, ScreenerBotError> {
-        let rpc_payload = serde_json::json!({
+        let rpc_payload =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getTransaction",
@@ -2998,12 +2932,12 @@ impl RpcClient {
             if let Some(premium_url) = &self.premium_url {
                 self.record_call_for_url(premium_url, "getTransaction");
 
-                match client
-                    .post(premium_url)
-                    .header("Content-Type", "application/json")
-                    .json(&rpc_payload)
-                    .send()
-                    .await
+                match
+                    client
+                        .post(premium_url)
+                        .header("Content-Type", "application/json")
+                        .json(&rpc_payload)
+                        .send().await
                 {
                     Ok(response) => {
                         if response.status().is_success() {
@@ -3012,25 +2946,28 @@ impl RpcClient {
                                     let blockchain_error = parse_solana_error(
                                         &error.to_string(),
                                         None,
-                                        "premium_rpc_get_transaction",
+                                        "premium_rpc_get_transaction"
                                     );
                                     return Err(ScreenerBotError::Blockchain(blockchain_error));
                                 }
 
                                 if let Some(result) = rpc_response.get("result") {
                                     if result.is_null() {
-                                        return Err(ScreenerBotError::Blockchain(
-                                            crate::errors::BlockchainError::TransactionNotFound {
-                                                signature: transaction_signature.to_string(),
-                                                commitment_level: "confirmed".to_string(),
-                                                searched_endpoints: vec![premium_url.clone()],
-                                                age_seconds: None,
-                                            },
-                                        ));
+                                        return Err(
+                                            ScreenerBotError::Blockchain(
+                                                crate::errors::BlockchainError::TransactionNotFound {
+                                                    signature: transaction_signature.to_string(),
+                                                    commitment_level: "confirmed".to_string(),
+                                                    searched_endpoints: vec![premium_url.clone()],
+                                                    age_seconds: None,
+                                                }
+                                            )
+                                        );
                                     }
 
-                                    let transaction_details: TransactionDetails =
-                                        serde_json::from_value(result.clone()).map_err(|e| {
+                                    let transaction_details: TransactionDetails = serde_json
+                                        ::from_value(result.clone())
+                                        .map_err(|e| {
                                             ScreenerBotError::Data(DataError::ParseError {
                                                 data_type: "transaction details".to_string(),
                                                 error: e.to_string(),
@@ -3043,22 +2980,21 @@ impl RpcClient {
                         }
                     }
                     Err(e) => {
-                        return Err(ScreenerBotError::Network(NetworkError::Generic {
-                            message: format!(
-                                "Failed to get transaction details from premium RPC: {}",
-                                e
-                            ),
-                        }));
+                        return Err(
+                            ScreenerBotError::Network(NetworkError::Generic {
+                                message: format!("Failed to get transaction details from premium RPC: {}", e),
+                            })
+                        );
                     }
                 }
             }
 
-            return Err(ScreenerBotError::RpcProvider(
-                RpcProviderError::ProviderDown {
+            return Err(
+                ScreenerBotError::RpcProvider(RpcProviderError::ProviderDown {
                     provider_name: "premium RPC".to_string(),
                     since: chrono::Utc::now(),
-                },
-            ));
+                })
+            );
         }
 
         // Record call in stats for normal mode
@@ -3069,12 +3005,12 @@ impl RpcClient {
         let mut should_fallback = false;
 
         // Normal mode: Try main RPC first
-        match client
-            .post(&self.rpc_url)
-            .header("Content-Type", "application/json")
-            .json(&rpc_payload)
-            .send()
-            .await
+        match
+            client
+                .post(&self.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
         {
             Ok(response) => {
                 // Check if response indicates rate limiting
@@ -3099,12 +3035,15 @@ impl RpcClient {
                                     "Main RPC returned 429 rate limit for transaction details, falling back to premium"
                                 );
                             } else {
-                                let blockchain_error =
-                                    parse_solana_error(&error.to_string(), None, "get_transaction");
+                                let blockchain_error = parse_solana_error(
+                                    &error.to_string(),
+                                    None,
+                                    "get_transaction"
+                                );
                                 log(
                                     LogTag::Rpc,
                                     "ERROR",
-                                    &format!("RPC error getting transaction: {}", blockchain_error),
+                                    &format!("RPC error getting transaction: {}", blockchain_error)
                                 );
                                 return Err(ScreenerBotError::Blockchain(blockchain_error));
                             }
@@ -3112,22 +3051,24 @@ impl RpcClient {
 
                         if let Some(result) = rpc_response.get("result") {
                             if result.is_null() {
-                                return Err(ScreenerBotError::Blockchain(
-                                    crate::errors::BlockchainError::TransactionNotFound {
-                                        signature: transaction_signature.to_string(),
-                                        commitment_level: "confirmed".to_string(),
-                                        searched_endpoints: vec![self.rpc_url.clone()],
-                                        age_seconds: None,
-                                    },
-                                ));
+                                return Err(
+                                    ScreenerBotError::Blockchain(
+                                        crate::errors::BlockchainError::TransactionNotFound {
+                                            signature: transaction_signature.to_string(),
+                                            commitment_level: "confirmed".to_string(),
+                                            searched_endpoints: vec![self.rpc_url.clone()],
+                                            age_seconds: None,
+                                        }
+                                    )
+                                );
                             }
 
-                            let transaction_details: TransactionDetails =
-                                serde_json::from_value(result.clone()).map_err(|e| {
-                                    ScreenerBotError::invalid_response(format!(
-                                        "Failed to parse transaction details: {}",
-                                        e
-                                    ))
+                            let transaction_details: TransactionDetails = serde_json
+                                ::from_value(result.clone())
+                                .map_err(|e| {
+                                    ScreenerBotError::invalid_response(
+                                        format!("Failed to parse transaction details: {}", e)
+                                    )
                                 })?;
 
                             return Ok(transaction_details);
@@ -3148,19 +3089,13 @@ impl RpcClient {
                     log(
                         LogTag::Rpc,
                         "ERROR",
-                        &format!(
-                            "Failed to get transaction details from main RPC (non-rate-limit): {}",
-                            error_msg
-                        ),
+                        &format!("Failed to get transaction details from main RPC (non-rate-limit): {}", error_msg)
                     );
-                    return Err(ScreenerBotError::Network(
-                        crate::errors::NetworkError::Generic {
-                            message: format!(
-                                "Failed to get transaction details from main RPC: {}",
-                                e
-                            ),
-                        },
-                    ));
+                    return Err(
+                        ScreenerBotError::Network(crate::errors::NetworkError::Generic {
+                            message: format!("Failed to get transaction details from main RPC: {}", e),
+                        })
+                    );
                 }
             }
         }
@@ -3168,12 +3103,12 @@ impl RpcClient {
         // Only fallback to premium RPC on 429/rate limit errors
         if should_fallback {
             if let Some(premium_url) = &self.premium_url {
-                match client
-                    .post(premium_url)
-                    .header("Content-Type", "application/json")
-                    .json(&rpc_payload)
-                    .send()
-                    .await
+                match
+                    client
+                        .post(premium_url)
+                        .header("Content-Type", "application/json")
+                        .json(&rpc_payload)
+                        .send().await
                 {
                     Ok(response) => {
                         if response.status().is_success() {
@@ -3185,34 +3120,36 @@ impl RpcClient {
                                         &format!(
                                             "RPC error getting transaction from premium: {:?}",
                                             error
-                                        ),
+                                        )
                                     );
-                                    return Err(ScreenerBotError::RpcProvider(
-                                        RpcProviderError::Generic {
+                                    return Err(
+                                        ScreenerBotError::RpcProvider(RpcProviderError::Generic {
                                             provider_name: "premium RPC".to_string(),
                                             message: format!("RPC error: {:?}", error),
-                                        },
-                                    ));
+                                        })
+                                    );
                                 }
 
                                 if let Some(result) = rpc_response.get("result") {
                                     if result.is_null() {
-                                        return Err(ScreenerBotError::Blockchain(
-                                            crate::errors::BlockchainError::TransactionNotFound {
-                                                signature: transaction_signature.to_string(),
-                                                commitment_level: "confirmed".to_string(),
-                                                searched_endpoints: vec![premium_url.clone()],
-                                                age_seconds: None,
-                                            },
-                                        ));
+                                        return Err(
+                                            ScreenerBotError::Blockchain(
+                                                crate::errors::BlockchainError::TransactionNotFound {
+                                                    signature: transaction_signature.to_string(),
+                                                    commitment_level: "confirmed".to_string(),
+                                                    searched_endpoints: vec![premium_url.clone()],
+                                                    age_seconds: None,
+                                                }
+                                            )
+                                        );
                                     }
 
-                                    let transaction_details: TransactionDetails =
-                                        serde_json::from_value(result.clone()).map_err(|e| {
-                                            ScreenerBotError::invalid_response(format!(
-                                                "Failed to parse transaction details: {}",
-                                                e
-                                            ))
+                                    let transaction_details: TransactionDetails = serde_json
+                                        ::from_value(result.clone())
+                                        .map_err(|e| {
+                                            ScreenerBotError::invalid_response(
+                                                format!("Failed to parse transaction details: {}", e)
+                                            )
                                         })?;
 
                                     return Ok(transaction_details);
@@ -3224,32 +3161,33 @@ impl RpcClient {
                         log(
                             LogTag::Rpc,
                             "WARNING",
-                            &format!("Failed to get transaction details from premium RPC: {}", e),
+                            &format!("Failed to get transaction details from premium RPC: {}", e)
                         );
                     }
                 }
             }
         }
 
-        Err(ScreenerBotError::Blockchain(
-            crate::errors::BlockchainError::TransactionNotFound {
+        Err(
+            ScreenerBotError::Blockchain(crate::errors::BlockchainError::TransactionNotFound {
                 signature: transaction_signature.to_string(),
                 commitment_level: "confirmed".to_string(),
                 searched_endpoints: vec![
                     self.rpc_url.clone(),
-                    self.premium_url.clone().unwrap_or_default(),
+                    self.premium_url.clone().unwrap_or_default()
                 ],
                 age_seconds: None,
-            },
-        ))
+            })
+        )
     }
 
     /// Premium-only variant of get_transaction_details, bypassing main RPC and fallbacks
     pub async fn get_transaction_details_premium(
         &self,
-        transaction_signature: &str,
+        transaction_signature: &str
     ) -> Result<TransactionDetails, ScreenerBotError> {
-        let rpc_payload = serde_json::json!({
+        let rpc_payload =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getTransaction",
@@ -3266,8 +3204,7 @@ impl RpcClient {
                 .post(premium_url)
                 .header("Content-Type", "application/json")
                 .json(&rpc_payload)
-                .send()
-                .await
+                .send().await
                 .map_err(|e| {
                     ScreenerBotError::Network(NetworkError::Generic {
                         message: format!("Failed to connect to premium RPC: {}", e),
@@ -3276,24 +3213,29 @@ impl RpcClient {
 
             if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
                 if let Some(error) = rpc_response.get("error") {
-                    return Err(ScreenerBotError::RpcProvider(RpcProviderError::Generic {
-                        provider_name: "premium RPC".to_string(),
-                        message: format!("Premium RPC error: {:?}", error),
-                    }));
+                    return Err(
+                        ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                            provider_name: "premium RPC".to_string(),
+                            message: format!("Premium RPC error: {:?}", error),
+                        })
+                    );
                 }
                 if let Some(result) = rpc_response.get("result") {
                     if result.is_null() {
-                        return Err(ScreenerBotError::Blockchain(
-                            crate::errors::BlockchainError::TransactionNotFound {
-                                signature: transaction_signature.to_string(),
-                                commitment_level: "confirmed".to_string(),
-                                searched_endpoints: vec![premium_url.clone()],
-                                age_seconds: None,
-                            },
-                        ));
+                        return Err(
+                            ScreenerBotError::Blockchain(
+                                crate::errors::BlockchainError::TransactionNotFound {
+                                    signature: transaction_signature.to_string(),
+                                    commitment_level: "confirmed".to_string(),
+                                    searched_endpoints: vec![premium_url.clone()],
+                                    age_seconds: None,
+                                }
+                            )
+                        );
                     }
-                    let transaction_details: TransactionDetails =
-                        serde_json::from_value(result.clone()).map_err(|e| {
+                    let transaction_details: TransactionDetails = serde_json
+                        ::from_value(result.clone())
+                        .map_err(|e| {
                             ScreenerBotError::Data(DataError::ParseError {
                                 data_type: "transaction details".to_string(),
                                 error: e.to_string(),
@@ -3302,33 +3244,34 @@ impl RpcClient {
                     return Ok(transaction_details);
                 }
             }
-            return Err(ScreenerBotError::RpcProvider(
-                RpcProviderError::MalformedResponse {
+            return Err(
+                ScreenerBotError::RpcProvider(RpcProviderError::MalformedResponse {
                     provider_name: "premium RPC".to_string(),
                     endpoint: "get_latest_blockhash".to_string(),
                     response_body: "Invalid premium RPC response".to_string(),
-                },
-            ));
+                })
+            );
         }
-        Err(ScreenerBotError::Configuration(
-            ConfigurationError::MissingConfig {
+        Err(
+            ScreenerBotError::Configuration(ConfigurationError::MissingConfig {
                 field: "premium_rpc_url".to_string(),
-            },
-        ))
+            })
+        )
     }
 
     /// Gets the associated token account address for a wallet and mint
     pub async fn get_associated_token_account(
         &self,
         wallet_address: &str,
-        mint: &str,
+        mint: &str
     ) -> Result<String, ScreenerBotError> {
         // Record call in stats
         if let Ok(mut stats) = self.stats.lock() {
             stats.record_call(&self.rpc_url, "getTokenAccountsByOwner");
         }
 
-        let rpc_payload = serde_json::json!({
+        let rpc_payload =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getTokenAccountsByOwner",
@@ -3347,12 +3290,12 @@ impl RpcClient {
         let mut should_fallback = false;
 
         // Try main RPC first
-        match client
-            .post(&self.rpc_url)
-            .header("Content-Type", "application/json")
-            .json(&rpc_payload)
-            .send()
-            .await
+        match
+            client
+                .post(&self.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
         {
             Ok(response) => {
                 // Check if response indicates rate limiting
@@ -3380,9 +3323,11 @@ impl RpcClient {
                         }
                     }
                     // If no accounts found, this is not an error - return the standard error
-                    return Err(ScreenerBotError::Data(DataError::Generic {
-                        message: format!("No associated token account found for mint {}", mint),
-                    }));
+                    return Err(
+                        ScreenerBotError::Data(DataError::Generic {
+                            message: format!("No associated token account found for mint {}", mint),
+                        })
+                    );
                 }
             }
             Err(e) => {
@@ -3400,12 +3345,11 @@ impl RpcClient {
                         "ERROR",
                         &format!("Failed to get associated token account from main RPC (non-rate-limit): {}", error_msg)
                     );
-                    return Err(ScreenerBotError::Network(NetworkError::Generic {
-                        message: format!(
-                            "Failed to get associated token account from main RPC: {}",
-                            error_msg
-                        ),
-                    }));
+                    return Err(
+                        ScreenerBotError::Network(NetworkError::Generic {
+                            message: format!("Failed to get associated token account from main RPC: {}", error_msg),
+                        })
+                    );
                 }
             }
         }
@@ -3413,12 +3357,12 @@ impl RpcClient {
         // Only fallback to premium RPC on 429/rate limit errors
         if should_fallback {
             if let Some(premium_url) = &self.premium_url {
-                match client
-                    .post(premium_url)
-                    .header("Content-Type", "application/json")
-                    .json(&rpc_payload)
-                    .send()
-                    .await
+                match
+                    client
+                        .post(premium_url)
+                        .header("Content-Type", "application/json")
+                        .json(&rpc_payload)
+                        .send().await
                 {
                     Ok(response) => {
                         if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
@@ -3443,51 +3387,43 @@ impl RpcClient {
                         log(
                             LogTag::Rpc,
                             "WARNING",
-                            &format!(
-                                "Failed to get associated token account from premium RPC: {}",
-                                e
-                            ),
+                            &format!("Failed to get associated token account from premium RPC: {}", e)
                         );
                     }
                 }
             }
         }
 
-        Err(ScreenerBotError::Blockchain(
-            crate::errors::BlockchainError::AccountNotFound {
+        Err(
+            ScreenerBotError::Blockchain(crate::errors::BlockchainError::AccountNotFound {
                 pubkey: format!("ATA for wallet {} mint {}", wallet_address, mint),
                 context: "get_associated_token_account".to_string(),
                 rpc_endpoint: Some(self.rpc_url.clone()),
-            },
-        ))
+            })
+        )
     }
 
     /// Helper method to get signature status using getSignatureStatuses
     async fn get_signature_status(
         &self,
-        signature: &str,
+        signature: &str
     ) -> Result<Option<SignatureStatusData>, ScreenerBotError> {
         if is_debug_transactions_enabled() {
             log(
                 LogTag::Rpc,
                 "STATUS_DEBUG_START",
-                &format!(
-                    "🔍 Checking signature status for {} using RPC client",
-                    &signature[..8]
-                ),
+                &format!("🔍 Checking signature status for {} using RPC client", &signature[..8])
             );
         }
 
         log(
             LogTag::Rpc,
             "STATUS_API_CALL_START",
-            &format!(
-                "🌐 Making getSignatureStatuses API call for {}",
-                &signature[..8]
-            ),
+            &format!("🌐 Making getSignatureStatuses API call for {}", &signature[..8])
         );
 
-        let rpc_payload = serde_json::json!({
+        let rpc_payload =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getSignatureStatuses",
@@ -3506,22 +3442,20 @@ impl RpcClient {
                 &format!(
                     "📤 Request payload for {}: {}",
                     &signature[..8],
-                    serde_json::to_string(&rpc_payload)
+                    serde_json
+                        ::to_string(&rpc_payload)
                         .unwrap_or_else(|_| "Failed to serialize".to_string())
-                ),
+                )
             );
         }
 
         let client = reqwest::Client::new();
         let rpc_url = if is_premium_rpc_only() {
-            &self
-                .premium_url
-                .as_ref()
-                .ok_or(ScreenerBotError::Configuration(
-                    crate::errors::ConfigurationError::MissingConfig {
-                        field: "premium_url".to_string(),
-                    },
-                ))?
+            &self.premium_url.as_ref().ok_or(
+                ScreenerBotError::Configuration(crate::errors::ConfigurationError::MissingConfig {
+                    field: "premium_url".to_string(),
+                })
+            )?
         } else {
             &self.rpc_url
         };
@@ -3529,11 +3463,7 @@ impl RpcClient {
         log(
             LogTag::Rpc,
             "STATUS_API_URL",
-            &format!(
-                "📡 Using RPC endpoint: {} for signature {}",
-                rpc_url,
-                &signature[..8]
-            ),
+            &format!("📡 Using RPC endpoint: {} for signature {}", rpc_url, &signature[..8])
         );
 
         let response = client
@@ -3541,8 +3471,7 @@ impl RpcClient {
             .header("Content-Type", "application/json")
             .json(&rpc_payload)
             .timeout(Duration::from_secs(10))
-            .send()
-            .await
+            .send().await
             .map_err(|e| {
                 log(
                     LogTag::Rpc,
@@ -3551,13 +3480,13 @@ impl RpcClient {
                         "🔌 Network error in getSignatureStatuses for {}: {}",
                         &signature[..8],
                         e
-                    ),
+                    )
                 );
                 if is_debug_transactions_enabled() {
                     log(
                         LogTag::Rpc,
                         "STATUS_DEBUG_NETWORK_ERROR_DETAIL",
-                        &format!("❌ Detailed network error for {}: {}", &signature[..8], e),
+                        &format!("❌ Detailed network error for {}: {}", &signature[..8], e)
                     );
                 }
                 ScreenerBotError::Network(crate::errors::NetworkError::Generic {
@@ -3573,7 +3502,7 @@ impl RpcClient {
                     "📡 HTTP status for signature status check {}: {}",
                     &signature[..8],
                     response.status()
-                ),
+                )
             );
         }
 
@@ -3585,12 +3514,9 @@ impl RpcClient {
                     "📉 HTTP error in getSignatureStatuses for {}: {}",
                     &signature[..8],
                     response.status()
-                ),
+                )
             );
-            return Err(ScreenerBotError::api_error(format!(
-                "RPC error: {}",
-                response.status()
-            )));
+            return Err(ScreenerBotError::api_error(format!("RPC error: {}", response.status())));
         }
 
         log(
@@ -3599,7 +3525,7 @@ impl RpcClient {
             &format!(
                 "✅ Received HTTP 200 response from getSignatureStatuses for {}",
                 &signature[..8]
-            ),
+            )
         );
 
         let response_text = response.text().await.map_err(|e| {
@@ -3607,11 +3533,7 @@ impl RpcClient {
                 log(
                     LogTag::Rpc,
                     "STATUS_DEBUG_TEXT_ERROR",
-                    &format!(
-                        "❌ Failed to get response text for {}: {}",
-                        &signature[..8],
-                        e
-                    ),
+                    &format!("❌ Failed to get response text for {}: {}", &signature[..8], e)
                 );
             }
             ScreenerBotError::Network(crate::errors::NetworkError::Generic {
@@ -3623,16 +3545,13 @@ impl RpcClient {
             log(
                 LogTag::Rpc,
                 "STATUS_DEBUG_RAW_RESPONSE",
-                &format!(
-                    "📄 Raw response for {}: {}",
-                    &signature[..8],
-                    &response_text
-                ),
+                &format!("📄 Raw response for {}: {}", &signature[..8], &response_text)
             );
         }
 
-        let rpc_response: SignatureStatusResponse =
-            serde_json::from_str(&response_text).map_err(|e| {
+        let rpc_response: SignatureStatusResponse = serde_json
+            ::from_str(&response_text)
+            .map_err(|e| {
                 log(
                     LogTag::Rpc,
                     "STATUS_API_PARSE_ERROR",
@@ -3640,7 +3559,7 @@ impl RpcClient {
                         "🔍 Failed to parse getSignatureStatuses response for {}: {}",
                         &signature[..8],
                         e
-                    ),
+                    )
                 );
                 if is_debug_transactions_enabled() {
                     log(
@@ -3650,13 +3569,12 @@ impl RpcClient {
                             "❌ Parse error detail for {}: Response was: {}",
                             &signature[..8],
                             &response_text
-                        ),
+                        )
                     );
                 }
-                ScreenerBotError::invalid_response(format!(
-                    "Failed to parse signature status: {}",
-                    e
-                ))
+                ScreenerBotError::invalid_response(
+                    format!("Failed to parse signature status: {}", e)
+                )
             })?;
 
         let result = rpc_response.result.value.into_iter().next().flatten();
@@ -3669,12 +3587,11 @@ impl RpcClient {
                 &signature[..8],
                 result
                     .as_ref()
-                    .map(|r| format!(
-                        "confirmation_status={:?}, err={:?}",
-                        r.confirmation_status, r.err
-                    ))
+                    .map(|r|
+                        format!("confirmation_status={:?}, err={:?}", r.confirmation_status, r.err)
+                    )
                     .unwrap_or_else(|| "null".to_string())
-            ),
+            )
         );
 
         if is_debug_transactions_enabled() {
@@ -3696,7 +3613,7 @@ impl RpcClient {
                         &signature[..8],
                         status.confirmation_status,
                         status.err
-                    ),
+                    )
                 );
             }
         }
@@ -3711,7 +3628,7 @@ impl RpcClient {
     /// Returns Ok(true) if a status record (any) appears within timeout, Ok(false) if not.
     pub async fn wait_for_signature_propagation(
         &self,
-        signature: &str,
+        signature: &str
     ) -> Result<bool, ScreenerBotError> {
         // Extended timing for better reliability: 4 attempts at t=2,7,12,17 seconds
         const ATTEMPTS: u32 = 4;
@@ -3739,7 +3656,7 @@ impl RpcClient {
                 &signature[..8],
                 ATTEMPTS,
                 FIRST_DELAY_SECS
-            ),
+            )
         );
 
         // Initial delay to allow transaction to propagate
@@ -3751,7 +3668,7 @@ impl RpcClient {
                     "⏳ Waiting {}s before first propagation check for {}",
                     FIRST_DELAY_SECS,
                     &signature[..8]
-                ),
+                )
             );
         }
         tokio::time::sleep(Duration::from_secs(FIRST_DELAY_SECS)).await;
@@ -3767,7 +3684,7 @@ impl RpcClient {
                         attempt,
                         ATTEMPTS,
                         &signature[..8]
-                    ),
+                    )
                 );
             }
 
@@ -3794,7 +3711,7 @@ impl RpcClient {
                                 "✅ Propagation successful for {}: Found status after {:.2}s",
                                 &signature[..8],
                                 start.elapsed().as_secs_f64()
-                            ),
+                            )
                         );
                     }
 
@@ -3810,7 +3727,7 @@ impl RpcClient {
                             ATTEMPTS,
                             &signature[..8],
                             start.elapsed().as_secs_f64()
-                        ),
+                        )
                     );
 
                     if is_debug_transactions_enabled() {
@@ -3823,7 +3740,7 @@ impl RpcClient {
                                 ATTEMPTS,
                                 &signature[..8],
                                 SLEEP_SECS
-                            ),
+                            )
                         );
                     }
                 }
@@ -3837,7 +3754,7 @@ impl RpcClient {
                             ATTEMPTS,
                             &signature[..8],
                             e
-                        ),
+                        )
                     );
 
                     if is_debug_transactions_enabled() {
@@ -3850,7 +3767,7 @@ impl RpcClient {
                                 ATTEMPTS,
                                 &signature[..8],
                                 e
-                            ),
+                            )
                         );
                     }
                 }
@@ -3865,7 +3782,7 @@ impl RpcClient {
                             "😴 Sleeping {}s before next attempt for {}",
                             SLEEP_SECS,
                             &signature[..8]
-                        ),
+                        )
                     );
                 }
                 tokio::time::sleep(Duration::from_secs(SLEEP_SECS)).await;
@@ -3880,7 +3797,7 @@ impl RpcClient {
                 &signature[..8],
                 ATTEMPTS,
                 start.elapsed().as_secs_f64() as u64
-            ),
+            )
         );
 
         if is_debug_transactions_enabled() {
@@ -3890,7 +3807,7 @@ impl RpcClient {
                 &format!(
                     "❌ Transaction {} failed to propagate - likely dropped by network",
                     &signature[..8]
-                ),
+                )
             );
         }
 
@@ -3903,10 +3820,10 @@ impl RpcClient {
         &self,
         wallet_pubkey: &Pubkey,
         limit: usize,
-        before: Option<&str>,
+        before: Option<&str>
     ) -> Result<
         Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>,
-        ScreenerBotError,
+        ScreenerBotError
     > {
         let config = solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config {
             before: before.and_then(|s| solana_sdk::signature::Signature::from_str(s).ok()),
@@ -3921,14 +3838,14 @@ impl RpcClient {
                 log(
                     LogTag::Rpc,
                     "PREMIUM_ONLY",
-                    "FORCE_PREMIUM_RPC_ONLY is active - fetching signatures from premium RPC only",
+                    "FORCE_PREMIUM_RPC_ONLY is active - fetching signatures from premium RPC only"
                 );
             }
 
             if let Some(premium_url) = &self.premium_url {
                 let premium_client = SolanaRpcClient::new_with_commitment(
                     premium_url.clone(),
-                    CommitmentConfig::confirmed(),
+                    CommitmentConfig::confirmed()
                 );
 
                 self.record_call_for_url(premium_url, "get_signatures_for_address");
@@ -3936,10 +3853,9 @@ impl RpcClient {
                 let signatures = premium_client
                     .get_signatures_for_address_with_config(wallet_pubkey, config)
                     .map_err(|e| {
-                        ScreenerBotError::api_error(format!(
-                            "Failed to get signatures from premium RPC: {}",
-                            e
-                        ))
+                        ScreenerBotError::api_error(
+                            format!("Failed to get signatures from premium RPC: {}", e)
+                        )
                     })?;
 
                 log(
@@ -3948,17 +3864,18 @@ impl RpcClient {
                     &format!(
                         "Retrieved {} signatures from premium RPC (premium-only mode)",
                         signatures.len()
-                    ),
+                    )
                 );
                 return Ok(signatures);
             } else {
-                return Err(ScreenerBotError::Configuration(
-                    crate::errors::ConfigurationError::InvalidConfig {
-                        field: "premium_url".to_string(),
-                        reason: "Premium RPC URL not configured but premium-only mode is active"
-                            .to_string(),
-                    },
-                ));
+                return Err(
+                    ScreenerBotError::Configuration(
+                        crate::errors::ConfigurationError::InvalidConfig {
+                            field: "premium_url".to_string(),
+                            reason: "Premium RPC URL not configured but premium-only mode is active".to_string(),
+                        }
+                    )
+                );
             }
         }
 
@@ -3970,26 +3887,21 @@ impl RpcClient {
         self.record_call_for_url(&self.rpc_url, "get_signatures_for_address");
 
         if is_debug_rpc_enabled() {
-            log(
-                LogTag::Rpc,
-                "MAIN",
-                &format!("Fetching {} signatures using main RPC", limit),
-            );
+            log(LogTag::Rpc, "MAIN", &format!("Fetching {} signatures using main RPC", limit));
         }
 
         let signatures = main_client
             .get_signatures_for_address_with_config(wallet_pubkey, config)
             .map_err(|e| {
-                ScreenerBotError::api_error(format!(
-                    "Failed to get signatures from main RPC: {}",
-                    e
-                ))
+                ScreenerBotError::api_error(
+                    format!("Failed to get signatures from main RPC: {}", e)
+                )
             })?;
 
         log(
             LogTag::Rpc,
             "SUCCESS",
-            &format!("Retrieved {} signatures from main RPC", signatures.len()),
+            &format!("Retrieved {} signatures from main RPC", signatures.len())
         );
         Ok(signatures)
     }
@@ -3998,10 +3910,10 @@ impl RpcClient {
     /// This is optimized for fetching full transaction data with minimal rate limiting
     pub async fn get_transaction_details_premium_rpc(
         &self,
-        transaction_signature: &str,
+        transaction_signature: &str
     ) -> Result<
         solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta,
-        ScreenerBotError,
+        ScreenerBotError
     > {
         // Use premium RPC for this data-intensive operation
         let premium_client = if let Some(client) = self.create_premium_client() {
@@ -4011,7 +3923,7 @@ impl RpcClient {
             log(
                 LogTag::Rpc,
                 "WARNING",
-                "No premium RPC available, using main RPC for transaction details",
+                "No premium RPC available, using main RPC for transaction details"
             );
             self.client.clone()
         };
@@ -4024,7 +3936,8 @@ impl RpcClient {
             self.record_call("get_transaction");
         }
 
-        let signature = solana_sdk::signature::Signature::from_str(transaction_signature)
+        let signature = solana_sdk::signature::Signature
+            ::from_str(transaction_signature)
             .map_err(|e| ScreenerBotError::parse_error(format!("Invalid signature: {}", e)))?;
 
         log(
@@ -4033,7 +3946,7 @@ impl RpcClient {
             &format!(
                 "Fetching transaction details for {} using premium RPC",
                 &transaction_signature[..8]
-            ),
+            )
         );
 
         let transaction = premium_client
@@ -4069,7 +3982,7 @@ impl RpcClient {
             &format!(
                 "Retrieved transaction details for {} from premium RPC",
                 &transaction_signature[..8]
-            ),
+            )
         );
         Ok(transaction)
     }
@@ -4078,13 +3991,10 @@ impl RpcClient {
     /// This uses premium RPC to minimize rate limiting when fetching multiple transactions
     pub async fn batch_get_transaction_details_premium_rpc(
         &self,
-        signatures: &[String],
+        signatures: &[String]
     ) -> Result<
-        Vec<(
-            String,
-            solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta,
-        )>,
-        ScreenerBotError,
+        Vec<(String, solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta)>,
+        ScreenerBotError
     > {
         if signatures.is_empty() {
             return Ok(Vec::new());
@@ -4102,7 +4012,7 @@ impl RpcClient {
             log(
                 LogTag::Rpc,
                 "WARNING",
-                "No premium RPC available, using main RPC for batch transaction details",
+                "No premium RPC available, using main RPC for batch transaction details"
             );
             self.client.clone()
         };
@@ -4110,10 +4020,7 @@ impl RpcClient {
         log(
             LogTag::Rpc,
             "PREMIUM",
-            &format!(
-                "Batch fetching {} transaction details using premium RPC",
-                signatures.len()
-            ),
+            &format!("Batch fetching {} transaction details using premium RPC", signatures.len())
         );
 
         // Create futures for parallel processing with concurrency cap
@@ -4137,30 +4044,29 @@ impl RpcClient {
                 let _permit = match permit.await {
                     Ok(p) => p,
                     Err(_) => {
-                        log(
-                            LogTag::Rpc,
-                            "ERROR",
-                            "Semaphore closed while fetching transactions",
-                        );
+                        log(LogTag::Rpc, "ERROR", "Semaphore closed while fetching transactions");
                         return None;
                     }
                 };
                 if let Ok(signature) = solana_sdk::signature::Signature::from_str(&signature_str) {
-                    match premium_client.get_transaction_with_config(
-                        &signature,
-                        solana_client::rpc_config::RpcTransactionConfig {
-                            encoding: Some(
-                                solana_transaction_status::UiTransactionEncoding::JsonParsed,
-                            ),
-                            commitment: Some(CommitmentConfig::confirmed()),
-                            max_supported_transaction_version: Some(0),
-                        },
-                    ) {
+                    match
+                        premium_client.get_transaction_with_config(
+                            &signature,
+                            solana_client::rpc_config::RpcTransactionConfig {
+                                encoding: Some(
+                                    solana_transaction_status::UiTransactionEncoding::JsonParsed
+                                ),
+                                commitment: Some(CommitmentConfig::confirmed()),
+                                max_supported_transaction_version: Some(0),
+                            }
+                        )
+                    {
                         Ok(tx) => Some((signature_str, tx)),
                         Err(e) => {
                             let error_msg = e.to_string();
-                            if error_msg.contains("Transaction not found")
-                                || error_msg.contains("null, expected struct")
+                            if
+                                error_msg.contains("Transaction not found") ||
+                                error_msg.contains("null, expected struct")
                             {
                                 log(
                                     LogTag::Rpc,
@@ -4168,7 +4074,7 @@ impl RpcClient {
                                     &format!(
                                         "Transaction {} not yet available",
                                         &signature_str[..8]
-                                    ),
+                                    )
                                 );
                             } else {
                                 log(
@@ -4178,7 +4084,7 @@ impl RpcClient {
                                         "Failed to fetch transaction {}: {}",
                                         &signature_str[..8],
                                         e
-                                    ),
+                                    )
                                 );
                             }
                             None
@@ -4213,7 +4119,7 @@ impl RpcClient {
                 "Successfully fetched {}/{} transactions from premium RPC",
                 successful_fetches,
                 signatures.len()
-            ),
+            )
         );
         Ok(results)
     }
@@ -4221,7 +4127,7 @@ impl RpcClient {
     /// Get transaction details using finalized commitment level for critical operations
     pub async fn get_transaction_details_finalized_rpc(
         &self,
-        signature: &str,
+        signature: &str
     ) -> Result<EncodedConfirmedTransactionWithStatusMeta, ScreenerBotError> {
         self.wait_for_rate_limit().await;
         self.record_call("get_transaction_finalized");
@@ -4230,7 +4136,7 @@ impl RpcClient {
             log(
                 LogTag::Rpc,
                 "WARNING",
-                "No premium RPC available for finalized transaction, using main RPC",
+                "No premium RPC available for finalized transaction, using main RPC"
             );
             self.client.clone()
         });
@@ -4245,58 +4151,55 @@ impl RpcClient {
         let signature_str = signature.to_string();
         let rpc_url = self.rpc_url.clone();
 
-        tokio::task::spawn_blocking({
-            let client = client.clone();
-            move || {
-                client
-                    .get_transaction_with_config(
-                        &signature,
-                        solana_client::rpc_config::RpcTransactionConfig {
-                            encoding: Some(UiTransactionEncoding::Json),
-                            commitment: Some(CommitmentConfig::finalized()),
-                            max_supported_transaction_version: Some(0),
-                        },
-                    )
-                    .map_err(|e| {
-                        let error_msg = e.to_string();
-                        if error_msg.contains("not found") {
-                            ScreenerBotError::Blockchain(
-                                crate::errors::BlockchainError::TransactionNotFound {
-                                    signature: signature_str.clone(),
-                                    commitment_level: "finalized".to_string(),
-                                    searched_endpoints: vec![rpc_url],
-                                    age_seconds: None,
-                                },
-                            )
-                        } else {
-                            ScreenerBotError::RpcProvider(RpcProviderError::Generic {
-                                provider_name: "main RPC".to_string(),
-                                message: format!("RPC error: {}", error_msg),
-                            })
-                        }
-                    })
-            }
-        })
-        .await
-        .map_err(|e| {
-            ScreenerBotError::RpcProvider(RpcProviderError::Generic {
-                provider_name: "tokio task".to_string(),
-                message: format!("Task error: {}", e),
-            })
-        })?
+        tokio::task
+            ::spawn_blocking({
+                let client = client.clone();
+                move || {
+                    client
+                        .get_transaction_with_config(
+                            &signature,
+                            solana_client::rpc_config::RpcTransactionConfig {
+                                encoding: Some(UiTransactionEncoding::Json),
+                                commitment: Some(CommitmentConfig::finalized()),
+                                max_supported_transaction_version: Some(0),
+                            }
+                        )
+                        .map_err(|e| {
+                            let error_msg = e.to_string();
+                            if error_msg.contains("not found") {
+                                ScreenerBotError::Blockchain(
+                                    crate::errors::BlockchainError::TransactionNotFound {
+                                        signature: signature_str.clone(),
+                                        commitment_level: "finalized".to_string(),
+                                        searched_endpoints: vec![rpc_url],
+                                        age_seconds: None,
+                                    }
+                                )
+                            } else {
+                                ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                                    provider_name: "main RPC".to_string(),
+                                    message: format!("RPC error: {}", error_msg),
+                                })
+                            }
+                        })
+                }
+            }).await
+            .map_err(|e| {
+                ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                    provider_name: "tokio task".to_string(),
+                    message: format!("Task error: {}", e),
+                })
+            })?
     }
 
     /// Batch get transaction details using finalized commitment level for transaction verification
     /// This ensures we get the final, immutable state of transactions for important operations
     pub async fn batch_get_transaction_details_finalized_rpc(
         &self,
-        signatures: &[String],
+        signatures: &[String]
     ) -> Result<
-        Vec<(
-            String,
-            solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta,
-        )>,
-        ScreenerBotError,
+        Vec<(String, solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta)>,
+        ScreenerBotError
     > {
         if signatures.is_empty() {
             return Ok(Vec::new());
@@ -4309,7 +4212,7 @@ impl RpcClient {
             log(
                 LogTag::Rpc,
                 "WARNING",
-                "No premium RPC available for finalized transactions, using main RPC",
+                "No premium RPC available for finalized transactions, using main RPC"
             );
             self.client.clone()
         };
@@ -4320,7 +4223,7 @@ impl RpcClient {
             &format!(
                 "Batch fetching {} transaction details with finalized commitment",
                 signatures.len()
-            ),
+            )
         );
 
         let mut results = Vec::new();
@@ -4332,7 +4235,7 @@ impl RpcClient {
             if self.premium_url.is_some() {
                 self.record_call_for_url(
                     self.premium_url.as_ref().unwrap(),
-                    "get_transaction_finalized",
+                    "get_transaction_finalized"
                 );
             } else {
                 self.wait_for_rate_limit().await;
@@ -4340,24 +4243,27 @@ impl RpcClient {
             }
 
             if let Ok(signature) = solana_sdk::signature::Signature::from_str(signature_str) {
-                match premium_client.get_transaction_with_config(
-                    &signature,
-                    solana_client::rpc_config::RpcTransactionConfig {
-                        encoding: Some(
-                            solana_transaction_status::UiTransactionEncoding::JsonParsed,
-                        ),
-                        commitment: Some(CommitmentConfig::finalized()), // Use finalized commitment
-                        max_supported_transaction_version: Some(0),
-                    },
-                ) {
+                match
+                    premium_client.get_transaction_with_config(
+                        &signature,
+                        solana_client::rpc_config::RpcTransactionConfig {
+                            encoding: Some(
+                                solana_transaction_status::UiTransactionEncoding::JsonParsed
+                            ),
+                            commitment: Some(CommitmentConfig::finalized()), // Use finalized commitment
+                            max_supported_transaction_version: Some(0),
+                        }
+                    )
+                {
                     Ok(tx) => {
                         results.push((signature_str.clone(), tx));
                         successful_fetches += 1;
                     }
                     Err(e) => {
                         let error_msg = e.to_string();
-                        if error_msg.contains("Transaction not found")
-                            || error_msg.contains("null, expected struct")
+                        if
+                            error_msg.contains("Transaction not found") ||
+                            error_msg.contains("null, expected struct")
                         {
                             not_finalized_count += 1;
                             if is_debug_transactions_enabled() {
@@ -4367,7 +4273,7 @@ impl RpcClient {
                                     &format!(
                                         "Transaction {} not yet finalized",
                                         &signature_str[..8]
-                                    ),
+                                    )
                                 );
                             }
                         } else {
@@ -4378,7 +4284,7 @@ impl RpcClient {
                                     "Failed to fetch finalized transaction {}: {}",
                                     &signature_str[..8],
                                     e
-                                ),
+                                )
                             );
                         }
                     }
@@ -4399,7 +4305,7 @@ impl RpcClient {
                     "{}/{} transactions not yet finalized, will retry later",
                     not_finalized_count,
                     signatures.len()
-                ),
+                )
             );
         }
 
@@ -4410,7 +4316,7 @@ impl RpcClient {
                 "Successfully fetched {}/{} finalized transactions",
                 successful_fetches,
                 signatures.len()
-            ),
+            )
         );
         Ok(results)
     }
@@ -4419,10 +4325,10 @@ impl RpcClient {
     /// This provides the fastest possible response for transaction status checking
     pub async fn get_transaction_details_processed_rpc(
         &self,
-        signature: &str,
+        signature: &str
     ) -> Result<
         solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta,
-        ScreenerBotError,
+        ScreenerBotError
     > {
         // Record call
         self.wait_for_rate_limit().await;
@@ -4430,14 +4336,18 @@ impl RpcClient {
 
         if let Ok(signature_obj) = solana_sdk::signature::Signature::from_str(signature) {
             // Use main RPC for processed transactions (faster response, lower latency)
-            match self.client.get_transaction_with_config(
-                &signature_obj,
-                solana_client::rpc_config::RpcTransactionConfig {
-                    encoding: Some(solana_transaction_status::UiTransactionEncoding::JsonParsed),
-                    commitment: Some(CommitmentConfig::processed()), // Use processed commitment for speed
-                    max_supported_transaction_version: Some(0),
-                },
-            ) {
+            match
+                self.client.get_transaction_with_config(
+                    &signature_obj,
+                    solana_client::rpc_config::RpcTransactionConfig {
+                        encoding: Some(
+                            solana_transaction_status::UiTransactionEncoding::JsonParsed
+                        ),
+                        commitment: Some(CommitmentConfig::processed()), // Use processed commitment for speed
+                        max_supported_transaction_version: Some(0),
+                    }
+                )
+            {
                 Ok(tx) => {
                     log(
                         LogTag::Rpc,
@@ -4445,19 +4355,20 @@ impl RpcClient {
                         &format!(
                             "Retrieved transaction {} with processed commitment",
                             &signature[..8]
-                        ),
+                        )
                     );
                     Ok(tx)
                 }
                 Err(e) => {
                     let error_msg = e.to_string();
-                    if error_msg.contains("Transaction not found")
-                        || error_msg.contains("null, expected struct")
+                    if
+                        error_msg.contains("Transaction not found") ||
+                        error_msg.contains("null, expected struct")
                     {
                         log(
                             LogTag::Rpc,
                             "NOT_PROCESSED",
-                            &format!("Transaction {} not yet processed", &signature[..8]),
+                            &format!("Transaction {} not yet processed", &signature[..8])
                         );
                     } else {
                         log(
@@ -4467,12 +4378,13 @@ impl RpcClient {
                                 "Failed to fetch processed transaction {}: {}",
                                 &signature[..8],
                                 e
-                            ),
+                            )
                         );
                     }
                     Err(
-                        if error_msg.contains("Transaction not found")
-                            || error_msg.contains("null, expected struct")
+                        if
+                            error_msg.contains("Transaction not found") ||
+                            error_msg.contains("null, expected struct")
                         {
                             ScreenerBotError::Blockchain(
                                 crate::errors::BlockchainError::TransactionNotFound {
@@ -4480,22 +4392,493 @@ impl RpcClient {
                                     commitment_level: "processed".to_string(),
                                     searched_endpoints: vec![self.rpc_url.clone()],
                                     age_seconds: None,
-                                },
+                                }
                             )
                         } else {
                             ScreenerBotError::RpcProvider(RpcProviderError::Generic {
                                 provider_name: "main RPC".to_string(),
                                 message: format!("Failed to fetch processed transaction: {}", e),
                             })
-                        },
+                        }
                     )
                 }
             }
         } else {
-            Err(ScreenerBotError::invalid_amount(
-                signature.to_string(),
-                "Invalid signature format".to_string(),
-            ))
+            Err(
+                ScreenerBotError::invalid_amount(
+                    signature.to_string(),
+                    "Invalid signature format".to_string()
+                )
+            )
+        }
+    }
+
+    /// Get program accounts with filters
+    /// This method follows the same pattern as other RPC methods with rate limiting and fallback
+    pub async fn get_program_accounts(
+        &self,
+        program_id: &str,
+        filters: Option<serde_json::Value>,
+        encoding: Option<&str>,
+        timeout_seconds: Option<u64>
+    ) -> Result<Vec<serde_json::Value>, ScreenerBotError> {
+        self.wait_for_rate_limit().await;
+
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "DEBUG",
+                &format!(
+                    "Getting program accounts for program: {}",
+                    crate::utils::safe_truncate(program_id, 12)
+                )
+            );
+        }
+
+        let mut params = vec![serde_json::Value::String(program_id.to_string())];
+
+        // Build config object
+        let mut config = serde_json::Map::new();
+        config.insert(
+            "encoding".to_string(),
+            serde_json::Value::String(encoding.unwrap_or("jsonParsed").to_string())
+        );
+
+        if let Some(filters_value) = filters {
+            config.insert("filters".to_string(), filters_value);
+        }
+
+        params.push(serde_json::Value::Object(config));
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getProgramAccounts",
+            "params": params
+        });
+
+        // Create client with extended timeout for large queries
+        let client = reqwest::Client
+            ::builder()
+            .timeout(std::time::Duration::from_secs(timeout_seconds.unwrap_or(60)))
+            .build()
+            .map_err(|e| {
+                ScreenerBotError::Network(NetworkError::Generic {
+                    message: format!("Failed to create HTTP client: {}", e),
+                })
+            })?;
+
+        let configs = read_configs().map_err(|e| {
+            ScreenerBotError::Configuration(ConfigurationError::Generic {
+                message: format!("Failed to read configs: {}", e),
+            })
+        })?;
+
+        // If premium RPC only mode is active, use only premium RPC
+        if is_premium_rpc_only() {
+            if is_debug_rpc_enabled() {
+                log(
+                    LogTag::Rpc,
+                    "PREMIUM_ONLY",
+                    "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for getProgramAccounts"
+                );
+            }
+
+            match
+                client
+                    .post(&configs.rpc_url_premium)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
+            {
+                Ok(response) => {
+                    if !response.status().is_success() {
+                        let status = response.status();
+                        let error_text = response
+                            .text().await
+                            .unwrap_or_else(|_| "Unknown error".to_string());
+
+                        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                            return Err(
+                                ScreenerBotError::RpcProvider(RpcProviderError::RateLimitExceeded {
+                                    provider_name: "premium_rpc".to_string(),
+                                    limit_type: "requests_per_second".to_string(),
+                                    reset_at: chrono::Utc::now() + chrono::Duration::seconds(60),
+                                })
+                            );
+                        } else if status == reqwest::StatusCode::REQUEST_TIMEOUT {
+                            return Err(
+                                ScreenerBotError::Network(NetworkError::ConnectionTimeout {
+                                    endpoint: configs.rpc_url_premium.clone(),
+                                    timeout_ms: timeout_seconds.unwrap_or(60) * 1000,
+                                })
+                            );
+                        } else {
+                            return Err(
+                                ScreenerBotError::Network(NetworkError::HttpStatusError {
+                                    endpoint: configs.rpc_url_premium.clone(),
+                                    status: status.as_u16(),
+                                    body: Some(error_text),
+                                })
+                            );
+                        }
+                    }
+
+                    let rpc_response = response.json::<serde_json::Value>().await.map_err(|e| {
+                        ScreenerBotError::Data(DataError::ParseError {
+                            data_type: "RPC response".to_string(),
+                            error: e.to_string(),
+                        })
+                    })?;
+
+                    // Check for RPC-level errors
+                    if let Some(error) = rpc_response.get("error") {
+                        if let Some(message) = error.get("message").and_then(|m| m.as_str()) {
+                            let error_msg = message.to_lowercase();
+
+                            if
+                                error_msg.contains("timeout") ||
+                                error_msg.contains("too many accounts")
+                            {
+                                return Err(
+                                    ScreenerBotError::Network(NetworkError::ConnectionTimeout {
+                                        endpoint: configs.rpc_url_premium.clone(),
+                                        timeout_ms: timeout_seconds.unwrap_or(60) * 1000,
+                                    })
+                                );
+                            } else if error_msg.contains("rate limit") || error_msg.contains("429") {
+                                return Err(
+                                    ScreenerBotError::RpcProvider(
+                                        RpcProviderError::RateLimitExceeded {
+                                            provider_name: "premium_rpc".to_string(),
+                                            limit_type: "requests_per_second".to_string(),
+                                            reset_at: chrono::Utc::now() +
+                                            chrono::Duration::seconds(60),
+                                        }
+                                    )
+                                );
+                            } else {
+                                return Err(
+                                    ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                                        provider_name: "premium_rpc".to_string(),
+                                        message: format!("RPC error: {}", message),
+                                    })
+                                );
+                            }
+                        }
+                    }
+
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(accounts) = result.as_array() {
+                            self.record_call_for_url(
+                                &configs.rpc_url_premium,
+                                "getProgramAccounts"
+                            );
+                            self.record_success(Some(&configs.rpc_url_premium));
+
+                            if is_debug_rpc_enabled() {
+                                log(
+                                    LogTag::Rpc,
+                                    "DEBUG",
+                                    &format!(
+                                        "Retrieved {} program accounts from premium RPC",
+                                        accounts.len()
+                                    )
+                                );
+                            }
+
+                            return Ok(accounts.clone());
+                        }
+                    }
+
+                    return Err(
+                        ScreenerBotError::Data(DataError::ParseError {
+                            data_type: "program accounts".to_string(),
+                            error: "No accounts found or invalid response format".to_string(),
+                        })
+                    );
+                }
+                Err(e) => {
+                    return Err(
+                        ScreenerBotError::Network(NetworkError::Generic {
+                            message: format!("Failed to get program accounts from premium RPC: {}", e),
+                        })
+                    );
+                }
+            }
+        }
+
+        // Normal mode: Try main RPC first
+        let mut should_fallback = false;
+
+        match
+            client
+                .post(&configs.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                // Check if response indicates rate limiting
+                if Self::is_rate_limit_response(&response) {
+                    should_fallback = true;
+                    self.record_429_error(Some(&configs.rpc_url));
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        "Main RPC returned 429 rate limit for getProgramAccounts, falling back to premium"
+                    );
+                } else if !response.status().is_success() {
+                    let status = response.status();
+                    let error_text = response
+                        .text().await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+
+                    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                        should_fallback = true;
+                        self.record_429_error(Some(&configs.rpc_url));
+                        log(
+                            LogTag::Rpc,
+                            "WARNING",
+                            "Main RPC rate limited for getProgramAccounts, falling back to premium"
+                        );
+                    } else if status == reqwest::StatusCode::REQUEST_TIMEOUT {
+                        return Err(
+                            ScreenerBotError::Network(NetworkError::ConnectionTimeout {
+                                endpoint: configs.rpc_url.clone(),
+                                timeout_ms: timeout_seconds.unwrap_or(60) * 1000,
+                            })
+                        );
+                    } else if status.as_u16() == 410 {
+                        should_fallback = true;
+                        log(
+                            LogTag::Rpc,
+                            "WARNING",
+                            "Main RPC disabled getProgramAccounts (410), falling back to premium"
+                        );
+                    } else {
+                        return Err(
+                            ScreenerBotError::Network(NetworkError::HttpStatusError {
+                                endpoint: configs.rpc_url.clone(),
+                                status: status.as_u16(),
+                                body: Some(error_text),
+                            })
+                        );
+                    }
+                } else {
+                    let rpc_response = response.json::<serde_json::Value>().await.map_err(|e| {
+                        ScreenerBotError::Data(DataError::ParseError {
+                            data_type: "RPC response".to_string(),
+                            error: e.to_string(),
+                        })
+                    })?;
+
+                    // Check for RPC-level errors
+                    if let Some(error) = rpc_response.get("error") {
+                        if let Some(message) = error.get("message").and_then(|m| m.as_str()) {
+                            let error_msg = message.to_lowercase();
+
+                            if
+                                error_msg.contains("timeout") ||
+                                error_msg.contains("too many accounts")
+                            {
+                                return Err(
+                                    ScreenerBotError::Network(NetworkError::ConnectionTimeout {
+                                        endpoint: configs.rpc_url.clone(),
+                                        timeout_ms: timeout_seconds.unwrap_or(60) * 1000,
+                                    })
+                                );
+                            } else if error_msg.contains("rate limit") || error_msg.contains("429") {
+                                should_fallback = true;
+                                self.record_429_error(Some(&configs.rpc_url));
+                                log(
+                                    LogTag::Rpc,
+                                    "WARNING",
+                                    "Main RPC rate limited (error message), falling back to premium"
+                                );
+                            } else {
+                                return Err(
+                                    ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                                        provider_name: "main_rpc".to_string(),
+                                        message: format!("RPC error: {}", message),
+                                    })
+                                );
+                            }
+                        }
+                    } else if let Some(result) = rpc_response.get("result") {
+                        if let Some(accounts) = result.as_array() {
+                            self.record_call_for_url(&configs.rpc_url, "getProgramAccounts");
+                            self.record_success(Some(&configs.rpc_url));
+
+                            if is_debug_rpc_enabled() {
+                                log(
+                                    LogTag::Rpc,
+                                    "DEBUG",
+                                    &format!(
+                                        "Retrieved {} program accounts from main RPC",
+                                        accounts.len()
+                                    )
+                                );
+                            }
+
+                            return Ok(accounts.clone());
+                        }
+                    }
+
+                    if !should_fallback {
+                        return Err(
+                            ScreenerBotError::Data(DataError::ParseError {
+                                data_type: "program accounts".to_string(),
+                                error: "No accounts found or invalid response format".to_string(),
+                            })
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                if Self::is_rate_limit_error(&error_msg) {
+                    should_fallback = true;
+                    self.record_429_error(Some(&configs.rpc_url));
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        &format!("Main RPC rate limited for getProgramAccounts: {}, falling back to premium", error_msg)
+                    );
+                } else {
+                    return Err(
+                        ScreenerBotError::Network(NetworkError::Generic {
+                            message: format!("Failed to get program accounts from main RPC: {}", e),
+                        })
+                    );
+                }
+            }
+        }
+
+        // Only fallback to premium RPC on 429/rate limit errors
+        if !should_fallback {
+            return Err(
+                ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                    provider_name: "main_rpc".to_string(),
+                    message: "Failed to get program accounts from main RPC".to_string(),
+                })
+            );
+        }
+
+        // Fallback to premium RPC
+        match
+            client
+                .post(&configs.rpc_url_premium)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let error_text = response
+                        .text().await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+
+                    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                        return Err(
+                            ScreenerBotError::RpcProvider(RpcProviderError::RateLimitExceeded {
+                                provider_name: "premium_rpc".to_string(),
+                                limit_type: "requests_per_second".to_string(),
+                                reset_at: chrono::Utc::now() + chrono::Duration::seconds(60),
+                            })
+                        );
+                    } else if status == reqwest::StatusCode::REQUEST_TIMEOUT {
+                        return Err(
+                            ScreenerBotError::Network(NetworkError::ConnectionTimeout {
+                                endpoint: configs.rpc_url_premium.clone(),
+                                timeout_ms: timeout_seconds.unwrap_or(60) * 1000,
+                            })
+                        );
+                    } else {
+                        return Err(
+                            ScreenerBotError::Network(NetworkError::HttpStatusError {
+                                endpoint: configs.rpc_url_premium.clone(),
+                                status: status.as_u16(),
+                                body: Some(error_text),
+                            })
+                        );
+                    }
+                }
+
+                let rpc_response = response.json::<serde_json::Value>().await.map_err(|e| {
+                    ScreenerBotError::Data(DataError::ParseError {
+                        data_type: "RPC response".to_string(),
+                        error: e.to_string(),
+                    })
+                })?;
+
+                // Check for RPC-level errors
+                if let Some(error) = rpc_response.get("error") {
+                    if let Some(message) = error.get("message").and_then(|m| m.as_str()) {
+                        let error_msg = message.to_lowercase();
+
+                        if error_msg.contains("timeout") || error_msg.contains("too many accounts") {
+                            return Err(
+                                ScreenerBotError::Network(NetworkError::ConnectionTimeout {
+                                    endpoint: configs.rpc_url_premium.clone(),
+                                    timeout_ms: timeout_seconds.unwrap_or(60) * 1000,
+                                })
+                            );
+                        } else if error_msg.contains("rate limit") || error_msg.contains("429") {
+                            return Err(
+                                ScreenerBotError::RpcProvider(RpcProviderError::RateLimitExceeded {
+                                    provider_name: "premium_rpc".to_string(),
+                                    limit_type: "requests_per_second".to_string(),
+                                    reset_at: chrono::Utc::now() + chrono::Duration::seconds(60),
+                                })
+                            );
+                        } else {
+                            return Err(
+                                ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                                    provider_name: "premium_rpc".to_string(),
+                                    message: format!("RPC error: {}", message),
+                                })
+                            );
+                        }
+                    }
+                }
+
+                if let Some(result) = rpc_response.get("result") {
+                    if let Some(accounts) = result.as_array() {
+                        self.record_call_for_url(&configs.rpc_url_premium, "getProgramAccounts");
+                        self.record_success(Some(&configs.rpc_url_premium));
+
+                        if is_debug_rpc_enabled() {
+                            log(
+                                LogTag::Rpc,
+                                "DEBUG",
+                                &format!(
+                                    "Retrieved {} program accounts from premium RPC (fallback)",
+                                    accounts.len()
+                                )
+                            );
+                        }
+
+                        return Ok(accounts.clone());
+                    }
+                }
+
+                Err(
+                    ScreenerBotError::Data(DataError::ParseError {
+                        data_type: "program accounts".to_string(),
+                        error: "No accounts found or invalid response format".to_string(),
+                    })
+                )
+            }
+            Err(e) => {
+                Err(
+                    ScreenerBotError::Network(NetworkError::Generic {
+                        message: format!("Failed to get program accounts from premium RPC: {}", e),
+                    })
+                )
+            }
         }
     }
 }
@@ -4509,22 +4892,20 @@ pub fn init_rpc_client() -> Result<&'static RpcClient, String> {
     unsafe {
         let mut init_error: Option<String> = None;
 
-        RPC_INIT.call_once(|| match RpcClient::from_config() {
-            Ok(client) => {
-                log(
-                    LogTag::Rpc,
-                    "SUCCESS",
-                    "Global RPC client initialized from configuration",
-                );
-                GLOBAL_RPC_CLIENT = Some(client);
-            }
-            Err(e) => {
-                init_error = Some(e.clone());
-                log(
-                    LogTag::Rpc,
-                    "ERROR",
-                    &format!("Failed to init RPC client from config: {}", e),
-                );
+        RPC_INIT.call_once(|| {
+            match RpcClient::from_config() {
+                Ok(client) => {
+                    log(LogTag::Rpc, "SUCCESS", "Global RPC client initialized from configuration");
+                    GLOBAL_RPC_CLIENT = Some(client);
+                }
+                Err(e) => {
+                    init_error = Some(e.clone());
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("Failed to init RPC client from config: {}", e)
+                    );
+                }
             }
         });
 
@@ -4564,11 +4945,7 @@ pub fn save_global_rpc_stats() -> Result<(), String> {
 
 /// Start RPC stats auto-save background task
 pub async fn start_rpc_stats_auto_save_service(shutdown: Arc<tokio::sync::Notify>) {
-    log(
-        LogTag::Rpc,
-        "START",
-        "Starting RPC stats auto-save service (every 3 seconds)",
-    );
+    log(LogTag::Rpc, "START", "Starting RPC stats auto-save service (every 3 seconds)");
 
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));
 
@@ -4631,7 +5008,7 @@ mod tests {
 /// Extracts token account information from RPC response
 fn extract_token_account_info(
     account: &serde_json::Value,
-    is_token_2022: bool,
+    is_token_2022: bool
 ) -> Option<TokenAccountInfo> {
     let pubkey = account.get("pubkey")?.as_str()?;
     let account_data = account.get("account")?;
