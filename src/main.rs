@@ -18,6 +18,24 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
 
+// Constants for timeouts and limits
+const CRITICAL_OPS_TIMEOUT_SECS: u64 = 60;
+const CLEANUP_TIMEOUT_SECS: u64 = 3;
+const EMERGENCY_WAIT_SECS: u64 = 30;
+const DASHBOARD_MONITOR_INTERVAL_MS: u64 = 500;
+const PROGRESS_UPDATE_INTERVAL_SECS: u64 = 2;
+const DEFAULT_TASK_TIMEOUT_SECS: u64 = 10;
+const DASHBOARD_TASK_TIMEOUT_SECS: u64 = 20;
+const EXTENDED_TASK_TIMEOUT_SECS: u64 = 120;
+const DASHBOARD_MIN_TIMEOUT_SECS: u64 = 22;
+
+// Helper function for debug logging to reduce repetition
+fn debug_log(tag: LogTag, level: &str, message: &str) {
+    if is_debug_system_enabled() {
+        log(tag, level, message);
+    }
+}
+
 #[tokio::main]
 async fn main() {
     // Initialize file logging system first
@@ -85,9 +103,7 @@ async fn main() {
                 dashboard::run_dashboard(shutdown_dashboard, services_completed_dashboard).await
             {
                 // Avoid stderr prints in dashboard context; route to file logger
-                if is_debug_system_enabled() {
-                    log(LogTag::System, "ERROR", &format!("Dashboard error: {}", e));
-                }
+                debug_log(LogTag::System, "ERROR", &format!("Dashboard error: {}", e));
             }
             // Clear global dashboard on exit
             dashboard::clear_global_dashboard();
@@ -107,7 +123,7 @@ async fn main() {
                         break;
                     }
                 }
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                tokio::time::sleep(Duration::from_millis(DASHBOARD_MONITOR_INTERVAL_MS)).await;
             }
         });
 
@@ -115,11 +131,9 @@ async fn main() {
         let shutdown_trigger_os = shutdown_trigger.clone();
         tokio::spawn(async move {
             if tokio::signal::ctrl_c().await.is_ok() {
-                if is_debug_system_enabled() {
-                    log(LogTag::System, "INFO", "Shutdown signal received (Ctrl+C)");
-                }
-                shutdown_trigger_os.notify_waiters();
+                debug_log(LogTag::System, "INFO", "Shutdown signal received (Ctrl+C)");
             }
+            shutdown_trigger_os.notify_waiters();
         });
 
         // In dashboard mode, we'll run a simplified background version
@@ -129,21 +143,17 @@ async fn main() {
             "Running in dashboard mode with terminal UI",
         );
     } else {
-        if is_debug_system_enabled() {
-            log(LogTag::System, "INFO", "Running in console mode");
-        }
+        debug_log(LogTag::System, "INFO", "Running in console mode");
     }
 
     // Initialize centralized blacklist system with system/stable tokens
     tokens::initialize_system_stable_blacklist();
 
-    if is_debug_system_enabled() {
-        log(
-            LogTag::System,
-            "INFO",
-            "Starting ScreenerBot background tasks",
-        );
-    }
+    debug_log(
+        LogTag::System,
+        "INFO",
+        "Starting ScreenerBot background tasks",
+    );
 
     // Emergency shutdown flag (used below after first Ctrl+C)
     let emergency_shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -152,13 +162,11 @@ async fn main() {
     let mut tokens_system = match tokens::initialize_tokens_system().await {
         Ok(system) => system,
         Err(e) => {
-            if is_debug_system_enabled() {
-                log(
-                    LogTag::System,
-                    "ERROR",
-                    &format!("Failed to initialize tokens system: {}", e),
-                );
-            }
+            debug_log(
+                LogTag::System,
+                "ERROR",
+                &format!("Failed to initialize tokens system: {}", e),
+            );
             std::process::exit(1);
         }
     };
@@ -166,28 +174,23 @@ async fn main() {
     // Initialize and start pool service for real-time price calculations and history caching
     let pool_service = pool::init_pool_service();
     pool_service.start_monitoring().await;
-    if is_debug_system_enabled() {
-        log(
-            LogTag::System,
-            "INFO",
-            "Pool price service with disk caching initialized and monitoring started",
-        );
-    }
+    debug_log(
+        LogTag::System,
+        "INFO",
+        "Pool price service with disk caching initialized and monitoring started",
+    );
 
     let shutdown_tokens = shutdown.clone();
-    let _shutdown_pricing = shutdown.clone();
 
     // Initialize global rugcheck service
     let database = match TokenDatabase::new() {
         Ok(db) => db,
         Err(e) => {
-            if is_debug_system_enabled() {
-                log(
-                    LogTag::System,
-                    "ERROR",
-                    &format!("Failed to create database for rugcheck: {}", e),
-                );
-            }
+            debug_log(
+                LogTag::System,
+                "ERROR",
+                &format!("Failed to create database for rugcheck: {}", e),
+            );
             std::process::exit(1);
         }
     };
@@ -197,23 +200,19 @@ async fn main() {
         match tokens::initialize_global_rugcheck_service(database, shutdown_rugcheck).await {
             Ok(handle) => handle,
             Err(e) => {
-                if is_debug_system_enabled() {
-                    log(
-                        LogTag::System,
-                        "ERROR",
-                        &format!("Failed to initialize global rugcheck service: {}", e),
-                    );
-                }
+                debug_log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to initialize global rugcheck service: {}", e),
+                );
                 std::process::exit(1);
             }
         };
-    if is_debug_system_enabled() {
-        log(
-            LogTag::System,
-            "INFO",
-            "Global rugcheck service initialized successfully",
-        );
-    }
+    debug_log(
+        LogTag::System,
+        "INFO",
+        "Global rugcheck service initialized successfully",
+    );
 
     // Start token monitoring service for database updates
     let shutdown_monitor = shutdown.clone();
@@ -226,45 +225,37 @@ async fn main() {
         match monitor::start_token_monitoring(shutdown_monitor).await {
             Ok(handle) => {
                 if let Err(e) = handle.await {
-                    if is_debug_system_enabled() {
-                        log(
-                            LogTag::System,
-                            "ERROR",
-                            &format!("Token monitoring task failed: {:?}", e),
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                if is_debug_system_enabled() {
-                    log(
+                    debug_log(
                         LogTag::System,
                         "ERROR",
-                        &format!("Failed to start token monitoring: {}", e),
+                        &format!("Token monitoring task failed: {:?}", e),
                     );
                 }
             }
+            Err(e) => {
+                debug_log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to start token monitoring: {}", e),
+                );
+            }
         }
-        if is_debug_system_enabled() {
-            log(
-                LogTag::System,
-                "INFO",
-                "Token monitoring service task ended",
-            );
-        }
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "Token monitoring service task ended",
+        );
     });
 
     // Start tokens system background tasks (includes rugcheck service)
     let tokens_handles = match tokens_system.start_background_tasks(shutdown_tokens).await {
         Ok(handles) => handles,
         Err(e) => {
-            if is_debug_system_enabled() {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!("Some tokens system tasks failed to start: {}", e),
-                );
-            }
+            debug_log(
+                LogTag::System,
+                "WARN",
+                &format!("Some tokens system tasks failed to start: {}", e),
+            );
             Vec::new()
         }
     };
@@ -272,33 +263,25 @@ async fn main() {
     // Start RPC stats auto-save background service
     let shutdown_rpc_stats = shutdown.clone();
     let rpc_stats_handle = tokio::spawn(async move {
-        if is_debug_system_enabled() {
-            log(
-                LogTag::System,
-                "INFO",
-                "RPC stats auto-save service task started",
-            );
-        }
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "RPC stats auto-save service task started",
+        );
         rpc::start_rpc_stats_auto_save_service(shutdown_rpc_stats).await;
-        if is_debug_system_enabled() {
-            log(
-                LogTag::System,
-                "INFO",
-                "RPC stats auto-save service task ended",
-            );
-        }
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "RPC stats auto-save service task ended",
+        );
     });
 
     // Start ATA cleanup background service
     let shutdown_ata_cleanup = shutdown.clone();
     let ata_cleanup_handle = tokio::spawn(async move {
-        if is_debug_system_enabled() {
-            log(LogTag::System, "INFO", "ATA cleanup service task started");
-        }
+        debug_log(LogTag::System, "INFO", "ATA cleanup service task started");
         ata_cleanup::start_ata_cleanup_service(shutdown_ata_cleanup).await;
-        if is_debug_system_enabled() {
-            log(LogTag::System, "INFO", "ATA cleanup service task ended");
-        }
+        debug_log(LogTag::System, "INFO", "ATA cleanup service task ended");
     });
 
     // Start wallet monitoring background service
@@ -316,45 +299,37 @@ async fn main() {
                 if let Err(e) =
                     transactions::initialize_global_transaction_manager(wallet_pubkey).await
                 {
-                    if is_debug_system_enabled() {
-                        log(
-                            LogTag::System,
-                            "ERROR",
-                            &format!("Failed to initialize global transaction manager: {}", e),
-                        );
-                    }
-                    std::process::exit(1);
-                }
-                if is_debug_system_enabled() {
-                    log(
-                        LogTag::System,
-                        "INFO",
-                        "Global transaction manager initialized for swap monitoring",
-                    );
-                }
-            }
-            Err(e) => {
-                if is_debug_system_enabled() {
-                    log(
+                    debug_log(
                         LogTag::System,
                         "ERROR",
-                        &format!(
-                            "Failed to load wallet keypair for transaction manager: {}",
-                            e
-                        ),
+                        &format!("Failed to initialize global transaction manager: {}", e),
                     );
+                    std::process::exit(1);
                 }
+                debug_log(
+                    LogTag::System,
+                    "INFO",
+                    "Global transaction manager initialized for swap monitoring",
+                );
+            }
+            Err(e) => {
+                debug_log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!(
+                        "Failed to load wallet keypair for transaction manager: {}",
+                        e
+                    ),
+                );
                 std::process::exit(1);
             }
         },
         Err(e) => {
-            if is_debug_system_enabled() {
-                log(
-                    LogTag::System,
-                    "ERROR",
-                    &format!("Failed to read configs for transaction manager: {}", e),
-                );
-            }
+            debug_log(
+                LogTag::System,
+                "ERROR",
+                &format!("Failed to read configs for transaction manager: {}", e),
+            );
             std::process::exit(1);
         }
     }
@@ -362,21 +337,17 @@ async fn main() {
     // Start PositionsManager background service
     let shutdown_positions_manager = shutdown.clone();
     let positions_manager_handle = tokio::spawn(async move {
-        if is_debug_system_enabled() {
-            log(
-                LogTag::System,
-                "INFO",
-                "PositionsManager service task started",
-            );
-        }
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "PositionsManager service task started",
+        );
         let _sender = positions::start_positions_manager_service(shutdown_positions_manager).await;
-        if is_debug_system_enabled() {
-            log(
-                LogTag::System,
-                "INFO",
-                "PositionsManager service task ended",
-            );
-        }
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "PositionsManager service task ended",
+        );
     });
 
     let shutdown_entries = shutdown.clone();
@@ -417,86 +388,68 @@ async fn main() {
     // Start transaction manager background service
     let shutdown_transactions = shutdown.clone();
     let transaction_manager_handle = tokio::spawn(async move {
-        if is_debug_system_enabled() {
-            log(
-                LogTag::System,
-                "INFO",
-                "Transaction manager service task started",
-            );
-        }
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "Transaction manager service task started",
+        );
         transactions::start_transactions_service(shutdown_transactions).await;
-        if is_debug_system_enabled() {
-            log(
-                LogTag::System,
-                "INFO",
-                "Transaction manager service task ended",
-            );
-        }
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "Transaction manager service task ended",
+        );
     });
 
     if dashboard_mode {
-        if is_debug_system_enabled() {
-            log(
-                LogTag::System,
-                "INFO",
-                "Waiting for exit (q/Esc/Ctrl+C) to shutdown",
-            );
-        }
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "Waiting for exit (q/Esc/Ctrl+C) to shutdown",
+        );
         // Wait until dashboard requests shutdown or OS Ctrl+C arrives
         shutdown_trigger.notified().await;
         emergency_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
-        if is_debug_system_enabled() {
-            log(
-                LogTag::System,
-                "INFO",
-                "Shutdown requested, initiating graceful shutdown...",
-            );
-        }
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "Shutdown requested, initiating graceful shutdown...",
+        );
     } else {
-        if is_debug_system_enabled() {
-            log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
-        }
+        debug_log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
         // Set up Ctrl+C signal handler with better error handling
         match tokio::signal::ctrl_c().await {
             Ok(_) => {
                 emergency_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
-                if is_debug_system_enabled() {
-                    log(
-                        LogTag::System,
-                        "INFO",
-                        "Shutdown signal received, initiating graceful shutdown...",
-                    );
-                }
+                debug_log(
+                    LogTag::System,
+                    "INFO",
+                    "Shutdown signal received, initiating graceful shutdown...",
+                );
             }
             Err(e) => {
-                if is_debug_system_enabled() {
-                    log(
-                        LogTag::System,
-                        "ERROR",
-                        &format!("Failed to listen for shutdown signal: {}", e),
-                    );
-                }
+                debug_log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to listen for shutdown signal: {}", e),
+                );
                 std::process::exit(1);
             }
         }
     }
 
     // Notify all tasks to shutdown
-    if is_debug_system_enabled() {
-        log(
-            LogTag::System,
-            "INFO",
-            "📢 Starting shutdown notification to all background tasks...",
-        );
-    }
+    debug_log(
+        LogTag::System,
+        "INFO",
+        "📢 Starting shutdown notification to all background tasks...",
+    );
     shutdown.notify_waiters();
-    if is_debug_system_enabled() {
-        log(
-            LogTag::System,
-            "INFO",
-            "✅ Shutdown notification sent to all background tasks",
-        );
-    }
+    debug_log(
+        LogTag::System,
+        "INFO",
+        "✅ Shutdown notification sent to all background tasks",
+    );
     let shutdown_start_time = std::time::Instant::now();
 
     // CRITICAL PROTECTION: Check for active trading operations
@@ -519,7 +472,9 @@ async fn main() {
         // Wait for critical operations to complete (max 60 seconds)
         let critical_ops_timeout = std::time::Instant::now();
         while CriticalOperationGuard::get_active_count() > 0 {
-            if critical_ops_timeout.elapsed() > std::time::Duration::from_secs(60) {
+            if critical_ops_timeout.elapsed()
+                > std::time::Duration::from_secs(CRITICAL_OPS_TIMEOUT_SECS)
+            {
                 log(
                     LogTag::System,
                     "EMERGENCY",
@@ -529,8 +484,8 @@ async fn main() {
             }
 
             let remaining = CriticalOperationGuard::get_active_count();
-            if remaining > 0 && is_debug_system_enabled() {
-                log(
+            if remaining > 0 {
+                debug_log(
                     LogTag::System,
                     "CRITICAL",
                     &format!(
@@ -544,8 +499,8 @@ async fn main() {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
 
-        if CriticalOperationGuard::get_active_count() == 0 && is_debug_system_enabled() {
-            log(
+        if CriticalOperationGuard::get_active_count() == 0 {
+            debug_log(
                 LogTag::System,
                 "CRITICAL",
                 "✅ All critical trading operations completed safely",
@@ -554,48 +509,41 @@ async fn main() {
     }
 
     // Cleanup price service on shutdown (with timeout)
-    let cleanup_result = tokio::time::timeout(std::time::Duration::from_secs(3), async {
-        // Stop pool monitoring service
-        let pool_service = pool::get_pool_service();
-        pool_service.stop_monitoring().await;
-        if is_debug_system_enabled() {
-            log(LogTag::System, "INFO", "Pool monitoring service stopped");
-        }
+    let cleanup_result = tokio::time::timeout(
+        std::time::Duration::from_secs(CLEANUP_TIMEOUT_SECS),
+        async {
+            // Stop pool monitoring service
+            let pool_service = pool::get_pool_service();
+            pool_service.stop_monitoring().await;
+            debug_log(LogTag::System, "INFO", "Pool monitoring service stopped");
 
-        // Decimals are now automatically saved to database
-        if is_debug_system_enabled() {
-            log(
+            // Decimals are now automatically saved to database
+            debug_log(
                 LogTag::System,
                 "INFO",
                 "Decimals database persists automatically",
             );
-        }
 
-        // Save RPC statistics to disk
-        if let Err(e) = rpc::save_global_rpc_stats() {
-            if is_debug_system_enabled() {
-                log(
+            // Save RPC statistics to disk
+            if let Err(e) = rpc::save_global_rpc_stats() {
+                debug_log(
                     LogTag::System,
                     "WARN",
                     &format!("Failed to save RPC statistics: {}", e),
                 );
+            } else {
+                debug_log(LogTag::System, "INFO", "RPC statistics saved to disk");
             }
-        } else if is_debug_system_enabled() {
-            log(LogTag::System, "INFO", "RPC statistics saved to disk");
-        }
-    })
+        },
+    )
     .await;
 
     match cleanup_result {
         Ok(_) => {
-            if is_debug_system_enabled() {
-                log(LogTag::System, "INFO", "Cleanup completed successfully");
-            }
+            debug_log(LogTag::System, "INFO", "Cleanup completed successfully");
         }
         Err(_) => {
-            if is_debug_system_enabled() {
-                log(LogTag::System, "WARN", "Cleanup timed out after 3 seconds");
-            }
+            debug_log(LogTag::System, "WARN", "Cleanup timed out after 3 seconds");
         }
     }
 
@@ -607,43 +555,40 @@ async fn main() {
             "CRITICAL",
             &format!("🚨 {} CRITICAL OPERATIONS STILL ACTIVE - Extending task shutdown timeout to 120 seconds", final_critical_ops)
         );
-        120 // Extended timeout when critical operations are active
+        EXTENDED_TASK_TIMEOUT_SECS
     } else if dashboard_mode {
-        20
+        DASHBOARD_TASK_TIMEOUT_SECS
     } else {
-        10
-    }; // More time in dashboard mode to drain logs/UI
+        DEFAULT_TASK_TIMEOUT_SECS
+    };
 
     // If in dashboard mode, ensure timeout is at least as long as dashboard's max wait window
     if dashboard_mode {
-        task_timeout_seconds = task_timeout_seconds.max(22);
+        task_timeout_seconds = task_timeout_seconds.max(DASHBOARD_MIN_TIMEOUT_SECS);
     }
 
-    if is_debug_system_enabled() {
-        log(
-            LogTag::System,
-            "INFO",
-            &format!(
-                "Waiting for background tasks to shutdown (max {} seconds)...",
-                task_timeout_seconds
-            ),
-        );
-    }
+    debug_log(
+        LogTag::System,
+        "INFO",
+        &format!(
+            "Waiting for background tasks to shutdown (max {} seconds)...",
+            task_timeout_seconds
+        ),
+    );
 
     // Start a progress monitor task that runs in parallel
     let progress_shutdown = shutdown.clone();
     let progress_task = tokio::spawn(async move {
-        let mut progress_interval = tokio::time::interval(Duration::from_secs(2));
+        let mut progress_interval =
+            tokio::time::interval(Duration::from_secs(PROGRESS_UPDATE_INTERVAL_SECS));
         let mut elapsed = 0u64;
 
         loop {
             tokio::select! {
                 _ = progress_shutdown.notified() => break,
                 _ = progress_interval.tick() => {
-                    elapsed += 2;
-                    if is_debug_system_enabled() {
-                        log(LogTag::System, "INFO", &format!("⏳ Shutdown progress: {}s elapsed, still waiting for tasks...", elapsed));
-                    }
+                    elapsed += PROGRESS_UPDATE_INTERVAL_SECS;
+                    debug_log(LogTag::System, "INFO", &format!("⏳ Shutdown progress: {}s elapsed, still waiting for tasks...", elapsed));
                 }
             }
         }
@@ -653,36 +598,30 @@ async fn main() {
         std::time::Duration::from_secs(task_timeout_seconds),
         async {
             // Wait for trader tasks
-            if is_debug_system_enabled() {
-                log(
-                    LogTag::System,
-                    "INFO",
-                    "🔄 Waiting for entries monitor task to shutdown...",
-                );
-            }
+            debug_log(
+                LogTag::System,
+                "INFO",
+                "🔄 Waiting for entries monitor task to shutdown...",
+            );
             if let Err(e) = entries_handle.await {
-                if is_debug_system_enabled() {
-                    log(
-                        LogTag::System,
-                        "WARN",
-                        &format!("New entries monitor task failed to shutdown cleanly: {}", e),
-                    );
-                }
-            } else if is_debug_system_enabled() {
-                log(
+                debug_log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("New entries monitor task failed to shutdown cleanly: {}", e),
+                );
+            } else {
+                debug_log(
                     LogTag::System,
                     "INFO",
                     "✅ Entries monitor task shutdown completed",
                 );
             }
 
-            if is_debug_system_enabled() {
-                log(
-                    LogTag::System,
-                    "INFO",
-                    "🔄 Waiting for positions monitor task to shutdown...",
-                );
-            }
+            debug_log(
+                LogTag::System,
+                "INFO",
+                "🔄 Waiting for positions monitor task to shutdown...",
+            );
             if let Err(e) = positions_handle.await {
                 log(
                     LogTag::System,
@@ -910,7 +849,8 @@ async fn main() {
                 // Last ditch effort - wait another 30 seconds for critical operations
                 let emergency_start = std::time::Instant::now();
                 while CriticalOperationGuard::get_active_count() > 0
-                    && emergency_start.elapsed() < std::time::Duration::from_secs(30)
+                    && emergency_start.elapsed()
+                        < std::time::Duration::from_secs(EMERGENCY_WAIT_SECS)
                 {
                     tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
                     let remaining = CriticalOperationGuard::get_active_count();
