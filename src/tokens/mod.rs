@@ -22,17 +22,18 @@ pub use pool::{
     SOL_MINT,
 };
 
-use crate::global::{is_debug_decimals_enabled, is_debug_monitor_enabled};
+use crate::global::{ is_debug_decimals_enabled, is_debug_monitor_enabled };
 /// Centralized Token Management System - Thread-Safe Edition
 /// Pool pricing is enabled - use pool module for direct on-chain price calculations
 
 /// This module provides thread-safe access to token data and prices
 /// using a centralized price service instead of direct database access.
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::sync::Notify;
 
+pub mod authority;
 pub mod blacklist;
 pub mod cache;
 pub mod decimals;
@@ -46,14 +47,29 @@ pub mod rugcheck;
 pub mod types;
 
 // Re-export main types and functions
-pub use blacklist::{
-    add_to_blacklist_manual, check_and_track_liquidity, get_blacklist_stats,
-    initialize_system_stable_blacklist, is_system_or_stable_token, is_token_blacklisted,
-    is_token_excluded_from_trading, TokenBlacklist,
+pub use authority::{
+    get_authority_summary,
+    get_multiple_token_authorities,
+    get_token_authorities,
+    is_token_safe,
+    TokenAuthorities,
+    TokenRiskLevel,
 };
-pub use cache::{DatabaseStats, TokenDatabase};
+pub use blacklist::{
+    add_to_blacklist_manual,
+    check_and_track_liquidity,
+    get_blacklist_stats,
+    initialize_system_stable_blacklist,
+    is_system_or_stable_token,
+    is_token_blacklisted,
+    is_token_excluded_from_trading,
+    TokenBlacklist,
+};
+pub use cache::{ DatabaseStats, TokenDatabase };
 pub use decimals::{
-    batch_fetch_token_decimals, get_cached_decimals, get_token_decimals_from_chain,
+    batch_fetch_token_decimals,
+    get_cached_decimals,
+    get_token_decimals_from_chain,
 };
 pub use dexscreener::{
     get_global_dexscreener_api,
@@ -68,16 +84,29 @@ pub use dexscreener::{
     DEXSCREENER_RATE_LIMIT_PER_MINUTE,
     MAX_TOKENS_PER_API_CALL,
 };
-pub use discovery::{discover_tokens_once, start_token_discovery, TokenDiscovery};
+pub use discovery::{ discover_tokens_once, start_token_discovery, TokenDiscovery };
 pub use ohlcvs::{
-    get_latest_ohlcv, get_ohlcv_service_clone, get_ohlcv_service_ref, init_ohlcv_service,
-    is_ohlcv_data_available, start_ohlcv_monitoring, sync_watch_list_with_trader, DataAvailability,
-    OhlcvDataPoint, OhlcvService, Timeframe,
+    get_latest_ohlcv,
+    get_ohlcv_service_clone,
+    get_ohlcv_service_ref,
+    init_ohlcv_service,
+    is_ohlcv_data_available,
+    start_ohlcv_monitoring,
+    sync_watch_list_with_trader,
+    DataAvailability,
+    OhlcvDataPoint,
+    OhlcvService,
+    Timeframe,
 };
 pub use pool::initialize_price_service;
 pub use rugcheck::{
-    get_high_risk_issues, get_rugcheck_score, get_token_rugcheck_data, is_token_safe_for_trading,
-    update_new_token_rugcheck_data, RugcheckResponse, RugcheckService,
+    get_high_risk_issues,
+    get_rugcheck_score,
+    get_token_rugcheck_data,
+    is_token_safe_for_trading,
+    update_new_token_rugcheck_data,
+    RugcheckResponse,
+    RugcheckService,
 };
 pub use types::*;
 
@@ -127,7 +156,7 @@ impl TokensSystem {
     /// Start all background tasks
     pub async fn start_background_tasks(
         &mut self,
-        shutdown: Arc<Notify>,
+        shutdown: Arc<Notify>
     ) -> Result<Vec<tokio::task::JoinHandle<()>>, String> {
         let mut handles = Vec::new();
 
@@ -144,27 +173,18 @@ impl TokensSystem {
                 log(LogTag::System, "SUCCESS", "OHLCV monitoring task started");
             }
             Err(e) => {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!("Failed to start OHLCV monitoring: {}", e),
-                );
+                log(LogTag::System, "WARN", &format!("Failed to start OHLCV monitoring: {}", e));
             }
         }
 
-        log(
-            LogTag::System,
-            "SUCCESS",
-            "All tokens system background tasks started",
-        );
+        log(LogTag::System, "SUCCESS", "All tokens system background tasks started");
 
         Ok(handles)
     }
 
     /// Get system statistics
     pub async fn get_system_stats(&self) -> Result<TokensSystemStats, String> {
-        let db_stats = self
-            .database
+        let db_stats = self.database
             .get_stats()
             .map_err(|e| format!("Failed to get database stats: {}", e))?;
         let blacklist_stats = get_blacklist_stats();
@@ -205,15 +225,11 @@ static GLOBAL_RUGCHECK_SERVICE: Mutex<Option<Arc<RugcheckService>>> = Mutex::new
 /// Initialize global rugcheck service
 pub async fn initialize_global_rugcheck_service(
     database: TokenDatabase,
-    shutdown: Arc<Notify>,
+    shutdown: Arc<Notify>
 ) -> Result<tokio::task::JoinHandle<()>, String> {
     // Check if already initialized and stop the old one first
     if let Some(old_service) = GLOBAL_RUGCHECK_SERVICE.lock().unwrap().take() {
-        log(
-            LogTag::System,
-            "INIT",
-            "Replacing existing global rugcheck service",
-        );
+        log(LogTag::System, "INIT", "Replacing existing global rugcheck service");
         // The old service will stop when its shutdown notify is triggered
     }
 
@@ -226,11 +242,7 @@ pub async fn initialize_global_rugcheck_service(
     });
 
     *GLOBAL_RUGCHECK_SERVICE.lock().unwrap() = Some(service);
-    log(
-        LogTag::System,
-        "INIT",
-        "Global rugcheck service initialized",
-    );
+    log(LogTag::System, "INIT", "Global rugcheck service initialized");
     Ok(handle)
 }
 
@@ -245,18 +257,14 @@ pub fn get_global_rugcheck_service() -> Option<Arc<RugcheckService>> {
 
 /// Initialize the tokens system with price service
 pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::error::Error>> {
-    log(
-        LogTag::System,
-        "INIT",
-        "Initializing complete tokens system...",
-    );
+    log(LogTag::System, "INIT", "Initializing complete tokens system...");
 
     // Initialize global RPC client from configuration
     if let Err(e) = crate::rpc::init_rpc_client() {
         log(
             LogTag::System,
             "WARN",
-            &format!("RPC config initialization failed, using fallback: {}", e),
+            &format!("RPC config initialization failed, using fallback: {}", e)
         );
     }
 
@@ -273,27 +281,15 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
 
     // Initialize OHLCV service
     if let Err(e) = init_ohlcv_service().await {
-        log(
-            LogTag::System,
-            "WARN",
-            &format!("OHLCV service initialization failed: {}", e),
-        );
+        log(LogTag::System, "WARN", &format!("OHLCV service initialization failed: {}", e));
     } else {
-        log(
-            LogTag::System,
-            "SUCCESS",
-            "OHLCV service initialized successfully",
-        );
+        log(LogTag::System, "SUCCESS", "OHLCV service initialized successfully");
     }
 
     // Create tokens system
     let system = TokensSystem::new()?;
 
-    log(
-        LogTag::System,
-        "SUCCESS",
-        "Tokens system initialized successfully",
-    );
+    log(LogTag::System, "SUCCESS", "Tokens system initialized successfully");
     Ok(system)
 }
 
@@ -327,11 +323,7 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
     // Handle SOL native token immediately
     if mint == "So11111111111111111111111111111111111111112" {
         if debug_enabled {
-            log(
-                LogTag::Decimals,
-                "SOL_NATIVE",
-                "SOL decimals: 9 (native token)",
-            );
+            log(LogTag::Decimals, "SOL_NATIVE", "SOL decimals: 9 (native token)");
         }
         return Some(9);
     }
@@ -342,7 +334,7 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
             log(
                 LogTag::Decimals,
                 "CACHE_HIT",
-                &format!("Cached decimals for {}: {}", &mint[..8], decimals),
+                &format!("Cached decimals for {}: {}", &mint[..8], decimals)
             );
         }
         return Some(decimals);
@@ -353,7 +345,7 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
         log(
             LogTag::Decimals,
             "BLOCKCHAIN_FETCH",
-            &format!("Fetching decimals for {} from blockchain", &mint[..8]),
+            &format!("Fetching decimals for {} from blockchain", &mint[..8])
         );
     }
 
@@ -363,11 +355,7 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
                 log(
                     LogTag::Decimals,
                     "FETCH_SUCCESS",
-                    &format!(
-                        "Fetched decimals {} for {} from blockchain",
-                        decimals,
-                        &mint[..8]
-                    ),
+                    &format!("Fetched decimals {} for {} from blockchain", decimals, &mint[..8])
                 );
             }
             return Some(decimals);
@@ -377,7 +365,7 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
                 log(
                     LogTag::Decimals,
                     "FETCH_ERROR",
-                    &format!("Failed to fetch decimals for {}: {}", &mint[..8], e),
+                    &format!("Failed to fetch decimals for {}: {}", &mint[..8], e)
                 );
             }
         }
@@ -388,10 +376,7 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
         log(
             LogTag::Decimals,
             "NO_DECIMALS",
-            &format!(
-                "No decimals available for {} - operations will be skipped",
-                &mint[..8]
-            ),
+            &format!("No decimals available for {} - operations will be skipped", &mint[..8])
         );
     }
 
@@ -429,11 +414,7 @@ pub async fn get_token_rugcheck_data_safe(mint: &str) -> Result<Option<RugcheckR
     match get_global_rugcheck_service() {
         Some(service) => service.get_rugcheck_data(mint).await,
         None => {
-            log(
-                LogTag::Rugcheck,
-                "ERROR",
-                "Global rugcheck service not initialized",
-            );
+            log(LogTag::Rugcheck, "ERROR", "Global rugcheck service not initialized");
             Err("Global rugcheck service not initialized".to_string())
         }
     }
@@ -447,10 +428,7 @@ pub async fn is_token_safe_for_trading_safe(mint: &str) -> bool {
             log(
                 LogTag::Rugcheck,
                 "WARN",
-                &format!(
-                    "No rugcheck data available after auto-fetch for token: {}",
-                    mint
-                ),
+                &format!("No rugcheck data available after auto-fetch for token: {}", mint)
             );
             true // Changed: Allow trading if rugcheck data unavailable (fail-safe approach)
         }
@@ -458,7 +436,7 @@ pub async fn is_token_safe_for_trading_safe(mint: &str) -> bool {
             log(
                 LogTag::Rugcheck,
                 "ERROR",
-                &format!("Failed to get rugcheck data for {}: {}", mint, e),
+                &format!("Failed to get rugcheck data for {}: {}", mint, e)
             );
             true // Changed: Allow trading if rugcheck service has errors (fail-safe approach)
         }
@@ -471,9 +449,7 @@ pub async fn is_token_safe_for_trading_safe(mint: &str) -> bool {
 
 /// Get current token price using thread-safe price service
 pub async fn get_current_token_price(mint: &str) -> Option<f64> {
-    get_price(mint, Some(PriceOptions::simple()), false)
-        .await
-        .and_then(|r| r.best_sol_price())
+    get_price(mint, Some(PriceOptions::simple()), false).await.and_then(|r| r.best_sol_price())
 }
 
 /// Get all tokens by liquidity using database directly (for compatibility)
@@ -484,11 +460,15 @@ pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, String> {
         Ok(tokens) => {
             let mut sorted_tokens = tokens;
             sorted_tokens.sort_by(|a, b| {
-                let a_liq = a.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
-                let b_liq = b.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
-                b_liq
-                    .partial_cmp(&a_liq)
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                let a_liq = a.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(0.0);
+                let b_liq = b.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(0.0);
+                b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
             });
             Ok(sorted_tokens)
         }

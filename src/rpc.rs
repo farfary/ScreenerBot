@@ -4731,6 +4731,169 @@ impl RpcClient {
                 ),
         }
     }
+
+    /// Get mint account data to check authorities (minting, freeze, update metadata)
+    /// Returns the raw mint account data for authority parsing
+    pub async fn get_mint_account(
+        &self,
+        mint: &str
+    ) -> Result<serde_json::Value, ScreenerBotError> {
+        self.wait_for_rate_limit().await;
+
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "INFO",
+                &format!("Getting mint account data for: {}", crate::utils::safe_truncate(mint, 12))
+            );
+        }
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getAccountInfo",
+            "params": [
+                mint,
+                {
+                    "encoding": "jsonParsed",
+                    "commitment": "confirmed"
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+        let configs = read_configs().map_err(|e| {
+            ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
+                message: format!("Failed to read configs: {}", e),
+            })
+        })?;
+
+        // If premium RPC only mode is active, use only premium RPC
+        if is_premium_rpc_only() {
+            if is_debug_rpc_enabled() {
+                log(LogTag::Rpc, "INFO", "Using premium RPC only mode for mint account");
+            }
+
+            self.record_call_for_url(&configs.rpc_url_premium, "getAccountInfo");
+
+            match
+                client
+                    .post(&configs.rpc_url_premium)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await?
+            {
+                response if response.status().is_success() => {
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            self.record_success(Some(&configs.rpc_url_premium));
+                            return Ok(result.clone());
+                        }
+                    }
+                }
+                _ => {
+                    log(LogTag::Rpc, "ERROR", "Premium RPC failed for mint account");
+                }
+            }
+
+            return Err(
+                ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                    provider_name: "premium_rpc".to_string(),
+                    message: "Premium RPC failed for mint account".to_string(),
+                })
+            );
+        }
+
+        // Normal mode: Try premium RPC first for better reliability
+        let mut should_fallback = false;
+
+        match
+            client
+                .post(&configs.rpc_url_premium)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                let is_success = response.status().is_success();
+                let is_rate_limited = Self::is_rate_limit_response(&response);
+
+                if is_success {
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            self.record_call_for_url(&configs.rpc_url_premium, "getAccountInfo");
+                            self.record_success(Some(&configs.rpc_url_premium));
+                            return Ok(result.clone());
+                        }
+                    }
+                }
+
+                if is_rate_limited {
+                    should_fallback = true;
+                    self.record_429_error(Some(&configs.rpc_url_premium));
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        "Premium RPC rate limited for mint account, falling back to main"
+                    );
+                }
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                if Self::is_rate_limit_error(&error_msg) {
+                    should_fallback = true;
+                    self.record_429_error(Some(&configs.rpc_url_premium));
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        &format!("Premium RPC rate limited for mint account: {}, falling back to main", error_msg)
+                    );
+                } else {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("Failed to get mint account from premium RPC (non-rate-limit): {}", error_msg)
+                    );
+                }
+            }
+        }
+
+        // Only fallback to main RPC on 429/rate limit errors
+        if should_fallback {
+            log(LogTag::Rpc, "INFO", "Fallback: Getting mint account from main RPC...");
+
+            match
+                client
+                    .post(&configs.rpc_url)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await?
+            {
+                response if response.status().is_success() => {
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            self.record_call_for_url(&configs.rpc_url, "getAccountInfo");
+                            self.record_success(Some(&configs.rpc_url));
+                            return Ok(result.clone());
+                        }
+                    }
+                }
+                response => {
+                    if Self::is_rate_limit_response(&response) {
+                        self.record_429_error(Some(&configs.rpc_url));
+                    }
+                }
+            }
+        }
+
+        Err(
+            ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                provider_name: "main_rpc".to_string(),
+                message: "Failed to get mint account from all RPC endpoints".to_string(),
+            })
+        )
+    }
 }
 
 /// Global RPC client instance
