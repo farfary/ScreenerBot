@@ -1730,8 +1730,6 @@ impl PoolPriceService {
         let was_cache_hit = false; // Always false since no caching
         let mut was_blockchain = false;
 
-        // CACHING COMPLETELY REMOVED - ALWAYS CALCULATE FRESH
-
         // Check if token has available pools
         if !self.check_token_availability(token_address).await {
             self.record_price_request(false, was_cache_hit, was_blockchain)
