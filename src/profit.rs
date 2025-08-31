@@ -240,6 +240,25 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         return true;
     }
 
+    // 3b) Round-trip neutral exit: after a meaningful peak, if we round-trip back to ~flat,
+    // prefer to exit instead of waiting for another full cycle.
+    if peak_profit >= BASE_MIN_PROFIT_PERCENT && minutes_held >= 8.0 && pnl_percent <= 1.0 {
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Profit,
+                "ROUND_TRIP_NEUTRAL_EXIT",
+                &format!(
+                    "{} pnl={:.2}% peak={:.2}% t={:.1}m",
+                    position.symbol,
+                    pnl_percent,
+                    peak_profit,
+                    minutes_held
+                )
+            );
+        }
+        return true;
+    }
+
     // 4) Quick capture windows (fast large moves)
     for (window_minutes, required_profit) in QUICK_WINDOWS {
         if minutes_held <= *window_minutes && pnl_percent >= *required_profit {
@@ -368,35 +387,93 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         }
     }
 
-    // 8) Odds / expected-value based exit
+    // 8) Scoring-based exit decision (lightweight, reuses existing signals)
+    // Score components: negative adds to exit_score; positive subtracts (hold bias).
     let odds = continuation_odds(pnl_percent, minutes_held);
-
-    // Heuristic future upside cap (conservative)
-    let potential_gain_ceiling = 200.0;
-    let potential_gain = (potential_gain_ceiling - pnl_percent).max(0.0).min(100.0);
-
-    // Future gap is an estimate of how much downside we'd accept as the trailing gap if we continued.
-    // Use max(pnl_percent, peak_profit) to avoid underestimating gap in certain edge cases.
     let future_gap =
         trailing_gap(pnl_percent.max(peak_profit), minutes_held) *
         trailing_time_pressure_multiplier;
-
-    // Expected edge: simplified EV proxy
+    let potential_gain_ceiling = 200.0;
+    let potential_gain = (potential_gain_ceiling - pnl_percent).max(0.0).min(100.0);
     let expected_edge = odds * potential_gain - (1.0 - odds) * future_gap;
 
-    // If odds are poor relative to adaptive threshold and EV is non-positive -> exit.
-    if odds < adaptive_odds_threshold && expected_edge <= 0.0 {
+    let mut exit_score = 0.0f64;
+
+    // Drawdown vs dynamic gap: heavy weight
+    if peak_profit >= BASE_MIN_PROFIT_PERCENT {
+        let gap_now = trailing_gap(peak_profit, minutes_held) * trailing_time_pressure_multiplier;
+        let dd_ratio = if gap_now > 0.0 { drawdown / gap_now } else { 0.0 };
+        if dd_ratio >= 1.0 {
+            exit_score += 2.0;
+        } else if
+            // would trigger trail
+            dd_ratio >= 0.7
+        {
+            exit_score += 1.2;
+        } else if dd_ratio >= 0.4 {
+            exit_score += 0.6;
+        }
+    }
+
+    // Odds and EV
+    if odds < adaptive_odds_threshold {
+        exit_score += (adaptive_odds_threshold - odds) * 1.5;
+    }
+    if expected_edge <= 0.0 {
+        exit_score += (expected_edge.abs() / (future_gap + 1.0)).min(1.5);
+    }
+
+    // Time pressure
+    exit_score += time_pressure * 0.8; // up to +0.8
+
+    // Profit quality
+    if pnl_percent < dynamic_min_profit {
+        exit_score += 0.8;
+    } // below our dynamic gate
+    if pnl_percent >= INSTANT_EXIT_LEVEL_1 {
+        exit_score += 1.0;
+    }
+
+    // Early retrace already handled above; add a small nudge if peak was meaningful and we gave back a lot
+    if peak_profit >= 20.0 && drawdown >= peak_profit * 0.4 {
+        exit_score += 0.7;
+    }
+
+    // Very small profits after long time -> nudge to close
+    if minutes_held > 45.0 && pnl_percent < 5.0 {
+        exit_score += 0.6;
+    }
+
+    // Flat after big peak for a while -> additional nudge
+    if peak_profit >= BASE_MIN_PROFIT_PERCENT && minutes_held >= 12.0 && pnl_percent <= 1.0 {
+        exit_score += 1.0;
+    }
+
+    // Holding bias when trend looks healthy (odds good and EV positive)
+    if odds >= adaptive_odds_threshold && expected_edge > 0.0 {
+        exit_score -= 0.6;
+    }
+
+    // Normalize and threshold
+    let mut score_threshold = 1.2; // calibrated to act after 1-3 weak signals or one strong
+    // Lower threshold under high time pressure to favor exits as cap approaches
+    score_threshold -= 0.2 * time_pressure; // down to ~1.0 at full pressure
+    if exit_score >= score_threshold {
         if is_debug_profit_enabled() {
             log(
                 LogTag::Profit,
-                "ODDS_EXIT",
+                "SCORE_EXIT",
                 &format!(
-                    "{} pnl={:.2}% odds={:.2} thr={:.2} edge={:.2} t={:.1}m",
+                    "{} score={:.2} thr={:.2} pnl={:.2}% peak={:.2}% dd={:.2}% odds={:.2} edge={:.2} gapF={:.2} t={:.1}m",
                     position.symbol,
+                    exit_score,
+                    score_threshold,
                     pnl_percent,
+                    peak_profit,
+                    drawdown,
                     odds,
-                    adaptive_odds_threshold,
                     expected_edge,
+                    future_gap,
                     minutes_held
                 )
             );
