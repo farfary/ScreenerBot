@@ -560,35 +560,6 @@ impl TransactionsManager {
         Ok(())
     }
 
-    /// If transaction has a valid cached analysis snapshot, hydrate derived fields from it
-    pub fn try_hydrate_from_cached_analysis(&self, transaction: &mut Transaction) -> bool {
-        if let Some(snapshot) = &transaction.cached_analysis {
-            if snapshot.version == ANALYSIS_CACHE_VERSION && snapshot.hydrated {
-                transaction.transaction_type = snapshot.transaction_type.clone();
-                transaction.direction = snapshot.direction.clone();
-                transaction.success = snapshot.success;
-                transaction.fee_sol = snapshot.fee_sol;
-                transaction.sol_balance_change = snapshot.sol_balance_change;
-                transaction.token_transfers = snapshot.token_transfers.clone();
-                transaction.sol_balance_changes = snapshot.sol_balance_changes.clone();
-                transaction.token_balance_changes = snapshot.token_balance_changes.clone();
-                transaction.ata_analysis = snapshot.ata_analysis.clone();
-                transaction.token_info = snapshot.token_info.clone();
-                transaction.calculated_token_price_sol = snapshot.calculated_token_price_sol;
-                transaction.price_source = snapshot.price_source.clone();
-                transaction.token_symbol = snapshot.token_symbol.clone();
-                transaction.token_decimals = snapshot.token_decimals;
-                // Restore the missing critical fields
-                transaction.swap_analysis = snapshot.swap_analysis.clone();
-                transaction.fee_breakdown = snapshot.fee_breakdown.clone();
-                transaction.log_messages = snapshot.log_messages.clone();
-                transaction.instructions = snapshot.instructions.clone();
-                return true;
-            }
-        }
-        false
-    }
-
     /// Cache transaction to database only
     pub async fn cache_transaction(&self, transaction: &Transaction) -> Result<(), String> {
         if let Some(ref db) = self.transaction_database {
@@ -723,44 +694,39 @@ impl TransactionsManager {
             // Use the new optimized batch function to avoid N+1 queries
             let mut transactions = db.get_recent_transactions_batch(limit).await?;
 
-            // Hydrate transactions that need analysis but only if they have raw data
-            let mut hydrated_count = 0;
+            // Recalculate analysis for transactions that need it
+            let mut recalculated_count = 0;
             for tx in &mut transactions {
-                // Only try to hydrate if we have raw data and the transaction type is unknown
+                // Only recalculate if we have raw data and the transaction type is unknown
                 if matches!(tx.transaction_type, TransactionType::Unknown)
                     && tx.raw_transaction_data.is_some()
                 {
-                    // Try to hydrate from cached analysis first
-                    if !self.try_hydrate_from_cached_analysis(tx) {
-                        // If no cached analysis, recalculate (but don't fetch from RPC)
-                        if let Err(e) = self.recalculate_transaction_analysis(tx).await {
-                            if self.debug_enabled {
-                                log(
-                                    LogTag::Transactions,
-                                    "WARN",
-                                    &format!(
-                                        "Failed to recalculate analysis for {}: {}",
-                                        &tx.signature[..8],
-                                        e
-                                    ),
-                                );
-                            }
-                        } else {
-                            hydrated_count += 1;
+                    // Always recalculate analysis (don't use cached analysis)
+                    if let Err(e) = self.recalculate_transaction_analysis(tx).await {
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "WARN",
+                                &format!(
+                                    "Failed to recalculate analysis for {}: {}",
+                                    &tx.signature[..8],
+                                    e
+                                ),
+                            );
                         }
                     } else {
-                        hydrated_count += 1;
+                        recalculated_count += 1;
                     }
                 }
             }
 
-            if self.debug_enabled && hydrated_count > 0 {
+            if self.debug_enabled && recalculated_count > 0 {
                 log(
                     LogTag::Transactions,
-                    "HYDRATE",
+                    "RECALC",
                     &format!(
-                        "Hydrated {} transactions from {} requested",
-                        hydrated_count, limit
+                        "Recalculated analysis for {} transactions from {} requested",
+                        recalculated_count, limit
                     ),
                 );
             }
