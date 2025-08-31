@@ -301,25 +301,40 @@ async fn find_liquidity_pool(
     }
 
     // First try to find Raydium V4 pool
-    if let Ok(Some(pool_info)) = find_raydium_v4_pool(token_mint).await {
+    if let Ok(Some(pool_info)) = search_dex_pool(token_mint, &PoolSearchConfig::raydium_v4()).await {
         log(LogTag::Rpc, "POOL_FOUND", "Found Raydium V4 pool");
         return Ok(Some(pool_info));
     }
 
     // Try Raydium CPMM pools
-    if let Ok(Some(pool_info)) = find_raydium_cpmm_pool(token_mint).await {
+    if
+        let Ok(Some(pool_info)) = search_dex_pool(
+            token_mint,
+            &PoolSearchConfig::raydium_cpmm()
+        ).await
+    {
         log(LogTag::Rpc, "POOL_FOUND", "Found Raydium CPMM pool");
         return Ok(Some(pool_info));
     }
 
     // Try Orca Whirlpools
-    if let Ok(Some(pool_info)) = find_orca_whirlpool(token_mint).await {
+    if
+        let Ok(Some(pool_info)) = search_dex_pool(
+            token_mint,
+            &PoolSearchConfig::orca_whirlpool()
+        ).await
+    {
         log(LogTag::Rpc, "POOL_FOUND", "Found Orca Whirlpool");
         return Ok(Some(pool_info));
     }
 
     // Try Meteora pools
-    if let Ok(Some(pool_info)) = find_meteora_pool(token_mint).await {
+    if
+        let Ok(Some(pool_info)) = search_dex_pool(
+            token_mint,
+            &PoolSearchConfig::meteora_dlmm()
+        ).await
+    {
         log(LogTag::Rpc, "POOL_FOUND", "Found Meteora pool");
         return Ok(Some(pool_info));
     }
@@ -336,184 +351,205 @@ async fn find_liquidity_pool(
     Ok(None)
 }
 
-/// Find Raydium V4 liquidity pool for a token
-async fn find_raydium_v4_pool(
-    token_mint: &str
-) -> Result<Option<(String, String, String)>, ScreenerBotError> {
-    let rpc_client = get_rpc_client();
+/// Pool search configuration for different DEXs
+#[derive(Debug, Clone)]
+struct PoolSearchConfig {
+    program_id: &'static str,
+    pool_name: &'static str,
+    data_size: u64,
+    token_a_offset: u64,
+    token_b_offset: u64,
+    lp_extraction_method: LpExtractionMethod,
+}
 
-    // Raydium V4 program ID
-    const RAYDIUM_V4_PROGRAM: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
+/// Method for extracting LP mint from pool data
+#[derive(Debug, Clone)]
+enum LpExtractionMethod {
+    /// Extract from pool account data at specific offset
+    FromPoolData {
+        offset: usize,
+    },
+    /// Derive using PDA from pool address
+    DerivePda {
+        seeds: &'static [&'static [u8]],
+    },
+    /// Use pool address as LP mint (for special cases)
+    UsePoolAddress,
+}
 
-    // Create filters to find pools containing this token
-    let filters =
-        serde_json::json!([
-        {
-            "dataSize": 752  // Raydium V4 pool account size
-        },
-        {
-            "memcmp": {
-                "offset": 400,  // Token A mint offset
-                "bytes": token_mint
-            }
-        }
-    ]);
-
-    match
-        rpc_client.get_program_accounts(
-            RAYDIUM_V4_PROGRAM,
-            Some(filters.clone()),
-            Some("base64"),
-            Some(30)
-        ).await
-    {
-        Ok(accounts) => {
-            if let Some(account) = accounts.first() {
-                if let Some(pool_address) = account.get("pubkey").and_then(|v| v.as_str()) {
-                    // Parse pool data to get LP mint
-                    if let Some(lp_mint) = extract_raydium_v4_lp_mint(&account) {
-                        return Ok(
-                            Some((pool_address.to_string(), lp_mint, "Raydium V4".to_string()))
-                        );
-                    }
-                }
-            }
-        }
-        Err(_) => {
-            // Try with token B position
-            let filters_b =
-                serde_json::json!([
-                {
-                    "dataSize": 752
-                },
-                {
-                    "memcmp": {
-                        "offset": 432,  // Token B mint offset
-                        "bytes": token_mint
-                    }
-                }
-            ]);
-
-            if
-                let Ok(accounts) = rpc_client.get_program_accounts(
-                    RAYDIUM_V4_PROGRAM,
-                    Some(filters_b),
-                    Some("base64"),
-                    Some(30)
-                ).await
-            {
-                if let Some(account) = accounts.first() {
-                    if let Some(pool_address) = account.get("pubkey").and_then(|v| v.as_str()) {
-                        if let Some(lp_mint) = extract_raydium_v4_lp_mint(&account) {
-                            return Ok(
-                                Some((pool_address.to_string(), lp_mint, "Raydium V4".to_string()))
-                            );
-                        }
-                    }
-                }
-            }
+/// Pool search configurations for all supported DEXs
+impl PoolSearchConfig {
+    fn raydium_v4() -> Self {
+        Self {
+            program_id: "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+            pool_name: "Raydium V4",
+            data_size: 752,
+            token_a_offset: 400,
+            token_b_offset: 432,
+            lp_extraction_method: LpExtractionMethod::FromPoolData { offset: 112 },
         }
     }
 
-    Ok(None)
+    fn raydium_cpmm() -> Self {
+        Self {
+            program_id: "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
+            pool_name: "Raydium CPMM",
+            data_size: 1544,
+            token_a_offset: 73,
+            token_b_offset: 105,
+            lp_extraction_method: LpExtractionMethod::DerivePda {
+                seeds: &[b"lp_mint"],
+            },
+        }
+    }
+
+    fn orca_whirlpool() -> Self {
+        Self {
+            program_id: "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+            pool_name: "Orca Whirlpool",
+            data_size: 653,
+            token_a_offset: 101,
+            token_b_offset: 181,
+            lp_extraction_method: LpExtractionMethod::UsePoolAddress,
+        }
+    }
+
+    fn meteora_dlmm() -> Self {
+        Self {
+            program_id: "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB",
+            pool_name: "Meteora DLMM",
+            data_size: 1544,
+            token_a_offset: 73,
+            token_b_offset: 105,
+            lp_extraction_method: LpExtractionMethod::DerivePda {
+                seeds: &[b"lp_mint"],
+            },
+        }
+    }
 }
 
-/// Find Raydium CPMM pool for a token
-async fn find_raydium_cpmm_pool(
-    token_mint: &str
+/// Generic pool search function that eliminates code duplication
+async fn search_dex_pool(
+    token_mint: &str,
+    config: &PoolSearchConfig
 ) -> Result<Option<(String, String, String)>, ScreenerBotError> {
     let rpc_client = get_rpc_client();
 
-    // Raydium CPMM program ID
-    const RAYDIUM_CPMM_PROGRAM: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
+    log(
+        LogTag::Rpc,
+        "DEX_SEARCH",
+        &format!("Searching {} pools for token {}", config.pool_name, safe_truncate(token_mint, 8))
+    );
 
-    // CPMM pools have different structure, search by token mints
-    let filters =
-        serde_json::json!([
+    // Try both token positions (A and B)
+    let positions = [
+        ("token_a", config.token_a_offset),
+        ("token_b", config.token_b_offset),
+    ];
+
+    for (position_name, offset) in positions {
+        let filters = create_search_filters(config.data_size, offset, token_mint);
+
+        match
+            rpc_client.get_program_accounts(
+                config.program_id,
+                Some(filters),
+                Some("base64"),
+                Some(30)
+            ).await
         {
-            "dataSize": 1544  // CPMM pool account size
-        },
-        {
-            "memcmp": {
-                "offset": 73,  // Token A mint offset in CPMM
-                "bytes": token_mint
-            }
-        }
-    ]);
-
-    match
-        rpc_client.get_program_accounts(
-            RAYDIUM_CPMM_PROGRAM,
-            Some(filters.clone()),
-            Some("base64"),
-            Some(30)
-        ).await
-    {
-        Ok(accounts) => {
-            if let Some(account) = accounts.first() {
-                if let Some(pool_address) = account.get("pubkey").and_then(|v| v.as_str()) {
-                    // For CPMM, LP mint is derived from pool address
-                    if let Some(lp_mint) = derive_cpmm_lp_mint(pool_address).await {
-                        return Ok(
-                            Some((pool_address.to_string(), lp_mint, "Raydium CPMM".to_string()))
-                        );
-                    }
-                }
-            }
-        }
-        Err(_) => {
-            // Try with token B position
-            let filters_b =
-                serde_json::json!([
-                {
-                    "dataSize": 1544
-                },
-                {
-                    "memcmp": {
-                        "offset": 105,  // Token B mint offset in CPMM
-                        "bytes": token_mint
-                    }
-                }
-            ]);
-
-            if
-                let Ok(accounts) = rpc_client.get_program_accounts(
-                    RAYDIUM_CPMM_PROGRAM,
-                    Some(filters_b),
-                    Some("base64"),
-                    Some(30)
-                ).await
-            {
+            Ok(accounts) => {
                 if let Some(account) = accounts.first() {
                     if let Some(pool_address) = account.get("pubkey").and_then(|v| v.as_str()) {
-                        if let Some(lp_mint) = derive_cpmm_lp_mint(pool_address).await {
+                        if
+                            let Some(lp_mint) = extract_lp_mint(
+                                pool_address,
+                                account,
+                                &config.lp_extraction_method,
+                                config.program_id
+                            ).await
+                        {
+                            log(
+                                LogTag::Rpc,
+                                "POOL_FOUND",
+                                &format!(
+                                    "Found {} pool at {} ({})",
+                                    config.pool_name,
+                                    safe_truncate(pool_address, 8),
+                                    position_name
+                                )
+                            );
                             return Ok(
                                 Some((
                                     pool_address.to_string(),
                                     lp_mint,
-                                    "Raydium CPMM".to_string(),
+                                    config.pool_name.to_string(),
                                 ))
                             );
                         }
                     }
                 }
             }
+            Err(e) => {
+                log(
+                    LogTag::Rpc,
+                    "DEX_SEARCH_ERROR",
+                    &format!(
+                        "Error searching {} {} position: {}",
+                        config.pool_name,
+                        position_name,
+                        e
+                    )
+                );
+                // Continue to next position instead of failing immediately
+            }
         }
     }
 
     Ok(None)
 }
 
-/// Extract LP mint from Raydium V4 pool account data
-fn extract_raydium_v4_lp_mint(account: &serde_json::Value) -> Option<String> {
+/// Create search filters for pool discovery
+fn create_search_filters(data_size: u64, token_offset: u64, token_mint: &str) -> serde_json::Value {
+    serde_json::json!([
+        {
+            "dataSize": data_size
+        },
+        {
+            "memcmp": {
+                "offset": token_offset,
+                "bytes": token_mint
+            }
+        }
+    ])
+}
+
+/// Extract LP mint using the specified method
+async fn extract_lp_mint(
+    pool_address: &str,
+    account_data: &serde_json::Value,
+    method: &LpExtractionMethod,
+    program_id: &str
+) -> Option<String> {
+    match method {
+        LpExtractionMethod::FromPoolData { offset } => {
+            extract_lp_mint_from_data(account_data, *offset)
+        }
+        LpExtractionMethod::DerivePda { seeds } => {
+            derive_lp_mint_pda(pool_address, seeds, program_id).await
+        }
+        LpExtractionMethod::UsePoolAddress => { Some(pool_address.to_string()) }
+    }
+}
+
+/// Extract LP mint from pool account data at specific offset
+fn extract_lp_mint_from_data(account: &serde_json::Value, offset: usize) -> Option<String> {
     if let Some(data) = account.get("account")?.get("data")?.as_array() {
         if data.len() >= 2 {
             if let Some(data_str) = data[0].as_str() {
-                // Decode base64 data and extract LP mint at offset 112
                 if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(data_str) {
-                    if decoded.len() >= 144 {
-                        // 112 + 32 bytes for pubkey
-                        let lp_mint_bytes = &decoded[112..144];
+                    if decoded.len() >= offset + 32 {
+                        let lp_mint_bytes = &decoded[offset..offset + 32];
                         let lp_mint = bs58::encode(lp_mint_bytes).into_string();
                         return Some(lp_mint);
                     }
@@ -524,247 +560,24 @@ fn extract_raydium_v4_lp_mint(account: &serde_json::Value) -> Option<String> {
     None
 }
 
-/// Find Orca Whirlpool for a token
-async fn find_orca_whirlpool(
-    token_mint: &str
-) -> Result<Option<(String, String, String)>, ScreenerBotError> {
-    let rpc_client = get_rpc_client();
+/// Derive LP mint using PDA
+async fn derive_lp_mint_pda(
+    pool_address: &str,
+    seeds: &[&[u8]],
+    program_id: &str
+) -> Option<String> {
+    use solana_sdk::pubkey::Pubkey;
+    use std::str::FromStr;
 
-    // Orca Whirlpool program ID
-    const ORCA_WHIRLPOOL_PROGRAM: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
+    let pool_pubkey = Pubkey::from_str(pool_address).ok()?;
+    let program_pubkey = Pubkey::from_str(program_id).ok()?;
 
-    log(
-        LogTag::Rpc,
-        "ORCA_SEARCH",
-        &format!("Searching Orca Whirlpools for token {}", safe_truncate(token_mint, 8))
-    );
+    // Build seed vector with pool address
+    let mut seed_vec: Vec<&[u8]> = seeds.to_vec();
+    seed_vec.push(pool_pubkey.as_ref());
 
-    // Search for whirlpools containing this token
-    let filters =
-        serde_json::json!([
-        {
-            "dataSize": 653  // Whirlpool account size
-        },
-        {
-            "memcmp": {
-                "offset": 101,  // Token A mint offset
-                "bytes": token_mint
-            }
-        }
-    ]);
-
-    match
-        rpc_client.get_program_accounts(
-            ORCA_WHIRLPOOL_PROGRAM,
-            Some(filters.clone()),
-            Some("base64"),
-            Some(30)
-        ).await
-    {
-        Ok(accounts) => {
-            if let Some(account) = accounts.first() {
-                if let Some(pool_address) = account.get("pubkey").and_then(|v| v.as_str()) {
-                    // For Orca, the pool itself acts as the LP token in many cases
-                    // or we need to derive the position NFT mint
-                    let lp_mint = derive_orca_position_mint(pool_address).await.unwrap_or_else(||
-                        pool_address.to_string()
-                    ); // Fallback to pool address
-                    return Ok(
-                        Some((pool_address.to_string(), lp_mint, "Orca Whirlpool".to_string()))
-                    );
-                }
-            }
-        }
-        Err(_) => {
-            // Try with token B position
-            let filters_b =
-                serde_json::json!([
-                {
-                    "dataSize": 653
-                },
-                {
-                    "memcmp": {
-                        "offset": 181,  // Token B mint offset
-                        "bytes": token_mint
-                    }
-                }
-            ]);
-
-            if
-                let Ok(accounts) = rpc_client.get_program_accounts(
-                    ORCA_WHIRLPOOL_PROGRAM,
-                    Some(filters_b),
-                    Some("base64"),
-                    Some(30)
-                ).await
-            {
-                if let Some(account) = accounts.first() {
-                    if let Some(pool_address) = account.get("pubkey").and_then(|v| v.as_str()) {
-                        let lp_mint = derive_orca_position_mint(pool_address).await.unwrap_or_else(
-                            || pool_address.to_string()
-                        );
-                        return Ok(
-                            Some((pool_address.to_string(), lp_mint, "Orca Whirlpool".to_string()))
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(None)
-}
-
-/// Find Pump.fun bonding curve for a token
-async fn find_pumpfun_pool(
-    token_mint: &str
-) -> Result<Option<(String, String, String)>, ScreenerBotError> {
-    let rpc_client = get_rpc_client();
-
-    // Pump.fun program ID
-    const PUMPFUN_PROGRAM: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
-
-    log(
-        LogTag::Rpc,
-        "PUMPFUN_SEARCH",
-        &format!("Searching Pump.fun bonding curves for token {}", safe_truncate(token_mint, 8))
-    );
-
-    // Search for bonding curves
-    let filters =
-        serde_json::json!([
-        {
-            "dataSize": 41  // Pump.fun bonding curve account size
-        },
-        {
-            "memcmp": {
-                "offset": 8,  // Mint offset in bonding curve
-                "bytes": token_mint
-            }
-        }
-    ]);
-
-    match
-        rpc_client.get_program_accounts(
-            PUMPFUN_PROGRAM,
-            Some(filters),
-            Some("base64"),
-            Some(30)
-        ).await
-    {
-        Ok(accounts) => {
-            if let Some(account) = accounts.first() {
-                if let Some(curve_address) = account.get("pubkey").and_then(|v| v.as_str()) {
-                    // For Pump.fun, there's no traditional LP mint - the bonding curve itself manages liquidity
-                    // We'll use the curve address as both pool and "LP mint"
-                    return Ok(
-                        Some((
-                            curve_address.to_string(),
-                            curve_address.to_string(), // No separate LP mint
-                            "Pump.fun Bonding Curve".to_string(),
-                        ))
-                    );
-                }
-            }
-        }
-        Err(e) => {
-            log(LogTag::Rpc, "PUMPFUN_ERROR", &format!("Error searching Pump.fun: {}", e));
-        }
-    }
-
-    Ok(None)
-}
-
-/// Find Meteora pool for a token
-async fn find_meteora_pool(
-    token_mint: &str
-) -> Result<Option<(String, String, String)>, ScreenerBotError> {
-    let rpc_client = get_rpc_client();
-
-    // Meteora Dynamic AMM program ID
-    const METEORA_PROGRAM: &str = "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB";
-
-    log(
-        LogTag::Rpc,
-        "METEORA_SEARCH",
-        &format!("Searching Meteora pools for token {}", safe_truncate(token_mint, 8))
-    );
-
-    // Search for Meteora pools
-    let filters =
-        serde_json::json!([
-        {
-            "dataSize": 1544  // Meteora pool account size (similar to CPMM)
-        },
-        {
-            "memcmp": {
-                "offset": 73,  // Token A mint offset
-                "bytes": token_mint
-            }
-        }
-    ]);
-
-    match
-        rpc_client.get_program_accounts(
-            METEORA_PROGRAM,
-            Some(filters.clone()),
-            Some("base64"),
-            Some(30)
-        ).await
-    {
-        Ok(accounts) => {
-            if let Some(account) = accounts.first() {
-                if let Some(pool_address) = account.get("pubkey").and_then(|v| v.as_str()) {
-                    // Derive Meteora LP mint (similar to CPMM)
-                    if let Some(lp_mint) = derive_meteora_lp_mint(pool_address).await {
-                        return Ok(
-                            Some((pool_address.to_string(), lp_mint, "Meteora DLMM".to_string()))
-                        );
-                    }
-                }
-            }
-        }
-        Err(_) => {
-            // Try with token B position
-            let filters_b =
-                serde_json::json!([
-                {
-                    "dataSize": 1544
-                },
-                {
-                    "memcmp": {
-                        "offset": 105,  // Token B mint offset
-                        "bytes": token_mint
-                    }
-                }
-            ]);
-
-            if
-                let Ok(accounts) = rpc_client.get_program_accounts(
-                    METEORA_PROGRAM,
-                    Some(filters_b),
-                    Some("base64"),
-                    Some(30)
-                ).await
-            {
-                if let Some(account) = accounts.first() {
-                    if let Some(pool_address) = account.get("pubkey").and_then(|v| v.as_str()) {
-                        if let Some(lp_mint) = derive_meteora_lp_mint(pool_address).await {
-                            return Ok(
-                                Some((
-                                    pool_address.to_string(),
-                                    lp_mint,
-                                    "Meteora DLMM".to_string(),
-                                ))
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(None)
+    let (lp_mint_pda, _) = Pubkey::find_program_address(&seed_vec, &program_pubkey);
+    Some(lp_mint_pda.to_string())
 }
 /// Derive LP mint for CPMM pool (it's a PDA derived from pool address)
 async fn derive_cpmm_lp_mint(pool_address: &str) -> Option<String> {
