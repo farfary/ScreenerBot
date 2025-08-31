@@ -1027,17 +1027,19 @@ impl PoolPriceService {
             }
         }
 
-        let duration = start_time.elapsed();
-        log(
-            LogTag::Pool,
-            "BATCH_COMPLETE",
-            &format!(
-                "{} batch update completed: {} tokens in {:?}",
-                batch_type,
-                tokens.len(),
-                duration
-            ),
-        );
+        if is_debug_pool_prices_enabled() {
+            let duration = start_time.elapsed();
+            log(
+                LogTag::Pool,
+                "BATCH_COMPLETE",
+                &format!(
+                    "{} batch update completed: {} tokens in {:?}",
+                    batch_type,
+                    tokens.len(),
+                    duration
+                ),
+            );
+        }
     }
 
     /// Get random batch of watchlist tokens for update (prioritize least recently updated)
