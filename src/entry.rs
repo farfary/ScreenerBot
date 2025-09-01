@@ -912,14 +912,17 @@ async fn get_ath_distance_percent(mint: &str, current_price: f64) -> Option<f64>
 
 /// Calculate profit targets based on drop analysis and liquidity
 pub async fn get_profit_target(token: &Token) -> (f64, f64) {
-    let liquidity_usd = match get_current_pool_data(token).await {
-        Some((_, _, liquidity)) => liquidity,
-        None => {
-            token.liquidity
-                .as_ref()
-                .and_then(|l| l.usd)
-                .unwrap_or(10_000.0) // Default fallback
-        }
+    // Pull current pool data first (price + liquidity)
+    let (current_price_opt, liquidity_usd) = match get_current_pool_data(token).await {
+        Some((price, _age_min, liquidity)) => (Some(price), liquidity),
+        None =>
+            (
+                None,
+                token.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(10_000.0), // Default fallback
+            ),
     };
 
     // Base profit targets (refined buckets)
@@ -937,6 +940,113 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
     } else {
         (9.0, 40.0) // large caps
     };
+
+    // Enhance with dynamic, pool-price-based signals if we have data
+    let pool_service = get_pool_service();
+    let price_history = pool_service.get_recent_price_history(&token.mint).await;
+    if let Some(current_price) = current_price_opt {
+        if price_history.len() >= 3 {
+            let now = Utc::now();
+            // 60s volatility via high-low range
+            let prices_60: Vec<f64> = price_history
+                .iter()
+                .filter(|(ts, _)| (now - *ts).num_seconds() <= 60)
+                .map(|(_, p)| *p)
+                .collect();
+
+            if prices_60.len() >= 3 {
+                let high_60 = prices_60.iter().fold(0.0f64, |a, b| a.max(*b));
+                let low_60 = prices_60.iter().fold(f64::INFINITY, |a, b| a.min(*b));
+                if high_60.is_finite() && low_60.is_finite() && high_60 > 0.0 && low_60 > 0.0 {
+                    let hl_range_60 = ((high_60 - low_60) / high_60) * 100.0;
+                    // Scale targets with volatility (larger range => larger targets)
+                    let min_scale = (hl_range_60 / 80.0).clamp(0.0, 0.6); // up to +60%
+                    let max_scale = (hl_range_60 / 60.0).clamp(0.0, 0.8); // up to +80%
+                    min_profit *= 1.0 + min_scale;
+                    max_profit *= 1.0 + max_scale;
+                }
+            }
+
+            // 10s velocity — quick momentum context
+            let prices_10: Vec<f64> = price_history
+                .iter()
+                .filter(|(ts, _)| (now - *ts).num_seconds() <= 10)
+                .map(|(_, p)| *p)
+                .collect();
+            if prices_10.len() >= 2 {
+                let vel10 = calculate_velocity(&prices_10, 10);
+                if vel10 < -20.0 {
+                    min_profit += 3.0;
+                    max_profit += 8.0;
+                } else if vel10 < -8.0 {
+                    min_profit += 1.5;
+                    max_profit += 5.0;
+                } else if vel10 > 18.0 {
+                    min_profit -= 3.0;
+                    max_profit -= 6.0;
+                } else if vel10 > 8.0 {
+                    min_profit -= 1.5;
+                    max_profit -= 3.5;
+                }
+            }
+
+            // Detected drop style => tailor targets
+            if
+                let Some(da) = analyze_drop_patterns(
+                    &price_history,
+                    current_price,
+                    liquidity_usd
+                ).await
+            {
+                let s = (da.confidence / 100.0).clamp(0.4, 1.0);
+                match da.drop_style {
+                    DropStyle::UltraFlash | DropStyle::Flash | DropStyle::WickRebound => {
+                        // Expect fast bounce — raise near-term target
+                        let bump = (da.drop_percent * 0.35 * s).clamp(2.0, 15.0);
+                        min_profit += bump;
+                        max_profit = max_profit.max(min_profit + bump * 1.8);
+                    }
+                    DropStyle::Moderate => {
+                        let bump = (da.drop_percent * 0.25 * s).clamp(1.0, 10.0);
+                        min_profit += bump;
+                        max_profit = max_profit.max(min_profit + bump * 1.5);
+                    }
+                    DropStyle::Cascade => {
+                        let bump = (da.drop_percent * 0.2 * s).clamp(1.0, 8.0);
+                        min_profit += bump;
+                        max_profit = max_profit.max(min_profit + bump * 1.4);
+                    }
+                    DropStyle::MedianDip => {
+                        let bump = (da.drop_percent * 0.22 * s).clamp(1.0, 9.0);
+                        min_profit += bump;
+                        max_profit = max_profit.max(min_profit + bump * 1.5);
+                    }
+                    DropStyle::Deep => {
+                        min_profit -= 2.0 * s; // allow tighter first scale-out
+                        max_profit += (da.drop_percent * 0.5 * s).clamp(8.0, 40.0);
+                    }
+                    DropStyle::Extreme => {
+                        min_profit -= 3.0 * s;
+                        max_profit += (da.drop_percent * 0.7 * s).clamp(12.0, 60.0);
+                    }
+                }
+            }
+        }
+    }
+
+    // Liquidity risk adjustments and caps
+    if liquidity_usd < 5_000.0 {
+        min_profit += 2.0;
+        max_profit = max_profit.min(120.0);
+        if liquidity_usd < 2_500.0 {
+            min_profit += 2.0;
+            max_profit = max_profit.min(110.0);
+        }
+    } else if liquidity_usd > 1_000_000.0 {
+        // Large caps: require more conservative expectations
+        min_profit = (min_profit * 0.9).max(8.0);
+        max_profit = (max_profit * 0.9).min(120.0);
+    }
 
     // Ensure proportional spread: at least 60% of min or 12%, whichever larger
     let min_spread = (min_profit * 0.6).max(12.0);
