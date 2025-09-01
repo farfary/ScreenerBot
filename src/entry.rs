@@ -930,41 +930,6 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
     (min_target, max_target)
 }
 
-/// Get dynamic entry threshold based on liquidity (not fixed)
-pub fn get_entry_threshold(token: &Token) -> f64 {
-    let liquidity_usd = token.liquidity
-        .as_ref()
-        .and_then(|l| l.usd)
-        .unwrap_or(TARGET_LIQUIDITY_MIN);
-    let (min_drop, _max_drop, _target_ratio) = get_liquidity_based_thresholds(liquidity_usd);
-    min_drop
-}
-
-/// Helper function to get rugcheck score for a token (simplified)
-pub async fn get_rugcheck_score_for_token(mint: &str) -> Option<f64> {
-    // Use global rugcheck service instead of direct database access
-    use crate::tokens::get_global_rugcheck_service;
-
-    match get_global_rugcheck_service() {
-        Some(service) =>
-            match service.get_rugcheck_data(mint).await {
-                Ok(Some(rugcheck_data)) => rugcheck_data.score.map(|s| s as f64),
-                _ => None,
-            }
-        None => {
-            // Fallback to direct database access if service not available
-            match TokenDatabase::new() {
-                Ok(database) =>
-                    match database.get_rugcheck_data(mint) {
-                        Ok(Some(rugcheck_data)) => rugcheck_data.score.map(|s| s as f64),
-                        _ => None,
-                    }
-                Err(_) => None,
-            }
-        }
-    }
-}
-
 /// Calculate price volatility from recent history
 fn calculate_price_volatility(
     price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
