@@ -161,7 +161,6 @@ use crate::tokens::{
 use crate::utils::check_shutdown_or_delay;
 
 use crate::entry::get_profit_target;
-use crate::entry::should_buy;
 use crate::filtering::log_filtering_summary;
 
 // =============================================================================
@@ -744,8 +743,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         // Check for recent drops
                         let had_recent_drop = check_token_for_recent_drop(&token).await;
 
-                        // Entry decision delegated to entry::should_buy
-                        let (approved, _confidence, reason) = should_buy(&token).await;
+                        // Entry decision delegated to entry::should_buy  
+                        let (approved, confidence, reason) = crate::entry::should_buy(&token).await;
 
                         // Update token tracking info
                         update_token_check_info(&token.mint, Some(current_price), had_recent_drop);

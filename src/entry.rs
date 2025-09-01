@@ -1,2276 +1,650 @@
-use crate::global::is_debug_entry_enabled;
-use crate::logger::{ log, LogTag };
-use crate::tokens::cache::TokenDatabase;
-use crate::tokens::get_pool_service;
-use crate::tokens::is_token_excluded_from_trading;
-use crate::tokens::ohlcvs::{ get_latest_ohlcv, get_ohlcv_service_clone, is_ohlcv_data_available };
-/// Pool-based entry logic for ScreenerBot with Enhanced Momentum Analysis
+/// Advanced Drop Detection and Entry Analysis System
 ///
-/// This module provides sophisticated entry timing based on drop momentum and acceleration analysis.
-/// Uses real-time blockchain pool data for trading decisions while API data is used only for validation.
+/// This module provides sophisticated drop pattern detection with confidence scoring
+/// for trading decisions. It focuses on detecting different styles of price drops
+/// from -5% to -100% with appropriate entry timing and confidence assessment.
 ///
 /// ## Key Features:
-/// - **Drop Momentum Analysis**: Multi-timeframe velocity tracking (10s, 30s, 60s) to detect acceleration/deceleration
-/// - **Optimal Entry Timing**: Waits for drop deceleration before entering to avoid catching falling knives
-/// - **Maturity Scoring**: Calculates drop maturity scores to enter at optimal depths, not too aggressively
-/// - **Bounce Detection**: Advanced bounce suppression using velocity-based strong bounce detection
-/// - **Multi-Window Analysis**: Near-top filtering with 1m, 5m, 15m windows plus ATH proximity guards
-/// - **OHLCV-Enhanced ATH Detection**: Uses OHLCV data (1h, 4h, 1d) for comprehensive ATH prevention
+/// - **Multi-Style Drop Detection**: Detects flash crashes, gradual declines, capitulation wicks
+/// - **Confidence Scoring**: Returns probability scores for drop likelihood and quality
+/// - **Fast Pool Price Integration**: Uses real-time pool data for immediate drop detection
+/// - **OHLCV ATH Protection**: Prevents entries near all-time highs using 1m OHLCV data
+/// - **Progressive Entry Logic**: Different strategies for different drop magnitudes and styles
 ///
-/// ## Timing Logic:
-/// 1. **Acceleration Check**: Rejects entries if drop is still accelerating downward
-/// 2. **Momentum Analysis**: Tracks velocity across multiple timeframes for trend consistency
-/// 3. **Maturity Scoring**: Requires minimum maturity scores based on drop depth and momentum
-/// 4. **Deceleration Detection**: Prefers entries when drop momentum is slowing (optimal timing)
-/// 5. **Dual ATH Protection**: Pool data (1-3s updates) for fast checks + OHLCV (longer windows) for comprehensive ATH detection
+/// ## Drop Detection Categories:
+/// - **Flash Drops (5-15%)**: Quick, sudden price movements with high velocity
+/// - **Moderate Drops (15-35%)**: Sustained downward pressure with momentum analysis
+/// - **Deep Drops (35-60%)**: Major corrections requiring careful timing
+/// - **Extreme Drops (60-100%)**: Potential capitulation events with high risk/reward
 ///
-/// OPTIMIZED FOR SMART TIMING: Enters at optimal drop depths with momentum-based timing guards.
-use crate::tokens::Token;
+/// ## Confidence Scoring (0-100):
+/// - 0-30: Low confidence - drop may not be real or sustainable
+/// - 30-60: Moderate confidence - decent entry opportunity with some risk
+/// - 60-85: High confidence - strong entry signal with good risk/reward
+/// - 85-100: Extreme confidence - exceptional entry opportunity
+
+use crate::global::is_debug_entry_enabled;
+use crate::logger::{log, LogTag};
+use crate::tokens::{get_pool_service, Token, PriceOptions};
 use crate::trader::POSITION_CLOSE_COOLDOWN_MINUTES;
-use chrono::Utc;
-use std::collections::HashMap;
-use std::sync::OnceLock;
-use std::time::{ Instant };
-use tokio::sync::RwLock;
+use chrono::{DateTime, Utc};
+use std::time::Instant;
 
-// ============================================================================
-// 🎯 TRADING PARAMETERS - HARDCODED CONFIGURATION
-// ============================================================================
+// =============================================================================
+// CORE CONFIGURATION PARAMETERS
+// =============================================================================
 
-// DATA AGE LIMITS (Less aggressive - allow older data)
-const MAX_DATA_AGE_MINUTES: i64 = 30; // Increased from 10 to 30 minutes - less restrictive
+// Drop Detection Thresholds
+const FLASH_DROP_MIN: f64 = 5.0;        // Minimum flash drop %
+const FLASH_DROP_MAX: f64 = 15.0;       // Maximum flash drop %
+const MODERATE_DROP_MIN: f64 = 15.0;    // Minimum moderate drop %
+const MODERATE_DROP_MAX: f64 = 35.0;    // Maximum moderate drop %
+const DEEP_DROP_MIN: f64 = 35.0;        // Minimum deep drop %
+const DEEP_DROP_MAX: f64 = 60.0;        // Maximum deep drop %
+const EXTREME_DROP_MIN: f64 = 60.0;     // Minimum extreme drop %
+const EXTREME_DROP_MAX: f64 = 100.0;    // Maximum extreme drop %
 
-// LIQUIDITY TARGETING RANGES (Much more permissive)
-const TARGET_LIQUIDITY_MIN: f64 = 100.0; // Reduced from 1000 to 100 - catch very small tokens
-const TARGET_LIQUIDITY_MAX: f64 = 10_000_000.0; // Increased from 500k to 10M - allow big tokens
+// Time Windows for Analysis
+const FLASH_WINDOW_SEC: i64 = 10;       // Flash drop detection window
+const MODERATE_WINDOW_SEC: i64 = 60;    // Moderate drop detection window  
+const DEEP_WINDOW_SEC: i64 = 300;       // Deep drop detection window (5 min)
+const EXTREME_WINDOW_SEC: i64 = 900;    // Extreme drop detection window (15 min)
 
-// DROP PERCENTAGE RANGES (Less aggressive - catch smaller drops)
-const DROP_PERCENT_MIN: f64 = 6.0; // Slightly lower to allow earlier participation in emerging reversals (was 8)
-const DROP_PERCENT_MAX: f64 = 20.0; // Increased from 9% to 15% - wider range
-const DROP_PERCENT_ULTRA_MAX: f64 = 50.0; // Increased from 30% to 50% - allow deeper drops
+// ATH Protection Settings
+const ATH_PROTECTION_WINDOW_SEC: i64 = 7200; // 2 hours ATH protection
+const ATH_MIN_DISTANCE_PERCENT: f64 = 5.0;   // Minimum 5% below ATH
 
-// TIME WINDOWS FOR ANALYSIS (Multiple ultra-aggressive timeframes)
-const INSTANT_DROP_TIME_WINDOW_SEC: i64 = 5; // NEW: Ultra-fast detection (5 seconds)
-const FAST_DROP_TIME_WINDOW_SEC: i64 = 10; // Fast drop detection
-const DEEP_DROP_TIME_WINDOW_SEC: i64 = 60; // Standard time window
-const MEDIUM_DROP_TIME_WINDOW_SEC: i64 = 120; // Medium-term analysis (2 minutes)
-const LONG_DROP_TIME_WINDOW_SEC: i64 = 300; // Long-term analysis (5 minutes)
-const EXTENDED_DROP_TIME_WINDOW_SEC: i64 = 600; // NEW: Extended analysis (10 minutes)
-const NEAR_TOP_ANALYSIS_WINDOW_SEC: i64 = 900; // Near-top analysis (15 minutes)
-// Dynamic near-top floor/ceiling based on liquidity and volatility
-const NEAR_TOP_THRESHOLD_MIN: f64 = 6.5; // Slightly lower to allow earlier post-peak entries (was 8)
-const NEAR_TOP_THRESHOLD_MAX: f64 = 20.0; // never above 20%
+// Confidence Scoring Base Values
+const FLASH_BASE_CONFIDENCE: f64 = 70.0;     // Base confidence for flash drops
+const MODERATE_BASE_CONFIDENCE: f64 = 75.0;  // Base confidence for moderate drops
+const DEEP_BASE_CONFIDENCE: f64 = 80.0;      // Base confidence for deep drops
+const EXTREME_BASE_CONFIDENCE: f64 = 85.0;   // Base confidence for extreme drops
 
-// DYNAMIC TARGET RATIOS (Ultra-aggressive)
-const TARGET_DROP_RATIO_MIN: f64 = 0.05; // Reduced from 0.08 (5% instead of 8%)
-const TARGET_DROP_RATIO_MAX: f64 = 0.12; // Reduced from 0.15 (12% instead of 15%)
+// Price History Requirements
+const MIN_PRICE_POINTS: usize = 3;           // Minimum price points needed
+const MAX_DATA_AGE_MIN: i64 = 10;            // Maximum data age in minutes
 
-// STRATEGY-SPECIFIC PARAMETERS (Less restrictive)
-const ULTRA_FRESH_MIN_LIQUIDITY: f64 = 50.0; // Reduced from 500 - allow micro liquidity
-const SMALL_TOKEN_MIN_DROP: f64 = 5.0; // Reduced from 10% to 5% - easier small token entries
-const LARGE_TOKEN_MIN_DROP: f64 = 1.0; // Reduced from 2% to 1% - catch tiny moves in large tokens
-const LONG_TERM_MIN_LIQUIDITY: f64 = 1_000.0; // Reduced from 10k to 1k - more long-term entries
-const VOLUME_MULTIPLIER_HIGH: f64 = 1.2; // Reduced from 1.5x to 1.2x - easier volume requirements
-const VOLUME_MULTIPLIER_LARGE: f64 = 0.2; // Reduced from 0.3x to 0.2x - easier large token requirements
-const MIN_VOLUME_DROP: f64 = 0.1; // Reduced from 0.2% to 0.1% - catch micro volume moves
-const MICRO_DROP_THRESHOLD: f64 = 0.3; // Reduced from 0.5% to 0.3% - easier micro drops
+// Liquidity Filters (Basic)
+const MIN_LIQUIDITY_USD: f64 = 100.0;        // Minimum liquidity requirement
+const MAX_LIQUIDITY_USD: f64 = 50_000_000.0; // Maximum liquidity to avoid mega caps
 
-// NEAR-TOP FILTER PARAMETERS (Prevent buying at recent peaks)
-// Multi-window near-top minimums (stricter near fresh highs)
-const NEAR_TOP_1M_MIN: f64 = 3.0; // at least 3% below 1m high
-const NEAR_TOP_5M_MIN: f64 = 6.0; // at least 6% below 5m high
-// Cooldown after making a new window high to avoid buying the spike
-const COOLDOWN_AFTER_NEW_HIGH_SEC: i64 = 45;
-// ATH proximity guard across all available history
-const ATH_PROXIMITY_PERCENT: f64 = 3.5; // avoid entries within ~3.5% of observed ATH
-// Toggle risky ultra-fresh entries (disabled by default)
-const ULTRA_FRESH_ENTRY_ENABLED: bool = false;
+// =============================================================================
+// DROP DETECTION STRUCTURES
+// =============================================================================
 
-// RE-ENTRY AGGRESSION PARAMETERS (be stricter about paying premiums after prior trades)
-const REENTRY_PREMIUM_BASE_MAX: f64 = 12.0; // first re-entry: allow up to +12% over anchor
-const REENTRY_PREMIUM_MIN_FLOOR: f64 = 3.0; // never allow more than +3% at high experience
-const REENTRY_PREMIUM_DECAY_PER_TRADE: f64 = 1.8; // shrink premium allowance each completed cycle
-const REENTRY_VALUE_ZONE_MAX: f64 = 35.0; // cap value-zone widening
-
-// PROFIT TARGET CALCULATION PARAMETERS
-const PROFIT_BASE_MIN: f64 = 50.0; // Base minimum profit target %
-const PROFIT_BASE_MAX: f64 = 150.0; // Base maximum profit target %
-const PROFIT_LIQUIDITY_ADJUSTMENT_MIN: f64 = 40.0; // Liquidity adjustment for min target
-const PROFIT_LIQUIDITY_ADJUSTMENT_MAX: f64 = 100.0; // Liquidity adjustment for max target
-const PROFIT_TARGET_MIN_FLOOR: f64 = 8.0; // Never go below 8% profit target
-const PROFIT_TARGET_MIN_RANGE: f64 = 10.0; // Always at least 10% range
-
-// TRANSACTION ACTIVITY FILTERING
-// Transaction activity constants moved to filtering.rs for centralized configuration
-
-// FAST DROP MULTIPLIER
-const FAST_DROP_THRESHOLD_MULTIPLIER: f64 = 1.2; // Fast drop threshold = 1.2x the min threshold (was 1.5x)
-
-// CONFIDENCE SCORING PARAMETERS (for should_buy_with_confidence)
-const CONFIDENCE_BELOW_RANGE: f64 = 45.0; // Confidence for tokens below target liquidity
-const CONFIDENCE_ABOVE_RANGE: f64 = 60.0; // Confidence for tokens above target liquidity
-const CONFIDENCE_CENTER_MAX: f64 = 85.0; // Maximum confidence at center of range
-const CONFIDENCE_EDGE_MIN: f64 = 70.0; // Minimum confidence at edges of range
-const CONFIDENCE_CENTER_ADJUSTMENT: f64 = 15.0; // Adjustment factor for distance from center
-
-// MATHEMATICAL CONSTANTS
-const PERCENTAGE_MULTIPLIER: f64 = 100.0; // Convert ratio to percentage
-const THOUSAND_DIVISOR: f64 = 1000.0; // Convert to thousands for display
-const MILLION_DIVISOR: f64 = 1_000_000.0; // Convert to millions for display
-const MINUTES_PER_SECOND: i64 = 60; // Time conversion
-
-// ============================================================================
-// 📦 PRICE HISTORY FRESHNESS SAFEGUARDS (HARDCODED MINIMUM REQUIREMENTS)
-// ============================================================================
-// Hardcoded minimum price points required before allowing any entry
-// Lower to admit earlier entries; logs showed frequent INSUFFICIENT_PRICE_DATA at 1-5 points
-// Safety is still guarded by near-top checks and momentum validations
-const MIN_PRICE_POINTS_REQUIRED: usize = 4; // was 10 (previously 15)
-const HISTORY_MAX_POINT_AGE_SEC: i64 = 1800; // Extended to 30m for more flexibility
-const HISTORY_MIN_POINTS_60S: usize = 0; // NO REQUIREMENT - allow fresh tokens
-const HISTORY_MIN_POINTS_300S: usize = 0; // NO REQUIREMENT - allow fresh tokens
-const HISTORY_MAX_LARGEST_GAP_SEC: i64 = 600; // Extended to 10min gaps (more lenient)
-// Allow the pool price cache to warm up before enforcing strict freshness
-const STARTUP_STALE_GRACE_SEC: i64 = 60; // was 10
-static BOT_START_INSTANT: once_cell::sync::OnceCell<Instant> = once_cell::sync::OnceCell::new();
-
-// ============================================================================
-
-/// Calculate dynamic drop thresholds based on token liquidity
-/// Returns (min_drop_percent, max_drop_percent, target_ratio) based on liquidity
-fn get_liquidity_based_thresholds(liquidity_usd: f64) -> (f64, f64, f64) {
-    // Clamp liquidity to our target range
-    let clamped_liquidity = liquidity_usd.max(TARGET_LIQUIDITY_MIN).min(TARGET_LIQUIDITY_MAX);
-
-    // Calculate liquidity ratio (0.0 = min liquidity, 1.0 = max liquidity)
-    let liquidity_ratio =
-        (clamped_liquidity - TARGET_LIQUIDITY_MIN) / (TARGET_LIQUIDITY_MAX - TARGET_LIQUIDITY_MIN);
-
-    // INVERSE RELATIONSHIP: Higher liquidity = smaller drops needed, Lower liquidity = larger drops needed
-    let min_drop = DROP_PERCENT_MAX - liquidity_ratio * (DROP_PERCENT_MAX - DROP_PERCENT_MIN);
-    let max_drop = DROP_PERCENT_ULTRA_MAX;
-    let target_ratio =
-        TARGET_DROP_RATIO_MAX - liquidity_ratio * (TARGET_DROP_RATIO_MAX - TARGET_DROP_RATIO_MIN);
-
-    (min_drop, max_drop, target_ratio)
+#[derive(Debug, Clone)]
+pub struct DropAnalysis {
+    pub drop_percent: f64,
+    pub drop_style: DropStyle,
+    pub confidence: f64,
+    pub velocity_per_minute: f64,
+    pub time_window_used: i64,
+    pub reasoning: String,
 }
 
-/// Check if current price is near recent top using both pool data and OHLCV data
-/// Pool data: Fast updates (1-3 sec) for short-term analysis (1m, 5m, 15m)
-/// OHLCV data: Longer windows (1h, 4h, 1d) for comprehensive ATH detection
-/// Returns true if price is too close to recent peak (should NOT enter)
-async fn is_near_recent_top(
-    mint: &str,
-    current_price: f64,
-    price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
-    _liquidity_usd: f64 // Not used anymore, kept for compatibility
-) -> bool {
-    use chrono::Utc;
-
-    if price_history.is_empty() {
-        // No history = can't determine if near top, allow entry
-        return false;
-    }
-
-    // === PHASE 1: Fast pool-based analysis for short-term windows (1m, 5m, 15m) ===
-    let now = Utc::now();
-    let mut recent_prices: Vec<f64> = price_history
-        .iter()
-        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= NEAR_TOP_ANALYSIS_WINDOW_SEC)
-        .map(|(_, price)| *price)
-        .collect();
-
-    if recent_prices.len() < MIN_PRICE_POINTS_REQUIRED {
-        // Not enough pool data points - allow rather than reject to avoid blocking fresh tokens
-        return false;
-    }
-
-    // Find the highest/lowest price in the 15-minute window and when it occurred
-    let mut recent_high = 0.0f64;
-    let mut recent_low = f64::INFINITY;
-    let mut recent_high_ts = None;
-    for (ts, price) in price_history.iter() {
-        if (now - *ts).num_seconds() <= NEAR_TOP_ANALYSIS_WINDOW_SEC {
-            if *price > recent_high {
-                recent_high = *price;
-                recent_high_ts = Some(*ts);
-            }
-            if *price < recent_low {
-                recent_low = *price;
-            }
-        }
-    }
-
-    if
-        recent_high <= 0.0 ||
-        !recent_high.is_finite() ||
-        current_price <= 0.0 ||
-        !current_price.is_finite()
-    {
-        return false;
-    }
-
-    // Calculate how much BELOW the recent high we are
-    let drop_from_high_percent =
-        ((recent_high - current_price) / recent_high) * PERCENTAGE_MULTIPLIER;
-
-    // Dynamic near-top threshold: tighter when volatility and liquidity are low, looser when high
-    let range_pct = if recent_low.is_finite() && recent_low > 0.0 {
-        ((recent_high - recent_low) / recent_high).max(0.0) * 100.0
-    } else {
-        0.0
-    };
-
-    // Map range 0..30% -> threshold 12..8 (more conservative near tops when calm), beyond 30% -> 15%
-    let mut dynamic_threshold = if range_pct < 30.0 {
-        12.0 - (range_pct / 30.0) * 4.0
-    } else if range_pct < 80.0 {
-        12.0 + ((range_pct - 30.0) / 50.0) * 3.0 // up to 15%
-    } else {
-        15.0
-    };
-    dynamic_threshold = dynamic_threshold.max(NEAR_TOP_THRESHOLD_MIN).min(NEAR_TOP_THRESHOLD_MAX);
-
-    // STRICT RULE: Must be MORE than dynamic_threshold below 15-min high to allow entry
-    let mut is_too_close_to_top = drop_from_high_percent < dynamic_threshold;
-
-    // Additional 5m and 1m window checks (prevent buys near shorter-term highs)
-    let window_check = |secs: i64| -> Option<f64> {
-        let high = price_history
-            .iter()
-            .filter(|(ts, _)| (now - *ts).num_seconds() <= secs)
-            .map(|(_, p)| *p)
-            .fold(0.0f64, |a, b| a.max(b));
-        if high > 0.0 && high.is_finite() {
-            Some(((high - current_price) / high) * 100.0)
-        } else {
-            None
-        }
-    };
-    if let Some(drop_5m) = window_check(300) {
-        if drop_5m < NEAR_TOP_5M_MIN {
-            is_too_close_to_top = true;
-        }
-    }
-    if let Some(drop_1m) = window_check(60) {
-        if drop_1m < NEAR_TOP_1M_MIN {
-            is_too_close_to_top = true;
-        }
-    }
-
-    // Cooldown after printing a new 15m high
-    if let Some(high_ts) = recent_high_ts {
-        let secs_since_high = (now - high_ts).num_seconds();
-        if secs_since_high >= 0 && secs_since_high <= COOLDOWN_AFTER_NEW_HIGH_SEC {
-            is_too_close_to_top = true;
-        }
-    }
-
-    // === PHASE 2: OHLCV-based ATH detection (1-minute data only) ===
-    let mut ohlcv_ath = 0.0f64;
-
-    // Add token to OHLCV watch list for background monitoring (no immediate API call if cached)
-    if let Ok(ohlcv_service) = get_ohlcv_service_clone().await {
-        ohlcv_service.add_to_watch_list(mint, false).await; // false = not open position yet
-
-        // Only fetch OHLCV data if available in cache (avoid immediate API calls)
-        if is_ohlcv_data_available(mint).await {
-            if let Ok(ohlcv_data) = get_latest_ohlcv(mint, 50).await {
-                // Reduced from 100 to 50 for faster performance
-                for point in &ohlcv_data {
-                    ohlcv_ath = ohlcv_ath.max(point.high);
-                }
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "OHLCV_ATH",
-                        &format!(
-                            "Mint: {}, 1m Points: {}, ATH: ${:.6}",
-                            mint,
-                            ohlcv_data.len(),
-                            ohlcv_ath
-                        )
-                    );
-                }
-            }
-        } else if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "OHLCV_WATCH_ADDED",
-                &format!("Added {} to OHLCV watch list, data will be fetched in background", mint)
-            );
-        }
-    }
-
-    // === PHASE 3: Combined ATH analysis (pool history + OHLCV ATH) ===
-
-    // Pool-based ATH from available history
-    let pool_ath = price_history
-        .iter()
-        .map(|(_, p)| *p)
-        .fold(0.0f64, |a, b| a.max(b));
-
-    // Use the highest ATH from both sources
-    let combined_ath = pool_ath.max(ohlcv_ath);
-
-    if combined_ath > 0.0 && combined_ath.is_finite() {
-        let drop_from_ath = ((combined_ath - current_price) / combined_ath) * 100.0;
-        if drop_from_ath < ATH_PROXIMITY_PERCENT {
-            is_too_close_to_top = true;
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "ATH_BLOCK",
-                    &format!(
-                        "Mint: {}, Current: ${:.6}, ATH: ${:.6} (Pool: ${:.6}, OHLCV: ${:.6}), Drop: {:.2}% < {:.2}%",
-                        mint,
-                        current_price,
-                        combined_ath,
-                        pool_ath,
-                        ohlcv_ath,
-                        drop_from_ath,
-                        ATH_PROXIMITY_PERCENT
-                    )
-                );
-            }
-        }
-    }
-
-    if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "NEAR_TOP_CHECK",
-            &format!(
-                "Mint: {}, Price: ${:.6}, 15m_drop: {:.2}%, threshold: {:.2}%, pool_ATH: ${:.6}, ohlcv_ATH: ${:.6}, blocked: {}",
-                mint,
-                current_price,
-                drop_from_high_percent,
-                dynamic_threshold,
-                pool_ath,
-                ohlcv_ath,
-                is_too_close_to_top
-            )
-        );
-    }
-
-    is_too_close_to_top
+#[derive(Debug, Clone)]
+pub enum DropStyle {
+    Flash,      // Quick sudden drop (5-15%)
+    Moderate,   // Sustained decline (15-35%) 
+    Deep,       // Major correction (35-60%)
+    Extreme,    // Potential capitulation (60-100%)
 }
 
-/// Check if token is in 7-day re-entry cooldown period
-/// Returns (is_in_cooldown, minutes_remaining, reason)
-async fn check_position_cooldown(mint: &str) -> (bool, i64, String) {
-    // Get the last closed position for this token that has verified exit transaction
-    match crate::positions_db::get_closed_positions().await {
-        Ok(closed_positions) => {
-            // Find the most recent closed position for this mint with verified exit
-            let mut relevant_positions: Vec<_> = closed_positions
-                .iter()
-                .filter(|p| {
-                    p.mint == mint && p.transaction_exit_verified // Only consider properly closed positions
-                })
-                .collect();
-
-            if relevant_positions.is_empty() {
-                return (false, 0, "No previous closed positions".to_string());
-            }
-
-            // Sort by exit_time to get the most recent
-            relevant_positions.sort_by_key(|p| p.exit_time);
-
-            if let Some(last_position) = relevant_positions.last() {
-                if let Some(exit_time) = last_position.exit_time {
-                    let now = chrono::Utc::now();
-                    let elapsed_minutes = now.signed_duration_since(exit_time).num_minutes();
-
-                    if elapsed_minutes < POSITION_CLOSE_COOLDOWN_MINUTES {
-                        let remaining_minutes = POSITION_CLOSE_COOLDOWN_MINUTES - elapsed_minutes;
-                        let remaining_hours = remaining_minutes / 60;
-                        let remaining_days = remaining_hours / 24;
-
-                        let reason = if remaining_days > 0 {
-                            format!(
-                                "{}d {}h cooldown remaining",
-                                remaining_days,
-                                remaining_hours % 24
-                            )
-                        } else if remaining_hours > 0 {
-                            format!(
-                                "{}h {}m cooldown remaining",
-                                remaining_hours,
-                                remaining_minutes % 60
-                            )
-                        } else {
-                            format!("{}m cooldown remaining", remaining_minutes)
-                        };
-
-                        return (true, remaining_minutes, reason);
-                    }
-                }
-            }
-
-            (false, 0, "Cooldown period expired".to_string())
-        }
-        Err(e) => {
-            // If we can't check the database, allow entry but log the issue
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "COOLDOWN_CHECK_ERROR",
-                    &format!(
-                        "❌ Could not check position cooldown for {}: {}",
-                        crate::utils::safe_truncate(mint, 8),
-                        e
-                    )
-                );
-            }
-            (false, 0, format!("Database error: {}", e))
+impl DropStyle {
+    fn to_string(&self) -> &'static str {
+        match self {
+            DropStyle::Flash => "FLASH",
+            DropStyle::Moderate => "MODERATE", 
+            DropStyle::Deep => "DEEP",
+            DropStyle::Extreme => "EXTREME",
         }
     }
 }
 
-/// Deep drop entry decision with dynamic liquidity-based scaling
-/// Returns true if token shows deep drop pattern for immediate entry
+// =============================================================================
+// MAIN ENTRY FUNCTION
+// =============================================================================
+
+/// Main entry decision function with confidence scoring
+/// Returns (approved, confidence, reason) where:
+/// - approved: true if should enter position immediately
+/// - confidence: 0-100 score indicating drop quality and likelihood
+/// - reason: detailed explanation of the decision
 pub async fn should_buy(token: &Token) -> (bool, f64, String) {
-    if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "ENTRY_CHECK_START",
-            &format!(
-                "🔍 Analyzing {} ({})",
-                token.symbol,
-                crate::utils::safe_truncate(&token.mint, 8)
-            )
-        );
-    }
-
-    // Check blacklist first
-    if is_token_excluded_from_trading(&token.mint) {
-        if is_debug_entry_enabled() {
-            log(LogTag::Entry, "BLACKLIST_REJECT", &format!("❌ {} blacklisted", token.symbol));
-        }
-        return (false, 0.0, "Token blacklisted or excluded".to_string());
-    }
-
-    // Check 7-day re-entry cooldown
-    let (is_in_cooldown, remaining_minutes, cooldown_reason) = check_position_cooldown(
-        &token.mint
-    ).await;
-    if is_in_cooldown {
+    // Check basic position constraints first
+    if let (true, remaining_min, reason) = check_position_cooldown(&token.mint).await {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Entry,
-                "COOLDOWN_REJECT",
-                &format!("❌ {} in cooldown: {}", token.symbol, cooldown_reason)
+                "COOLDOWN",
+                &format!("❄️ {} in cooldown: {} ({}min remaining)", token.symbol, reason, remaining_min)
             );
         }
-        return (false, 0.0, format!("Token in cooldown: {}", cooldown_reason));
+        return (false, 0.0, format!("Position cooldown: {}", reason));
     }
 
-    // Get transaction activity using centralized filtering system
-    let txn_5min_count = crate::filtering::get_token_5min_activity(token);
-
-    if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "TXN_ACTIVITY_INFO",
-            &format!(
-                "📊 {} transaction activity: {} txns in 5min (already passed filtering)",
-                token.symbol,
-                txn_5min_count
-            )
-        );
-    }
-
-    // NOTE: Transaction activity validation is now handled in centralized filtering.rs
-    // Tokens reaching this point have already passed transaction activity requirements
-
-    // Position validation - moved here from filtering to avoid async runtime conflicts
-    // Check for existing open position
-    if crate::positions::is_open_position(&token.mint).await {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "POSITION_REJECT",
-                &format!("❌ {} already has an open position", token.symbol)
-            );
-        }
-        return (false, 0.0, "Token already has an open position".to_string());
-    }
-
-    // NOTE: Position limit check removed from here to prevent race conditions
-    // The atomic check happens in open_position_direct() during position creation
-
+    // Get current pool price and data
     let pool_service = get_pool_service();
-
     if !pool_service.check_token_availability(&token.mint).await {
         return (false, 0.0, "Pool not available".to_string());
     }
 
-    // Get current pool price with age validation AND liquidity data
-    let (current_pool_price, pool_data_age, liquidity_usd) = match
-        crate::tokens::get_price(
-            &token.mint,
-            Some(crate::tokens::PriceOptions::pool_only()),
-            false
-        ).await
-    {
+    let (current_price, data_age_min, liquidity_usd) = match get_current_pool_data(token).await {
+        Some(data) => data,
+        None => return (false, 0.0, "No valid pool data".to_string()),
+    };
+
+    // Basic liquidity filter
+    if liquidity_usd < MIN_LIQUIDITY_USD {
+        return (false, 0.0, format!("Liquidity too low: ${:.0} < ${:.0}", liquidity_usd, MIN_LIQUIDITY_USD));
+    }
+
+    if liquidity_usd > MAX_LIQUIDITY_USD {
+        return (false, 0.0, format!("Liquidity too high: ${:.0} > ${:.0}", liquidity_usd, MAX_LIQUIDITY_USD));
+    }
+
+    // Get price history for drop analysis
+    let price_history = pool_service.get_recent_price_history(&token.mint).await;
+    if price_history.len() < MIN_PRICE_POINTS {
+        return (false, 0.0, format!("Insufficient price history: {} < {}", price_history.len(), MIN_PRICE_POINTS));
+    }
+
+    // Check ATH protection using OHLCV data
+    if is_near_ath(&token.mint, current_price).await {
+        return (false, 0.0, "Too close to ATH (2h protection)".to_string());
+    }
+
+    // Analyze drop patterns with confidence scoring
+    let drop_analysis = analyze_drop_patterns(&price_history, current_price, liquidity_usd).await;
+
+    if let Some(analysis) = drop_analysis {
+        let approved = should_enter_based_on_analysis(&analysis, liquidity_usd);
+        
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "DROP_ANALYSIS",
+                &format!(
+                    "🎯 {} {}: -{:.1}% drop, confidence: {:.0}%, velocity: {:.1}%/min, approved: {}",
+                    token.symbol,
+                    analysis.drop_style.to_string(),
+                    analysis.drop_percent,
+                    analysis.confidence,
+                    analysis.velocity_per_minute,
+                    approved
+                )
+            );
+        }
+
+        return (approved, analysis.confidence, analysis.reasoning);
+    }
+
+    // No significant drop detected
+    (false, 0.0, "No significant drop pattern detected".to_string())
+}
+
+// =============================================================================
+// DROP PATTERN ANALYSIS
+// =============================================================================
+
+async fn analyze_drop_patterns(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64,
+    liquidity_usd: f64,
+) -> Option<DropAnalysis> {
+    let now = Utc::now();
+    
+    // Try different drop detection strategies in order of priority
+    
+    // 1. Flash Drop Detection (10 seconds)
+    if let Some(analysis) = detect_flash_drop(price_history, current_price, now) {
+        return Some(enhance_confidence_with_context(analysis, liquidity_usd));
+    }
+    
+    // 2. Moderate Drop Detection (1 minute) 
+    if let Some(analysis) = detect_moderate_drop(price_history, current_price, now) {
+        return Some(enhance_confidence_with_context(analysis, liquidity_usd));
+    }
+    
+    // 3. Deep Drop Detection (5 minutes)
+    if let Some(analysis) = detect_deep_drop(price_history, current_price, now) {
+        return Some(enhance_confidence_with_context(analysis, liquidity_usd));
+    }
+    
+    // 4. Extreme Drop Detection (15 minutes)
+    if let Some(analysis) = detect_extreme_drop(price_history, current_price, now) {
+        return Some(enhance_confidence_with_context(analysis, liquidity_usd));
+    }
+
+    None
+}
+
+// =============================================================================
+// INDIVIDUAL DROP DETECTORS
+// =============================================================================
+
+fn detect_flash_drop(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64,
+    now: DateTime<Utc>,
+) -> Option<DropAnalysis> {
+    let window_prices: Vec<f64> = price_history
+        .iter()
+        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= FLASH_WINDOW_SEC)
+        .map(|(_, price)| *price)
+        .collect();
+
+    if window_prices.len() < 2 {
+        return None;
+    }
+
+    let window_high = window_prices.iter().fold(0.0f64, |a, b| a.max(*b));
+    if window_high <= 0.0 || !window_high.is_finite() {
+        return None;
+    }
+
+    let drop_percent = ((window_high - current_price) / window_high) * 100.0;
+    
+    if drop_percent >= FLASH_DROP_MIN && drop_percent <= FLASH_DROP_MAX {
+        let velocity = calculate_velocity(&window_prices, FLASH_WINDOW_SEC);
+        let confidence = calculate_flash_confidence(drop_percent, velocity);
+        
+        return Some(DropAnalysis {
+            drop_percent,
+            drop_style: DropStyle::Flash,
+            confidence,
+            velocity_per_minute: velocity,
+            time_window_used: FLASH_WINDOW_SEC,
+            reasoning: format!("Flash drop -{:.1}% in {}s", drop_percent, FLASH_WINDOW_SEC),
+        });
+    }
+
+    None
+}
+
+fn detect_moderate_drop(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64,
+    now: DateTime<Utc>,
+) -> Option<DropAnalysis> {
+    let window_prices: Vec<f64> = price_history
+        .iter()
+        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= MODERATE_WINDOW_SEC)
+        .map(|(_, price)| *price)
+        .collect();
+
+    if window_prices.len() < 3 {
+        return None;
+    }
+
+    let window_high = window_prices.iter().fold(0.0f64, |a, b| a.max(*b));
+    if window_high <= 0.0 || !window_high.is_finite() {
+        return None;
+    }
+
+    let drop_percent = ((window_high - current_price) / window_high) * 100.0;
+    
+    if drop_percent >= MODERATE_DROP_MIN && drop_percent <= MODERATE_DROP_MAX {
+        let velocity = calculate_velocity(&window_prices, MODERATE_WINDOW_SEC);
+        let confidence = calculate_moderate_confidence(drop_percent, velocity);
+        
+        return Some(DropAnalysis {
+            drop_percent,
+            drop_style: DropStyle::Moderate,
+            confidence,
+            velocity_per_minute: velocity,
+            time_window_used: MODERATE_WINDOW_SEC,
+            reasoning: format!("Moderate drop -{:.1}% in {}s", drop_percent, MODERATE_WINDOW_SEC),
+        });
+    }
+
+    None
+}
+
+fn detect_deep_drop(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64,
+    now: DateTime<Utc>,
+) -> Option<DropAnalysis> {
+    let window_prices: Vec<f64> = price_history
+        .iter()
+        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= DEEP_WINDOW_SEC)
+        .map(|(_, price)| *price)
+        .collect();
+
+    if window_prices.len() < 5 {
+        return None;
+    }
+
+    let window_high = window_prices.iter().fold(0.0f64, |a, b| a.max(*b));
+    if window_high <= 0.0 || !window_high.is_finite() {
+        return None;
+    }
+
+    let drop_percent = ((window_high - current_price) / window_high) * 100.0;
+    
+    if drop_percent >= DEEP_DROP_MIN && drop_percent <= DEEP_DROP_MAX {
+        let velocity = calculate_velocity(&window_prices, DEEP_WINDOW_SEC);
+        let confidence = calculate_deep_confidence(drop_percent, velocity);
+        
+        return Some(DropAnalysis {
+            drop_percent,
+            drop_style: DropStyle::Deep,
+            confidence,
+            velocity_per_minute: velocity,
+            time_window_used: DEEP_WINDOW_SEC,
+            reasoning: format!("Deep drop -{:.1}% in {}min", drop_percent, DEEP_WINDOW_SEC / 60),
+        });
+    }
+
+    None
+}
+
+fn detect_extreme_drop(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64,
+    now: DateTime<Utc>,
+) -> Option<DropAnalysis> {
+    let window_prices: Vec<f64> = price_history
+        .iter()
+        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= EXTREME_WINDOW_SEC)
+        .map(|(_, price)| *price)
+        .collect();
+
+    if window_prices.len() < 8 {
+        return None;
+    }
+
+    let window_high = window_prices.iter().fold(0.0f64, |a, b| a.max(*b));
+    if window_high <= 0.0 || !window_high.is_finite() {
+        return None;
+    }
+
+    let drop_percent = ((window_high - current_price) / window_high) * 100.0;
+    
+    if drop_percent >= EXTREME_DROP_MIN && drop_percent <= EXTREME_DROP_MAX {
+        let velocity = calculate_velocity(&window_prices, EXTREME_WINDOW_SEC);
+        let confidence = calculate_extreme_confidence(drop_percent, velocity);
+        
+        return Some(DropAnalysis {
+            drop_percent,
+            drop_style: DropStyle::Extreme,
+            confidence,
+            velocity_per_minute: velocity,
+            time_window_used: EXTREME_WINDOW_SEC,
+            reasoning: format!("Extreme drop -{:.1}% in {}min", drop_percent, EXTREME_WINDOW_SEC / 60),
+        });
+    }
+
+    None
+}
+
+// =============================================================================
+// CONFIDENCE CALCULATION
+// =============================================================================
+
+fn calculate_flash_confidence(drop_percent: f64, velocity: f64) -> f64 {
+    let mut confidence = FLASH_BASE_CONFIDENCE;
+    
+    // Adjust based on drop magnitude
+    let drop_factor = (drop_percent - FLASH_DROP_MIN) / (FLASH_DROP_MAX - FLASH_DROP_MIN);
+    confidence += drop_factor * 10.0; // Up to +10 for larger drops
+    
+    // Adjust based on velocity (negative velocity = downward)
+    if velocity < -20.0 {
+        confidence += 10.0; // High downward velocity is good
+    } else if velocity > 10.0 {
+        confidence -= 15.0; // Upward velocity during drop is suspicious
+    }
+    
+    confidence.max(20.0).min(95.0)
+}
+
+fn calculate_moderate_confidence(drop_percent: f64, velocity: f64) -> f64 {
+    let mut confidence = MODERATE_BASE_CONFIDENCE;
+    
+    // Adjust based on drop magnitude  
+    let drop_factor = (drop_percent - MODERATE_DROP_MIN) / (MODERATE_DROP_MAX - MODERATE_DROP_MIN);
+    confidence += drop_factor * 8.0; // Up to +8 for larger drops
+    
+    // Adjust based on velocity
+    if velocity < -10.0 {
+        confidence += 8.0; // Strong downward trend
+    } else if velocity > 5.0 {
+        confidence -= 12.0; // Recovery during drop reduces confidence
+    }
+    
+    confidence.max(25.0).min(92.0)
+}
+
+fn calculate_deep_confidence(drop_percent: f64, velocity: f64) -> f64 {
+    let mut confidence = DEEP_BASE_CONFIDENCE;
+    
+    // Deep drops are inherently more confident opportunities
+    let drop_factor = (drop_percent - DEEP_DROP_MIN) / (DEEP_DROP_MAX - DEEP_DROP_MIN);
+    confidence += drop_factor * 6.0; // Up to +6 for deeper drops
+    
+    // For deep drops, we want stabilization (lower velocity)
+    if velocity.abs() < 5.0 {
+        confidence += 5.0; // Stabilizing price is good for deep drops
+    } else if velocity < -15.0 {
+        confidence -= 8.0; // Still falling fast might not be bottom
+    }
+    
+    confidence.max(30.0).min(90.0)
+}
+
+fn calculate_extreme_confidence(drop_percent: f64, velocity: f64) -> f64 {
+    let mut confidence = EXTREME_BASE_CONFIDENCE;
+    
+    // Extreme drops need careful analysis
+    let drop_factor = (drop_percent - EXTREME_DROP_MIN) / (EXTREME_DROP_MAX - EXTREME_DROP_MIN);
+    confidence += drop_factor * 5.0; // Up to +5 for more extreme drops
+    
+    // For extreme drops, we strongly prefer stabilization
+    if velocity.abs() < 3.0 {
+        confidence += 8.0; // Very stable price after extreme drop
+    } else if velocity < -10.0 {
+        confidence -= 15.0; // Still crashing heavily, dangerous
+    } else if velocity > 8.0 {
+        confidence += 3.0; // Some recovery can be good sign
+    }
+    
+    confidence.max(35.0).min(95.0)
+}
+
+// =============================================================================
+// CONFIDENCE ENHANCEMENT WITH CONTEXT
+// =============================================================================
+
+fn enhance_confidence_with_context(mut analysis: DropAnalysis, liquidity_usd: f64) -> DropAnalysis {
+    // Adjust confidence based on liquidity context
+    if liquidity_usd > 1_000_000.0 {
+        // Higher liquidity tokens are more stable/predictable
+        analysis.confidence += 5.0;
+        analysis.reasoning += " (high liquidity)";
+    } else if liquidity_usd < 10_000.0 {
+        // Lower liquidity can be more volatile but riskier
+        analysis.confidence -= 3.0;
+        analysis.reasoning += " (low liquidity)";
+    }
+    
+    // Ensure confidence stays in bounds
+    analysis.confidence = analysis.confidence.max(0.0).min(100.0);
+    
+    analysis
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
+    if prices.len() < 2 {
+        return 0.0;
+    }
+    
+    let first = prices[0];
+    let last = prices[prices.len() - 1];
+    
+    if first <= 0.0 || !first.is_finite() || !last.is_finite() {
+        return 0.0;
+    }
+    
+    let percent_change = ((last - first) / first) * 100.0;
+    let minutes = window_seconds as f64 / 60.0;
+    
+    if minutes <= 0.0 {
+        return 0.0;
+    }
+    
+    percent_change / minutes // Percent per minute
+}
+
+fn should_enter_based_on_analysis(analysis: &DropAnalysis, liquidity_usd: f64) -> bool {
+    // Base confidence threshold varies by drop style
+    let min_confidence = match analysis.drop_style {
+        DropStyle::Flash => 60.0,      // Need higher confidence for quick moves
+        DropStyle::Moderate => 55.0,   // Moderate confidence needed
+        DropStyle::Deep => 50.0,       // Lower threshold for deep drops
+        DropStyle::Extreme => 45.0,    // Lowest threshold for extreme opportunities
+    };
+    
+    // Adjust threshold based on liquidity
+    let adjusted_threshold = if liquidity_usd > 100_000.0 {
+        min_confidence - 5.0  // Lower threshold for higher liquidity (safer)
+    } else if liquidity_usd < 5_000.0 {
+        min_confidence + 10.0 // Higher threshold for low liquidity (riskier)
+    } else {
+        min_confidence
+    };
+    
+    analysis.confidence >= adjusted_threshold
+}
+
+async fn get_current_pool_data(token: &Token) -> Option<(f64, i64, f64)> {
+    match crate::tokens::get_price(
+        &token.mint,
+        Some(PriceOptions::pool_only()),
+        false,
+    ).await {
         Some(price_result) => {
             match price_result.best_sol_price() {
                 Some(price) if price > 0.0 && price.is_finite() => {
-                    let data_age_minutes =
-                        (Utc::now() - price_result.calculated_at).num_seconds() /
-                        MINUTES_PER_SECOND;
-
-                    if data_age_minutes > MAX_DATA_AGE_MINUTES {
-                        if is_debug_entry_enabled() {
-                            log(
-                                LogTag::Entry,
-                                "DATA_AGE_REJECT",
-                                &format!(
-                                    "❌ {} data too old: {}min > {}min",
-                                    token.symbol,
-                                    data_age_minutes,
-                                    MAX_DATA_AGE_MINUTES
-                                )
-                            );
-                        }
-                        return (
-                            false,
-                            0.0,
-                            format!(
-                                "Pool data too old: {}min > {}min",
-                                data_age_minutes,
-                                MAX_DATA_AGE_MINUTES
-                            ),
-                        );
+                    let data_age_minutes = (Utc::now() - price_result.calculated_at).num_seconds() / 60;
+                    
+                    if data_age_minutes > MAX_DATA_AGE_MIN {
+                        return None;
                     }
-
-                    // Get liquidity or fallback to token data
+                    
                     let liquidity = price_result.liquidity_usd.unwrap_or_else(|| {
                         token.liquidity
                             .as_ref()
                             .and_then(|l| l.usd)
                             .unwrap_or(0.0)
                     });
-
-                    if is_debug_entry_enabled() {
-                        log(
-                            LogTag::Entry,
-                            "POOL_DATA",
-                            &format!(
-                                "📊 {} price: {:.12} SOL, liquidity: ${:.0}, age: {}min",
-                                token.symbol,
-                                price,
-                                liquidity,
-                                data_age_minutes
-                            )
-                        );
-                    }
-
-                    (price, data_age_minutes, liquidity)
+                    
+                    Some((price, data_age_minutes, liquidity))
                 }
-                _ => {
-                    if is_debug_entry_enabled() {
-                        log(
-                            LogTag::Entry,
-                            "PRICE_INVALID",
-                            &format!("❌ {} invalid pool price", token.symbol)
-                        );
-                    }
-                    return (false, 0.0, "Invalid pool price".to_string());
-                }
+                _ => None,
             }
         }
-        None => {
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "NO_POOL_DATA",
-                    &format!("❌ {} no pool data available", token.symbol)
-                );
-            }
-            return (false, 0.0, "No pool data available".to_string());
-        }
-    };
-
-    // Ultra-flexible liquidity filtering - allow almost any token with meaningful volume
-    if liquidity_usd < TARGET_LIQUIDITY_MIN {
-        // Allow micro tokens (even under $50) if they have volume or big drops
-        if liquidity_usd < 10.0 {
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "NANO_LIQUIDITY_REJECT",
-                    &format!(
-                        "❌ {} liquidity ${:.0} too small (under $10)",
-                        token.symbol,
-                        liquidity_usd
-                    )
-                );
-            }
-            return (false, 0.0, format!("Liquidity ${:.0} too small (under $10)", liquidity_usd));
-        }
-    } else if liquidity_usd > TARGET_LIQUIDITY_MAX {
-        // Allow ALL tokens regardless of liquidity - no upper limit rejection
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "GIGA_LIQUIDITY_NOTICE",
-                &format!(
-                    "📈 {} mega liquidity ${:.0}M detected - allowing",
-                    token.symbol,
-                    liquidity_usd / 1_000_000.0
-                )
-            );
-        }
-        // Don't reject, just log for visibility
+        None => None,
     }
-
-    if
-        is_debug_entry_enabled() &&
-        (liquidity_usd < TARGET_LIQUIDITY_MIN || liquidity_usd > TARGET_LIQUIDITY_MAX)
-    {
-        log(
-            LogTag::Entry,
-            "EXTENDED_LIQUIDITY_ACCEPT",
-            &format!(
-                "✅ {} liquidity ${:.0} outside target but allowed",
-                token.symbol,
-                liquidity_usd
-            )
-        );
-    }
-
-    // Compute token re-entry profile from past closed trades
-    let reentry_profile_opt: Option<ReentryProfile> = get_reentry_profile(&token.mint).await;
-
-    // Get recent price history for deep drop analysis
-    let mut price_history = pool_service.get_recent_price_history(&token.mint).await;
-
-    // Initialize bot start instant if first call
-    let bot_start = BOT_START_INSTANT.get_or_init(Instant::now);
-    let now_chrono = chrono::Utc::now();
-
-    // Filter out stale points beyond HISTORY_MAX_POINT_AGE_SEC
-    price_history.retain(|(ts, _)| (now_chrono - *ts).num_seconds() <= HISTORY_MAX_POINT_AGE_SEC);
-
-    // Compute counts inside rolling windows
-    let count_60s = price_history
-        .iter()
-        .filter(|(ts, _)| (now_chrono - *ts).num_seconds() <= 60)
-        .count();
-    let count_300s = price_history
-        .iter()
-        .filter(|(ts, _)| (now_chrono - *ts).num_seconds() <= 300)
-        .count();
-
-    // Largest gap detection (successive sorted points)
-    let mut largest_gap: i64 = 0;
-    if price_history.len() >= 2 {
-        let mut sorted = price_history.clone();
-        sorted.sort_by(|a, b| a.0.cmp(&b.0));
-        for w in sorted.windows(2) {
-            let g = (w[1].0 - w[0].0).num_seconds();
-            if g > largest_gap {
-                largest_gap = g;
-            }
-        }
-    }
-
-    let fragmented = largest_gap > HISTORY_MAX_LARGEST_GAP_SEC;
-    let within_startup_grace = (bot_start.elapsed().as_secs() as i64) <= STARTUP_STALE_GRACE_SEC;
-
-    if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "PRICE_HISTORY_FRESHNESS",
-            &format!(
-                "📈 {} history: total={} fresh60s={} fresh300s={} largest_gap={}s fragmented={} startup_grace={}",
-                token.symbol,
-                price_history.len(),
-                count_60s,
-                count_300s,
-                largest_gap,
-                fragmented,
-                within_startup_grace
-            )
-        );
-    }
-
-    // Gate dynamic drop strategies if insufficient fresh data
-    // HARDCODED REQUIREMENT: Must have at least MIN_PRICE_POINTS_REQUIRED price points
-    if price_history.len() < MIN_PRICE_POINTS_REQUIRED {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "INSUFFICIENT_PRICE_DATA",
-                &format!(
-                    "❌ {} insufficient price data: {} < {} required points",
-                    token.symbol,
-                    price_history.len(),
-                    MIN_PRICE_POINTS_REQUIRED
-                )
-            );
-        }
-        return (
-            false,
-            0.0,
-            format!(
-                "Insufficient price data: {} < {} required points",
-                price_history.len(),
-                MIN_PRICE_POINTS_REQUIRED
-            ),
-        );
-    }
-
-    if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "PRICE_HISTORY",
-            &format!("📈 {} usable price points: {}", token.symbol, price_history.len())
-        );
-    }
-
-    // CRITICAL SAFETY CHECK: Reject entries if price is near recent top (multi-window + ATH guards)
-    if is_near_recent_top(&token.mint, current_pool_price, &price_history, liquidity_usd).await {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "NEAR_TOP_REJECT",
-                &format!(
-                    "🚫 {} rejected: price too close to 15-min high (safety filter)",
-                    token.symbol
-                )
-            );
-        }
-        return (false, 0.0, "Price too close to highs (multi-window/ATH guard)".to_string());
-    }
-
-    // Re-entry premium guard: avoid buying "very higher" than prior anchors
-    if let Some(profile) = &reentry_profile_opt {
-        if profile.anchor_price > 0.0 && profile.anchor_price.is_finite() {
-            let premium_pct =
-                ((current_pool_price - profile.anchor_price) / profile.anchor_price) * 100.0;
-            let allowed_premium = reentry_allowed_premium(profile.completed_trades);
-            if premium_pct > allowed_premium {
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "REENTRY_PREMIUM_REJECT",
-                        &format!(
-                            "🚫 {} price {:.2}% above anchor {:.12} SOL (allowed ≤{:.1}%)",
-                            token.symbol,
-                            premium_pct,
-                            profile.anchor_price,
-                            allowed_premium
-                        )
-                    );
-                }
-                return (
-                    false,
-                    0.0,
-                    format!(
-                        "Above prior anchor by {:.1}% (limit {:.1}%)",
-                        premium_pct,
-                        allowed_premium
-                    ),
-                );
-            }
-        }
-    }
-
-    // CORE LOGIC: Dynamic drop detection based on liquidity + history bias
-    let volume_24h = token.volume.as_ref().and_then(|v| v.h24);
-    let deep_drop_result = analyze_deep_drop_entry(
-        &token.mint,
-        current_pool_price,
-        &price_history,
-        pool_data_age,
-        liquidity_usd,
-        volume_24h,
-        build_history_bias(&reentry_profile_opt, current_pool_price)
-    ).await;
-
-    if let Some((drop_percent, entry_reason)) = deep_drop_result {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "DYNAMIC_DROP_ENTRY",
-                &format!(
-                    "🎯 {} DYNAMIC ENTRY: -{:.1}% {} (liquidity: ${:.0}, price: {:.12} SOL)",
-                    token.symbol,
-                    drop_percent,
-                    entry_reason,
-                    liquidity_usd,
-                    current_pool_price
-                )
-            );
-        }
-        // Confidence scoring (merged from should_buy_with_confidence)
-        let confidence = if liquidity_usd < TARGET_LIQUIDITY_MIN {
-            CONFIDENCE_BELOW_RANGE
-        } else if liquidity_usd > TARGET_LIQUIDITY_MAX {
-            CONFIDENCE_ABOVE_RANGE
-        } else {
-            let position_in_range =
-                (liquidity_usd - TARGET_LIQUIDITY_MIN) /
-                (TARGET_LIQUIDITY_MAX - TARGET_LIQUIDITY_MIN);
-            let distance_from_center = (position_in_range - 0.5).abs() * 2.0; // 0.0 = center, 1.0 = edges
-            let base_confidence =
-                CONFIDENCE_CENTER_MAX - distance_from_center * CONFIDENCE_CENTER_ADJUSTMENT;
-            base_confidence.max(CONFIDENCE_EDGE_MIN).min(CONFIDENCE_CENTER_MAX)
-        };
-
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "CONFIDENCE_SCORE",
-                &format!(
-                    "🎯 Confidence: {:.1}% for ${:.0}k liquidity",
-                    confidence,
-                    liquidity_usd / THOUSAND_DIVISOR
-                )
-            );
-        }
-
-        let reason = format!(
-            "{} (${:.0}k liquidity)",
-            entry_reason,
-            liquidity_usd / THOUSAND_DIVISOR
-        );
-        return (true, confidence, reason);
-    }
-
-    // VOLUME-BASED FALLBACK: If no drop signal, check for high volume activity
-    // NOTE: This is now only reached if we have sufficient price points (>= MIN_PRICE_POINTS_REQUIRED)
-    if let Some(vol_24h) = token.volume.as_ref().and_then(|v| v.h24) {
-        // Standard volume entry for tokens with sufficient history
-        if vol_24h > 50000.0 && liquidity_usd > 10000.0 {
-            let confidence = 60.0; // Conservative confidence for volume-based entry
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "VOLUME_ENTRY",
-                    &format!(
-                        "� Volume-based entry: ${:.0}k vol, ${:.0}k liq (history: {})",
-                        vol_24h / 1000.0,
-                        liquidity_usd / 1000.0,
-                        price_history.len()
-                    )
-                );
-            }
-            return (true, confidence, "High volume activity".to_string());
-        }
-    }
-
-    if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "NO_ENTRY_SIGNAL",
-            &format!("❌ {} no dynamic drop signal detected", token.symbol)
-        );
-    }
-
-    (false, 0.0, "No dynamic drop signal".to_string())
 }
 
-/// Get profit target range based on pool liquidity (DYNAMIC TARGETING)
-pub async fn get_profit_target(token: &Token) -> (f64, f64) {
-    let pool_service = get_pool_service();
+async fn is_near_ath(mint: &str, current_price: f64) -> bool {
+    // Check OHLCV data for 2-hour ATH protection
+    match crate::tokens::ohlcvs::get_latest_ohlcv(mint, 120).await {
+        Ok(ohlcv_data) => {
+            let now = Utc::now();
+            let two_hours_ago = now - chrono::Duration::seconds(ATH_PROTECTION_WINDOW_SEC);
+            
+            let recent_high = ohlcv_data
+                .iter()
+                .map(|point| point.high)
+                .fold(0.0f64, |a, b| a.max(b));
+            
+            if recent_high > 0.0 && recent_high.is_finite() {
+                let drop_from_high = ((recent_high - current_price) / recent_high) * 100.0;
+                return drop_from_high < ATH_MIN_DISTANCE_PERCENT;
+            }
+        }
+        _ => {}
+    }
+    
+    false // If no OHLCV data, don't block the entry
+}
 
-    let liquidity_usd = if
-        let Some(price_result) = crate::tokens::get_price(
-            &token.mint,
-            Some(crate::tokens::PriceOptions::pool_only()),
-            false
-        ).await
-    {
-        price_result.liquidity_usd.unwrap_or_else(||
+async fn check_position_cooldown(mint: &str) -> (bool, i64, String) {
+    match crate::positions_db::get_closed_positions().await {
+        Ok(closed_positions) => {
+            let relevant_positions: Vec<_> = closed_positions
+                .iter()
+                .filter(|p| p.mint == mint && p.transaction_exit_verified)
+                .collect();
+            
+            if relevant_positions.is_empty() {
+                return (false, 0, "No previous positions".to_string());
+            }
+            
+            if let Some(last_position) = relevant_positions.last() {
+                if let Some(exit_time) = last_position.exit_time {
+                    let now = Utc::now();
+                    let elapsed_minutes = now.signed_duration_since(exit_time).num_minutes();
+                    
+                    if elapsed_minutes < POSITION_CLOSE_COOLDOWN_MINUTES {
+                        let remaining_minutes = POSITION_CLOSE_COOLDOWN_MINUTES - elapsed_minutes;
+                        return (
+                            true,
+                            remaining_minutes,
+                            format!("{}h {}m remaining", remaining_minutes / 60, remaining_minutes % 60)
+                        );
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    
+    (false, 0, "No cooldown".to_string())
+}
+
+// =============================================================================
+// PROFIT TARGET CALCULATION
+// =============================================================================
+
+/// Calculate profit targets based on drop analysis and liquidity
+pub async fn get_profit_target(token: &Token) -> (f64, f64) {
+    let liquidity_usd = match get_current_pool_data(token).await {
+        Some((_, _, liquidity)) => liquidity,
+        None => {
             token.liquidity
                 .as_ref()
                 .and_then(|l| l.usd)
-                .unwrap_or(0.0)
-        )
+                .unwrap_or(10_000.0) // Default fallback
+        }
+    };
+    
+    // Base profit targets
+    let (mut min_profit, mut max_profit): (f64, f64) = if liquidity_usd < 5_000.0 {
+        (30.0, 120.0) // Higher targets for micro caps
+    } else if liquidity_usd < 50_000.0 {
+        (20.0, 80.0)  // Moderate targets for small caps
+    } else if liquidity_usd < 500_000.0 {
+        (15.0, 60.0)  // Conservative targets for mid caps
     } else {
-        token.liquidity
-            .as_ref()
-            .and_then(|l| l.usd)
-            .unwrap_or(0.0)
+        (10.0, 40.0)  // Lower targets for large caps
     };
-
-    // DYNAMIC targets based on liquidity (INVERSE relationship like entry thresholds)
-    // Higher liquidity = lower targets (safer), Lower liquidity = higher targets (more risk/reward)
-
-    // Clamp to our target range
-    let clamped_liquidity = liquidity_usd.max(TARGET_LIQUIDITY_MIN).min(TARGET_LIQUIDITY_MAX);
-    let liquidity_ratio =
-        (clamped_liquidity - TARGET_LIQUIDITY_MIN) / (TARGET_LIQUIDITY_MAX - TARGET_LIQUIDITY_MIN);
-
-    // INVERSE: High liquidity = conservative targets, Low liquidity = aggressive targets
-    let base_min: f64 = PROFIT_BASE_MIN - liquidity_ratio * PROFIT_LIQUIDITY_ADJUSTMENT_MIN; // 50% down to 10%
-    let base_max: f64 = PROFIT_BASE_MAX - liquidity_ratio * PROFIT_LIQUIDITY_ADJUSTMENT_MAX; // 150% down to 50%
-
-    let min_target = base_min.max(PROFIT_TARGET_MIN_FLOOR); // Never below 8%
-    let max_target = base_max.max(min_target + PROFIT_TARGET_MIN_RANGE); // Always at least 10% range
-
-    if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "PROFIT_TARGET",
-            &format!(
-                "🎯 {} targets: {:.1}%-{:.1}% (liquidity: ${:.0})",
-                token.symbol,
-                min_target,
-                max_target,
-                liquidity_usd
-            )
-        );
+    
+    // Ensure minimum spread
+    if max_profit - min_profit < 15.0 {
+        max_profit = min_profit + 15.0;
     }
-
-    (min_target, max_target)
-}
-
-/// Calculate price volatility from recent history
-fn calculate_price_volatility(
-    price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
-    current_price: f64
-) -> f64 {
-    if price_history.len() < 2 {
-        return 10.0; // Default volatility for new tokens
-    }
-
-    let mut prices: Vec<f64> = price_history
-        .iter()
-        .map(|(_, price)| *price)
-        .collect();
-    prices.push(current_price);
-
-    let min_price = prices.iter().fold(f64::INFINITY, |a, &b| a.min(b));
-    let max_price = prices.iter().fold(0.0f64, |a, &b| a.max(b));
-
-    if min_price > 0.0 && min_price.is_finite() && max_price.is_finite() {
-        ((max_price - min_price) / min_price) * PERCENTAGE_MULTIPLIER
-    } else {
-        10.0
-    }
-}
-
-// ============================================================================
-// 🎯 ENHANCED MOMENTUM ANALYSIS STRUCTURES AND FUNCTIONS
-// ============================================================================
-
-/// Drop momentum analysis structure for better entry timing
-#[derive(Debug, Clone)]
-struct MomentumAnalysis {
-    velocity_per_minute: f64, // Current velocity %/min (negative = dropping)
-    acceleration: f64, // Acceleration %/min² (negative = decelerating drop)
-    is_accelerating: bool, // Is drop still gaining momentum?
-    is_bouncing_strong: bool, // Is price bouncing aggressively?
-    velocity_10s: f64, // 10-second velocity
-    velocity_30s: f64, // 30-second velocity
-    velocity_60s: f64, // 60-second velocity
-    trend_consistency: f64, // How consistent is the trend (0-1)
-}
-
-/// Analyze drop momentum across multiple timeframes for optimal entry timing
-fn analyze_drop_momentum(
-    price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
-    current_price: f64,
-    now: &chrono::DateTime<chrono::Utc>
-) -> MomentumAnalysis {
-    if price_history.len() < MIN_PRICE_POINTS_REQUIRED {
-        return MomentumAnalysis {
-            velocity_per_minute: 0.0,
-            acceleration: 0.0,
-            is_accelerating: false,
-            is_bouncing_strong: false,
-            velocity_10s: 0.0,
-            velocity_30s: 0.0,
-            velocity_60s: 0.0,
-            trend_consistency: 0.0,
-        };
-    }
-
-    // Calculate velocities across different timeframes
-    let velocity_10s = calculate_velocity_for_window(price_history, current_price, now, 10);
-    let velocity_30s = calculate_velocity_for_window(price_history, current_price, now, 30);
-    let velocity_60s = calculate_velocity_for_window(price_history, current_price, now, 60);
-
-    // Primary velocity is 30s smoothed
-    let velocity_per_minute = velocity_30s;
-
-    // Calculate acceleration by comparing recent vs older velocity
-    let acceleration = if velocity_10s.is_finite() && velocity_60s.is_finite() {
-        (velocity_10s - velocity_60s) / 50.0 // Acceleration over ~50s
-    } else {
-        0.0
-    };
-
-    // Determine if drop is still accelerating (getting faster downward)
-    let is_accelerating = {
-        // Drop is accelerating if:
-        // 1. Recent velocity is more negative than older velocity
-        // 2. Acceleration is negative (speeding up downward)
-        // 3. Velocity magnitude is increasing
-        velocity_10s < velocity_30s &&
-            velocity_30s < velocity_60s &&
-            acceleration < -0.5 &&
-            velocity_per_minute < -2.0 // Meaningful downward velocity
-    };
-
-    // Detect strong bounce (rapid upward movement)
-    let is_bouncing_strong = {
-        velocity_10s > 3.0 && // Fast upward movement
-            velocity_30s > 1.0 && // Sustained upward movement
-            acceleration > 1.0 // Accelerating upward
-    };
-
-    // Calculate trend consistency (how aligned are the different timeframes)
-    let trend_consistency = calculate_trend_consistency(velocity_10s, velocity_30s, velocity_60s);
-
-    MomentumAnalysis {
-        velocity_per_minute,
-        acceleration,
-        is_accelerating,
-        is_bouncing_strong,
-        velocity_10s,
-        velocity_30s,
-        velocity_60s,
-        trend_consistency,
-    }
-}
-
-/// Calculate velocity for a specific time window
-fn calculate_velocity_for_window(
-    price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
-    current_price: f64,
-    now: &chrono::DateTime<chrono::Utc>,
-    window_seconds: i64
-) -> f64 {
-    let now_owned = *now;
-    let window_prices: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
-        .iter()
-        .filter(|(ts, _)| (now_owned - *ts).num_seconds() <= window_seconds)
-        .cloned()
-        .collect();
-
-    if window_prices.len() < 2 {
-        return 0.0;
-    }
-
-    // Use first and last prices in window for velocity calculation
-    let first = window_prices.first().unwrap();
-    let last = window_prices.last().unwrap();
-
-    if first.1 <= 0.0 || !first.1.is_finite() || !last.1.is_finite() {
-        return 0.0;
-    }
-
-    let time_diff = (last.0 - first.0).num_seconds().max(1) as f64;
-    let price_change_pct = ((current_price - first.1) / first.1) * 100.0;
-
-    // Convert to %/minute
-    price_change_pct * (60.0 / time_diff)
-}
-
-/// Calculate trend consistency across timeframes (0-1 scale)
-fn calculate_trend_consistency(vel_10s: f64, vel_30s: f64, vel_60s: f64) -> f64 {
-    if !vel_10s.is_finite() || !vel_30s.is_finite() || !vel_60s.is_finite() {
-        return 0.0;
-    }
-
-    // Check if all velocities have the same sign (direction)
-    let same_direction = (vel_10s > 0.0) == (vel_30s > 0.0) && (vel_30s > 0.0) == (vel_60s > 0.0);
-
-    if !same_direction {
-        return 0.0; // Inconsistent trend
-    }
-
-    // Calculate how similar the magnitudes are
-    let velocities = vec![vel_10s.abs(), vel_30s.abs(), vel_60s.abs()];
-    let max_vel = velocities.iter().fold(0.0f64, |a, &b| a.max(b));
-    let min_vel = velocities.iter().fold(f64::INFINITY, |a, &b| a.min(b));
-
-    if max_vel <= 0.0 {
-        return 0.0;
-    }
-
-    // Consistency is higher when velocities are similar in magnitude
-    let magnitude_consistency = min_vel / max_vel;
-
-    // Boost consistency for meaningful trends
-    (if max_vel > 2.0 { magnitude_consistency * 1.2 } else { magnitude_consistency * 0.8 }).min(1.0)
-}
-
-/// Calculate drop maturity score - higher score means better entry timing
-fn calculate_drop_maturity(
-    momentum: &MomentumAnalysis,
-    drop_percent: f64,
-    min_drop_threshold: f64
-) -> f64 {
-    if drop_percent < min_drop_threshold * 0.5 {
-        return 0.0; // Not enough of a drop yet
-    }
-
-    let mut maturity_score = 0.0;
-
-    // Base score from drop magnitude (larger drops = more mature)
-    let magnitude_score = (drop_percent / min_drop_threshold - 0.5) * 0.3;
-    maturity_score += magnitude_score.min(0.4);
-
-    // Deceleration bonus (drop slowing down = good timing)
-    if !momentum.is_accelerating && momentum.velocity_per_minute < 0.0 {
-        maturity_score += 0.3;
-    }
-
-    // Trend consistency bonus (stable trend = more predictable)
-    maturity_score += momentum.trend_consistency * 0.2;
-
-    // Velocity stabilization bonus (not moving too fast in either direction)
-    let velocity_stability = if momentum.velocity_per_minute.abs() < 5.0 {
-        0.2
-    } else if momentum.velocity_per_minute.abs() < 10.0 {
-        0.1
-    } else {
-        0.0
-    };
-    maturity_score += velocity_stability;
-
-    // Penalty for still accelerating downward (too early)
-    if momentum.is_accelerating {
-        maturity_score -= 0.4;
-    }
-
-    // Penalty for bouncing (too late)
-    if momentum.is_bouncing_strong {
-        maturity_score -= 0.3;
-    }
-
-    maturity_score.max(0.0).min(1.0)
-}
-
-/// Dynamic drop analysis with liquidity-based entry decisions
-/// Returns Some((drop_percent, reason)) if dynamic drop detected, None otherwise
-/// REQUIRES MINIMUM PRICE POINTS: Only analyzes tokens with sufficient price history
-async fn analyze_deep_drop_entry(
-    mint: &str,
-    current_price: f64,
-    price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
-    data_age_minutes: i64,
-    liquidity_usd: f64,
-    volume_24h: Option<f64>,
-    history_bias: Option<HistoryBias>
-) -> Option<(f64, String)> {
-    use chrono::Utc;
-
-    // HARDCODED REQUIREMENT: Must have minimum price points before any analysis
-    if price_history.len() < MIN_PRICE_POINTS_REQUIRED {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "INSUFFICIENT_PRICE_POINTS",
-                &format!(
-                    "❌ {} insufficient points: {} < {} required",
-                    crate::utils::safe_truncate(mint, 8),
-                    price_history.len(),
-                    MIN_PRICE_POINTS_REQUIRED
-                )
-            );
-        }
-        return None;
-    }
-
-    // --- Adaptive tuner (runtime auto-tuning of min drop) -----------------
-    // Lightweight, in-memory EMA-based scaler per token
-    struct TunerState {
-        scale_ema: f64, // threshold multiplier (0.6..1.4)
-        ema_volatility: f64, // smoothed volatility %
-        ema_velocity: f64, // smoothed pct/minute (+/-)
-        last_update: Instant,
-    }
-
-    struct AdaptiveDropTuner {
-        inner: RwLock<HashMap<String, TunerState>>,
-    }
-
-    static ADAPTIVE_TUNER: OnceLock<AdaptiveDropTuner> = OnceLock::new();
-    fn get_adaptive_tuner() -> &'static AdaptiveDropTuner {
-        ADAPTIVE_TUNER.get_or_init(|| AdaptiveDropTuner {
-            inner: RwLock::new(HashMap::new()),
-        })
-    }
-
-    // Get dynamic thresholds based on liquidity
-    let (base_min_drop, max_drop_threshold, target_drop_ratio) =
-        get_liquidity_based_thresholds(liquidity_usd);
-    // Slight relaxation to increase opportunities; other safeties prevent top buys
-    let min_drop_threshold = (base_min_drop * 0.9).max(DROP_PERCENT_MIN);
-
-    // Volatility-aware adjustment: in higher volatility allow smaller drops to qualify
-    let vol_percent = calculate_price_volatility(price_history, current_price);
-    let volatility_factor = if vol_percent > 100.0 {
-        0.7
-    } else if vol_percent > 60.0 {
-        0.8
-    } else if vol_percent > 30.0 {
-        0.9
-    } else {
-        1.0
-    };
-
-    // Short-term velocity (percent per minute) over last ~30s
-    let velocity_per_minute = {
-        let now = Utc::now();
-        let window_sec: i64 = 30;
-        let recent: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
-            .iter()
-            .filter(|(ts, _)| (now - *ts).num_seconds() <= window_sec)
-            .cloned()
-            .collect();
-        if recent.len() >= 2 {
-            let first = recent.first().unwrap();
-            let last = recent.last().unwrap();
-            if first.1 > 0.0 && first.1.is_finite() && last.1.is_finite() {
-                let dt = (last.0 - first.0).num_seconds().max(1) as f64;
-                let pct_change = ((last.1 - first.1) / first.1) * 100.0; // % over dt seconds
-                pct_change * (60.0 / dt) // % per minute
-            } else {
-                0.0
-            }
-        } else {
-            0.0
-        }
-    };
-
-    // Adaptive tuner: compute a per-mint scale with EMA smoothing
-    let adaptive_scale = {
-        // Compute a bounded target scale from current observations
-        let vol_scale = if vol_percent <= 20.0 {
-            0.9
-        } else if vol_percent <= 40.0 {
-            0.98
-        } else if vol_percent <= 80.0 {
-            1.05
-        } else {
-            1.2
-        };
-        let vel_scale = if velocity_per_minute < -6.0 {
-            // accelerating downtrend: lower threshold to catch
-            0.92
-        } else if velocity_per_minute > 6.0 {
-            // accelerating uptrend: raise threshold to avoid chasing
-            1.1
-        } else {
-            1.0
-        };
-        let liq_scale = if liquidity_usd >= 200_000.0 {
-            0.92
-        } else if liquidity_usd <= 5_000.0 {
-            1.08
-        } else {
-            1.0
-        };
-        let mut target_scale = vol_scale * vel_scale * liq_scale;
-        if target_scale < 0.6f64 {
-            target_scale = 0.6f64;
-        }
-        if target_scale > 1.4f64 {
-            target_scale = 1.4f64;
-        }
-
-        // Update EMA state
-        let tuner = get_adaptive_tuner();
-        if let Ok(mut map) = tuner.inner.try_write() {
-            let st = map.entry(mint.to_string()).or_insert(TunerState {
-                scale_ema: 1.0,
-                ema_volatility: vol_percent,
-                ema_velocity: velocity_per_minute,
-                last_update: Instant::now(),
-            });
-            let old_scale = st.scale_ema;
-            st.ema_volatility = st.ema_volatility * 0.8 + vol_percent * 0.2;
-            st.ema_velocity = st.ema_velocity * 0.8 + velocity_per_minute * 0.2;
-            st.scale_ema = st.scale_ema * 0.7 + target_scale * 0.3;
-            if st.scale_ema < 0.6f64 {
-                st.scale_ema = 0.6f64;
-            }
-            if st.scale_ema > 1.4f64 {
-                st.scale_ema = 1.4f64;
-            }
-            st.last_update = Instant::now();
-            let new_scale = st.scale_ema;
-            if is_debug_entry_enabled() && (new_scale - old_scale).abs() >= 0.05 {
-                log(
-                    LogTag::Entry,
-                    "ADAPT_TUNE",
-                    &format!(
-                        "🛠️ Tuner {}: vol {:.1}% vel {:.1}%/min liq ${:.0} → scale {:.2} (target {:.2})",
-                        crate::utils::safe_truncate(mint, 8),
-                        vol_percent,
-                        velocity_per_minute,
-                        liquidity_usd,
-                        new_scale,
-                        target_scale
-                    )
-                );
-            }
-            new_scale
-        } else if let Ok(map_ro) = tuner.inner.try_read() {
-            if let Some(st) = map_ro.get(mint) { st.scale_ema } else { 1.0 }
-        } else {
-            1.0
-        }
-    };
-
-    // History-aware biasing: if below anchor (value zone), lower threshold; above anchor, raise threshold slightly
-    let history_scale = if let Some(hb) = &history_bias {
-        if hb.anchor_price > 0.0 {
-            if hb.below_anchor_by_pct > 0.0 {
-                // Reduce threshold up to 40% when deeply below anchor; stronger with experience
-                let depth = (hb.below_anchor_by_pct / REENTRY_VALUE_ZONE_MAX).min(1.0);
-                let exp = (hb.completed_trades as f64).min(5.0) / 5.0; // 0..1
-                let reduce = 0.2 + 0.2 * depth + 0.1 * exp; // 20%..50%
-                (1.0 - reduce).max(0.5)
-            } else if hb.premium_over_anchor_pct > 0.0 {
-                // Slightly increase threshold when above anchor to avoid chasing
-                let inc = (hb.premium_over_anchor_pct / 20.0).min(0.25); // up to +25%
-                1.0 + inc
-            } else {
-                1.0
-            }
-        } else {
-            1.0
-        }
-    } else {
-        1.0
-    };
-
-    let effective_min_drop = (
-        min_drop_threshold *
-        volatility_factor *
-        adaptive_scale *
-        history_scale
-    ).max(DROP_PERCENT_MIN * 0.5);
-
-    if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "DROP_THRESHOLDS",
-            &format!(
-                "🎯 Dynamic thresholds for ${:.0}k: min {:.1}% (eff {:.1}%, scale {:.2} hist {:.2}) - max {:.1}%, ratio: {:.1}% | vol {:.1}% vel {:.1}%/min",
-                liquidity_usd / THOUSAND_DIVISOR,
-                min_drop_threshold,
-                effective_min_drop,
-                adaptive_scale,
-                history_scale,
-                max_drop_threshold,
-                target_drop_ratio * PERCENTAGE_MULTIPLIER,
-                vol_percent,
-                velocity_per_minute
-            )
-        );
-    }
-
-    // Strategy 1: (disabled by default) Ultra-fresh entry — risky near tops
-    if ULTRA_FRESH_ENTRY_ENABLED {
-        if
-            data_age_minutes == 0 &&
-            price_history.is_empty() &&
-            liquidity_usd >= ULTRA_FRESH_MIN_LIQUIDITY
-        {
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "ULTRA_FRESH_ENTRY",
-                    &format!(
-                        "⚡ Ultra-fresh entry for ${:.0}k liquidity",
-                        liquidity_usd / THOUSAND_DIVISOR
-                    )
-                );
-            }
-            return Some((
-                0.0,
-                format!("ultra-fresh entry (${:.0}k liquidity)", liquidity_usd / THOUSAND_DIVISOR),
-            ));
-        }
-    }
-
-    // Need at least MIN_PRICE_POINTS_REQUIRED data points for proper momentum analysis
-    // (This check is redundant since we already checked at function start, but kept for clarity)
-    if price_history.len() < MIN_PRICE_POINTS_REQUIRED {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "INSUFFICIENT_DATA",
-                &format!("❌ Need at least {} price points for momentum analysis", MIN_PRICE_POINTS_REQUIRED)
-            );
-        }
-        return None;
-    }
-
-    // Get recent prices within time window
-    let now = Utc::now();
-    let recent_prices: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
-        .iter()
-        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= DEEP_DROP_TIME_WINDOW_SEC)
-        .cloned()
-        .collect();
-
-    if recent_prices.is_empty() {
-        return None;
-    }
-
-    // Find recent high and calculate drop
-    let recent_high = recent_prices
-        .iter()
-        .map(|(_, price)| *price)
-        .fold(0.0f64, |a, b| a.max(b));
-    let recent_low = recent_prices
-        .iter()
-        .map(|(_, price)| *price)
-        .fold(f64::INFINITY, |a, b| a.min(b));
-
-    if recent_high <= 0.0 || !recent_high.is_finite() {
-        return None;
-    }
-
-    let drop_percent = ((recent_high - current_price) / recent_high) * PERCENTAGE_MULTIPLIER;
-
-    if !drop_percent.is_finite() || drop_percent < 0.0 {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "INVALID_DROP",
-                &format!("❌ Invalid drop calculation: {:.2}%", drop_percent)
-            );
-        }
-        return None;
-    }
-
-    if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "DROP_ANALYSIS",
-            &format!(
-                "📉 Drop: {:.2}% (high: {:.12} → current: {:.12}, low: {:.12})",
-                drop_percent,
-                recent_high,
-                current_price,
-                recent_low
-            )
-        );
-    }
-
-    // ============================================================================
-    // 🎯 ENHANCED MOMENTUM & TIMING ANALYSIS - Avoid entering too early in drops
-    // ============================================================================
-
-    // Multi-timeframe velocity analysis to detect drop acceleration/deceleration
-    let momentum_analysis = analyze_drop_momentum(&recent_prices, current_price, &now);
-
-    // Check if drop is still accelerating (too early to enter)
-    if momentum_analysis.is_accelerating && drop_percent >= effective_min_drop {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "DROP_STILL_ACCELERATING",
-                &format!(
-                    "⏳ Drop {:.1}% still accelerating (vel: {:.1}%/min, accel: {:.2}), waiting for deceleration",
-                    drop_percent,
-                    momentum_analysis.velocity_per_minute,
-                    momentum_analysis.acceleration
-                )
-            );
-        }
-        return None; // Wait for drop to mature
-    }
-
-    // Enhanced bounce detection with momentum consideration
-    if momentum_analysis.is_bouncing_strong {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "STRONG_BOUNCE_DETECTED",
-                &format!(
-                    "🚫 Strong bounce detected (vel: +{:.1}%/min), avoiding late entry",
-                    momentum_analysis.velocity_per_minute
-                )
-            );
-        }
-        return None;
-    }
-
-    // Drop maturity check - prefer entries when drop momentum is slowing
-    let drop_maturity_score = calculate_drop_maturity(
-        &momentum_analysis,
-        drop_percent,
-        effective_min_drop
-    );
-
-    if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "MOMENTUM_ANALYSIS",
-            &format!(
-                "🔄 Momentum: vel={:.1}%/min accel={:.2} maturity={:.0}% bouncing={} accelerating={}",
-                momentum_analysis.velocity_per_minute,
-                momentum_analysis.acceleration,
-                drop_maturity_score * 100.0,
-                momentum_analysis.is_bouncing_strong,
-                momentum_analysis.is_accelerating
-            )
-        );
-    }
-
-    // Bounce suppression: if price has already retraced > 35% of the drop from low -> avoid chasing tops
-    if
-        recent_low.is_finite() &&
-        recent_low > 0.0 &&
-        recent_high > 0.0 &&
-        current_price > recent_low
-    {
-        let total_drop_from_high = recent_high - recent_low;
-        if total_drop_from_high.is_finite() && total_drop_from_high > 0.0 {
-            let retrace = (current_price - recent_low) / total_drop_from_high; // 0..1
-            if retrace >= 0.5 {
-                // was 35%, eased to 50% to allow entries during mid-range consolidations
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "BOUNCE_SUPPRESS",
-                        &format!(
-                            "🚫 Retrace {:.0}% of drop detected (>{:.0}%), skipping to avoid buying bounce",
-                            retrace * 100.0,
-                            35.0
-                        )
-                    );
-                }
-                return None;
-            }
-        }
-    }
-
-    // Strategy 1.5: Capitulation wick recovery (very short-term flush then snapback)
-    // If we saw a sharp low within last seconds and current recovered a bit, but still well below recent high
-    {
-        const CAPITULATION_WINDOW_SEC: i64 = 20;
-        let now2 = Utc::now();
-        let cap_recent: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
-            .iter()
-            .filter(|(ts, _)| (now2 - *ts).num_seconds() <= CAPITULATION_WINDOW_SEC)
-            .cloned()
-            .collect();
-        if cap_recent.len() >= 2 {
-            let cap_high = cap_recent
-                .iter()
-                .map(|(_, p)| *p)
-                .fold(0.0_f64, |a, b| a.max(b));
-            let cap_low = cap_recent
-                .iter()
-                .map(|(_, p)| *p)
-                .fold(f64::INFINITY, |a, b| a.min(b));
-            if cap_high > 0.0 && cap_low.is_finite() && cap_high.is_finite() {
-                let flush_drop = ((cap_high - cap_low) / cap_high) * 100.0;
-                let recovered_from_low = if current_price > 0.0 {
-                    ((current_price - cap_low) / current_price) * 100.0
-                } else {
-                    0.0
-                };
-                // Require a meaningful flush and slight recovery, but still below high enough
-                if
-                    flush_drop >= (effective_min_drop * 1.1).min(20.0) &&
-                    recovered_from_low >= 1.0 &&
-                    drop_percent >= effective_min_drop * 0.5
-                {
-                    if is_debug_entry_enabled() {
-                        log(
-                            LogTag::Entry,
-                            "CAPITULATION_WICK",
-                            &format!(
-                                "🕯️ Capitulation wick: flush {:.1}% | recovered {:.1}% | drop_from_high {:.1}%",
-                                flush_drop,
-                                recovered_from_low,
-                                drop_percent
-                            )
-                        );
-                    }
-                    return Some((
-                        drop_percent.max(flush_drop),
-                        format!(
-                            "capitulation wick {:.1}% (eff≥{:.1}%)",
-                            flush_drop,
-                            effective_min_drop
-                        ),
-                    ));
-                }
-            }
-        }
-    }
-
-    // Strategy 2: Dynamic drop detection (main entry condition) - ENHANCED WITH TIMING
-    if drop_percent >= effective_min_drop && drop_percent <= max_drop_threshold {
-        // Require minimum maturity score for main strategy (unless very deep drop)
-        let min_maturity_required = if drop_percent >= effective_min_drop * 2.0 {
-            0.25 // Lower bar for very deep drops (was 0.3)
-        } else {
-            0.4 // Slightly lower to enter earlier (was 0.5)
-        };
-
-        if drop_maturity_score >= min_maturity_required {
-            let time_span = recent_prices.len();
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "DYNAMIC_DROP_HIT",
-                    &format!(
-                        "✅ Dynamic drop {:.1}% in range {:.1}%-{:.1}% (maturity: {:.0}% ≥ {:.0}%)",
-                        drop_percent,
-                        effective_min_drop,
-                        max_drop_threshold,
-                        drop_maturity_score * 100.0,
-                        min_maturity_required * 100.0
-                    )
-                );
-            }
-            return Some((
-                drop_percent,
-                format!(
-                    "dynamic drop in {}pts (${:.0}k: {:.1}%-{:.1}%, maturity: {:.0}%)",
-                    time_span,
-                    liquidity_usd / THOUSAND_DIVISOR,
-                    effective_min_drop,
-                    max_drop_threshold,
-                    drop_maturity_score * 100.0
-                ),
-            ));
-        } else {
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "DYNAMIC_DROP_IMMATURE",
-                    &format!(
-                        "⏳ Drop {:.1}% qualifies but immature (maturity: {:.0}% < {:.0}%)",
-                        drop_percent,
-                        drop_maturity_score * 100.0,
-                        min_maturity_required * 100.0
-                    )
-                );
-            }
-            return None; // Wait for better timing
-        }
-    }
-
-    // Strategy 3: Dynamic target ratio drop detection - LIQUIDITY ADJUSTED
-    let target_drop_absolute = recent_high * target_drop_ratio;
-    let current_drop_absolute = recent_high - current_price;
-
-    if current_drop_absolute >= target_drop_absolute {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "TARGET_RATIO_HIT",
-                &format!(
-                    "✅ Target ratio hit: {:.6} ≥ {:.6} SOL",
-                    current_drop_absolute,
-                    target_drop_absolute
-                )
-            );
-        }
-        return Some((
-            drop_percent,
-            format!(
-                "dynamic target hit {:.1}% (${:.0}k ratio: {:.1}%)",
-                drop_percent,
-                liquidity_usd / THOUSAND_DIVISOR,
-                target_drop_ratio * PERCENTAGE_MULTIPLIER
-            ),
-        ));
-    }
-
-    // Strategy 4: Fast dynamic drop (higher threshold but faster timeframe) - ENHANCED WITH TIMING
-    let ultra_recent: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
-        .iter()
-        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= FAST_DROP_TIME_WINDOW_SEC)
-        .cloned()
-        .collect();
-
-    if ultra_recent.len() >= 2 {
-        let ultra_high = ultra_recent
-            .iter()
-            .map(|(_, price)| *price)
-            .fold(0.0f64, |a, b| a.max(b));
-
-        if ultra_high > 0.0 && ultra_high.is_finite() {
-            let ultra_drop = ((ultra_high - current_price) / ultra_high) * PERCENTAGE_MULTIPLIER;
-
-            // Fast drop threshold is 1.2x the minimum threshold for that liquidity level
-            let fast_threshold = effective_min_drop * FAST_DROP_THRESHOLD_MULTIPLIER;
-
-            if ultra_drop >= fast_threshold && ultra_drop <= max_drop_threshold {
-                // For fast drops, require higher maturity OR very deep drop (due to speed)
-                let min_maturity_for_fast = if ultra_drop >= fast_threshold * 1.5 {
-                    0.35 // Lower bar for very fast deep drops (was 0.4)
-                } else {
-                    0.55 // Slightly lower for fast shallow drops (was 0.6)
-                };
-
-                // Fast drops get some maturity bonus due to their speed
-                let adjusted_maturity = (drop_maturity_score + 0.1).min(1.0);
-
-                if
-                    adjusted_maturity >= min_maturity_for_fast ||
-                    (!momentum_analysis.is_accelerating &&
-                        momentum_analysis.velocity_per_minute < -8.0)
-                {
-                    if is_debug_entry_enabled() {
-                        log(
-                            LogTag::Entry,
-                            "FAST_DROP_HIT",
-                            &format!(
-                                "⚡ Fast drop {:.1}% ≥ {:.1}% threshold (adj_maturity: {:.0}% ≥ {:.0}%)",
-                                ultra_drop,
-                                fast_threshold,
-                                adjusted_maturity * 100.0,
-                                min_maturity_for_fast * 100.0
-                            )
-                        );
-                    }
-                    return Some((
-                        ultra_drop,
-                        format!(
-                            "fast dynamic drop {:.1}% (${:.0}k: ≥{:.1}%, timing: {:.0}%)",
-                            ultra_drop,
-                            liquidity_usd / THOUSAND_DIVISOR,
-                            fast_threshold,
-                            adjusted_maturity * 100.0
-                        ),
-                    ));
-                } else {
-                    if is_debug_entry_enabled() {
-                        log(
-                            LogTag::Entry,
-                            "FAST_DROP_EARLY",
-                            &format!(
-                                "⏳ Fast drop {:.1}% too early (adj_maturity: {:.0}% < {:.0}%)",
-                                ultra_drop,
-                                adjusted_maturity * 100.0,
-                                min_maturity_for_fast * 100.0
-                            )
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    // Strategy 5: Small drop detection for high liquidity tokens (OPTIMIZED - lower requirements)
-    if liquidity_usd >= 50_000.0 && drop_percent >= 0.5 && drop_percent < min_drop_threshold {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "SMALL_DROP_HIT",
-                &format!(
-                    "💰 Small drop {:.1}% for high liquidity ${:.0}k",
-                    drop_percent,
-                    liquidity_usd / THOUSAND_DIVISOR
-                )
-            );
-        }
-        return Some((
-            drop_percent,
-            format!(
-                "small drop high-liq {:.1}% (${:.0}k)",
-                drop_percent,
-                liquidity_usd / THOUSAND_DIVISOR
-            ),
-        ));
-    }
-
-    // Strategy 6: Medium-term drop analysis (NEW - 2 minutes)
-    let medium_recent: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
-        .iter()
-        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= MEDIUM_DROP_TIME_WINDOW_SEC)
-        .cloned()
-        .collect();
-
-    if medium_recent.len() >= 3 {
-        let medium_high = medium_recent
-            .iter()
-            .map(|(_, price)| *price)
-            .fold(0.0f64, |a, b| a.max(b));
-
-        if medium_high > 0.0 && medium_high.is_finite() {
-            let medium_drop = ((medium_high - current_price) / medium_high) * 100.0;
-
-            // Medium-term threshold is 0.8x the minimum (catch sustained drops)
-            let medium_threshold = effective_min_drop * 0.8;
-
-            if medium_drop >= medium_threshold && medium_drop <= max_drop_threshold {
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "MEDIUM_DROP_HIT",
-                        &format!(
-                            "📊 Medium-term drop {:.1}% ≥ {:.1}% threshold",
-                            medium_drop,
-                            medium_threshold
-                        )
-                    );
-                }
-                return Some((
-                    medium_drop,
-                    format!(
-                        "medium-term drop {:.1}% (${:.0}k: ≥{:.1}%)",
-                        medium_drop,
-                        liquidity_usd / THOUSAND_DIVISOR,
-                        medium_threshold
-                    ),
-                ));
-            }
-        }
-    }
-
-    // Strategy 7: Long-term drop analysis (NEW - 5 minutes)
-    let long_recent: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
-        .iter()
-        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= LONG_DROP_TIME_WINDOW_SEC)
-        .cloned()
-        .collect();
-
-    if long_recent.len() >= 5 {
-        let long_high = long_recent
-            .iter()
-            .map(|(_, price)| *price)
-            .fold(0.0f64, |a, b| a.max(b));
-
-        if long_high > 0.0 && long_high.is_finite() {
-            let long_drop = ((long_high - current_price) / long_high) * 100.0;
-
-            // Long-term threshold is 0.6x the minimum (catch extended downtrends)
-            let long_threshold = effective_min_drop * 0.6;
-
-            if
-                long_drop >= long_threshold &&
-                long_drop <= max_drop_threshold &&
-                liquidity_usd >= LONG_TERM_MIN_LIQUIDITY
-            {
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "LONG_DROP_HIT",
-                        &format!(
-                            "📈 Long-term drop {:.1}% ≥ {:.1}% threshold",
-                            long_drop,
-                            long_threshold
-                        )
-                    );
-                }
-                return Some((
-                    long_drop,
-                    format!(
-                        "long-term drop {:.1}% (${:.0}k: ≥{:.1}%)",
-                        long_drop,
-                        liquidity_usd / THOUSAND_DIVISOR,
-                        long_threshold
-                    ),
-                ));
-            }
-        }
-    }
-
-    // Strategy 8: Volume-based entry (NEW - any meaningful drop with high volume)
-    if let Some(vol_24h) = volume_24h {
-        if vol_24h >= liquidity_usd * VOLUME_MULTIPLIER_HIGH && drop_percent >= MIN_VOLUME_DROP {
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "VOLUME_DROP_HIT",
-                    &format!(
-                        "🔥 Volume spike drop {:.1}% with {:.1}x volume",
-                        drop_percent,
-                        vol_24h / liquidity_usd
-                    )
-                );
-            }
-            return Some((
-                drop_percent,
-                format!(
-                    "volume spike drop {:.1}% (vol: {:.1}x liq)",
-                    drop_percent,
-                    vol_24h / liquidity_usd
-                ),
-            ));
-        }
-    }
-
-    // Strategy 9: Extended range tokens with special requirements (NEW)
-    if liquidity_usd < TARGET_LIQUIDITY_MIN || liquidity_usd > TARGET_LIQUIDITY_MAX {
-        // For small tokens ($1k-$5k): require bigger drops (15%+)
-        if liquidity_usd < TARGET_LIQUIDITY_MIN && drop_percent >= SMALL_TOKEN_MIN_DROP {
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "SMALL_TOKEN_BIG_DROP",
-                    &format!(
-                        "💎 Small token big drop {:.1}% for ${:.0}",
-                        drop_percent,
-                        liquidity_usd
-                    )
-                );
-            }
-            return Some((
-                drop_percent,
-                format!("small token big drop {:.1}% (${:.0})", drop_percent, liquidity_usd),
-            ));
-        }
-
-        // For large tokens ($1M-$10M): require moderate drops (5%+) with volume
-        if liquidity_usd > TARGET_LIQUIDITY_MAX && drop_percent >= LARGE_TOKEN_MIN_DROP {
-            if let Some(vol_24h) = volume_24h {
-                if vol_24h >= liquidity_usd * VOLUME_MULTIPLIER_LARGE {
-                    if is_debug_entry_enabled() {
-                        log(
-                            LogTag::Entry,
-                            "LARGE_TOKEN_VOLUME_DROP",
-                            &format!(
-                                "🚀 Large token drop {:.1}% with volume ${:.0}k",
-                                drop_percent,
-                                vol_24h / THOUSAND_DIVISOR
-                            )
-                        );
-                    }
-                    return Some((
-                        drop_percent,
-                        format!(
-                            "large token drop {:.1}% (${:.0}M, vol: ${:.0}k)",
-                            drop_percent,
-                            liquidity_usd / MILLION_DIVISOR,
-                            vol_24h / THOUSAND_DIVISOR
-                        ),
-                    ));
-                }
-            }
-        }
-    }
-
-    // Strategy 10: Instant drop detection (5s) with extra near-top guard
-    let instant_recent: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
-        .iter()
-        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= INSTANT_DROP_TIME_WINDOW_SEC)
-        .cloned()
-        .collect();
-
-    if instant_recent.len() >= 1 {
-        let instant_high = instant_recent
-            .iter()
-            .map(|(_, price)| *price)
-            .fold(0.0f64, |a, b| a.max(b));
-
-        if instant_high > 0.0 && instant_high.is_finite() {
-            let instant_drop = ((instant_high - current_price) / instant_high) * 100.0;
-
-            // Instant drop threshold uses 0.5x minimum to avoid tiny dips at peaks
-            let instant_threshold = (effective_min_drop * 0.5).max(0.6);
-            // Additional guard: must also be > 1m near-top minimum
-            let one_min_high = instant_recent
-                .iter()
-                .map(|(_, p)| *p)
-                .fold(0.0f64, |a, b| a.max(b));
-            let one_min_drop_from_high = if one_min_high > 0.0 {
-                ((one_min_high - current_price) / one_min_high) * 100.0
-            } else {
-                0.0
-            };
-
-            if
-                instant_drop >= instant_threshold &&
-                instant_drop <= max_drop_threshold &&
-                one_min_drop_from_high >= NEAR_TOP_1M_MIN
-            {
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "INSTANT_DROP_HIT",
-                        &format!(
-                            "⚡⚡ Instant drop {:.1}% ≥ {:.1}% (1m drop_from_high {:.1}% ≥ {:.1}%)",
-                            instant_drop,
-                            instant_threshold,
-                            one_min_drop_from_high,
-                            NEAR_TOP_1M_MIN
-                        )
-                    );
-                }
-                return Some((
-                    instant_drop,
-                    format!(
-                        "instant drop {:.1}% (${:.0}k: ≥{:.1}%)",
-                        instant_drop,
-                        liquidity_usd / THOUSAND_DIVISOR,
-                        instant_threshold
-                    ),
-                ));
-            }
-        }
-    }
-
-    // Strategy 13: Moving-average deviation (current below short MA by enough margin)
-    {
-        const MA_WINDOW_SEC: i64 = 60; // last 60 seconds
-        let now3 = Utc::now();
-        let ma_recent: Vec<f64> = price_history
-            .iter()
-            .filter(|(ts, _)| (now3 - *ts).num_seconds() <= MA_WINDOW_SEC)
-            .map(|(_, p)| *p)
-            .collect();
-        if ma_recent.len() >= 3 {
-            let ma = ma_recent.iter().sum::<f64>() / (ma_recent.len() as f64);
-            if ma > 0.0 && ma.is_finite() {
-                let ma_dev = ((ma - current_price) / ma) * 100.0; // how far below MA
-                // Liquidity-aware MA thresholds
-                let ma_threshold = if liquidity_usd >= 200_000.0 {
-                    effective_min_drop * 0.5
-                } else {
-                    effective_min_drop * 0.7
-                };
-                if ma_dev >= ma_threshold && ma_dev <= max_drop_threshold {
-                    if is_debug_entry_enabled() {
-                        log(
-                            LogTag::Entry,
-                            "MA_DEVIATION_HIT",
-                            &format!(
-                                "📉 MA deviation {:.1}% ≥ {:.1}% (MA {:.12})",
-                                ma_dev,
-                                ma_threshold,
-                                ma
-                            )
-                        );
-                    }
-                    return Some((
-                        ma_dev.max(drop_percent),
-                        format!("MA deviation {:.1}% (≥{:.1}%)", ma_dev, ma_threshold),
-                    ));
-                }
-            }
-        }
-    }
-
-    // Strategy 11: Micro drops for mega liquidity tokens (NEW)
-    if liquidity_usd >= 5_000_000.0 && drop_percent >= MICRO_DROP_THRESHOLD {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "MICRO_DROP_MEGA_LIQ",
-                &format!(
-                    "💎 Micro drop {:.1}% for mega liquidity ${:.0}M",
-                    drop_percent,
-                    liquidity_usd / MILLION_DIVISOR
-                )
-            );
-        }
-        return Some((
-            drop_percent,
-            format!(
-                "micro drop mega-liq {:.1}% (${:.0}M)",
-                drop_percent,
-                liquidity_usd / MILLION_DIVISOR
-            ),
-        ));
-    }
-
-    // Strategy 12: Extended time window analysis (NEW - 10 minutes)
-    let extended_recent: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
-        .iter()
-        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= EXTENDED_DROP_TIME_WINDOW_SEC)
-        .cloned()
-        .collect();
-
-    if extended_recent.len() >= 8 {
-        let extended_high = extended_recent
-            .iter()
-            .map(|(_, price)| *price)
-            .fold(0.0f64, |a, b| a.max(b));
-
-        if extended_high > 0.0 && extended_high.is_finite() {
-            let extended_drop = ((extended_high - current_price) / extended_high) * 100.0;
-
-            // Extended threshold is very low (0.4x minimum) to catch slow bleeds
-            let extended_threshold = min_drop_threshold * 0.4;
-
-            if
-                extended_drop >= extended_threshold &&
-                extended_drop <= max_drop_threshold &&
-                liquidity_usd >= 5_000.0
-            {
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "EXTENDED_DROP_HIT",
-                        &format!(
-                            "📉 Extended drop {:.1}% ≥ {:.1}% threshold",
-                            extended_drop,
-                            extended_threshold
-                        )
-                    );
-                }
-                return Some((
-                    extended_drop,
-                    format!(
-                        "extended drop {:.1}% (${:.0}k: ≥{:.1}%)",
-                        extended_drop,
-                        liquidity_usd / THOUSAND_DIVISOR,
-                        extended_threshold
-                    ),
-                ));
-            }
-        }
-    }
-
-    if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "NO_DROP_SIGNAL",
-            &format!(
-                "❌ No drop signals: {:.1}% (need {:.1}%-{:.1}%)",
-                drop_percent,
-                effective_min_drop,
-                max_drop_threshold
-            )
-        );
-
-        // Final debug: Entry criteria summary for expanded analysis
-        let criteria_summary = format!(
-            "Liquidity: ${:.0} (target: ${:.0}k-${:.0}k), Drop: {:.1}% (min: {:.1}%), Age: {:.1}min (max: {:.1}min)",
-            liquidity_usd,
-            TARGET_LIQUIDITY_MIN / THOUSAND_DIVISOR,
-            TARGET_LIQUIDITY_MAX / THOUSAND_DIVISOR,
-            drop_percent,
-            DROP_PERCENT_MIN,
-            data_age_minutes,
-            MAX_DATA_AGE_MINUTES as f64
-        );
-        log(LogTag::Entry, "ENTRY_ANALYSIS", &criteria_summary);
-    }
-
-    None
-}
-
-// Enhanced entry decision with liquidity-based confidence scoring merged into should_buy
-
-// ======================== RE-ENTRY HISTORY SUPPORT ==========================
-
-#[derive(Debug, Clone)]
-struct ReentryProfile {
-    completed_trades: usize,
-    last_entry_price: Option<f64>,
-    last_exit_price: Option<f64>,
-    avg_entry_price: Option<f64>,
-    avg_exit_price: Option<f64>,
-    anchor_price: f64,
-}
-
-async fn get_reentry_profile(mint: &str) -> Option<ReentryProfile> {
-    use crate::positions::get_closed_positions;
-
-    // Get all closed positions from the async positions manager
-    let all_closed = get_closed_positions().await;
-
-    // Filter for this specific mint and buy positions with exit prices
-    let mut closed: Vec<_> = all_closed
-        .iter()
-        .filter(|p| p.mint == mint && p.position_type == "buy")
-        .collect();
-
-    if closed.is_empty() {
-        return None;
-    }
-
-    // Sort by exit_time to find last trade
-    closed.sort_by_key(|p| p.exit_time);
-    let completed_trades = closed.len();
-
-    let last = *closed.last().unwrap();
-    let last_entry = last.effective_entry_price.or(Some(last.entry_price));
-    let last_exit = last.effective_exit_price.or(last.exit_price);
-
-    // Compute averages using effective prices when available
-    let mut sum_entry = 0.0;
-    let mut sum_exit = 0.0;
-    let mut cnt_entry = 0usize;
-    let mut cnt_exit = 0usize;
-
-    for p in closed.iter() {
-        if let Some(eff) = p.effective_entry_price.or(Some(p.entry_price)) {
-            if eff.is_finite() && eff > 0.0 {
-                sum_entry += eff;
-                cnt_entry += 1;
-            }
-        }
-        if let Some(ex) = p.effective_exit_price.or(p.exit_price) {
-            if ex.is_finite() && ex > 0.0 {
-                sum_exit += ex;
-                cnt_exit += 1;
-            }
-        }
-    }
-
-    let avg_entry = if cnt_entry > 0 { Some(sum_entry / (cnt_entry as f64)) } else { None };
-    let avg_exit = if cnt_exit > 0 { Some(sum_exit / (cnt_exit as f64)) } else { None };
-
-    // Anchor: favor last exit (60%) blended with average exit (40%); fallback to entry prices
-    let anchor = if let Some(le) = last_exit {
-        let avg = avg_exit.or(avg_entry).or(last_entry).unwrap_or(le);
-        0.6 * le + 0.4 * avg
-    } else if let Some(avg) = avg_exit.or(avg_entry).or(last_entry) {
-        avg
-    } else {
-        0.0
-    };
-
-    Some(ReentryProfile {
-        completed_trades,
-        last_entry_price: last_entry,
-        last_exit_price: last_exit,
-        avg_entry_price: avg_entry,
-        avg_exit_price: avg_exit,
-        anchor_price: anchor,
-    })
-}
-
-fn reentry_allowed_premium(completed_trades: usize) -> f64 {
-    let decay = (completed_trades as f64) * REENTRY_PREMIUM_DECAY_PER_TRADE;
-    let cap = (REENTRY_PREMIUM_BASE_MAX - decay).max(REENTRY_PREMIUM_MIN_FLOOR);
-    cap
-}
-
-#[derive(Debug, Clone)]
-struct HistoryBias {
-    anchor_price: f64,
-    completed_trades: usize,
-    premium_over_anchor_pct: f64,
-    below_anchor_by_pct: f64,
-}
-
-fn build_history_bias(profile: &Option<ReentryProfile>, current_price: f64) -> Option<HistoryBias> {
-    if let Some(p) = profile {
-        if
-            p.anchor_price > 0.0 &&
-            p.anchor_price.is_finite() &&
-            current_price.is_finite() &&
-            current_price > 0.0
-        {
-            let diff_pct = ((current_price - p.anchor_price) / p.anchor_price) * 100.0;
-            let (premium_over, below_by) = if diff_pct >= 0.0 {
-                (diff_pct, 0.0)
-            } else {
-                (0.0, -diff_pct)
-            };
-            return Some(HistoryBias {
-                anchor_price: p.anchor_price,
-                completed_trades: p.completed_trades,
-                premium_over_anchor_pct: premium_over,
-                below_anchor_by_pct: below_by,
-            });
-        }
-    }
-    None
+    
+    // Ensure reasonable minimums
+    min_profit = min_profit.max(8.0);
+    max_profit = max_profit.max(25.0);
+    
+    (min_profit, max_profit)
 }

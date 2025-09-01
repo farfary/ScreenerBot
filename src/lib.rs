@@ -4,7 +4,7 @@ pub mod arguments;
 pub mod ata_cleanup;
 pub mod configs;
 pub mod dashboard;
-pub mod entry;
+pub mod entry; // New improved entry system
 pub mod errors; // New structured error handling
 pub mod filtering;
 pub mod global;
