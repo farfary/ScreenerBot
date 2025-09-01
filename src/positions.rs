@@ -1944,6 +1944,11 @@ pub async fn close_position_direct(
     // Final cleanup of critical operation marking
     unmark_critical_operation(mint).await;
 
+    // Update OHLCV watch list - mark as no longer open position (lower priority)
+    if let Ok(ohlcv_service) = crate::tokens::get_ohlcv_service_clone().await {
+        ohlcv_service.add_to_watch_list(mint, false).await; // false = no longer open position
+    }
+
     if is_debug_positions_enabled() {
         log(
             LogTag::Positions,

@@ -3,7 +3,7 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::get_pool_service;
 use crate::tokens::is_token_excluded_from_trading;
-use crate::tokens::ohlcvs::{ get_latest_ohlcv };
+use crate::tokens::ohlcvs::{ get_latest_ohlcv, get_ohlcv_service_clone, is_ohlcv_data_available };
 /// Pool-based entry logic for ScreenerBot with Enhanced Momentum Analysis
 ///
 /// This module provides sophisticated entry timing based on drop momentum and acceleration analysis.
@@ -269,15 +269,35 @@ async fn is_near_recent_top(
     // === PHASE 2: OHLCV-based ATH detection (1-minute data only) ===
     let mut ohlcv_ath = 0.0f64;
 
-    if let Ok(ohlcv_data) = get_latest_ohlcv(mint, 100).await {
-        for point in &ohlcv_data {
-            ohlcv_ath = ohlcv_ath.max(point.high);
-        }
-        if is_debug_entry_enabled() {
+    // Add token to OHLCV watch list for background monitoring (no immediate API call if cached)
+    if let Ok(ohlcv_service) = get_ohlcv_service_clone().await {
+        ohlcv_service.add_to_watch_list(mint, false).await; // false = not open position yet
+
+        // Only fetch OHLCV data if available in cache (avoid immediate API calls)
+        if is_ohlcv_data_available(mint).await {
+            if let Ok(ohlcv_data) = get_latest_ohlcv(mint, 50).await {
+                // Reduced from 100 to 50 for faster performance
+                for point in &ohlcv_data {
+                    ohlcv_ath = ohlcv_ath.max(point.high);
+                }
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Entry,
+                        "OHLCV_ATH",
+                        &format!(
+                            "Mint: {}, 1m Points: {}, ATH: ${:.6}",
+                            mint,
+                            ohlcv_data.len(),
+                            ohlcv_ath
+                        )
+                    );
+                }
+            }
+        } else if is_debug_entry_enabled() {
             log(
                 LogTag::Entry,
-                "OHLCV_ATH",
-                &format!("Mint: {}, 1m Points: {}, ATH: ${:.6}", mint, ohlcv_data.len(), ohlcv_ath)
+                "OHLCV_WATCH_ADDED",
+                &format!("Added {} to OHLCV watch list, data will be fetched in background", mint)
             );
         }
     }

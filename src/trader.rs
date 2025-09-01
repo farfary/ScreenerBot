@@ -54,7 +54,7 @@ pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 0.0;
 /// Time-based override: Allow sell decisions after this duration (hours)
 /// Positions held longer than this can bypass profit threshold if in significant loss
 /// This prevents positions from being held indefinitely when they're clearly failing
-pub const TIME_OVERRIDE_DURATION_HOURS: f64 = 12.0;
+pub const TIME_OVERRIDE_DURATION_HOURS: f64 = 72.0;
 
 /// Loss threshold for time-based override (negative percentage, e.g., -20.0 for -20%)
 /// Positions with losses worse than this threshold can bypass profit requirements after time override
@@ -155,7 +155,6 @@ use crate::tokens::{
     get_all_tokens_by_liquidity,
     get_price,
     pool::{ add_watchlist_tokens, get_pool_service },
-    sync_watch_list_with_trader,
     PriceOptions,
     Token,
 };
@@ -663,14 +662,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Log filtering summary
         log_filtering_summary(&tokens);
 
-        // Sync OHLCV watch list with trader tokens (run async to not block trading)
-        let shutdown_clone_for_ohlcv = shutdown.clone();
-        tokio::spawn(async move {
-            if let Err(e) = sync_watch_list_with_trader(Some(shutdown_clone_for_ohlcv)).await {
-                log(LogTag::Trader, "WARN", &format!("OHLCV sync failed: {}", e));
-            }
-        });
-
         // Process tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
@@ -830,7 +821,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         };
 
                         // Open position directly
-                        let _ = crate::positions::open_position_direct(
+                        let position_result = crate::positions::open_position_direct(
                             &token,
                             current_price,
                             change,
@@ -839,6 +830,16 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             profit_min,
                             profit_max
                         ).await;
+
+                        // Add to OHLCV watch list as open position for priority monitoring
+                        if position_result.is_ok() {
+                            if
+                                let Ok(ohlcv_service) =
+                                    crate::tokens::get_ohlcv_service_clone().await
+                            {
+                                ohlcv_service.add_to_watch_list(&token.mint, true).await; // true = open position
+                            }
+                        }
                     }).await
                 {
                     Ok(_) => {}

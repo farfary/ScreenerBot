@@ -42,6 +42,7 @@ pub mod discovery;
 pub mod holders;
 pub mod lp_lock;
 pub mod monitor;
+pub mod ohlcv_db;
 pub mod ohlcvs;
 pub mod pool;
 pub mod pool_db;
@@ -110,7 +111,6 @@ pub use ohlcvs::{
     init_ohlcv_service,
     is_ohlcv_data_available,
     start_ohlcv_monitoring,
-    sync_watch_list_with_trader,
     DataAvailability,
     OhlcvDataPoint,
     OhlcvService,
