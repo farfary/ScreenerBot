@@ -33,21 +33,21 @@ use chrono::{ DateTime, Utc };
 // =============================================================================
 
 // Drop Detection Thresholds
-const FLASH_DROP_MIN: f64 = 5.0; // Minimum flash drop %
+const FLASH_DROP_MIN: f64 = 2.5; // Minimum flash drop %
 const FLASH_DROP_MAX: f64 = 15.0; // Maximum flash drop %
-const MODERATE_DROP_MIN: f64 = 15.0; // Minimum moderate drop %
+const MODERATE_DROP_MIN: f64 = 8.0; // Minimum moderate drop %
 const MODERATE_DROP_MAX: f64 = 35.0; // Maximum moderate drop %
-const DEEP_DROP_MIN: f64 = 35.0; // Minimum deep drop %
+const DEEP_DROP_MIN: f64 = 20.0; // Minimum deep drop %
 const DEEP_DROP_MAX: f64 = 60.0; // Maximum deep drop %
 const EXTREME_DROP_MIN: f64 = 60.0; // Minimum extreme drop %
 const EXTREME_DROP_MAX: f64 = 100.0; // Maximum extreme drop %
 
 // Time Windows for Analysis
-const FLASH_WINDOW_SEC: i64 = 10; // Flash drop detection window
-const MODERATE_WINDOW_SEC: i64 = 60; // Moderate drop detection window
+const FLASH_WINDOW_SEC: i64 = 20; // Flash drop detection window (doubled from 10s)
+const MODERATE_WINDOW_SEC: i64 = 120; // Moderate drop detection window (doubled from 60s)
 const DEEP_WINDOW_SEC: i64 = 300; // Deep drop detection window (5 min)
 const EXTREME_WINDOW_SEC: i64 = 900; // Extreme drop detection window (15 min)
-const ULTRA_FLASH_WINDOW_SEC: i64 = 3; // Very fast drop detection window
+const ULTRA_FLASH_WINDOW_SEC: i64 = 6; // Very fast drop detection window (doubled from 3s)
 const WICK_WINDOW_SEC: i64 = 30; // Wick detection window (drop + partial recovery)
 const CASCADE_WINDOW_SEC: i64 = 120; // Stair-step (cascade) window (2 min)
 const MEDIAN_DIP_WINDOW_SEC: i64 = 20; // Median-dip detection window
@@ -62,7 +62,7 @@ const DEEP_BASE_CONFIDENCE: f64 = 80.0; // Base confidence for deep drops
 const EXTREME_BASE_CONFIDENCE: f64 = 85.0; // Base confidence for extreme drops
 
 // Price History Requirements
-const MIN_PRICE_POINTS: usize = 3; // Minimum price points needed
+const MIN_PRICE_POINTS: usize = 2; // Minimum price points needed (reduced from 3)
 const MAX_DATA_AGE_MIN: i64 = 10; // Maximum data age in minutes
 
 // Liquidity Filters (Basic)
@@ -816,16 +816,16 @@ fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
 }
 
 fn should_enter_based_on_analysis(analysis: &DropAnalysis, liquidity_usd: f64) -> bool {
-    // Base confidence threshold varies by drop style
+    // Base confidence threshold varies by drop style - LOWERED for more aggressive entry
     let min_confidence = match analysis.drop_style {
-        DropStyle::UltraFlash => 62.0, // Very quick moves must be convincing
-        DropStyle::Flash => 58.0, // Slightly lowered to allow more entries
-        DropStyle::WickRebound => 54.0,
-        DropStyle::Moderate => 54.0, // Moderate confidence needed
-        DropStyle::Cascade => 52.0,
-        DropStyle::Deep => 48.0, // Lower threshold for deep drops
-        DropStyle::Extreme => 44.0, // Lowest threshold for extreme opportunities
-        DropStyle::MedianDip => 56.0,
+        DropStyle::UltraFlash => 35.0, // Very quick moves must be convincing (was 62.0)
+        DropStyle::Flash => 32.0, // Slightly lowered to allow more entries (was 58.0)
+        DropStyle::WickRebound => 30.0, // (was 54.0)
+        DropStyle::Moderate => 30.0, // Moderate confidence needed (was 54.0)
+        DropStyle::Cascade => 28.0, // (was 52.0)
+        DropStyle::Deep => 25.0, // Lower threshold for deep drops (was 48.0)
+        DropStyle::Extreme => 22.0, // Lowest threshold for extreme opportunities (was 44.0)
+        DropStyle::MedianDip => 30.0, // (was 56.0)
     };
 
     // Adjust threshold based on liquidity

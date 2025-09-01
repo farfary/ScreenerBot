@@ -45,7 +45,7 @@ const PRICE_CACHE_TTL_SECONDS: i64 = 8;
 // =============================================================================
 
 /// Priority tokens update interval (5 seconds exactly)
-const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 2;
+const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 3;
 
 /// Watchlist batch size for random updates
 const WATCHLIST_BATCH_SIZE: usize = 25;
@@ -61,7 +61,7 @@ const MAX_WATCHLIST_SIZE: usize = 200;
 
 /// Minimum liquidity (USD) required to consider a pool usable for price calculation.
 /// Lower this for testing environments if you want stats to increment sooner.
-pub const MIN_POOL_LIQUIDITY_USD: f64 = 1000.0;
+pub const MIN_POOL_LIQUIDITY_USD: f64 = 10.0;
 
 // Monitoring concurrency & performance budgeting
 const POOL_MONITOR_CONCURRENCY: usize = 20; // Max concurrent token updates per cycle
@@ -1146,10 +1146,10 @@ impl PoolPriceService {
                 // Update price cache for successful calculations
                 {
                     let mut cache = price_cache.write().await;
-                    for ((pool_address, token_address), price_info) in pool_token_pairs
-                        .iter()
-                        .zip(price_results.values()) {
-                        if let Some(info) = price_info {
+                    // FIXED: Use proper key-based lookup instead of zip with values() which doesn't preserve order
+                    for (pool_address, token_address) in pool_token_pairs.iter() {
+                        let lookup_key = format!("{}_{}", pool_address, token_address);
+                        if let Some(Some(info)) = price_results.get(&lookup_key) {
                             cache.insert(token_address.clone(), PoolPriceResult {
                                 pool_address: pool_address.clone(),
                                 dex_id: format!("batch_{}", batch_type),
@@ -1587,10 +1587,10 @@ impl PoolPriceService {
                 let mut success_count = 0;
 
                 // Update cache and price history for each successful calculation
-                for ((pool_address, token_address), price_info) in pool_token_pairs
-                    .iter()
-                    .zip(price_results.values()) {
-                    if let Some(info) = price_info {
+                // FIXED: Use proper key-based lookup instead of zip with values() which doesn't preserve order
+                for (pool_address, token_address) in pool_token_pairs.iter() {
+                    let lookup_key = format!("{}_{}", pool_address, token_address);
+                    if let Some(Some(info)) = price_results.get(&lookup_key) {
                         // Update price cache
                         {
                             let mut cache = self.price_cache.write().await;
@@ -1710,24 +1710,32 @@ impl PoolPriceService {
             }
         }
 
-        // Fallback to in-memory cache (limited to 10 entries)
+        // Fallback to in-memory cache (limited to 10 entries), but ensure RECENT points
         let history = self.price_history.read().await;
         let fallback_history = history.get(token_address).cloned().unwrap_or_default();
 
-        // If in-memory cache has sufficient data, return it
-        if fallback_history.len() >= 3 {
-            if is_debug_pool_prices_enabled() && !fallback_history.is_empty() {
+        // Only consider recent entries (last 15 minutes to cover EXTREME window)
+        let recent_cutoff_mem = Utc::now() - chrono::Duration::minutes(15);
+        let recent_fallback: Vec<(DateTime<Utc>, f64)> = fallback_history
+            .clone()
+            .into_iter()
+            .filter(|(timestamp, _)| *timestamp >= recent_cutoff_mem)
+            .collect();
+
+        // If in-memory cache has sufficient RECENT data, return it
+        if recent_fallback.len() >= 3 {
+            if is_debug_pool_prices_enabled() {
                 log(
                     LogTag::Pool,
                     "PRICE_HISTORY_MEMORY",
                     &format!(
-                        "📈 Retrieved {} price history entries from memory cache for {}",
-                        fallback_history.len(),
+                        "📈 Retrieved {} RECENT price history entries from memory cache for {} (<=15min)",
+                        recent_fallback.len(),
                         token_address
                     )
                 );
             }
-            return fallback_history;
+            return recent_fallback;
         }
 
         // Final fallback: try database for recent price history
@@ -1749,7 +1757,7 @@ impl PoolPriceService {
                             "🗄️ Retrieved {} recent price history entries from database for {} (memory had {}, using 10min window)",
                             recent_db_history.len(),
                             &token_address[..8],
-                            fallback_history.len()
+                            recent_fallback.len()
                         )
                     );
                 }
@@ -1757,8 +1765,8 @@ impl PoolPriceService {
             }
         }
 
-        // Return whatever we have from memory, even if limited
-        fallback_history
+        // Return whatever recent memory we have (may be <3, which will simply yield no detection windows)
+        recent_fallback
     }
 
     /// Get comprehensive price history for RL learning system
