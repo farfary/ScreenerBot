@@ -1786,6 +1786,7 @@ pub fn is_token_eligible_for_trading(token: &Token) -> bool {
 /// Filter a list of tokens and return both eligible and rejected with reasons
 pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, FilterReason)>) {
     // Performance fix: Limit tokens to prevent timeout on large datasets
+    // SMART PRIORITIZATION: prefer tokens likely to have usable data (price, txns, volume)
     const MAX_TOKENS_FOR_DETAILED_FILTERING: usize = 15000;
 
     let (tokens_to_process, pre_filtered_rejected) = if
@@ -1796,49 +1797,90 @@ pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, 
                 LogTag::Filtering,
                 "PERFORMANCE",
                 &format!(
-                    "⚡ Large token set detected: {} tokens. Limiting to top {} by liquidity to prevent timeout",
+                    "⚡ Large token set detected: {} tokens. Prioritizing by data-availability score, then liquidity (cap {}).",
                     tokens.len(),
                     MAX_TOKENS_FOR_DETAILED_FILTERING
                 )
             );
         }
 
-        // Sort by liquidity (highest first) and take top tokens
-        let mut sorted_tokens = tokens.to_vec();
-        sorted_tokens.sort_by(|a, b| {
-            let a_liq = a.liquidity
-                .as_ref()
-                .and_then(|l| l.usd)
-                .unwrap_or(0.0);
-            let b_liq = b.liquidity
-                .as_ref()
-                .and_then(|l| l.usd)
-                .unwrap_or(0.0);
-            b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        let top_tokens = sorted_tokens[..MAX_TOKENS_FOR_DETAILED_FILTERING].to_vec();
-        let excluded_tokens: Vec<(Token, FilterReason)> = sorted_tokens[
-            MAX_TOKENS_FOR_DETAILED_FILTERING..
-        ]
+        // Score tokens by cheap-to-compute signals that correlate with usable price history
+        // Score components (0-5):
+        //  - +1 has pool price now (price_pool_sol)
+        //  - +1 has dexscreener price (price_dexscreener_sol)
+        //  - +1 has m5 txn activity >= MIN_TRANSACTIONS_5MIN
+        //  - +1 has m5 volume
+        //  - +1 has non-zero liquidity USD
+        let mut scored: Vec<(i32, f64, &Token)> = tokens
             .iter()
-            .map(|token| {
-                (
-                    token.clone(),
-                    FilterReason::PerformanceLimitExceeded {
-                        total_tokens: tokens.len(),
-                        max_allowed: MAX_TOKENS_FOR_DETAILED_FILTERING,
-                    },
-                )
+            .map(|t| {
+                let mut score: i32 = 0;
+                if t.price_pool_sol.unwrap_or(0.0) > 0.0 {
+                    score += 1;
+                }
+                if t.price_dexscreener_sol.unwrap_or(0.0) > 0.0 {
+                    score += 1;
+                }
+                // txn m5
+                let m5_txn = t.txns
+                    .as_ref()
+                    .and_then(|x| x.m5.as_ref())
+                    .map(|p| p.buys.unwrap_or(0) + p.sells.unwrap_or(0))
+                    .unwrap_or(0);
+                if (m5_txn as i64) >= MIN_TRANSACTIONS_5MIN {
+                    score += 1;
+                }
+                // volume m5
+                if
+                    t.volume
+                        .as_ref()
+                        .and_then(|v| v.m5)
+                        .unwrap_or(0.0) > 0.0
+                {
+                    score += 1;
+                }
+                // liquidity usd
+                let liq = t.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(0.0);
+                if liq > 0.0 {
+                    score += 1;
+                }
+
+                (score, liq, t)
             })
             .collect();
+
+        // Sort by score desc, then liquidity desc
+        scored.sort_by(|a, b| {
+            b.0.cmp(&a.0).then_with(|| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal))
+        });
+
+        // Take the top-N
+        let mut top_tokens: Vec<Token> = Vec::with_capacity(MAX_TOKENS_FOR_DETAILED_FILTERING);
+        for (_, _, tok) in scored.iter().take(MAX_TOKENS_FOR_DETAILED_FILTERING) {
+            top_tokens.push((*tok).clone());
+        }
+
+        // Everything else is excluded for performance
+        let mut excluded_tokens: Vec<(Token, FilterReason)> = Vec::new();
+        for (_, _, tok) in scored.into_iter().skip(MAX_TOKENS_FOR_DETAILED_FILTERING) {
+            excluded_tokens.push((
+                tok.clone(),
+                FilterReason::PerformanceLimitExceeded {
+                    total_tokens: tokens.len(),
+                    max_allowed: MAX_TOKENS_FOR_DETAILED_FILTERING,
+                },
+            ));
+        }
 
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "PERFORMANCE",
                 &format!(
-                    "📊 Performance limiting: Processing top {} tokens, excluding {} lower-liquidity tokens",
+                    "📊 Performance limiting: Selected top {} by score→liquidity, excluded {}",
                     top_tokens.len(),
                     excluded_tokens.len()
                 )

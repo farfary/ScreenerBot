@@ -869,6 +869,30 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
         // Note: tokens are now prioritized by recent drops and fair rotation
+        // Proactively feed a slice of prioritized tokens into price-service watchlist to build price history
+        // This directly addresses lack of history without touching entry.rs or the 5s schedule
+        if !tokens.is_empty() {
+            // Limit to a reasonable batch to avoid flooding the watchlist
+            let watch_batch: Vec<String> = tokens
+                .iter()
+                .take(50)
+                .map(|t| t.mint.clone())
+                .collect();
+            if !watch_batch.is_empty() {
+                add_watchlist_tokens(&watch_batch).await;
+                if is_debug_trader_enabled() {
+                    log(
+                        LogTag::Trader,
+                        "WATCHLIST_PRIME",
+                        &format!(
+                            "Primed {} tokens to price watchlist for history building",
+                            watch_batch.len()
+                        )
+                    );
+                }
+            }
+        }
+
         for token in tokens.iter() {
             // Check for shutdown before spawning tasks
             if
