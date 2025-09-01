@@ -568,9 +568,26 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
     const FILTERING_TIMEOUT_SECS: u64 = 180;
 
     // 1. Fetch tokens from safe system
+    if is_debug_trader_enabled() {
+        log(LogTag::Trader, "TOKEN_FETCH_START", "🔄 Fetching tokens from safe system...");
+    }
+
+    let fetch_start = std::time::Instant::now();
     let tokens = {
         let tokens_from_module: Vec<Token> = match get_all_tokens_by_liquidity().await {
             Ok(api_tokens) => {
+                let fetch_duration = fetch_start.elapsed();
+                if is_debug_trader_enabled() {
+                    log(
+                        LogTag::Trader,
+                        "TOKEN_FETCH_SUCCESS",
+                        &format!(
+                            "✅ Fetched {} tokens in {:.3}s",
+                            api_tokens.len(),
+                            fetch_duration.as_secs_f32()
+                        )
+                    );
+                }
                 // Convert ApiToken to Token for compatibility with existing code
                 api_tokens
                     .into_iter()
@@ -578,10 +595,15 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
                     .collect()
             }
             Err(e) => {
+                let fetch_duration = fetch_start.elapsed();
                 log(
                     LogTag::Trader,
                     "WARN",
-                    &format!("Failed to get tokens from safe system: {}", e)
+                    &format!(
+                        "❌ Failed to get tokens from safe system after {:.3}s: {}",
+                        fetch_duration.as_secs_f32(),
+                        e
+                    )
                 );
                 Vec::new()
             }
@@ -612,7 +634,11 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
             log(
                 LogTag::Trader,
                 "INFO",
-                &format!("Processing {} tokens with liquidity", with_liquidity)
+                &format!(
+                    "Processing {} tokens with liquidity (out of {} total)",
+                    with_liquidity,
+                    tokens_from_module.len()
+                )
             );
         }
 
@@ -622,6 +648,19 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
     };
 
     // 2. Apply filtering with timeout protection
+    if is_debug_trader_enabled() {
+        log(
+            LogTag::Trader,
+            "FILTER_START",
+            &format!(
+                "🔍 Starting filtering of {} tokens (timeout: {}s)",
+                tokens.len(),
+                FILTERING_TIMEOUT_SECS
+            )
+        );
+    }
+
+    let filter_start = std::time::Instant::now();
     let filtering_result = tokio::time::timeout(
         std::time::Duration::from_secs(FILTERING_TIMEOUT_SECS),
         async {
@@ -633,12 +672,51 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
         }
     ).await;
 
+    let filter_duration = filter_start.elapsed();
+    if is_debug_trader_enabled() {
+        log(
+            LogTag::Trader,
+            "FILTER_TIMING",
+            &format!("⏱️ Filtering completed in {:.2}s", filter_duration.as_secs_f32())
+        );
+    }
+
     let (eligible_tokens, rejected_tokens) = match filtering_result {
-        Ok(Ok(result)) => result,
+        Ok(Ok(result)) => {
+            if is_debug_trader_enabled() {
+                log(
+                    LogTag::Trader,
+                    "FILTER_SUCCESS",
+                    &format!(
+                        "✅ Filtering task completed successfully in {:.2}s",
+                        filter_duration.as_secs_f32()
+                    )
+                );
+            }
+            result
+        }
         Ok(Err(e)) => {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!(
+                    "❌ Token filtering task failed after {:.2}s: {}",
+                    filter_duration.as_secs_f32(),
+                    e
+                )
+            );
             return Err(format!("Token filtering task failed: {}", e));
         }
         Err(_) => {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!(
+                    "⏰ Token filtering TIMED OUT after {:.2}s (limit: {}s)",
+                    filter_duration.as_secs_f32(),
+                    FILTERING_TIMEOUT_SECS
+                )
+            );
             return Err(format!("Token filtering timed out after {}s", FILTERING_TIMEOUT_SECS));
         }
     };
@@ -815,17 +893,56 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         }
 
         // Prepare tokens for trading (fetch, sort, filter)
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "CYCLE_START",
+                &format!(
+                    "🔄 Starting token preparation cycle at {:.3}s",
+                    cycle_start.elapsed().as_secs_f32()
+                )
+            );
+        }
+
         let tokens = match prepare_tokens(cycle_start).await {
-            Ok(tokens) => tokens,
+            Ok(tokens) => {
+                if is_debug_trader_enabled() {
+                    log(
+                        LogTag::Trader,
+                        "CYCLE_PREPARED",
+                        &format!(
+                            "✅ Token preparation completed: {} eligible tokens in {:.3}s",
+                            tokens.len(),
+                            cycle_start.elapsed().as_secs_f32()
+                        )
+                    );
+                }
+                tokens
+            }
             Err(e) => {
-                log(LogTag::Trader, "ERROR", &format!("Token preparation failed: {}", e));
+                log(
+                    LogTag::Trader,
+                    "ERROR",
+                    &format!(
+                        "❌ Token preparation failed after {:.3}s: {}",
+                        cycle_start.elapsed().as_secs_f32(),
+                        e
+                    )
+                );
                 continue; // Skip this cycle and try again
             }
         };
 
         // Early return if no tokens to process
         if tokens.is_empty() {
-            log(LogTag::Trader, "INFO", "No tokens to process, skipping token checking cycle");
+            log(
+                LogTag::Trader,
+                "INFO",
+                &format!(
+                    "No tokens to process after {:.3}s, skipping token checking cycle",
+                    cycle_start.elapsed().as_secs_f32()
+                )
+            );
 
             // Calculate how long we've spent in this cycle
             let cycle_duration = cycle_start.elapsed();
@@ -834,6 +951,18 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             } else {
                 Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) - cycle_duration
             };
+
+            if is_debug_trader_enabled() {
+                log(
+                    LogTag::Trader,
+                    "CYCLE_WAIT",
+                    &format!(
+                        "⏸️ Waiting {:.1}s before next cycle (cycle took {:.3}s)",
+                        wait_time.as_secs_f32(),
+                        cycle_duration.as_secs_f32()
+                    )
+                );
+            }
 
             if check_shutdown_or_delay(&shutdown, wait_time).await {
                 log(LogTag::Trader, "INFO", "new entries monitor shutting down...");
@@ -964,15 +1093,63 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             _ => {
                                 // Update tracking even for failed price fetches
                                 update_token_check_info(&token.mint, None, false);
+                                if is_debug_trader_enabled() {
+                                    log(
+                                        LogTag::Trader,
+                                        "PRICE_FAIL",
+                                        &format!("❌ No valid price for {}: skipping", token.symbol)
+                                    );
+                                }
                                 return;
                             }
                         };
+
+                        if is_debug_trader_enabled() {
+                            log(
+                                LogTag::Trader,
+                                "PRICE_CHECK",
+                                &format!("💰 {} price: {:.10} SOL", token.symbol, current_price)
+                            );
+                        }
 
                         // Check for recent drops
                         let had_recent_drop = check_token_for_recent_drop(&token).await;
 
                         // Entry decision delegated to entry::should_buy
+                        if is_debug_trader_enabled() {
+                            log(
+                                LogTag::Trader,
+                                "ENTRY_CHECK",
+                                &format!(
+                                    "🔍 Checking entry criteria for {} at {:.10} SOL",
+                                    token.symbol,
+                                    current_price
+                                )
+                            );
+                        }
+
+                        let entry_start = std::time::Instant::now();
                         let (approved, confidence, reason) = crate::entry::should_buy(&token).await;
+                        let entry_duration = entry_start.elapsed();
+
+                        if is_debug_trader_enabled() {
+                            log(
+                                LogTag::Trader,
+                                "ENTRY_RESULT",
+                                &format!(
+                                    "📊 Entry check for {} completed in {:.3}s: {} (confidence: {:.1}%, reason: {})",
+                                    token.symbol,
+                                    entry_duration.as_secs_f32(),
+                                    if approved {
+                                        "APPROVED"
+                                    } else {
+                                        "REJECTED"
+                                    },
+                                    confidence,
+                                    reason
+                                )
+                            );
+                        }
 
                         // Update confidence tracking system
                         update_token_confidence(
@@ -995,7 +1172,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     LogTag::Trader,
                                     "WATCHLIST_ADD",
                                     &format!(
-                                        "Added {} to watchlist (confidence: {:.1}%, reason: {}) [Drop: {}]",
+                                        "📝 Added {} to watchlist (confidence: {:.1}%, reason: {}) [Drop: {}]",
                                         &token.symbol,
                                         confidence,
                                         reason,
@@ -1011,6 +1188,23 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
 
                         // Token approved for entry!
+                        if is_debug_trader_enabled() {
+                            log(
+                                LogTag::Trader,
+                                "ENTRY_APPROVED",
+                                &format!(
+                                    "🚀 ENTRY APPROVED: {} at {:.10} SOL (confidence: {:.1}%, drop: {})",
+                                    &token.symbol,
+                                    current_price,
+                                    confidence,
+                                    if had_recent_drop {
+                                        "YES"
+                                    } else {
+                                        "NO"
+                                    }
+                                )
+                            );
+                        }
 
                         // Compute percent change from recent history if available
                         let change = {
@@ -1057,6 +1251,20 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         };
 
                         // Open position directly
+                        if is_debug_trader_enabled() {
+                            log(
+                                LogTag::Trader,
+                                "POSITION_OPENING",
+                                &format!(
+                                    "📈 Opening position for {} at {:.10} SOL (size: {} SOL)",
+                                    token.symbol,
+                                    current_price,
+                                    TRADE_SIZE_SOL
+                                )
+                            );
+                        }
+
+                        let position_start = std::time::Instant::now();
                         let position_result = crate::positions::open_position_direct(
                             &token,
                             current_price,
@@ -1066,6 +1274,35 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             profit_min,
                             profit_max
                         ).await;
+
+                        let position_duration = position_start.elapsed();
+
+                        match &position_result {
+                            Ok(position_id) => {
+                                log(
+                                    LogTag::Trader,
+                                    "POSITION_OPENED",
+                                    &format!(
+                                        "✅ Successfully opened position {} for {} in {:.3}s",
+                                        position_id,
+                                        token.symbol,
+                                        position_duration.as_secs_f32()
+                                    )
+                                );
+                            }
+                            Err(e) => {
+                                log(
+                                    LogTag::Trader,
+                                    "POSITION_FAILED",
+                                    &format!(
+                                        "❌ Failed to open position for {} after {:.3}s: {}",
+                                        token.symbol,
+                                        position_duration.as_secs_f32(),
+                                        e
+                                    )
+                                );
+                            }
+                        }
 
                         // Add to OHLCV watch list as open position for priority monitoring
                         if position_result.is_ok() {
@@ -1121,12 +1358,28 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             log(
                 LogTag::Trader,
                 "WARN",
-                &format!("Token checking cycle took longer than interval: {:?}", cycle_duration)
+                &format!(
+                    "⚠️ Token checking cycle took longer than interval: {:.3}s > {}s",
+                    cycle_duration.as_secs_f32(),
+                    ENTRY_MONITOR_INTERVAL_SECS
+                )
             );
             Duration::from_millis(ENTRY_CYCLE_MIN_WAIT_MS)
         } else {
             // Otherwise wait for the remaining interval time
-            Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) - cycle_duration
+            let remaining = Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) - cycle_duration;
+            if is_debug_trader_enabled() {
+                log(
+                    LogTag::Trader,
+                    "CYCLE_COMPLETE",
+                    &format!(
+                        "✅ Cycle completed in {:.3}s, waiting {:.1}s before next cycle",
+                        cycle_duration.as_secs_f32(),
+                        remaining.as_secs_f32()
+                    )
+                );
+            }
+            remaining
         };
 
         if check_shutdown_or_delay(&shutdown, wait_time).await {

@@ -267,7 +267,7 @@ impl PoolDbService {
         entries.reverse();
 
         // Apply gap detection - remove entries older than significant gaps
-        let filtered_entries = self.filter_entries_by_gaps(entries);
+        let filtered_entries = self.filter_entries_by_gaps(entries, token_mint);
 
         // Return in DESC order (newest first) for consistency
         let mut result = filtered_entries;
@@ -369,7 +369,8 @@ impl PoolDbService {
     /// Filter price entries by gaps - removes entries older than significant gaps
     fn filter_entries_by_gaps(
         &self,
-        entries: Vec<(DateTime<Utc>, f64)>
+        entries: Vec<(DateTime<Utc>, f64)>,
+        token_mint: &str
     ) -> Vec<(DateTime<Utc>, f64)> {
         if entries.len() <= 1 {
             return entries;
@@ -381,19 +382,27 @@ impl PoolDbService {
         // Find the first significant gap from the end (most recent)
         let mut gap_found_at = None;
 
+        // Iterate backwards through entries (entries are ordered oldest to newest)
+        // When iterating backwards: entries[i-1] is NEWER, entries[i] is OLDER
         for i in (1..entries.len()).rev() {
-            let current_time = entries[i].0;
-            let previous_time = entries[i - 1].0;
-            let gap = current_time - previous_time;
+            let older_time = entries[i].0; // Older timestamp
+            let newer_time = entries[i - 1].0; // Newer timestamp
+            let gap = newer_time - older_time; // Newer - Older = Positive gap duration
 
             if gap > max_gap_duration {
                 gap_found_at = Some(i);
+                let token_display = crate::utils::safe_truncate(token_mint, 8);
                 log(
                     LogTag::Pool,
                     "GAP_DETECTED",
                     &format!(
-                        "Found {:.1} minute gap in price history, keeping only entries after gap",
-                        gap.num_minutes() as f64
+                        "Token {} - {:.1} minute gap between {} and {} (keeping {} entries after gap, removing {} older entries)",
+                        token_display,
+                        gap.num_minutes() as f64,
+                        older_time.format("%H:%M:%S"),
+                        newer_time.format("%H:%M:%S"),
+                        entries.len() - i,
+                        i
                     )
                 );
                 break;
