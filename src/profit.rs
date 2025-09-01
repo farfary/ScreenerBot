@@ -50,6 +50,8 @@ const QUICK_WINDOWS: &[(f64, f64)] = &[
     (1.0, 30.0),
     (5.0, 50.0),
     (15.0, 80.0),
+    // Added: give an extra safety window so we can lock solid runs
+    (10.0, 60.0),
 ];
 
 /// ============================= Helpers =============================
@@ -266,6 +268,37 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         }
     }
 
+    // 4b) Big-peak retention rule (anti-giveback):
+    // If we printed a strong early peak, require we retain a reasonable fraction of it.
+    // Rationale: after big impulse moves, reversals are violent; we prefer to bank a
+    // chunk rather than round-trip. Tunables chosen conservatively.
+    {
+        let strong_peak = peak_profit >= 40.0; // "big first leg" heuristic
+        let early_enough = minutes_held <= 15.0; // focus on the opening impulse
+        let retain_frac = if peak_profit >= 80.0 { 0.55 } else { 0.5 }; // keep at least 50-55%
+        let must_retain = peak_profit * retain_frac;
+        let big_giveback = pnl_percent < must_retain;
+        let decent_abs_dd = peak_profit - pnl_percent >= 10.0; // avoid triggering on tiny wobbles
+
+        if strong_peak && early_enough && big_giveback && decent_abs_dd {
+            if is_debug_profit_enabled() {
+                log(
+                    LogTag::Profit,
+                    "BIG_PEAK_RETAIN_EXIT",
+                    &format!(
+                        "{} pnl={:.2}% peak={:.2}% retain_req={:.2}% t={:.1}m",
+                        position.symbol,
+                        pnl_percent,
+                        peak_profit,
+                        must_retain,
+                        minutes_held
+                    )
+                );
+            }
+            return true;
+        }
+    }
+
     // 5) Instant large profits - take them immediately
     if pnl_percent >= INSTANT_EXIT_LEVEL_2 {
         return true;
@@ -349,11 +382,18 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         // baseline gap derived from peak profit and age
         let mut gap = trailing_gap(peak_profit, minutes_held);
 
-        // Micro trailing for early modest profits (10% - 25% peak) to avoid giving back everything.
+        // Micro trailing for early profits:
+        // - For modest peaks (10% - 25%): keep very tight to avoid full givebacks.
+        // - For medium peaks (25% - 60%): still tighten a bit vs baseline.
         if peak_profit < 25.0 {
-            let micro_gap = (peak_profit * 0.35).clamp(3.0, 8.0); // 35% of peak with bounds
+            let micro_gap = (peak_profit * 0.35).clamp(3.0, 8.0);
             if micro_gap < gap {
                 gap = micro_gap;
+            }
+        } else if peak_profit < 60.0 {
+            let micro_gap_mid = (peak_profit * 0.3).clamp(6.0, 12.0);
+            if micro_gap_mid < gap {
+                gap = micro_gap_mid;
             }
         }
 
