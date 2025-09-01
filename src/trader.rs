@@ -77,12 +77,6 @@ pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 20.0;
 // Position Timing Configuration - Improved for longer holding
 // -----------------------------------------------------------------------------
 
-/// Minimum hold time before considering sell (seconds) - reduced for flexibility
-pub const MIN_POSITION_HOLD_TIME_SECS: f64 = 45.0;
-
-/// Maximum hold time cap for open positions (reduced to 45 minutes for risk control)
-pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 45.0 * 60.0; // 45 minutes (2700 seconds)
-
 /// Re-entry cooldown after closing a position (minutes) - prevents immediate re-buy of same token
 pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 6 * 60; // 6 hours
 
@@ -123,12 +117,6 @@ pub const TOKEN_CHECK_COLLECTION_TIMEOUT_SECS: u64 = 120;
 /// Individual token check handle timeout (seconds)
 pub const TOKEN_CHECK_HANDLE_TIMEOUT_SECS: u64 = 120;
 
-/// Buy operations collection timeout (seconds)
-pub const BUY_OPERATIONS_COLLECTION_TIMEOUT_SECS: u64 = 120;
-
-/// Individual buy operation timeout (seconds) - extended for smart timeout handling
-pub const BUY_OPERATION_SMART_TIMEOUT_SECS: u64 = 600; // 10 minutes total allowance for complex operations
-
 /// Sell operations collection timeout (seconds) - must accommodate multiple 3-min operations
 pub const SELL_OPERATIONS_COLLECTION_TIMEOUT_SECS: u64 = 240;
 
@@ -139,14 +127,8 @@ pub const SELL_OPERATION_SMART_TIMEOUT_SECS: u64 = 600; // 10 minutes total allo
 /// Sell semaphore acquire timeout (seconds) - increased for safety
 pub const SELL_SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 30;
 
-/// Buy semaphore acquire timeout (seconds) - increased for safety
-pub const BUY_SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 180;
-
 /// Individual sell task handle timeout (seconds) - must be longer than operation timeout
 pub const SELL_TASK_HANDLE_TIMEOUT_SECS: u64 = 200;
-
-/// Entry monitor cycle timeout warning threshold (seconds)
-pub const ENTRY_CYCLE_TIMEOUT_WARNING_SECS: u64 = 5;
 
 /// Entry monitor cycle minimum wait time (milliseconds)
 pub const ENTRY_CYCLE_MIN_WAIT_MS: u64 = 100;
@@ -166,27 +148,21 @@ pub const SELL_OPERATION_SHUTDOWN_CHECK_MS: u64 = 1;
 /// Collection shutdown check delay (milliseconds)
 pub const COLLECTION_SHUTDOWN_CHECK_MS: u64 = 1;
 
-// -----------------------------------------------------------------------------
-// Wallet Management Configuration
-// -----------------------------------------------------------------------------
-
-/// Automatically close Associated Token Accounts after selling tokens
-pub const AUTO_CLOSE_ATA_AFTER_SELL: bool = true;
-
 use crate::global::is_debug_trader_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use crate::positions_lib::calculate_position_pnl;
 use crate::tokens::{
-    discover_tokens_once, get_all_tokens_by_liquidity, get_price,
-    pool::{add_watchlist_tokens, get_pool_service},
-    sync_watch_list_with_trader, PriceOptions, Token,
+    get_all_tokens_by_liquidity,
+    get_price,
+    pool::{ add_watchlist_tokens, get_pool_service },
+    sync_watch_list_with_trader,
+    PriceOptions,
+    Token,
 };
 use crate::utils::check_shutdown_or_delay;
-use crate::utils::*;
 
 use crate::entry::get_profit_target;
 use crate::entry::should_buy;
-use crate::errors::{PositionError, ScreenerBotError};
 use crate::filtering::log_filtering_summary;
 
 // =============================================================================
@@ -194,13 +170,9 @@ use crate::filtering::log_filtering_summary;
 // =============================================================================
 
 use chrono::Utc;
-use colored::Colorize;
 use futures;
 use once_cell::sync::Lazy;
-use rand::seq::SliceRandom;
-use rand::SeedableRng;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -211,8 +183,9 @@ use tokio::sync::Notify;
 // =============================================================================
 
 /// Static global: tracks critical trading operations in progress to prevent force shutdown
-pub static CRITICAL_OPERATIONS_IN_PROGRESS: Lazy<Arc<std::sync::atomic::AtomicUsize>> =
-    Lazy::new(|| Arc::new(std::sync::atomic::AtomicUsize::new(0)));
+pub static CRITICAL_OPERATIONS_IN_PROGRESS: Lazy<Arc<std::sync::atomic::AtomicUsize>> = Lazy::new(||
+    Arc::new(std::sync::atomic::AtomicUsize::new(0))
+);
 
 /// Global tracker: number of buy operations currently in-flight (reserved but not yet reflected in open positions)
 // removed legacy in-flight buy tracking; PositionsManager enforces capacity
@@ -231,8 +204,9 @@ pub struct TokenCheckInfo {
 }
 
 /// Global token tracking state
-pub static TOKEN_CHECK_TRACKER: Lazy<Arc<std::sync::RwLock<HashMap<String, TokenCheckInfo>>>> =
-    Lazy::new(|| Arc::new(std::sync::RwLock::new(HashMap::new())));
+pub static TOKEN_CHECK_TRACKER: Lazy<
+    Arc<std::sync::RwLock<HashMap<String, TokenCheckInfo>>>
+> = Lazy::new(|| Arc::new(std::sync::RwLock::new(HashMap::new())));
 
 // =============================================================================
 // CRITICAL OPERATION PROTECTION
@@ -248,8 +222,10 @@ impl CriticalOperationGuard {
     /// Create a new critical operation guard
     /// This should be created before any buy/sell operation
     pub fn new(operation_name: &str) -> Self {
-        let count =
-            CRITICAL_OPERATIONS_IN_PROGRESS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let count = CRITICAL_OPERATIONS_IN_PROGRESS.fetch_add(
+            1,
+            std::sync::atomic::Ordering::SeqCst
+        );
         log(
             LogTag::Trader,
             "CRITICAL_OP_START",
@@ -257,7 +233,7 @@ impl CriticalOperationGuard {
                 "🔒 PROTECTED: {} operation started (active operations: {})",
                 operation_name,
                 count + 1
-            ),
+            )
         );
 
         Self {
@@ -273,15 +249,17 @@ impl CriticalOperationGuard {
 
 impl Drop for CriticalOperationGuard {
     fn drop(&mut self) {
-        let count =
-            CRITICAL_OPERATIONS_IN_PROGRESS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        let count = CRITICAL_OPERATIONS_IN_PROGRESS.fetch_sub(
+            1,
+            std::sync::atomic::Ordering::SeqCst
+        );
         log(
             LogTag::Trader,
             "CRITICAL_OP_END",
             &format!(
                 "🔓 UNPROTECTED: Critical operation finished (remaining operations: {})",
                 count - 1
-            ),
+            )
         );
     }
 }
@@ -317,8 +295,10 @@ pub fn should_debug_force_sell(position: &crate::positions_types::Position) -> b
             "DEBUG_FORCE_SELL",
             &format!(
                 "🚨 DEBUG MODE: Force selling {} after {:.1}s (timeout: {:.1}s)",
-                position.symbol, position_age_secs, DEBUG_FORCE_SELL_TIMEOUT_SECS
-            ),
+                position.symbol,
+                position_age_secs,
+                DEBUG_FORCE_SELL_TIMEOUT_SECS
+            )
         );
         return true;
     }
@@ -375,7 +355,10 @@ pub async fn check_token_for_recent_drop(token: &Token) -> bool {
         .iter()
         .map(|(_, price)| *price)
         .fold(0.0f64, f64::max);
-    let current = recent_prices.last().map(|(_, price)| *price).unwrap_or(0.0);
+    let current = recent_prices
+        .last()
+        .map(|(_, price)| *price)
+        .unwrap_or(0.0);
 
     if max_recent > 0.0 && current > 0.0 {
         let drop_percent = ((max_recent - current) / max_recent) * 100.0;
@@ -438,16 +421,14 @@ pub fn prioritize_tokens_for_checking(mut tokens: Vec<Token>) -> Vec<Token> {
 
 /// Prepare tokens for filtering and trading by fetching from database
 /// Returns all available tokens ready for the filtering system to process
-pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token>, String> {
-    use crate::filtering::{
-        filter_tokens_with_reasons, get_filtering_stats, log_transaction_activity_stats,
-    };
+pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Token>, String> {
+    use crate::filtering::{ filter_tokens_with_reasons, log_transaction_activity_stats };
 
     // Timeout for filtering operations
     const FILTERING_TIMEOUT_SECS: u64 = 120;
 
     // 1. Fetch tokens from safe system
-    let mut tokens = {
+    let tokens = {
         let tokens_from_module: Vec<Token> = match get_all_tokens_by_liquidity().await {
             Ok(api_tokens) => {
                 // Convert ApiToken to Token for compatibility with existing code
@@ -460,7 +441,7 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
                 log(
                     LogTag::Trader,
                     "WARN",
-                    &format!("Failed to get tokens from safe system: {}", e),
+                    &format!("Failed to get tokens from safe system: {}", e)
                 );
                 Vec::new()
             }
@@ -471,24 +452,27 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
             log(
                 LogTag::Trader,
                 "DEBUG",
-                &format!(
-                    "Total tokens from safe system: {}",
-                    tokens_from_module.len()
-                ),
+                &format!("Total tokens from safe system: {}", tokens_from_module.len())
             );
         }
 
         // Count tokens with liquidity data
         let with_liquidity = tokens_from_module
             .iter()
-            .filter(|token| token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0) > 0.0)
+            .filter(
+                |token|
+                    token.liquidity
+                        .as_ref()
+                        .and_then(|l| l.usd)
+                        .unwrap_or(0.0) > 0.0
+            )
             .count();
 
         if with_liquidity > 0 {
             log(
                 LogTag::Trader,
                 "INFO",
-                &format!("Processing {} tokens with liquidity", with_liquidity),
+                &format!("Processing {} tokens with liquidity", with_liquidity)
             );
         }
 
@@ -505,11 +489,9 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
             tokio::task::spawn_blocking({
                 let tokens_copy = tokens.to_vec();
                 move || filter_tokens_with_reasons(&tokens_copy)
-            })
-            .await
-        },
-    )
-    .await;
+            }).await
+        }
+    ).await;
 
     let (eligible_tokens, rejected_tokens) = match filtering_result {
         Ok(Ok(result)) => result,
@@ -517,10 +499,7 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
             return Err(format!("Token filtering task failed: {}", e));
         }
         Err(_) => {
-            return Err(format!(
-                "Token filtering timed out after {}s",
-                FILTERING_TIMEOUT_SECS
-            ));
+            return Err(format!("Token filtering timed out after {}s", FILTERING_TIMEOUT_SECS));
         }
     };
 
@@ -539,7 +518,7 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
                     0.0
                 },
                 tokens.len()
-            ),
+            )
         );
     }
 
@@ -555,17 +534,14 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
             log(
                 LogTag::Trader,
                 "DEBUG",
-                &format!("🚫 {} filtered out: {:?}", token.symbol, reason),
+                &format!("🚫 {} filtered out: {:?}", token.symbol, reason)
             );
         }
         if rejected_tokens.len() > sample_size {
             log(
                 LogTag::Trader,
                 "DEBUG",
-                &format!(
-                    "... and {} more tokens filtered out",
-                    rejected_tokens.len() - sample_size
-                ),
+                &format!("... and {} more tokens filtered out", rejected_tokens.len() - sample_size)
             );
         }
     }
@@ -584,8 +560,7 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
                     .iter()
                     .take(10)
                     .filter(|t| {
-                        TOKEN_CHECK_TRACKER
-                            .read()
+                        TOKEN_CHECK_TRACKER.read()
                             .unwrap()
                             .get(&t.mint)
                             .map(|info| info.had_recent_drop)
@@ -595,8 +570,7 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
                 prioritized_tokens
                     .iter()
                     .filter(|t| {
-                        TOKEN_CHECK_TRACKER
-                            .read()
+                        TOKEN_CHECK_TRACKER.read()
                             .unwrap()
                             .get(&t.mint)
                             .map(|info| info.check_count == 0)
@@ -604,7 +578,7 @@ pub async fn prepare_tokens(cycle_start: std::time::Instant) -> Result<Vec<Token
                     })
                     .count(),
                 prioritized_tokens.len() - 10
-            ),
+            )
         );
     }
 
@@ -616,38 +590,29 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
     // Clone shutdown once at the start to avoid borrow checker issues
     let shutdown = shutdown.clone();
 
-    log(
-        LogTag::Trader,
-        "STARTUP",
-        "🚀 Starting monitor_new_entries task",
-    );
+    log(LogTag::Trader, "STARTUP", "🚀 Starting monitor_new_entries task");
 
     'outer: loop {
         // Check for shutdown at the very beginning of each loop iteration
         if check_shutdown_or_delay(&shutdown, Duration::from_millis(10)).await {
-            log(
-                LogTag::Trader,
-                "INFO",
-                "✅ New entries monitor shutdown requested at loop start",
-            );
+            log(LogTag::Trader, "INFO", "✅ New entries monitor shutdown requested at loop start");
             break 'outer;
         }
 
         // CRITICAL: Wait for position recalculation to complete before starting any trading operations
-        if !crate::global::POSITION_RECALCULATION_COMPLETE.load(std::sync::atomic::Ordering::SeqCst)
+        if
+            !crate::global::POSITION_RECALCULATION_COMPLETE.load(
+                std::sync::atomic::Ordering::SeqCst
+            )
         {
-            log(
-                LogTag::Trader,
-                "STARTUP",
-                "⏳ Waiting for position recalculation to complete...",
-            );
+            log(LogTag::Trader, "STARTUP", "⏳ Waiting for position recalculation to complete...");
 
             // Use shutdown-aware sleep instead of fixed sleep
             if check_shutdown_or_delay(&shutdown, Duration::from_secs(1)).await {
                 log(
                     LogTag::Trader,
                     "INFO",
-                    "✅ New entries monitor shutdown during position recalc wait",
+                    "✅ New entries monitor shutdown during position recalc wait"
                 );
                 break 'outer;
             }
@@ -659,11 +624,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         // Check for shutdown before starting main processing
         if check_shutdown_or_delay(&shutdown, Duration::from_millis(10)).await {
-            log(
-                LogTag::Trader,
-                "INFO",
-                "✅ New entries monitor shutdown before token processing",
-            );
+            log(LogTag::Trader, "INFO", "✅ New entries monitor shutdown before token processing");
             break 'outer;
         }
 
@@ -671,22 +632,14 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let tokens = match prepare_tokens(cycle_start).await {
             Ok(tokens) => tokens,
             Err(e) => {
-                log(
-                    LogTag::Trader,
-                    "ERROR",
-                    &format!("Token preparation failed: {}", e),
-                );
+                log(LogTag::Trader, "ERROR", &format!("Token preparation failed: {}", e));
                 continue; // Skip this cycle and try again
             }
         };
 
         // Early return if no tokens to process
         if tokens.is_empty() {
-            log(
-                LogTag::Trader,
-                "INFO",
-                "No tokens to process, skipping token checking cycle",
-            );
+            log(LogTag::Trader, "INFO", "No tokens to process, skipping token checking cycle");
 
             // Calculate how long we've spent in this cycle
             let cycle_duration = cycle_start.elapsed();
@@ -697,11 +650,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             };
 
             if check_shutdown_or_delay(&shutdown, wait_time).await {
-                log(
-                    LogTag::Trader,
-                    "INFO",
-                    "new entries monitor shutting down...",
-                );
+                log(LogTag::Trader, "INFO", "new entries monitor shutting down...");
                 break;
             }
             continue;
@@ -728,33 +677,29 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Note: tokens are now prioritized by recent drops and fair rotation
         for token in tokens.iter() {
             // Check for shutdown before spawning tasks
-            if check_shutdown_or_delay(
-                &shutdown,
-                Duration::from_millis(TOKEN_PROCESSING_SHUTDOWN_CHECK_MS),
-            )
-            .await
+            if
+                check_shutdown_or_delay(
+                    &shutdown,
+                    Duration::from_millis(TOKEN_PROCESSING_SHUTDOWN_CHECK_MS)
+                ).await
             {
-                log(
-                    LogTag::Trader,
-                    "INFO",
-                    "new entries monitor shutting down...",
-                );
+                log(LogTag::Trader, "INFO", "new entries monitor shutting down...");
                 break 'outer;
             }
 
             // Get permit from semaphore to limit concurrency with timeout
-            let permit = match tokio::time::timeout(
-                Duration::from_secs(SEMAPHORE_ACQUIRE_TIMEOUT_SECS),
-                semaphore.clone().acquire_owned(),
-            )
-            .await
+            let permit = match
+                tokio::time::timeout(
+                    Duration::from_secs(SEMAPHORE_ACQUIRE_TIMEOUT_SECS),
+                    semaphore.clone().acquire_owned()
+                ).await
             {
                 Ok(Ok(permit)) => permit,
                 Ok(Err(e)) => {
                     log(
                         LogTag::Trader,
                         "ERROR",
-                        &format!("Failed to acquire semaphore permit: {}", e),
+                        &format!("Failed to acquire semaphore permit: {}", e)
                     );
                     continue;
                 }
@@ -762,10 +707,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     log(
                         LogTag::Trader,
                         "WARN",
-                        &format!(
-                            "Semaphore acquire timed out after {} seconds",
-                            SEMAPHORE_ACQUIRE_TIMEOUT_SECS
-                        ),
+                        &format!("Semaphore acquire timed out after {} seconds", SEMAPHORE_ACQUIRE_TIMEOUT_SECS)
                     );
                     continue;
                 }
@@ -780,11 +722,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 let _permit = permit; // This will be automatically dropped when the task completes
 
                 // Check for shutdown before starting task
-                if check_shutdown_or_delay(
-                    &shutdown_clone,
-                    Duration::from_millis(TASK_SHUTDOWN_CHECK_MS),
-                )
-                .await
+                if
+                    check_shutdown_or_delay(
+                        &shutdown_clone,
+                        Duration::from_millis(TASK_SHUTDOWN_CHECK_MS)
+                    ).await
                 {
                     return;
                 }
@@ -912,31 +854,26 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             Duration::from_secs(TOKEN_CHECK_COLLECTION_TIMEOUT_SECS),
             async {
                 for handle in handles {
-                    if check_shutdown_or_delay(
-                        &shutdown,
-                        Duration::from_millis(COLLECTION_SHUTDOWN_CHECK_MS),
-                    )
-                    .await
+                    if
+                        check_shutdown_or_delay(
+                            &shutdown,
+                            Duration::from_millis(COLLECTION_SHUTDOWN_CHECK_MS)
+                        ).await
                     {
                         return;
                     }
                     let _ = tokio::time::timeout(
                         Duration::from_secs(TOKEN_CHECK_HANDLE_TIMEOUT_SECS),
-                        handle,
-                    )
-                    .await;
+                        handle
+                    ).await;
                 }
-            },
-        )
-        .await;
+            }
+        ).await;
         if collection_result.is_err() {
             log(
                 LogTag::Trader,
                 "ERROR",
-                &format!(
-                    "Token check collection timed out after {} seconds",
-                    TOKEN_CHECK_COLLECTION_TIMEOUT_SECS
-                ),
+                &format!("Token check collection timed out after {} seconds", TOKEN_CHECK_COLLECTION_TIMEOUT_SECS)
             );
         }
 
@@ -947,10 +884,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             log(
                 LogTag::Trader,
                 "WARN",
-                &format!(
-                    "Token checking cycle took longer than interval: {:?}",
-                    cycle_duration
-                ),
+                &format!("Token checking cycle took longer than interval: {:?}", cycle_duration)
             );
             Duration::from_millis(ENTRY_CYCLE_MIN_WAIT_MS)
         } else {
@@ -959,11 +893,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         };
 
         if check_shutdown_or_delay(&shutdown, wait_time).await {
-            log(
-                LogTag::Trader,
-                "INFO",
-                "new entries monitor shutting down...",
-            );
+            log(LogTag::Trader, "INFO", "new entries monitor shutting down...");
             break;
         }
     }
@@ -976,12 +906,15 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
     loop {
         // CRITICAL: Wait for position recalculation to complete before starting any position monitoring
-        if !crate::global::POSITION_RECALCULATION_COMPLETE.load(std::sync::atomic::Ordering::SeqCst)
+        if
+            !crate::global::POSITION_RECALCULATION_COMPLETE.load(
+                std::sync::atomic::Ordering::SeqCst
+            )
         {
             log(
                 LogTag::Trader,
                 "STARTUP",
-                "⏳ Position monitor waiting for recalculation to complete...",
+                "⏳ Position monitor waiting for recalculation to complete..."
             );
             tokio::time::sleep(Duration::from_secs(1)).await;
             continue;
@@ -999,7 +932,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     &format!(
                         "Requesting priority price updates for {} open positions",
                         open_position_mints.len()
-                    ),
+                    )
                 );
             }
 
@@ -1013,7 +946,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         "Priority updates completed: {}/{} successful",
                         updated_count,
                         open_position_mints.len()
-                    ),
+                    )
                 );
             }
         }
@@ -1046,7 +979,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     "Skipping {} unverified open positions, processing {} verified positions",
                     unverified_count,
                     open_positions_data.len()
-                ),
+                )
             );
         }
 
@@ -1078,52 +1011,56 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         let price_results = futures::future::join_all(price_futures).await;
 
         // Create price lookup map for fast access
-        let price_map: std::collections::HashMap<String, (f64, crate::tokens::PriceResult)> =
-            price_results
-                .into_iter()
-                .filter_map(|(mint, result_opt)| {
-                    result_opt.map(|(price, price_result)| (mint, (price, price_result)))
-                })
-                .collect();
+        let price_map: std::collections::HashMap<
+            String,
+            (f64, crate::tokens::PriceResult)
+        > = price_results
+            .into_iter()
+            .filter_map(|(mint, result_opt)| {
+                result_opt.map(|(price, price_result)| (mint, (price, price_result)))
+            })
+            .collect();
 
         // Now process each position with async calls (mutex is released)
         for position in open_positions_data.into_iter() {
-            let mut position = position; // local mutable copy for calculations/logs
+            let position = position; // local copy for calculations/logs
 
             // Get current price and price result from our parallel fetch results
             if let Some((current_price, price_result)) = price_map.get(&position.mint) {
                 let current_price = *current_price;
                 if current_price > 0.0 && current_price.is_finite() {
                     // Send price update to positions manager for tracking
-                    let tracking_result = crate::positions::update_position_tracking(
+                    let _tracking_result = crate::positions::update_position_tracking(
                         &position.mint,
                         current_price,
-                        price_result,
-                    )
-                    .await;
+                        price_result
+                    ).await;
 
                     let now = Utc::now();
 
                     // Calculate P&L for logging and decision making
-                    let (pnl_sol, pnl_percent) =
-                        calculate_position_pnl(&position, Some(current_price)).await;
+                    let (pnl_sol, pnl_percent) = calculate_position_pnl(
+                        &position,
+                        Some(current_price)
+                    ).await;
 
                     // Check debug force sell first
                     let debug_force_sell = should_debug_force_sell(&position);
 
                     // Calculate sell decision using the unified profit system
-                    let should_exit_base = debug_force_sell
-                        || crate::profit::should_sell(&position, current_price).await;
+                    let should_exit_base =
+                        debug_force_sell ||
+                        crate::profit::should_sell(&position, current_price).await;
 
                     // Apply minimum profit threshold check if enabled
                     let should_exit = if MIN_PROFIT_THRESHOLD_ENABLED && !debug_force_sell {
                         // Check if position qualifies for time-based override
                         let position_age_hours =
-                            (now.signed_duration_since(position.entry_time).num_seconds() as f64)
-                                / 3600.0;
-                        let time_override_applies = position_age_hours
-                            >= TIME_OVERRIDE_DURATION_HOURS
-                            && pnl_percent <= TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT;
+                            (now.signed_duration_since(position.entry_time).num_seconds() as f64) /
+                            3600.0;
+                        let time_override_applies =
+                            position_age_hours >= TIME_OVERRIDE_DURATION_HOURS &&
+                            pnl_percent <= TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT;
 
                         if time_override_applies {
                             // Time override: Allow should_sell to decide for old positions with significant losses
@@ -1140,11 +1077,11 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                     if is_debug_trader_enabled() {
                         let position_age_hours =
-                            (now.signed_duration_since(position.entry_time).num_seconds() as f64)
-                                / 3600.0;
-                        let time_override_applies = position_age_hours
-                            >= TIME_OVERRIDE_DURATION_HOURS
-                            && pnl_percent <= TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT;
+                            (now.signed_duration_since(position.entry_time).num_seconds() as f64) /
+                            3600.0;
+                        let time_override_applies =
+                            position_age_hours >= TIME_OVERRIDE_DURATION_HOURS &&
+                            pnl_percent <= TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT;
 
                         debug_trader_log(
                             "SELL_ANALYSIS",
@@ -1171,8 +1108,9 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     if should_exit {
                         // CRITICAL: Check pool availability before selling
                         let pool_service = get_pool_service();
-                        let has_pool_availability =
-                            pool_service.check_token_availability(&position.mint).await;
+                        let has_pool_availability = pool_service.check_token_availability(
+                            &position.mint
+                        ).await;
 
                         if !has_pool_availability {
                             if is_debug_trader_enabled() {
@@ -1180,24 +1118,25 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                     "SELL_POOL_UNAVAILABLE",
                                     &format!(
                                         "SKIPPING SELL for {} ({}): No pool available for trading",
-                                        position.symbol, position.mint
-                                    ),
+                                        position.symbol,
+                                        position.mint
+                                    )
                                 );
                             }
                             continue;
                         }
 
                         // Fetch full token from database
-                        let Some(full_token) =
-                            crate::tokens::get_token_from_db(&position.mint).await
-                        else {
+                        let Some(full_token) = crate::tokens::get_token_from_db(
+                            &position.mint
+                        ).await else {
                             log(
                                 LogTag::Trader,
                                 "ERROR",
                                 &format!(
                                     "Token not found in DB for mint {} — skipping sell",
                                     position.mint
-                                ),
+                                )
                             );
                             continue;
                         };
@@ -1207,8 +1146,11 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             "SELL",
                             &format!(
                                 "Sell signal for {} ({}) - P&L: {:.2}% ({:.6} SOL) - SHOULD EXIT",
-                                position.symbol, position.mint, pnl_percent, pnl_sol
-                            ),
+                                position.symbol,
+                                position.mint,
+                                pnl_percent,
+                                pnl_sol
+                            )
                         );
 
                         positions_to_close.push((
@@ -1230,7 +1172,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                     pnl_percent,
                                     pnl_sol,
                                     current_price
-                                ),
+                                )
                             );
                         }
                     }
@@ -1243,8 +1185,10 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         "WARN",
                         &format!(
                             "Invalid price for position monitoring: {} ({}) - Price = {:.10}",
-                            position.symbol, position.mint, current_price
-                        ),
+                            position.symbol,
+                            position.mint,
+                            current_price
+                        )
                     );
                 }
             } else {
@@ -1253,8 +1197,9 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     "WARN",
                     &format!(
                         "No price found for open position: {} ({})",
-                        position.symbol, position.mint
-                    ),
+                        position.symbol,
+                        position.mint
+                    )
                 );
             }
         }
@@ -1268,28 +1213,28 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             let mut handles = Vec::new();
 
             // Process all sell orders concurrently
-            for (position, token, exit_price, exit_time, sell_urgency) in positions_to_close {
+            for (position, token, exit_price, _exit_time, _sell_urgency) in positions_to_close {
                 // Check for shutdown before spawning tasks
-                if check_shutdown_or_delay(
-                    &shutdown,
-                    Duration::from_millis(SELL_OPERATION_SHUTDOWN_CHECK_MS),
-                )
-                .await
+                if
+                    check_shutdown_or_delay(
+                        &shutdown,
+                        Duration::from_millis(SELL_OPERATION_SHUTDOWN_CHECK_MS)
+                    ).await
                 {
                     log(
                         LogTag::Trader,
                         "INFO",
-                        "open positions monitor shutting down during sell processing...",
+                        "open positions monitor shutting down during sell processing..."
                     );
                     break;
                 }
 
                 // Get permit from semaphore to limit concurrency with timeout
-                let permit = match tokio::time::timeout(
-                    Duration::from_secs(SELL_SEMAPHORE_ACQUIRE_TIMEOUT_SECS),
-                    semaphore.clone().acquire_owned(),
-                )
-                .await
+                let permit = match
+                    tokio::time::timeout(
+                        Duration::from_secs(SELL_SEMAPHORE_ACQUIRE_TIMEOUT_SECS),
+                        semaphore.clone().acquire_owned()
+                    ).await
                 {
                     Ok(Ok(permit)) => permit,
                     Ok(Err(_)) | Err(_) => {
@@ -1306,41 +1251,40 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     // CRITICAL OPERATION PROTECTION - Prevent shutdown during sell
                     let _guard = CriticalOperationGuard::new(&format!("SELL_{}", token.symbol));
 
-                    let mut position = position;
+                    let position = position;
                     let token_symbol = token.symbol.clone();
 
                     // Check for shutdown before starting sell operation (non-blocking check)
                     let shutdown_check = tokio::time::timeout(
                         Duration::from_millis(SELL_OPERATION_SHUTDOWN_CHECK_MS),
-                        shutdown_for_task.notified(),
-                    )
-                    .await;
+                        shutdown_for_task.notified()
+                    ).await;
                     if shutdown_check.is_ok() {
                         return false;
                     }
 
                     // Wrap the sell operation in a timeout
-                    match tokio::time::timeout(
-                        Duration::from_secs(SELL_OPERATION_SMART_TIMEOUT_SECS),
-                        async {
-                            crate::positions::close_position_direct(
-                                &position.mint,
-                                &token,
-                                exit_price,
-                                "Trading decision".to_string(),
-                                Utc::now(),
-                            )
-                            .await
-                            .map(|_| ())
-                        },
-                    )
-                    .await
+                    match
+                        tokio::time::timeout(
+                            Duration::from_secs(SELL_OPERATION_SMART_TIMEOUT_SECS),
+                            async {
+                                crate::positions
+                                    ::close_position_direct(
+                                        &position.mint,
+                                        &token,
+                                        exit_price,
+                                        "Trading decision".to_string(),
+                                        Utc::now()
+                                    ).await
+                                    .map(|_| ())
+                            }
+                        ).await
                     {
                         Ok(Ok(())) => {
                             log(
                                 LogTag::Trader,
                                 "SUCCESS",
-                                &format!("Successfully closed position for {}", token_symbol),
+                                &format!("Successfully closed position for {}", token_symbol)
                             );
                             true
                         }
@@ -1348,7 +1292,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             log(
                                 LogTag::Trader,
                                 "ERROR",
-                                &format!("Failed to close position for {}: {}", token_symbol, e),
+                                &format!("Failed to close position for {}: {}", token_symbol, e)
                             );
                             false
                         }
@@ -1356,7 +1300,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             log(
                                 LogTag::Trader,
                                 "ERROR",
-                                &format!("Sell operation for {} timed out", token_symbol),
+                                &format!("Sell operation for {} timed out", token_symbol)
                             );
                             false
                         }
@@ -1375,33 +1319,34 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                     for handle in handles {
                         // Skip if shutdown signal received
-                        if check_shutdown_or_delay(
-                            &shutdown,
-                            Duration::from_millis(COLLECTION_SHUTDOWN_CHECK_MS),
-                        )
-                        .await
+                        if
+                            check_shutdown_or_delay(
+                                &shutdown,
+                                Duration::from_millis(COLLECTION_SHUTDOWN_CHECK_MS)
+                            ).await
                         {
                             break;
                         }
 
                         // Add timeout for each handle
-                        match tokio::time::timeout(
-                            Duration::from_secs(SELL_TASK_HANDLE_TIMEOUT_SECS),
-                            handle,
-                        )
-                        .await
+                        match
+                            tokio::time::timeout(
+                                Duration::from_secs(SELL_TASK_HANDLE_TIMEOUT_SECS),
+                                handle
+                            ).await
                         {
-                            Ok(task_result) => match task_result {
-                                Ok(success) => {
-                                    completed += 1;
-                                    if success {
-                                        successful += 1;
+                            Ok(task_result) =>
+                                match task_result {
+                                    Ok(success) => {
+                                        completed += 1;
+                                        if success {
+                                            successful += 1;
+                                        }
+                                    }
+                                    Err(_) => {
+                                        completed += 1;
                                     }
                                 }
-                                Err(_) => {
-                                    completed += 1;
-                                }
-                            },
                             Err(_) => {
                                 completed += 1;
                             }
@@ -1409,9 +1354,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     }
 
                     (completed, successful)
-                },
-            )
-            .await;
+                }
+            ).await;
 
             if let Ok((completed, successful)) = collection_result {
                 if completed > 0 {
@@ -1420,24 +1364,21 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         "INFO",
                         &format!(
                             "Sell operations completed: {}/{} successful",
-                            successful, completed
-                        ),
+                            successful,
+                            completed
+                        )
                     );
                 }
             }
         }
 
-        if check_shutdown_or_delay(
-            &shutdown,
-            Duration::from_secs(POSITION_MONITOR_INTERVAL_SECS),
-        )
-        .await
+        if
+            check_shutdown_or_delay(
+                &shutdown,
+                Duration::from_secs(POSITION_MONITOR_INTERVAL_SECS)
+            ).await
         {
-            log(
-                LogTag::Trader,
-                "INFO",
-                "open positions monitor shutting down...",
-            );
+            log(LogTag::Trader, "INFO", "open positions monitor shutting down...");
             break;
         }
     }
