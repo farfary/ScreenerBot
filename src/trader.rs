@@ -398,6 +398,28 @@ pub fn get_top_confidence_tokens(limit: usize) -> Vec<TokenConfidenceInfo> {
         .collect()
 }
 
+/// Check if a token has stale price history that needs refreshing
+pub async fn has_stale_price_history(token_mint: &str) -> bool {
+    let pool_service = get_pool_service();
+    let history = pool_service.get_recent_price_history(token_mint).await;
+
+    // Consider history stale if:
+    // 1. No history at all
+    // 2. Less than 3 entries (insufficient for entry analysis)
+    // 3. Most recent entry is older than 2 minutes (consistent with watchlist logic)
+    if history.is_empty() || history.len() < 3 {
+        return true;
+    }
+
+    // Check age of most recent entry
+    let now = chrono::Utc::now();
+    if let Some((most_recent_time, _)) = history.last() {
+        let age_minutes = now.signed_duration_since(*most_recent_time).num_minutes();
+        age_minutes > 2 // Stale if older than 2 minutes (consistent threshold)
+    } else {
+        true // No recent entry means stale
+    }
+}
 /// Clean up stale confidence entries
 pub fn cleanup_stale_confidence_entries() {
     let mut tracker = TOKEN_CONFIDENCE_TRACKER.write().unwrap();
@@ -548,9 +570,35 @@ pub fn prioritize_tokens_for_checking(mut tokens: Vec<Token>) -> Vec<Token> {
     });
 
     // Clean up very old entries (>10 minutes) to prevent memory growth
-    drop(tracker);
-    let mut tracker_write = TOKEN_CHECK_TRACKER.write().unwrap();
-    tracker_write.retain(|_, info| now.duration_since(info.last_check_time).as_secs() < 600);
+    // Only do this cleanup every ~10 calls to reduce lock contention
+    static mut CLEANUP_COUNTER: u32 = 0;
+    let should_cleanup = unsafe {
+        CLEANUP_COUNTER += 1;
+        CLEANUP_COUNTER % 10 == 0
+    };
+
+    if should_cleanup {
+        drop(tracker);
+        let mut tracker_write = TOKEN_CHECK_TRACKER.write().unwrap();
+        let before_count = tracker_write.len();
+        tracker_write.retain(|_, info| now.duration_since(info.last_check_time).as_secs() < 600);
+        let after_count = tracker_write.len();
+
+        if is_debug_trader_enabled() && before_count != after_count {
+            log(
+                LogTag::Trader,
+                "TRACKER_CLEANUP",
+                &format!(
+                    "🧹 Cleaned up {} stale token tracking entries ({} -> {})",
+                    before_count - after_count,
+                    before_count,
+                    after_count
+                )
+            );
+        }
+    } else {
+        drop(tracker);
+    }
 
     tokens
 }
@@ -997,25 +1045,116 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Process tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
-        // Note: tokens are now prioritized by recent drops and fair rotation
-        // Proactively feed a slice of prioritized tokens into price-service watchlist to build price history
-        // This directly addresses lack of history without touching entry.rs or the 5s schedule
+        // Intelligently prioritize tokens for watchlist based on price history needs
+        // This ensures tokens with insufficient or stale price history get fresh price updates
         if !tokens.is_empty() {
-            // Limit to a reasonable batch to avoid flooding the watchlist
-            let watch_batch: Vec<String> = tokens
-                .iter()
-                .take(50)
-                .map(|t| t.mint.clone())
-                .collect();
+            let pool_service = get_pool_service();
+            let mut tokens_needing_updates = Vec::new();
+            let mut tokens_with_good_history = Vec::new();
+
+            // Categorize tokens based on their price history status
+            // Use concurrent checking for better performance with many tokens
+            if tokens.len() > 50 {
+                // For large token sets, use concurrent processing
+                let futures: Vec<_> = tokens
+                    .iter()
+                    .map(|token| {
+                        let pool_service = pool_service;
+                        let token_mint = token.mint.clone();
+                        async move {
+                            let history = pool_service.get_recent_price_history(&token_mint).await;
+
+                            let needs_update = if history.is_empty() {
+                                true // No history at all
+                            } else if history.len() < 3 {
+                                true // Insufficient history for entry analysis
+                            } else {
+                                // Check if most recent price is stale (older than 2 minutes)
+                                let now = chrono::Utc::now();
+                                let most_recent_time = history
+                                    .last()
+                                    .map(|(time, _)| *time)
+                                    .unwrap_or(now);
+                                let age_minutes = now
+                                    .signed_duration_since(most_recent_time)
+                                    .num_minutes();
+                                age_minutes > 2 // Stale if older than 2 minutes
+                            };
+
+                            (token_mint, needs_update)
+                        }
+                    })
+                    .collect();
+
+                let results = futures::future::join_all(futures).await;
+
+                for (mint, needs_update) in results {
+                    if needs_update {
+                        tokens_needing_updates.push(mint);
+                    } else {
+                        tokens_with_good_history.push(mint);
+                    }
+                }
+            } else {
+                // For smaller token sets, use sequential processing to avoid overhead
+                for token in tokens.iter() {
+                    let history = pool_service.get_recent_price_history(&token.mint).await;
+
+                    // Check if token needs price updates based on:
+                    // 1. Insufficient history (< 3 entries)
+                    // 2. Stale history (most recent entry > 2 minutes old)
+                    // 3. No history at all
+                    let needs_update = if history.is_empty() {
+                        true // No history at all
+                    } else if history.len() < 3 {
+                        true // Insufficient history for entry analysis
+                    } else {
+                        // Check if most recent price is stale (older than 2 minutes)
+                        let now = chrono::Utc::now();
+                        let most_recent_time = history
+                            .last()
+                            .map(|(time, _)| *time)
+                            .unwrap_or(now);
+                        let age_minutes = now.signed_duration_since(most_recent_time).num_minutes();
+                        age_minutes > 2 // Stale if older than 2 minutes
+                    };
+
+                    if needs_update {
+                        tokens_needing_updates.push(token.mint.clone());
+                    } else {
+                        tokens_with_good_history.push(token.mint.clone());
+                    }
+                }
+            } // Create watchlist batch prioritizing tokens that need updates
+            let mut watch_batch = Vec::new();
+
+            // First: Add all tokens needing updates (up to 40 slots)
+            let priority_count = std::cmp::min(40, tokens_needing_updates.len());
+            watch_batch.extend_from_slice(&tokens_needing_updates[..priority_count]);
+
+            // Then: Fill remaining slots with tokens that have good history (for rotation)
+            let remaining_slots = if watch_batch.len() < 50 {
+                50 - watch_batch.len()
+            } else {
+                0 // Safety check to prevent underflow
+            };
+            if remaining_slots > 0 && !tokens_with_good_history.is_empty() {
+                let rotation_count = std::cmp::min(remaining_slots, tokens_with_good_history.len());
+                watch_batch.extend_from_slice(&tokens_with_good_history[..rotation_count]);
+            }
+
             if !watch_batch.is_empty() {
                 add_watchlist_tokens(&watch_batch).await;
+
                 if is_debug_trader_enabled() {
                     log(
                         LogTag::Trader,
-                        "WATCHLIST_PRIME",
+                        "WATCHLIST_INTELLIGENT",
                         &format!(
-                            "Primed {} tokens to price watchlist for history building",
-                            watch_batch.len()
+                            "🎯 Added {} tokens to watchlist: {} priority (low/stale history), {} rotation (good history)",
+                            watch_batch.len(),
+                            priority_count,
+                            watch_batch.len() - priority_count
                         )
                     );
                 }
@@ -1082,6 +1221,33 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 match
                     tokio::time::timeout(Duration::from_secs(TOKEN_CHECK_TASK_TIMEOUT_SECS), async {
                         let pool_service = get_pool_service();
+
+                        // ENHANCEMENT: Check if token has insufficient price history and force an update if needed
+                        let history_before = pool_service.get_recent_price_history(
+                            &token.mint
+                        ).await;
+                        let needs_history_boost = history_before.len() < 3;
+
+                        if needs_history_boost {
+                            // Force a price update by calling get_pool_price which will cache the result
+                            let _ = pool_service.get_pool_price(
+                                &token.mint,
+                                None,
+                                &PriceOptions::default()
+                            ).await;
+
+                            if is_debug_trader_enabled() {
+                                log(
+                                    LogTag::Trader,
+                                    "HISTORY_BOOST",
+                                    &format!(
+                                        "🔄 Force-updated price for {} (had {} history entries)",
+                                        token.symbol,
+                                        history_before.len()
+                                    )
+                                );
+                            }
+                        }
 
                         // Get current pool price
                         let current_price = match
@@ -1869,6 +2035,117 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             ).await
         {
             log(LogTag::Trader, "INFO", "open positions monitor shutting down...");
+            break;
+        }
+    }
+}
+
+/// Background task to refresh stale price history for tokens
+/// Runs every 2 minutes to ensure tokens with stale price data get fresh updates
+pub async fn refresh_stale_price_history(shutdown: Arc<Notify>) {
+    let shutdown = shutdown.clone();
+
+    log(LogTag::Trader, "STARTUP", "🔄 Starting stale price history refresh task");
+
+    loop {
+        // Wait for position recalculation to complete
+        if
+            !crate::global::POSITION_RECALCULATION_COMPLETE.load(
+                std::sync::atomic::Ordering::SeqCst
+            )
+        {
+            if check_shutdown_or_delay(&shutdown, Duration::from_secs(1)).await {
+                log(
+                    LogTag::Trader,
+                    "INFO",
+                    "✅ Stale history refresh shutdown during position recalc wait"
+                );
+                break;
+            }
+            continue;
+        }
+
+        // Get a sample of active tokens from the database
+        let tokens = match get_all_tokens_by_liquidity().await {
+            Ok(api_tokens) => {
+                // Convert to Token format and take first 100 for stale checking
+                api_tokens
+                    .into_iter()
+                    .take(100)
+                    .map(|api_token| api_token.into())
+                    .collect::<Vec<crate::tokens::Token>>()
+            }
+            Err(_) => {
+                if check_shutdown_or_delay(&shutdown, Duration::from_secs(30)).await {
+                    break;
+                }
+                continue;
+            }
+        };
+
+        if tokens.is_empty() {
+            if check_shutdown_or_delay(&shutdown, Duration::from_secs(120)).await {
+                // 2 minutes
+                break;
+            }
+            continue;
+        }
+
+        // Find tokens with stale price history
+        let mut stale_tokens = Vec::new();
+        let pool_service = get_pool_service();
+
+        for token in tokens.iter() {
+            if has_stale_price_history(&token.mint).await {
+                stale_tokens.push(token.mint.clone());
+            }
+
+            // Limit batch size to avoid overwhelming the system
+            if stale_tokens.len() >= 20 {
+                break;
+            }
+        }
+
+        if !stale_tokens.is_empty() {
+            // Force price updates for stale tokens with error tracking
+            let mut success_count = 0;
+            let mut error_count = 0;
+
+            for mint in &stale_tokens {
+                match pool_service.get_pool_price(mint, None, &PriceOptions::default()).await {
+                    Some(_) => {
+                        success_count += 1;
+                    }
+                    None => {
+                        error_count += 1;
+                        if is_debug_trader_enabled() {
+                            log(
+                                LogTag::Trader,
+                                "STALE_REFRESH_ERROR",
+                                &format!("❌ Failed to refresh price for {}", &mint[..8])
+                            );
+                        }
+                    }
+                }
+            }
+
+            if is_debug_trader_enabled() {
+                log(
+                    LogTag::Trader,
+                    "STALE_REFRESH",
+                    &format!(
+                        "🔄 Stale price refresh: {} successful, {} failed out of {} tokens",
+                        success_count,
+                        error_count,
+                        stale_tokens.len()
+                    )
+                );
+            }
+        }
+
+        // Wait 2 minutes before next refresh cycle
+        if check_shutdown_or_delay(&shutdown, Duration::from_secs(120)).await {
+            log(LogTag::Trader, "INFO", "✅ Stale history refresh shutting down");
             break;
         }
     }

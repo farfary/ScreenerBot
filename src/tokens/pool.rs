@@ -48,23 +48,23 @@ const PRICE_CACHE_TTL_SECONDS: i64 = 8;
 const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 2;
 
 /// Watchlist batch size for random updates
-const WATCHLIST_BATCH_SIZE: usize = 10;
+const WATCHLIST_BATCH_SIZE: usize = 25;
 
 /// Watchlist update interval (spread updates over time)
-const WATCHLIST_UPDATE_INTERVAL_SECS: u64 = 5;
+const WATCHLIST_UPDATE_INTERVAL_SECS: u64 = 3;
 
 /// Maximum tokens per DexScreener API call
 const MAX_TOKENS_PER_BATCH: usize = 30;
 
 /// Maximum watchlist size (user requirement)
-const MAX_WATCHLIST_SIZE: usize = 100;
+const MAX_WATCHLIST_SIZE: usize = 200;
 
 /// Minimum liquidity (USD) required to consider a pool usable for price calculation.
 /// Lower this for testing environments if you want stats to increment sooner.
 pub const MIN_POOL_LIQUIDITY_USD: f64 = 1000.0;
 
 // Monitoring concurrency & performance budgeting
-const POOL_MONITOR_CONCURRENCY: usize = 5; // Max concurrent token updates per cycle
+const POOL_MONITOR_CONCURRENCY: usize = 20; // Max concurrent token updates per cycle
 const POOL_MONITOR_CYCLE_BUDGET_MS: u128 = 2500; // Soft per-cycle time budget
 const POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS: u64 = 6; // Guard per token update future
 
@@ -1602,18 +1602,50 @@ impl PoolPriceService {
         let history = self.price_history.read().await;
         let fallback_history = history.get(token_address).cloned().unwrap_or_default();
 
-        if is_debug_pool_prices_enabled() && !fallback_history.is_empty() {
-            log(
-                LogTag::Pool,
-                "PRICE_HISTORY_MEMORY",
-                &format!(
-                    "📈 Retrieved {} price history entries from memory cache for {}",
-                    fallback_history.len(),
-                    token_address
-                )
-            );
+        // If in-memory cache has sufficient data, return it
+        if fallback_history.len() >= 3 {
+            if is_debug_pool_prices_enabled() && !fallback_history.is_empty() {
+                log(
+                    LogTag::Pool,
+                    "PRICE_HISTORY_MEMORY",
+                    &format!(
+                        "📈 Retrieved {} price history entries from memory cache for {}",
+                        fallback_history.len(),
+                        token_address
+                    )
+                );
+            }
+            return fallback_history;
         }
 
+        // Final fallback: try database for recent price history
+        if let Ok(db_history) = get_price_history_for_token(token_address) {
+            // Filter to recent entries (last 10 minutes) to be more lenient than memory cache
+            // This ensures we capture more database entries while still avoiding very stale data
+            let recent_cutoff = Utc::now() - chrono::Duration::minutes(10);
+            let recent_db_history: Vec<(DateTime<Utc>, f64)> = db_history
+                .into_iter()
+                .filter(|(timestamp, _)| *timestamp >= recent_cutoff)
+                .collect();
+
+            if !recent_db_history.is_empty() {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "PRICE_HISTORY_DB_FALLBACK",
+                        &format!(
+                            "🗄️ Retrieved {} recent price history entries from database for {} (memory had {}, using 10min window)",
+                            recent_db_history.len(),
+                            &token_address[..8],
+                            fallback_history.len()
+                        )
+                    );
+                }
+                return recent_db_history;
+            }
+        }
+
+        // Return whatever we have from memory, even if limited
         fallback_history
     }
 
