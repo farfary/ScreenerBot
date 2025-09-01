@@ -33,14 +33,14 @@ use chrono::{ DateTime, Utc };
 // CORE CONFIGURATION PARAMETERS
 // =============================================================================
 
-// Drop Detection Thresholds
-const FLASH_DROP_MIN: f64 = 2.5; // Minimum flash drop %
+// Drop Detection Thresholds - LOWERED FOR MORE AGGRESSIVE ENTRY
+const FLASH_DROP_MIN: f64 = 2.0; // Minimum flash drop % (reduced from 2.5%)
 const FLASH_DROP_MAX: f64 = 15.0; // Maximum flash drop %
-const MODERATE_DROP_MIN: f64 = 8.0; // Minimum moderate drop %
+const MODERATE_DROP_MIN: f64 = 5.0; // Minimum moderate drop % (reduced from 8.0%)
 const MODERATE_DROP_MAX: f64 = 35.0; // Maximum moderate drop %
-const DEEP_DROP_MIN: f64 = 20.0; // Minimum deep drop %
+const DEEP_DROP_MIN: f64 = 15.0; // Minimum deep drop % (reduced from 20.0%)
 const DEEP_DROP_MAX: f64 = 60.0; // Maximum deep drop %
-const EXTREME_DROP_MIN: f64 = 60.0; // Minimum extreme drop %
+const EXTREME_DROP_MIN: f64 = 50.0; // Minimum extreme drop % (reduced from 60.0%)
 const EXTREME_DROP_MAX: f64 = 100.0; // Maximum extreme drop %
 
 // Pump.fun Token Optimal Entry Configuration
@@ -163,11 +163,37 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
 
     // Update confidence based on available data
     if price_history.len() < MIN_PRICE_POINTS {
-        confidence = confidence.min(25.0); // Cap confidence if insufficient history
+        confidence = confidence.min(25.0);
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "INSUFFICIENT_HISTORY",
+                &format!(
+                    "❌ {} insufficient price history: {} < {} points",
+                    token.symbol,
+                    price_history.len(),
+                    MIN_PRICE_POINTS
+                )
+            );
+        }
         return (
             false,
             confidence,
             format!("Insufficient price history: {} < {}", price_history.len(), MIN_PRICE_POINTS),
+        );
+    }
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Entry,
+            "PRICE_HISTORY_OK",
+            &format!(
+                "✅ {} price history available: {} points, current: {:.6} SOL, liquidity: ${:.0}",
+                token.symbol,
+                price_history.len(),
+                current_price,
+                liquidity_usd
+            )
         );
     }
 
@@ -176,6 +202,40 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
 
     // Analyze drop patterns with confidence scoring
     let drop_analysis = analyze_drop_patterns(&price_history, current_price, liquidity_usd).await;
+
+    if is_debug_entry_enabled() {
+        if drop_analysis.is_some() {
+            log(
+                LogTag::Entry,
+                "DROP_DETECTED",
+                &format!("✅ {} drop analysis found pattern", token.symbol)
+            );
+        } else {
+            log(
+                LogTag::Entry,
+                "NO_DROP_PATTERN",
+                &format!(
+                    "❌ {} no drop pattern detected in {} price points",
+                    token.symbol,
+                    price_history.len()
+                )
+            );
+
+            // Log recent price data for debugging
+            if price_history.len() > 0 {
+                let recent_prices: Vec<String> = price_history
+                    .iter()
+                    .take(5)
+                    .map(|(ts, price)| format!("{:.6}@{}", price, ts.format("%H:%M:%S")))
+                    .collect();
+                log(
+                    LogTag::Entry,
+                    "RECENT_PRICES",
+                    &format!("📊 {} recent prices: [{}]", token.symbol, recent_prices.join(", "))
+                );
+            }
+        }
+    }
 
     if let Some(analysis) = drop_analysis {
         // Update confidence based on drop analysis and apply soft ATH penalty
@@ -796,11 +856,12 @@ fn calculate_flash_confidence(drop_percent: f64, velocity: f64) -> f64 {
     let drop_factor = (drop_percent - FLASH_DROP_MIN) / (FLASH_DROP_MAX - FLASH_DROP_MIN);
     confidence += drop_factor * 10.0; // Up to +10 for larger drops
 
-    // Adjust based on velocity (negative velocity = downward)
+    // Adjust based on velocity (negative velocity = downward) - MADE MORE FORGIVING
     if velocity < -20.0 {
         confidence += 10.0; // High downward velocity is good
-    } else if velocity > 10.0 {
-        confidence -= 15.0; // Upward velocity during drop is suspicious
+    } else if velocity > 25.0 {
+        // Changed from 10.0 to 25.0 - allow more recovery
+        confidence -= 8.0; // Reduced penalty from 15.0 to 8.0
     }
 
     confidence.max(20.0).min(95.0)
@@ -890,6 +951,8 @@ fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
         return 0.0;
     }
 
+    // Note: prices array comes from filtering by timestamp, so it should be chronologically ordered
+    // But let's be safe and use first/last by design
     let first = prices[0];
     let last = prices[prices.len() - 1];
 
@@ -904,20 +967,35 @@ fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
         return 0.0;
     }
 
+    // Add debug logging to see what's happening
+    if crate::global::is_debug_entry_enabled() {
+        crate::logger::log(
+            crate::logger::LogTag::Entry,
+            "VELOCITY_CALC",
+            &format!(
+                "Velocity calc: first={:.6}, last={:.6}, change={:.2}%/min over {:.1}min",
+                first,
+                last,
+                percent_change / minutes,
+                minutes
+            )
+        );
+    }
+
     percent_change / minutes // Percent per minute
 }
 
 fn should_enter_based_on_analysis(analysis: &DropAnalysis, liquidity_usd: f64) -> bool {
-    // Base confidence threshold varies by drop style - LOWERED for more aggressive entry
+    // Base confidence threshold varies by drop style - FURTHER LOWERED for more aggressive entry
     let min_confidence = match analysis.drop_style {
-        DropStyle::UltraFlash => 35.0, // Very quick moves must be convincing (was 62.0)
-        DropStyle::Flash => 32.0, // Slightly lowered to allow more entries (was 58.0)
-        DropStyle::WickRebound => 30.0, // (was 54.0)
-        DropStyle::Moderate => 30.0, // Moderate confidence needed (was 54.0)
-        DropStyle::Cascade => 28.0, // (was 52.0)
-        DropStyle::Deep => 25.0, // Lower threshold for deep drops (was 48.0)
-        DropStyle::Extreme => 22.0, // Lowest threshold for extreme opportunities (was 44.0)
-        DropStyle::MedianDip => 30.0, // (was 56.0)
+        DropStyle::UltraFlash => 30.0, // Very quick moves (reduced from 35.0)
+        DropStyle::Flash => 28.0, // Flash drops (reduced from 32.0)
+        DropStyle::WickRebound => 26.0, // Wick rebounds (reduced from 30.0)
+        DropStyle::Moderate => 25.0, // Moderate drops (reduced from 30.0)
+        DropStyle::Cascade => 24.0, // Cascade drops (reduced from 28.0)
+        DropStyle::Deep => 22.0, // Deep drops (reduced from 25.0)
+        DropStyle::Extreme => 20.0, // Extreme drops (reduced from 22.0)
+        DropStyle::MedianDip => 25.0, // Median dips (reduced from 30.0)
     };
 
     // Adjust threshold based on liquidity
