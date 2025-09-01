@@ -44,6 +44,7 @@ pub mod lp_lock;
 pub mod monitor;
 pub mod ohlcvs;
 pub mod pool;
+pub mod pool_db;
 pub mod rugcheck;
 pub mod types;
 

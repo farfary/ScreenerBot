@@ -9,6 +9,7 @@ use crate::positions_lib::{calculate_position_pnl, calculate_position_total_fees
 use crate::positions_types::Position;
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
+use crate::tokens::pool_db::get_pool_db_statistics;
 use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
 use crate::trader::*;
 use crate::transactions::TransactionsManager;
@@ -174,23 +175,38 @@ pub struct PoolServiceDisplay {
     watch_snapshot: String,
 }
 
-/// Display structure for detailed disk cache statistics
+/// Display structure for memory cache statistics
 #[derive(Tabled)]
-pub struct PoolDiskCacheDisplay {
-    #[tabled(rename = "💾 Disk Tokens")]
-    disk_tokens: String,
-    #[tabled(rename = "🏊 Disk Pools")]
-    disk_pools: String,
-    #[tabled(rename = "📁 Cache Files")]
-    cache_files: String,
+pub struct PoolMemoryCacheDisplay {
+    #[tabled(rename = "🏊 Pool Cache")]
+    pool_cache: String,
+    #[tabled(rename = "💰 Price Cache")]
+    price_cache: String,
+    #[tabled(rename = "� Availability Cache")]
+    availability_cache: String,
     #[tabled(rename = "📊 Total Entries")]
     total_entries: String,
-    #[tabled(rename = "💿 Cache Size")]
-    cache_size: String,
-    #[tabled(rename = "📅 Data Range")]
-    data_range: String,
-    #[tabled(rename = "📈 Avg/Token")]
-    avg_per_token: String,
+    #[tabled(rename = "� Storage Type")]
+    storage_type: String,
+    #[tabled(rename = "� Cache Performance")]
+    cache_performance: String,
+}
+
+/// Display structure for database statistics
+#[derive(Tabled)]
+pub struct PoolDatabaseDisplay {
+    #[tabled(rename = "🗄️ Total History")]
+    total_history: String,
+    #[tabled(rename = "📅 Recent (24h)")]
+    recent_history: String,
+    #[tabled(rename = "🪙 Tracked Tokens")]
+    tracked_tokens: String,
+    #[tabled(rename = "💾 Storage")]
+    storage_location: String,
+    #[tabled(rename = "🧹 Auto Cleanup")]
+    auto_cleanup: String,
+    #[tabled(rename = "🔧 Gap Detection")]
+    gap_detection: String,
 }
 
 /// Display structure for Discovery statistics (printed first, compact)
@@ -1074,16 +1090,16 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
         }
     };
 
-    // Get detailed disk cache statistics with timeout
-    let disk_cache_start = Instant::now();
+    // Get memory cache statistics with timeout
+    let memory_cache_start = Instant::now();
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",
-            "[build_summary_report] Starting pool service disk cache stats call",
+            "[build_summary_report] Starting pool service memory cache stats call",
         );
     }
-    let disk_cache_stats = match tokio::time::timeout(
+    let memory_cache_stats = match tokio::time::timeout(
         Duration::from_secs(2),
         pool_service.get_cache_stats(),
     )
@@ -1095,8 +1111,8 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
                     LogTag::Summary,
                     "DEBUG",
                     &format!(
-                        "[build_summary_report] Pool disk cache stats obtained in {} ms",
-                        disk_cache_start.elapsed().as_millis()
+                        "[build_summary_report] Pool memory cache stats obtained in {} ms",
+                        memory_cache_start.elapsed().as_millis()
                     ),
                 );
             }
@@ -1107,11 +1123,70 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
                 LogTag::Summary,
                 "WARN",
                 &format!(
-                    "[build_summary_report] Pool disk cache stats timeout after {} ms - using default",
-                    disk_cache_start.elapsed().as_millis()
+                    "[build_summary_report] Pool memory cache stats timeout after {} ms - using default",
+                    memory_cache_start.elapsed().as_millis()
                 )
             );
             (0, 0, 0)
+        }
+    };
+
+    // Get database statistics with timeout
+    let database_stats_start = Instant::now();
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            "[build_summary_report] Fetching pool database statistics",
+        );
+    }
+    let database_stats = match tokio::time::timeout(
+        Duration::from_secs(1),
+        tokio::task::spawn_blocking(|| get_pool_db_statistics())
+    )
+    .await
+    {
+        Ok(task_result) => match task_result {
+            Ok(stats_result) => match stats_result {
+                Ok(stats) => {
+                    if is_debug_summary_enabled() {
+                        log(
+                            LogTag::Summary,
+                            "DEBUG",
+                            &format!(
+                                "[build_summary_report] Pool database stats obtained in {} ms",
+                                database_stats_start.elapsed().as_millis()
+                            ),
+                        );
+                    }
+                    Some(stats)
+                }
+                Err(e) => {
+                    if is_debug_summary_enabled() {
+                        log(
+                            LogTag::Summary,
+                            "DEBUG",
+                            &format!("Database stats error: {}", e),
+                        );
+                    }
+                    None
+                }
+            }
+            Err(_) => {
+                log(LogTag::Summary, "WARN", "Database stats task panicked");
+                None
+            }
+        }
+        Err(_) => {
+            log(
+                LogTag::Summary,
+                "WARN",
+                &format!(
+                    "Database stats timeout after {} ms",
+                    database_stats_start.elapsed().as_millis()
+                )
+            );
+            None
         }
     };
 
@@ -1164,19 +1239,36 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
         ),
     };
 
-    // Build cache display (simplified - no disk cache)
-    let (pool_cache_count, price_cache_count, availability_cache_count) = disk_cache_stats;
-    let disk_cache_display = PoolDiskCacheDisplay {
-        disk_tokens: format!("{}", pool_cache_count),
-        disk_pools: format!("{}", price_cache_count),
-        cache_files: format!("{}", availability_cache_count),
+    // Build memory cache display with accurate information
+    let (pool_cache_count, price_cache_count, availability_cache_count) = memory_cache_stats;
+    let memory_cache_display = PoolMemoryCacheDisplay {
+        pool_cache: format!("{} pools", pool_cache_count),
+        price_cache: format!("{} prices", price_cache_count),
+        availability_cache: format!("{} tokens", availability_cache_count),
         total_entries: format!(
             "{}",
             pool_cache_count + price_cache_count + availability_cache_count
         ),
-        cache_size: "Memory only".to_string(),
-        data_range: "In-memory".to_string(),
-        avg_per_token: format!("{} pools cached", pool_cache_count),
+        storage_type: "In-Memory".to_string(),
+        cache_performance: if enhanced_stats.total_price_requests > 0 {
+            format!("{:.1}% hit rate", enhanced_stats.get_cache_hit_rate())
+        } else {
+            "No requests yet".to_string()
+        },
+    };
+
+    // Build database display with statistics
+    let database_display = if let Some((total_entries, recent_entries, unique_tokens)) = database_stats {
+        Some(PoolDatabaseDisplay {
+            total_history: format!("{} entries", total_entries),
+            recent_history: format!("{} entries", recent_entries),
+            tracked_tokens: format!("{} tokens", unique_tokens),
+            storage_location: "data/pools.db".to_string(),
+            auto_cleanup: "24h retention".to_string(),
+            gap_detection: "10min threshold".to_string(),
+        })
+    } else {
+        None
     };
 
     // Build all table strings first, then display in one shot
@@ -1184,7 +1276,7 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
         log(
             LogTag::Summary,
             "DEBUG",
-            "[build_summary_report] Starting static tables build (overview, stats, performance, ATA, pool, disk)"
+            "[build_summary_report] Starting static tables build (overview, stats, performance, ATA, pool, memory)"
         );
     }
     let tables_build_start = Instant::now();
@@ -1250,13 +1342,23 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
         );
     }
 
-    // Build Pool Disk Cache Statistics table
-    summary_output.push_str("\n💾 Pool Disk Cache Statistics\n");
-    let mut disk_cache_table = Table::new(vec![disk_cache_display]);
-    disk_cache_table
+    // Build Pool Memory Cache Statistics table
+    summary_output.push_str("\n🧠 Pool Memory Cache Statistics\n");
+    let mut memory_cache_table = Table::new(vec![memory_cache_display]);
+    memory_cache_table
         .with(Style::rounded())
         .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    summary_output.push_str(&format!("{}\n", disk_cache_table));
+    summary_output.push_str(&format!("{}\n", memory_cache_table));
+
+    // Build Pool Database Statistics table (if available)
+    if let Some(db_display) = database_display {
+        summary_output.push_str("\n🗄️ Pool Database Statistics\n");
+        let mut database_table = Table::new(vec![db_display]);
+        database_table
+            .with(Style::rounded())
+            .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+        summary_output.push_str(&format!("{}\n", database_table));
+    }
 
     // Build Recent Swaps table (last 20)
     if is_debug_summary_enabled() {
