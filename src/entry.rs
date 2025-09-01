@@ -26,9 +26,7 @@
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
 use crate::tokens::{ get_pool_service, Token, PriceOptions };
-use crate::trader::POSITION_CLOSE_COOLDOWN_MINUTES;
 use chrono::{ DateTime, Utc };
-use std::time::Instant;
 
 // =============================================================================
 // CORE CONFIGURATION PARAMETERS
@@ -51,7 +49,6 @@ const DEEP_WINDOW_SEC: i64 = 300; // Deep drop detection window (5 min)
 const EXTREME_WINDOW_SEC: i64 = 900; // Extreme drop detection window (15 min)
 
 // ATH Protection Settings
-const ATH_PROTECTION_WINDOW_SEC: i64 = 7200; // 2 hours ATH protection
 const ATH_MIN_DISTANCE_PERCENT: f64 = 5.0; // Minimum 5% below ATH
 
 // Confidence Scoring Base Values
@@ -595,9 +592,6 @@ async fn is_near_ath(mint: &str, current_price: f64) -> bool {
     // Check OHLCV data for 2-hour ATH protection
     match crate::tokens::ohlcvs::get_latest_ohlcv(mint, 120).await {
         Ok(ohlcv_data) => {
-            let now = Utc::now();
-            let two_hours_ago = now - chrono::Duration::seconds(ATH_PROTECTION_WINDOW_SEC);
-
             let recent_high = ohlcv_data
                 .iter()
                 .map(|point| point.high)
@@ -612,44 +606,6 @@ async fn is_near_ath(mint: &str, current_price: f64) -> bool {
     }
 
     false // If no OHLCV data, don't block the entry
-}
-
-async fn check_position_cooldown(mint: &str) -> (bool, i64, String) {
-    match crate::positions_db::get_closed_positions().await {
-        Ok(closed_positions) => {
-            let relevant_positions: Vec<_> = closed_positions
-                .iter()
-                .filter(|p| p.mint == mint && p.transaction_exit_verified)
-                .collect();
-
-            if relevant_positions.is_empty() {
-                return (false, 0, "No previous positions".to_string());
-            }
-
-            if let Some(last_position) = relevant_positions.last() {
-                if let Some(exit_time) = last_position.exit_time {
-                    let now = Utc::now();
-                    let elapsed_minutes = now.signed_duration_since(exit_time).num_minutes();
-
-                    if elapsed_minutes < POSITION_CLOSE_COOLDOWN_MINUTES {
-                        let remaining_minutes = POSITION_CLOSE_COOLDOWN_MINUTES - elapsed_minutes;
-                        return (
-                            true,
-                            remaining_minutes,
-                            format!(
-                                "{}h {}m remaining",
-                                remaining_minutes / 60,
-                                remaining_minutes % 60
-                            ),
-                        );
-                    }
-                }
-            }
-        }
-        _ => {}
-    }
-
-    (false, 0, "No cooldown".to_string())
 }
 
 // =============================================================================
@@ -668,25 +624,36 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
         }
     };
 
-    // Base profit targets
-    let (mut min_profit, mut max_profit): (f64, f64) = if liquidity_usd < 5_000.0 {
-        (30.0, 120.0) // Higher targets for micro caps
+    // Base profit targets (refined buckets)
+    // Keep simple: just a few more tiers tuned by liquidity.
+    let (mut min_profit, mut max_profit): (f64, f64) = if liquidity_usd < 2_500.0 {
+        (35.0, 140.0) // very micro caps
+    } else if liquidity_usd < 10_000.0 {
+        (28.0, 110.0) // micro/small caps
     } else if liquidity_usd < 50_000.0 {
-        (20.0, 80.0) // Moderate targets for small caps
-    } else if liquidity_usd < 500_000.0 {
-        (15.0, 60.0) // Conservative targets for mid caps
+        (20.0, 85.0) // small caps
+    } else if liquidity_usd < 250_000.0 {
+        (16.0, 70.0) // lower mid caps
+    } else if liquidity_usd < 1_000_000.0 {
+        (12.0, 55.0) // mid caps
     } else {
-        (10.0, 40.0) // Lower targets for large caps
+        (9.0, 40.0) // large caps
     };
 
-    // Ensure minimum spread
-    if max_profit - min_profit < 15.0 {
-        max_profit = min_profit + 15.0;
+    // Ensure proportional spread: at least 60% of min or 12%, whichever larger
+    let min_spread = (min_profit * 0.6).max(12.0);
+    if max_profit - min_profit < min_spread {
+        max_profit = min_profit + min_spread;
     }
 
-    // Ensure reasonable minimums
-    min_profit = min_profit.max(8.0);
-    max_profit = max_profit.max(25.0);
+    // Clamp bounds to sane global limits
+    min_profit = min_profit.clamp(6.0, 45.0);
+    max_profit = max_profit.clamp(24.0, 180.0);
+
+    // Final ordering safety: keep at least 10% gap post-clamp
+    if max_profit - min_profit < 10.0 {
+        max_profit = (min_profit + 10.0).min(180.0);
+    }
 
     (min_profit, max_profit)
 }

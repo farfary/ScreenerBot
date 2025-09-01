@@ -200,6 +200,18 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     let trailing_time_pressure_multiplier = 1.0 - time_pressure * 0.35; // up to 35% tighter trailing gaps
 
+    // ============================= Profit Targets Integration =============================
+    // Use position-specific targets when available. Keep it simple and local.
+    let target_min = position.profit_target_min
+        .unwrap_or(BASE_MIN_PROFIT_PERCENT)
+        .clamp(1.0, 300.0);
+    let mut target_max = position.profit_target_max
+        .unwrap_or(INSTANT_EXIT_LEVEL_1)
+        .clamp(1.0, 500.0);
+    if target_max < target_min {
+        target_max = (target_min + 1.0).min(500.0);
+    }
+
     // 1) Extreme loss immediate kill (no questions)
     if pnl_percent <= EXTREME_LOSS_PERCENT {
         return true;
@@ -244,7 +256,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     // 3b) Round-trip neutral exit: after a meaningful peak, if we round-trip back to ~flat,
     // prefer to exit instead of waiting for another full cycle.
-    if peak_profit >= BASE_MIN_PROFIT_PERCENT && minutes_held >= 8.0 && pnl_percent <= 1.0 {
+    if peak_profit >= target_min && minutes_held >= 8.0 && pnl_percent <= 1.0 {
         if is_debug_profit_enabled() {
             log(
                 LogTag::Profit,
@@ -254,6 +266,24 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                     position.symbol,
                     pnl_percent,
                     peak_profit,
+                    minutes_held
+                )
+            );
+        }
+        return true;
+    }
+
+    // 4)A Target-based take-profit: if we hit the configured maximum target, exit cleanly.
+    if pnl_percent >= target_max {
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Profit,
+                "TARGET_MAX_HIT",
+                &format!(
+                    "{} pnl={:.2}% target_max={:.2}% t={:.1}m",
+                    position.symbol,
+                    pnl_percent,
+                    target_max,
                     minutes_held
                 )
             );
@@ -314,10 +344,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     // We reduce the min threshold over time (so we can exit smaller wins later instead of round-tripping)
     // and also if volatility already produced a decent peak but we gave a lot back.
     let dynamic_min_profit = {
-        // Base decays from BASE_MIN_PROFIT_PERCENT toward 0.5 * BASE over time pressure
-        let decay_component = BASE_MIN_PROFIT_PERCENT * (1.0 - 0.5 * time_pressure);
+        // Base decays from target_min toward 0.5 * target_min over time pressure
+        let decay_component = target_min * (1.0 - 0.5 * time_pressure);
         // After 25 minutes allow a further soft decay to encourage freeing capital
-        let long_hold_bonus = if minutes_held > 25.0 { BASE_MIN_PROFIT_PERCENT * 0.2 } else { 0.0 };
+        let long_hold_bonus = if minutes_held > 25.0 { target_min * 0.2 } else { 0.0 };
         (decay_component - long_hold_bonus).max(3.0)
     };
 
@@ -330,12 +360,12 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     // * Still cap window to first 10 minutes (after that trailing / odds logic govern).
     // * Ensure we aren't still sitting on a solid base profit (skip if pnl >= 0.8 * BASE_MIN_PROFIT_PERCENT).
     {
-        let meaningful_peak = peak_profit >= BASE_MIN_PROFIT_PERCENT * 1.8; // ~18% with BASE=10
+        let meaningful_peak = peak_profit >= target_min * 1.8; // scale with target
         let warmup_passed = minutes_held >= 2.5;
         let within_window = minutes_held <= 10.0; // tighter than prior 12m
         let large_absolute_drawdown = peak_profit - pnl_percent >= 8.0; // avoid micro noise
         let large_relative_giveback = pnl_percent < peak_profit * 0.25; // retain <25% of peak
-        let not_still_ok_profit = pnl_percent < BASE_MIN_PROFIT_PERCENT * 0.8; // <8% with BASE=10
+        let not_still_ok_profit = pnl_percent < target_min * 0.8; // scale with target
 
         if
             meaningful_peak &&
@@ -378,7 +408,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     }
 
     // 7) Trailing stop logic (dynamic)
-    if peak_profit >= BASE_MIN_PROFIT_PERCENT {
+    if peak_profit >= target_min {
         // baseline gap derived from peak profit and age
         let mut gap = trailing_gap(peak_profit, minutes_held);
 
@@ -440,7 +470,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     let mut exit_score = 0.0f64;
 
     // Drawdown vs dynamic gap: heavy weight
-    if peak_profit >= BASE_MIN_PROFIT_PERCENT {
+    if peak_profit >= target_min {
         let gap_now = trailing_gap(peak_profit, minutes_held) * trailing_time_pressure_multiplier;
         let dd_ratio = if gap_now > 0.0 { drawdown / gap_now } else { 0.0 };
         if dd_ratio >= 1.0 {
@@ -485,7 +515,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     }
 
     // Flat after big peak for a while -> additional nudge
-    if peak_profit >= BASE_MIN_PROFIT_PERCENT && minutes_held >= 12.0 && pnl_percent <= 1.0 {
+    if peak_profit >= target_min && minutes_held >= 12.0 && pnl_percent <= 1.0 {
         exit_score += 1.0;
     }
 
@@ -523,7 +553,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     // 9) Time pressure final nudge — if we are very close to MAX_HOLD_MINUTES and have any decent profit,
     // prefer to exit rather than risk forced closure on the cap.
-    if time_pressure > 0.92 && pnl_percent > BASE_MIN_PROFIT_PERCENT {
+    if time_pressure > 0.92 && pnl_percent > target_min {
         if is_debug_profit_enabled() {
             log(
                 LogTag::Profit,
@@ -546,7 +576,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
             LogTag::Profit,
             "DECISION",
             &format!(
-                "{} pnl={:.2}% ({:.6} SOL) peak={:.2}% dd={:.2}% t={:.1}m tp={:.2} odds={:.2} edge={:.2} thr={:.2} dyn_min={:.2}",
+                "{} pnl={:.2}% ({:.6} SOL) peak={:.2}% dd={:.2}% t={:.1}m tp={:.2} odds={:.2} edge={:.2} thr={:.2} dyn_min={:.2} tgt_min={:.2} tgt_max={:.2}",
                 position.symbol,
                 pnl_percent,
                 pnl_sol,
@@ -557,7 +587,9 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                 odds,
                 expected_edge,
                 adaptive_odds_threshold,
-                dynamic_min_profit
+                dynamic_min_profit,
+                target_min,
+                target_max
             )
         );
     }
