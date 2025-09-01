@@ -26,6 +26,7 @@
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
 use crate::tokens::{ get_pool_service, Token, PriceOptions };
+use crate::tokens::pool::{ PUMP_FUN_AMM_PROGRAM_ID, PoolPriceInfo };
 use chrono::{ DateTime, Utc };
 
 // =============================================================================
@@ -41,6 +42,12 @@ const DEEP_DROP_MIN: f64 = 20.0; // Minimum deep drop %
 const DEEP_DROP_MAX: f64 = 60.0; // Maximum deep drop %
 const EXTREME_DROP_MIN: f64 = 60.0; // Minimum extreme drop %
 const EXTREME_DROP_MAX: f64 = 100.0; // Maximum extreme drop %
+
+// Pump.fun Token Optimal Entry Configuration
+const PUMPFUN_SOL_RESERVE_MIN: f64 = 23.0; // Minimum SOL reserve for easy entry
+const PUMPFUN_SOL_RESERVE_MAX: f64 = 26.0; // Maximum SOL reserve for easy entry
+const PUMPFUN_EASY_ENTRY_CONFIDENCE_BOOST: f64 = 25.0; // Confidence boost for optimal range
+const PUMPFUN_EASY_ENTRY_MIN_BASE_CONFIDENCE: f64 = 45.0; // Min confidence to apply boost
 
 // Time Windows for Analysis
 const FLASH_WINDOW_SEC: i64 = 20; // Flash drop detection window (doubled from 10s)
@@ -148,6 +155,9 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         (true, "Liquidity OK".to_string())
     };
 
+    // Check for pump.fun tokens in optimal SOL reserve range (23-26 SOL)
+    let pumpfun_easy_entry = check_pumpfun_easy_entry(token).await;
+
     // Get price history for drop analysis
     let price_history = pool_service.get_recent_price_history(&token.mint).await;
 
@@ -170,6 +180,53 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     if let Some(analysis) = drop_analysis {
         // Update confidence based on drop analysis and apply soft ATH penalty
         let mut analysis = analysis;
+
+        // Apply pump.fun easy entry boost if applicable
+        if let Some((is_pumpfun, sol_reserves, in_range)) = pumpfun_easy_entry {
+            if
+                is_pumpfun &&
+                in_range &&
+                analysis.confidence >= PUMPFUN_EASY_ENTRY_MIN_BASE_CONFIDENCE
+            {
+                let old_confidence = analysis.confidence;
+                analysis.confidence = (
+                    analysis.confidence + PUMPFUN_EASY_ENTRY_CONFIDENCE_BOOST
+                ).min(95.0);
+                analysis.reasoning = format!(
+                    "{} (pump.fun {:.1} SOL +{:.0}% confidence)",
+                    analysis.reasoning,
+                    sol_reserves,
+                    analysis.confidence - old_confidence
+                );
+
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Entry,
+                        "PUMPFUN_BOOST",
+                        &format!(
+                            "🚀 {} pump.fun easy entry boost: {:.1} SOL reserves → confidence {:.0}% → {:.0}%",
+                            token.symbol,
+                            sol_reserves,
+                            old_confidence,
+                            analysis.confidence
+                        )
+                    );
+                }
+            } else if is_pumpfun && is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "PUMPFUN_INFO",
+                    &format!(
+                        "📊 {} pump.fun token: {:.1} SOL reserves (optimal: {:.0}-{:.0}), confidence: {:.0}%",
+                        token.symbol,
+                        sol_reserves,
+                        PUMPFUN_SOL_RESERVE_MIN,
+                        PUMPFUN_SOL_RESERVE_MAX,
+                        analysis.confidence
+                    )
+                );
+            }
+        }
 
         if let Some(distance) = ath_distance_opt {
             if distance < ATH_MIN_DISTANCE_PERCENT {
@@ -221,9 +278,44 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         );
     }
 
-    // No significant drop detected - return base confidence
+    // No significant drop detected - check for pump.fun easy entry opportunity
     let final_reason = if !liquidity_check.0 {
         format!("No significant drop pattern detected ({})", liquidity_check.1)
+    } else if let Some((is_pumpfun, sol_reserves, in_range)) = pumpfun_easy_entry {
+        if is_pumpfun && in_range {
+            // Even without a significant drop, pump.fun tokens in optimal range can be good entries
+            let pumpfun_confidence = (confidence + PUMPFUN_EASY_ENTRY_CONFIDENCE_BOOST * 0.6).min(
+                85.0
+            );
+
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "PUMPFUN_NO_DROP",
+                    &format!(
+                        "🎯 {} pump.fun no-drop entry: {:.1} SOL reserves, confidence: {:.0}%",
+                        token.symbol,
+                        sol_reserves,
+                        pumpfun_confidence
+                    )
+                );
+            }
+
+            // Consider entry if confidence is reasonable (lower threshold for pump.fun)
+            if pumpfun_confidence >= 35.0 {
+                return (
+                    true,
+                    pumpfun_confidence,
+                    format!("Pump.fun easy entry ({:.1} SOL reserves)", sol_reserves),
+                );
+            } else {
+                format!("Pump.fun token ({:.1} SOL) but confidence too low", sol_reserves)
+            }
+        } else if is_pumpfun {
+            format!("Pump.fun token but SOL reserves not optimal ({:.1} SOL)", sol_reserves)
+        } else {
+            "No significant drop pattern detected".to_string()
+        }
     } else {
         "No significant drop pattern detected".to_string()
     };
@@ -907,6 +999,114 @@ async fn get_ath_distance_percent(mint: &str, current_price: f64) -> Option<f64>
 }
 
 // =============================================================================
+// PUMP.FUN SPECIAL ENTRY DETECTION
+// =============================================================================
+
+/// Check if token is a pump.fun token in the optimal SOL reserve range (23-26 SOL)
+/// Returns (is_pumpfun, sol_reserves, in_optimal_range)
+async fn check_pumpfun_easy_entry(token: &Token) -> Option<(bool, f64, bool)> {
+    let pool_service = get_pool_service();
+
+    // Check if this is a pump.fun token by DEX ID or pool program
+    let is_pumpfun_token = if let Some(ref dex_id) = token.dex_id {
+        dex_id.to_lowercase().contains("pump") || dex_id == "pumpfun" || dex_id == "pumpswap"
+    } else {
+        false
+    };
+
+    if !is_pumpfun_token {
+        // Also check if we have pool data indicating pump.fun
+        if
+            let Some(pool_result) = pool_service.get_pool_price(
+                &token.mint,
+                None,
+                &PriceOptions::default()
+            ).await
+        {
+            if let Some(pool_type) = &pool_result.pool_type {
+                if pool_type.to_uppercase().contains("PUMP") {
+                    return check_sol_reserves(&token.mint, pool_service).await;
+                }
+            }
+        }
+        return None;
+    }
+
+    // It's a pump.fun token, now check SOL reserves
+    check_sol_reserves(&token.mint, pool_service).await
+}
+
+/// Check if a pool result represents a pump.fun token
+fn is_pump_fun_pool(pool_result: &crate::tokens::pool::PoolPriceResult) -> bool {
+    // Check if the pool type indicates pump.fun
+    if let Some(ref pool_type) = pool_result.pool_type {
+        return pool_type.to_lowercase().contains("pump");
+    }
+
+    // Check if dex_id indicates pump.fun
+    pool_result.dex_id.to_lowercase().contains("pump")
+}
+
+/// Check SOL reserves for a pump.fun token
+async fn check_sol_reserves(
+    mint: &str,
+    pool_service: &crate::tokens::pool::PoolPriceService
+) -> Option<(bool, f64, bool)> {
+    // Try to get direct pool price calculation which includes reserve information
+    match pool_service.get_pool_price_direct(&format!("{}pool", mint), mint, None).await {
+        Some(pool_result) => {
+            // Check if we have direct SOL reserve information from the new fields
+            if let Some(sol_reserve) = pool_result.sol_reserve {
+                let is_pump_fun = is_pump_fun_pool(&pool_result);
+                let in_optimal_range = sol_reserve >= 23.0 && sol_reserve <= 26.0;
+                return Some((is_pump_fun, sol_reserve, in_optimal_range));
+            }
+
+            // Fallback: For pump.fun, we need to check if we have SOL liquidity data
+            if pool_result.liquidity_usd > 0.0 {
+                // Estimate SOL reserves from liquidity (rough approximation)
+                // Pump.fun pools typically have SOL as quote token, so roughly half the liquidity is SOL
+                let estimated_sol_reserves = if pool_result.liquidity_usd > 0.0 {
+                    // Assume SOL price ~$150 and roughly half liquidity is SOL
+                    (pool_result.liquidity_usd * 0.5) / 150.0
+                } else {
+                    0.0
+                };
+
+                let in_optimal_range =
+                    estimated_sol_reserves >= PUMPFUN_SOL_RESERVE_MIN &&
+                    estimated_sol_reserves <= PUMPFUN_SOL_RESERVE_MAX;
+                return Some((true, estimated_sol_reserves, in_optimal_range));
+            }
+        }
+        None => {}
+    }
+
+    // Fallback: Try to get pool info and extract reserves from there
+    match pool_service.get_pool_price(mint, None, &PriceOptions::default()).await {
+        Some(pool_result) => {
+            // Use liquidity to estimate SOL reserves if available
+            if pool_result.liquidity_usd > 0.0 {
+                // Rough estimation: pump.fun pools typically hold 20-30 SOL at optimal trading times
+                // We can estimate from liquidity USD
+                let estimated_sol_reserves = (pool_result.liquidity_usd * 0.4) / 150.0; // Assume SOL ~$150
+                let in_optimal_range =
+                    estimated_sol_reserves >= PUMPFUN_SOL_RESERVE_MIN &&
+                    estimated_sol_reserves <= PUMPFUN_SOL_RESERVE_MAX;
+
+                Some((true, estimated_sol_reserves, in_optimal_range))
+            } else {
+                Some((true, 0.0, false))
+            }
+        }
+        None => {
+            // If we can't get pool data but we know it's pump.fun, still return that info
+            Some((true, 0.0, false))
+        }
+    }
+}
+
+// =============================================================================
 // PROFIT TARGET CALCULATION
 // =============================================================================
 
@@ -925,6 +1125,9 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
             ),
     };
 
+    // Check for pump.fun easy entry opportunity
+    let pumpfun_easy_entry = check_pumpfun_easy_entry(token).await;
+
     // Base profit targets (refined buckets)
     // Keep simple: just a few more tiers tuned by liquidity.
     let (mut min_profit, mut max_profit): (f64, f64) = if liquidity_usd < 2_500.0 {
@@ -940,6 +1143,26 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
     } else {
         (9.0, 40.0) // large caps
     };
+
+    // Apply pump.fun easy entry adjustments
+    if let Some((is_pumpfun, sol_reserves, in_range)) = pumpfun_easy_entry {
+        if is_pumpfun && in_range {
+            // Pump.fun tokens in optimal range tend to have quick, predictable bounces
+            min_profit *= 1.15; // 15% higher min target for quicker exits
+            max_profit *= 1.25; // 25% higher max target due to volatility
+
+            // Add additional boost based on how close to center of range
+            let range_center = (PUMPFUN_SOL_RESERVE_MIN + PUMPFUN_SOL_RESERVE_MAX) / 2.0;
+            let distance_from_center = (sol_reserves - range_center).abs();
+            let max_distance = (PUMPFUN_SOL_RESERVE_MAX - PUMPFUN_SOL_RESERVE_MIN) / 2.0;
+            let proximity_factor = 1.0 - (distance_from_center / max_distance).min(1.0);
+
+            // Closer to 24.5 SOL gets additional boost
+            let proximity_boost = proximity_factor * 0.1; // Up to 10% boost
+            min_profit *= 1.0 + proximity_boost;
+            max_profit *= 1.0 + proximity_boost * 1.5;
+        }
+    }
 
     // Enhance with dynamic, pool-price-based signals if we have data
     let pool_service = get_pool_service();

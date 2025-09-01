@@ -298,6 +298,8 @@ pub struct PoolPriceResult {
     pub volume_24h: f64,
     pub source: String, // "pool" or "api"
     pub calculated_at: DateTime<Utc>,
+    pub sol_reserve: Option<f64>, // SOL reserve amount in pool
+    pub token_reserve: Option<f64>, // Token reserve amount in pool
 }
 
 /// Token availability for pool price calculation
@@ -1164,6 +1166,8 @@ impl PoolPriceService {
                                 volume_24h: 0.0,
                                 source: "pool_batch".to_string(),
                                 calculated_at: chrono::Utc::now(),
+                                sol_reserve: Some(info.sol_reserve as f64),
+                                token_reserve: Some(info.token_reserve as f64),
                             });
 
                             successful_updates += 1;
@@ -1608,6 +1612,8 @@ impl PoolPriceService {
                                 volume_24h: 0.0,
                                 source: "pool_batch".to_string(),
                                 calculated_at: chrono::Utc::now(),
+                                sol_reserve: Some(info.sol_reserve as f64),
+                                token_reserve: Some(info.token_reserve as f64),
                             });
                         }
 
@@ -2530,11 +2536,13 @@ impl PoolPriceService {
         }
 
         // Calculate REAL price from blockchain pool reserves instead of using API data
-        let (price_sol, actual_pool_type) = match
-            self.calculate_real_pool_price_from_reserves(
-                &best_pool.pair_address,
-                token_address
-            ).await
+        let pool_calculation_result = self.calculate_real_pool_price_from_reserves(
+            &best_pool.pair_address,
+            token_address
+        ).await;
+
+        let (price_sol, actual_pool_type, sol_reserve, token_reserve) = match
+            pool_calculation_result
         {
             Ok(Some(pool_price_info)) => {
                 if is_debug_pool_prices_enabled() {
@@ -2550,7 +2558,12 @@ impl PoolPriceService {
                         )
                     );
                 }
-                (Some(pool_price_info.price_sol), Some(pool_price_info.pool_type))
+                (
+                    Some(pool_price_info.price_sol),
+                    Some(pool_price_info.pool_type.clone()),
+                    Some(pool_price_info.sol_reserve as f64),
+                    Some(pool_price_info.token_reserve as f64),
+                )
             }
             Ok(None) => {
                 if is_debug_pool_prices_enabled() {
@@ -2565,7 +2578,7 @@ impl PoolPriceService {
                     );
                 }
                 // Return None - price_service.rs will decide whether to use API fallback
-                (None, None)
+                (None, None, None, None)
             }
             Err(e) => {
                 if is_debug_pool_prices_enabled() {
@@ -2580,7 +2593,7 @@ impl PoolPriceService {
                     );
                 }
                 // Return None - price_service.rs will decide whether to use API fallback
-                (None, None)
+                (None, None, None, None)
             }
         };
 
@@ -2613,6 +2626,8 @@ impl PoolPriceService {
             volume_24h: best_pool.volume_24h,
             source: "pool".to_string(),
             calculated_at: calculation_time,
+            sol_reserve,
+            token_reserve,
         };
 
         if is_debug_pool_prices_enabled() {
@@ -2866,6 +2881,8 @@ impl PoolPriceService {
                     volume_24h: 0.0, // No API data for volume in direct mode
                     source: "pool_direct".to_string(),
                     calculated_at: calculation_time,
+                    sol_reserve: Some(pool_price_info.sol_reserve as f64),
+                    token_reserve: Some(pool_price_info.token_reserve as f64),
                 };
 
                 // Cache the result
