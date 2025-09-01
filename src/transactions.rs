@@ -1,8 +1,6 @@
 use chrono::{ DateTime, Utc };
-use once_cell::sync::Lazy;
-use rand;
 use serde::{ Deserialize, Serialize };
-use solana_sdk::{ commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Signature };
+use solana_sdk::{ pubkey::Pubkey, signature::Signature };
 use solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta;
 /// Transactions Manager - Real-time background transaction monitoring and analysis
 /// Tracks wallet transactions, caches data, detects transaction types, and integrates with positions
@@ -13,32 +11,17 @@ use solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta;
 /// Debug Tool: Use `cargo run --bin main_debug` for comprehensive debugging,
 /// monitoring, analysis, and performance testing of the transaction management system.
 use std::collections::{ HashMap, HashSet };
-use std::fs;
-use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
-use tabled::{ settings::{ object::Rows, Alignment, Modify, Style }, Table, Tabled };
 use tokio::sync::Notify;
-use tokio::time::{ interval, Duration };
+use tokio::time::Duration;
 
-use crate::errors::blockchain::{
-    is_permanent_failure,
-    parse_structured_solana_error,
-    BlockchainError,
-};
-use crate::global::{ is_debug_transactions_enabled, load_wallet_from_config, read_configs };
+use crate::errors::blockchain::parse_structured_solana_error;
+use crate::global::is_debug_transactions_enabled;
 use crate::logger::{ log, LogTag };
 use crate::rpc::get_rpc_client;
-use crate::tokens::decimals::{ lamports_to_sol, raw_to_ui_amount, sol_to_lamports };
-use crate::tokens::{
-    get_price,
-    get_token_decimals,
-    get_token_decimals_safe,
-    initialize_price_service,
-    types::PriceSourceType,
-    PriceOptions,
-    TokenDatabase,
-};
+use crate::tokens::decimals::lamports_to_sol;
+use crate::tokens::{ initialize_price_service, TokenDatabase };
 use crate::transactions_db::TransactionDatabase;
 use crate::transactions_types::{
     AtaAnalysis,
@@ -57,16 +40,8 @@ use crate::transactions_types::{
     TransactionStats,
     TransactionStatus,
     TransactionType,
-    ANALYSIS_CACHE_VERSION,
-    ATA_RENT_COST_SOL,
-    ATA_RENT_TOLERANCE_LAMPORTS,
-    DEFAULT_COMPUTE_UNIT_PRICE,
-    PROCESS_BATCH_SIZE,
-    RPC_BATCH_SIZE,
-    TRANSACTION_DATA_BATCH_SIZE,
-    WSOL_MINT,
 };
-use crate::utils::{ get_wallet_address, safe_truncate };
+use crate::utils::get_wallet_address;
 
 // Import the implementation methods
 use crate::transactions_lib;
