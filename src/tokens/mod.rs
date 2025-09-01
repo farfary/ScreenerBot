@@ -107,7 +107,6 @@ pub use lp_lock::{
 pub use ohlcvs::{
     get_latest_ohlcv,
     get_ohlcv_service_clone,
-    get_ohlcv_service_ref,
     init_ohlcv_service,
     is_ohlcv_data_available,
     start_ohlcv_monitoring,
@@ -115,7 +114,6 @@ pub use ohlcvs::{
     DataAvailability,
     OhlcvDataPoint,
     OhlcvService,
-    Timeframe,
 };
 pub use pool::initialize_price_service;
 pub use rugcheck::{

@@ -3,6 +3,7 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::get_pool_service;
 use crate::tokens::is_token_excluded_from_trading;
+use crate::tokens::ohlcvs::{ get_latest_ohlcv };
 /// Pool-based entry logic for ScreenerBot with Enhanced Momentum Analysis
 ///
 /// This module provides sophisticated entry timing based on drop momentum and acceleration analysis.
@@ -14,21 +15,22 @@ use crate::tokens::is_token_excluded_from_trading;
 /// - **Maturity Scoring**: Calculates drop maturity scores to enter at optimal depths, not too aggressively
 /// - **Bounce Detection**: Advanced bounce suppression using velocity-based strong bounce detection
 /// - **Multi-Window Analysis**: Near-top filtering with 1m, 5m, 15m windows plus ATH proximity guards
+/// - **OHLCV-Enhanced ATH Detection**: Uses OHLCV data (1h, 4h, 1d) for comprehensive ATH prevention
 ///
 /// ## Timing Logic:
 /// 1. **Acceleration Check**: Rejects entries if drop is still accelerating downward
 /// 2. **Momentum Analysis**: Tracks velocity across multiple timeframes for trend consistency
 /// 3. **Maturity Scoring**: Requires minimum maturity scores based on drop depth and momentum
 /// 4. **Deceleration Detection**: Prefers entries when drop momentum is slowing (optimal timing)
+/// 5. **Dual ATH Protection**: Pool data (1-3s updates) for fast checks + OHLCV (longer windows) for comprehensive ATH detection
 ///
 /// OPTIMIZED FOR SMART TIMING: Enters at optimal drop depths with momentum-based timing guards.
 use crate::tokens::Token;
 use crate::trader::POSITION_CLOSE_COOLDOWN_MINUTES;
 use chrono::Utc;
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::OnceLock;
-use std::time::{ Duration, Instant };
+use std::time::{ Instant };
 use tokio::sync::RwLock;
 
 // ============================================================================
@@ -72,10 +74,8 @@ const VOLUME_MULTIPLIER_HIGH: f64 = 1.2; // Reduced from 1.5x to 1.2x - easier v
 const VOLUME_MULTIPLIER_LARGE: f64 = 0.2; // Reduced from 0.3x to 0.2x - easier large token requirements
 const MIN_VOLUME_DROP: f64 = 0.1; // Reduced from 0.2% to 0.1% - catch micro volume moves
 const MICRO_DROP_THRESHOLD: f64 = 0.3; // Reduced from 0.5% to 0.3% - easier micro drops
-const VOLUME_SPIKE_MULTIPLIER: f64 = 2.0; // Reduced from 3.0x to 2.0x - easier volume spikes
 
 // NEAR-TOP FILTER PARAMETERS (Prevent buying at recent peaks)
-const NEAR_TOP_THRESHOLD_PERCENT: f64 = 10.0; // Must be MORE than 10% below 15-min high to enter
 // Multi-window near-top minimums (stricter near fresh highs)
 const NEAR_TOP_1M_MIN: f64 = 3.0; // at least 3% below 1m high
 const NEAR_TOP_5M_MIN: f64 = 6.0; // at least 6% below 5m high
@@ -90,8 +90,6 @@ const ULTRA_FRESH_ENTRY_ENABLED: bool = false;
 const REENTRY_PREMIUM_BASE_MAX: f64 = 12.0; // first re-entry: allow up to +12% over anchor
 const REENTRY_PREMIUM_MIN_FLOOR: f64 = 3.0; // never allow more than +3% at high experience
 const REENTRY_PREMIUM_DECAY_PER_TRADE: f64 = 1.8; // shrink premium allowance each completed cycle
-const REENTRY_VALUE_ZONE_BASE: f64 = 10.0; // if price is this % below anchor, treat as value
-const REENTRY_VALUE_ZONE_GROW_PER_TRADE: f64 = 4.0; // widen value zone with experience
 const REENTRY_VALUE_ZONE_MAX: f64 = 35.0; // cap value-zone widening
 
 // PROFIT TARGET CALCULATION PARAMETERS
@@ -125,12 +123,15 @@ const MINUTES_PER_SECOND: i64 = 60; // Time conversion
 // 📦 PRICE HISTORY FRESHNESS SAFEGUARDS (HARDCODED MINIMUM REQUIREMENTS)
 // ============================================================================
 // Hardcoded minimum price points required before allowing any entry
-const MIN_PRICE_POINTS_REQUIRED: usize = 10; // Lowered to reduce start latency (was 15)
+// Lower to admit earlier entries; logs showed frequent INSUFFICIENT_PRICE_DATA at 1-5 points
+// Safety is still guarded by near-top checks and momentum validations
+const MIN_PRICE_POINTS_REQUIRED: usize = 4; // was 10 (previously 15)
 const HISTORY_MAX_POINT_AGE_SEC: i64 = 1800; // Extended to 30m for more flexibility
 const HISTORY_MIN_POINTS_60S: usize = 0; // NO REQUIREMENT - allow fresh tokens
 const HISTORY_MIN_POINTS_300S: usize = 0; // NO REQUIREMENT - allow fresh tokens
 const HISTORY_MAX_LARGEST_GAP_SEC: i64 = 600; // Extended to 10min gaps (more lenient)
-const STARTUP_STALE_GRACE_SEC: i64 = 10; // Reduced grace period - be more aggressive
+// Allow the pool price cache to warm up before enforcing strict freshness
+const STARTUP_STALE_GRACE_SEC: i64 = 60; // was 10
 static BOT_START_INSTANT: once_cell::sync::OnceCell<Instant> = once_cell::sync::OnceCell::new();
 
 // ============================================================================
@@ -154,9 +155,12 @@ fn get_liquidity_based_thresholds(liquidity_usd: f64) -> (f64, f64, f64) {
     (min_drop, max_drop, target_ratio)
 }
 
-/// Check if current price is near recent top (15-minute high)
+/// Check if current price is near recent top using both pool data and OHLCV data
+/// Pool data: Fast updates (1-3 sec) for short-term analysis (1m, 5m, 15m)
+/// OHLCV data: Longer windows (1h, 4h, 1d) for comprehensive ATH detection
 /// Returns true if price is too close to recent peak (should NOT enter)
-fn is_near_recent_top(
+async fn is_near_recent_top(
+    mint: &str,
     current_price: f64,
     price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
     _liquidity_usd: f64 // Not used anymore, kept for compatibility
@@ -168,7 +172,7 @@ fn is_near_recent_top(
         return false;
     }
 
-    // Get prices from last 15 minutes
+    // === PHASE 1: Fast pool-based analysis for short-term windows (1m, 5m, 15m) ===
     let now = Utc::now();
     let mut recent_prices: Vec<f64> = price_history
         .iter()
@@ -177,8 +181,8 @@ fn is_near_recent_top(
         .collect();
 
     if recent_prices.len() < MIN_PRICE_POINTS_REQUIRED {
-        // Not enough data points to trust near-top logic – allow rather than reject to avoid blocking fresh tokens.
-        return false; // Do not classify as near top; other guards will decide
+        // Not enough pool data points - allow rather than reject to avoid blocking fresh tokens
+        return false;
     }
 
     // Find the highest/lowest price in the 15-minute window and when it occurred
@@ -216,17 +220,15 @@ fn is_near_recent_top(
     } else {
         0.0
     };
+
     // Map range 0..30% -> threshold 12..8 (more conservative near tops when calm), beyond 30% -> 15%
     let mut dynamic_threshold = if range_pct < 30.0 {
-        // linear from 12 down to 8
         12.0 - (range_pct / 30.0) * 4.0
     } else if range_pct < 80.0 {
-        // moderate volatility -> increase threshold to avoid top entries
         12.0 + ((range_pct - 30.0) / 50.0) * 3.0 // up to 15%
     } else {
         15.0
     };
-    // Clamp to global min/max bounds
     dynamic_threshold = dynamic_threshold.max(NEAR_TOP_THRESHOLD_MIN).min(NEAR_TOP_THRESHOLD_MAX);
 
     // STRICT RULE: Must be MORE than dynamic_threshold below 15-min high to allow entry
@@ -264,15 +266,53 @@ fn is_near_recent_top(
         }
     }
 
-    // ATH guard across all available history (observed within the provided history span)
-    let observed_ath = price_history
+    // === PHASE 2: OHLCV-based ATH detection (1-minute data only) ===
+    let mut ohlcv_ath = 0.0f64;
+
+    if let Ok(ohlcv_data) = get_latest_ohlcv(mint, 100).await {
+        for point in &ohlcv_data {
+            ohlcv_ath = ohlcv_ath.max(point.high);
+        }
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "OHLCV_ATH",
+                &format!("Mint: {}, 1m Points: {}, ATH: ${:.6}", mint, ohlcv_data.len(), ohlcv_ath)
+            );
+        }
+    }
+
+    // === PHASE 3: Combined ATH analysis (pool history + OHLCV ATH) ===
+
+    // Pool-based ATH from available history
+    let pool_ath = price_history
         .iter()
         .map(|(_, p)| *p)
         .fold(0.0f64, |a, b| a.max(b));
-    if observed_ath > 0.0 && observed_ath.is_finite() {
-        let drop_from_ath = ((observed_ath - current_price) / observed_ath) * 100.0;
+
+    // Use the highest ATH from both sources
+    let combined_ath = pool_ath.max(ohlcv_ath);
+
+    if combined_ath > 0.0 && combined_ath.is_finite() {
+        let drop_from_ath = ((combined_ath - current_price) / combined_ath) * 100.0;
         if drop_from_ath < ATH_PROXIMITY_PERCENT {
             is_too_close_to_top = true;
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "ATH_BLOCK",
+                    &format!(
+                        "Mint: {}, Current: ${:.6}, ATH: ${:.6} (Pool: ${:.6}, OHLCV: ${:.6}), Drop: {:.2}% < {:.2}%",
+                        mint,
+                        current_price,
+                        combined_ath,
+                        pool_ath,
+                        ohlcv_ath,
+                        drop_from_ath,
+                        ATH_PROXIMITY_PERCENT
+                    )
+                );
+            }
         }
     }
 
@@ -281,15 +321,13 @@ fn is_near_recent_top(
             LogTag::Entry,
             "NEAR_TOP_CHECK",
             &format!(
-                "🔝 High proximity: current={:.12} | 15m drop={:.2}% req>{:.1}% (range={:.1}%) | 5m req>{:.1}% | 1m req>{:.1}% | cooldown={} | ath_guard={} -> too_close={}",
+                "Mint: {}, Price: ${:.6}, 15m_drop: {:.2}%, threshold: {:.2}%, pool_ATH: ${:.6}, ohlcv_ATH: ${:.6}, blocked: {}",
+                mint,
                 current_price,
                 drop_from_high_percent,
                 dynamic_threshold,
-                range_pct,
-                NEAR_TOP_5M_MIN,
-                NEAR_TOP_1M_MIN,
-                COOLDOWN_AFTER_NEW_HIGH_SEC,
-                ATH_PROXIMITY_PERCENT,
+                pool_ath,
+                ohlcv_ath,
                 is_too_close_to_top
             )
         );
@@ -674,7 +712,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     }
 
     // CRITICAL SAFETY CHECK: Reject entries if price is near recent top (multi-window + ATH guards)
-    if is_near_recent_top(current_pool_price, &price_history, liquidity_usd) {
+    if is_near_recent_top(&token.mint, current_pool_price, &price_history, liquidity_usd).await {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Entry,

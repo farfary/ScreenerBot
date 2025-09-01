@@ -1,13 +1,14 @@
 use crate::global::{is_debug_ohlcv_enabled, CACHE_OHLCVS_DIR};
-/// OHLCV Data Collection and Caching System for ScreenerBot
+/// OHLCV Data Collection and Caching System for ScreenerBot - 1-Minute Only
 ///
-/// This module provides comprehensive OHLCV (Open, High, Low, Close, Volume) data collection
+/// This module provides OHLCV (Open, High, Low, Close, Volume) data collection
 /// from GeckoTerminal API with intelligent caching and background monitoring.
+/// Optimized for 1-minute timeframe only for simplicity and performance.
 ///
 /// ## Features:
-/// - **Multi-timeframe Support**: minute(1,5,15), hour(1,4,12), day(1) aggregations
-/// - **Smart Caching**: File-based cache organized per mint and pool in CACHE_OHLCVS_DIR/
-///   - Structure: CACHE_OHLCVS_DIR/<mint>/<pool_address>/<timeframe>.json (e.g., 1m.json, 5m.json, 15m.json, 1h.json, 4h.json, 12h.json, 1d.json)
+/// - **Single Timeframe**: Only 1-minute candles for consistent analysis
+/// - **Smart Caching**: File-based cache organized per mint and pool
+///   - Structure: CACHE_OHLCVS_DIR/<mint>/<pool_address>/1m.json
 /// - **Background Monitoring**: Continuous data collection for watched tokens
 /// - **Pool Integration**: Uses best pools from pool service for data fetching
 /// - **Data Validation**: Handles missing intervals and validates data integrity
@@ -21,20 +22,16 @@ use crate::global::{is_debug_ohlcv_enabled, CACHE_OHLCVS_DIR};
 /// // Add token to watch list (from trader filtering)
 /// ohlcv_service.add_to_watch_list("token_mint", true).await;
 ///
-/// // Check data availability
-/// let availability = ohlcv_service.check_data_availability("token_mint", &Timeframe::Hour1).await;
-///
-/// // Get OHLCV data
-/// let data = ohlcv_service.get_ohlcv_data("token_mint", &Timeframe::Hour1, 100).await?;
+/// // Get OHLCV data (always 1-minute)
+/// let data = ohlcv_service.get_ohlcv_data("token_mint", 100).await?;
 /// ```
 use crate::logger::{log, LogTag};
 use crate::tokens::pool::get_pool_service;
 use crate::tokens::PriceOptions;
-use crate::utils::safe_truncate;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -51,105 +48,39 @@ const GECKOTERMINAL_BASE_URL: &str = "https://api.geckoterminal.com/api/v2";
 /// API version header value
 const API_VERSION: &str = "20230302";
 
-/// Rate limit: 30 calls per minute
-const API_RATE_LIMIT_PER_MINUTE: u32 = 30;
-
 /// Rate limit delay between calls (2 seconds to be safe)
 const API_RATE_LIMIT_DELAY_MS: u64 = 2000;
 
 /// Maximum number of cached entries in memory to prevent unbounded growth
-const MAX_MEMORY_CACHE_ENTRIES: usize = 1000;
+const MAX_MEMORY_CACHE_ENTRIES: usize = 500;
 
 /// Cache directory for OHLCV data
 const CACHE_DIR: &str = CACHE_OHLCVS_DIR;
 
-/// Data retention period (24 hours)
-const DATA_RETENTION_HOURS: i64 = 24;
+/// Data retention period (6 hours - shorter since only 1m data)
+const DATA_RETENTION_HOURS: i64 = 6;
 
 /// Default limit for OHLCV data points
 const DEFAULT_OHLCV_LIMIT: u32 = 100;
 
 /// Maximum limit for OHLCV data points
-const MAX_OHLCV_LIMIT: u32 = 1000;
+const MAX_OHLCV_LIMIT: u32 = 500;
 
-/// Background monitoring interval (1 minute)
-const MONITORING_INTERVAL_SECS: u64 = 60;
+/// Background monitoring interval (30 seconds - more frequent for 1m data)
+const MONITORING_INTERVAL_SECS: u64 = 30;
 
-/// Cache file cleanup interval (1 hour)
-const CLEANUP_INTERVAL_SECS: u64 = 3600;
+/// Cache file cleanup interval (30 minutes)
+const CLEANUP_INTERVAL_SECS: u64 = 1800;
 
 /// Solana network identifier for GeckoTerminal
 const SOLANA_NETWORK: &str = "solana";
 
+/// Cache expiration time for 1-minute data (2 minutes)
+const CACHE_EXPIRY_MINUTES: i64 = 2;
+
 // =============================================================================
 // DATA STRUCTURES
 // =============================================================================
-
-/// Supported timeframes with aggregation values
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Timeframe {
-    /// 1-minute candles
-    Minute1,
-    /// 5-minute candles
-    Minute5,
-    /// 15-minute candles
-    Minute15,
-    /// 1-hour candles
-    Hour1,
-    /// 4-hour candles
-    Hour4,
-    /// 12-hour candles
-    Hour12,
-    /// 1-day candles
-    Day1,
-}
-
-impl Timeframe {
-    /// Get the GeckoTerminal API timeframe and aggregate parameters
-    pub fn get_api_params(&self) -> (&'static str, u32) {
-        match self {
-            Timeframe::Minute1 => ("minute", 1),
-            Timeframe::Minute5 => ("minute", 5),
-            Timeframe::Minute15 => ("minute", 15),
-            Timeframe::Hour1 => ("hour", 1),
-            Timeframe::Hour4 => ("hour", 4),
-            Timeframe::Hour12 => ("hour", 12),
-            Timeframe::Day1 => ("day", 1),
-        }
-    }
-
-    /// Get cache subdirectory name
-    pub fn get_cache_dir(&self) -> &'static str {
-        match self {
-            Timeframe::Minute1 => "1m",
-            Timeframe::Minute5 => "5m",
-            Timeframe::Minute15 => "15m",
-            Timeframe::Hour1 => "1h",
-            Timeframe::Hour4 => "4h",
-            Timeframe::Hour12 => "12h",
-            Timeframe::Day1 => "1d",
-        }
-    }
-
-    /// Get all available timeframes
-    pub fn all() -> Vec<Timeframe> {
-        vec![
-            Timeframe::Minute1,
-            Timeframe::Minute5,
-            Timeframe::Minute15,
-            Timeframe::Hour1,
-            Timeframe::Hour4,
-            Timeframe::Hour12,
-            Timeframe::Day1,
-        ]
-    }
-}
-
-impl std::fmt::Display for Timeframe {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.get_cache_dir())
-    }
-}
 
 /// OHLCV data point
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,11 +99,10 @@ pub struct OhlcvDataPoint {
     pub volume: f64,
 }
 
-/// Cached OHLCV data for a token/timeframe combination
+/// Cached OHLCV data for a token (1-minute only)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedOhlcvData {
     pub mint: String,
-    pub timeframe: Timeframe,
     pub pool_address: String,
     pub data_points: Vec<OhlcvDataPoint>,
     pub last_updated: DateTime<Utc>,
@@ -180,23 +110,18 @@ pub struct CachedOhlcvData {
 }
 
 impl CachedOhlcvData {
-    /// Check if cache is expired (older than 5 minutes for real-time timeframes)
+    /// Check if cache is expired (older than 2 minutes for 1m data)
     pub fn is_expired(&self) -> bool {
         let age = Utc::now() - self.last_updated;
-        match self.timeframe {
-            Timeframe::Minute1 | Timeframe::Minute5 => age.num_minutes() > 5,
-            Timeframe::Minute15 | Timeframe::Hour1 => age.num_minutes() > 15,
-            _ => age.num_hours() > 1,
-        }
+        age.num_minutes() > CACHE_EXPIRY_MINUTES
     }
 
-    /// Get cache file path (new layout)
-    /// New layout stores files as: CACHE_OHLCVS_DIR/<mint>/<pool_address>/<timeframe>.json
+    /// Get cache file path: CACHE_OHLCVS_DIR/<mint>/<pool_address>/1m.json
     pub fn get_cache_path(&self) -> PathBuf {
         Path::new(CACHE_DIR)
             .join(&self.mint)
             .join(&self.pool_address)
-            .join(format!("{}.json", self.timeframe.get_cache_dir()))
+            .join("1m.json")
     }
 }
 
@@ -204,13 +129,12 @@ impl CachedOhlcvData {
 #[derive(Debug, Clone)]
 pub struct DataAvailability {
     pub mint: String,
-    pub timeframe: Timeframe,
     pub has_cached_data: bool,
     pub has_pool: bool,
     pub pool_address: Option<String>,
     pub last_data_timestamp: Option<i64>,
     pub data_points_count: usize,
-    pub is_fresh: bool, // Data is less than expected interval old
+    pub is_fresh: bool,
     pub last_checked: DateTime<Utc>,
 }
 
@@ -220,7 +144,6 @@ pub struct OhlcvWatchEntry {
     pub mint: String,
     pub is_open_position: bool,
     pub priority: i32,
-    pub timeframes: HashSet<Timeframe>,
     pub added_at: DateTime<Utc>,
     pub last_update: Option<DateTime<Utc>>,
     pub update_count: u64,
@@ -231,7 +154,6 @@ pub struct OhlcvWatchEntry {
 #[derive(Debug, Deserialize)]
 struct GeckoTerminalResponse {
     data: GeckoTerminalData,
-    meta: Option<GeckoTerminalMeta>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -247,33 +169,19 @@ struct GeckoTerminalAttributes {
     ohlcv_list: Vec<Vec<f64>>, // [timestamp, open, high, low, close, volume]
 }
 
-#[derive(Debug, Deserialize)]
-struct GeckoTerminalMeta {
-    base: Option<GeckoTerminalTokenInfo>,
-    quote: Option<GeckoTerminalTokenInfo>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GeckoTerminalTokenInfo {
-    address: String,
-    name: String,
-    symbol: String,
-    coingecko_coin_id: Option<String>,
-}
-
 // =============================================================================
 // MAIN OHLCV SERVICE
 // =============================================================================
 
-/// OHLCV data collection and caching service
+/// OHLCV data collection and caching service (1-minute only)
 #[derive(Clone)]
 pub struct OhlcvService {
     /// HTTP client for API requests
     client: Client,
-    /// In-memory cache for OHLCV data
-    cache: Arc<RwLock<HashMap<String, CachedOhlcvData>>>, // key: mint_timeframe
-    /// Watch list for background monitoring
-    watch_list: Arc<RwLock<HashMap<String, OhlcvWatchEntry>>>, // key: mint
+    /// In-memory cache for OHLCV data (key: mint)
+    cache: Arc<RwLock<HashMap<String, CachedOhlcvData>>>,
+    /// Watch list for background monitoring (key: mint)
+    watch_list: Arc<RwLock<HashMap<String, OhlcvWatchEntry>>>,
     /// Rate limiting state
     last_api_call: Arc<RwLock<Option<Instant>>>,
     /// Service statistics
@@ -290,7 +198,6 @@ pub struct OhlcvStats {
     pub cache_hits: u64,
     pub cache_misses: u64,
     pub watched_tokens: usize,
-    pub cached_timeframes: usize,
     pub last_cleanup: Option<DateTime<Utc>>,
     pub data_points_cached: usize,
 }
@@ -308,7 +215,6 @@ impl OhlcvService {
                 &format!("Created OHLCV cache directory: {}", CACHE_DIR),
             );
         }
-        // Note: Files are stored under per-mint folders organized by pool address.
 
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
@@ -319,7 +225,7 @@ impl OhlcvService {
             log(
                 LogTag::Ohlcv,
                 "INIT_CLIENT",
-                "🌐 HTTP client configured with 30s timeout and custom user-agent",
+                "🌐 HTTP client configured for 1-minute OHLCV data only",
             );
         }
 
@@ -346,7 +252,7 @@ impl OhlcvService {
         log(
             LogTag::Ohlcv,
             "START",
-            "🚀 Starting OHLCV background monitoring service",
+            "🚀 Starting 1-minute OHLCV background monitoring service",
         );
 
         if is_debug_ohlcv_enabled() {
@@ -380,7 +286,7 @@ impl OhlcvService {
                 tokio::select! {
                     _ = monitoring_interval.tick() => {
                         if is_debug_ohlcv_enabled() {
-                            log(LogTag::Ohlcv, "MONITOR_TICK", "⏰ Background monitoring tick starting");
+                            log(LogTag::Ohlcv, "MONITOR_TICK", "⏰ 1m OHLCV monitoring tick starting");
                         }
                         if let Err(e) = Self::process_watch_list(
                             &client,
@@ -392,18 +298,18 @@ impl OhlcvService {
                             log(LogTag::Ohlcv, "ERROR", &format!("Watch list processing failed: {}", e));
                         }
                         if is_debug_ohlcv_enabled() {
-                            log(LogTag::Ohlcv, "MONITOR_TICK_DONE", "✅ Background monitoring tick completed");
+                            log(LogTag::Ohlcv, "MONITOR_TICK_DONE", "✅ 1m OHLCV monitoring tick completed");
                         }
                     }
                     _ = cleanup_interval.tick() => {
                         if is_debug_ohlcv_enabled() {
-                            log(LogTag::Ohlcv, "CLEANUP_TICK", "🧹 Background cleanup tick starting");
+                            log(LogTag::Ohlcv, "CLEANUP_TICK", "🧹 OHLCV cleanup tick starting");
                         }
                         if let Err(e) = Self::cleanup_old_data(&cache, &stats).await {
                             log(LogTag::Ohlcv, "ERROR", &format!("Cleanup failed: {}", e));
                         }
                         if is_debug_ohlcv_enabled() {
-                            log(LogTag::Ohlcv, "CLEANUP_TICK_DONE", "✅ Background cleanup tick completed");
+                            log(LogTag::Ohlcv, "CLEANUP_TICK_DONE", "✅ OHLCV cleanup tick completed");
                         }
                     }
                     _ = shutdown.notified() => {
@@ -448,28 +354,17 @@ impl OhlcvService {
                 log(
                     LogTag::Ohlcv,
                     "WATCH_UPDATE",
-                    &format!("📊 Updated watch list for {}: priority={}", mint, priority),
+                    &format!("📊 Updated 1m OHLCV watch list for {}: priority={}", mint, priority),
                 );
             }
         } else {
             // Add new entry
-            let timeframes = if is_open_position {
-                // Open positions get all timeframes
-                Timeframe::all().into_iter().collect()
-            } else {
-                // Regular tokens get essential timeframes
-                vec![Timeframe::Minute15, Timeframe::Hour1, Timeframe::Hour4]
-                    .into_iter()
-                    .collect()
-            };
-
             watch_list.insert(
                 mint.to_string(),
                 OhlcvWatchEntry {
                     mint: mint.to_string(),
                     is_open_position,
                     priority,
-                    timeframes,
                     added_at: Utc::now(),
                     last_update: None,
                     update_count: 0,
@@ -482,15 +377,8 @@ impl OhlcvService {
                     LogTag::Ohlcv,
                     "WATCH_ADD_DETAIL",
                     &format!(
-                        "📈 Added {} to OHLCV watch list (priority: {}, open_position: {}, timeframes: {})",
-                        mint,
-                        priority,
-                        is_open_position,
-                        if is_open_position {
-                            "ALL"
-                        } else {
-                            "Essential (15m, 1h, 4h)"
-                        }
+                        "📈 Added {} to 1m OHLCV watch list (priority: {}, open_position: {})",
+                        mint, priority, is_open_position
                     )
                 );
             }
@@ -510,7 +398,7 @@ impl OhlcvService {
             log(
                 LogTag::Ohlcv,
                 "WATCH_REMOVE",
-                &format!("📉 Removed {} from OHLCV watch list", mint),
+                &format!("📉 Removed {} from 1m OHLCV watch list", mint),
             );
 
             // Update stats
@@ -519,26 +407,20 @@ impl OhlcvService {
         }
     }
 
-    /// Check data availability for a token/timeframe
-    pub async fn check_data_availability(
-        &self,
-        mint: &str,
-        timeframe: &Timeframe,
-    ) -> DataAvailability {
-        let cache_key = format!("{}_{}", mint, timeframe.get_cache_dir());
-
+    /// Check data availability for a token
+    pub async fn check_data_availability(&self, mint: &str) -> DataAvailability {
         if is_debug_ohlcv_enabled() {
             log(
                 LogTag::Ohlcv,
                 "AVAILABILITY_CHECK",
-                &format!("🔍 Checking data availability for {} {}", mint, timeframe),
+                &format!("🔍 Checking 1m OHLCV data availability for {}", mint),
             );
         }
 
         // Check in-memory cache
         let cached_data = {
             let cache = self.cache.read().await;
-            cache.get(&cache_key).cloned()
+            cache.get(mint).cloned()
         };
 
         let (has_cached_data, last_data_timestamp, data_points_count, is_fresh) =
@@ -549,44 +431,33 @@ impl OhlcvService {
                         LogTag::Ohlcv,
                         "MEMORY_CACHE_CHECK",
                         &format!(
-                            "💾 Memory cache found for {} {}: {} points, fresh: {}",
-                            mint,
-                            timeframe,
-                            data.data_points.len(),
-                            is_fresh
+                            "💾 Memory cache found for {}: {} points, fresh: {}",
+                            mint, data.data_points.len(), is_fresh
                         ),
                     );
                 }
                 (true, data.last_timestamp, data.data_points.len(), is_fresh)
             } else {
                 // Check file cache
-                if let Ok(file_data) = self.load_from_file_cache(mint, timeframe).await {
+                if let Ok(file_data) = self.load_from_file_cache(mint).await {
                     let is_fresh = !file_data.is_expired();
                     if is_debug_ohlcv_enabled() {
                         log(
                             LogTag::Ohlcv,
                             "FILE_CACHE_CHECK",
                             &format!(
-                                "📁 File cache found for {} {}: {} points, fresh: {}",
-                                mint,
-                                timeframe,
-                                file_data.data_points.len(),
-                                is_fresh
+                                "📁 File cache found for {}: {} points, fresh: {}",
+                                mint, file_data.data_points.len(), is_fresh
                             ),
                         );
                     }
-                    (
-                        true,
-                        file_data.last_timestamp,
-                        file_data.data_points.len(),
-                        is_fresh,
-                    )
+                    (true, file_data.last_timestamp, file_data.data_points.len(), is_fresh)
                 } else {
                     if is_debug_ohlcv_enabled() {
                         log(
                             LogTag::Ohlcv,
                             "NO_CACHE",
-                            &format!("❌ No cache found for {} {}", mint, timeframe),
+                            &format!("❌ No cache found for {}", mint),
                         );
                     }
                     (false, None, 0, false)
@@ -637,15 +508,14 @@ impl OhlcvService {
                 LogTag::Ohlcv,
                 "AVAILABILITY_RESULT",
                 &format!(
-                    "📊 Availability result for {} {}: cached={}, pool={}, fresh={}, points={}",
-                    mint, timeframe, has_cached_data, has_pool, is_fresh, data_points_count
+                    "📊 1m OHLCV availability for {}: cached={}, pool={}, fresh={}, points={}",
+                    mint, has_cached_data, has_pool, is_fresh, data_points_count
                 ),
             );
         }
 
         DataAvailability {
             mint: mint.to_string(),
-            timeframe: timeframe.clone(),
             has_cached_data,
             has_pool,
             pool_address,
@@ -656,31 +526,26 @@ impl OhlcvService {
         }
     }
 
-    /// Get OHLCV data for a token/timeframe
+    /// Get 1-minute OHLCV data for a token
     pub async fn get_ohlcv_data(
         &self,
         mint: &str,
-        timeframe: &Timeframe,
         limit: Option<u32>,
     ) -> Result<Vec<OhlcvDataPoint>, String> {
         let limit = limit.unwrap_or(DEFAULT_OHLCV_LIMIT).min(MAX_OHLCV_LIMIT);
-        let cache_key = format!("{}_{}", mint, timeframe.get_cache_dir());
 
         if is_debug_ohlcv_enabled() {
             log(
                 LogTag::Ohlcv,
                 "DATA_REQUEST",
-                &format!(
-                    "📊 OHLCV data request: {} {} (limit: {})",
-                    mint, timeframe, limit
-                ),
+                &format!("📊 1m OHLCV data request: {} (limit: {})", mint, limit),
             );
         }
 
         // Check in-memory cache first
         {
             let cache = self.cache.read().await;
-            if let Some(cached_data) = cache.get(&cache_key) {
+            if let Some(cached_data) = cache.get(mint) {
                 if !cached_data.is_expired() {
                     let mut stats = self.stats.write().await;
                     stats.cache_hits += 1;
@@ -689,12 +554,7 @@ impl OhlcvService {
                         log(
                             LogTag::Ohlcv,
                             "CACHE_HIT",
-                            &format!(
-                                "💾 Cache hit for {} {}: {} points",
-                                mint,
-                                timeframe,
-                                cached_data.data_points.len()
-                            ),
+                            &format!("✅ Memory cache hit for {}: {} points", mint, cached_data.data_points.len()),
                         );
                     }
 
@@ -708,12 +568,12 @@ impl OhlcvService {
         }
 
         // Check file cache
-        if let Ok(file_data) = self.load_from_file_cache(mint, timeframe).await {
+        if let Ok(file_data) = self.load_from_file_cache(mint).await {
             if !file_data.is_expired() {
                 // Load into memory cache
                 {
                     let mut cache = self.cache.write().await;
-                    cache.insert(cache_key.clone(), file_data.clone());
+                    cache.insert(mint.to_string(), file_data.clone());
                 }
 
                 let mut stats = self.stats.write().await;
@@ -723,12 +583,7 @@ impl OhlcvService {
                     log(
                         LogTag::Ohlcv,
                         "FILE_CACHE_HIT",
-                        &format!(
-                            "📁 File cache hit for {} {}: {} points",
-                            mint,
-                            timeframe,
-                            file_data.data_points.len()
-                        ),
+                        &format!("📁 File cache hit for {}: {} points", mint, file_data.data_points.len()),
                     );
                 }
 
@@ -749,10 +604,7 @@ impl OhlcvService {
             log(
                 LogTag::Ohlcv,
                 "CACHE_MISS",
-                &format!(
-                    "❌ Cache miss for {} {}, fetching from API",
-                    mint, timeframe
-                ),
+                &format!("❌ Cache miss for {}, fetching 1m data from API", mint),
             );
         }
 
@@ -778,28 +630,19 @@ impl OhlcvService {
         };
 
         // Fetch from API
-        match self
-            .fetch_ohlcv_from_api(&pool_address, timeframe, limit)
-            .await
-        {
+        match self.fetch_ohlcv_from_api(&pool_address, limit).await {
             Ok(data_points) => {
                 if is_debug_ohlcv_enabled() {
                     log(
                         LogTag::Ohlcv,
                         "API_SUCCESS",
-                        &format!(
-                            "✅ Fetched {} OHLCV points for {} {} from API",
-                            data_points.len(),
-                            mint,
-                            timeframe
-                        ),
+                        &format!("✅ Fetched {} 1m OHLCV points for {} from API", data_points.len(), mint),
                     );
                 }
 
                 // Cache the data
                 let cached_data = CachedOhlcvData {
                     mint: mint.to_string(),
-                    timeframe: timeframe.clone(),
                     pool_address,
                     data_points: data_points.clone(),
                     last_updated: Utc::now(),
@@ -816,7 +659,7 @@ impl OhlcvService {
                         let oldest_key = cache
                             .iter()
                             .min_by_key(|(_, data)| data.last_updated)
-                            .map(|(key, _)| key.clone());
+                            .map(|(k, _)| k.clone());
 
                         if let Some(key) = oldest_key {
                             cache.remove(&key);
@@ -830,7 +673,7 @@ impl OhlcvService {
                         }
                     }
 
-                    cache.insert(cache_key, cached_data.clone());
+                    cache.insert(mint.to_string(), cached_data.clone());
                 }
 
                 // Save to file cache
@@ -855,10 +698,7 @@ impl OhlcvService {
                 log(
                     LogTag::Ohlcv,
                     "ERROR",
-                    &format!(
-                        "Failed to fetch OHLCV data for {} {}: {}",
-                        mint, timeframe, e
-                    ),
+                    &format!("Failed to fetch 1m OHLCV data for {}: {}", mint, e),
                 );
                 Err(e)
             }
@@ -873,9 +713,6 @@ impl OhlcvService {
         // Update real-time stats
         let watch_list = self.watch_list.read().await;
         stats_copy.watched_tokens = watch_list.len();
-
-        let cache = self.cache.read().await;
-        stats_copy.cached_timeframes = cache.len();
 
         stats_copy
     }
@@ -895,43 +732,34 @@ impl OhlcvService {
         }
     }
 
-    /// Fetch OHLCV data from GeckoTerminal API
+    /// Fetch 1-minute OHLCV data from GeckoTerminal API
     async fn fetch_ohlcv_from_api(
         &self,
         pool_address: &str,
-        timeframe: &Timeframe,
         limit: u32,
     ) -> Result<Vec<OhlcvDataPoint>, String> {
         // Rate limiting
         self.enforce_rate_limit().await;
 
-        let (timeframe_str, aggregate) = timeframe.get_api_params();
-
         let url = format!(
-            "{}/networks/{}/pools/{}/ohlcv/{}",
-            GECKOTERMINAL_BASE_URL, SOLANA_NETWORK, pool_address, timeframe_str
+            "{}/networks/{}/pools/{}/ohlcv/minute",
+            GECKOTERMINAL_BASE_URL, SOLANA_NETWORK, pool_address
         );
 
         if is_debug_ohlcv_enabled() {
             log(
                 LogTag::Ohlcv,
                 "API_CALL",
-                &format!(
-                    "🌐 API call: {} (aggregate: {}, limit: {})",
-                    url, aggregate, limit
-                ),
+                &format!("🌐 1m OHLCV API call: {} (limit: {})", url, limit),
             );
         }
 
         let response = self
             .client
             .get(&url)
-            .header(
-                "Accept",
-                format!("application/json;version={}", API_VERSION),
-            )
+            .header("Accept", format!("application/json;version={}", API_VERSION))
             .query(&[
-                ("aggregate", aggregate.to_string()),
+                ("aggregate", "1".to_string()),
                 ("limit", limit.to_string()),
                 ("currency", "usd".to_string()),
             ])
@@ -964,8 +792,8 @@ impl OhlcvService {
                     if is_debug_ohlcv_enabled() {
                         log(
                             LogTag::Ohlcv,
-                            "RATE_LIMIT_EXCEEDED",
-                            "⚠️ API rate limit exceeded, backing off",
+                            "RATE_LIMIT_HIT",
+                            "⏳ Rate limit exceeded, waiting 10 seconds",
                         );
                     }
                     tokio::time::sleep(Duration::from_secs(10)).await;
@@ -1092,7 +920,7 @@ impl OhlcvService {
                         LogTag::Ohlcv,
                         "RATE_LIMIT",
                         &format!(
-                            "⏳ Rate limiting: sleeping for {:?} (elapsed: {:?}, required: {:?})",
+                            "⏳ Rate limiting: sleeping {:?} (elapsed: {:?}, required: {:?})",
                             sleep_duration, elapsed, required_delay
                         ),
                     );
@@ -1119,12 +947,8 @@ impl OhlcvService {
         *last_call = Some(Instant::now());
     }
 
-    /// Load OHLCV data from file cache (public for testing)
-    pub async fn load_from_file_cache(
-        &self,
-        mint: &str,
-        timeframe: &Timeframe,
-    ) -> Result<CachedOhlcvData, String> {
+    /// Load OHLCV data from file cache
+    pub async fn load_from_file_cache(&self, mint: &str) -> Result<CachedOhlcvData, String> {
         // Get pool address for this mint
         let pool_address = if let Some(addr) = self.get_pool_address_for_mint(mint).await {
             addr
@@ -1135,13 +959,13 @@ impl OhlcvService {
         let cache_path = Path::new(CACHE_DIR)
             .join(mint)
             .join(&pool_address)
-            .join(format!("{}.json", timeframe.get_cache_dir()));
+            .join("1m.json");
 
         if is_debug_ohlcv_enabled() {
             log(
                 LogTag::Ohlcv,
                 "FILE_CACHE_LOAD",
-                &format!("📁 Loading cache file: {}", cache_path.display()),
+                &format!("📁 Loading 1m cache file: {}", cache_path.display()),
             );
         }
 
@@ -1210,7 +1034,7 @@ impl OhlcvService {
                 LogTag::Ohlcv,
                 "CACHE_SAVE",
                 &format!(
-                    "💾 Saved cache file: {} ({} points, {:.1} KB)",
+                    "💾 Saved 1m cache file: {} ({} points, {:.1} KB)",
                     cache_path.display(),
                     cached_data.data_points.len(),
                     (content_len as f64) / 1024.0
@@ -1243,8 +1067,8 @@ impl OhlcvService {
                     .then_with(|| a.last_update.cmp(&b.last_update))
             });
 
-            // Limit concurrent updates to avoid API overload
-            tokens.into_iter().take(5).collect::<Vec<_>>()
+            // Limit concurrent updates to avoid API overload (more aggressive for 1m)
+            tokens.into_iter().take(8).collect::<Vec<_>>()
         };
 
         if is_debug_ohlcv_enabled() {
@@ -1252,7 +1076,7 @@ impl OhlcvService {
                 LogTag::Ohlcv,
                 "WATCH_PROCESS",
                 &format!(
-                    "🔄 Processing {} watched tokens for OHLCV updates (total available: {})",
+                    "🔄 Processing {} watched tokens for 1m OHLCV updates (total available: {})",
                     tokens_to_update.len(),
                     {
                         let watch_list_read = watch_list.read().await;
@@ -1263,151 +1087,126 @@ impl OhlcvService {
         }
 
         for entry in tokens_to_update {
-            // Check each timeframe for this token
-            for timeframe in &entry.timeframes {
-                let cache_key = format!("{}_{}", entry.mint, timeframe.get_cache_dir());
+            let needs_update = {
+                let cache = cache.read().await;
+                if let Some(cached) = cache.get(&entry.mint) {
+                    let expired = cached.is_expired();
+                    if is_debug_ohlcv_enabled() {
+                        log(
+                            LogTag::Ohlcv,
+                            "CACHE_CHECK",
+                            &format!(
+                                "📋 Cache check for {}: expired={}",
+                                entry.mint, expired
+                            ),
+                        );
+                    }
+                    expired
+                } else {
+                    if is_debug_ohlcv_enabled() {
+                        log(
+                            LogTag::Ohlcv,
+                            "NO_CACHE_ENTRY",
+                            &format!("❌ No cache entry for {}", entry.mint),
+                        );
+                    }
+                    true // No cache, definitely needs update
+                }
+            };
 
-                let needs_update = {
-                    let cache = cache.read().await;
-                    if let Some(cached) = cache.get(&cache_key) {
-                        let expired = cached.is_expired();
-                        if is_debug_ohlcv_enabled() {
-                            log(
-                                LogTag::Ohlcv,
-                                "CACHE_CHECK",
-                                &format!(
-                                    "📊 Cache check for {} {}: expired={}, last_updated={}",
-                                    entry.mint,
-                                    timeframe,
-                                    expired,
-                                    cached.last_updated.format("%H:%M:%S")
-                                ),
-                            );
-                        }
-                        expired
+            if needs_update {
+                // Get pool address
+                let pool_address = if let Some(addr) = &entry.pool_address {
+                    addr.clone()
+                } else {
+                    let pool_service = get_pool_service();
+                    if let Some(result) = pool_service
+                        .get_pool_price(&entry.mint, None, &PriceOptions::default())
+                        .await
+                    {
+                        result.pool_address
                     } else {
                         if is_debug_ohlcv_enabled() {
                             log(
                                 LogTag::Ohlcv,
-                                "NO_CACHE_ENTRY",
-                                &format!(
-                                    "❌ No cache entry for {} {}, update needed",
-                                    entry.mint, timeframe
-                                ),
+                                "POOL_UNAVAILABLE",
+                                &format!("⚠️ No pool available for {}", entry.mint),
                             );
                         }
-                        true // No cache, definitely needs update
+                        continue;
                     }
                 };
 
-                if needs_update {
-                    // Get pool address
-                    let pool_address = if let Some(addr) = &entry.pool_address {
-                        addr.clone()
-                    } else {
-                        let pool_service = get_pool_service();
-                        if let Some(result) = pool_service
-                            .get_pool_price(&entry.mint, None, &PriceOptions::default())
-                            .await
+                // Create temporary service instance for this update
+                let temp_service = OhlcvService {
+                    client: client.clone(),
+                    cache: cache.clone(),
+                    watch_list: watch_list.clone(),
+                    last_api_call: last_api_call.clone(),
+                    stats: stats.clone(),
+                    monitoring_active: Arc::new(RwLock::new(true)),
+                };
+
+                // Fetch new data
+                match temp_service
+                    .fetch_ohlcv_from_api(&pool_address, DEFAULT_OHLCV_LIMIT)
+                    .await
+                {
+                    Ok(data_points) => {
+                        // Cache the data
+                        let cached_data = CachedOhlcvData {
+                            mint: entry.mint.clone(),
+                            pool_address: pool_address.clone(),
+                            data_points,
+                            last_updated: Utc::now(),
+                            last_timestamp: None, // Will be calculated if needed
+                        };
+
+                        // Update memory cache
                         {
-                            result.pool_address
-                        } else {
-                            if is_debug_ohlcv_enabled() {
-                                log(
-                                    LogTag::Ohlcv,
-                                    "NO_POOL",
-                                    &format!(
-                                        "⚠️ No pool found for {}, skipping OHLCV update",
-                                        entry.mint
-                                    ),
-                                );
-                            }
-                            continue;
+                            let mut cache = cache.write().await;
+                            cache.insert(entry.mint.clone(), cached_data.clone());
                         }
-                    };
 
-                    // Create temporary service instance for this update
-                    let temp_service = OhlcvService {
-                        client: client.clone(),
-                        cache: cache.clone(),
-                        watch_list: watch_list.clone(),
-                        last_api_call: last_api_call.clone(),
-                        stats: stats.clone(),
-                        monitoring_active: Arc::new(RwLock::new(true)),
-                    };
-
-                    // Fetch new data
-                    match temp_service
-                        .fetch_ohlcv_from_api(&pool_address, timeframe, DEFAULT_OHLCV_LIMIT)
-                        .await
-                    {
-                        Ok(data_points) => {
-                            if is_debug_ohlcv_enabled() {
-                                log(
-                                    LogTag::Ohlcv,
-                                    "BACKGROUND_UPDATE",
-                                    &format!(
-                                        "📈 Background update: {} {} - {} points (pool: {})",
-                                        entry.mint,
-                                        timeframe,
-                                        data_points.len(),
-                                        if pool_address.len() >= 8 {
-                                            &pool_address[..8]
-                                        } else {
-                                            &pool_address
-                                        }
-                                    ),
-                                );
-                            }
-
-                            // Cache the data
-                            let last_timestamp = data_points.iter().map(|p| p.timestamp).max();
-
-                            let cached_data = CachedOhlcvData {
-                                mint: entry.mint.clone(),
-                                timeframe: timeframe.clone(),
-                                pool_address: pool_address.clone(),
-                                data_points,
-                                last_updated: Utc::now(),
-                                last_timestamp,
-                            };
-
-                            // Update memory cache
-                            {
-                                let mut cache = cache.write().await;
-                                cache.insert(cache_key, cached_data.clone());
-                            }
-
-                            // Save to file cache
-                            if let Err(e) = temp_service.save_to_file_cache(&cached_data).await {
-                                log(
-                                    LogTag::Ohlcv,
-                                    "WARNING",
-                                    &format!("Background save failed: {}", e),
-                                );
-                            }
-
-                            // Update stats
-                            {
-                                let mut stats = stats.write().await;
-                                stats.successful_fetches += 1;
-                            }
-                        }
-                        Err(e) => {
+                        // Save to file cache
+                        if let Err(e) = temp_service.save_to_file_cache(&cached_data).await {
                             log(
                                 LogTag::Ohlcv,
-                                "ERROR",
+                                "WARNING",
+                                &format!("Failed to save background fetch to cache: {}", e),
+                            );
+                        }
+
+                        // Update stats
+                        {
+                            let mut stats = stats.write().await;
+                            stats.successful_fetches += 1;
+                            stats.data_points_cached += cached_data.data_points.len();
+                        }
+
+                        if is_debug_ohlcv_enabled() {
+                            log(
+                                LogTag::Ohlcv,
+                                "BACKGROUND_UPDATE_SUCCESS",
                                 &format!(
-                                    "Background fetch failed for {} {}: {}",
-                                    entry.mint, timeframe, e
+                                    "✅ Background updated {} with {} 1m points",
+                                    entry.mint,
+                                    cached_data.data_points.len()
                                 ),
                             );
                         }
                     }
-
-                    // Small delay between API calls to be nice to the API
-                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    Err(e) => {
+                        log(
+                            LogTag::Ohlcv,
+                            "WARNING",
+                            &format!("Background fetch failed for {}: {}", entry.mint, e),
+                        );
+                    }
                 }
+
+                // Small delay between API calls to be nice to the API
+                tokio::time::sleep(Duration::from_millis(300)).await;
             }
 
             // Update watch list entry
@@ -1419,11 +1218,8 @@ impl OhlcvService {
                     if is_debug_ohlcv_enabled() {
                         log(
                             LogTag::Ohlcv,
-                            "WATCH_ENTRY_UPDATE",
-                            &format!(
-                                "📝 Updated watch entry for {}: count={}",
-                                entry.mint, entry.update_count
-                            ),
+                            "WATCH_UPDATE_COMPLETE",
+                            &format!("📊 Updated watch entry for {} (count: {})", entry.mint, entry.update_count),
                         );
                     }
                 }
@@ -1442,7 +1238,7 @@ impl OhlcvService {
             log(
                 LogTag::Ohlcv,
                 "CLEANUP_START",
-                "🧹 Starting OHLCV data cleanup",
+                "🧹 Starting 1m OHLCV data cleanup",
             );
         }
 
@@ -1526,13 +1322,19 @@ impl OhlcvService {
                     if let Ok(modified) = metadata.modified() {
                         let modified_dt: DateTime<Utc> = modified.into();
                         if modified_dt < cutoff_time {
-                            if fs::remove_file(&path).is_ok() {
+                            if let Err(e) = fs::remove_file(&path) {
+                                log(
+                                    LogTag::Ohlcv,
+                                    "WARNING",
+                                    &format!("Failed to remove old cache file {}: {}", path.display(), e),
+                                );
+                            } else {
                                 cleaned_count += 1;
                                 if is_debug_ohlcv_enabled() {
                                     log(
                                         LogTag::Ohlcv,
-                                        "FILE_DELETED",
-                                        &format!("🗑️ Deleted old cache file: {}", path.display()),
+                                        "FILE_REMOVED",
+                                        &format!("🗑️ Removed old cache file: {}", path.display()),
                                     );
                                 }
                             }
@@ -1569,7 +1371,7 @@ pub async fn init_ohlcv_service() -> Result<(), Box<dyn std::error::Error>> {
     match OhlcvService::new() {
         Ok(service) => {
             *service_guard = Some(service);
-            log(LogTag::Ohlcv, "INIT", "✅ Global OHLCV service initialized");
+            log(LogTag::Ohlcv, "INIT", "✅ Global 1m OHLCV service initialized");
             Ok(())
         }
         Err(e) => {
@@ -1583,13 +1385,7 @@ pub async fn init_ohlcv_service() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-/// Get direct access to OHLCV service for sync operations
-pub async fn get_ohlcv_service_ref(
-) -> Result<impl std::ops::Deref<Target = Option<OhlcvService>>, String> {
-    Ok(GLOBAL_OHLCV_SERVICE.read().await)
-}
-
-/// Get a cloned OHLCV service for async operations (less efficient but works around lifetime issues)
+/// Get a cloned OHLCV service for async operations
 pub async fn get_ohlcv_service_clone() -> Result<OhlcvService, String> {
     let service_guard = GLOBAL_OHLCV_SERVICE.read().await;
     match service_guard.as_ref() {
@@ -1623,84 +1419,33 @@ pub async fn start_ohlcv_monitoring(
         log(
             LogTag::Ohlcv,
             "TASK_START",
-            "🚀 OHLCV monitoring task started",
+            "🚀 1m OHLCV monitoring task started",
         );
         shutdown.notified().await;
-        log(LogTag::Ohlcv, "TASK_END", "✅ OHLCV monitoring task ended");
+        log(LogTag::Ohlcv, "TASK_END", "✅ 1m OHLCV monitoring task ended");
     });
 
     Ok(handle)
 }
 
-/// Sync watch list with price service priority tokens (called from trader)
+/// Sync watch list with trader tokens (called from trader)
 pub async fn sync_watch_list_with_trader(
-    shutdown: Option<std::sync::Arc<Notify>>,
+    _shutdown: Option<std::sync::Arc<Notify>>,
 ) -> Result<(), String> {
-    // No more priority tokens from price service - positions manager handles this internally
-    let priority_tokens: Vec<String> = Vec::new();
-
+    // For simplicity, we'll rely on manual addition via add_to_watch_list
+    // when positions are opened/closed
     if is_debug_ohlcv_enabled() {
         log(
             LogTag::Ohlcv,
-            "SYNC_START",
-            &format!(
-                "🔄 Syncing OHLCV watch list with {} priority tokens",
-                priority_tokens.len()
-            ),
+            "SYNC_SIMPLE",
+            "📊 1m OHLCV watch list sync - using manual position-based management",
         );
     }
-
-    let service = get_ohlcv_service_clone().await?;
-
-    for token_mint in &priority_tokens {
-        // If shutdown requested, stop syncing to avoid late logs during shutdown
-        if let Some(ref s) = shutdown {
-            if crate::utils::check_shutdown_or_delay(s, std::time::Duration::from_millis(0)).await {
-                if is_debug_ohlcv_enabled() {
-                    log(
-                        LogTag::Ohlcv,
-                        "SHUTDOWN",
-                        "Skipping OHLCV watch list sync due to shutdown",
-                    );
-                }
-                break;
-            }
-        }
-        // Check if it's an open position (higher priority)
-        let is_open_position = crate::positions::is_open_position(token_mint).await;
-        service
-            .add_to_watch_list(token_mint, is_open_position)
-            .await;
-
-        if is_debug_ohlcv_enabled() {
-            log(
-                LogTag::Ohlcv,
-                "SYNC_TOKEN",
-                &format!(
-                    "🔄 Synced token to watch list: {} (open_position: {})",
-                    token_mint, is_open_position
-                ),
-            );
-        }
-    }
-
-    if is_debug_ohlcv_enabled() {
-        let stats = service.get_stats().await;
-        log(
-            LogTag::Ohlcv,
-            "SYNC_COMPLETE",
-            &format!(
-                "✅ OHLCV watch list synced: {} tokens being monitored",
-                stats.watched_tokens
-            ),
-        );
-    }
-
     Ok(())
 }
 
 /// Check if OHLCV data is available for trading decisions
-pub async fn is_ohlcv_data_available(mint: &str, timeframe: &Timeframe) -> bool {
+pub async fn is_ohlcv_data_available(mint: &str) -> bool {
     let service = match get_ohlcv_service_clone().await {
         Ok(service) => service,
         Err(_) => {
@@ -1715,62 +1460,47 @@ pub async fn is_ohlcv_data_available(mint: &str, timeframe: &Timeframe) -> bool 
         }
     };
 
-    let availability = service.check_data_availability(mint, timeframe).await;
+    let availability = service.check_data_availability(mint).await;
     let is_available = availability.has_cached_data && availability.is_fresh;
 
     if is_debug_ohlcv_enabled() {
         log(
             LogTag::Ohlcv,
             "AVAILABILITY_CHECK",
-            &format!(
-                "📊 OHLCV availability check for {} {}: result={}",
-                mint, timeframe, is_available
-            ),
+            &format!("📊 1m OHLCV availability check for {}: result={}", mint, is_available),
         );
     }
 
     is_available
 }
 
-/// Get latest OHLCV data for analysis (convenience function)
+/// Get latest 1-minute OHLCV data for analysis (convenience function)
 pub async fn get_latest_ohlcv(
     mint: &str,
-    timeframe: &Timeframe,
     limit: u32,
 ) -> Result<Vec<OhlcvDataPoint>, String> {
     if is_debug_ohlcv_enabled() {
         log(
             LogTag::Ohlcv,
             "GET_LATEST",
-            &format!(
-                "📈 Getting latest OHLCV data for {} {} (limit: {})",
-                mint, timeframe, limit
-            ),
+            &format!("📈 Getting latest 1m OHLCV data for {} (limit: {})", mint, limit),
         );
     }
 
     let service = get_ohlcv_service_clone().await?;
-    let result = service.get_ohlcv_data(mint, timeframe, Some(limit)).await;
+    let result = service.get_ohlcv_data(mint, Some(limit)).await;
 
     if is_debug_ohlcv_enabled() {
         match &result {
             Ok(data) => log(
                 LogTag::Ohlcv,
                 "GET_LATEST_SUCCESS",
-                &format!(
-                    "✅ Retrieved {} OHLCV points for {} {}",
-                    data.len(),
-                    mint,
-                    timeframe
-                ),
+                &format!("✅ Retrieved {} 1m OHLCV points for {}", data.len(), mint),
             ),
             Err(e) => log(
                 LogTag::Ohlcv,
                 "GET_LATEST_ERROR",
-                &format!(
-                    "❌ Failed to get OHLCV data for {} {}: {}",
-                    mint, timeframe, e
-                ),
+                &format!("❌ Failed to get 1m OHLCV data for {}: {}", mint, e),
             ),
         }
     }

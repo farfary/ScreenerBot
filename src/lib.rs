@@ -1,4 +1,4 @@
-// #![allow(warnings)]
+#![allow(warnings)]
 
 pub mod arguments;
 pub mod ata_cleanup;
@@ -9,7 +9,7 @@ pub mod errors; // New structured error handling
 pub mod filtering;
 pub mod global;
 pub mod logger;
-pub mod ohlcv_analysis;
+
 pub mod positions;
 pub mod positions_db; // Positions database module
 pub mod positions_lib; // Position management library
