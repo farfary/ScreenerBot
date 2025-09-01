@@ -1,16 +1,17 @@
 use crate::global::is_debug_filtering_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 /// Centralized token filtering system for ScreenerBot
 /// All token filtering logic consolidated into a single function
 /// No structs or models - pure functional approach
 use crate::tokens::Token;
 use crate::tokens::{
-    get_token_decimals_sync, is_token_excluded_from_trading,
-    rugcheck::{get_high_risk_issues, is_token_safe_for_trading},
+    get_token_decimals_sync,
+    is_token_excluded_from_trading,
+    rugcheck::{ get_high_risk_issues, is_token_safe_for_trading },
     TokenDatabase,
 };
 use crate::trader::MAX_OPEN_POSITIONS;
-use chrono::{Duration as ChronoDuration, Utc};
+use chrono::{ Duration as ChronoDuration, Utc };
 
 // =============================================================================
 // FILTERING CONFIGURATION PARAMETERS (CENTRALIZED FOR EASY ACCESS)
@@ -283,11 +284,8 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
                     let age = (Utc::now() - created).num_hours();
                     age.to_string()
                 }),
-                token
-                    .liquidity
-                    .as_ref()
-                    .map_or(0.0, |l| l.usd.unwrap_or(0.0))
-            ),
+                token.liquidity.as_ref().map_or(0.0, |l| l.usd.unwrap_or(0.0))
+            )
         );
     }
 
@@ -296,10 +294,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "STEP_0",
-            &format!(
-                "🚫 Step 0: Checking blacklist/exclusion for {}",
-                token.symbol
-            ),
+            &format!("🚫 Step 0: Checking blacklist/exclusion for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_blacklist_exclusion(token) {
@@ -307,10 +302,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_0",
-                &format!(
-                    "❌ {}: FAILED Step 0 (Blacklist/Exclusion) - {:?}",
-                    token.symbol, reason
-                ),
+                &format!("❌ {}: FAILED Step 0 (Blacklist/Exclusion) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -319,7 +311,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_0",
-            &format!("✅ {}: PASSED Step 0 (Blacklist/Exclusion)", token.symbol),
+            &format!("✅ {}: PASSED Step 0 (Blacklist/Exclusion)", token.symbol)
         );
     }
 
@@ -328,7 +320,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "STEP_1",
-            &format!("🛡️ Step 1: Checking rugcheck security for {}", token.symbol),
+            &format!("🛡️ Step 1: Checking rugcheck security for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_rugcheck_risks(token) {
@@ -336,10 +328,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_1",
-                &format!(
-                    "❌ {}: FAILED Step 1 (Rugcheck) - {:?}",
-                    token.symbol, reason
-                ),
+                &format!("❌ {}: FAILED Step 1 (Rugcheck) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -348,7 +337,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_1",
-            &format!("✅ {}: PASSED Step 1 (Rugcheck)", token.symbol),
+            &format!("✅ {}: PASSED Step 1 (Rugcheck)", token.symbol)
         );
     }
 
@@ -357,7 +346,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "STEP_2",
-            &format!("📝 Step 2: Checking metadata for {}", token.symbol),
+            &format!("📝 Step 2: Checking metadata for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_basic_token_info(token) {
@@ -365,10 +354,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_2",
-                &format!(
-                    "❌ {}: FAILED Step 2 (Metadata) - {:?}",
-                    token.symbol, reason
-                ),
+                &format!("❌ {}: FAILED Step 2 (Metadata) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -377,34 +363,26 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_2",
-            &format!("✅ {}: PASSED Step 2 (Metadata)", token.symbol),
+            &format!("✅ {}: PASSED Step 2 (Metadata)", token.symbol)
         );
     }
 
     // 3. Age validation
     if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "STEP_3",
-            &format!("⏰ Step 3: Checking age for {}", token.symbol),
-        );
+        log(LogTag::Filtering, "STEP_3", &format!("⏰ Step 3: Checking age for {}", token.symbol));
     }
     if let Some(reason) = validate_token_age(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_3",
-                &format!("❌ {}: FAILED Step 3 (Age) - {:?}", token.symbol, reason),
+                &format!("❌ {}: FAILED Step 3 (Age) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
     }
     if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "PASS_STEP_3",
-            &format!("✅ {}: PASSED Step 3 (Age)", token.symbol),
-        );
+        log(LogTag::Filtering, "PASS_STEP_3", &format!("✅ {}: PASSED Step 3 (Age)", token.symbol));
     }
 
     // 4. Liquidity validation
@@ -412,7 +390,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "STEP_4",
-            &format!("💧 Step 4: Checking liquidity for {}", token.symbol),
+            &format!("💧 Step 4: Checking liquidity for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_liquidity(token) {
@@ -420,10 +398,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_4",
-                &format!(
-                    "❌ {}: FAILED Step 4 (Liquidity) - {:?}",
-                    token.symbol, reason
-                ),
+                &format!("❌ {}: FAILED Step 4 (Liquidity) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -432,7 +407,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_4",
-            &format!("✅ {}: PASSED Step 4 (Liquidity)", token.symbol),
+            &format!("✅ {}: PASSED Step 4 (Liquidity)", token.symbol)
         );
     }
 
@@ -441,10 +416,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "STEP_5",
-            &format!(
-                "👥 Step 5: Checking holder distribution for {}",
-                token.symbol
-            ),
+            &format!("👥 Step 5: Checking holder distribution for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_holder_distribution(token) {
@@ -452,10 +424,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_5",
-                &format!(
-                    "❌ {}: FAILED Step 5 (Holder Distribution) - {:?}",
-                    token.symbol, reason
-                ),
+                &format!("❌ {}: FAILED Step 5 (Holder Distribution) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -464,7 +433,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_5",
-            &format!("✅ {}: PASSED Step 5 (Holder Distribution)", token.symbol),
+            &format!("✅ {}: PASSED Step 5 (Holder Distribution)", token.symbol)
         );
     }
 
@@ -473,10 +442,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "STEP_6",
-            &format!(
-                "📈 Step 6: Checking basic price validity for {}",
-                token.symbol
-            ),
+            &format!("📈 Step 6: Checking basic price validity for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_basic_price_data(token) {
@@ -484,10 +450,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_6",
-                &format!(
-                    "❌ {}: FAILED Step 6 (Price Validation) - {:?}",
-                    token.symbol, reason
-                ),
+                &format!("❌ {}: FAILED Step 6 (Price Validation) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -496,7 +459,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_6",
-            &format!("✅ {}: PASSED Step 6 (Price Validation)", token.symbol),
+            &format!("✅ {}: PASSED Step 6 (Price Validation)", token.symbol)
         );
     }
 
@@ -505,7 +468,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "STEP_7",
-            &format!("💰 Step 7: Checking price data for {}", token.symbol),
+            &format!("💰 Step 7: Checking price data for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_price_data(token) {
@@ -513,10 +476,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_7",
-                &format!(
-                    "❌ {}: FAILED Step 7 (Price Data) - {:?}",
-                    token.symbol, reason
-                ),
+                &format!("❌ {}: FAILED Step 7 (Price Data) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -525,7 +485,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_7",
-            &format!("✅ {}: PASSED Step 7 (Price Data)", token.symbol),
+            &format!("✅ {}: PASSED Step 7 (Price Data)", token.symbol)
         );
     }
 
@@ -534,10 +494,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "STEP_8",
-            &format!(
-                "📊 Step 8: Checking transaction activity for {}",
-                token.symbol
-            ),
+            &format!("📊 Step 8: Checking transaction activity for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_transaction_activity(token) {
@@ -545,10 +502,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_8",
-                &format!(
-                    "❌ {}: FAILED Step 8 (Transaction Activity) - {:?}",
-                    token.symbol, reason
-                ),
+                &format!("❌ {}: FAILED Step 8 (Transaction Activity) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -557,7 +511,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_8",
-            &format!("✅ {}: PASSED Step 8 (Transaction Activity)", token.symbol),
+            &format!("✅ {}: PASSED Step 8 (Transaction Activity)", token.symbol)
         );
     }
 
@@ -566,10 +520,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "STEP_9",
-            &format!(
-                "🔢 Step 9: Checking decimal availability for {}",
-                token.symbol
-            ),
+            &format!("🔢 Step 9: Checking decimal availability for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_decimal_availability(token) {
@@ -577,10 +528,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_9",
-                &format!(
-                    "❌ {}: FAILED Step 9 (Decimal Availability) - {:?}",
-                    token.symbol, reason
-                ),
+                &format!("❌ {}: FAILED Step 9 (Decimal Availability) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -589,7 +537,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_9",
-            &format!("✅ {}: PASSED Step 9 (Decimal Availability)", token.symbol),
+            &format!("✅ {}: PASSED Step 9 (Decimal Availability)", token.symbol)
         );
     }
 
@@ -598,10 +546,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "STEP_10",
-            &format!(
-                "🔒 Step 10: Checking position constraints for {}",
-                token.symbol
-            ),
+            &format!("🔒 Step 10: Checking position constraints for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_position_constraints(token) {
@@ -611,8 +556,9 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
                 "REJECT_STEP_10",
                 &format!(
                     "❌ {}: FAILED Step 10 (Position Constraints) - {:?}",
-                    token.symbol, reason
-                ),
+                    token.symbol,
+                    reason
+                )
             );
         }
         return FilterResult::Rejected(reason);
@@ -621,7 +567,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_10",
-            &format!("✅ {}: PASSED Step 10 (Position Constraints)", token.symbol),
+            &format!("✅ {}: PASSED Step 10 (Position Constraints)", token.symbol)
         );
     }
 
@@ -630,10 +576,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "ALL_STEPS_PASSED",
-            &format!(
-                "🎉 {}: PASSED ALL 10 FILTERING STEPS - ELIGIBLE FOR TRADING",
-                token.symbol
-            ),
+            &format!("🎉 {}: PASSED ALL 10 FILTERING STEPS - ELIGIBLE FOR TRADING", token.symbol)
         );
     }
 
@@ -680,10 +623,7 @@ fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
                 log(
                     LogTag::Filtering,
                     "DEBUG_BLACKLIST",
-                    &format!(
-                        "🚫 Token {} is a system or stable token - excluded",
-                        token.symbol
-                    ),
+                    &format!("🚫 Token {} is a system or stable token - excluded", token.symbol)
                 );
             }
             return Some(FilterReason::SystemOrStableToken);
@@ -699,10 +639,7 @@ fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
                 log(
                     LogTag::Filtering,
                     "DEBUG_BLACKLIST",
-                    &format!(
-                        "🚫 Token {} is blacklisted - {}",
-                        token.symbol, reason_description
-                    ),
+                    &format!("🚫 Token {} is blacklisted - {}", token.symbol, reason_description)
                 );
             }
 
@@ -716,7 +653,7 @@ fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
         log(
             LogTag::Filtering,
             "DEBUG_BLACKLIST",
-            &format!("✅ Token {} passed blacklist/exclusion check", token.symbol),
+            &format!("✅ Token {} passed blacklist/exclusion check", token.symbol)
         );
     }
 
@@ -740,7 +677,7 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
                                 log(
                                     LogTag::Filtering,
                                     "RUGCHECK_MISSING",
-                                    &format!("No rugcheck data for token: {}", token.symbol),
+                                    &format!("No rugcheck data for token: {}", token.symbol)
                                 );
                             }
                             None
@@ -752,8 +689,9 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
                                     "ERROR",
                                     &format!(
                                         "Failed to get rugcheck data for {}: {}",
-                                        token.symbol, e
-                                    ),
+                                        token.symbol,
+                                        e
+                                    )
                                 );
                             }
                             None
@@ -771,7 +709,7 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
                         log(
                             LogTag::Filtering,
                             "ERROR",
-                            &format!("Failed to connect to database for rugcheck: {}", e),
+                            &format!("Failed to connect to database for rugcheck: {}", e)
                         );
                     }
                     return None; // Skip validation if database unavailable
@@ -785,7 +723,7 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
                         log(
                             LogTag::Filtering,
                             "RUGCHECK_MISSING",
-                            &format!("No rugcheck data for token: {}", token.symbol),
+                            &format!("No rugcheck data for token: {}", token.symbol)
                         );
                     }
                     None
@@ -795,7 +733,7 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
                         log(
                             LogTag::Filtering,
                             "ERROR",
-                            &format!("Failed to get rugcheck data for {}: {}", token.symbol, e),
+                            &format!("Failed to get rugcheck data for {}: {}", token.symbol, e)
                         );
                     }
                     None
@@ -821,16 +759,21 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
                     "EMERGENCY_RISK",
                     &format!(
                         "Token {} EMERGENCY REJECTED - Risk score {} >= {} (VERY HIGH RISK)",
-                        token.symbol, risk_score, EMERGENCY_MAX_RISK_SCORE
-                    ),
+                        token.symbol,
+                        risk_score,
+                        EMERGENCY_MAX_RISK_SCORE
+                    )
                 );
             }
             return Some(FilterReason::RugcheckRisk {
                 risk_level: "EMERGENCY".to_string(),
-                reasons: vec![format!(
-                    "Risk score {} is too high (max allowed: {})",
-                    risk_score, EMERGENCY_MAX_RISK_SCORE
-                )],
+                reasons: vec![
+                    format!(
+                        "Risk score {} is too high (max allowed: {})",
+                        risk_score,
+                        EMERGENCY_MAX_RISK_SCORE
+                    )
+                ],
             });
         }
 
@@ -842,16 +785,21 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
                     "HIGH_RISK_SCORE",
                     &format!(
                         "Token {} rejected - Risk score {} > {} (HIGH RISK)",
-                        token.symbol, risk_score, MAX_RUGCHECK_RISK_SCORE
-                    ),
+                        token.symbol,
+                        risk_score,
+                        MAX_RUGCHECK_RISK_SCORE
+                    )
                 );
             }
             return Some(FilterReason::RugcheckRisk {
                 risk_level: "HIGH".to_string(),
-                reasons: vec![format!(
-                    "Risk score {} exceeds maximum allowed {}",
-                    risk_score, MAX_RUGCHECK_RISK_SCORE
-                )],
+                reasons: vec![
+                    format!(
+                        "Risk score {} exceeds maximum allowed {}",
+                        risk_score,
+                        MAX_RUGCHECK_RISK_SCORE
+                    )
+                ],
             });
         }
 
@@ -861,8 +809,10 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
                 "RISK_SCORE_OK",
                 &format!(
                     "Token {} risk score {} <= {} (acceptable risk)",
-                    token.symbol, risk_score, MAX_RUGCHECK_RISK_SCORE
-                ),
+                    token.symbol,
+                    risk_score,
+                    MAX_RUGCHECK_RISK_SCORE
+                )
             );
         }
     }
@@ -885,8 +835,10 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
                 "RUGCHECK_FAIL",
                 &format!(
                     "Token {} failed rugcheck validation. Risk level: {}, Issues: {:?}",
-                    token.symbol, risk_level, risk_issues
-                ),
+                    token.symbol,
+                    risk_level,
+                    risk_issues
+                )
             );
         }
 
@@ -897,17 +849,11 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
     }
 
     if is_debug_filtering_enabled() {
-        let score = rugcheck_data
-            .score_normalised
-            .or(rugcheck_data.score)
-            .unwrap_or(0);
+        let score = rugcheck_data.score_normalised.or(rugcheck_data.score).unwrap_or(0);
         log(
             LogTag::Filtering,
             "RUGCHECK_PASS",
-            &format!(
-                "Token {} passed rugcheck validation (risk score: {})",
-                token.symbol, score
-            ),
+            &format!("Token {} passed rugcheck validation (risk score: {})", token.symbol, score)
         );
     }
 
@@ -992,7 +938,7 @@ fn validate_token_age(token: &Token) -> Option<FilterReason> {
             log(
                 LogTag::Filtering,
                 "DEBUG_AGE",
-                &format!("⏰ Token {} has no creation date", token.symbol),
+                &format!("⏰ Token {} has no creation date", token.symbol)
             );
         }
         return Some(FilterReason::NoCreationDate);
@@ -1018,7 +964,7 @@ fn validate_token_age(token: &Token) -> Option<FilterReason> {
                 MIN_TOKEN_AGE_SECONDS / 3600,
                 MAX_TOKEN_AGE_SECONDS,
                 MAX_TOKEN_AGE_SECONDS / 3600
-            ),
+            )
         );
     }
 
@@ -1029,8 +975,10 @@ fn validate_token_age(token: &Token) -> Option<FilterReason> {
                 "DEBUG_AGE",
                 &format!(
                     "❌ Token {} too young: {}s < {}s minimum",
-                    token.symbol, age_seconds, MIN_TOKEN_AGE_SECONDS
-                ),
+                    token.symbol,
+                    age_seconds,
+                    MIN_TOKEN_AGE_SECONDS
+                )
             );
         }
         return Some(FilterReason::TooYoung {
@@ -1046,8 +994,10 @@ fn validate_token_age(token: &Token) -> Option<FilterReason> {
                 "DEBUG_AGE",
                 &format!(
                     "❌ Token {} too old: {}s > {}s maximum",
-                    token.symbol, age_seconds, MAX_TOKEN_AGE_SECONDS
-                ),
+                    token.symbol,
+                    age_seconds,
+                    MAX_TOKEN_AGE_SECONDS
+                )
             );
         }
         return Some(FilterReason::TooOld {
@@ -1060,7 +1010,7 @@ fn validate_token_age(token: &Token) -> Option<FilterReason> {
         log(
             LogTag::Filtering,
             "DEBUG_AGE",
-            &format!("✅ Token {} age within acceptable range", token.symbol),
+            &format!("✅ Token {} age within acceptable range", token.symbol)
         );
     }
 
@@ -1074,7 +1024,7 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
             log(
                 LogTag::Filtering,
                 "DEBUG_LIQUIDITY",
-                &format!("💧 Token {} has no liquidity data", token.symbol),
+                &format!("💧 Token {} has no liquidity data", token.symbol)
             );
         }
         return Some(FilterReason::MissingLiquidityData);
@@ -1088,8 +1038,11 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
             "DEBUG_LIQUIDITY",
             &format!(
                 "💧 Liquidity check for {}: ${:.2} (min: ${:.2}, max: ${:.2})",
-                token.symbol, liquidity_usd, MIN_LIQUIDITY_USD, MAX_LIQUIDITY_USD
-            ),
+                token.symbol,
+                liquidity_usd,
+                MIN_LIQUIDITY_USD,
+                MAX_LIQUIDITY_USD
+            )
         );
     }
 
@@ -1098,7 +1051,7 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
             log(
                 LogTag::Filtering,
                 "DEBUG_LIQUIDITY",
-                &format!("❌ Token {} has zero liquidity", token.symbol),
+                &format!("❌ Token {} has zero liquidity", token.symbol)
             );
         }
         return Some(FilterReason::ZeroLiquidity);
@@ -1112,8 +1065,10 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
                 "DEBUG_LIQUIDITY",
                 &format!(
                     "❌ Token {} insufficient liquidity: ${:.2} < ${:.2} minimum",
-                    token.symbol, liquidity_usd, MIN_LIQUIDITY_USD
-                ),
+                    token.symbol,
+                    liquidity_usd,
+                    MIN_LIQUIDITY_USD
+                )
             );
         }
         return Some(FilterReason::InsufficientLiquidity {
@@ -1130,8 +1085,10 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
                 "DEBUG_LIQUIDITY",
                 &format!(
                     "❌ Token {} too high liquidity (stable token): ${:.2} > ${:.2} maximum",
-                    token.symbol, liquidity_usd, MAX_LIQUIDITY_USD
-                ),
+                    token.symbol,
+                    liquidity_usd,
+                    MAX_LIQUIDITY_USD
+                )
             );
         }
         return Some(FilterReason::TooHighLiquidity {
@@ -1149,8 +1106,10 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
                     "DEBUG_LIQUIDITY",
                     &format!(
                         "❌ Token {} too high market cap: ${:.2} > ${:.2} maximum",
-                        token.symbol, market_cap, MAX_MARKET_CAP_USD
-                    ),
+                        token.symbol,
+                        market_cap,
+                        MAX_MARKET_CAP_USD
+                    )
                 );
             }
             return Some(FilterReason::TooHighMarketCap {
@@ -1171,8 +1130,10 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
                     "DEBUG_LIQUIDITY",
                     &format!(
                         "💹 Token {} volume/liquidity ratio: {:.3} (24h vol: ${:.2})",
-                        token.symbol, volume_liquidity_ratio, volume_24h
-                    ),
+                        token.symbol,
+                        volume_liquidity_ratio,
+                        volume_24h
+                    )
                 );
             }
 
@@ -1184,8 +1145,9 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
                         "DEBUG_LIQUIDITY",
                         &format!(
                             "🚀 Token {} shows high activity (ratio: {:.3}) - POTENTIAL GEM!",
-                            token.symbol, volume_liquidity_ratio
-                        ),
+                            token.symbol,
+                            volume_liquidity_ratio
+                        )
                     );
                 }
             }
@@ -1198,8 +1160,9 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
             "DEBUG_LIQUIDITY",
             &format!(
                 "✅ Token {} liquidity optimal for gem hunting (${:.2})",
-                token.symbol, liquidity_usd
-            ),
+                token.symbol,
+                liquidity_usd
+            )
         );
     }
 
@@ -1224,7 +1187,7 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
                                 log(
                                     LogTag::Filtering,
                                     "DEBUG_HOLDERS",
-                                    &format!("No rugcheck/holder data for token: {}", token.symbol),
+                                    &format!("No rugcheck/holder data for token: {}", token.symbol)
                                 );
                             }
                             None
@@ -1236,8 +1199,9 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
                                     "DEBUG_HOLDERS",
                                     &format!(
                                         "Failed to get holder data for {}: {}",
-                                        token.symbol, e
-                                    ),
+                                        token.symbol,
+                                        e
+                                    )
                                 );
                             }
                             None
@@ -1255,7 +1219,7 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
                         log(
                             LogTag::Filtering,
                             "DEBUG_HOLDERS",
-                            &format!("Failed to connect to database for holders: {}", e),
+                            &format!("Failed to connect to database for holders: {}", e)
                         );
                     }
                     return None; // Skip validation if database unavailable
@@ -1269,7 +1233,7 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
                         log(
                             LogTag::Filtering,
                             "DEBUG_HOLDERS",
-                            &format!("No rugcheck/holder data for token: {}", token.symbol),
+                            &format!("No rugcheck/holder data for token: {}", token.symbol)
                         );
                     }
                     None
@@ -1279,7 +1243,7 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
                         log(
                             LogTag::Filtering,
                             "DEBUG_HOLDERS",
-                            &format!("Failed to get holder data for {}: {}", token.symbol, e),
+                            &format!("Failed to get holder data for {}: {}", token.symbol, e)
                         );
                     }
                     None
@@ -1301,11 +1265,7 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
             log(
                 LogTag::Filtering,
                 "DEBUG_HOLDERS",
-                &format!(
-                    "Analyzing {} top holders for {}",
-                    top_holders.len(),
-                    token.symbol
-                ),
+                &format!("Analyzing {} top holders for {}", top_holders.len(), token.symbol)
             );
         }
 
@@ -1325,19 +1285,17 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
                     log(
                         LogTag::Filtering,
                         "DEBUG_HOLDERS",
-                        &format!(
-                            "Holder #{}: {:.2}% (address: {})",
-                            i + 1,
-                            pct,
-                            &holder.address
-                        ),
+                        &format!("Holder #{}: {:.2}% (address: {})", i + 1, pct, &holder.address)
                     );
                 }
             }
         }
 
         // For micro-cap gems, be more lenient but still prevent obvious whale concentration
-        let liquidity_usd = token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
+        let liquidity_usd = token.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0);
 
         // Much more lenient thresholds for micro-caps since they naturally have higher concentration
         let (max_single_holder, max_top5_total) = if liquidity_usd < 1000.0 {
@@ -1359,8 +1317,11 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
                         "DEBUG_HOLDERS",
                         &format!(
                             "❌ Token {} rejected: Holder #{} has {:.2}% (max allowed: {:.1}%)",
-                            token.symbol, rank, pct, max_single_holder
-                        ),
+                            token.symbol,
+                            rank,
+                            pct,
+                            max_single_holder
+                        )
                     );
                 }
                 return Some(FilterReason::WhaleConcentrationRisk {
@@ -1372,7 +1333,11 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
         }
 
         // Check total top 5 concentration
-        let top5_total: f64 = top_holders.iter().take(5).filter_map(|h| h.pct).sum();
+        let top5_total: f64 = top_holders
+            .iter()
+            .take(5)
+            .filter_map(|h| h.pct)
+            .sum();
 
         if top5_total > max_top5_total {
             if is_debug_filtering_enabled() {
@@ -1381,8 +1346,10 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
                     "DEBUG_HOLDERS",
                     &format!(
                         "❌ Token {} rejected: Top 5 holders control {:.2}% (max allowed: {:.1}%)",
-                        token.symbol, top5_total, max_top5_total
-                    ),
+                        token.symbol,
+                        top5_total,
+                        max_top5_total
+                    )
                 );
             }
             return Some(FilterReason::WhaleConcentrationRisk {
@@ -1404,7 +1371,7 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
                         .map(|(_, pct)| *pct)
                         .unwrap_or(0.0),
                     top5_total
-                ),
+                )
             );
         }
     } else {
@@ -1412,10 +1379,7 @@ fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
             log(
                 LogTag::Filtering,
                 "DEBUG_HOLDERS",
-                &format!(
-                    "No top holder data available for {}, allowing through",
-                    token.symbol
-                ),
+                &format!("No top holder data available for {}, allowing through", token.symbol)
             );
         }
     }
@@ -1433,8 +1397,11 @@ fn validate_price_data(token: &Token) -> Option<FilterReason> {
             "DEBUG_PRICE",
             &format!(
                 "💰 Price check for {}: {:.10} SOL (range: {:.12} - {:.3} SOL)",
-                token.symbol, current_price, MIN_VALID_PRICE_SOL, MAX_VALID_PRICE_SOL
-            ),
+                token.symbol,
+                current_price,
+                MIN_VALID_PRICE_SOL,
+                MAX_VALID_PRICE_SOL
+            )
         );
     }
 
@@ -1443,10 +1410,7 @@ fn validate_price_data(token: &Token) -> Option<FilterReason> {
             log(
                 LogTag::Filtering,
                 "DEBUG_PRICE",
-                &format!(
-                    "❌ Token {} has invalid price: {:.10}",
-                    token.symbol, current_price
-                ),
+                &format!("❌ Token {} has invalid price: {:.10}", token.symbol, current_price)
             );
         }
         return Some(FilterReason::InvalidPrice);
@@ -1457,7 +1421,7 @@ fn validate_price_data(token: &Token) -> Option<FilterReason> {
             log(
                 LogTag::Filtering,
                 "DEBUG_PRICE",
-                &format!("❌ Token {} missing price data", token.symbol),
+                &format!("❌ Token {} missing price data", token.symbol)
             );
         }
         return Some(FilterReason::MissingPriceData);
@@ -1471,8 +1435,10 @@ fn validate_price_data(token: &Token) -> Option<FilterReason> {
                 "DEBUG_PRICE",
                 &format!(
                     "❌ Token {} price too low: {:.12} < {:.12} minimum",
-                    token.symbol, current_price, MIN_VALID_PRICE_SOL
-                ),
+                    token.symbol,
+                    current_price,
+                    MIN_VALID_PRICE_SOL
+                )
             );
         }
         return Some(FilterReason::PriceTooLow {
@@ -1488,8 +1454,10 @@ fn validate_price_data(token: &Token) -> Option<FilterReason> {
                 "DEBUG_PRICE",
                 &format!(
                     "❌ Token {} price too high: {:.10} > {:.3} maximum",
-                    token.symbol, current_price, MAX_VALID_PRICE_SOL
-                ),
+                    token.symbol,
+                    current_price,
+                    MAX_VALID_PRICE_SOL
+                )
             );
         }
         return Some(FilterReason::PriceTooHigh {
@@ -1502,7 +1470,7 @@ fn validate_price_data(token: &Token) -> Option<FilterReason> {
         log(
             LogTag::Filtering,
             "DEBUG_PRICE",
-            &format!("✅ Token {} price within valid range", token.symbol),
+            &format!("✅ Token {} price within valid range", token.symbol)
         );
     }
 
@@ -1516,7 +1484,7 @@ fn validate_transaction_activity(token: &Token) -> Option<FilterReason> {
             log(
                 LogTag::Filtering,
                 "DEBUG_TXN_ACTIVITY",
-                &format!("📊 Token {} has no transaction data", token.symbol),
+                &format!("📊 Token {} has no transaction data", token.symbol)
             );
         }
         return Some(FilterReason::NoTransactionData);
@@ -1540,7 +1508,7 @@ fn validate_transaction_activity(token: &Token) -> Option<FilterReason> {
                     total_5min,
                     MIN_TRANSACTIONS_5MIN,
                     MAX_TRANSACTIONS_5MIN
-                ),
+                )
             );
         }
 
@@ -1552,8 +1520,10 @@ fn validate_transaction_activity(token: &Token) -> Option<FilterReason> {
                     "DEBUG_TXN_ACTIVITY",
                     &format!(
                         "❌ Token {} insufficient 5min activity: {} < {} minimum",
-                        token.symbol, total_5min, MIN_TRANSACTIONS_5MIN
-                    ),
+                        token.symbol,
+                        total_5min,
+                        MIN_TRANSACTIONS_5MIN
+                    )
                 );
             }
             return Some(FilterReason::InsufficientTransactionActivity {
@@ -1571,8 +1541,10 @@ fn validate_transaction_activity(token: &Token) -> Option<FilterReason> {
                     "DEBUG_TXN_ACTIVITY",
                     &format!(
                         "❌ Token {} excessive 5min activity: {} > {} maximum",
-                        token.symbol, total_5min, MAX_TRANSACTIONS_5MIN
-                    ),
+                        token.symbol,
+                        total_5min,
+                        MAX_TRANSACTIONS_5MIN
+                    )
                 );
             }
             return Some(FilterReason::ExcessiveTransactionActivity {
@@ -1592,8 +1564,11 @@ fn validate_transaction_activity(token: &Token) -> Option<FilterReason> {
                     "DEBUG_TXN_ACTIVITY",
                     &format!(
                         "📊 Token {} buy/sell ratio: {:.2} (range: {:.1} - {:.1})",
-                        token.symbol, buy_sell_ratio, MIN_BUY_SELL_RATIO, MAX_BUY_SELL_RATIO
-                    ),
+                        token.symbol,
+                        buy_sell_ratio,
+                        MIN_BUY_SELL_RATIO,
+                        MAX_BUY_SELL_RATIO
+                    )
                 );
             }
 
@@ -1625,7 +1600,7 @@ fn validate_transaction_activity(token: &Token) -> Option<FilterReason> {
             log(
                 LogTag::Filtering,
                 "DEBUG_TXN_ACTIVITY",
-                &format!("📊 Token {} has no 5-minute transaction data", token.symbol),
+                &format!("📊 Token {} has no 5-minute transaction data", token.symbol)
             );
         }
         return Some(FilterReason::NoTransactionData);
@@ -1643,8 +1618,12 @@ fn validate_transaction_activity(token: &Token) -> Option<FilterReason> {
                 "DEBUG_TXN_ACTIVITY",
                 &format!(
                     "📊 Token {} 1hour activity: {} buys, {} sells, {} total (min: {})",
-                    token.symbol, buys_1h, sells_1h, total_1h, MIN_TRANSACTIONS_1H
-                ),
+                    token.symbol,
+                    buys_1h,
+                    sells_1h,
+                    total_1h,
+                    MIN_TRANSACTIONS_1H
+                )
             );
         }
 
@@ -1655,8 +1634,10 @@ fn validate_transaction_activity(token: &Token) -> Option<FilterReason> {
                     "DEBUG_TXN_ACTIVITY",
                     &format!(
                         "❌ Token {} insufficient 1hour activity: {} < {} minimum",
-                        token.symbol, total_1h, MIN_TRANSACTIONS_1H
-                    ),
+                        token.symbol,
+                        total_1h,
+                        MIN_TRANSACTIONS_1H
+                    )
                 );
             }
             return Some(FilterReason::InsufficientTransactionActivity {
@@ -1671,10 +1652,7 @@ fn validate_transaction_activity(token: &Token) -> Option<FilterReason> {
         log(
             LogTag::Filtering,
             "DEBUG_TXN_ACTIVITY",
-            &format!(
-                "✅ Token {} passed transaction activity validation",
-                token.symbol
-            ),
+            &format!("✅ Token {} passed transaction activity validation", token.symbol)
         );
     }
 
@@ -1690,10 +1668,7 @@ fn validate_decimal_availability(token: &Token) -> Option<FilterReason> {
             log(
                 LogTag::Filtering,
                 "DEBUG_DECIMALS",
-                &format!(
-                    "❌ Token {} decimals not available in cache or blockchain",
-                    token.symbol
-                ),
+                &format!("❌ Token {} decimals not available in cache or blockchain", token.symbol)
             );
         }
         return Some(FilterReason::DecimalsNotAvailable {
@@ -1705,7 +1680,7 @@ fn validate_decimal_availability(token: &Token) -> Option<FilterReason> {
         log(
             LogTag::Filtering,
             "DEBUG_DECIMALS",
-            &format!("✅ Token {} decimals are available", token.symbol),
+            &format!("✅ Token {} decimals are available", token.symbol)
         );
     }
 
@@ -1725,10 +1700,7 @@ fn validate_position_constraints(_token: &Token) -> Option<FilterReason> {
         log(
             LogTag::Filtering,
             "DEBUG_POSITION",
-            &format!(
-                "✅ {}: Position constraints deferred to trading decision",
-                _token.symbol
-            ),
+            &format!("✅ {}: Position constraints deferred to trading decision", _token.symbol)
         );
     }
 
@@ -1742,8 +1714,7 @@ fn validate_position_constraints(_token: &Token) -> Option<FilterReason> {
 
 /// Calculate 5-minute transaction activity for a token
 pub fn get_token_5min_activity(token: &Token) -> i64 {
-    token
-        .txns
+    token.txns
         .as_ref()
         .and_then(|t| t.m5.as_ref())
         .map(|m5| m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0))
@@ -1772,7 +1743,10 @@ pub fn get_transaction_activity_stats(tokens: &[Token]) -> (i64, i64, f64, usize
     let max_txns = *txn_stats.iter().max().unwrap_or(&0);
     let min_txns = *txn_stats.iter().min().unwrap_or(&0);
     let avg_txns = (txn_stats.iter().sum::<i64>() as f64) / (txn_stats.len() as f64);
-    let tokens_with_10_plus = txn_stats.iter().filter(|&&x| x >= 10).count();
+    let tokens_with_10_plus = txn_stats
+        .iter()
+        .filter(|&&x| x >= 10)
+        .count();
 
     (max_txns, min_txns, avg_txns, tokens_with_10_plus)
 }
@@ -1796,7 +1770,7 @@ pub fn log_transaction_activity_stats(tokens: &[Token]) {
             avg_txns,
             tokens_with_10_plus,
             tokens.len()
-        ),
+        )
     );
 }
 
@@ -1812,10 +1786,10 @@ pub fn is_token_eligible_for_trading(token: &Token) -> bool {
 /// Filter a list of tokens and return both eligible and rejected with reasons
 pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, FilterReason)>) {
     // Performance fix: Limit tokens to prevent timeout on large datasets
-    const MAX_TOKENS_FOR_DETAILED_FILTERING: usize = 8000;
+    const MAX_TOKENS_FOR_DETAILED_FILTERING: usize = 15000;
 
-    let (tokens_to_process, pre_filtered_rejected) = if tokens.len()
-        > MAX_TOKENS_FOR_DETAILED_FILTERING
+    let (tokens_to_process, pre_filtered_rejected) = if
+        tokens.len() > MAX_TOKENS_FOR_DETAILED_FILTERING
     {
         if is_debug_filtering_enabled() {
             log(
@@ -1832,16 +1806,21 @@ pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, 
         // Sort by liquidity (highest first) and take top tokens
         let mut sorted_tokens = tokens.to_vec();
         sorted_tokens.sort_by(|a, b| {
-            let a_liq = a.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
-            let b_liq = b.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
-            b_liq
-                .partial_cmp(&a_liq)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            let a_liq = a.liquidity
+                .as_ref()
+                .and_then(|l| l.usd)
+                .unwrap_or(0.0);
+            let b_liq = b.liquidity
+                .as_ref()
+                .and_then(|l| l.usd)
+                .unwrap_or(0.0);
+            b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
         });
 
         let top_tokens = sorted_tokens[..MAX_TOKENS_FOR_DETAILED_FILTERING].to_vec();
-        let excluded_tokens: Vec<(Token, FilterReason)> = sorted_tokens
-            [MAX_TOKENS_FOR_DETAILED_FILTERING..]
+        let excluded_tokens: Vec<(Token, FilterReason)> = sorted_tokens[
+            MAX_TOKENS_FOR_DETAILED_FILTERING..
+        ]
             .iter()
             .map(|token| {
                 (
@@ -1856,14 +1835,14 @@ pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, 
 
         if is_debug_filtering_enabled() {
             log(
-            LogTag::Filtering,
-            "PERFORMANCE",
-            &format!(
-                "📊 Performance limiting: Processing top {} tokens, excluding {} lower-liquidity tokens",
-                top_tokens.len(),
-                excluded_tokens.len()
-            )
-        );
+                LogTag::Filtering,
+                "PERFORMANCE",
+                &format!(
+                    "📊 Performance limiting: Processing top {} tokens, excluding {} lower-liquidity tokens",
+                    top_tokens.len(),
+                    excluded_tokens.len()
+                )
+            );
         }
 
         (top_tokens, excluded_tokens)
@@ -1901,11 +1880,7 @@ pub fn count_eligible_tokens(tokens: &[Token]) -> usize {
 pub fn get_filtering_stats(tokens: &[Token]) -> (usize, usize, f64) {
     let total = tokens.len();
     let eligible = count_eligible_tokens(tokens);
-    let pass_rate = if total > 0 {
-        ((eligible as f64) / (total as f64)) * 100.0
-    } else {
-        0.0
-    };
+    let pass_rate = if total > 0 { ((eligible as f64) / (total as f64)) * 100.0 } else { 0.0 };
 
     (total, eligible, pass_rate)
 }
@@ -1924,8 +1899,10 @@ pub fn log_filtering_summary(tokens: &[Token]) {
         "SUMMARY",
         &format!(
             "📊 FILTERING SUMMARY: Processed {} tokens → {} eligible ({:.1}% pass rate)",
-            total, eligible, pass_rate
-        ),
+            total,
+            eligible,
+            pass_rate
+        )
     );
 
     // Log detailed breakdown if we have rejections
@@ -1938,7 +1915,7 @@ pub fn log_filtering_summary(tokens: &[Token]) {
                 "🚫 Rejected {} tokens ({:.1}% rejection rate) - use --debug-filtering for details",
                 rejected_count,
                 ((rejected_count as f64) / (total as f64)) * 100.0
-            ),
+            )
         );
     }
 
@@ -1946,7 +1923,7 @@ pub fn log_filtering_summary(tokens: &[Token]) {
         log(
             LogTag::Filtering,
             "WARN",
-            "⚠️ NO TOKENS PASSED FILTERING - Consider reviewing filter criteria or token sources",
+            "⚠️ NO TOKENS PASSED FILTERING - Consider reviewing filter criteria or token sources"
         );
 
         // Log current filter parameters for debugging
@@ -1962,13 +1939,13 @@ pub fn log_filtering_summary(tokens: &[Token]) {
                 MIN_LIQUIDITY_USD,
                 MIN_VALID_PRICE_SOL,
                 MAX_VALID_PRICE_SOL
-            ),
+            )
         );
     } else if eligible > 0 {
         log(
             LogTag::Filtering,
             "SUMMARY",
-            &format!("✅ {} tokens ready for trading evaluation", eligible),
+            &format!("✅ {} tokens ready for trading evaluation", eligible)
         );
     }
 }
@@ -1987,24 +1964,24 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             FilterReason::TokenBlacklisted { .. } | FilterReason::SystemOrStableToken => {
                 "Blacklist/Exclusion"
             }
-            FilterReason::EmptySymbol
+            | FilterReason::EmptySymbol
             | FilterReason::EmptyMint
             | FilterReason::EmptyLogoUrl
             | FilterReason::EmptyWebsite
             | FilterReason::EmptyDescription => "Invalid Metadata",
-            FilterReason::InvalidPrice
+            | FilterReason::InvalidPrice
             | FilterReason::PriceTooLow { .. }
             | FilterReason::PriceTooHigh { .. }
             | FilterReason::MissingPriceData => "Price Issues",
-            FilterReason::ZeroLiquidity
+            | FilterReason::ZeroLiquidity
             | FilterReason::InsufficientLiquidity { .. }
             | FilterReason::TooHighLiquidity { .. }
             | FilterReason::TooHighMarketCap { .. }
             | FilterReason::MissingLiquidityData => "Liquidity Issues",
-            FilterReason::TooYoung { .. }
+            | FilterReason::TooYoung { .. }
             | FilterReason::TooOld { .. }
             | FilterReason::NoCreationDate => "Age Constraints",
-            FilterReason::ExistingOpenPosition
+            | FilterReason::ExistingOpenPosition
             | FilterReason::RecentlyClosed { .. }
             | FilterReason::MaxPositionsReached { .. } => "Position Constraints",
             FilterReason::AccountFrozen | FilterReason::TokenAccountFrozen => "Account Issues",
@@ -2013,7 +1990,7 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             FilterReason::WhaleConcentrationRisk { .. } => "Whale Concentration Risk",
             FilterReason::LockAcquisitionFailed => "System Errors",
             FilterReason::DecimalsNotAvailable { .. } => "Decimal Issues",
-            FilterReason::InsufficientTransactionActivity { .. }
+            | FilterReason::InsufficientTransactionActivity { .. }
             | FilterReason::ExcessiveTransactionActivity { .. }
             | FilterReason::UnhealthyBuySellRatio { .. }
             | FilterReason::NoTransactionData => "Transaction Activity Issues",
@@ -2023,9 +2000,5 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
         *reason_counts.entry(reason_type.to_string()).or_insert(0) += 1;
     }
 
-    log(
-        LogTag::Filtering,
-        "DEBUG",
-        &format!("Rejection breakdown: {:?}", reason_counts),
-    );
+    log(LogTag::Filtering, "DEBUG", &format!("Rejection breakdown: {:?}", reason_counts));
 }

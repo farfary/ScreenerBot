@@ -49,7 +49,7 @@ pub const MIN_PROFIT_THRESHOLD_ENABLED: bool = true;
 
 /// Minimum profit threshold percentage (e.g., 5.0 for 5%, -5.0 for -5%)
 /// Positions below this P&L will not be sold regardless of other exit conditions
-pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 0.0;
+pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 3.0;
 
 /// Time-based override: Allow sell decisions after this duration (hours)
 /// Positions held longer than this can bypass profit threshold if in significant loss
@@ -99,8 +99,8 @@ pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 5;
 // Task Timeout Configuration
 // -----------------------------------------------------------------------------
 
-/// Semaphore acquire timeout for token processing tasks (seconds)
-pub const SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 120;
+/// Semaphore acquire timeout for token processing tasks (seconds) - reduced for faster failure detection
+pub const SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 60;
 
 /// Individual token check task timeout (seconds)
 pub const TOKEN_CHECK_TASK_TIMEOUT_SECS: u64 = 60;
@@ -564,8 +564,8 @@ pub fn prioritize_tokens_for_checking(mut tokens: Vec<Token>) -> Vec<Token> {
 pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Token>, String> {
     use crate::filtering::{ filter_tokens_with_reasons, log_transaction_activity_stats };
 
-    // Timeout for filtering operations
-    const FILTERING_TIMEOUT_SECS: u64 = 120;
+    // Timeout for filtering operations - increased for larger token sets
+    const FILTERING_TIMEOUT_SECS: u64 = 180;
 
     // 1. Fetch tokens from safe system
     let tokens = {
@@ -844,7 +844,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         // Limit concurrent token checks to avoid overwhelming services
         use tokio::sync::Semaphore;
-        let semaphore = Arc::new(Semaphore::new(5)); // Reduced to 5 concurrent checks to avoid overwhelming
+        let semaphore = Arc::new(Semaphore::new(10)); // Increased to 10 concurrent checks for better performance
 
         // Log filtering summary
         log_filtering_summary(&tokens);
@@ -1421,7 +1421,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         if !positions_to_close.is_empty() {
             // Use a semaphore to limit concurrent sell transactions
             use tokio::sync::Semaphore;
-            let semaphore = Arc::new(Semaphore::new(3)); // Allow up to 3 concurrent sells
+            let semaphore = Arc::new(Semaphore::new(5)); // Allow up to 5 concurrent sells for better performance
 
             let mut handles = Vec::new();
 
