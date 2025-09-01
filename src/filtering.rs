@@ -1895,7 +1895,33 @@ pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, 
     let mut eligible = Vec::new();
     let mut rejected = pre_filtered_rejected; // Start with pre-filtered rejected tokens
 
+    // FAST PRE-SCREEN: cheaply discard obvious rejects without verbose step-by-step logging
+    // This dramatically reduces the workload of full filtering when token sets are large
+    let mut fast_pass: Vec<&Token> = Vec::with_capacity(tokens_to_process.len());
     for token in &tokens_to_process {
+        // Cheap checks (no logging): price validity, liquidity, age, decimals
+        if let Some(reason) = validate_basic_price_data(token) {
+            rejected.push((token.clone(), reason));
+            continue;
+        }
+        if let Some(reason) = validate_liquidity(token) {
+            rejected.push((token.clone(), reason));
+            continue;
+        }
+        if let Some(reason) = validate_token_age(token) {
+            rejected.push((token.clone(), reason));
+            continue;
+        }
+        if let Some(reason) = validate_decimal_availability(token) {
+            rejected.push((token.clone(), reason));
+            continue;
+        }
+        // Passed fast pre-screen
+        fast_pass.push(token);
+    }
+
+    // Now run the full filter only on pre-screened tokens (far fewer logs/work)
+    for token in fast_pass {
         match filter_token_for_trading(token) {
             FilterResult::Approved => eligible.push(token.clone()),
             FilterResult::Rejected(reason) => rejected.push((token.clone(), reason)),
