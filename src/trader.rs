@@ -206,6 +206,22 @@ pub static TOKEN_CHECK_TRACKER: Lazy<
     Arc<std::sync::RwLock<HashMap<String, TokenCheckInfo>>>
 > = Lazy::new(|| Arc::new(std::sync::RwLock::new(HashMap::new())));
 
+/// Token confidence tracking for intelligent monitoring
+#[derive(Clone, Debug)]
+pub struct TokenConfidenceInfo {
+    pub mint: String,
+    pub symbol: String,
+    pub confidence: f64,
+    pub last_updated: Instant,
+    pub last_price: Option<f64>,
+    pub trend: String, // "rising", "falling", "stable"
+    pub consecutive_updates: usize,
+}
+
+/// Global confidence-based token ranking system
+pub static TOKEN_CONFIDENCE_TRACKER: Lazy<Arc<std::sync::RwLock<Vec<TokenConfidenceInfo>>>> =
+    Lazy::new(|| Arc::new(std::sync::RwLock::new(Vec::new())));
+
 // =============================================================================
 // CRITICAL OPERATION PROTECTION
 // =============================================================================
@@ -305,8 +321,134 @@ pub fn should_debug_force_sell(position: &crate::positions_types::Position) -> b
 }
 
 // =============================================================================
-// TOKEN TRACKING AND INTELLIGENT PRIORITIZATION
+// CONFIDENCE-BASED TOKEN TRACKING SYSTEM
 // =============================================================================
+
+/// Update token confidence in the global tracking system
+pub fn update_token_confidence(
+    mint: &str,
+    symbol: &str,
+    confidence: f64,
+    current_price: Option<f64>
+) {
+    let mut tracker = TOKEN_CONFIDENCE_TRACKER.write().unwrap();
+    let now = Instant::now();
+
+    // Find existing entry or create new one
+    let mut found_index = None;
+    for (i, info) in tracker.iter().enumerate() {
+        if info.mint == mint {
+            found_index = Some(i);
+            break;
+        }
+    }
+
+    if let Some(index) = found_index {
+        // Update existing entry
+        let existing = &mut tracker[index];
+        let prev_confidence = existing.confidence;
+
+        // Determine trend
+        let trend = if confidence > prev_confidence + 5.0 {
+            "rising".to_string()
+        } else if confidence < prev_confidence - 5.0 {
+            "falling".to_string()
+        } else {
+            "stable".to_string()
+        };
+
+        existing.confidence = confidence;
+        existing.last_updated = now;
+        existing.last_price = current_price;
+        existing.trend = trend;
+        existing.consecutive_updates += 1;
+    } else {
+        // Create new entry
+        tracker.push(TokenConfidenceInfo {
+            mint: mint.to_string(),
+            symbol: symbol.to_string(),
+            confidence,
+            last_updated: now,
+            last_price: current_price,
+            trend: "stable".to_string(),
+            consecutive_updates: 1,
+        });
+    }
+
+    // Sort by confidence (highest first)
+    tracker.sort_by(|a, b| {
+        b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Keep only top 50 entries to prevent memory bloat
+    tracker.truncate(50);
+}
+
+/// Get top confidence tokens for priority monitoring
+pub fn get_top_confidence_tokens(limit: usize) -> Vec<TokenConfidenceInfo> {
+    let tracker = TOKEN_CONFIDENCE_TRACKER.read().unwrap();
+    let now = Instant::now();
+
+    // Filter out stale entries (older than 5 minutes) and return top entries
+    tracker
+        .iter()
+        .filter(|info| now.duration_since(info.last_updated).as_secs() < 300) // 5 minutes
+        .take(limit)
+        .cloned()
+        .collect()
+}
+
+/// Clean up stale confidence entries
+pub fn cleanup_stale_confidence_entries() {
+    let mut tracker = TOKEN_CONFIDENCE_TRACKER.write().unwrap();
+    let now = Instant::now();
+
+    // Remove entries older than 10 minutes
+    tracker.retain(|info| now.duration_since(info.last_updated).as_secs() < 600);
+}
+
+/// Get detailed confidence tracking status for debugging
+pub fn get_confidence_tracking_status() -> String {
+    let tracker = TOKEN_CONFIDENCE_TRACKER.read().unwrap();
+    let now = Instant::now();
+
+    if tracker.is_empty() {
+        return "No tokens in confidence tracking system".to_string();
+    }
+
+    let mut status = format!("Confidence Tracking Status ({} tokens):\n", tracker.len());
+
+    for (i, info) in tracker.iter().enumerate() {
+        let age_secs = now.duration_since(info.last_updated).as_secs();
+        let price_str = info.last_price
+            .map(|p| format!("{:.10} SOL", p))
+            .unwrap_or_else(|| "No price".to_string());
+
+        status.push_str(
+            &format!(
+                "  {}. {} ({}): {:.1}% confidence, trend: {}, price: {}, age: {}s, updates: {}\n",
+                i + 1,
+                info.symbol,
+                &info.mint[..8],
+                info.confidence,
+                info.trend,
+                price_str,
+                age_secs,
+                info.consecutive_updates
+            )
+        );
+
+        // Limit display to top 20 for readability
+        if i >= 19 {
+            if tracker.len() > 20 {
+                status.push_str(&format!("  ... and {} more tokens\n", tracker.len() - 20));
+            }
+            break;
+        }
+    }
+
+    status
+}
 
 /// Update token tracking after checking a token
 pub fn update_token_check_info(mint: &str, current_price: Option<f64>, had_drop: bool) {
@@ -544,19 +686,65 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
         }
     }
 
-    // 6. Smart token prioritization instead of random shuffling
-    let prioritized_tokens = prioritize_tokens_for_checking(eligible_tokens);
+    // 6. Smart token prioritization with confidence-based top tokens
+    let mut prioritized_tokens = prioritize_tokens_for_checking(eligible_tokens);
+
+    // Get top 10 confidence tokens for priority monitoring
+    let top_confidence_tokens = get_top_confidence_tokens(10);
+    let top_confidence_mints: std::collections::HashSet<String> = top_confidence_tokens
+        .iter()
+        .map(|info| info.mint.clone())
+        .collect();
+
+    // Add top confidence tokens to the beginning if not already present
+    let mut confidence_tokens_to_add = Vec::new();
+    for confidence_info in top_confidence_tokens {
+        // Check if token is already in prioritized list
+        let already_present = prioritized_tokens.iter().any(|t| t.mint == confidence_info.mint);
+
+        if !already_present {
+            // Try to find token in original tokens list
+            if let Some(token) = tokens.iter().find(|t| t.mint == confidence_info.mint) {
+                confidence_tokens_to_add.push(token.clone());
+                if is_debug_trader_enabled() {
+                    log(
+                        LogTag::Trader,
+                        "CONFIDENCE_ADD",
+                        &format!(
+                            "📈 Adding high-confidence token: {} (confidence: {:.1}%, trend: {})",
+                            confidence_info.symbol,
+                            confidence_info.confidence,
+                            confidence_info.trend
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    // Prepend confidence tokens to prioritized list
+    confidence_tokens_to_add.extend(prioritized_tokens);
+    prioritized_tokens = confidence_tokens_to_add;
+
+    // Clean up stale entries periodically
+    cleanup_stale_confidence_entries();
 
     if is_debug_trader_enabled() && !prioritized_tokens.is_empty() {
+        let confidence_count = prioritized_tokens
+            .iter()
+            .filter(|t| top_confidence_mints.contains(&t.mint))
+            .count();
+
         log(
             LogTag::Trader,
             "PRIORITY_ORDER",
             &format!(
-                "📊 Prioritized {} tokens: drops={}, fair_rotation={}, others={}",
+                "📊 Prioritized {} tokens: confidence_top={}, drops={}, fair_rotation={}, others={}",
                 prioritized_tokens.len(),
+                confidence_count,
                 prioritized_tokens
                     .iter()
-                    .take(10)
+                    .take(20)
                     .filter(|t| {
                         TOKEN_CHECK_TRACKER.read()
                             .unwrap()
@@ -661,6 +849,22 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Log filtering summary
         log_filtering_summary(&tokens);
 
+        // Debug: Show top confidence tokens every few cycles
+        if is_debug_trader_enabled() {
+            let top_confidence = get_top_confidence_tokens(5);
+            if !top_confidence.is_empty() {
+                let confidence_summary: Vec<String> = top_confidence
+                    .iter()
+                    .map(|info| format!("{}:{:.1}%", info.symbol, info.confidence))
+                    .collect();
+                log(
+                    LogTag::Trader,
+                    "CONFIDENCE_TOP",
+                    &format!("🎯 Top confidence tokens: [{}]", confidence_summary.join(", "))
+                );
+            }
+        }
+
         // Process tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
@@ -743,8 +947,16 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         // Check for recent drops
                         let had_recent_drop = check_token_for_recent_drop(&token).await;
 
-                        // Entry decision delegated to entry::should_buy  
+                        // Entry decision delegated to entry::should_buy
                         let (approved, confidence, reason) = crate::entry::should_buy(&token).await;
+
+                        // Update confidence tracking system
+                        update_token_confidence(
+                            &token.mint,
+                            &token.symbol,
+                            confidence,
+                            Some(current_price)
+                        );
 
                         // Update token tracking info
                         update_token_check_info(&token.mint, Some(current_price), had_recent_drop);
@@ -759,8 +971,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     LogTag::Trader,
                                     "WATCHLIST_ADD",
                                     &format!(
-                                        "Added {} to watchlist (passed filtering, waiting for entry signal: {}) [Drop: {}]",
+                                        "Added {} to watchlist (confidence: {:.1}%, reason: {}) [Drop: {}]",
                                         &token.symbol,
+                                        confidence,
                                         reason,
                                         if had_recent_drop {
                                             "YES"

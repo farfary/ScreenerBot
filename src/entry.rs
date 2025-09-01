@@ -24,10 +24,10 @@
 /// - 85-100: Extreme confidence - exceptional entry opportunity
 
 use crate::global::is_debug_entry_enabled;
-use crate::logger::{log, LogTag};
-use crate::tokens::{get_pool_service, Token, PriceOptions};
+use crate::logger::{ log, LogTag };
+use crate::tokens::{ get_pool_service, Token, PriceOptions };
 use crate::trader::POSITION_CLOSE_COOLDOWN_MINUTES;
-use chrono::{DateTime, Utc};
+use chrono::{ DateTime, Utc };
 use std::time::Instant;
 
 // =============================================================================
@@ -35,37 +35,37 @@ use std::time::Instant;
 // =============================================================================
 
 // Drop Detection Thresholds
-const FLASH_DROP_MIN: f64 = 5.0;        // Minimum flash drop %
-const FLASH_DROP_MAX: f64 = 15.0;       // Maximum flash drop %
-const MODERATE_DROP_MIN: f64 = 15.0;    // Minimum moderate drop %
-const MODERATE_DROP_MAX: f64 = 35.0;    // Maximum moderate drop %
-const DEEP_DROP_MIN: f64 = 35.0;        // Minimum deep drop %
-const DEEP_DROP_MAX: f64 = 60.0;        // Maximum deep drop %
-const EXTREME_DROP_MIN: f64 = 60.0;     // Minimum extreme drop %
-const EXTREME_DROP_MAX: f64 = 100.0;    // Maximum extreme drop %
+const FLASH_DROP_MIN: f64 = 5.0; // Minimum flash drop %
+const FLASH_DROP_MAX: f64 = 15.0; // Maximum flash drop %
+const MODERATE_DROP_MIN: f64 = 15.0; // Minimum moderate drop %
+const MODERATE_DROP_MAX: f64 = 35.0; // Maximum moderate drop %
+const DEEP_DROP_MIN: f64 = 35.0; // Minimum deep drop %
+const DEEP_DROP_MAX: f64 = 60.0; // Maximum deep drop %
+const EXTREME_DROP_MIN: f64 = 60.0; // Minimum extreme drop %
+const EXTREME_DROP_MAX: f64 = 100.0; // Maximum extreme drop %
 
 // Time Windows for Analysis
-const FLASH_WINDOW_SEC: i64 = 10;       // Flash drop detection window
-const MODERATE_WINDOW_SEC: i64 = 60;    // Moderate drop detection window  
-const DEEP_WINDOW_SEC: i64 = 300;       // Deep drop detection window (5 min)
-const EXTREME_WINDOW_SEC: i64 = 900;    // Extreme drop detection window (15 min)
+const FLASH_WINDOW_SEC: i64 = 10; // Flash drop detection window
+const MODERATE_WINDOW_SEC: i64 = 60; // Moderate drop detection window
+const DEEP_WINDOW_SEC: i64 = 300; // Deep drop detection window (5 min)
+const EXTREME_WINDOW_SEC: i64 = 900; // Extreme drop detection window (15 min)
 
 // ATH Protection Settings
 const ATH_PROTECTION_WINDOW_SEC: i64 = 7200; // 2 hours ATH protection
-const ATH_MIN_DISTANCE_PERCENT: f64 = 5.0;   // Minimum 5% below ATH
+const ATH_MIN_DISTANCE_PERCENT: f64 = 5.0; // Minimum 5% below ATH
 
 // Confidence Scoring Base Values
-const FLASH_BASE_CONFIDENCE: f64 = 70.0;     // Base confidence for flash drops
-const MODERATE_BASE_CONFIDENCE: f64 = 75.0;  // Base confidence for moderate drops
-const DEEP_BASE_CONFIDENCE: f64 = 80.0;      // Base confidence for deep drops
-const EXTREME_BASE_CONFIDENCE: f64 = 85.0;   // Base confidence for extreme drops
+const FLASH_BASE_CONFIDENCE: f64 = 70.0; // Base confidence for flash drops
+const MODERATE_BASE_CONFIDENCE: f64 = 75.0; // Base confidence for moderate drops
+const DEEP_BASE_CONFIDENCE: f64 = 80.0; // Base confidence for deep drops
+const EXTREME_BASE_CONFIDENCE: f64 = 85.0; // Base confidence for extreme drops
 
 // Price History Requirements
-const MIN_PRICE_POINTS: usize = 3;           // Minimum price points needed
-const MAX_DATA_AGE_MIN: i64 = 10;            // Maximum data age in minutes
+const MIN_PRICE_POINTS: usize = 3; // Minimum price points needed
+const MAX_DATA_AGE_MIN: i64 = 10; // Maximum data age in minutes
 
 // Liquidity Filters (Basic)
-const MIN_LIQUIDITY_USD: f64 = 100.0;        // Minimum liquidity requirement
+const MIN_LIQUIDITY_USD: f64 = 100.0; // Minimum liquidity requirement
 const MAX_LIQUIDITY_USD: f64 = 50_000_000.0; // Maximum liquidity to avoid mega caps
 
 // =============================================================================
@@ -84,17 +84,17 @@ pub struct DropAnalysis {
 
 #[derive(Debug, Clone)]
 pub enum DropStyle {
-    Flash,      // Quick sudden drop (5-15%)
-    Moderate,   // Sustained decline (15-35%) 
-    Deep,       // Major correction (35-60%)
-    Extreme,    // Potential capitulation (60-100%)
+    Flash, // Quick sudden drop (5-15%)
+    Moderate, // Sustained decline (15-35%)
+    Deep, // Major correction (35-60%)
+    Extreme, // Potential capitulation (60-100%)
 }
 
 impl DropStyle {
     fn to_string(&self) -> &'static str {
         match self {
             DropStyle::Flash => "FLASH",
-            DropStyle::Moderate => "MODERATE", 
+            DropStyle::Moderate => "MODERATE",
             DropStyle::Deep => "DEEP",
             DropStyle::Extreme => "EXTREME",
         }
@@ -117,7 +117,12 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             log(
                 LogTag::Entry,
                 "COOLDOWN",
-                &format!("❄️ {} in cooldown: {} ({}min remaining)", token.symbol, reason, remaining_min)
+                &format!(
+                    "❄️ {} in cooldown: {} ({}min remaining)",
+                    token.symbol,
+                    reason,
+                    remaining_min
+                )
             );
         }
         return (false, 0.0, format!("Position cooldown: {}", reason));
@@ -131,22 +136,36 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
 
     let (current_price, data_age_min, liquidity_usd) = match get_current_pool_data(token).await {
         Some(data) => data,
-        None => return (false, 0.0, "No valid pool data".to_string()),
+        None => {
+            return (false, 0.0, "No valid pool data".to_string());
+        }
     };
 
     // Basic liquidity filter
     if liquidity_usd < MIN_LIQUIDITY_USD {
-        return (false, 0.0, format!("Liquidity too low: ${:.0} < ${:.0}", liquidity_usd, MIN_LIQUIDITY_USD));
+        return (
+            false,
+            0.0,
+            format!("Liquidity too low: ${:.0} < ${:.0}", liquidity_usd, MIN_LIQUIDITY_USD),
+        );
     }
 
     if liquidity_usd > MAX_LIQUIDITY_USD {
-        return (false, 0.0, format!("Liquidity too high: ${:.0} > ${:.0}", liquidity_usd, MAX_LIQUIDITY_USD));
+        return (
+            false,
+            0.0,
+            format!("Liquidity too high: ${:.0} > ${:.0}", liquidity_usd, MAX_LIQUIDITY_USD),
+        );
     }
 
     // Get price history for drop analysis
     let price_history = pool_service.get_recent_price_history(&token.mint).await;
     if price_history.len() < MIN_PRICE_POINTS {
-        return (false, 0.0, format!("Insufficient price history: {} < {}", price_history.len(), MIN_PRICE_POINTS));
+        return (
+            false,
+            0.0,
+            format!("Insufficient price history: {} < {}", price_history.len(), MIN_PRICE_POINTS),
+        );
     }
 
     // Check ATH protection using OHLCV data
@@ -159,7 +178,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
 
     if let Some(analysis) = drop_analysis {
         let approved = should_enter_based_on_analysis(&analysis, liquidity_usd);
-        
+
         if is_debug_entry_enabled() {
             log(
                 LogTag::Entry,
@@ -190,27 +209,27 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
 async fn analyze_drop_patterns(
     price_history: &[(DateTime<Utc>, f64)],
     current_price: f64,
-    liquidity_usd: f64,
+    liquidity_usd: f64
 ) -> Option<DropAnalysis> {
     let now = Utc::now();
-    
+
     // Try different drop detection strategies in order of priority
-    
+
     // 1. Flash Drop Detection (10 seconds)
     if let Some(analysis) = detect_flash_drop(price_history, current_price, now) {
         return Some(enhance_confidence_with_context(analysis, liquidity_usd));
     }
-    
-    // 2. Moderate Drop Detection (1 minute) 
+
+    // 2. Moderate Drop Detection (1 minute)
     if let Some(analysis) = detect_moderate_drop(price_history, current_price, now) {
         return Some(enhance_confidence_with_context(analysis, liquidity_usd));
     }
-    
+
     // 3. Deep Drop Detection (5 minutes)
     if let Some(analysis) = detect_deep_drop(price_history, current_price, now) {
         return Some(enhance_confidence_with_context(analysis, liquidity_usd));
     }
-    
+
     // 4. Extreme Drop Detection (15 minutes)
     if let Some(analysis) = detect_extreme_drop(price_history, current_price, now) {
         return Some(enhance_confidence_with_context(analysis, liquidity_usd));
@@ -226,7 +245,7 @@ async fn analyze_drop_patterns(
 fn detect_flash_drop(
     price_history: &[(DateTime<Utc>, f64)],
     current_price: f64,
-    now: DateTime<Utc>,
+    now: DateTime<Utc>
 ) -> Option<DropAnalysis> {
     let window_prices: Vec<f64> = price_history
         .iter()
@@ -244,11 +263,11 @@ fn detect_flash_drop(
     }
 
     let drop_percent = ((window_high - current_price) / window_high) * 100.0;
-    
+
     if drop_percent >= FLASH_DROP_MIN && drop_percent <= FLASH_DROP_MAX {
         let velocity = calculate_velocity(&window_prices, FLASH_WINDOW_SEC);
         let confidence = calculate_flash_confidence(drop_percent, velocity);
-        
+
         return Some(DropAnalysis {
             drop_percent,
             drop_style: DropStyle::Flash,
@@ -265,7 +284,7 @@ fn detect_flash_drop(
 fn detect_moderate_drop(
     price_history: &[(DateTime<Utc>, f64)],
     current_price: f64,
-    now: DateTime<Utc>,
+    now: DateTime<Utc>
 ) -> Option<DropAnalysis> {
     let window_prices: Vec<f64> = price_history
         .iter()
@@ -283,11 +302,11 @@ fn detect_moderate_drop(
     }
 
     let drop_percent = ((window_high - current_price) / window_high) * 100.0;
-    
+
     if drop_percent >= MODERATE_DROP_MIN && drop_percent <= MODERATE_DROP_MAX {
         let velocity = calculate_velocity(&window_prices, MODERATE_WINDOW_SEC);
         let confidence = calculate_moderate_confidence(drop_percent, velocity);
-        
+
         return Some(DropAnalysis {
             drop_percent,
             drop_style: DropStyle::Moderate,
@@ -304,7 +323,7 @@ fn detect_moderate_drop(
 fn detect_deep_drop(
     price_history: &[(DateTime<Utc>, f64)],
     current_price: f64,
-    now: DateTime<Utc>,
+    now: DateTime<Utc>
 ) -> Option<DropAnalysis> {
     let window_prices: Vec<f64> = price_history
         .iter()
@@ -322,11 +341,11 @@ fn detect_deep_drop(
     }
 
     let drop_percent = ((window_high - current_price) / window_high) * 100.0;
-    
+
     if drop_percent >= DEEP_DROP_MIN && drop_percent <= DEEP_DROP_MAX {
         let velocity = calculate_velocity(&window_prices, DEEP_WINDOW_SEC);
         let confidence = calculate_deep_confidence(drop_percent, velocity);
-        
+
         return Some(DropAnalysis {
             drop_percent,
             drop_style: DropStyle::Deep,
@@ -343,7 +362,7 @@ fn detect_deep_drop(
 fn detect_extreme_drop(
     price_history: &[(DateTime<Utc>, f64)],
     current_price: f64,
-    now: DateTime<Utc>,
+    now: DateTime<Utc>
 ) -> Option<DropAnalysis> {
     let window_prices: Vec<f64> = price_history
         .iter()
@@ -361,18 +380,22 @@ fn detect_extreme_drop(
     }
 
     let drop_percent = ((window_high - current_price) / window_high) * 100.0;
-    
+
     if drop_percent >= EXTREME_DROP_MIN && drop_percent <= EXTREME_DROP_MAX {
         let velocity = calculate_velocity(&window_prices, EXTREME_WINDOW_SEC);
         let confidence = calculate_extreme_confidence(drop_percent, velocity);
-        
+
         return Some(DropAnalysis {
             drop_percent,
             drop_style: DropStyle::Extreme,
             confidence,
             velocity_per_minute: velocity,
             time_window_used: EXTREME_WINDOW_SEC,
-            reasoning: format!("Extreme drop -{:.1}% in {}min", drop_percent, EXTREME_WINDOW_SEC / 60),
+            reasoning: format!(
+                "Extreme drop -{:.1}% in {}min",
+                drop_percent,
+                EXTREME_WINDOW_SEC / 60
+            ),
         });
     }
 
@@ -385,62 +408,62 @@ fn detect_extreme_drop(
 
 fn calculate_flash_confidence(drop_percent: f64, velocity: f64) -> f64 {
     let mut confidence = FLASH_BASE_CONFIDENCE;
-    
+
     // Adjust based on drop magnitude
     let drop_factor = (drop_percent - FLASH_DROP_MIN) / (FLASH_DROP_MAX - FLASH_DROP_MIN);
     confidence += drop_factor * 10.0; // Up to +10 for larger drops
-    
+
     // Adjust based on velocity (negative velocity = downward)
     if velocity < -20.0 {
         confidence += 10.0; // High downward velocity is good
     } else if velocity > 10.0 {
         confidence -= 15.0; // Upward velocity during drop is suspicious
     }
-    
+
     confidence.max(20.0).min(95.0)
 }
 
 fn calculate_moderate_confidence(drop_percent: f64, velocity: f64) -> f64 {
     let mut confidence = MODERATE_BASE_CONFIDENCE;
-    
-    // Adjust based on drop magnitude  
+
+    // Adjust based on drop magnitude
     let drop_factor = (drop_percent - MODERATE_DROP_MIN) / (MODERATE_DROP_MAX - MODERATE_DROP_MIN);
     confidence += drop_factor * 8.0; // Up to +8 for larger drops
-    
+
     // Adjust based on velocity
     if velocity < -10.0 {
         confidence += 8.0; // Strong downward trend
     } else if velocity > 5.0 {
         confidence -= 12.0; // Recovery during drop reduces confidence
     }
-    
+
     confidence.max(25.0).min(92.0)
 }
 
 fn calculate_deep_confidence(drop_percent: f64, velocity: f64) -> f64 {
     let mut confidence = DEEP_BASE_CONFIDENCE;
-    
+
     // Deep drops are inherently more confident opportunities
     let drop_factor = (drop_percent - DEEP_DROP_MIN) / (DEEP_DROP_MAX - DEEP_DROP_MIN);
     confidence += drop_factor * 6.0; // Up to +6 for deeper drops
-    
+
     // For deep drops, we want stabilization (lower velocity)
     if velocity.abs() < 5.0 {
         confidence += 5.0; // Stabilizing price is good for deep drops
     } else if velocity < -15.0 {
         confidence -= 8.0; // Still falling fast might not be bottom
     }
-    
+
     confidence.max(30.0).min(90.0)
 }
 
 fn calculate_extreme_confidence(drop_percent: f64, velocity: f64) -> f64 {
     let mut confidence = EXTREME_BASE_CONFIDENCE;
-    
+
     // Extreme drops need careful analysis
     let drop_factor = (drop_percent - EXTREME_DROP_MIN) / (EXTREME_DROP_MAX - EXTREME_DROP_MIN);
     confidence += drop_factor * 5.0; // Up to +5 for more extreme drops
-    
+
     // For extreme drops, we strongly prefer stabilization
     if velocity.abs() < 3.0 {
         confidence += 8.0; // Very stable price after extreme drop
@@ -449,7 +472,7 @@ fn calculate_extreme_confidence(drop_percent: f64, velocity: f64) -> f64 {
     } else if velocity > 8.0 {
         confidence += 3.0; // Some recovery can be good sign
     }
-    
+
     confidence.max(35.0).min(95.0)
 }
 
@@ -468,10 +491,10 @@ fn enhance_confidence_with_context(mut analysis: DropAnalysis, liquidity_usd: f6
         analysis.confidence -= 3.0;
         analysis.reasoning += " (low liquidity)";
     }
-    
+
     // Ensure confidence stays in bounds
     analysis.confidence = analysis.confidence.max(0.0).min(100.0);
-    
+
     analysis
 }
 
@@ -483,67 +506,64 @@ fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
     if prices.len() < 2 {
         return 0.0;
     }
-    
+
     let first = prices[0];
     let last = prices[prices.len() - 1];
-    
+
     if first <= 0.0 || !first.is_finite() || !last.is_finite() {
         return 0.0;
     }
-    
+
     let percent_change = ((last - first) / first) * 100.0;
-    let minutes = window_seconds as f64 / 60.0;
-    
+    let minutes = (window_seconds as f64) / 60.0;
+
     if minutes <= 0.0 {
         return 0.0;
     }
-    
+
     percent_change / minutes // Percent per minute
 }
 
 fn should_enter_based_on_analysis(analysis: &DropAnalysis, liquidity_usd: f64) -> bool {
     // Base confidence threshold varies by drop style
     let min_confidence = match analysis.drop_style {
-        DropStyle::Flash => 60.0,      // Need higher confidence for quick moves
-        DropStyle::Moderate => 55.0,   // Moderate confidence needed
-        DropStyle::Deep => 50.0,       // Lower threshold for deep drops
-        DropStyle::Extreme => 45.0,    // Lowest threshold for extreme opportunities
+        DropStyle::Flash => 60.0, // Need higher confidence for quick moves
+        DropStyle::Moderate => 55.0, // Moderate confidence needed
+        DropStyle::Deep => 50.0, // Lower threshold for deep drops
+        DropStyle::Extreme => 45.0, // Lowest threshold for extreme opportunities
     };
-    
+
     // Adjust threshold based on liquidity
     let adjusted_threshold = if liquidity_usd > 100_000.0 {
-        min_confidence - 5.0  // Lower threshold for higher liquidity (safer)
+        min_confidence - 5.0 // Lower threshold for higher liquidity (safer)
     } else if liquidity_usd < 5_000.0 {
         min_confidence + 10.0 // Higher threshold for low liquidity (riskier)
     } else {
         min_confidence
     };
-    
+
     analysis.confidence >= adjusted_threshold
 }
 
 async fn get_current_pool_data(token: &Token) -> Option<(f64, i64, f64)> {
-    match crate::tokens::get_price(
-        &token.mint,
-        Some(PriceOptions::pool_only()),
-        false,
-    ).await {
+    match crate::tokens::get_price(&token.mint, Some(PriceOptions::pool_only()), false).await {
         Some(price_result) => {
             match price_result.best_sol_price() {
                 Some(price) if price > 0.0 && price.is_finite() => {
-                    let data_age_minutes = (Utc::now() - price_result.calculated_at).num_seconds() / 60;
-                    
+                    let data_age_minutes =
+                        (Utc::now() - price_result.calculated_at).num_seconds() / 60;
+
                     if data_age_minutes > MAX_DATA_AGE_MIN {
                         return None;
                     }
-                    
+
                     let liquidity = price_result.liquidity_usd.unwrap_or_else(|| {
                         token.liquidity
                             .as_ref()
                             .and_then(|l| l.usd)
                             .unwrap_or(0.0)
                     });
-                    
+
                     Some((price, data_age_minutes, liquidity))
                 }
                 _ => None,
@@ -559,12 +579,12 @@ async fn is_near_ath(mint: &str, current_price: f64) -> bool {
         Ok(ohlcv_data) => {
             let now = Utc::now();
             let two_hours_ago = now - chrono::Duration::seconds(ATH_PROTECTION_WINDOW_SEC);
-            
+
             let recent_high = ohlcv_data
                 .iter()
                 .map(|point| point.high)
                 .fold(0.0f64, |a, b| a.max(b));
-            
+
             if recent_high > 0.0 && recent_high.is_finite() {
                 let drop_from_high = ((recent_high - current_price) / recent_high) * 100.0;
                 return drop_from_high < ATH_MIN_DISTANCE_PERCENT;
@@ -572,7 +592,7 @@ async fn is_near_ath(mint: &str, current_price: f64) -> bool {
         }
         _ => {}
     }
-    
+
     false // If no OHLCV data, don't block the entry
 }
 
@@ -583,22 +603,26 @@ async fn check_position_cooldown(mint: &str) -> (bool, i64, String) {
                 .iter()
                 .filter(|p| p.mint == mint && p.transaction_exit_verified)
                 .collect();
-            
+
             if relevant_positions.is_empty() {
                 return (false, 0, "No previous positions".to_string());
             }
-            
+
             if let Some(last_position) = relevant_positions.last() {
                 if let Some(exit_time) = last_position.exit_time {
                     let now = Utc::now();
                     let elapsed_minutes = now.signed_duration_since(exit_time).num_minutes();
-                    
+
                     if elapsed_minutes < POSITION_CLOSE_COOLDOWN_MINUTES {
                         let remaining_minutes = POSITION_CLOSE_COOLDOWN_MINUTES - elapsed_minutes;
                         return (
                             true,
                             remaining_minutes,
-                            format!("{}h {}m remaining", remaining_minutes / 60, remaining_minutes % 60)
+                            format!(
+                                "{}h {}m remaining",
+                                remaining_minutes / 60,
+                                remaining_minutes % 60
+                            ),
                         );
                     }
                 }
@@ -606,7 +630,7 @@ async fn check_position_cooldown(mint: &str) -> (bool, i64, String) {
         }
         _ => {}
     }
-    
+
     (false, 0, "No cooldown".to_string())
 }
 
@@ -625,26 +649,26 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
                 .unwrap_or(10_000.0) // Default fallback
         }
     };
-    
+
     // Base profit targets
     let (mut min_profit, mut max_profit): (f64, f64) = if liquidity_usd < 5_000.0 {
         (30.0, 120.0) // Higher targets for micro caps
     } else if liquidity_usd < 50_000.0 {
-        (20.0, 80.0)  // Moderate targets for small caps
+        (20.0, 80.0) // Moderate targets for small caps
     } else if liquidity_usd < 500_000.0 {
-        (15.0, 60.0)  // Conservative targets for mid caps
+        (15.0, 60.0) // Conservative targets for mid caps
     } else {
-        (10.0, 40.0)  // Lower targets for large caps
+        (10.0, 40.0) // Lower targets for large caps
     };
-    
+
     // Ensure minimum spread
     if max_profit - min_profit < 15.0 {
         max_profit = min_profit + 15.0;
     }
-    
+
     // Ensure reasonable minimums
     min_profit = min_profit.max(8.0);
     max_profit = max_profit.max(25.0);
-    
+
     (min_profit, max_profit)
 }
