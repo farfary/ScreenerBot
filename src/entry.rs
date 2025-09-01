@@ -105,79 +105,69 @@ impl DropStyle {
 // MAIN ENTRY FUNCTION
 // =============================================================================
 
-/// Main entry decision function with confidence scoring
-/// Returns (approved, confidence, reason) where:
-/// - approved: true if should enter position immediately
-/// - confidence: 0-100 score indicating drop quality and likelihood
-/// - reason: detailed explanation of the decision
+/// Main entry point for determining if a token should be bought
+/// Returns (approved_for_entry, confidence_score, reason)
 pub async fn should_buy(token: &Token) -> (bool, f64, String) {
-    // Check basic position constraints first
-    if let (true, remaining_min, reason) = check_position_cooldown(&token.mint).await {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "COOLDOWN",
-                &format!(
-                    "❄️ {} in cooldown: {} ({}min remaining)",
-                    token.symbol,
-                    reason,
-                    remaining_min
-                )
-            );
-        }
-        return (false, 0.0, format!("Position cooldown: {}", reason));
-    }
-
-    // Get current pool price and data
     let pool_service = get_pool_service();
-    if !pool_service.check_token_availability(&token.mint).await {
-        return (false, 0.0, "Pool not available".to_string());
-    }
 
-    let (current_price, data_age_min, liquidity_usd) = match get_current_pool_data(token).await {
-        Some(data) => data,
+    // Get current pool price and liquidity first
+    let (current_price, liquidity_usd) = match
+        pool_service.get_pool_price(&token.mint, None, &PriceOptions::default()).await
+    {
+        Some(result) => {
+            let price = result.price_sol.unwrap_or(0.0);
+            let liquidity = result.liquidity_usd;
+            if price <= 0.0 || !price.is_finite() {
+                return (false, 10.0, "Invalid price data".to_string());
+            }
+            (price, liquidity)
+        }
         None => {
-            return (false, 0.0, "No valid pool data".to_string());
+            return (false, 5.0, "No valid pool data".to_string());
         }
     };
 
-    // Basic liquidity filter
-    if liquidity_usd < MIN_LIQUIDITY_USD {
-        return (
-            false,
-            0.0,
-            format!("Liquidity too low: ${:.0} < ${:.0}", liquidity_usd, MIN_LIQUIDITY_USD),
-        );
-    }
+    // Initialize base confidence based on basic metrics
+    let mut confidence = calculate_base_confidence(liquidity_usd);
 
-    if liquidity_usd > MAX_LIQUIDITY_USD {
-        return (
-            false,
-            0.0,
-            format!("Liquidity too high: ${:.0} > ${:.0}", liquidity_usd, MAX_LIQUIDITY_USD),
-        );
-    }
+    // Basic liquidity filter (affects entry approval but not confidence calculation)
+    let liquidity_check = if liquidity_usd < MIN_LIQUIDITY_USD {
+        (false, format!("Liquidity too low: ${:.0} < ${:.0}", liquidity_usd, MIN_LIQUIDITY_USD))
+    } else if liquidity_usd > MAX_LIQUIDITY_USD {
+        (false, format!("Liquidity too high: ${:.0} > ${:.0}", liquidity_usd, MAX_LIQUIDITY_USD))
+    } else {
+        (true, "Liquidity OK".to_string())
+    };
 
     // Get price history for drop analysis
     let price_history = pool_service.get_recent_price_history(&token.mint).await;
+
+    // Update confidence based on available data
     if price_history.len() < MIN_PRICE_POINTS {
+        confidence = confidence.min(25.0); // Cap confidence if insufficient history
         return (
             false,
-            0.0,
+            confidence,
             format!("Insufficient price history: {} < {}", price_history.len(), MIN_PRICE_POINTS),
         );
     }
 
     // Check ATH protection using OHLCV data
-    if is_near_ath(&token.mint, current_price).await {
-        return (false, 0.0, "Too close to ATH (2h protection)".to_string());
+    let ath_check = is_near_ath(&token.mint, current_price).await;
+    if ath_check {
+        confidence = confidence.min(15.0); // Very low confidence near ATH
+        return (false, confidence, "Too close to ATH (2h protection)".to_string());
     }
 
     // Analyze drop patterns with confidence scoring
     let drop_analysis = analyze_drop_patterns(&price_history, current_price, liquidity_usd).await;
 
     if let Some(analysis) = drop_analysis {
-        let approved = should_enter_based_on_analysis(&analysis, liquidity_usd);
+        // Update confidence based on drop analysis
+        confidence = analysis.confidence;
+
+        let approved =
+            liquidity_check.0 && should_enter_based_on_analysis(&analysis, liquidity_usd);
 
         if is_debug_entry_enabled() {
             log(
@@ -195,11 +185,39 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             );
         }
 
-        return (approved, analysis.confidence, analysis.reasoning);
+        return (
+            approved,
+            confidence,
+            if approved {
+                analysis.reasoning
+            } else {
+                format!("{} ({})", analysis.reasoning, liquidity_check.1)
+            },
+        );
     }
 
-    // No significant drop detected
-    (false, 0.0, "No significant drop pattern detected".to_string())
+    // No significant drop detected - return base confidence
+    let final_reason = if !liquidity_check.0 {
+        format!("No significant drop pattern detected ({})", liquidity_check.1)
+    } else {
+        "No significant drop pattern detected".to_string()
+    };
+
+    (false, confidence, final_reason)
+}
+
+/// Calculate base confidence based on fundamental metrics
+fn calculate_base_confidence(liquidity: f64) -> f64 {
+    // Base confidence from liquidity
+    let confidence: f64 = match liquidity {
+        liq if liq >= 1000000.0 => 40.0, // $1M+ liquidity
+        liq if liq >= 500000.0 => 35.0, // $500K+ liquidity
+        liq if liq >= 100000.0 => 30.0, // $100K+ liquidity
+        liq if liq >= 50000.0 => 25.0, // $50K+ liquidity
+        liq if liq >= 10000.0 => 20.0, // $10K+ liquidity
+        _ => 10.0, // Lower liquidity
+    };
+    confidence.min(40.0)
 }
 
 // =============================================================================
