@@ -2742,20 +2742,6 @@ async fn deep_analyze_transaction(signature: &str) {
                             )
                         );
                     }
-
-                    if let Some(ref fee_breakdown) = internal_tx.fee_breakdown {
-                        log(LogTag::Transactions, "DEEP_ANALYSIS", "Fee Breakdown Available:");
-                        log(
-                            LogTag::Transactions,
-                            "DEEP_ANALYSIS",
-                            &format!("  Transaction Fee: {:.9} SOL", fee_breakdown.transaction_fee)
-                        );
-                        log(
-                            LogTag::Transactions,
-                            "DEEP_ANALYSIS",
-                            &format!("  Compute Units: {}", fee_breakdown.compute_units_consumed)
-                        );
-                    }
                 }
                 Ok(None) => {
                     log(
@@ -3019,7 +3005,9 @@ async fn update_transaction_cache(wallet_pubkey: Pubkey, max_count: usize) {
                         let mut token_cache = std::collections::HashMap::new();
                         let swaps: Vec<SwapPnLInfo> = transactions
                             .iter()
-                            .filter_map(|tx| manager.convert_to_swap_pnl_info(tx, &token_cache, true))
+                            .filter_map(|tx|
+                                manager.convert_to_swap_pnl_info(tx, &token_cache, true)
+                            )
                             .collect();
 
                         log(
@@ -3399,94 +3387,31 @@ fn display_detailed_transaction_info(transaction: &Transaction) {
         &format!("SOL Balance Change: {:.9}", transaction.sol_balance_change)
     );
 
-    // Display comprehensive fee information if available
-    if let Some(fee_breakdown) = &transaction.fee_breakdown {
-        log(LogTag::Transactions, "DETAIL", "=== COMPREHENSIVE FEE BREAKDOWN ===");
+    // Display ATA analysis if available (simpler fee information)
+    if let Some(ata_analysis) = &transaction.ata_analysis {
         log(
             LogTag::Transactions,
             "DETAIL",
-            &format!("Transaction Fee: {:.9} SOL", fee_breakdown.transaction_fee)
+            &format!("ATA Creation Cost: {:.9} SOL", ata_analysis.total_rent_spent)
         );
         log(
             LogTag::Transactions,
             "DETAIL",
-            &format!("Router Fee: {:.9} SOL", fee_breakdown.router_fee)
+            &format!("ATA Rent Recovery: {:.9} SOL", ata_analysis.total_rent_recovered)
         );
         log(
             LogTag::Transactions,
             "DETAIL",
-            &format!("Platform Fee: {:.9} SOL", fee_breakdown.platform_fee)
-        );
-        log(
-            LogTag::Transactions,
-            "DETAIL",
-            &format!("Priority Fee: {:.9} SOL", fee_breakdown.priority_fee)
-        );
-
-        // Get ATA costs from the new ATA analysis instead of removed fee breakdown fields
-        if let Some(ata_analysis) = &transaction.ata_analysis {
-            log(
-                LogTag::Transactions,
-                "DETAIL",
-                &format!("ATA Creation Cost: {:.9} SOL", ata_analysis.total_rent_spent)
-            );
-            log(
-                LogTag::Transactions,
-                "DETAIL",
-                &format!("ATA Rent Recovery: {:.9} SOL", ata_analysis.total_rent_recovered)
-            );
-            log(
-                LogTag::Transactions,
-                "DETAIL",
-                &format!("Net ATA Impact: {:.9} SOL", ata_analysis.net_rent_impact)
-            );
-            log(
-                LogTag::Transactions,
-                "DETAIL",
-                &format!(
-                    "Infrastructure Costs: {:.9} SOL (one-time setup)",
-                    ata_analysis.total_rent_spent
-                )
-            );
-        }
-
-        log(
-            LogTag::Transactions,
-            "DETAIL",
-            &format!(
-                "Trading Fees Total: {:.9} SOL ({:.2}%)",
-                fee_breakdown.total_fees,
-                fee_breakdown.fee_percentage
-            )
+            &format!("Net ATA Impact: {:.9} SOL", ata_analysis.net_rent_impact)
         );
         log(
             LogTag::Transactions,
             "DETAIL",
             &format!(
-                "Compute Units: {} consumed / {} price = Priority: {}",
-                fee_breakdown.compute_units_consumed,
-                fee_breakdown.compute_unit_price,
-                fee_breakdown.compute_unit_price.saturating_sub(
-                    fee_breakdown.compute_units_consumed
-                )
+                "Infrastructure Costs: {:.9} SOL (one-time setup)",
+                ata_analysis.total_rent_spent
             )
         );
-
-        // Display swap analysis information if available
-        if let Some(swap_analysis) = &transaction.swap_analysis {
-            log(
-                LogTag::Transactions,
-                "DETAIL",
-                &format!("Effective Price: {:.12}", swap_analysis.effective_price)
-            );
-            log(
-                LogTag::Transactions,
-                "DETAIL",
-                &format!("Slippage: {:.2}%", swap_analysis.slippage)
-            );
-        }
-
-        log(LogTag::Transactions, "DETAIL", "=== END FEE BREAKDOWN ===");
     }
 
     // Transaction type details
@@ -6394,7 +6319,6 @@ async fn analyze_transaction_fees(
     display_fee_by_transaction_type(&transaction_type_fees);
     display_monthly_fee_trends(&monthly_fees);
     display_expensive_transactions(&expensive_transactions);
-    display_fee_breakdown_analysis(&filtered_transactions);
 
     log(LogTag::System, "FEE_ANALYSIS", "=== FEE ANALYSIS COMPLETE ===");
 }
@@ -6557,131 +6481,6 @@ fn display_expensive_transactions(expensive_txns: &[(&Transaction, f64)]) {
             )
         );
     }
-}
-
-/// Display detailed fee breakdown analysis
-fn display_fee_breakdown_analysis(transactions: &[&Transaction]) {
-    log(LogTag::System, "FEE_ANALYSIS", "");
-    log(LogTag::System, "FEE_ANALYSIS", "🔍 === DETAILED FEE BREAKDOWN ANALYSIS ===");
-
-    let mut total_with_breakdown = 0;
-    let mut total_compute_fees = 0.0;
-    let mut total_priority_fees = 0.0;
-    let mut total_base_fees = 0.0;
-
-    for transaction in transactions {
-        if let Some(ref fee_breakdown) = transaction.fee_breakdown {
-            total_with_breakdown += 1;
-            // Compute unit fees (compute units * price in micro-lamports converted to SOL)
-            let compute_fee_sol =
-                ((fee_breakdown.compute_units_consumed as f64) *
-                    (fee_breakdown.compute_unit_price as f64)) /
-                1_000_000_000.0;
-            total_compute_fees += compute_fee_sol;
-            total_priority_fees += fee_breakdown.priority_fee;
-            total_base_fees += fee_breakdown.transaction_fee;
-        }
-    }
-
-    if total_with_breakdown > 0 {
-        log(
-            LogTag::System,
-            "FEE_ANALYSIS",
-            &format!(
-                "Transactions with detailed breakdown: {} out of {}",
-                total_with_breakdown,
-                transactions.len()
-            )
-        );
-        log(
-            LogTag::System,
-            "FEE_ANALYSIS",
-            &format!("Total Compute Unit Fees: {:.9} SOL", total_compute_fees)
-        );
-        log(
-            LogTag::System,
-            "FEE_ANALYSIS",
-            &format!("Total Priority Fees: {:.9} SOL", total_priority_fees)
-        );
-        log(
-            LogTag::System,
-            "FEE_ANALYSIS",
-            &format!("Total Base Fees: {:.9} SOL", total_base_fees)
-        );
-
-        let avg_compute = total_compute_fees / (total_with_breakdown as f64);
-        let avg_priority = total_priority_fees / (total_with_breakdown as f64);
-        let avg_base = total_base_fees / (total_with_breakdown as f64);
-
-        log(
-            LogTag::System,
-            "FEE_ANALYSIS",
-            &format!("Average Compute Fee: {:.9} SOL", avg_compute)
-        );
-        log(
-            LogTag::System,
-            "FEE_ANALYSIS",
-            &format!("Average Priority Fee: {:.9} SOL", avg_priority)
-        );
-        log(LogTag::System, "FEE_ANALYSIS", &format!("Average Base Fee: {:.9} SOL", avg_base));
-    } else {
-        log(LogTag::System, "FEE_ANALYSIS", "No transactions with detailed fee breakdown found");
-        log(
-            LogTag::System,
-            "FEE_ANALYSIS",
-            "Note: Detailed fee breakdowns require fee_breakdown analysis to be enabled"
-        );
-    }
-
-    // Analyze failed vs successful transaction fees
-    let mut successful_fees = 0.0;
-    let mut failed_fees = 0.0;
-    let mut successful_count = 0;
-    let mut failed_count = 0;
-
-    for transaction in transactions {
-        if transaction.success {
-            successful_fees += transaction.fee_sol;
-            successful_count += 1;
-        } else {
-            failed_fees += transaction.fee_sol;
-            failed_count += 1;
-        }
-    }
-
-    log(LogTag::System, "FEE_ANALYSIS", "");
-    log(LogTag::System, "FEE_ANALYSIS", "✅❌ === SUCCESS vs FAILED TRANSACTION FEES ===");
-    if successful_count > 0 {
-        log(
-            LogTag::System,
-            "FEE_ANALYSIS",
-            &format!(
-                "Successful: {} transactions, {:.9} SOL total, {:.9} SOL average",
-                successful_count,
-                successful_fees,
-                successful_fees / (successful_count as f64)
-            )
-        );
-    }
-    if failed_count > 0 {
-        log(
-            LogTag::System,
-            "FEE_ANALYSIS",
-            &format!(
-                "Failed: {} transactions, {:.9} SOL total, {:.9} SOL average",
-                failed_count,
-                failed_fees,
-                failed_fees / (failed_count as f64)
-            )
-        );
-        log(
-            LogTag::System,
-            "FEE_ANALYSIS",
-            &format!("Note: Failed transactions still consume fees for compute units used")
-        );
-    }
-
-    log(LogTag::System, "FEE_ANALYSIS", "=== FEE ANALYSIS COMPLETE ===");
 }
 
 /// Display comprehensive ATA operations and SOL flow analysis
@@ -7451,20 +7250,6 @@ async fn display_simple_transaction_analysis(
                         &format!("  {}...: {} tokens", mint_short, transfer.amount)
                     );
                 }
-            }
-
-            if let Some(ref fee_breakdown) = internal_tx.fee_breakdown {
-                log(LogTag::Transactions, "DEEP_ANALYSIS", "Fee Breakdown Available:");
-                log(
-                    LogTag::Transactions,
-                    "DEEP_ANALYSIS",
-                    &format!("  Transaction Fee: {:.9} SOL", fee_breakdown.transaction_fee)
-                );
-                log(
-                    LogTag::Transactions,
-                    "DEEP_ANALYSIS",
-                    &format!("  Compute Units: {}", fee_breakdown.compute_units_consumed)
-                );
             }
 
             if let Some(ref ata_analysis) = internal_tx.ata_analysis {

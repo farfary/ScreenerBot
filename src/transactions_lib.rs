@@ -2416,10 +2416,9 @@ impl TransactionsManager {
             LogTag::Transactions,
             "FORCE_ANALYSIS_COMPLETE",
             &format!(
-                "Completed force analysis for {} - type: {:?}, has_swap: {}, sol_change: {:.9}",
+                "Completed force analysis for {} - type: {:?}, sol_change: {:.9}",
                 &transaction.signature,
                 transaction.transaction_type,
-                transaction.swap_analysis.is_some(),
                 transaction.sol_balance_change
             )
         );
@@ -2570,16 +2569,6 @@ impl TransactionsManager {
             TransactionType::AtaClose { token_mint: mint, .. } => mint == token_mint,
             _ => false,
         }
-    }
-
-    /// Get effective price from swap transaction
-    pub fn get_effective_price(&self, transaction: &Transaction) -> Option<f64> {
-        if let Some(swap_analysis) = &transaction.swap_analysis {
-            if swap_analysis.output_amount > 0.0 {
-                return Some(swap_analysis.input_amount / swap_analysis.output_amount);
-            }
-        }
-        None
     }
 
     /// Extract basic transaction information (slot, time, fee, success)
@@ -3551,258 +3540,6 @@ impl TransactionsManager {
         Ok(())
     }
 
-    /// Comprehensive fee analysis to extract all fee types
-    async fn analyze_fees(&self, transaction: &mut Transaction) -> Result<FeeBreakdown, String> {
-        let mut fee_breakdown = FeeBreakdown {
-            transaction_fee: transaction.fee_sol,
-            router_fee: 0.0,
-            platform_fee: 0.0,
-            compute_units_consumed: 0,
-            compute_unit_price: 0,
-            priority_fee: 0.0,
-            total_fees: transaction.fee_sol,
-            fee_percentage: 0.0,
-        };
-
-        if let Some(raw_data) = &transaction.raw_transaction_data {
-            if let Some(meta) = raw_data.get("meta") {
-                // Extract compute units information
-                if
-                    let Some(compute_units) = meta
-                        .get("computeUnitsConsumed")
-                        .and_then(|v| v.as_u64())
-                {
-                    fee_breakdown.compute_units_consumed = compute_units;
-
-                    if self.debug_enabled {
-                        log(
-                            LogTag::Transactions,
-                            "FEE_DEBUG",
-                            &format!(
-                                "{} - Compute units consumed: {}",
-                                &transaction.signature[..8],
-                                compute_units
-                            )
-                        );
-                    }
-                }
-
-                // Extract cost units (compute unit price)
-                if let Some(cost_units) = meta.get("costUnits").and_then(|v| v.as_u64()) {
-                    fee_breakdown.compute_unit_price = cost_units;
-
-                    if self.debug_enabled {
-                        log(
-                            LogTag::Transactions,
-                            "FEE_DEBUG",
-                            &format!("{} - Cost units: {}", &transaction.signature[..8], cost_units)
-                        );
-                    }
-                }
-
-                // Calculate priority fee from actual transaction data
-                // Transaction fee = base fee (5000 lamports) + compute cost + priority fee
-                let total_fee_lamports = (transaction.fee_sol * 1_000_000_000.0) as u64;
-                let base_fee_lamports = 5000; // Standard Solana base fee
-                let compute_cost_lamports = fee_breakdown.compute_units_consumed * 5; // 5 micro-lamports per CU converted to lamports
-
-                // Priority fee is what's left after base fee and compute cost
-                if total_fee_lamports > base_fee_lamports + compute_cost_lamports {
-                    let priority_fee_lamports =
-                        total_fee_lamports - base_fee_lamports - compute_cost_lamports;
-                    fee_breakdown.priority_fee = (priority_fee_lamports as f64) / 1_000_000_000.0;
-
-                    if self.debug_enabled {
-                        log(
-                            LogTag::Transactions,
-                            "FEE_DEBUG",
-                            &format!(
-                                "{} - Priority fee: {:.9} SOL (total: {} lamports, base: {}, compute: {}, priority: {})",
-                                &transaction.signature[..8],
-                                fee_breakdown.priority_fee,
-                                total_fee_lamports,
-                                base_fee_lamports,
-                                compute_cost_lamports,
-                                priority_fee_lamports
-                            )
-                        );
-                    }
-                } else if self.debug_enabled {
-                    log(
-                        LogTag::Transactions,
-                        "FEE_DEBUG",
-                        &format!(
-                            "{} - No priority fee detected (total fee covers base + compute only)",
-                            &transaction.signature[..8]
-                        )
-                    );
-                }
-
-                // Analyze log messages for fee information
-                self.analyze_fee_logs(&mut fee_breakdown, transaction).await?;
-
-                // Calculate total fees (ONLY trading fees, NOT infrastructure costs)
-                // ATA creation and rent costs are one-time infrastructure costs, not trading fees
-                fee_breakdown.total_fees =
-                    fee_breakdown.transaction_fee +
-                    fee_breakdown.router_fee +
-                    fee_breakdown.platform_fee +
-                    fee_breakdown.priority_fee;
-                // rent_costs and ata_creation_cost are tracked separately
-
-                // Calculate fee percentage of transaction value
-                // For swaps, calculate percentage against the actual swap amount (excluding ALL costs)
-                if transaction.sol_balance_change.abs() > 0.0 {
-                    // Get ATA costs from the new ATA analysis
-                    let ata_costs = if let Some(ata_analysis) = &transaction.ata_analysis {
-                        ata_analysis.total_rent_spent.abs()
-                    } else {
-                        0.0
-                    };
-
-                    // The actual swap amount is the SOL balance change minus ALL costs (fees + infrastructure)
-                    let total_costs = fee_breakdown.total_fees + ata_costs;
-                    let swap_amount = transaction.sol_balance_change.abs() - total_costs;
-                    if swap_amount > 0.0 {
-                        // Calculate fee percentage based on trading fees only (not infrastructure costs)
-                        fee_breakdown.fee_percentage =
-                            (fee_breakdown.total_fees / swap_amount) * 100.0;
-                    } else {
-                        // If total costs >= balance change, calculate against balance change
-                        fee_breakdown.fee_percentage =
-                            (fee_breakdown.total_fees / transaction.sol_balance_change.abs()) *
-                            100.0;
-                    }
-
-                    if self.debug_enabled {
-                        log(
-                            LogTag::Transactions,
-                            "FEE_DEBUG",
-                            &format!(
-                                "{} - Fee calculation: trading_fees={:.9}, infrastructure_costs={:.9}, balance_change={:.9}, swap_amount={:.9}",
-                                &transaction.signature[..8],
-                                fee_breakdown.total_fees,
-                                ata_costs,
-                                transaction.sol_balance_change.abs(),
-                                swap_amount
-                            )
-                        );
-                    }
-                }
-
-                if self.debug_enabled {
-                    let ata_costs = if let Some(ata_analysis) = &transaction.ata_analysis {
-                        ata_analysis.total_rent_spent.abs()
-                    } else {
-                        0.0
-                    };
-
-                    log(
-                        LogTag::Transactions,
-                        "FEE_SUMMARY",
-                        &format!(
-                            "{} - Trading fees: {:.9} SOL ({:.2}%), Infrastructure costs: {:.9} SOL",
-                            &transaction.signature[..8],
-                            fee_breakdown.total_fees,
-                            fee_breakdown.fee_percentage,
-                            ata_costs
-                        )
-                    );
-                }
-            }
-        }
-
-        Ok(fee_breakdown)
-    }
-
-    /// Analyze log messages for fee-related information
-    async fn analyze_fee_logs(
-        &self,
-        fee_breakdown: &mut FeeBreakdown,
-        transaction: &Transaction
-    ) -> Result<(), String> {
-        let log_text = transaction.log_messages.join(" ");
-
-        // Look for Jupiter fee patterns (but only apply if Jupiter is detected)
-        let is_jupiter = log_text.contains("Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4");
-        let is_raydium = log_text.contains("Program 675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8");
-
-        if is_jupiter && !is_raydium {
-            // Jupiter only - typically takes 0.1% fee
-            if transaction.sol_balance_change.abs() > 0.0 {
-                fee_breakdown.router_fee = transaction.sol_balance_change.abs() * 0.001; // 0.1%
-
-                if self.debug_enabled {
-                    log(
-                        LogTag::Transactions,
-                        "FEE_DEBUG",
-                        &format!(
-                            "{} - Estimated Jupiter router fee: {:.9} SOL",
-                            &transaction.signature[..8],
-                            fee_breakdown.router_fee
-                        )
-                    );
-                }
-            }
-        } else if is_raydium && !is_jupiter {
-            // Raydium only - typically takes 0.25% fee
-            if transaction.sol_balance_change.abs() > 0.0 {
-                fee_breakdown.router_fee = transaction.sol_balance_change.abs() * 0.0025; // 0.25%
-
-                if self.debug_enabled {
-                    log(
-                        LogTag::Transactions,
-                        "FEE_DEBUG",
-                        &format!(
-                            "{} - Estimated Raydium router fee: {:.9} SOL",
-                            &transaction.signature[..8],
-                            fee_breakdown.router_fee
-                        )
-                    );
-                }
-            }
-        } else if is_jupiter && is_raydium {
-            // Both Jupiter and Raydium detected - use Jupiter fee (usually the aggregator)
-            if transaction.sol_balance_change.abs() > 0.0 {
-                fee_breakdown.router_fee = transaction.sol_balance_change.abs() * 0.001; // 0.1%
-
-                if self.debug_enabled {
-                    log(
-                        LogTag::Transactions,
-                        "FEE_DEBUG",
-                        &format!(
-                            "{} - Jupiter + Raydium detected, using Jupiter fee: {:.9} SOL",
-                            &transaction.signature[..8],
-                            fee_breakdown.router_fee
-                        )
-                    );
-                }
-            }
-        }
-
-        // Look for platform/referral fees in logs
-        if log_text.contains("referral") || log_text.contains("platform") {
-            // Platform fees are typically small, estimate 0.05%
-            if transaction.sol_balance_change.abs() > 0.0 {
-                fee_breakdown.platform_fee = transaction.sol_balance_change.abs() * 0.0005; // 0.05%
-
-                if self.debug_enabled {
-                    log(
-                        LogTag::Transactions,
-                        "FEE_DEBUG",
-                        &format!(
-                            "{} - Estimated platform fee: {:.9} SOL",
-                            &transaction.signature[..8],
-                            fee_breakdown.platform_fee
-                        )
-                    );
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     /// Determine the specific DEX router based on program IDs in the transaction
     fn determine_swap_router(&self, transaction: &Transaction) -> String {
         let log_text = transaction.log_messages.join(" ");
@@ -4428,41 +4165,6 @@ impl TransactionsManager {
         Err("Could not classify transaction from instructions".to_string())
     }
 
-    /// Detect DEX router and extract router-specific information
-    async fn detect_dex_router(&self, transaction: &mut Transaction) -> Result<(), String> {
-        let log_text = transaction.log_messages.join(" ");
-
-        // Extract swap analysis data based on detected router
-        match &transaction.transaction_type {
-            | TransactionType::SwapSolToToken { router, .. }
-            | TransactionType::SwapTokenToSol { router, .. }
-            | TransactionType::SwapTokenToToken { router, .. } => {
-                transaction.swap_analysis = Some(SwapAnalysis {
-                    router: router.clone(),
-                    input_token: "SOL".to_string(), // Simplified
-                    output_token: "unknown".to_string(),
-                    input_amount: transaction.sol_balance_change.abs(),
-                    output_amount: 0.0, // Would calculate from token transfers
-                    effective_price: 0.0, // Would calculate
-                    slippage: 0.0, // Would calculate
-                    fee_breakdown: transaction.fee_breakdown.clone().unwrap_or(FeeBreakdown {
-                        transaction_fee: transaction.fee_sol,
-                        router_fee: 0.0,
-                        platform_fee: 0.0,
-                        compute_units_consumed: 0,
-                        compute_unit_price: 0,
-                        priority_fee: 0.0,
-                        total_fees: transaction.fee_sol,
-                        fee_percentage: 0.0,
-                    }),
-                });
-            }
-            _ => {}
-        }
-
-        Ok(())
-    }
-
     /// Convert transaction to SwapPnLInfo using precise ATA rent detection
     /// Set silent=true to skip detailed logging (for hydrated transactions)
     pub fn convert_to_swap_pnl_info(
@@ -4476,11 +4178,10 @@ impl TransactionsManager {
                 LogTag::Transactions,
                 "CONVERT_ATTEMPT",
                 &format!(
-                    "Converting {} to SwapPnLInfo - type: {:?}, success: {}, has_swap_analysis: {}",
+                    "Converting {} to SwapPnLInfo - type: {:?}, success: {}",
                     &transaction.signature,
                     transaction.transaction_type,
-                    transaction.success,
-                    transaction.swap_analysis.is_some()
+                    transaction.success
                 )
             );
         }

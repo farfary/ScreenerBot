@@ -46,10 +46,8 @@ use crate::transactions_types::{
     AtaOperationType,
     CachedAnalysis,
     DeferredRetry,
-    FeeBreakdown,
     InstructionInfo,
     SolBalanceChange,
-    SwapAnalysis,
     SwapPnLInfo,
     TokenBalanceChange,
     TokenSwapInfo,
@@ -474,10 +472,8 @@ impl TransactionsManager {
             instructions: Vec::new(),
             sol_balance_changes: Vec::new(),
             token_balance_changes: Vec::new(),
-            swap_analysis: None,
             position_impact: None,
             profit_calculation: None,
-            fee_breakdown: None,
             ata_analysis: None,
             token_info: None,
             calculated_token_price_sol: None,
@@ -655,10 +651,8 @@ impl TransactionsManager {
         transaction.direction = TransactionDirection::Internal;
         transaction.sol_balance_change = 0.0;
         transaction.token_transfers = Vec::new();
-        transaction.swap_analysis = None;
         transaction.position_impact = None;
         transaction.profit_calculation = None;
-        transaction.fee_breakdown = None;
         transaction.ata_analysis = None; // CRITICAL: Reset ATA analysis for recalculation
         transaction.token_info = None;
         transaction.calculated_token_price_sol = None;
@@ -774,21 +768,38 @@ impl TransactionsManager {
         }
 
         let recent_transactions = self.get_recent_transactions(examine_count).await?;
+        let recent_count = recent_transactions.len();
 
         let swap_transactions: Vec<Transaction> = recent_transactions
             .into_iter()
-            .filter(|tx| self.is_swap_transaction(tx))
+            .filter(|tx| {
+                let is_swap = self.is_swap_transaction(tx);
+                if is_debug_transactions_enabled() || self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "RECENT_SWAPS_FILTER",
+                        &format!(
+                            "Transaction {}: type = {:?}, is_swap = {}",
+                            &tx.signature[..8],
+                            tx.transaction_type,
+                            is_swap
+                        )
+                    );
+                }
+                is_swap
+            })
             .take(limit)
             .collect();
 
-        if self.debug_enabled {
+        if self.debug_enabled || is_debug_transactions_enabled() {
             log(
                 LogTag::Transactions,
                 "RECENT_SWAPS",
                 &format!(
-                    "Found {} swap transactions from last {} transactions",
+                    "Found {} swap transactions from last {} transactions (examined {} total)",
                     swap_transactions.len(),
-                    examine_count
+                    examine_count,
+                    recent_count
                 )
             );
         }
@@ -1020,21 +1031,6 @@ async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(usize
     Ok((new_transaction_count, false)) // Second value no longer used in simplified system
 }
 
-impl Default for FeeBreakdown {
-    fn default() -> Self {
-        Self {
-            transaction_fee: 0.0,
-            router_fee: 0.0,
-            platform_fee: 0.0,
-            compute_units_consumed: 0,
-            compute_unit_price: 0,
-            priority_fee: 0.0,
-            total_fees: 0.0,
-            fee_percentage: 0.0,
-        }
-    }
-}
-
 // =============================================================================
 // PUBLIC API FOR INTEGRATION
 // =============================================================================
@@ -1127,10 +1123,8 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                 instructions: Vec::new(),
                                 sol_balance_changes: Vec::new(),
                                 token_balance_changes: Vec::new(),
-                                swap_analysis: None,
                                 position_impact: None,
                                 profit_calculation: None,
-                                fee_breakdown: None,
                                 ata_analysis: None,
                                 token_info: None,
                                 calculated_token_price_sol: None,

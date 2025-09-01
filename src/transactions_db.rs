@@ -1,9 +1,9 @@
-use chrono::{DateTime, Utc};
+use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;
-use r2d2::{Pool, PooledConnection};
+use r2d2::{ Pool, PooledConnection };
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
-use serde::{Deserialize, Serialize};
+use rusqlite::{ params, Connection, OptionalExtension, Result as SqliteResult };
+use serde::{ Deserialize, Serialize };
 /// Database module for transactions management
 /// Replaces JSON file-based caching with high-performance SQLite database
 ///
@@ -14,13 +14,16 @@ use serde::{Deserialize, Serialize};
 /// - High-performance batch operations
 /// - Migration utilities from JSON files
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{ AtomicBool, Ordering };
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use crate::transactions_types::{
-    Transaction, TransactionDirection, TransactionStatus, TransactionType,
+    Transaction,
+    TransactionDirection,
+    TransactionStatus,
+    TransactionType,
 };
 
 // Static flag to track if database has been initialized (to reduce log noise)
@@ -33,7 +36,8 @@ const DATABASE_SCHEMA_VERSION: u32 = 1;
 // DATABASE SCHEMA DEFINITIONS
 // =============================================================================
 
-const SCHEMA_RAW_TRANSACTIONS: &str = r#"
+const SCHEMA_RAW_TRANSACTIONS: &str =
+    r#"
 CREATE TABLE IF NOT EXISTS raw_transactions (
     signature TEXT PRIMARY KEY,
     slot INTEGER,
@@ -48,7 +52,8 @@ CREATE TABLE IF NOT EXISTS raw_transactions (
 );
 "#;
 
-const SCHEMA_PROCESSED_TRANSACTIONS: &str = r#"
+const SCHEMA_PROCESSED_TRANSACTIONS: &str =
+    r#"
 CREATE TABLE IF NOT EXISTS processed_transactions (
     signature TEXT PRIMARY KEY,
     transaction_type TEXT NOT NULL, -- Serialized TransactionType enum
@@ -59,11 +64,9 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     sol_balance_changes TEXT, -- JSON array of SolBalanceChange  
     token_balance_changes TEXT, -- JSON array of TokenBalanceChange
     log_messages TEXT, -- JSON array of log messages
-    instructions TEXT, -- JSON array of InstructionInfo
-    swap_analysis TEXT, -- JSON blob of SwapAnalysis
+    instructions TEXT,
     position_impact TEXT, -- JSON blob of PositionImpact
     profit_calculation TEXT, -- JSON blob of ProfitCalculation
-    fee_breakdown TEXT, -- JSON blob of FeeBreakdown
     ata_analysis TEXT, -- JSON blob of AtaAnalysis
     token_info TEXT, -- JSON blob of TokenSwapInfo
     calculated_token_price_sol REAL,
@@ -78,7 +81,8 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
 );
 "#;
 
-const SCHEMA_KNOWN_SIGNATURES: &str = r#"
+const SCHEMA_KNOWN_SIGNATURES: &str =
+    r#"
 CREATE TABLE IF NOT EXISTS known_signatures (
     signature TEXT PRIMARY KEY,
     status TEXT NOT NULL DEFAULT 'known',
@@ -86,7 +90,8 @@ CREATE TABLE IF NOT EXISTS known_signatures (
 );
 "#;
 
-const SCHEMA_DEFERRED_RETRIES: &str = r#"
+const SCHEMA_DEFERRED_RETRIES: &str =
+    r#"
 CREATE TABLE IF NOT EXISTS deferred_retries (
     signature TEXT PRIMARY KEY,
     next_retry_at TEXT NOT NULL,
@@ -98,7 +103,8 @@ CREATE TABLE IF NOT EXISTS deferred_retries (
 );
 "#;
 
-const SCHEMA_METADATA: &str = r#"
+const SCHEMA_METADATA: &str =
+    r#"
 CREATE TABLE IF NOT EXISTS db_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -176,7 +182,8 @@ impl TransactionDatabase {
 
         // Ensure data directory exists
         if !data_dir.exists() {
-            std::fs::create_dir_all(&data_dir)
+            std::fs
+                ::create_dir_all(&data_dir)
                 .map_err(|e| format!("Failed to create data directory: {}", e))?;
         }
 
@@ -189,7 +196,7 @@ impl TransactionDatabase {
             log(
                 LogTag::Transactions,
                 "INIT",
-                &format!("Initializing TransactionDatabase at: {}", database_path_str),
+                &format!("Initializing TransactionDatabase at: {}", database_path_str)
             );
         }
 
@@ -216,10 +223,7 @@ impl TransactionDatabase {
             log(
                 LogTag::Transactions,
                 "SUCCESS",
-                &format!(
-                    "TransactionDatabase initialized successfully at: {}",
-                    database_path_str
-                ),
+                &format!("TransactionDatabase initialized successfully at: {}", database_path_str)
             );
             DATABASE_INITIALIZED.store(true, Ordering::Relaxed);
         }
@@ -232,50 +236,55 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
 
         // Configure database settings - use pragma_update for setting values
-        conn.pragma_update(None, "journal_mode", "WAL")
+        conn
+            .pragma_update(None, "journal_mode", "WAL")
             .map_err(|e| format!("Failed to set WAL mode: {}", e))?;
-        conn.pragma_update(None, "foreign_keys", true)
+        conn
+            .pragma_update(None, "foreign_keys", true)
             .map_err(|e| format!("Failed to enable foreign keys: {}", e))?;
-        conn.pragma_update(None, "synchronous", "NORMAL")
+        conn
+            .pragma_update(None, "synchronous", "NORMAL")
             .map_err(|e| format!("Failed to set synchronous mode: {}", e))?;
 
         // Create all tables
-        conn.execute(SCHEMA_RAW_TRANSACTIONS, [])
+        conn
+            .execute(SCHEMA_RAW_TRANSACTIONS, [])
             .map_err(|e| format!("Failed to create raw_transactions table: {}", e))?;
 
-        conn.execute(SCHEMA_PROCESSED_TRANSACTIONS, [])
+        conn
+            .execute(SCHEMA_PROCESSED_TRANSACTIONS, [])
             .map_err(|e| format!("Failed to create processed_transactions table: {}", e))?;
 
-        conn.execute(SCHEMA_KNOWN_SIGNATURES, [])
+        conn
+            .execute(SCHEMA_KNOWN_SIGNATURES, [])
             .map_err(|e| format!("Failed to create known_signatures table: {}", e))?;
 
-        conn.execute(SCHEMA_DEFERRED_RETRIES, [])
+        conn
+            .execute(SCHEMA_DEFERRED_RETRIES, [])
             .map_err(|e| format!("Failed to create deferred_retries table: {}", e))?;
 
-        conn.execute(SCHEMA_METADATA, [])
+        conn
+            .execute(SCHEMA_METADATA, [])
             .map_err(|e| format!("Failed to create db_metadata table: {}", e))?;
 
         // Create all indexes
         for index_sql in INDEXES {
-            conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create index: {}", e))?;
+            conn.execute(index_sql, []).map_err(|e| format!("Failed to create index: {}", e))?;
         }
 
         // Set schema version
-        conn.execute(
-            "INSERT OR REPLACE INTO db_metadata (key, value) VALUES ('schema_version', ?1)",
-            params![DATABASE_SCHEMA_VERSION.to_string()],
-        )
-        .map_err(|e| format!("Failed to set schema version: {}", e))?;
+        conn
+            .execute(
+                "INSERT OR REPLACE INTO db_metadata (key, value) VALUES ('schema_version', ?1)",
+                params![DATABASE_SCHEMA_VERSION.to_string()]
+            )
+            .map_err(|e| format!("Failed to set schema version: {}", e))?;
 
         if log_initialization {
             log(
                 LogTag::Transactions,
                 "SCHEMA",
-                &format!(
-                    "Database schema initialized (version {})",
-                    DATABASE_SCHEMA_VERSION
-                ),
+                &format!("Database schema initialized (version {})", DATABASE_SCHEMA_VERSION)
             );
         }
 
@@ -284,9 +293,7 @@ impl TransactionDatabase {
 
     /// Get database connection from pool
     fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.pool
-            .get()
-            .map_err(|e| format!("Failed to get database connection: {}", e))
+        self.pool.get().map_err(|e| format!("Failed to get database connection: {}", e))
     }
 
     /// Check if a signature is already known (cached)
@@ -297,7 +304,7 @@ impl TransactionDatabase {
             .query_row(
                 "SELECT 1 FROM known_signatures WHERE signature = ?1",
                 params![signature],
-                |_| Ok(true),
+                |_| Ok(true)
             )
             .optional()
             .map_err(|e| format!("Database error checking signature: {}", e))?
@@ -310,11 +317,12 @@ impl TransactionDatabase {
     pub async fn add_known_signature(&self, signature: &str) -> Result<(), String> {
         let conn = self.get_connection()?;
 
-        conn.execute(
-            "INSERT OR IGNORE INTO known_signatures (signature) VALUES (?1)",
-            params![signature],
-        )
-        .map_err(|e| format!("Failed to add known signature: {}", e))?;
+        conn
+            .execute(
+                "INSERT OR IGNORE INTO known_signatures (signature) VALUES (?1)",
+                params![signature]
+            )
+            .map_err(|e| format!("Failed to add known signature: {}", e))?;
 
         Ok(())
     }
@@ -332,21 +340,18 @@ impl TransactionDatabase {
                 .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
             for signature in signatures {
-                stmt.execute(params![signature])
+                stmt
+                    .execute(params![signature])
                     .map_err(|e| format!("Failed to insert signature {}: {}", signature, e))?;
             }
         }
 
-        tx.commit()
-            .map_err(|e| format!("Failed to commit batch signature insert: {}", e))?;
+        tx.commit().map_err(|e| format!("Failed to commit batch signature insert: {}", e))?;
 
         log(
             LogTag::Transactions,
             "BATCH",
-            &format!(
-                "Added {} signatures to known signatures cache",
-                signatures.len()
-            ),
+            &format!("Added {} signatures to known signatures cache", signatures.len())
         );
 
         Ok(())
@@ -357,9 +362,7 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| {
-                row.get(0)
-            })
+            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| { row.get(0) })
             .map_err(|e| format!("Failed to count known signatures: {}", e))?;
 
         Ok(count as u64)
@@ -367,8 +370,7 @@ impl TransactionDatabase {
 
     /// Get all known signatures for initialization
     pub async fn get_all_known_signatures(&self) -> Result<Vec<String>, String> {
-        let conn = self
-            .pool
+        let conn = self.pool
             .get()
             .map_err(|e| format!("Failed to get database connection: {}", e))?;
 
@@ -400,7 +402,7 @@ impl TransactionDatabase {
         status: &str,
         success: bool,
         error_message: Option<&str>,
-        raw_transaction_data: Option<&str>,
+        raw_transaction_data: Option<&str>
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
 
@@ -431,7 +433,7 @@ impl TransactionDatabase {
     /// Get raw transaction data
     pub async fn get_raw_transaction(
         &self,
-        signature: &str,
+        signature: &str
     ) -> Result<Option<RawTransactionData>, String> {
         let conn = self.get_connection()?;
 
@@ -464,7 +466,7 @@ impl TransactionDatabase {
     /// Store processed transaction analysis
     pub async fn store_processed_transaction(
         &self,
-        transaction: &ProcessedTransaction,
+        transaction: &ProcessedTransaction
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
 
@@ -473,10 +475,10 @@ impl TransactionDatabase {
                 r#"INSERT OR REPLACE INTO processed_transactions 
                (signature, transaction_type, direction, fee_sol, sol_balance_change, 
                 token_transfers, sol_balance_changes, token_balance_changes, log_messages,
-                instructions, swap_analysis, position_impact, profit_calculation, fee_breakdown,
+                instructions, position_impact, profit_calculation,
                 ata_analysis, token_info, calculated_token_price_sol, price_source, token_symbol,
                 token_decimals, cached_analysis, analysis_version, processed_at, updated_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, 
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, 
                        COALESCE((SELECT processed_at FROM processed_transactions WHERE signature = ?1), datetime('now')),
                        datetime('now'))"#,
                 params![
@@ -490,10 +492,8 @@ impl TransactionDatabase {
                     None::<String>, // token_balance_changes JSON
                     None::<String>, // log_messages JSON
                     None::<String>, // instructions JSON
-                    None::<String>, // swap_analysis JSON
                     None::<String>, // position_impact JSON
                     None::<String>, // profit_calculation JSON
-                    None::<String>, // fee_breakdown JSON
                     None::<String>, // ata_analysis JSON
                     None::<String>, // token_info JSON
                     transaction.price_sol,
@@ -513,12 +513,13 @@ impl TransactionDatabase {
     /// This is the main method for storing complete transaction analysis
     pub async fn store_full_transaction_analysis(
         &self,
-        transaction: &Transaction,
+        transaction: &Transaction
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
 
         // Serialize complex structures to JSON
-        let transaction_type_json = serde_json::to_string(&transaction.transaction_type)
+        let transaction_type_json = serde_json
+            ::to_string(&transaction.transaction_type)
             .map_err(|e| format!("Failed to serialize transaction type: {}", e))?;
 
         let direction_str = match transaction.direction {
@@ -529,8 +530,9 @@ impl TransactionDatabase {
 
         let token_transfers_json = if !transaction.token_transfers.is_empty() {
             Some(
-                serde_json::to_string(&transaction.token_transfers)
-                    .map_err(|e| format!("Failed to serialize token transfers: {}", e))?,
+                serde_json
+                    ::to_string(&transaction.token_transfers)
+                    .map_err(|e| format!("Failed to serialize token transfers: {}", e))?
             )
         } else {
             None
@@ -538,8 +540,9 @@ impl TransactionDatabase {
 
         let sol_balance_changes_json = if !transaction.sol_balance_changes.is_empty() {
             Some(
-                serde_json::to_string(&transaction.sol_balance_changes)
-                    .map_err(|e| format!("Failed to serialize SOL balance changes: {}", e))?,
+                serde_json
+                    ::to_string(&transaction.sol_balance_changes)
+                    .map_err(|e| format!("Failed to serialize SOL balance changes: {}", e))?
             )
         } else {
             None
@@ -547,8 +550,9 @@ impl TransactionDatabase {
 
         let token_balance_changes_json = if !transaction.token_balance_changes.is_empty() {
             Some(
-                serde_json::to_string(&transaction.token_balance_changes)
-                    .map_err(|e| format!("Failed to serialize token balance changes: {}", e))?,
+                serde_json
+                    ::to_string(&transaction.token_balance_changes)
+                    .map_err(|e| format!("Failed to serialize token balance changes: {}", e))?
             )
         } else {
             None
@@ -556,8 +560,9 @@ impl TransactionDatabase {
 
         let log_messages_json = if !transaction.log_messages.is_empty() {
             Some(
-                serde_json::to_string(&transaction.log_messages)
-                    .map_err(|e| format!("Failed to serialize log messages: {}", e))?,
+                serde_json
+                    ::to_string(&transaction.log_messages)
+                    .map_err(|e| format!("Failed to serialize log messages: {}", e))?
             )
         } else {
             None
@@ -565,26 +570,9 @@ impl TransactionDatabase {
 
         let instructions_json = if !transaction.instructions.is_empty() {
             Some(
-                serde_json::to_string(&transaction.instructions)
-                    .map_err(|e| format!("Failed to serialize instructions: {}", e))?,
-            )
-        } else {
-            None
-        };
-
-        let swap_analysis_json = if let Some(ref swap_analysis) = transaction.swap_analysis {
-            Some(
-                serde_json::to_string(swap_analysis)
-                    .map_err(|e| format!("Failed to serialize swap analysis: {}", e))?,
-            )
-        } else {
-            None
-        };
-
-        let fee_breakdown_json = if let Some(ref fee_breakdown) = transaction.fee_breakdown {
-            Some(
-                serde_json::to_string(fee_breakdown)
-                    .map_err(|e| format!("Failed to serialize fee breakdown: {}", e))?,
+                serde_json
+                    ::to_string(&transaction.instructions)
+                    .map_err(|e| format!("Failed to serialize instructions: {}", e))?
             )
         } else {
             None
@@ -592,8 +580,9 @@ impl TransactionDatabase {
 
         let ata_analysis_json = if let Some(ref ata_analysis) = transaction.ata_analysis {
             Some(
-                serde_json::to_string(ata_analysis)
-                    .map_err(|e| format!("Failed to serialize ATA analysis: {}", e))?,
+                serde_json
+                    ::to_string(ata_analysis)
+                    .map_err(|e| format!("Failed to serialize ATA analysis: {}", e))?
             )
         } else {
             None
@@ -601,8 +590,9 @@ impl TransactionDatabase {
 
         let token_info_json = if let Some(ref token_info) = transaction.token_info {
             Some(
-                serde_json::to_string(token_info)
-                    .map_err(|e| format!("Failed to serialize token info: {}", e))?,
+                serde_json
+                    ::to_string(token_info)
+                    .map_err(|e| format!("Failed to serialize token info: {}", e))?
             )
         } else {
             None
@@ -616,8 +606,9 @@ impl TransactionDatabase {
 
         let cached_analysis_json = if let Some(ref cached_analysis) = transaction.cached_analysis {
             Some(
-                serde_json::to_string(cached_analysis)
-                    .map_err(|e| format!("Failed to serialize cached analysis: {}", e))?,
+                serde_json
+                    ::to_string(cached_analysis)
+                    .map_err(|e| format!("Failed to serialize cached analysis: {}", e))?
             )
         } else {
             None
@@ -628,10 +619,10 @@ impl TransactionDatabase {
                 r#"INSERT OR REPLACE INTO processed_transactions 
                (signature, transaction_type, direction, fee_sol, sol_balance_change, 
                 token_transfers, sol_balance_changes, token_balance_changes, log_messages,
-                instructions, swap_analysis, position_impact, profit_calculation, fee_breakdown,
+                instructions, position_impact, profit_calculation,
                 ata_analysis, token_info, calculated_token_price_sol, price_source, token_symbol,
                 token_decimals, cached_analysis, analysis_version, processed_at, updated_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, 
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, 
                        COALESCE((SELECT processed_at FROM processed_transactions WHERE signature = ?1), datetime('now')),
                        datetime('now'))"#,
                 params![
@@ -645,10 +636,8 @@ impl TransactionDatabase {
                     token_balance_changes_json,
                     log_messages_json,
                     instructions_json,
-                    swap_analysis_json,
                     None::<String>, // position_impact JSON - not stored yet
                     None::<String>, // profit_calculation JSON - not stored yet
-                    fee_breakdown_json,
                     ata_analysis_json,
                     token_info_json,
                     transaction.calculated_token_price_sol,
@@ -671,7 +660,7 @@ impl TransactionDatabase {
         signature: &str,
         status: &str,
         success: bool,
-        error_message: Option<&str>,
+        error_message: Option<&str>
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
 
@@ -683,11 +672,12 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to update transaction status: {}", e))?;
 
         // Also update the processed_transactions updated_at if it exists
-        conn.execute(
-            "UPDATE processed_transactions SET updated_at = datetime('now') WHERE signature = ?1",
-            params![signature],
-        )
-        .map_err(|e| format!("Failed to update processed transaction timestamp: {}", e))?;
+        conn
+            .execute(
+                "UPDATE processed_transactions SET updated_at = datetime('now') WHERE signature = ?1",
+                params![signature]
+            )
+            .map_err(|e| format!("Failed to update processed transaction timestamp: {}", e))?;
 
         Ok(())
     }
@@ -695,7 +685,7 @@ impl TransactionDatabase {
     /// Get processed transaction analysis
     pub async fn get_processed_transaction(
         &self,
-        signature: &str,
+        signature: &str
     ) -> Result<Option<ProcessedTransaction>, String> {
         let conn = self.get_connection()?;
 
@@ -739,7 +729,7 @@ impl TransactionDatabase {
     /// This is more efficient than using get_transaction which may trigger RPC calls
     pub async fn get_full_transaction_from_db(
         &self,
-        signature: &str,
+        signature: &str
     ) -> Result<Option<Transaction>, String> {
         let conn = self.get_connection()?;
 
@@ -785,8 +775,9 @@ impl TransactionDatabase {
             .optional()
             .map_err(|e| format!("Failed to get raw transaction: {}", e))?;
 
-        if let Some((sig, slot, block_time, timestamp, status, success, error_message, raw_data)) =
-            raw_result
+        if
+            let Some((sig, slot, block_time, timestamp, status, success, error_message, raw_data)) =
+                raw_result
         {
             // Now get processed transaction data if available
             let processed_result = conn
@@ -877,10 +868,8 @@ impl TransactionDatabase {
                 instructions: Vec::new(),
                 sol_balance_changes: Vec::new(),
                 token_balance_changes: Vec::new(),
-                swap_analysis: None,
                 position_impact: None,
                 profit_calculation: None,
-                fee_breakdown: None,
                 ata_analysis: None,
                 token_info: None,
                 calculated_token_price_sol: None,
@@ -891,17 +880,20 @@ impl TransactionDatabase {
             };
 
             // Populate from processed data if available
-            if let Some((
-                tx_type,
-                direction,
-                fee_sol,
-                sol_balance_change,
-                price_sol,
-                price_source_str,
-                token_symbol,
-                token_decimals,
-                cached_analysis,
-            )) = processed_result
+            if
+                let Some(
+                    (
+                        tx_type,
+                        direction,
+                        fee_sol,
+                        sol_balance_change,
+                        price_sol,
+                        price_source_str,
+                        token_symbol,
+                        token_decimals,
+                        cached_analysis,
+                    ),
+                ) = processed_result
             {
                 log(
                     crate::logger::LogTag::Transactions,
@@ -910,7 +902,7 @@ impl TransactionDatabase {
                         "Populating transaction {} with type: {:?}",
                         &sig[..(8).min(sig.len())],
                         tx_type
-                    ),
+                    )
                 );
 
                 transaction.transaction_type = tx_type;
@@ -924,8 +916,9 @@ impl TransactionDatabase {
 
                 if let Some(ps_str) = price_source_str {
                     // Parse price_source if needed
-                    transaction.price_source =
-                        Some(crate::tokens::types::PriceSourceType::DexScreenerApi);
+                    transaction.price_source = Some(
+                        crate::tokens::types::PriceSourceType::DexScreenerApi
+                    );
                 }
             }
 
@@ -942,7 +935,7 @@ impl TransactionDatabase {
         next_retry_at: &DateTime<Utc>,
         remaining_attempts: i32,
         current_delay_secs: i64,
-        last_error: Option<&str>,
+        last_error: Option<&str>
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
 
@@ -993,8 +986,9 @@ impl TransactionDatabase {
 
         let mut retries = Vec::new();
         for retry_result in retry_iter {
-            retries
-                .push(retry_result.map_err(|e| format!("Failed to parse deferred retry: {}", e))?);
+            retries.push(
+                retry_result.map_err(|e| format!("Failed to parse deferred retry: {}", e))?
+            );
         }
 
         Ok(retries)
@@ -1004,11 +998,9 @@ impl TransactionDatabase {
     pub async fn remove_deferred_retry(&self, signature: &str) -> Result<(), String> {
         let conn = self.get_connection()?;
 
-        conn.execute(
-            "DELETE FROM deferred_retries WHERE signature = ?1",
-            params![signature],
-        )
-        .map_err(|e| format!("Failed to remove deferred retry: {}", e))?;
+        conn
+            .execute("DELETE FROM deferred_retries WHERE signature = ?1", params![signature])
+            .map_err(|e| format!("Failed to remove deferred retry: {}", e))?;
 
         Ok(())
     }
@@ -1018,31 +1010,24 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
 
         let raw_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM raw_transactions", [], |row| {
-                row.get(0)
-            })
+            .query_row("SELECT COUNT(*) FROM raw_transactions", [], |row| { row.get(0) })
             .map_err(|e| format!("Failed to count raw transactions: {}", e))?;
 
         let processed_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM processed_transactions", [], |row| {
-                row.get(0)
-            })
+            .query_row("SELECT COUNT(*) FROM processed_transactions", [], |row| { row.get(0) })
             .map_err(|e| format!("Failed to count processed transactions: {}", e))?;
 
         let signatures_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| {
-                row.get(0)
-            })
+            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| { row.get(0) })
             .map_err(|e| format!("Failed to count known signatures: {}", e))?;
 
         let retries_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM deferred_retries", [], |row| {
-                row.get(0)
-            })
+            .query_row("SELECT COUNT(*) FROM deferred_retries", [], |row| { row.get(0) })
             .map_err(|e| format!("Failed to count deferred retries: {}", e))?;
 
         // Get database file size
-        let database_size = std::fs::metadata(&self.database_path)
+        let database_size = std::fs
+            ::metadata(&self.database_path)
             .map(|m| m.len())
             .unwrap_or(0);
 
@@ -1059,8 +1044,7 @@ impl TransactionDatabase {
     /// Get all transaction signatures from the database
     pub async fn get_all_signatures(&self) -> Result<Vec<String>, String> {
         // Use pooled connection directly; ordering by slot DESC if present else by rowid
-        let conn = self
-            .pool
+        let conn = self.pool
             .get()
             .map_err(|e| format!("Failed to get database connection: {}", e))?;
 
@@ -1086,7 +1070,7 @@ impl TransactionDatabase {
     /// This avoids the N+1 query problem of calling get_transaction for each signature
     pub async fn get_recent_transactions_batch(
         &self,
-        limit: usize,
+        limit: usize
     ) -> Result<Vec<Transaction>, String> {
         let conn = self.get_connection()?;
 
@@ -1140,8 +1124,9 @@ impl TransactionDatabase {
                     token_decimals,
                     cached_analysis,
                 ) = if let Ok(Some(tx_type_str)) = row.get::<_, Option<String>>(8) {
-                    let tx_type =
-                        serde_json::from_str(&tx_type_str).unwrap_or(TransactionType::Unknown);
+                    let tx_type = serde_json
+                        ::from_str(&tx_type_str)
+                        .unwrap_or(TransactionType::Unknown);
 
                     let direction_str: String = row.get(9).unwrap_or("Internal".to_string());
                     let direction = match direction_str.as_str() {
@@ -1164,7 +1149,8 @@ impl TransactionDatabase {
                         row.get(11).unwrap_or(0.0),
                         row.get(12).unwrap_or(None),
                         row.get(14).unwrap_or(None),
-                        row.get::<_, Option<i32>>(15)
+                        row
+                            .get::<_, Option<i32>>(15)
                             .unwrap_or(None)
                             .map(|d| d as u8),
                         cached_analysis,
@@ -1210,10 +1196,8 @@ impl TransactionDatabase {
                     instructions: Vec::new(),
                     sol_balance_changes: Vec::new(),
                     token_balance_changes: Vec::new(),
-                    swap_analysis: None,
                     position_impact: None,
                     profit_calculation: None,
-                    fee_breakdown: None,
                     ata_analysis: None,
                     token_info: None,
                     price_source: None,
@@ -1229,7 +1213,7 @@ impl TransactionDatabase {
                     log(
                         crate::logger::LogTag::Transactions,
                         "WARN",
-                        &format!("Failed to parse transaction in batch: {}", e),
+                        &format!("Failed to parse transaction in batch: {}", e)
                     );
                 }
             }
@@ -1240,41 +1224,23 @@ impl TransactionDatabase {
 
     /// Vacuum database to reclaim space and optimize performance
     pub async fn vacuum_database(&self) -> Result<(), String> {
-        log(
-            LogTag::Transactions,
-            "VACUUM",
-            "Starting database vacuum operation...",
-        );
+        log(LogTag::Transactions, "VACUUM", "Starting database vacuum operation...");
 
         let conn = self.get_connection()?;
-        conn.execute("VACUUM", [])
-            .map_err(|e| format!("Failed to vacuum database: {}", e))?;
+        conn.execute("VACUUM", []).map_err(|e| format!("Failed to vacuum database: {}", e))?;
 
-        log(
-            LogTag::Transactions,
-            "VACUUM",
-            "Database vacuum completed successfully",
-        );
+        log(LogTag::Transactions, "VACUUM", "Database vacuum completed successfully");
         Ok(())
     }
 
     /// Analyze database for query optimization
     pub async fn analyze_database(&self) -> Result<(), String> {
-        log(
-            LogTag::Transactions,
-            "ANALYZE",
-            "Running database analysis for optimization...",
-        );
+        log(LogTag::Transactions, "ANALYZE", "Running database analysis for optimization...");
 
         let conn = self.get_connection()?;
-        conn.execute("ANALYZE", [])
-            .map_err(|e| format!("Failed to analyze database: {}", e))?;
+        conn.execute("ANALYZE", []).map_err(|e| format!("Failed to analyze database: {}", e))?;
 
-        log(
-            LogTag::Transactions,
-            "ANALYZE",
-            "Database analysis completed successfully",
-        );
+        log(LogTag::Transactions, "ANALYZE", "Database analysis completed successfully");
         Ok(())
     }
 
@@ -1284,10 +1250,9 @@ impl TransactionDatabase {
         &self,
         token_mint: &str,
         swap_type: Option<&str>, // "Sell", "Buy", or None for both
-        limit: Option<usize>,
+        limit: Option<usize>
     ) -> Result<Vec<String>, String> {
-        let conn = self
-            .pool
+        let conn = self.pool
             .get()
             .map_err(|e| format!("Failed to get database connection: {}", e))?;
 
@@ -1295,8 +1260,7 @@ impl TransactionDatabase {
             "SELECT DISTINCT pt.signature FROM processed_transactions pt 
              INNER JOIN raw_transactions rt ON pt.signature = rt.signature 
              WHERE pt.token_info IS NOT NULL 
-             AND pt.swap_analysis IS NOT NULL 
-             AND rt.success = 1",
+             AND rt.success = 1"
         );
 
         let mut params: Vec<Box<dyn rusqlite::ToSql + Send>> = Vec::new();
@@ -1329,7 +1293,7 @@ impl TransactionDatabase {
                     token_mint
                 },
                 query
-            ),
+            )
         );
 
         let mut stmt = conn
@@ -1359,21 +1323,20 @@ impl TransactionDatabase {
                     token_mint
                 },
                 swap_type
-            ),
+            )
         );
 
         Ok(signatures)
     }
 
-    /// Fallback search for tokens when token_info/swap_analysis are not populated
+    /// Fallback search for tokens when token_info are not populated
     /// This searches directly in the transaction_type JSON for the mint address
     pub async fn get_swap_signatures_for_token_fallback(
         &self,
         token_mint: &str,
-        limit: Option<usize>,
+        limit: Option<usize>
     ) -> Result<Vec<String>, String> {
-        let conn = self
-            .pool
+        let conn = self.pool
             .get()
             .map_err(|e| format!("Failed to get database connection: {}", e))?;
 
@@ -1381,7 +1344,7 @@ impl TransactionDatabase {
             "SELECT DISTINCT pt.signature FROM processed_transactions pt 
              INNER JOIN raw_transactions rt ON pt.signature = rt.signature 
              WHERE rt.success = 1
-             AND (pt.transaction_type LIKE ? OR pt.transaction_type LIKE ?)",
+             AND (pt.transaction_type LIKE ? OR pt.transaction_type LIKE ?)"
         );
 
         // Order by timestamp DESC to get most recent first
@@ -1395,14 +1358,13 @@ impl TransactionDatabase {
         log(
             LogTag::Transactions,
             "FALLBACK_QUERY",
-            &format!(
-                "Fallback search for token {}: searching transaction_type field directly",
-                if token_mint.len() >= 8 {
-                    &token_mint[..8]
-                } else {
-                    token_mint
-                }
-            ),
+            &format!("Fallback search for token {}: searching transaction_type field directly", if
+                token_mint.len() >= 8
+            {
+                &token_mint[..8]
+            } else {
+                token_mint
+            })
         );
 
         let mut stmt = conn
