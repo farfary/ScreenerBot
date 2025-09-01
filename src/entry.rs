@@ -47,6 +47,10 @@ const FLASH_WINDOW_SEC: i64 = 10; // Flash drop detection window
 const MODERATE_WINDOW_SEC: i64 = 60; // Moderate drop detection window
 const DEEP_WINDOW_SEC: i64 = 300; // Deep drop detection window (5 min)
 const EXTREME_WINDOW_SEC: i64 = 900; // Extreme drop detection window (15 min)
+const ULTRA_FLASH_WINDOW_SEC: i64 = 3; // Very fast drop detection window
+const WICK_WINDOW_SEC: i64 = 30; // Wick detection window (drop + partial recovery)
+const CASCADE_WINDOW_SEC: i64 = 120; // Stair-step (cascade) window (2 min)
+const MEDIAN_DIP_WINDOW_SEC: i64 = 20; // Median-dip detection window
 
 // ATH Protection Settings
 const ATH_MIN_DISTANCE_PERCENT: f64 = 5.0; // Minimum 5% below ATH
@@ -85,6 +89,10 @@ pub enum DropStyle {
     Moderate, // Sustained decline (15-35%)
     Deep, // Major correction (35-60%)
     Extreme, // Potential capitulation (60-100%)
+    UltraFlash, // Very quick sudden drop (5-12%) over ~3s
+    WickRebound, // Sharp wick down then partial recovery within short window
+    Cascade, // Stair-step sequential declines across ~2min
+    MedianDip, // Current price deviates significantly below short-term median
 }
 
 impl DropStyle {
@@ -94,6 +102,10 @@ impl DropStyle {
             DropStyle::Moderate => "MODERATE",
             DropStyle::Deep => "DEEP",
             DropStyle::Extreme => "EXTREME",
+            DropStyle::UltraFlash => "ULTRA_FLASH",
+            DropStyle::WickRebound => "WICK_REBOUND",
+            DropStyle::Cascade => "CASCADE",
+            DropStyle::MedianDip => "MEDIAN_DIP",
         }
     }
 }
@@ -149,18 +161,34 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         );
     }
 
-    // Check ATH protection using OHLCV data
-    let ath_check = is_near_ath(&token.mint, current_price).await;
-    if ath_check {
-        confidence = confidence.min(15.0); // Very low confidence near ATH
-        return (false, confidence, "Too close to ATH (2h protection)".to_string());
-    }
+    // Soft ATH penalty using OHLCV data (don't hard-block pool-based signals)
+    let ath_distance_opt = get_ath_distance_percent(&token.mint, current_price).await;
 
     // Analyze drop patterns with confidence scoring
     let drop_analysis = analyze_drop_patterns(&price_history, current_price, liquidity_usd).await;
 
     if let Some(analysis) = drop_analysis {
-        // Update confidence based on drop analysis
+        // Update confidence based on drop analysis and apply soft ATH penalty
+        let mut analysis = analysis;
+
+        if let Some(distance) = ath_distance_opt {
+            if distance < ATH_MIN_DISTANCE_PERCENT {
+                let penalty = match analysis.drop_style {
+                    DropStyle::UltraFlash | DropStyle::Flash | DropStyle::MedianDip => 15.0,
+                    DropStyle::Moderate => 10.0,
+                    DropStyle::WickRebound | DropStyle::Cascade => 6.0,
+                    DropStyle::Deep => 4.0,
+                    DropStyle::Extreme => 0.0,
+                };
+                analysis.confidence = (analysis.confidence - penalty).max(0.0);
+                analysis.reasoning = format!(
+                    "{} (near ATH penalty -{:.0}%)",
+                    analysis.reasoning,
+                    penalty
+                );
+            }
+        }
+
         confidence = analysis.confidence;
 
         let approved =
@@ -230,13 +258,28 @@ async fn analyze_drop_patterns(
 
     // Try different drop detection strategies in order of priority
 
+    // 0. Ultra-Flash Drop Detection (~3 seconds)
+    if let Some(analysis) = detect_ultra_flash_drop(price_history, current_price, now) {
+        return Some(enhance_confidence_with_context(analysis, liquidity_usd));
+    }
+
     // 1. Flash Drop Detection (10 seconds)
     if let Some(analysis) = detect_flash_drop(price_history, current_price, now) {
         return Some(enhance_confidence_with_context(analysis, liquidity_usd));
     }
 
+    // 1.5 Wick-Rebound Detection (30 seconds)
+    if let Some(analysis) = detect_wick_rebound(price_history, current_price, now) {
+        return Some(enhance_confidence_with_context(analysis, liquidity_usd));
+    }
+
     // 2. Moderate Drop Detection (1 minute)
     if let Some(analysis) = detect_moderate_drop(price_history, current_price, now) {
+        return Some(enhance_confidence_with_context(analysis, liquidity_usd));
+    }
+
+    // 2.5 Cascade (stair-step) Detection (2 minutes)
+    if let Some(analysis) = detect_cascade_drop(price_history, current_price, now) {
         return Some(enhance_confidence_with_context(analysis, liquidity_usd));
     }
 
@@ -247,6 +290,11 @@ async fn analyze_drop_patterns(
 
     // 4. Extreme Drop Detection (15 minutes)
     if let Some(analysis) = detect_extreme_drop(price_history, current_price, now) {
+        return Some(enhance_confidence_with_context(analysis, liquidity_usd));
+    }
+
+    // 4.5 Median Dip Detection (current below short-term median)
+    if let Some(analysis) = detect_median_dip(price_history, current_price, now) {
         return Some(enhance_confidence_with_context(analysis, liquidity_usd));
     }
 
@@ -290,6 +338,60 @@ fn detect_flash_drop(
             velocity_per_minute: velocity,
             time_window_used: FLASH_WINDOW_SEC,
             reasoning: format!("Flash drop -{:.1}% in {}s", drop_percent, FLASH_WINDOW_SEC),
+        });
+    }
+
+    None
+}
+
+fn detect_ultra_flash_drop(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64,
+    now: DateTime<Utc>
+) -> Option<DropAnalysis> {
+    let window_prices: Vec<f64> = price_history
+        .iter()
+        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= ULTRA_FLASH_WINDOW_SEC)
+        .map(|(_, price)| *price)
+        .collect();
+
+    if window_prices.len() < 2 {
+        return None;
+    }
+
+    let window_high = window_prices.iter().fold(0.0f64, |a, b| a.max(*b));
+    if window_high <= 0.0 || !window_high.is_finite() {
+        return None;
+    }
+
+    let drop_percent = ((window_high - current_price) / window_high) * 100.0;
+
+    // Slightly narrower band than flash to require very sudden drops
+    if drop_percent >= 5.0 && drop_percent <= 12.0 {
+        let velocity = calculate_velocity(&window_prices, ULTRA_FLASH_WINDOW_SEC);
+        // Start from higher base due to immediacy
+        let mut confidence = FLASH_BASE_CONFIDENCE + 5.0;
+        let drop_factor = (drop_percent - 5.0) / (12.0 - 5.0);
+        confidence += drop_factor * 8.0;
+        if velocity < -40.0 {
+            confidence += 12.0;
+        }
+        if velocity > 15.0 {
+            confidence -= 18.0;
+        }
+        confidence = confidence.max(25.0).min(97.0);
+
+        return Some(DropAnalysis {
+            drop_percent,
+            drop_style: DropStyle::UltraFlash,
+            confidence,
+            velocity_per_minute: velocity,
+            time_window_used: ULTRA_FLASH_WINDOW_SEC,
+            reasoning: format!(
+                "Ultra-flash drop -{:.1}% in {}s",
+                drop_percent,
+                ULTRA_FLASH_WINDOW_SEC
+            ),
         });
     }
 
@@ -414,6 +516,180 @@ fn detect_extreme_drop(
         });
     }
 
+    None
+}
+
+fn detect_wick_rebound(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64,
+    now: DateTime<Utc>
+) -> Option<DropAnalysis> {
+    let window: Vec<(DateTime<Utc>, f64)> = price_history
+        .iter()
+        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= WICK_WINDOW_SEC)
+        .cloned()
+        .collect();
+
+    if window.len() < 3 {
+        return None;
+    }
+
+    let prices: Vec<f64> = window
+        .iter()
+        .map(|(_, p)| *p)
+        .collect();
+    let window_high = prices.iter().fold(0.0f64, |a, b| a.max(*b));
+    let window_low = prices.iter().fold(f64::INFINITY, |a, b| a.min(*b));
+    if window_high <= 0.0 || !window_high.is_finite() || !window_low.is_finite() {
+        return None;
+    }
+
+    let total_drop = ((window_high - window_low) / window_high) * 100.0;
+    if total_drop < 12.0 {
+        return None;
+    }
+
+    // Require some rebound off the low
+    let recovered = if current_price > window_low {
+        ((current_price - window_low) / (window_high - window_low)).max(0.0)
+    } else {
+        0.0
+    };
+
+    if recovered >= 0.2 {
+        // at least 20% of wick recovered
+        let velocity = calculate_velocity(&prices, WICK_WINDOW_SEC);
+        let mut confidence = MODERATE_BASE_CONFIDENCE + 4.0;
+        // deeper wick and some stabilization increase confidence
+        confidence += ((total_drop - 12.0) / 30.0).clamp(0.0, 1.0) * 8.0;
+        if velocity.abs() < 6.0 {
+            confidence += 6.0;
+        }
+        if velocity < -15.0 {
+            confidence -= 8.0;
+        }
+        confidence = confidence.max(30.0).min(93.0);
+
+        return Some(DropAnalysis {
+            drop_percent: total_drop,
+            drop_style: DropStyle::WickRebound,
+            confidence,
+            velocity_per_minute: velocity,
+            time_window_used: WICK_WINDOW_SEC,
+            reasoning: format!(
+                "Wick dip/rebound -{:.1}% in {}s with recovery",
+                total_drop,
+                WICK_WINDOW_SEC
+            ),
+        });
+    }
+
+    None
+}
+
+fn detect_cascade_drop(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64,
+    now: DateTime<Utc>
+) -> Option<DropAnalysis> {
+    let window: Vec<(DateTime<Utc>, f64)> = price_history
+        .iter()
+        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= CASCADE_WINDOW_SEC)
+        .cloned()
+        .collect();
+    if window.len() < 5 {
+        return None;
+    }
+    let prices: Vec<f64> = window
+        .iter()
+        .map(|(_, p)| *p)
+        .collect();
+    let window_high = prices.iter().fold(0.0f64, |a, b| a.max(*b));
+    if window_high <= 0.0 || !window_high.is_finite() {
+        return None;
+    }
+
+    // Count stair-step lower-high/lower-low sequences
+    let mut steps = 0usize;
+    let mut last = prices[0];
+    for p in prices.iter().skip(1) {
+        if *p < last {
+            steps += 1;
+        }
+        last = *p;
+    }
+    let total_drop = ((window_high - current_price) / window_high) * 100.0;
+    if steps >= 4 && total_drop >= 15.0 && total_drop <= 45.0 {
+        let velocity = calculate_velocity(&prices, CASCADE_WINDOW_SEC);
+        let mut confidence = MODERATE_BASE_CONFIDENCE + 2.0;
+        confidence += (((steps as f64) - 4.0) * 1.5).min(8.0);
+        if velocity.abs() < 8.0 {
+            confidence += 4.0;
+        }
+        confidence = confidence.max(28.0).min(90.0);
+        return Some(DropAnalysis {
+            drop_percent: total_drop,
+            drop_style: DropStyle::Cascade,
+            confidence,
+            velocity_per_minute: velocity,
+            time_window_used: CASCADE_WINDOW_SEC,
+            reasoning: format!(
+                "Cascade drop -{:.1}% over {}s ({} steps)",
+                total_drop,
+                CASCADE_WINDOW_SEC,
+                steps
+            ),
+        });
+    }
+    None
+}
+
+fn detect_median_dip(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64,
+    now: DateTime<Utc>
+) -> Option<DropAnalysis> {
+    let mut window_prices: Vec<f64> = price_history
+        .iter()
+        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= MEDIAN_DIP_WINDOW_SEC)
+        .map(|(_, price)| *price)
+        .collect();
+    if window_prices.len() < 3 {
+        return None;
+    }
+    window_prices.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let median = if window_prices.len() % 2 == 1 {
+        window_prices[window_prices.len() / 2]
+    } else {
+        let mid = window_prices.len() / 2;
+        (window_prices[mid - 1] + window_prices[mid]) / 2.0
+    };
+    if median <= 0.0 || !median.is_finite() {
+        return None;
+    }
+    let dip_percent = ((median - current_price) / median) * 100.0;
+    if dip_percent >= 6.0 && dip_percent <= 25.0 {
+        // short-term overshoot below typical
+        let velocity = calculate_velocity(&window_prices, MEDIAN_DIP_WINDOW_SEC);
+        let mut confidence = FLASH_BASE_CONFIDENCE - 5.0; // a bit lower base than flash
+        confidence += ((dip_percent - 6.0) / 19.0).clamp(0.0, 1.0) * 6.0;
+        if velocity.abs() < 8.0 {
+            confidence += 5.0;
+        }
+        confidence = confidence.max(22.0).min(88.0);
+        return Some(DropAnalysis {
+            drop_percent: dip_percent,
+            drop_style: DropStyle::MedianDip,
+            confidence,
+            velocity_per_minute: velocity,
+            time_window_used: MEDIAN_DIP_WINDOW_SEC,
+            reasoning: format!(
+                "Median-dip -{:.1}% vs {}s median",
+                dip_percent,
+                MEDIAN_DIP_WINDOW_SEC
+            ),
+        });
+    }
     None
 }
 
@@ -542,10 +818,14 @@ fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
 fn should_enter_based_on_analysis(analysis: &DropAnalysis, liquidity_usd: f64) -> bool {
     // Base confidence threshold varies by drop style
     let min_confidence = match analysis.drop_style {
-        DropStyle::Flash => 60.0, // Need higher confidence for quick moves
-        DropStyle::Moderate => 55.0, // Moderate confidence needed
-        DropStyle::Deep => 50.0, // Lower threshold for deep drops
-        DropStyle::Extreme => 45.0, // Lowest threshold for extreme opportunities
+        DropStyle::UltraFlash => 62.0, // Very quick moves must be convincing
+        DropStyle::Flash => 58.0, // Slightly lowered to allow more entries
+        DropStyle::WickRebound => 54.0,
+        DropStyle::Moderate => 54.0, // Moderate confidence needed
+        DropStyle::Cascade => 52.0,
+        DropStyle::Deep => 48.0, // Lower threshold for deep drops
+        DropStyle::Extreme => 44.0, // Lowest threshold for extreme opportunities
+        DropStyle::MedianDip => 56.0,
     };
 
     // Adjust threshold based on liquidity
@@ -606,6 +886,24 @@ async fn is_near_ath(mint: &str, current_price: f64) -> bool {
     }
 
     false // If no OHLCV data, don't block the entry
+}
+
+// Returns percent below recent ATH over last 120 minutes if available
+async fn get_ath_distance_percent(mint: &str, current_price: f64) -> Option<f64> {
+    match crate::tokens::ohlcvs::get_latest_ohlcv(mint, 120).await {
+        Ok(ohlcv_data) => {
+            let recent_high = ohlcv_data
+                .iter()
+                .map(|point| point.high)
+                .fold(0.0f64, |a, b| a.max(b));
+            if recent_high > 0.0 && recent_high.is_finite() {
+                let drop_from_high = ((recent_high - current_price) / recent_high) * 100.0;
+                return Some(drop_from_high);
+            }
+            None
+        }
+        _ => None,
+    }
 }
 
 // =============================================================================
