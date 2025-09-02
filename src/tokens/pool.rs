@@ -2425,7 +2425,43 @@ impl PoolPriceService {
                         &format!("❌ CALCULATION ERROR for {}: {}", token_address, e)
                     );
                 }
-                None
+
+                // Store error result in cache so get_price() can retrieve it with error details
+                let error_result = PoolPriceResult {
+                    pool_address: "".to_string(), // No pool address for error
+                    dex_id: "".to_string(),
+                    pool_type: None,
+                    token_address: token_address.to_string(),
+                    price_sol: None,
+                    price_usd: None,
+                    api_price_sol,
+                    liquidity_usd: 0.0,
+                    volume_24h: 0.0,
+                    source: "error".to_string(),
+                    calculated_at: Utc::now(),
+                    sol_reserve: None,
+                    token_reserve: None,
+                    error: Some(e), // Store the specific error message
+                };
+
+                {
+                    let mut price_cache = self.price_cache.write().await;
+                    price_cache.insert(token_address.to_string(), error_result.clone());
+
+                    if is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "ERROR_CACHE_STORED",
+                            &format!(
+                                "💾 CACHED error for {}: {}",
+                                token_address,
+                                error_result.error.as_ref().unwrap()
+                            )
+                        );
+                    }
+                }
+
+                Some(error_result)
             }
         }
     }
@@ -6437,12 +6473,35 @@ async fn get_price_async(token_address: &str, options: PriceOptions) -> Option<P
 
     // Apply timeout if specified
     let result = if let Some(timeout_secs) = options.timeout_secs {
-        tokio::time
-            ::timeout(
+        match
+            tokio::time::timeout(
                 Duration::from_secs(timeout_secs),
                 get_price_internal(token_address, &options, calculated_at)
             ).await
-            .unwrap_or(None)
+        {
+            Ok(result) => result,
+            Err(_) => {
+                // Timeout occurred - return error result instead of None
+                let error_msg = format!("Price calculation timed out after {}s", timeout_secs);
+                Some(PriceResult {
+                    token_address: token_address.to_string(),
+                    price_sol: None,
+                    price_usd: None,
+                    api_price_sol: None,
+                    pool_price_sol: None,
+                    pool_address: None,
+                    dex_id: None,
+                    pool_type: None,
+                    volume_24h: None,
+                    source: "timeout".to_string(),
+                    calculated_at,
+                    is_cached: false,
+                    error: Some(error_msg),
+                    reserve_sol: None,
+                    reserve_token: None,
+                })
+            }
+        }
     } else {
         get_price_internal(token_address, &options, calculated_at).await
     };
@@ -6450,13 +6509,18 @@ async fn get_price_async(token_address: &str, options: PriceOptions) -> Option<P
     if is_debug_pool_prices_enabled() {
         let duration = start_time.elapsed();
         let result_info = match &result {
-            Some(r) =>
-                format!(
-                    "source={}, pool={:?}, api={:?}",
-                    r.source,
-                    r.pool_price_sol,
-                    r.api_price_sol
-                ),
+            Some(r) => {
+                if let Some(ref err) = r.error {
+                    format!("error: {}", err)
+                } else {
+                    format!(
+                        "source={}, pool={:?}, api={:?}",
+                        r.source,
+                        r.pool_price_sol,
+                        r.api_price_sol
+                    )
+                }
+            }
             None => "failed".to_string(),
         };
         log(
@@ -6519,10 +6583,40 @@ async fn get_price_internal(
                 source: pool_result.source,
                 calculated_at,
                 is_cached: true,
-                error: None, // No error for successful cached result
+                error: pool_result.error.clone(), // Pass through error from cached result
                 reserve_sol: pool_result.sol_reserve,
                 reserve_token: pool_result.token_reserve,
             };
+
+            return Some(result);
+        } else {
+            // Cached result is too old
+            let error_msg = format!(
+                "Cached price expired (age: {}s, max: {}s)",
+                age.num_seconds(),
+                PRICE_CACHE_TTL_SECONDS
+            );
+
+            let result = PriceResult {
+                token_address: token_address.to_string(),
+                price_sol: None,
+                price_usd: None,
+                api_price_sol: None,
+                pool_price_sol: None,
+                pool_address: None,
+                dex_id: None,
+                pool_type: None,
+                volume_24h: None,
+                source: "cache_expired".to_string(),
+                calculated_at,
+                is_cached: false,
+                error: Some(error_msg),
+                reserve_sol: None,
+                reserve_token: None,
+            };
+
+            // Add token to watchlist so background service will calculate price for next call
+            service.add_watchlist_token(token_address).await;
 
             return Some(result);
         }
@@ -6550,7 +6644,28 @@ async fn get_price_internal(
         );
     }
 
-    None
+    // No cached result available - return error result instead of None
+    let error_msg =
+        "No cached price available - added to watchlist for background calculation".to_string();
+    let result = PriceResult {
+        token_address: token_address.to_string(),
+        price_sol: None,
+        price_usd: None,
+        api_price_sol: None,
+        pool_price_sol: None,
+        pool_address: None,
+        dex_id: None,
+        pool_type: None,
+        volume_24h: None,
+        source: "no_cache".to_string(),
+        calculated_at,
+        is_cached: false,
+        error: Some(error_msg),
+        reserve_sol: None,
+        reserve_token: None,
+    };
+
+    Some(result)
 }
 
 // =============================================================================

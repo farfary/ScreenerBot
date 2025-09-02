@@ -1531,22 +1531,50 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
 
                         // Get current pool price
-                        let current_price = match
-                            get_price(
-                                &token.mint,
-                                Some(PriceOptions::default()),
-                                false
-                            ).await.and_then(|r| r.sol_price())
-                        {
-                            Some(p) if p > 0.0 && p.is_finite() => p,
-                            _ => {
+                        let price_result = get_price(
+                            &token.mint,
+                            Some(PriceOptions::default()),
+                            false
+                        ).await;
+
+                        let current_price = match &price_result {
+                            Some(result) =>
+                                match result.sol_price() {
+                                    Some(p) if p > 0.0 && p.is_finite() => p,
+                                    _ => {
+                                        // Update tracking even for failed price fetches
+                                        update_token_check_info(&token.mint, None, false);
+                                        if is_debug_trader_enabled() {
+                                            let error_detail = result.error
+                                                .as_ref()
+                                                .map(|e| format!(": {}", e))
+                                                .unwrap_or_default();
+                                            log(
+                                                LogTag::Trader,
+                                                "PRICE_FAIL",
+                                                &format!(
+                                                    "❌ No valid price for {} ({}){} - skipping",
+                                                    token.symbol,
+                                                    token.mint,
+                                                    error_detail
+                                                )
+                                            );
+                                        }
+                                        return;
+                                    }
+                                }
+                            None => {
                                 // Update tracking even for failed price fetches
                                 update_token_check_info(&token.mint, None, false);
                                 if is_debug_trader_enabled() {
                                     log(
                                         LogTag::Trader,
                                         "PRICE_FAIL",
-                                        &format!("❌ No valid price for {}: skipping", token.symbol)
+                                        &format!(
+                                            "❌ No price result for {} ({}) - skipping",
+                                            token.symbol,
+                                            token.mint
+                                        )
                                     );
                                 }
                                 return;
