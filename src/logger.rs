@@ -550,29 +550,8 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
     // Check if the original message already contains color codes
     let has_existing_colors = message.contains('\x1b');
 
-    // Determine message color based on log type and message content
-    let message_color = if has_existing_colors {
-        // If message already has colors, use the first chunk as-is
-        message_chunks[0].to_string()
-    } else {
-        // Apply coloring based on log type only if no existing colors
-        match log_type.to_uppercase().as_str() {
-            "ERROR" => message_chunks[0].bright_red().to_string(),
-            "FAILED" => message_chunks[0].bright_red().to_string(),
-            _ => {
-                // Check if message contains error/failed keywords
-                if
-                    message.to_lowercase().contains("error") ||
-                    message.to_lowercase().contains("failed") ||
-                    message.to_lowercase().contains("fail")
-                {
-                    message_chunks[0].bright_red().to_string()
-                } else {
-                    message_chunks[0].bright_white().to_string()
-                }
-            }
-        }
-    };
+    // Never modify message colors - use message as-is
+    let message_color = message_chunks[0].to_string();
 
     // Print first line with full prefix (console output)
     let console_line = format!("{}{}", base_line, message_color);
@@ -623,29 +602,8 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             " ".repeat(TOTAL_PREFIX_WIDTH)
         );
         for chunk in &message_chunks[1..] {
-            // Apply same color logic to continuation lines
-            let chunk_color = if has_existing_colors {
-                // If original message had colors, use chunks as-is
-                chunk.to_string()
-            } else {
-                // Apply coloring based on log type only if no existing colors
-                match log_type.to_uppercase().as_str() {
-                    "ERROR" => chunk.bright_red().to_string(),
-                    "FAILED" => chunk.bright_red().to_string(),
-                    _ => {
-                        // Check if message contains error/failed keywords
-                        if
-                            message.to_lowercase().contains("error") ||
-                            message.to_lowercase().contains("failed") ||
-                            message.to_lowercase().contains("fail")
-                        {
-                            chunk.bright_red().to_string()
-                        } else {
-                            chunk.bright_white().to_string()
-                        }
-                    }
-                }
-            };
+            // Never modify chunk colors - use chunks as-is
+            let chunk_color = chunk.to_string();
 
             let console_continuation = format!("{}{}", continuation_prefix, chunk_color);
             if !is_dashboard_enabled() {

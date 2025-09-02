@@ -244,7 +244,6 @@ pub fn print_help() {
     println!("    --debug-pool-calculator   Pool calculator debug mode");
     println!("    --debug-pool-prices       Pool prices debug mode");
     println!("    --debug-positions         Positions module debug mode");
-    println!("    --debug-price-service     Price service debug mode");
     println!("    --debug-profit            Profit calculation debug mode");
     println!("    --debug-rpc               RPC operations debug mode");
     println!("    --debug-rugcheck          Rugcheck module debug mode");

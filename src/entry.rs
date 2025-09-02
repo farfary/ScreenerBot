@@ -21,8 +21,8 @@ const MIN_PRICE_POINTS: usize = 8; // Increased from 3 for better analysis
 const MAX_DATA_AGE_MIN: i64 = 5; // Keep tight data freshness requirement
 
 // Conservative liquidity filter for more stable entries
-const MIN_RESERVE_SOL: f64 = 25.0; // Higher minimum for stability
-const MAX_RESERVE_SOL: f64 = 1200.0; // Higher maximum for less restrictive filtering
+const MIN_RESERVE_SOL: f64 = 20.0; // Higher minimum for stability
+const MAX_RESERVE_SOL: f64 = 3000.0; // Higher maximum for less restrictive filtering
 
 // CONSERVATIVE entry windows - more balanced approach
 const WINDOWS_SEC: [i64; 6] = [30, 60, 120, 180, 300, 600]; // 30s to 10min windows

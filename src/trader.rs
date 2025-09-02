@@ -200,6 +200,7 @@ use std::sync::atomic::{ AtomicUsize, Ordering };
 use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::Notify;
+use tabled::{ Tabled, Table, settings::{ Style, object::Rows, Alignment, Modify } };
 
 // =============================================================================
 // GLOBAL STATE AND STATIC STORAGE
@@ -233,6 +234,70 @@ pub struct TokenCheckInfo {
     pub pool_price_sol: Option<f64>,
     pub reserve_sol: Option<f64>,
     pub reserve_token: Option<f64>,
+}
+
+/// Display structure for tokens sorted by total checks
+#[derive(Tabled)]
+pub struct TokenCheckDisplay {
+    #[tabled(rename = "#")]
+    rank: String,
+    #[tabled(rename = "🔑 Mint")]
+    mint: String,
+    #[tabled(rename = "🏷️ Symbol")]
+    symbol: String,
+    #[tabled(rename = "💧 Liq")]
+    liquidity: String,
+    #[tabled(rename = "📊 MCap")]
+    market_cap: String,
+    #[tabled(rename = "💲 Last Price")]
+    last_price: String,
+    #[tabled(rename = "🏊 Pool")]
+    pool_info: String,
+    #[tabled(rename = "🔍 Checks")]
+    check_count: String,
+    #[tabled(rename = "🎯 Entry")]
+    entry_checks: String,
+}
+
+/// Display structure for tokens sorted by entry checks
+#[derive(Tabled)]
+pub struct TokenEntryDisplay {
+    #[tabled(rename = "#")]
+    rank: String,
+    #[tabled(rename = "🔑 Mint")]
+    mint: String,
+    #[tabled(rename = "🏷️ Symbol")]
+    symbol: String,
+    #[tabled(rename = "💧 Liq")]
+    liquidity: String,
+    #[tabled(rename = "📊 MCap")]
+    market_cap: String,
+    #[tabled(rename = "💲 Last Price")]
+    last_price: String,
+    #[tabled(rename = "🏊 Pool")]
+    pool_info: String,
+    #[tabled(rename = "🎯 Entry")]
+    entry_checks: String,
+    #[tabled(rename = "🔍 Checks")]
+    check_count: String,
+}
+
+/// Display structure for price summary statistics
+#[derive(Tabled)]
+pub struct PriceSummaryDisplay {
+    #[tabled(rename = "📊 Metric")]
+    metric: String,
+    #[tabled(rename = "🔢 Value")]
+    value: String,
+}
+
+/// Display structure for blacklist statistics
+#[derive(Tabled)]
+pub struct BlacklistSummaryDisplay {
+    #[tabled(rename = "🚫 Status")]
+    status: String,
+    #[tabled(rename = "🔢 Count")]
+    count: String,
 }
 
 /// Global token tracking state
@@ -905,7 +970,7 @@ fn log_cycle_price_summary(available: usize, unavailable: usize, zero_hist_warme
     // Top tokens by total checks
     let mut top_by_checks: Vec<(&String, &TokenCheckInfo)> = tracker.iter().collect();
     top_by_checks.sort_by(|a, b| b.1.check_count.cmp(&a.1.check_count));
-    let top_by_checks_lines = top_by_checks
+    let top_by_checks_displays: Vec<TokenCheckDisplay> = top_by_checks
         .iter()
         .take(10)
         .enumerate()
@@ -950,26 +1015,24 @@ fn log_cycle_price_summary(available: usize, unavailable: usize, zero_hist_warme
                     fmt_opt9(rtok)
                 )
             };
-            format!(
-                "  {}. {} {} | liq:{} | mcap:{} | last:{} SOL | {} | checks:{} | entry_checks:{}",
-                idx + 1,
-                &mint[..8],
-                sym_name,
-                liq,
-                mcap,
-                last_price,
-                pool_str,
-                info.check_count,
-                info.entry_check_count
-            )
+            TokenCheckDisplay {
+                rank: format!("{}.", idx + 1),
+                mint: format!("{}", &mint[..8]),
+                symbol: sym_name,
+                liquidity: liq,
+                market_cap: mcap,
+                last_price: format!("{} SOL", last_price),
+                pool_info: pool_str,
+                check_count: format!("{}", info.check_count),
+                entry_checks: format!("{}", info.entry_check_count),
+            }
         })
-        .collect::<Vec<_>>()
-        .join("\n");
+        .collect();
 
     // Top tokens by entry checks
     let mut top_by_entries: Vec<(&String, &TokenCheckInfo)> = tracker.iter().collect();
     top_by_entries.sort_by(|a, b| b.1.entry_check_count.cmp(&a.1.entry_check_count));
-    let top_by_entries_lines = top_by_entries
+    let top_by_entries_displays: Vec<TokenEntryDisplay> = top_by_entries
         .iter()
         .take(10)
         .enumerate()
@@ -1014,21 +1077,19 @@ fn log_cycle_price_summary(available: usize, unavailable: usize, zero_hist_warme
                     fmt_opt9(rtok)
                 )
             };
-            format!(
-                "  {}. {} {} | liq:{} | mcap:{} | last:{} SOL | {} | entry_checks:{} | checks:{}",
-                idx + 1,
-                &mint[..8],
-                sym_name,
-                liq,
-                mcap,
-                last_price,
-                pool_str,
-                info.entry_check_count,
-                info.check_count
-            )
+            TokenEntryDisplay {
+                rank: format!("{}.", idx + 1),
+                mint: format!("{}", &mint[..8]),
+                symbol: sym_name,
+                liquidity: liq,
+                market_cap: mcap,
+                last_price: format!("{} SOL", last_price),
+                pool_info: pool_str,
+                entry_checks: format!("{}", info.entry_check_count),
+                check_count: format!("{}", info.check_count),
+            }
         })
-        .collect::<Vec<_>>()
-        .join("\n");
+        .collect();
 
     // Overall tracker stats
     let tracked_tokens = tracker.len();
@@ -1069,30 +1130,97 @@ fn log_cycle_price_summary(available: usize, unavailable: usize, zero_hist_warme
     let blacklist_ready_for_retry = blacklist_total - blacklist_active;
     drop(blacklist);
 
-    let summary = format!(
-        "===== ENTRY PRICE SUMMARY =====\n\
-        • Prices: avail={} | unavail={} | zero-warm={}\n\
-        • Tracker: tracked={} | with_price={} | without_price={}\n\
-        • Averages: checks={:.1} | entry_checks={:.1}\n\
-        • Blacklist: total={} | active={} | retry_ready={}\n\
-        • Top by checks (max 10):\n{}\n\
-        • Top by entry checks (max 10):\n{}",
-        available,
-        unavailable,
-        zero_hist_warmed,
-        tracked_tokens,
-        tokens_with_price,
-        tokens_without_price,
-        avg_checks,
-        avg_entry_checks,
-        blacklist_total,
-        blacklist_active,
-        blacklist_ready_for_retry,
-        top_by_checks_lines,
-        top_by_entries_lines
-    );
+    // Create summary statistics displays
+    let price_summary_displays = vec![
+        PriceSummaryDisplay {
+            metric: "🔍 Available".to_string(),
+            value: format!("{}", available),
+        },
+        PriceSummaryDisplay {
+            metric: "❌ Unavailable".to_string(),
+            value: format!("{}", unavailable),
+        },
+        PriceSummaryDisplay {
+            metric: "🔥 Zero Warmed".to_string(),
+            value: format!("{}", zero_hist_warmed),
+        },
+        PriceSummaryDisplay {
+            metric: "📊 Tracked Tokens".to_string(),
+            value: format!("{}", tracked_tokens),
+        },
+        PriceSummaryDisplay {
+            metric: "💲 With Price".to_string(),
+            value: format!("{}", tokens_with_price),
+        },
+        PriceSummaryDisplay {
+            metric: "❓ Without Price".to_string(),
+            value: format!("{}", tokens_without_price),
+        },
+        PriceSummaryDisplay {
+            metric: "📈 Avg Checks".to_string(),
+            value: format!("{:.1}", avg_checks),
+        },
+        PriceSummaryDisplay {
+            metric: "🎯 Avg Entry Checks".to_string(),
+            value: format!("{:.1}", avg_entry_checks),
+        }
+    ];
 
-    log(LogTag::Trader, "PRICE_SUMMARY", &summary);
+    let blacklist_summary_displays = vec![
+        BlacklistSummaryDisplay {
+            status: "🚫 Total Blacklisted".to_string(),
+            count: format!("{}", blacklist_total),
+        },
+        BlacklistSummaryDisplay {
+            status: "❌ Active".to_string(),
+            count: format!("{}", blacklist_active),
+        },
+        BlacklistSummaryDisplay {
+            status: "🔄 Retry Ready".to_string(),
+            count: format!("{}", blacklist_ready_for_retry),
+        }
+    ];
+
+    // Build the complete summary using tables
+    let mut summary = String::new();
+    summary.push_str("===== ENTRY PRICE SUMMARY =====\n");
+
+    // Price Statistics
+    summary.push_str("\n📊 Price Statistics\n");
+    let mut price_table = Table::new(price_summary_displays);
+    price_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    summary.push_str(&format!("{}\n", price_table));
+
+    // Blacklist Statistics
+    summary.push_str("\n🚫 Blacklist Statistics\n");
+    let mut blacklist_table = Table::new(blacklist_summary_displays);
+    blacklist_table
+        .with(Style::rounded())
+        .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    summary.push_str(&format!("{}\n", blacklist_table));
+
+    // Top by checks table
+    if !top_by_checks_displays.is_empty() {
+        summary.push_str("\n🔍 Top by Total Checks\n");
+        let mut checks_table = Table::new(top_by_checks_displays);
+        checks_table
+            .with(Style::rounded())
+            .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+        summary.push_str(&format!("{}\n", checks_table));
+    }
+
+    // Top by entry checks table
+    if !top_by_entries_displays.is_empty() {
+        summary.push_str("\n🎯 Top by Entry Checks\n");
+        let mut entries_table = Table::new(top_by_entries_displays);
+        entries_table
+            .with(Style::rounded())
+            .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+        summary.push_str(&format!("{}\n", entries_table));
+    }
+
+    // Print directly to stdout instead of using logger
+    println!("{}", summary);
 }
 
 // Ensure token is in watchlist after a price failure, with a clear log
