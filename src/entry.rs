@@ -18,18 +18,18 @@ use chrono::{ DateTime, Utc };
 // CORE CONFIGURATION PARAMETERS
 // =============================================================================
 
-// Simple scalping config
-const MIN_PRICE_POINTS: usize = 2;
-const MAX_DATA_AGE_MIN: i64 = 10; // unchanged
+// Simple scalping config - more permissive
+const MIN_PRICE_POINTS: usize = 2; // Keep at 2 for safety
+const MAX_DATA_AGE_MIN: i64 = 15; // Increased from 10 to 15 minutes
 
 // Liquidity filter (very permissive for scalping)
 const MIN_LIQUIDITY_USD: f64 = 50.0;
 const MAX_LIQUIDITY_USD: f64 = 100_000_000.0;
 
-// Detection windows and thresholds
-const WINDOWS_SEC: [i64; 5] = [5, 10, 30, 60, 120];
-const MIN_DROP_PERCENT: f64 = 10.0; // -10%
-const MAX_DROP_PERCENT: f64 = 50.0; // -50%
+// Detection windows and thresholds - relaxed for more entries
+const WINDOWS_SEC: [i64; 6] = [5, 10, 30, 60, 120, 300]; // Added 5-minute window
+const MIN_DROP_PERCENT: f64 = 5.0; // Reduced from 10% to 5%
+const MAX_DROP_PERCENT: f64 = 70.0; // Increased from 50% to 70%
 
 // =============================================================================
 // SIMPLE DROP SIGNAL
@@ -52,9 +52,26 @@ struct SimpleDropSignal {
 /// Main entry point for determining if a token should be bought
 /// Returns (approved_for_entry, confidence_score, reason)
 pub async fn should_buy(token: &Token) -> (bool, f64, String) {
+    // Immediate debug log to ensure we're getting called
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Entry,
+            "SHOULD_BUY_START",
+            &format!("🔍 Starting entry analysis for {}", token.symbol)
+        );
+    }
+
     let pool_service = get_pool_service();
 
     // Get current pool price and liquidity first
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Entry,
+            "POOL_PRICE_REQUEST",
+            &format!("📊 Getting pool price for {}", token.symbol)
+        );
+    }
+
     let (current_price, liquidity_usd) = match
         pool_service.get_pool_price(&token.mint, None, &PriceOptions::default()).await
     {
@@ -62,16 +79,39 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             let price = result.price_sol.unwrap_or(0.0);
             let liquidity = result.liquidity_usd;
             if price <= 0.0 || !price.is_finite() {
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Entry,
+                        "INVALID_PRICE",
+                        &format!("❌ {} invalid price: {}", token.symbol, price)
+                    );
+                }
                 return (false, 10.0, "Invalid price data".to_string());
             }
             (price, liquidity)
         }
         None => {
+            if is_debug_entry_enabled() {
+                log(LogTag::Entry, "NO_POOL_DATA", &format!("❌ {} no pool data", token.symbol));
+            }
             return (false, 5.0, "No valid pool data".to_string());
         }
     };
     // Basic liquidity filter (lightweight)
     if liquidity_usd < MIN_LIQUIDITY_USD || liquidity_usd > MAX_LIQUIDITY_USD {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "LIQUIDITY_FILTER",
+                &format!(
+                    "❌ {} liquidity ${:.0} outside bounds {}-{:.0}",
+                    token.symbol,
+                    liquidity_usd,
+                    MIN_LIQUIDITY_USD as i64,
+                    MAX_LIQUIDITY_USD
+                )
+            );
+        }
         return (
             false,
             10.0,
@@ -85,6 +125,14 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     }
 
     // Get recent pool price history
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Entry,
+            "HISTORY_REQUEST",
+            &format!("📈 Getting price history for {}", token.symbol)
+        );
+    }
+
     let mut price_history = pool_service.get_recent_price_history(&token.mint).await;
     // Filter out invalid prices (0 or non-finite)
     price_history.retain(|(_, p)| *p > 0.0 && p.is_finite());
@@ -125,6 +173,34 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 )
             );
         }
+
+        // Fallback: If we have at least 1 price point, still attempt basic evaluation
+        if price_history.len() >= 1 && current_price > 0.0 {
+            let recent_price = price_history[0].1;
+            if recent_price > 0.0 && recent_price.is_finite() {
+                let instant_drop = ((recent_price - current_price) / recent_price) * 100.0;
+                if instant_drop >= 3.0 && instant_drop <= 70.0 {
+                    // Basic confidence for single-point drops
+                    let confidence = (25.0 + instant_drop * 0.8).min(60.0);
+                    if confidence >= 28.0 {
+                        if is_debug_entry_enabled() {
+                            log(
+                                LogTag::Entry,
+                                "INSTANT_DROP_FALLBACK",
+                                &format!(
+                                    "🎯 {} instant drop -{:.1}% → conf {:.0}% → APPROVE",
+                                    token.symbol,
+                                    instant_drop,
+                                    confidence
+                                )
+                            );
+                        }
+                        return (true, confidence, format!("Instant drop -{:.1}%", instant_drop));
+                    }
+                }
+            }
+        }
+
         return (
             false,
             12.0,
@@ -136,35 +212,37 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     let best = detect_best_drop(&price_history, current_price);
 
     if let Some(sig) = best {
-        // Confidence: base + magnitude + window bonus + velocity tweak + liquidity tweak
-        let mut confidence = 35.0;
+        // Confidence: more aggressive base + magnitude + window bonus + velocity tweak + liquidity tweak
+        let mut confidence = 30.0; // Reduced from 35.0
         confidence +=
             ((sig.drop_percent - MIN_DROP_PERCENT) / (MAX_DROP_PERCENT - MIN_DROP_PERCENT)).clamp(
                 0.0,
                 1.0
-            ) * 45.0; // up to +45
+            ) * 50.0; // Increased from 45 to 50
         confidence += match sig.window_sec {
-            5 => 15.0,
-            10 => 12.0,
-            30 => 8.0,
-            60 => 5.0,
+            5 => 18.0, // Increased bonuses
+            10 => 15.0,
+            30 => 12.0, // Increased from 8
+            60 => 8.0, // Increased from 5
+            120 => 5.0, // Increased from 2
+            300 => 3.0, // New longer window
             _ => 2.0,
         };
         if sig.velocity_per_minute < -20.0 {
-            confidence += 6.0;
+            confidence += 8.0; // Increased from 6
         }
         if sig.velocity_per_minute > 15.0 {
-            confidence -= 8.0;
+            confidence -= 6.0; // Reduced penalty from 8
         }
         if liquidity_usd < 5_000.0 {
-            confidence -= 5.0;
+            confidence -= 3.0; // Reduced penalty from 5
         } else if liquidity_usd > 100_000.0 {
-            confidence += 3.0;
+            confidence += 5.0; // Increased bonus from 3
         }
         confidence = confidence.clamp(0.0, 95.0);
 
-        // Entry decision with simple threshold
-        let approved = confidence >= 32.0;
+        // Entry decision with more permissive threshold
+        let approved = confidence >= 28.0; // Reduced from 32.0%
 
         if is_debug_entry_enabled() {
             log(
@@ -194,9 +272,10 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 format!("Scalp drop -{:.1}% over {}s", sig.drop_percent, sig.window_sec)
             } else {
                 format!(
-                    "Drop -{:.1}% over {}s but confidence too low",
+                    "Drop -{:.1}% over {}s but confidence {:.0}% < 28%",
                     sig.drop_percent,
-                    sig.window_sec
+                    sig.window_sec,
+                    confidence
                 )
             },
         );
@@ -212,14 +291,14 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 LogTag::Entry,
                 "NO_DROP_PATTERN",
                 &format!(
-                    "❌ {} no drop 10-50% detected in {} points | recent: [{}]",
+                    "❌ {} no drop 5-70% detected in {} points | recent: [{}]",
                     token.symbol,
                     price_history.len(),
                     recent_prices.join(", ")
                 )
             );
         }
-        return (false, 20.0, "No 10-50% drop detected".to_string());
+        return (false, 20.0, "No 5-70% drop detected".to_string());
     }
 }
 
@@ -250,8 +329,10 @@ fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
         return 0.0;
     }
 
-    // Add debug logging to see what's happening
-    if crate::global::is_debug_entry_enabled() {
+    let velocity_per_minute = percent_change / minutes;
+
+    // Add debug logging to see what's happening - only for very large velocity changes
+    if crate::global::is_debug_entry_enabled() && velocity_per_minute.abs() > 50.0 {
         crate::logger::log(
             crate::logger::LogTag::Entry,
             "VELOCITY_CALC",
@@ -259,13 +340,13 @@ fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
                 "Velocity calc: first={:.9}, last={:.9}, change={:.2}%/min over {:.1}min",
                 first,
                 last,
-                percent_change / minutes,
+                velocity_per_minute,
                 minutes
             )
         );
     }
 
-    percent_change / minutes // Percent per minute
+    velocity_per_minute // Percent per minute
 }
 
 // Simple best-drop detector over predefined windows

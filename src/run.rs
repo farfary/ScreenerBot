@@ -320,13 +320,6 @@ pub async fn run_bot() -> Result<(), String> {
         log(LogTag::Trader, "INFO", "Open positions monitor task ended");
     });
 
-    let shutdown_stale_refresh = shutdown.clone();
-    let stale_refresh_handle = tokio::spawn(async move {
-        log(LogTag::Trader, "INFO", "Stale price history refresh task started");
-        trader::refresh_stale_price_history(shutdown_stale_refresh).await;
-        log(LogTag::Trader, "INFO", "Stale price history refresh task ended");
-    });
-
     let shutdown_display = shutdown.clone();
     let display_handle = if is_summary_enabled() {
         tokio::spawn(async move {
@@ -553,19 +546,8 @@ pub async fn run_bot() -> Result<(), String> {
             debug_log(
                 LogTag::System,
                 "INFO",
-                "🔄 Waiting for stale price refresh task to shutdown..."
+                "🔄 Waiting for positions display task to shutdown..."
             );
-            if let Err(e) = stale_refresh_handle.await {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!("Stale price refresh task failed to shutdown cleanly: {}", e)
-                );
-            } else {
-                log(LogTag::System, "INFO", "✅ Stale price refresh task shutdown completed");
-            }
-
-            log(LogTag::System, "INFO", "🔄 Waiting for positions display task to shutdown...");
             if let Err(e) = display_handle.await {
                 log(
                     LogTag::System,
