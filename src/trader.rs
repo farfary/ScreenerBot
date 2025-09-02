@@ -163,7 +163,6 @@ pub const ENTRY_CHECK_CONCURRENCY: usize = 24; // previously 10
 pub const MAX_TOKENS_PER_CYCLE: usize = ENTRY_CHECK_CONCURRENCY * 2;
 
 /// Limit tokens analyzed for watchlist seeding per cycle (keeps history refresh light)
-pub const WATCHLIST_ANALYSIS_LIMIT: usize = 400;
 
 /// Fraction of the cycle interval used as a soft time budget; beyond this we stop scheduling new tasks
 /// Increased to allow more time for token processing after preparation phase
@@ -1368,126 +1367,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Process scheduled tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
         let handles_initial_size = scheduled_tokens.len(); // Track for summary logging
-
-        // Intelligently prioritize tokens for watchlist based on price history needs
-        // This ensures tokens with insufficient or stale price history get fresh price updates
-        if !scheduled_tokens.is_empty() {
-            let pool_service = get_pool_service();
-            let mut tokens_needing_updates = Vec::new();
-            let mut tokens_with_good_history = Vec::new();
-
-            // Categorize tokens based on their price history status
-            // Use concurrent checking for better performance with many tokens
-            // Limit analysis scope to keep watchlist updates light
-            let analysis_limit = std::cmp::min(WATCHLIST_ANALYSIS_LIMIT, scheduled_tokens.len());
-            let analysis_slice = &scheduled_tokens[..analysis_limit];
-
-            if analysis_slice.len() > 50 {
-                // For large token sets, use concurrent processing
-                let futures: Vec<_> = analysis_slice
-                    .iter()
-                    .map(|token| {
-                        let pool_service = pool_service;
-                        let token_mint = token.mint.clone();
-                        async move {
-                            let history = pool_service.get_recent_price_history(&token_mint).await;
-
-                            let needs_update = if history.is_empty() {
-                                true // No history at all
-                            } else if history.len() < 3 {
-                                true // Insufficient history for entry analysis
-                            } else {
-                                // Check if most recent price is stale (older than 2 minutes)
-                                let now = chrono::Utc::now();
-                                let most_recent_time = history
-                                    .last()
-                                    .map(|(time, _)| *time)
-                                    .unwrap_or(now);
-                                let age_minutes = now
-                                    .signed_duration_since(most_recent_time)
-                                    .num_minutes();
-                                age_minutes > 2 // Stale if older than 2 minutes
-                            };
-
-                            (token_mint, needs_update)
-                        }
-                    })
-                    .collect();
-
-                let results = futures::future::join_all(futures).await;
-
-                for (mint, needs_update) in results {
-                    if needs_update {
-                        tokens_needing_updates.push(mint);
-                    } else {
-                        tokens_with_good_history.push(mint);
-                    }
-                }
-            } else {
-                // For smaller token sets, use sequential processing to avoid overhead
-                for token in analysis_slice.iter() {
-                    let history = pool_service.get_recent_price_history(&token.mint).await;
-
-                    // Check if token needs price updates based on:
-                    // 1. Insufficient history (< 2 entries)
-                    // 2. Stale history (most recent entry > 2 minutes old)
-                    // 3. No history at all
-                    let needs_update = if history.is_empty() {
-                        true // No history at all
-                    } else if history.len() < 2 {
-                        true // Insufficient history for entry analysis
-                    } else {
-                        // Check if most recent price is stale (older than 2 minutes)
-                        let now = chrono::Utc::now();
-                        let most_recent_time = history
-                            .last()
-                            .map(|(time, _)| *time)
-                            .unwrap_or(now);
-                        let age_minutes = now.signed_duration_since(most_recent_time).num_minutes();
-                        age_minutes > 2 // Stale if older than 2 minutes
-                    };
-
-                    if needs_update {
-                        tokens_needing_updates.push(token.mint.clone());
-                    } else {
-                        tokens_with_good_history.push(token.mint.clone());
-                    }
-                }
-            } // Create watchlist batch prioritizing tokens that need updates
-            let mut watch_batch = Vec::new();
-
-            // First: Add all tokens needing updates (up to 40 slots)
-            let priority_count = std::cmp::min(40, tokens_needing_updates.len());
-            watch_batch.extend_from_slice(&tokens_needing_updates[..priority_count]);
-
-            // Then: Fill remaining slots with tokens that have good history (for rotation)
-            let remaining_slots = if watch_batch.len() < 50 {
-                50 - watch_batch.len()
-            } else {
-                0 // Safety check to prevent underflow
-            };
-            if remaining_slots > 0 && !tokens_with_good_history.is_empty() {
-                let rotation_count = std::cmp::min(remaining_slots, tokens_with_good_history.len());
-                watch_batch.extend_from_slice(&tokens_with_good_history[..rotation_count]);
-            }
-
-            if !watch_batch.is_empty() {
-                add_watchlist_tokens(&watch_batch).await;
-
-                if is_debug_trader_enabled() {
-                    log(
-                        LogTag::Trader,
-                        "WATCHLIST_INTELLIGENT",
-                        &format!(
-                            "🎯 Added {} tokens to watchlist: {} priority (low/stale history), {} rotation (good history)",
-                            watch_batch.len(),
-                            priority_count,
-                            watch_batch.len() - priority_count
-                        )
-                    );
-                }
-            }
-        }
 
         // Log detailed information about token processing
         log(

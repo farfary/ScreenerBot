@@ -38,7 +38,7 @@ use tokio::sync::RwLock;
 const POOL_CACHE_TTL_SECONDS: i64 = 600;
 
 /// Price cache TTL - increased to handle async task delays between pool calculation and entry checks
-const PRICE_CACHE_TTL_SECONDS: i64 = 8;
+const PRICE_CACHE_TTL_SECONDS: i64 = 60;
 
 // =============================================================================
 // BATCH PROCESSING CONFIGURATION
@@ -6241,8 +6241,6 @@ async fn get_price_internal(
     options: &PriceOptions,
     calculated_at: DateTime<Utc>
 ) -> Option<PriceResult> {
-    // NEW ARCHITECTURE: Universal function is READ-ONLY from service cache
-    // No API calls, no pool calculations - just read from background service results
 
     let service = get_pool_service();
 
@@ -6287,10 +6285,6 @@ async fn get_price_internal(
             return Some(result);
         }
     }
-
-    // No fresh cached data available
-    // In the new architecture, this means the token is not in priority/watchlist
-    // or the background service hasn't updated it yet
 
     if is_debug_pool_prices_enabled() {
         log(
