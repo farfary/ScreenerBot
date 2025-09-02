@@ -1688,12 +1688,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 Some("INVALID".to_string())
                             } else {
                                 let tier = match reserve_sol {
-                                    x if x < 2.0 => "MICRO", // < 2 SOL (~$1K)
-                                    x if x < 20.0 => "SMALL", // 2-20 SOL (~$1K-$10K)
-                                    x if x < 100.0 => "MEDIUM", // 20-100 SOL (~$10K-$50K)
-                                    x if x < 500.0 => "LARGE", // 100-500 SOL (~$50K-$250K)
-                                    x if x < 2000.0 => "XLARGE", // 500-2000 SOL (~$250K-$1M)
-                                    _ => "MEGA", // > 2000 SOL (~$1M+)
+                                    x if x < 5.0 => "MICRO", // < 5 SOL (~$1K at $200/SOL)
+                                    x if x < 50.0 => "SMALL", // 5-50 SOL (~$1K-$10K)
+                                    x if x < 250.0 => "MEDIUM", // 50-250 SOL (~$10K-$50K)
+                                    x if x < 1250.0 => "LARGE", // 250-1250 SOL (~$50K-$250K)
+                                    x if x < 5000.0 => "XLARGE", // 1250-5000 SOL (~$250K-$1M)
+                                    _ => "MEGA", // > 5000 SOL (~$1M+)
                                 };
                                 Some(tier.to_string())
                             }

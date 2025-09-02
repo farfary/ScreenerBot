@@ -22,9 +22,9 @@ use chrono::{ DateTime, Utc };
 const MIN_PRICE_POINTS: usize = 3; // Keep at 2 for safety
 const MAX_DATA_AGE_MIN: i64 = 15; // Increased from 10 to 15 minutes
 
-// Liquidity filter (very permissive for scalping) - using SOL reserves
-const MIN_RESERVE_SOL: f64 = 0.1; // Minimum SOL reserves in pool (replaces $50 USD)
-const MAX_RESERVE_SOL: f64 = 200_000.0; // Maximum SOL reserves in pool (replaces $100M USD)
+// Liquidity filter (optimized based on database analysis at $200/SOL)
+const MIN_RESERVE_SOL: f64 = 10.0; // Minimum SOL reserves in pool (~$2,000, excludes bottom 5% of tokens)
+const MAX_RESERVE_SOL: f64 = 5_000.0; // Maximum SOL reserves in pool (~$1M, focuses on liquid but not mega pools)
 
 // Detection windows and thresholds - relaxed for more entries
 const WINDOWS_SEC: [i64; 6] = [5, 10, 30, 60, 120, 300]; // Added 5-minute window
@@ -72,12 +72,23 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         );
     }
 
-    let (current_price, reserve_sol) = match
+    let (current_price, reserve_sol, activity_score) = match
         crate::tokens::get_price(&token.mint, Some(PriceOptions::default()), false).await
     {
         Some(result) => {
             let price = result.sol_price().unwrap_or(0.0);
             let reserve = result.reserve_sol.unwrap_or(0.0);
+
+            // Calculate transaction activity score from token data
+            let activity = token.txns
+                .as_ref()
+                .and_then(|txns| txns.m5.as_ref())
+                .map(|m5| {
+                    let total_5m = m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0);
+                    calculate_activity_score(total_5m as f64)
+                })
+                .unwrap_or(0.0);
+
             if price <= 0.0 || !price.is_finite() {
                 if is_debug_entry_enabled() {
                     log(
@@ -88,7 +99,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 }
                 return (false, 10.0, "Invalid price data".to_string());
             }
-            (price, reserve)
+            (price, reserve, activity)
         }
         None => {
             if is_debug_entry_enabled() {
@@ -212,36 +223,50 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     let best = detect_best_drop(&price_history, current_price);
 
     if let Some(sig) = best {
-        // Confidence: more aggressive base + magnitude + window bonus + velocity tweak + liquidity tweak
-        let mut confidence = 30.0; // Reduced from 35.0
-        confidence +=
-            ((sig.drop_percent - MIN_DROP_PERCENT) / (MAX_DROP_PERCENT - MIN_DROP_PERCENT)).clamp(
-                0.0,
-                1.0
-            ) * 50.0; // Increased from 45 to 50
+        // Enhanced confidence calculation based on database analysis
+        let mut confidence = 25.0; // Reduced base from 30.0
+
+        // Drop magnitude (non-linear curve favoring 8-15% sweet spot)
+        let drop_score = calculate_drop_magnitude_score(sig.drop_percent);
+        confidence += drop_score * 35.0; // Optimized from linear 50.0 scaling
+
+        // Transaction activity (NEW - high impact factor)
+        confidence += activity_score * 20.0; // Major addition based on 24.2% vs 3.5% success
+
+        // Liquidity impact (significantly increased)
+        let liquidity_score = calculate_liquidity_score(reserve_sol);
+        confidence += liquidity_score * 15.0; // Increased from 5.0
+
+        // Window preference (heavily favor quick drops)
         confidence += match sig.window_sec {
-            5 => 18.0, // Increased bonuses
-            10 => 15.0,
-            30 => 12.0, // Increased from 8
-            60 => 8.0, // Increased from 5
-            120 => 5.0, // Increased from 2
-            300 => 3.0, // New longer window
-            _ => 2.0,
+            5 => 25.0, // Increased from 18.0 (fast drops perform best)
+            10 => 20.0, // Increased from 15.0
+            30 => 12.0, // Keep existing
+            60 => 6.0, // Reduced from 8.0
+            120 => 3.0, // Reduced from 5.0
+            300 => 1.0, // Reduced from 3.0
+            _ => 1.0,
         };
+
+        // Velocity adjustments (keep existing logic)
         if sig.velocity_per_minute < -20.0 {
-            confidence += 8.0; // Increased from 6
+            confidence += 8.0;
         }
         if sig.velocity_per_minute > 15.0 {
-            confidence -= 6.0; // Reduced penalty from 8
+            confidence -= 6.0;
         }
-        // Confidence adjustment based on SOL reserves (converted from USD thresholds)
-        if reserve_sol < 10.0 {
-            // Equivalent to ~$5K at $500/SOL
-            confidence -= 3.0; // Reduced penalty from 5
-        } else if reserve_sol > 200.0 {
-            // Equivalent to ~$100K at $500/SOL
-            confidence += 5.0; // Increased bonus from 3
+
+        // Perfect storm multiplier (compound effect for ideal conditions)
+        let is_perfect_storm =
+            sig.drop_percent >= 7.0 &&
+            sig.drop_percent <= 15.0 &&
+            reserve_sol >= 250.0 &&
+            reserve_sol <= 1000.0 &&
+            activity_score >= 1.0; // >20 transactions
+        if is_perfect_storm {
+            confidence *= 1.3; // 30% boost for perfect conditions (50% success rate)
         }
+
         confidence = confidence.clamp(0.0, 95.0);
 
         // Entry decision with more permissive threshold
@@ -250,20 +275,22 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Entry,
-                "SIMPLE_DROP_DETECTED",
+                "ENHANCED_DROP_ANALYSIS",
                 &format!(
-                    "🎯 {} drop -{:.1}% over {}s (samples: {}, vel: {:.1}%/min) → conf {:.0}% → {}",
+                    "🎯 {} drop -{:.1}% over {}s → conf {:.0}% → {} [drop_score:{:.1} activity:{:.1} liquidity:{:.1} perfect_storm:{}]",
                     token.symbol,
                     sig.drop_percent,
                     sig.window_sec,
-                    sig.samples,
-                    sig.velocity_per_minute,
                     confidence,
                     if approved {
                         "APPROVE"
                     } else {
                         "REJECT"
-                    }
+                    },
+                    drop_score,
+                    activity_score,
+                    liquidity_score,
+                    is_perfect_storm
                 )
             );
         }
@@ -272,13 +299,28 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             approved,
             confidence,
             if approved {
-                format!("Scalp drop -{:.1}% over {}s", sig.drop_percent, sig.window_sec)
+                let reason = if is_perfect_storm {
+                    format!(
+                        "Perfect storm: -{:.1}% drop, {:.0} SOL liquidity, high activity",
+                        sig.drop_percent,
+                        reserve_sol
+                    )
+                } else {
+                    format!(
+                        "Enhanced scalp: -{:.1}% over {}s (conf: {:.0}%)",
+                        sig.drop_percent,
+                        sig.window_sec,
+                        confidence
+                    )
+                };
+                reason
             } else {
                 format!(
-                    "Drop -{:.1}% over {}s but confidence {:.0}% < 28%",
+                    "Enhanced analysis: -{:.1}% drop, conf {:.0}% < 28% [activity:{:.1} liquidity:{:.1}]",
                     sig.drop_percent,
-                    sig.window_sec,
-                    confidence
+                    confidence,
+                    activity_score,
+                    liquidity_score
                 )
             },
         );
@@ -310,6 +352,57 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
+
+/// Calculate transaction activity score (0.0 to 1.0 scale)
+/// Based on database analysis: >20 txns = 24.2% success, <5 txns = 3.5% success
+fn calculate_activity_score(txns_5min: f64) -> f64 {
+    if txns_5min >= 20.0 {
+        1.0 // High activity
+    } else if txns_5min >= 10.0 {
+        0.7 // Medium activity
+    } else if txns_5min >= 5.0 {
+        0.4 // Low activity
+    } else {
+        0.1 // Very low activity
+    }
+}
+
+/// Calculate enhanced drop magnitude score (non-linear curve favoring 8-15% sweet spot)
+/// Based on database analysis: 7-15% drops have best success rates
+fn calculate_drop_magnitude_score(drop_percent: f64) -> f64 {
+    if drop_percent >= 8.0 && drop_percent <= 15.0 {
+        // Sweet spot: enhanced scoring
+        1.0
+    } else if drop_percent >= 7.0 && drop_percent <= 20.0 {
+        // Good range: standard scoring
+        0.8
+    } else if drop_percent >= 20.0 && drop_percent <= 30.0 {
+        // Moderate range: reduced scoring
+        0.6
+    } else if drop_percent > 30.0 {
+        // Extreme drops: heavily penalized (7-19% success rate)
+        0.3
+    } else {
+        // Below minimum
+        0.0
+    }
+}
+
+/// Calculate liquidity tier score (0.0 to 1.0 scale)
+/// Based on database analysis: 250-1000 SOL = 50%+ success rate
+fn calculate_liquidity_score(reserve_sol: f64) -> f64 {
+    if reserve_sol >= 250.0 && reserve_sol <= 1000.0 {
+        1.0 // Sweet spot (50%+ success rate)
+    } else if reserve_sol >= 100.0 && reserve_sol <= 500.0 {
+        0.8 // Good range (35% success rate)
+    } else if reserve_sol >= 50.0 {
+        0.6 // Acceptable range
+    } else if reserve_sol >= 10.0 {
+        0.3 // Minimum viable
+    } else {
+        0.1 // Very low liquidity (1.6% success rate)
+    }
+}
 
 fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
     if prices.len() < 2 {
@@ -431,7 +524,7 @@ async fn get_current_pool_data(token: &Token) -> Option<(f64, i64, f64)> {
                         token.liquidity
                             .as_ref()
                             .and_then(|l| l.usd)
-                            .map(|usd_liq| usd_liq / 500.0) // Rough conversion at $500/SOL
+                            .map(|usd_liq| usd_liq / 200.0) // Updated conversion at $200/SOL
                             .unwrap_or(0.0)
                     });
 
@@ -443,14 +536,6 @@ async fn get_current_pool_data(token: &Token) -> Option<(f64, i64, f64)> {
         None => None,
     }
 }
-
-// Remove ATH/OHLCV dependency for fast scalping flow
-
-// =============================================================================
-// PUMP.FUN SPECIAL ENTRY DETECTION
-// =============================================================================
-
-// Remove pump.fun specific logic entirely
 
 // =============================================================================
 // PROFIT TARGET CALCULATION
@@ -467,29 +552,30 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
                 token.liquidity
                     .as_ref()
                     .and_then(|l| l.usd)
-                    .map(|usd_liq| usd_liq / 500.0) // Convert USD to SOL at ~$500/SOL
+                    .map(|usd_liq| usd_liq / 200.0) // Updated conversion at $200/SOL
                     .unwrap_or(20.0), // Default to 20 SOL reserves
             ),
     };
 
-    // Base profit targets by SOL reserves (converted from USD tiers)
-    let (mut min_profit, mut max_profit): (f64, f64) = if reserve_sol < 5.0 {
-        // ~$2.5K
-        (30.0, 120.0)
-    } else if reserve_sol < 20.0 {
-        // ~$10K
-        (24.0, 100.0)
-    } else if reserve_sol < 100.0 {
-        // ~$50K
-        (18.0, 80.0)
-    } else if reserve_sol < 500.0 {
-        // ~$250K
-        (14.0, 65.0)
-    } else if reserve_sol < 2000.0 {
-        // ~$1M
-        (10.0, 50.0)
+    // Base profit targets by SOL reserves (updated for $200/SOL and aligned with entry tiers)
+    let (mut min_profit, mut max_profit): (f64, f64) = if reserve_sol < 10.0 {
+        // Below minimum viable liquidity
+        (35.0, 140.0)
+    } else if reserve_sol < 50.0 {
+        // Low liquidity tier
+        (28.0, 110.0)
+    } else if reserve_sol < 250.0 {
+        // Medium liquidity tier (good for scalping)
+        (20.0, 85.0)
+    } else if reserve_sol < 1000.0 {
+        // High liquidity tier (sweet spot for entries)
+        (15.0, 70.0)
+    } else if reserve_sol < 2500.0 {
+        // Very high liquidity tier
+        (12.0, 55.0)
     } else {
-        (8.0, 38.0)
+        // Mega pools (limited entry focus)
+        (10.0, 45.0)
     };
 
     // Volatility-based adjustment using recent window
