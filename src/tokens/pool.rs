@@ -1236,8 +1236,14 @@ impl PoolPriceService {
                                 volume_24h: 0.0,
                                 source: "pool_batch".to_string(),
                                 calculated_at: chrono::Utc::now(),
-                                sol_reserve: Some(info.sol_reserve as f64),
-                                token_reserve: Some(info.token_reserve as f64),
+                                sol_reserve: Some(
+                                    (info.sol_reserve as f64) /
+                                        (10_f64).powi(info.sol_decimals as i32)
+                                ),
+                                token_reserve: Some(
+                                    (info.token_reserve as f64) /
+                                        (10_f64).powi(info.token_decimals as i32)
+                                ),
                                 error: None, // No error for successful batch calculation
                             });
 
@@ -1887,8 +1893,14 @@ impl PoolPriceService {
                                 volume_24h: 0.0,
                                 source: "pool_batch".to_string(),
                                 calculated_at: chrono::Utc::now(),
-                                sol_reserve: Some(info.sol_reserve as f64),
-                                token_reserve: Some(info.token_reserve as f64),
+                                sol_reserve: Some(
+                                    (info.sol_reserve as f64) /
+                                        (10_f64).powi(info.sol_decimals as i32)
+                                ),
+                                token_reserve: Some(
+                                    (info.token_reserve as f64) /
+                                        (10_f64).powi(info.token_decimals as i32)
+                                ),
                                 error: None, // No error for successful priority batch calculation
                             });
                         }
@@ -1901,8 +1913,13 @@ impl PoolPriceService {
                             Some(get_pool_program_display_name(&info.pool_program_id)),
                             info.price_sol,
                             None,
-                            Some(info.token_reserve as f64),
-                            Some(info.sol_reserve as f64),
+                            Some(
+                                (info.token_reserve as f64) /
+                                    (10_f64).powi(info.token_decimals as i32)
+                            ),
+                            Some(
+                                (info.sol_reserve as f64) / (10_f64).powi(info.sol_decimals as i32)
+                            ),
                             0.0, // liquidity_usd would need calculation
                             None,
                             "pool_batch"
@@ -3216,8 +3233,14 @@ Pool State Summary\n\
                     volume_24h: 0.0, // No API data for volume in direct mode
                     source: "pool_direct".to_string(),
                     calculated_at: calculation_time,
-                    sol_reserve: Some(pool_price_info.sol_reserve as f64),
-                    token_reserve: Some(pool_price_info.token_reserve as f64),
+                    sol_reserve: Some(
+                        (pool_price_info.sol_reserve as f64) /
+                            (10_f64).powi(pool_price_info.sol_decimals as i32)
+                    ),
+                    token_reserve: Some(
+                        (pool_price_info.token_reserve as f64) /
+                            (10_f64).powi(pool_price_info.token_decimals as i32)
+                    ),
                     error: None, // No error for successful direct pool calculation
                 };
 
