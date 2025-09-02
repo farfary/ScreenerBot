@@ -546,26 +546,30 @@ impl OhlcvService {
         let pool_address = if has_pool {
             // Get best pool address
             if
-                let Some(result) = pool_service.get_pool_price(
+                let Some(result) = crate::tokens::get_price(
                     mint,
-                    None,
-                    &PriceOptions::default()
+                    Some(PriceOptions::default()),
+                    false
                 ).await
             {
                 if is_debug_ohlcv_enabled() {
                     log(
                         LogTag::Ohlcv,
                         "POOL_FOUND",
-                        &format!("🏊 Pool found for {}: {}", mint, result.pool_address)
+                        &format!(
+                            "🏊 Pool found for {}: {}",
+                            mint,
+                            result.pool_address.as_ref().unwrap_or(&"unknown".to_string())
+                        )
                     );
                 }
-                Some(result.pool_address)
+                result.pool_address
             } else {
                 if is_debug_ohlcv_enabled() {
                     log(
                         LogTag::Ohlcv,
                         "POOL_UNAVAILABLE",
-                        &format!("⚠️ Pool service returned no price for {}", mint)
+                        &format!("⚠️ Price service returned no price for {}", mint)
                     );
                 }
                 None
@@ -934,15 +938,14 @@ impl OhlcvService {
         }
 
         // Cache miss or expired - get from pool service
-        let pool_service = get_pool_service();
         if
-            let Some(result) = pool_service.get_pool_price(
+            let Some(result) = crate::tokens::get_price(
                 mint,
-                None,
-                &PriceOptions::default()
+                Some(PriceOptions::default()),
+                false
             ).await
         {
-            let pool_address = result.pool_address.clone();
+            let pool_address = result.pool_address.clone().unwrap_or_default();
 
             // Update watch list cache
             {
@@ -1395,15 +1398,14 @@ impl OhlcvService {
                             addr.clone()
                         } else {
                             // Pool address cache expired, refresh it
-                            let pool_service = get_pool_service();
                             if
-                                let Some(result) = pool_service.get_pool_price(
+                                let Some(result) = crate::tokens::get_price(
                                     &entry.mint,
-                                    None,
-                                    &PriceOptions::default()
+                                    Some(PriceOptions::default()),
+                                    false
                                 ).await
                             {
-                                result.pool_address
+                                result.pool_address.unwrap_or_default()
                             } else {
                                 if is_debug_ohlcv_enabled() {
                                     log(
@@ -1419,15 +1421,14 @@ impl OhlcvService {
                         addr.clone()
                     }
                 } else {
-                    let pool_service = get_pool_service();
                     if
-                        let Some(result) = pool_service.get_pool_price(
+                        let Some(result) = crate::tokens::get_price(
                             &entry.mint,
-                            None,
-                            &PriceOptions::default()
+                            Some(PriceOptions::default()),
+                            false
                         ).await
                     {
-                        result.pool_address
+                        result.pool_address.unwrap_or_default()
                     } else {
                         if is_debug_ohlcv_enabled() {
                             log(

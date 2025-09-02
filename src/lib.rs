@@ -1,4 +1,4 @@
-#![allow(warnings)]
+// #![allow(warnings)]
 
 pub mod arguments;
 pub mod ata_cleanup;

@@ -466,7 +466,7 @@ pub async fn is_token_safe_for_trading_safe(mint: &str) -> bool {
 
 /// Get current token price using thread-safe price service
 pub async fn get_current_token_price(mint: &str) -> Option<f64> {
-    get_price(mint, Some(PriceOptions::simple()), false).await.and_then(|r| r.best_sol_price())
+    get_price(mint, Some(PriceOptions::default()), false).await.and_then(|r| r.sol_price())
 }
 
 /// Get all tokens by liquidity using database directly (for compatibility)

@@ -116,10 +116,6 @@ static LAST_OPEN_TIME: LazyLock<RwLock<Option<DateTime<Utc>>>> = LazyLock::new(|
     RwLock::new(None)
 );
 
-static EXIT_VERIFICATION_DEADLINES: LazyLock<
-    RwLock<HashMap<String, DateTime<Utc>>>
-> = LazyLock::new(|| RwLock::new(HashMap::new()));
-
 // ==================== CONSTANT-TIME INDEXES ====================
 
 // Phase 2: O(1) signature to mint lookup (eliminates position vector scans)
@@ -142,17 +138,6 @@ static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> = LazyL
 // Global position creation lock to prevent race conditions on MAX_OPEN_POSITIONS
 static GLOBAL_POSITION_CREATION_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
-// Safety mechanisms from original implementation
-static RECENT_SWAP_ATTEMPTS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> = LazyLock::new(||
-    RwLock::new(HashMap::new())
-);
-static ACTIVE_SELLS: LazyLock<RwLock<HashSet<String>>> = LazyLock::new(||
-    RwLock::new(HashSet::new())
-);
-static BALANCE_CACHE: LazyLock<RwLock<HashMap<String, (f64, DateTime<Utc>)>>> = LazyLock::new(||
-    RwLock::new(HashMap::new())
-);
-
 // Critical operations tracking to prevent race conditions with price updates
 static CRITICAL_OPERATIONS: LazyLock<RwLock<HashSet<String>>> = LazyLock::new(||
     RwLock::new(HashSet::new())
@@ -160,15 +145,10 @@ static CRITICAL_OPERATIONS: LazyLock<RwLock<HashSet<String>>> = LazyLock::new(||
 
 // Safety constants for verification system
 const VERIFICATION_BATCH_SIZE: usize = 10;
-const SWAP_ATTEMPT_COOLDOWN_SECONDS: i64 = 30;
-const BALANCE_CACHE_DURATION_SECONDS: i64 = 30;
-const DUPLICATE_SWAP_PREVENTION_SECS: i64 = 30;
 const POSITION_OPEN_COOLDOWN_SECS: i64 = 5; // No global cooldown (from backup)
 
 // Verification safety windows - reduced for better UX
 const ENTRY_VERIFICATION_MAX_SECS: i64 = 90; // hard cap for entry verification age before treating as timeout
-const EXIT_VERIFICATION_MAX_SECS: i64 = 60; // 1 minute for exit verification (faster than entry)
-const VERIFICATION_GRACE_PERIOD_SECS: i64 = 120; // grace period before aggressive cleanup (2 minutes)
 
 // Sell retry slippages (progressive)
 const SELL_RETRY_SLIPPAGES: &[f64] = &[3.0, 5.0, 8.0, 12.0, 20.0];
@@ -360,17 +340,6 @@ pub async fn open_position_direct(
     // Execute the buy transaction (still under global creation lock)
     let _guard = CriticalOperationGuard::new(&format!("BUY {}", token.symbol));
 
-    // DUPLICATE SWAP PREVENTION
-    if is_duplicate_swap_attempt(&token.mint, size_sol, "BUY").await {
-        return Err(
-            format!(
-                "Duplicate swap prevented for {} - similar buy attempted within last {}s",
-                token.symbol,
-                DUPLICATE_SWAP_PREVENTION_SECS
-            )
-        );
-    }
-
     if is_debug_positions_enabled() {
         log(
             LogTag::Positions,
@@ -414,7 +383,7 @@ pub async fn open_position_direct(
     let _price_service_result = match
         tokio::time::timeout(
             tokio::time::Duration::from_secs(10),
-            get_price(&token.mint, Some(PriceOptions::simple()), false)
+            get_price(&token.mint, Some(PriceOptions::default()), false)
         ).await
     {
         Ok(result) => result,
@@ -919,47 +888,13 @@ pub async fn close_position_direct(
         }
     }
 
-    // Check active sells to prevent duplicates
-    {
-        let active_sells = ACTIVE_SELLS.read().await;
-        if active_sells.contains(mint) {
-            return Err(format!("Sell already in progress for {} ({})", symbol, mint));
-        }
-    }
-
-    // Mark as actively selling
-    {
-        let mut active_sells = ACTIVE_SELLS.write().await;
-        active_sells.insert(mint.to_string());
-    }
-
-    // Clean up function for consistent exit handling
-    let cleanup = || async {
-        let mut active_sells = ACTIVE_SELLS.write().await;
-        active_sells.remove(mint);
-        // Also cleanup critical operation marking
-        unmark_critical_operation(mint).await;
-    };
-
     let _guard = CriticalOperationGuard::new(&format!("SELL {}", symbol));
-
-    // DUPLICATE SWAP PREVENTION
-    if is_duplicate_swap_attempt(mint, entry_size_sol, "SELL").await {
-        cleanup().await;
-        return Err(
-            format!(
-                "Duplicate swap prevented for {} - similar sell attempted within last {}s",
-                symbol,
-                DUPLICATE_SWAP_PREVENTION_SECS
-            )
-        );
-    }
 
     // ✅ ENSURE token remains in watch list during sell process
     let _price_service_result = match
         tokio::time::timeout(
             tokio::time::Duration::from_secs(10),
-            get_price(&token.mint, Some(PriceOptions::simple()), false)
+            get_price(&token.mint, Some(PriceOptions::default()), false)
         ).await
     {
         Ok(result) => result,
@@ -999,7 +934,7 @@ pub async fn close_position_direct(
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
         Err(e) => {
-            cleanup().await;
+            unmark_critical_operation(mint).await;
             log(LogTag::Positions, "ERROR", &format!("❌ Failed to get wallet address: {}", e));
             return Err(format!("Failed to get wallet address: {}", e));
         }
@@ -1019,7 +954,7 @@ pub async fn close_position_direct(
             // Try to recover position from recent transactions
             match attempt_position_recovery_from_transactions(mint, &symbol).await {
                 Ok(recovered_signature) => {
-                    cleanup().await;
+                    unmark_critical_operation(mint).await;
                     log(
                         LogTag::Positions,
                         "RECOVERY_SUCCESS",
@@ -1039,7 +974,7 @@ pub async fn close_position_direct(
                         "RECOVERY_FAILED",
                         &format!("❌ Recovery failed for {}: {}", symbol, recovery_error)
                     );
-                    cleanup().await;
+                    unmark_critical_operation(mint).await;
                     return Err(
                         format!(
                             "No {} tokens to sell (recovery failed: {})",
@@ -1051,7 +986,7 @@ pub async fn close_position_direct(
             }
         }
         None => {
-            cleanup().await;
+            unmark_critical_operation(mint).await;
             return Err(format!("Failed to get token balance for {}", symbol));
         }
     };
@@ -1130,7 +1065,7 @@ pub async fn close_position_direct(
     let quote = match best_quote {
         Some(q) => q,
         None => {
-            cleanup().await;
+            unmark_critical_operation(mint).await;
             return Err(format!("All sell quotes failed for {}: {}", symbol, last_error));
         }
     };
@@ -1158,12 +1093,12 @@ pub async fn close_position_direct(
                 );
                 signature.clone()
             } else {
-                cleanup().await;
+                unmark_critical_operation(mint).await;
                 return Err(format!("Sell swap completed but no transaction signature returned"));
             }
         }
         Err(e) => {
-            cleanup().await;
+            unmark_critical_operation(mint).await;
             return Err(format!("Sell swap execution failed: {}", e));
         }
     };
@@ -1178,13 +1113,13 @@ pub async fn close_position_direct(
 
     // CRITICAL VALIDATION: Verify transaction signature is valid before updating position
     if transaction_signature.is_empty() || transaction_signature.len() < 32 {
-        cleanup().await;
+        unmark_critical_operation(mint).await;
         return Err(format!("Transaction signature is invalid or empty: {}", transaction_signature));
     }
 
     // Additional validation: Check if signature is valid base58
     if bs58::decode(&transaction_signature).into_vec().is_err() {
-        cleanup().await;
+        unmark_critical_operation(mint).await;
         return Err(format!("Invalid base58 format: {}", transaction_signature));
     }
 
@@ -1224,7 +1159,7 @@ pub async fn close_position_direct(
                     transaction_signature
                 )
             );
-            cleanup().await;
+            unmark_critical_operation(mint).await;
             return Err(format!("Position already has valid exit transaction: {}", existing_sig));
         }
     }
@@ -1762,7 +1697,7 @@ pub async fn close_position_direct(
         log(LogTag::Positions, "DEBUG", &format!("🧹 Starting cleanup for {}", token.symbol));
     }
 
-    cleanup().await;
+    unmark_critical_operation(mint).await;
 
     if is_debug_positions_enabled() {
         log(
@@ -3384,7 +3319,7 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                                         let positions_snapshot = POSITIONS.read().await;
                                                         if let Some(position) = positions_snapshot.iter().find(|p| p.closed_reason.as_deref() == Some("exit_permanent_failure_retry") && p.exit_transaction_signature.is_none()) {
                                                             if let Some(token_obj) = get_token_from_db(&position.mint).await {
-                                                                if let Some(price_res) = get_price(&position.mint, Some(PriceOptions::simple()), false).await {
+                                                                if let Some(price_res) = get_price(&position.mint, Some(PriceOptions::default()), false).await {
                                                                     if let Some(price) = price_res.price_sol {
                                                                         let reason = format!("Retry after permanent exit failure for {}", position.symbol);
                                                                         let _ = close_position_direct(&position.mint, &token_obj, price, reason, Utc::now()).await;
@@ -3660,7 +3595,7 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                                                 tokio::spawn(async move {
                                                                     sleep(Duration::from_secs(5)).await; // small delay
                                                                     if let Some(token_obj) = get_token_from_db(&mint_retry).await {
-                                                                        if let Some(price_res) = get_price(&mint_retry, Some(PriceOptions::simple()), false).await {
+                                                                        if let Some(price_res) = get_price(&mint_retry, Some(PriceOptions::default()), false).await {
                                                                             if let Some(price) = price_res.price_sol {
                                                                                 let reason = format!("Retry after failed exit verification for {}", symbol_retry);
                                                                                 let _ = close_position_direct(&mint_retry, &token_obj, price, reason, Utc::now()).await;
@@ -3745,31 +3680,6 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
 // Removed - simplified architecture to focus only on verification
 
 // ==================== HELPER FUNCTIONS ====================
-
-/// Check if a swap attempt is a duplicate within the prevention window
-async fn is_duplicate_swap_attempt(mint: &str, size_sol: f64, swap_type: &str) -> bool {
-    let key = format!(
-        "{}_{}_{}_{}",
-        mint,
-        size_sol,
-        swap_type,
-        Utc::now().timestamp() / (DUPLICATE_SWAP_PREVENTION_SECS as i64)
-    );
-
-    {
-        let attempts = RECENT_SWAP_ATTEMPTS.read().await;
-        if attempts.contains_key(&key) {
-            return true;
-        }
-    }
-
-    {
-        let mut attempts = RECENT_SWAP_ATTEMPTS.write().await;
-        attempts.insert(key, Utc::now());
-    }
-
-    false
-}
 
 /// Get token balance safely with error handling
 async fn get_token_balance_safe(mint: &str, wallet_address: &str) -> Option<u64> {
@@ -3913,82 +3823,6 @@ pub async fn start_positions_manager_service(shutdown: Arc<Notify>) -> Result<()
 }
 
 // ==================== SAFETY HELPERS ====================
-
-/// Check if swap attempt is allowed (prevents duplicates)
-async fn is_swap_attempt_allowed(mint: &str) -> bool {
-    let recent_attempts = RECENT_SWAP_ATTEMPTS.read().await;
-    let now = Utc::now();
-
-    if let Some(last_attempt) = recent_attempts.get(mint) {
-        let elapsed = now.signed_duration_since(*last_attempt).num_seconds();
-        elapsed >= SWAP_ATTEMPT_COOLDOWN_SECONDS
-    } else {
-        true
-    }
-}
-
-/// Mark swap attempt to prevent duplicates
-async fn mark_swap_attempt(mint: &str) {
-    let mut recent_attempts = RECENT_SWAP_ATTEMPTS.write().await;
-    let now = Utc::now();
-
-    // Add current attempt
-    recent_attempts.insert(mint.to_string(), now);
-
-    // Clean up old entries (older than cooldown period)
-    recent_attempts.retain(|_, last_attempt| {
-        now.signed_duration_since(*last_attempt).num_seconds() < SWAP_ATTEMPT_COOLDOWN_SECONDS
-    });
-}
-
-/// Check if position is actively being sold
-async fn is_actively_selling(mint: &str) -> bool {
-    let active_sells = ACTIVE_SELLS.read().await;
-    active_sells.contains(mint)
-}
-
-/// Mark position as actively being sold
-async fn mark_actively_selling(mint: &str) {
-    let mut active_sells = ACTIVE_SELLS.write().await;
-    active_sells.insert(mint.to_string());
-}
-
-/// Remove position from actively selling
-async fn unmark_actively_selling(mint: &str) {
-    let mut active_sells = ACTIVE_SELLS.write().await;
-    active_sells.remove(mint);
-}
-
-/// Get cached balance if fresh enough
-async fn get_cached_balance(mint: &str) -> Option<f64> {
-    let balance_cache = BALANCE_CACHE.read().await;
-    let now = Utc::now();
-
-    if let Some((balance, cached_at)) = balance_cache.get(mint) {
-        let elapsed = now.signed_duration_since(*cached_at).num_seconds();
-        if elapsed < BALANCE_CACHE_DURATION_SECONDS {
-            Some(*balance)
-        } else {
-            None
-        }
-    } else {
-        None
-    }
-}
-
-/// Cache balance for mint
-async fn cache_balance(mint: &str, balance: f64) {
-    let mut balance_cache = BALANCE_CACHE.write().await;
-    let now = Utc::now();
-
-    // Store balance with timestamp
-    balance_cache.insert(mint.to_string(), (balance, now));
-
-    // Clean up old cache entries (older than cache duration)
-    balance_cache.retain(|_, (_, cached_at)| {
-        now.signed_duration_since(*cached_at).num_seconds() < BALANCE_CACHE_DURATION_SECONDS
-    });
-}
 
 /// Attempt to recover a position by finding its sell transaction and using full verification flow
 /// This handles cases where tokens were sold but position wasn't properly closed

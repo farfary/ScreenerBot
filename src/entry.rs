@@ -73,11 +73,11 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     }
 
     let (current_price, liquidity_usd) = match
-        pool_service.get_pool_price(&token.mint, None, &PriceOptions::default()).await
+        crate::tokens::get_price(&token.mint, Some(PriceOptions::default()), false).await
     {
         Some(result) => {
-            let price = result.price_sol.unwrap_or(0.0);
-            let liquidity = result.liquidity_usd;
+            let price = result.sol_price().unwrap_or(0.0);
+            let liquidity = result.liquidity_usd.unwrap_or(0.0);
             if price <= 0.0 || !price.is_finite() {
                 if is_debug_entry_enabled() {
                     log(
@@ -140,7 +140,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     // Proactively refresh once if history is insufficient, then re-fetch
     if price_history.len() < MIN_PRICE_POINTS {
         // Force a fresh pool-only price to seed history
-        let _ = crate::tokens::get_price(&token.mint, Some(PriceOptions::pool_only()), false).await;
+        let _ = crate::tokens::get_price(&token.mint, Some(PriceOptions::default()), false).await;
         let mut refreshed = pool_service.get_recent_price_history(&token.mint).await;
         refreshed.retain(|(_, p)| *p > 0.0 && p.is_finite());
         if refreshed.len() >= price_history.len() {
@@ -411,9 +411,9 @@ fn detect_best_drop(
 }
 
 async fn get_current_pool_data(token: &Token) -> Option<(f64, i64, f64)> {
-    match crate::tokens::get_price(&token.mint, Some(PriceOptions::pool_only()), false).await {
+    match crate::tokens::get_price(&token.mint, Some(PriceOptions::default()), false).await {
         Some(price_result) => {
-            match price_result.best_sol_price() {
+            match price_result.sol_price() {
                 Some(price) if price > 0.0 && price.is_finite() => {
                     let data_age_minutes =
                         (Utc::now() - price_result.calculated_at).num_seconds() / 60;

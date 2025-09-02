@@ -1835,39 +1835,6 @@ impl PoolPriceService {
         }
     }
 
-    /// Get detailed pool price history for a specific token
-    pub async fn get_detailed_pool_price_history_for_token(
-        &self,
-        token_address: &str
-    ) -> HashMap<
-        String,
-        Vec<(DateTime<Utc>, f64, Option<f64>, Option<f64>, Option<f64>, f64, Option<f64>)>
-    > {
-        let mut result = HashMap::new();
-
-        let cache = self.pool_price_history.read().await;
-        if let Some(token_cache) = cache.get(token_address) {
-            for (pool_address, pool_cache) in &token_cache.pool_caches {
-                result.insert(pool_address.clone(), pool_cache.get_detailed_price_history());
-            }
-        } else {
-            // No cache available
-        }
-
-        result
-    }
-
-    /// Get all pool addresses that have price history for a token
-    pub async fn get_pools_with_price_history_for_token(&self, token_address: &str) -> Vec<String> {
-        let cache = self.pool_price_history.read().await;
-        if let Some(token_cache) = cache.get(token_address) {
-            token_cache.pool_caches.keys().cloned().collect()
-        } else {
-            // No cache available
-            Vec::new()
-        }
-    }
-
     /// Get the best pool for a token based on activity and liquidity
     pub async fn get_best_pool_for_token(&self, token_address: &str) -> Option<String> {
         let cache = self.pool_price_history.read().await;
@@ -3107,65 +3074,9 @@ pub fn init_pool_service() -> &'static PoolPriceService {
     }
 }
 
-/// Try to get global service without forcing initialization (may return None)
-pub fn try_get_pool_service() -> Option<&'static PoolPriceService> {
-    unsafe { GLOBAL_POOL_SERVICE.as_ref() }
-}
-
 /// Get or initialize service, logging on failure
 pub fn get_pool_service() -> &'static PoolPriceService {
     init_pool_service()
-}
-
-/// Get comprehensive price history for analysis (global function)
-pub async fn get_price_history_for_analysis(token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
-    let pool_service = get_pool_service();
-    pool_service.get_comprehensive_price_history(token_address).await
-}
-
-/// Get detailed pool price history for a specific token (NEW FUNCTION)
-pub async fn get_detailed_pool_price_history(
-    token_address: &str
-) -> HashMap<
-    String,
-    Vec<(DateTime<Utc>, f64, Option<f64>, Option<f64>, Option<f64>, f64, Option<f64>)>
-> {
-    let pool_service = get_pool_service();
-    pool_service.get_detailed_pool_price_history_for_token(token_address).await
-}
-
-/// Get all pool addresses that have price history for a token (NEW FUNCTION)
-pub async fn get_pools_with_price_history(token_address: &str) -> Vec<String> {
-    let pool_service = get_pool_service();
-    pool_service.get_pools_with_price_history_for_token(token_address).await
-}
-
-// =============================================================================
-// GLOBAL HELPERS FOR POOLS INFOS CACHE
-// =============================================================================
-
-/// Get cached pools infos for a token, if any (not guaranteed fresh)
-pub async fn get_cached_pools_infos_safe(token_address: &str) -> Option<Vec<CachedPoolInfo>> {
-    let service = get_pool_service();
-    service.get_cached_pools_infos(token_address).await
-}
-
-/// Refresh pools infos for a token (rate-limited internally) and return updated list
-pub async fn refresh_pools_infos_safe(token_address: &str) -> Result<Vec<CachedPoolInfo>, String> {
-    let service = get_pool_service();
-    service.refresh_pools_infos(token_address).await
-}
-
-/// Get tokens which have pools infos within the last `window_seconds`
-pub async fn get_tokens_with_recent_pools_infos_safe(window_seconds: i64) -> Vec<String> {
-    let service = get_pool_service();
-    service.get_tokens_with_recent_pools_infos(window_seconds).await
-}
-
-/// Refresh pools infos for a list of tokens (only those missing/expired). Returns count updated.
-pub async fn refresh_pools_infos_for_tokens_safe(mints: &[String], max_tokens: usize) -> usize {
-    let service = get_pool_service();
-    service.refresh_pools_infos_for_tokens(mints, max_tokens).await
 }
 
 /// Request priority price updates for open positions (global function)
@@ -6188,11 +6099,6 @@ pub struct PriceResult {
 }
 
 impl PriceResult {
-    /// Get the best available SOL price (prioritizes pool over API)
-    pub fn best_sol_price(&self) -> Option<f64> {
-        self.pool_price_sol.or(self.api_price_sol).or(self.price_sol)
-    }
-
     /// Get simple SOL price
     pub fn sol_price(&self) -> Option<f64> {
         self.price_sol
@@ -6222,8 +6128,6 @@ pub struct PriceOptions {
     pub force_refresh: bool,
     /// Timeout for the entire operation (seconds)
     pub timeout_secs: Option<u64>,
-    /// Minimum liquidity required for pool prices (USD)
-    pub min_liquidity_usd: Option<f64>,
 }
 
 impl Default for PriceOptions {
@@ -6234,69 +6138,30 @@ impl Default for PriceOptions {
             allow_cache: true,
             force_refresh: false,
             timeout_secs: Some(10),
-            min_liquidity_usd: None,
         }
     }
 }
 
 impl PriceOptions {
-    /// Create options for simple price lookup (fastest)
-    pub fn simple() -> Self {
-        Self {
-            include_pool: true,
-            include_api: false,
-            allow_cache: true,
-            force_refresh: false,
-            timeout_secs: Some(5),
-            min_liquidity_usd: None,
-        }
-    }
-
-    /// Create options for comprehensive price (pool + API)
-    pub fn comprehensive() -> Self {
+    /// Create options for pool only
+    pub fn pool_only() -> Self {
         Self {
             include_pool: true,
             include_api: true,
             allow_cache: true,
             force_refresh: false,
-            timeout_secs: Some(15),
-            min_liquidity_usd: Some(MIN_POOL_LIQUIDITY_USD),
+            timeout_secs: Some(10),
         }
     }
 
     /// Create options for API only
     pub fn api_only() -> Self {
         Self {
-            include_pool: false,
+            include_pool: true,
             include_api: true,
             allow_cache: true,
             force_refresh: false,
             timeout_secs: Some(10),
-            min_liquidity_usd: None,
-        }
-    }
-
-    /// Create options for pool only
-    pub fn pool_only() -> Self {
-        Self {
-            include_pool: true,
-            include_api: false,
-            allow_cache: true,
-            force_refresh: false,
-            timeout_secs: Some(10),
-            min_liquidity_usd: Some(MIN_POOL_LIQUIDITY_USD),
-        }
-    }
-
-    /// Create options that force fresh data
-    pub fn fresh() -> Self {
-        Self {
-            include_pool: true,
-            include_api: true,
-            allow_cache: false,
-            force_refresh: true,
-            timeout_secs: Some(20),
-            min_liquidity_usd: None,
         }
     }
 }
@@ -6418,13 +6283,6 @@ async fn get_price_internal(
                 calculated_at,
                 is_cached: true,
             };
-
-            // Apply filters if specified
-            if let Some(min_liquidity) = options.min_liquidity_usd {
-                if result.liquidity_usd.unwrap_or(0.0) < min_liquidity {
-                    return None;
-                }
-            }
 
             return Some(result);
         }

@@ -160,7 +160,7 @@ pub const ENTRY_CHECK_CONCURRENCY: usize = 24; // previously 10
 // -------------------------
 /// Max number of tokens to fully process per cycle (rotated across cycles)
 /// Rule of thumb: ~3x concurrency to keep workers fed without overloading services
-pub const MAX_TOKENS_PER_CYCLE: usize = ENTRY_CHECK_CONCURRENCY * 3; // 72 by default
+pub const MAX_TOKENS_PER_CYCLE: usize = ENTRY_CHECK_CONCURRENCY * 2;
 
 /// Limit tokens analyzed for watchlist seeding per cycle (keeps history refresh light)
 pub const WATCHLIST_ANALYSIS_LIMIT: usize = 400;
@@ -1633,11 +1633,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         let needs_history_boost = history_before.len() < 3;
 
                         if needs_history_boost {
-                            // Force a price update by calling get_pool_price which will cache the result
-                            let _ = pool_service.get_pool_price(
+                            // Force a price update by calling get_price which will cache the result
+                            let _ = get_price(
                                 &token.mint,
-                                None,
-                                &PriceOptions::default()
+                                Some(PriceOptions::default()),
+                                false
                             ).await;
 
                             if is_debug_trader_enabled() {
@@ -1655,9 +1655,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                         // Get current pool price
                         let current_price = match
-                            pool_service
-                                .get_pool_price(&token.mint, None, &PriceOptions::default()).await
-                                .and_then(|r| r.price_sol)
+                            get_price(
+                                &token.mint,
+                                Some(PriceOptions::default()),
+                                false
+                            ).await.and_then(|r| r.sol_price())
                         {
                             Some(p) if p > 0.0 && p.is_finite() => p,
                             _ => {
@@ -1798,7 +1800,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         let liquidity_tier = if
                             let Some(price_result) = get_price(
                                 &token.mint,
-                                Some(PriceOptions::pool_only()),
+                                Some(PriceOptions::default()),
                                 false
                             ).await
                         {
@@ -2088,7 +2090,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                     // Extract best available price and price info
                     if let Some(result) = price_result {
-                        let best_price = result.best_sol_price();
+                        let best_price = result.sol_price();
                         if let Some(price) = best_price {
                             (mint, Some((price, result)))
                         } else {
