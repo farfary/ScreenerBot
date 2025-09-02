@@ -27,7 +27,7 @@ const MAX_RESERVE_SOL: f64 = 1200.0; // Higher maximum for less restrictive filt
 // CONSERVATIVE entry windows - more balanced approach
 const WINDOWS_SEC: [i64; 6] = [30, 60, 120, 180, 300, 600]; // 30s to 10min windows
 const MIN_DROP_PERCENT: f64 = 5.0; // Higher minimum for quality entries
-const MAX_DROP_PERCENT: f64 = 35.0; // Allow larger drops but with limits
+const MAX_DROP_PERCENT: f64 = 75.0; // Allow larger drops for volatile tokens
 
 // ATH Prevention parameters for scalping
 const ATH_LOOKBACK_15MIN: i64 = 900; // 15 minutes
@@ -205,7 +205,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             let recent_price = price_history[0].1;
             if recent_price > 0.0 && recent_price.is_finite() {
                 let instant_drop = ((recent_price - current_price) / recent_price) * 100.0;
-                if instant_drop >= 8.0 && instant_drop <= 50.0 {
+                if instant_drop >= 8.0 && instant_drop <= 75.0 {
                     // Higher minimum drop requirement
                     // Conservative confidence for single-point drops
                     let confidence = (20.0 + instant_drop * 0.6).min(50.0); // Reduced scaling
@@ -481,21 +481,24 @@ async fn check_ath_risk(price_history: &[(DateTime<Utc>, f64)], current_price: f
     (!near_ath, max_ath_percentage * 100.0) // Return (ath_safe, max_ath_percentage)
 }
 
-/// Calculate enhanced drop magnitude score (non-linear curve favoring 8-15% sweet spot)
-/// Based on database analysis: 7-15% drops have best success rates
+/// Calculate enhanced drop magnitude score (balanced approach for various drop sizes)
+/// Based on database analysis: 7-15% drops have best success rates, but allow larger drops with reduced scoring
 fn calculate_drop_magnitude_score(drop_percent: f64) -> f64 {
     if drop_percent >= 8.0 && drop_percent <= 15.0 {
         // Sweet spot: enhanced scoring
         1.0
-    } else if drop_percent >= 7.0 && drop_percent <= 20.0 {
+    } else if drop_percent >= 7.0 && drop_percent <= 25.0 {
         // Good range: standard scoring
         0.8
-    } else if drop_percent >= 20.0 && drop_percent <= 30.0 {
+    } else if drop_percent >= 25.0 && drop_percent <= 45.0 {
         // Moderate range: reduced scoring
         0.6
-    } else if drop_percent > 30.0 {
-        // Extreme drops: heavily penalized (7-19% success rate)
-        0.3
+    } else if drop_percent >= 45.0 && drop_percent <= 70.0 {
+        // Large drops: lower scoring but still acceptable
+        0.4
+    } else if drop_percent > 70.0 {
+        // Extreme drops: minimal scoring but not blocked
+        0.2
     } else {
         // Below minimum
         0.0
