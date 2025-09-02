@@ -249,6 +249,75 @@ pub static TOKEN_CONFIDENCE_TRACKER: Lazy<Arc<std::sync::RwLock<Vec<TokenConfide
     Lazy::new(|| Arc::new(std::sync::RwLock::new(Vec::new())));
 
 // =============================================================================
+// TOKEN CACHE FOR PERFORMANCE OPTIMIZATION
+// =============================================================================
+
+/// Cached token data structure for 10-minute caching
+#[derive(Clone, Debug)]
+pub struct CachedTokenData {
+    pub tokens: Vec<Token>,
+    pub cached_at: Instant,
+    pub cache_duration_minutes: u64,
+}
+
+impl CachedTokenData {
+    /// Check if cache is still valid
+    pub fn is_valid(&self) -> bool {
+        let age_minutes = self.cached_at.elapsed().as_secs() / 60;
+        age_minutes < self.cache_duration_minutes
+    }
+
+    /// Get age of cache in minutes
+    pub fn age_minutes(&self) -> u64 {
+        self.cached_at.elapsed().as_secs() / 60
+    }
+}
+
+/// Global cache for filtered tokens (10-minute duration)
+/// Reduces database load by caching filtered tokens across multiple monitoring cycles
+pub static FILTERED_TOKENS_CACHE: Lazy<Arc<std::sync::RwLock<Option<CachedTokenData>>>> = Lazy::new(
+    || Arc::new(std::sync::RwLock::new(None))
+);
+
+/// Token cache duration in minutes
+pub const TOKEN_CACHE_DURATION_MINUTES: u64 = 10;
+
+/// Clear the token cache (useful for debugging or forced refresh)
+pub fn clear_token_cache() {
+    let mut cache = FILTERED_TOKENS_CACHE.write().unwrap();
+    *cache = None;
+    log(LogTag::Trader, "CACHE_CLEARED", "🗑️ Token cache manually cleared");
+}
+
+/// Get token cache status for debugging
+pub fn get_token_cache_status() -> String {
+    let cache = FILTERED_TOKENS_CACHE.read().unwrap();
+    match cache.as_ref() {
+        Some(cached_data) => {
+            let age_minutes = cached_data.age_minutes();
+            let is_valid = cached_data.is_valid();
+            format!(
+                "Token Cache Status:\n  \
+                 - Tokens: {}\n  \
+                 - Age: {}min / {}min limit\n  \
+                 - Valid: {}\n  \
+                 - Remaining: {}min",
+                cached_data.tokens.len(),
+                age_minutes,
+                TOKEN_CACHE_DURATION_MINUTES,
+                is_valid,
+                if is_valid {
+                    TOKEN_CACHE_DURATION_MINUTES - age_minutes
+                } else {
+                    0
+                }
+            )
+        }
+        None => "Token Cache Status: No cache present".to_string(),
+    }
+}
+
+// =============================================================================
 // CRITICAL OPERATION PROTECTION
 // =============================================================================
 
@@ -635,7 +704,67 @@ pub fn prioritize_tokens_for_checking(mut tokens: Vec<Token>) -> Vec<Token> {
 
 /// Prepare tokens for filtering and trading by fetching from database
 /// Returns all available tokens ready for the filtering system to process
+/// Now uses 10-minute caching to reduce database load and improve performance
 pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Token>, String> {
+    // Check cache first - if valid, return cached tokens
+    {
+        let cache = FILTERED_TOKENS_CACHE.read().unwrap();
+        if let Some(cached_data) = cache.as_ref() {
+            if cached_data.is_valid() {
+                let cache_age = cached_data.age_minutes();
+                log(
+                    LogTag::Trader,
+                    "CACHE_HIT",
+                    &format!(
+                        "📋 Using cached tokens: {} tokens (age: {}min/{} min cache)",
+                        cached_data.tokens.len(),
+                        cache_age,
+                        TOKEN_CACHE_DURATION_MINUTES
+                    )
+                );
+
+                if is_debug_trader_enabled() {
+                    log(
+                        LogTag::Trader,
+                        "DEBUG_CACHE_HIT",
+                        &format!(
+                            "🎯 Cache details: {} tokens cached at {:.1}min ago, {} min remaining",
+                            cached_data.tokens.len(),
+                            cache_age,
+                            TOKEN_CACHE_DURATION_MINUTES - cache_age
+                        )
+                    );
+                }
+
+                return Ok(cached_data.tokens.clone());
+            } else {
+                let cache_age = cached_data.age_minutes();
+                log(
+                    LogTag::Trader,
+                    "CACHE_EXPIRED",
+                    &format!(
+                        "⏰ Cache expired: age {}min > {}min limit, refreshing tokens",
+                        cache_age,
+                        TOKEN_CACHE_DURATION_MINUTES
+                    )
+                );
+            }
+        } else {
+            log(
+                LogTag::Trader,
+                "CACHE_MISS",
+                "🆕 No cached tokens found, performing fresh fetch and filter"
+            );
+        }
+    }
+
+    // Cache miss or expired - perform full token fetch and filtering
+    log(
+        LogTag::Trader,
+        "TOKEN_REFRESH_START",
+        "🔄 Starting fresh token fetch and filtering (cache refresh)"
+    );
+
     use crate::filtering::{ filter_tokens_with_reasons, log_transaction_activity_stats };
 
     // Timeout for filtering operations - increased for larger token sets
@@ -1038,6 +1167,38 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
                 prioritized_tokens.len() - 10
             )
         );
+    }
+
+    // Cache the filtered and prioritized tokens for future cycles
+    {
+        let mut cache = FILTERED_TOKENS_CACHE.write().unwrap();
+        *cache = Some(CachedTokenData {
+            tokens: prioritized_tokens.clone(),
+            cached_at: Instant::now(),
+            cache_duration_minutes: TOKEN_CACHE_DURATION_MINUTES,
+        });
+
+        log(
+            LogTag::Trader,
+            "CACHE_UPDATED",
+            &format!(
+                "💾 Cached {} filtered tokens for {}min reuse",
+                prioritized_tokens.len(),
+                TOKEN_CACHE_DURATION_MINUTES
+            )
+        );
+
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "DEBUG_CACHE_UPDATED",
+                &format!(
+                    "📝 Cache details: {} tokens stored, next refresh in {}min",
+                    prioritized_tokens.len(),
+                    TOKEN_CACHE_DURATION_MINUTES
+                )
+            );
+        }
     }
 
     Ok(prioritized_tokens)
