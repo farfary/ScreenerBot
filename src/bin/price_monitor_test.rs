@@ -150,8 +150,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("   📋 DEX: {}", dex_id);
                     }
 
-                    if let Some(liquidity) = result.liquidity_usd {
-                        println!("   💧 Liquidity: ${:.0}", liquidity);
+                    if let Some(reserve_sol) = result.reserve_sol {
+                        println!("   💧 SOL Reserves: {:.2} SOL", reserve_sol);
                     }
                 } else {
                     println!("   ❌ No price available");

@@ -39,7 +39,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 6;
+pub const MAX_OPEN_POSITIONS: usize = 8;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
@@ -1683,17 +1683,17 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 false
                             ).await
                         {
-                            let liquidity_usd = price_result.liquidity_usd.unwrap_or(0.0);
-                            if liquidity_usd < 0.0 {
+                            let reserve_sol = price_result.reserve_sol.unwrap_or(0.0);
+                            if reserve_sol < 0.0 {
                                 Some("INVALID".to_string())
                             } else {
-                                let tier = match liquidity_usd {
-                                    x if x < 1_000.0 => "MICRO", // < $1K
-                                    x if x < 10_000.0 => "SMALL", // $1K - $10K
-                                    x if x < 50_000.0 => "MEDIUM", // $10K - $50K
-                                    x if x < 250_000.0 => "LARGE", // $50K - $250K
-                                    x if x < 1_000_000.0 => "XLARGE", // $250K - $1M
-                                    _ => "MEGA", // > $1M
+                                let tier = match reserve_sol {
+                                    x if x < 2.0 => "MICRO", // < 2 SOL (~$1K)
+                                    x if x < 20.0 => "SMALL", // 2-20 SOL (~$1K-$10K)
+                                    x if x < 100.0 => "MEDIUM", // 20-100 SOL (~$10K-$50K)
+                                    x if x < 500.0 => "LARGE", // 100-500 SOL (~$50K-$250K)
+                                    x if x < 2000.0 => "XLARGE", // 500-2000 SOL (~$250K-$1M)
+                                    _ => "MEGA", // > 2000 SOL (~$1M+)
                                 };
                                 Some(tier.to_string())
                             }

@@ -19,16 +19,16 @@ use chrono::{ DateTime, Utc };
 // =============================================================================
 
 // Simple scalping config - more permissive
-const MIN_PRICE_POINTS: usize = 2; // Keep at 2 for safety
+const MIN_PRICE_POINTS: usize = 3; // Keep at 2 for safety
 const MAX_DATA_AGE_MIN: i64 = 15; // Increased from 10 to 15 minutes
 
-// Liquidity filter (very permissive for scalping)
-const MIN_LIQUIDITY_USD: f64 = 50.0;
-const MAX_LIQUIDITY_USD: f64 = 100_000_000.0;
+// Liquidity filter (very permissive for scalping) - using SOL reserves
+const MIN_RESERVE_SOL: f64 = 0.1; // Minimum SOL reserves in pool (replaces $50 USD)
+const MAX_RESERVE_SOL: f64 = 200_000.0; // Maximum SOL reserves in pool (replaces $100M USD)
 
 // Detection windows and thresholds - relaxed for more entries
 const WINDOWS_SEC: [i64; 6] = [5, 10, 30, 60, 120, 300]; // Added 5-minute window
-const MIN_DROP_PERCENT: f64 = 5.0; // Reduced from 10% to 5%
+const MIN_DROP_PERCENT: f64 = 7.0; // Reduced from 10% to 5%
 const MAX_DROP_PERCENT: f64 = 70.0; // Increased from 50% to 70%
 
 // =============================================================================
@@ -72,12 +72,12 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         );
     }
 
-    let (current_price, liquidity_usd) = match
+    let (current_price, reserve_sol) = match
         crate::tokens::get_price(&token.mint, Some(PriceOptions::default()), false).await
     {
         Some(result) => {
             let price = result.sol_price().unwrap_or(0.0);
-            let liquidity = result.liquidity_usd.unwrap_or(0.0);
+            let reserve = result.reserve_sol.unwrap_or(0.0);
             if price <= 0.0 || !price.is_finite() {
                 if is_debug_entry_enabled() {
                     log(
@@ -88,7 +88,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 }
                 return (false, 10.0, "Invalid price data".to_string());
             }
-            (price, liquidity)
+            (price, reserve)
         }
         None => {
             if is_debug_entry_enabled() {
@@ -97,18 +97,18 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             return (false, 5.0, "No valid pool data".to_string());
         }
     };
-    // Basic liquidity filter (lightweight)
-    if liquidity_usd < MIN_LIQUIDITY_USD || liquidity_usd > MAX_LIQUIDITY_USD {
+    // Basic liquidity filter using SOL reserves (lightweight)
+    if reserve_sol < MIN_RESERVE_SOL || reserve_sol > MAX_RESERVE_SOL {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Entry,
                 "LIQUIDITY_FILTER",
                 &format!(
-                    "❌ {} liquidity ${:.0} outside bounds {}-{:.0}",
+                    "❌ {} SOL reserves {:.2} outside bounds {:.1}-{:.0}",
                     token.symbol,
-                    liquidity_usd,
-                    MIN_LIQUIDITY_USD as i64,
-                    MAX_LIQUIDITY_USD
+                    reserve_sol,
+                    MIN_RESERVE_SOL,
+                    MAX_RESERVE_SOL
                 )
             );
         }
@@ -116,10 +116,10 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             false,
             10.0,
             format!(
-                "Liquidity out of bounds: ${:.0} (allowed {}..{:.0})",
-                liquidity_usd,
-                MIN_LIQUIDITY_USD as i64,
-                MAX_LIQUIDITY_USD
+                "SOL reserves out of bounds: {:.2} (allowed {:.1}..{:.0})",
+                reserve_sol,
+                MIN_RESERVE_SOL,
+                MAX_RESERVE_SOL
             ),
         );
     }
@@ -234,9 +234,12 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         if sig.velocity_per_minute > 15.0 {
             confidence -= 6.0; // Reduced penalty from 8
         }
-        if liquidity_usd < 5_000.0 {
+        // Confidence adjustment based on SOL reserves (converted from USD thresholds)
+        if reserve_sol < 10.0 {
+            // Equivalent to ~$5K at $500/SOL
             confidence -= 3.0; // Reduced penalty from 5
-        } else if liquidity_usd > 100_000.0 {
+        } else if reserve_sol > 200.0 {
+            // Equivalent to ~$100K at $500/SOL
             confidence += 5.0; // Increased bonus from 3
         }
         confidence = confidence.clamp(0.0, 95.0);
@@ -410,6 +413,7 @@ fn detect_best_drop(
     best
 }
 
+/// Get current pool data: (price_sol, age_minutes, reserve_sol)
 async fn get_current_pool_data(token: &Token) -> Option<(f64, i64, f64)> {
     match crate::tokens::get_price(&token.mint, Some(PriceOptions::default()), false).await {
         Some(price_result) => {
@@ -422,14 +426,16 @@ async fn get_current_pool_data(token: &Token) -> Option<(f64, i64, f64)> {
                         return None;
                     }
 
-                    let liquidity = price_result.liquidity_usd.unwrap_or_else(|| {
+                    let reserve_sol = price_result.reserve_sol.unwrap_or_else(|| {
+                        // Fallback: estimate SOL reserves from legacy liquidity data if available
                         token.liquidity
                             .as_ref()
                             .and_then(|l| l.usd)
+                            .map(|usd_liq| usd_liq / 500.0) // Rough conversion at $500/SOL
                             .unwrap_or(0.0)
                     });
 
-                    Some((price, data_age_minutes, liquidity))
+                    Some((price, data_age_minutes, reserve_sol))
                 }
                 _ => None,
             }
@@ -450,31 +456,37 @@ async fn get_current_pool_data(token: &Token) -> Option<(f64, i64, f64)> {
 // PROFIT TARGET CALCULATION
 // =============================================================================
 
-/// Calculate profit targets based on drop analysis and liquidity
+/// Calculate profit targets based on drop analysis and SOL reserves
 pub async fn get_profit_target(token: &Token) -> (f64, f64) {
-    // Pull current pool data first (price + liquidity)
-    let (current_price_opt, liquidity_usd) = match get_current_pool_data(token).await {
-        Some((price, _age_min, liquidity)) => (Some(price), liquidity),
+    // Pull current pool data first (price + SOL reserves)
+    let (current_price_opt, reserve_sol) = match get_current_pool_data(token).await {
+        Some((price, _age_min, reserves)) => (Some(price), reserves),
         None =>
             (
                 None,
                 token.liquidity
                     .as_ref()
                     .and_then(|l| l.usd)
-                    .unwrap_or(10_000.0),
+                    .map(|usd_liq| usd_liq / 500.0) // Convert USD to SOL at ~$500/SOL
+                    .unwrap_or(20.0), // Default to 20 SOL reserves
             ),
     };
 
-    // Base profit targets by liquidity only (simple tiers)
-    let (mut min_profit, mut max_profit): (f64, f64) = if liquidity_usd < 2_500.0 {
+    // Base profit targets by SOL reserves (converted from USD tiers)
+    let (mut min_profit, mut max_profit): (f64, f64) = if reserve_sol < 5.0 {
+        // ~$2.5K
         (30.0, 120.0)
-    } else if liquidity_usd < 10_000.0 {
+    } else if reserve_sol < 20.0 {
+        // ~$10K
         (24.0, 100.0)
-    } else if liquidity_usd < 50_000.0 {
+    } else if reserve_sol < 100.0 {
+        // ~$50K
         (18.0, 80.0)
-    } else if liquidity_usd < 250_000.0 {
+    } else if reserve_sol < 500.0 {
+        // ~$250K
         (14.0, 65.0)
-    } else if liquidity_usd < 1_000_000.0 {
+    } else if reserve_sol < 2000.0 {
+        // ~$1M
         (10.0, 50.0)
     } else {
         (8.0, 38.0)

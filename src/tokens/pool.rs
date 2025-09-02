@@ -59,6 +59,16 @@ const MAX_TOKENS_PER_BATCH: usize = 30;
 /// Maximum watchlist size (user requirement)
 const MAX_WATCHLIST_SIZE: usize = 200;
 
+// Watchlist cleanup policies
+/// Remove tokens from watchlist if not accessed for this many hours
+const WATCHLIST_EXPIRY_HOURS: i64 = 24;
+
+/// Remove tokens from watchlist after this many consecutive failures
+const MAX_CONSECUTIVE_FAILURES: u32 = 5;
+
+/// Run watchlist cleanup every N seconds (during monitoring loop)
+const WATCHLIST_CLEANUP_INTERVAL_SECS: u64 = 300; // 5 minutes
+
 /// Minimum liquidity (USD) required to consider a pool usable for price calculation.
 /// Lower this for testing environments if you want stats to increment sooner.
 pub const MIN_POOL_LIQUIDITY_USD: f64 = 10.0;
@@ -300,6 +310,7 @@ pub struct PoolPriceResult {
     pub calculated_at: DateTime<Utc>,
     pub sol_reserve: Option<f64>, // SOL reserve amount in pool
     pub token_reserve: Option<f64>, // Token reserve amount in pool
+    pub error: Option<String>, // Error message for failed calculations
 }
 
 /// Token availability for pool price calculation
@@ -587,6 +598,10 @@ pub struct PoolPriceService {
     watchlist_last_updated: Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
     /// Track request counts for watchlist tokens to manage capacity
     watchlist_request_counts: Arc<RwLock<HashMap<String, u64>>>,
+    /// Track last access time for each watchlist token (for time-based expiry)
+    watchlist_last_accessed: Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
+    /// Track consecutive failures for each watchlist token (for failure-based removal)
+    watchlist_failure_counts: Arc<RwLock<HashMap<String, u32>>>,
 }
 
 /// Pool service comprehensive statistics
@@ -710,6 +725,8 @@ impl PoolPriceService {
             watchlist_tokens: Arc::new(RwLock::new(HashSet::new())),
             watchlist_last_updated: Arc::new(RwLock::new(HashMap::new())),
             watchlist_request_counts: Arc::new(RwLock::new(HashMap::new())),
+            watchlist_last_accessed: Arc::new(RwLock::new(HashMap::new())),
+            watchlist_failure_counts: Arc::new(RwLock::new(HashMap::new())),
         };
 
         // Load existing price history from database on startup
@@ -950,6 +967,9 @@ impl PoolPriceService {
         let priority_tokens = self.priority_tokens.clone();
         let watchlist_tokens = self.watchlist_tokens.clone();
         let watchlist_last_updated = self.watchlist_last_updated.clone();
+        let watchlist_last_accessed = self.watchlist_last_accessed.clone();
+        let watchlist_failure_counts = self.watchlist_failure_counts.clone();
+        let watchlist_request_counts = self.watchlist_request_counts.clone();
 
         // Start main monitoring loop with batch processing
         tokio::spawn(async move {
@@ -961,6 +981,9 @@ impl PoolPriceService {
             );
             let mut summary_interval = tokio::time::interval(Duration::from_secs(30));
             let mut cleanup_interval = tokio::time::interval(Duration::from_secs(3600)); // Cleanup every hour
+            let mut watchlist_cleanup_interval = tokio::time::interval(
+                Duration::from_secs(WATCHLIST_CLEANUP_INTERVAL_SECS)
+            );
 
             loop {
                 tokio::select! {
@@ -1086,6 +1109,25 @@ impl PoolPriceService {
                             }
                         });
                     }
+
+                    // Watchlist cleanup - every 5 minutes
+                    _ = watchlist_cleanup_interval.tick() => {
+                        // Check if monitoring should continue
+                        {
+                            let active = monitoring_active.read().await;
+                            if !*active {
+                                break;
+                            }
+                        }
+
+                        Self::cleanup_watchlist_tokens(
+                            &watchlist_tokens,
+                            &watchlist_last_accessed,
+                            &watchlist_failure_counts,
+                            &watchlist_request_counts,
+                            &watchlist_last_updated
+                        ).await;
+                    }
                 }
             }
 
@@ -1196,9 +1238,27 @@ impl PoolPriceService {
                                 calculated_at: chrono::Utc::now(),
                                 sol_reserve: Some(info.sol_reserve as f64),
                                 token_reserve: Some(info.token_reserve as f64),
+                                error: None, // No error for successful batch calculation
                             });
 
                             successful_updates += 1;
+
+                            // Reset failure count on successful update
+                            {
+                                let mut failure_counts =
+                                    service.watchlist_failure_counts.write().await;
+                                failure_counts.remove(token_address);
+                            }
+                        } else {
+                            // Track failure for tokens that didn't get price updates
+                            {
+                                let mut failure_counts =
+                                    service.watchlist_failure_counts.write().await;
+                                let current_failures = *failure_counts
+                                    .get(token_address)
+                                    .unwrap_or(&0);
+                                failure_counts.insert(token_address.clone(), current_failures + 1);
+                            }
                         }
                     }
                 }
@@ -1246,6 +1306,141 @@ impl PoolPriceService {
                     }
                 }
             }
+        }
+    }
+
+    /// Clean up stale, failed, or irrelevant tokens from watchlist
+    /// Implements time-based expiry, failure-based removal, and relevance cleanup
+    async fn cleanup_watchlist_tokens(
+        watchlist_tokens: &Arc<RwLock<HashSet<String>>>,
+        watchlist_last_accessed: &Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
+        watchlist_failure_counts: &Arc<RwLock<HashMap<String, u32>>>,
+        watchlist_request_counts: &Arc<RwLock<HashMap<String, u64>>>,
+        watchlist_last_updated: &Arc<RwLock<HashMap<String, DateTime<Utc>>>>
+    ) {
+        let now = Utc::now();
+        let mut removed_count = 0;
+        let mut expired_count = 0;
+        let mut failed_count = 0;
+        let mut stale_count = 0;
+
+        let tokens_to_remove = {
+            let watchlist = watchlist_tokens.read().await;
+            let last_accessed = watchlist_last_accessed.read().await;
+            let failure_counts = watchlist_failure_counts.read().await;
+            let request_counts = watchlist_request_counts.read().await;
+            let last_updated = watchlist_last_updated.read().await;
+
+            let mut to_remove = Vec::new();
+
+            for token in watchlist.iter() {
+                let mut remove_reason = None;
+
+                // 1. Time-based expiry: Remove if not accessed for WATCHLIST_EXPIRY_HOURS
+                if let Some(last_access) = last_accessed.get(token) {
+                    let hours_since_access = now.signed_duration_since(*last_access).num_hours();
+                    if hours_since_access > WATCHLIST_EXPIRY_HOURS {
+                        remove_reason = Some(
+                            format!("expired ({} hours since last access)", hours_since_access)
+                        );
+                        expired_count += 1;
+                    }
+                } else {
+                    // Never accessed - consider it expired if it's been in watchlist for more than expiry time
+                    if let Some(added_time) = last_updated.get(token) {
+                        let hours_since_added = now.signed_duration_since(*added_time).num_hours();
+                        if hours_since_added > WATCHLIST_EXPIRY_HOURS {
+                            remove_reason = Some(
+                                format!("never accessed in {} hours", hours_since_added)
+                            );
+                            expired_count += 1;
+                        }
+                    }
+                }
+
+                // 2. Failure-based removal: Remove if consecutive failures exceed threshold
+                if remove_reason.is_none() {
+                    if let Some(failure_count) = failure_counts.get(token) {
+                        if *failure_count >= MAX_CONSECUTIVE_FAILURES {
+                            remove_reason = Some(
+                                format!("failed {} consecutive times", failure_count)
+                            );
+                            failed_count += 1;
+                        }
+                    }
+                }
+
+                // 3. Token relevance: Remove tokens with very low activity and no recent requests
+                if remove_reason.is_none() {
+                    let request_count = request_counts.get(token).unwrap_or(&0);
+                    let last_update_age = last_updated
+                        .get(token)
+                        .map(|t| now.signed_duration_since(*t).num_hours())
+                        .unwrap_or(WATCHLIST_EXPIRY_HOURS + 1);
+
+                    // Remove if: very few requests AND no recent activity AND old
+                    if *request_count <= 1 && last_update_age > 12 {
+                        remove_reason = Some(
+                            format!(
+                                "low activity ({} requests, {} hours old)",
+                                request_count,
+                                last_update_age
+                            )
+                        );
+                        stale_count += 1;
+                    }
+                }
+
+                if let Some(reason) = remove_reason {
+                    to_remove.push((token.clone(), reason));
+                }
+            }
+
+            to_remove
+        };
+
+        if !tokens_to_remove.is_empty() {
+            // Remove tokens from all tracking structures
+            {
+                let mut watchlist = watchlist_tokens.write().await;
+                let mut last_accessed = watchlist_last_accessed.write().await;
+                let mut failure_counts = watchlist_failure_counts.write().await;
+                let mut request_counts = watchlist_request_counts.write().await;
+                let mut last_updated = watchlist_last_updated.write().await;
+
+                for (token, reason) in &tokens_to_remove {
+                    watchlist.remove(token);
+                    last_accessed.remove(token);
+                    failure_counts.remove(token);
+                    request_counts.remove(token);
+                    last_updated.remove(token);
+                    removed_count += 1;
+
+                    if is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "WATCHLIST_CLEANUP_REMOVE",
+                            &format!(
+                                "Removed {} from watchlist: {}",
+                                safe_truncate(token, 8),
+                                reason
+                            )
+                        );
+                    }
+                }
+            }
+
+            log(
+                LogTag::Pool,
+                "WATCHLIST_CLEANUP",
+                &format!(
+                    "🧹 Watchlist cleanup: removed {} tokens (expired: {}, failed: {}, stale: {})",
+                    removed_count,
+                    expired_count,
+                    failed_count,
+                    stale_count
+                )
+            );
         }
     }
 
@@ -1330,7 +1525,25 @@ impl PoolPriceService {
     /// Add token to watchlist
     pub async fn add_watchlist_token(&self, token_address: &str) {
         let mut watchlist = self.watchlist_tokens.write().await;
+        let is_new_token = !watchlist.contains(token_address);
         watchlist.insert(token_address.to_string());
+        drop(watchlist);
+
+        if is_new_token {
+            // Initialize tracking for new token
+            let now = Utc::now();
+
+            let mut request_counts = self.watchlist_request_counts.write().await;
+            request_counts.insert(token_address.to_string(), 0);
+            drop(request_counts);
+
+            let mut last_accessed = self.watchlist_last_accessed.write().await;
+            last_accessed.insert(token_address.to_string(), now);
+            drop(last_accessed);
+
+            let mut failure_counts = self.watchlist_failure_counts.write().await;
+            failure_counts.insert(token_address.to_string(), 0);
+        }
 
         if is_debug_pool_prices_enabled() {
             log(
@@ -1345,10 +1558,23 @@ impl PoolPriceService {
     pub async fn remove_watchlist_token(&self, token_address: &str) {
         let mut watchlist = self.watchlist_tokens.write().await;
         watchlist.remove(token_address);
+        drop(watchlist);
 
-        // Also remove from last updated tracking
+        // Remove from all tracking structures
         let mut last_updated = self.watchlist_last_updated.write().await;
         last_updated.remove(token_address);
+        drop(last_updated);
+
+        let mut request_counts = self.watchlist_request_counts.write().await;
+        request_counts.remove(token_address);
+        drop(request_counts);
+
+        let mut last_accessed = self.watchlist_last_accessed.write().await;
+        last_accessed.remove(token_address);
+        drop(last_accessed);
+
+        let mut failure_counts = self.watchlist_failure_counts.write().await;
+        failure_counts.remove(token_address);
 
         if is_debug_pool_prices_enabled() {
             log(
@@ -1407,11 +1633,32 @@ impl PoolPriceService {
             actually_added += 1;
         }
 
+        drop(watchlist);
+        drop(request_counts);
+
+        // Initialize tracking for newly added tokens
+        if actually_added > 0 {
+            let now = Utc::now();
+            let mut last_accessed = self.watchlist_last_accessed.write().await;
+            let mut failure_counts = self.watchlist_failure_counts.write().await;
+
+            for token_address in token_addresses {
+                if !last_accessed.contains_key(token_address) {
+                    last_accessed.insert(token_address.clone(), now);
+                    failure_counts.insert(token_address.clone(), 0);
+                }
+            }
+        }
+
         if is_debug_pool_prices_enabled() {
+            let watchlist_size = {
+                let watchlist = self.watchlist_tokens.read().await;
+                watchlist.len()
+            };
             log(
                 LogTag::Pool,
                 "WATCHLIST_BATCH_ADD",
-                &format!("Added {} tokens to watchlist (size: {})", actually_added, watchlist.len())
+                &format!("Added {} tokens to watchlist (size: {})", actually_added, watchlist_size)
             );
         }
     }
@@ -1642,6 +1889,7 @@ impl PoolPriceService {
                                 calculated_at: chrono::Utc::now(),
                                 sol_reserve: Some(info.sol_reserve as f64),
                                 token_reserve: Some(info.token_reserve as f64),
+                                error: None, // No error for successful priority batch calculation
                             });
                         }
 
@@ -2627,6 +2875,7 @@ impl PoolPriceService {
             calculated_at: calculation_time,
             sol_reserve,
             token_reserve,
+            error: None, // No error for successful pool calculation
         };
 
         if is_debug_pool_prices_enabled() {
@@ -2969,6 +3218,7 @@ Pool State Summary\n\
                     calculated_at: calculation_time,
                     sol_reserve: Some(pool_price_info.sol_reserve as f64),
                     token_reserve: Some(pool_price_info.token_reserve as f64),
+                    error: None, // No error for successful direct pool calculation
                 };
 
                 // Cache the result
@@ -6091,11 +6341,13 @@ pub struct PriceResult {
     pub pool_address: Option<String>, // Pool address (if pool source)
     pub dex_id: Option<String>, // DEX identifier (if pool source)
     pub pool_type: Option<String>, // Pool type (if pool source)
-    pub liquidity_usd: Option<f64>, // Pool liquidity (if pool source)
     pub volume_24h: Option<f64>, // 24h volume (if pool source)
     pub source: String, // "pool", "api", "both", or "cache"
     pub calculated_at: DateTime<Utc>, // When calculated
     pub is_cached: bool, // Whether result came from cache
+    pub error: Option<String>, // Error message when price is None (explains why)
+    pub reserve_sol: Option<f64>, // SOL reserves in pool (use this for liquidity checking)
+    pub reserve_token: Option<f64>, // Token reserves in pool
 }
 
 impl PriceResult {
@@ -6241,17 +6493,23 @@ async fn get_price_internal(
     options: &PriceOptions,
     calculated_at: DateTime<Utc>
 ) -> Option<PriceResult> {
-
     let service = get_pool_service();
 
-    // Track request count for watchlist tokens (for LRU eviction)
+    // Track request count and last accessed time for watchlist tokens
     {
         let watchlist = service.watchlist_tokens.read().await;
         if watchlist.contains(token_address) {
-            drop(watchlist); // Release read lock before acquiring write lock
+            drop(watchlist); // Release read lock before acquiring write locks
+
+            // Update request count
             let mut request_counts = service.watchlist_request_counts.write().await;
             let current_count = *request_counts.get(token_address).unwrap_or(&0);
             request_counts.insert(token_address.to_string(), current_count + 1);
+            drop(request_counts);
+
+            // Update last accessed time for time-based expiry
+            let mut last_accessed = service.watchlist_last_accessed.write().await;
+            last_accessed.insert(token_address.to_string(), calculated_at);
         }
     }
 
@@ -6275,11 +6533,13 @@ async fn get_price_internal(
                 pool_address: Some(pool_result.pool_address),
                 dex_id: Some(pool_result.dex_id),
                 pool_type: pool_result.pool_type,
-                liquidity_usd: Some(pool_result.liquidity_usd),
                 volume_24h: Some(pool_result.volume_24h),
                 source: pool_result.source,
                 calculated_at,
                 is_cached: true,
+                error: None, // No error for successful cached result
+                reserve_sol: pool_result.sol_reserve,
+                reserve_token: pool_result.token_reserve,
             };
 
             return Some(result);
@@ -6294,6 +6554,17 @@ async fn get_price_internal(
                 "No fresh cached price for {} (not in active monitoring or cache expired)",
                 &token_address[..8]
             )
+        );
+    }
+
+    // Add token to watchlist so background service will calculate price for next call
+    service.add_watchlist_token(token_address).await;
+
+    if is_debug_pool_prices_enabled() {
+        log(
+            LogTag::Pool,
+            "WATCHLIST_AUTO_ADD",
+            &format!("Added {} to watchlist for background price calculation", &token_address[..8])
         );
     }
 
