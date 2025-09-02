@@ -1,11 +1,11 @@
-/// Simple Scalping Drop Detector (fast and focused)
+/// Conservative Drop Detector (balanced and stable)
 ///
-/// OPTIMIZED FOR FAST SCALPING with 5-10% minimum profit targets:
-/// - Aggressive 1-60 second detection windows (faster than original 5-300s)
+/// OPTIMIZED FOR STABLE TRADING with 15-35% profit targets:
+/// - Conservative 30s-10min detection windows (balanced approach)
 /// - ATH prevention using multi-timeframe analysis
-/// - Database-driven confidence scoring with activity weighting
-/// - Jupiter profit optimization with tight entry criteria
-/// - Enhanced liquidity filters for scalping success
+/// - Database-driven confidence scoring with stability weighting
+/// - Higher confidence thresholds for quality entries
+/// - Enhanced liquidity filters for successful execution
 
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
@@ -13,21 +13,21 @@ use crate::tokens::{ get_pool_service, Token, PriceOptions };
 use chrono::{ DateTime, Utc };
 
 // =============================================================================
-// FAST SCALPING CONFIGURATION PARAMETERS
+// CONSERVATIVE TRADING CONFIGURATION PARAMETERS
 // =============================================================================
 
-// Optimized for seconds-level scalping entries
+// Balanced windows for stable entries (30s to 10min)
 const MIN_PRICE_POINTS: usize = 8; // Increased from 3 for better analysis
-const MAX_DATA_AGE_MIN: i64 = 5; // Tighter from 15min to 5min for scalping
+const MAX_DATA_AGE_MIN: i64 = 5; // Keep tight data freshness requirement
 
-// Scalping liquidity filter (optimized for fast fills at $200/SOL)
-const MIN_RESERVE_SOL: f64 = 15.0; // Higher minimum for faster execution
-const MAX_RESERVE_SOL: f64 = 800.0; // Tighter maximum for optimal slippage
+// Conservative liquidity filter for more stable entries
+const MIN_RESERVE_SOL: f64 = 25.0; // Higher minimum for stability
+const MAX_RESERVE_SOL: f64 = 1200.0; // Higher maximum for less restrictive filtering
 
-// AGGRESSIVE scalping windows - much faster than original
-const WINDOWS_SEC: [i64; 8] = [1, 3, 5, 10, 20, 30, 45, 60]; // Ultra-fast windows
-const MIN_DROP_PERCENT: f64 = 3.0; // Lower minimum for quick entries
-const MAX_DROP_PERCENT: f64 = 25.0; // Tighter maximum to avoid extreme volatility
+// CONSERVATIVE entry windows - more balanced approach
+const WINDOWS_SEC: [i64; 6] = [30, 60, 120, 180, 300, 600]; // 30s to 10min windows
+const MIN_DROP_PERCENT: f64 = 5.0; // Higher minimum for quality entries
+const MAX_DROP_PERCENT: f64 = 35.0; // Allow larger drops but with limits
 
 // ATH Prevention parameters for scalping
 const ATH_LOOKBACK_15MIN: i64 = 900; // 15 minutes
@@ -37,10 +37,10 @@ const ATH_THRESHOLD_15MIN: f64 = 0.95; // 95% of 15min high
 const ATH_THRESHOLD_1HR: f64 = 0.9; // 90% of 1hr high
 const ATH_THRESHOLD_6HR: f64 = 0.85; // 85% of 6hr high
 
-// Enhanced scalping activity thresholds
-const HIGH_ACTIVITY_SCALP: f64 = 25.0; // High activity for premium scalping
-const MED_ACTIVITY_SCALP: f64 = 12.0; // Medium activity threshold
-const MIN_ACTIVITY_SCALP: f64 = 5.0; // Minimum activity for scalping
+// Conservative activity thresholds for stable entries
+const HIGH_ACTIVITY_ENTRY: f64 = 20.0; // Reduced from 25.0 for high activity
+const MED_ACTIVITY_ENTRY: f64 = 8.0; // Reduced from 12.0 for medium activity
+const MIN_ACTIVITY_ENTRY: f64 = 3.0; // Reduced from 5.0 for minimum activity
 
 // =============================================================================
 // SIMPLE DROP SIGNAL
@@ -200,15 +200,17 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             );
         }
 
-        // Fallback: If we have at least 1 price point, still attempt basic evaluation
+        // Fallback: If we have at least 1 price point, still attempt basic evaluation with higher threshold
         if price_history.len() >= 1 && current_price > 0.0 {
             let recent_price = price_history[0].1;
             if recent_price > 0.0 && recent_price.is_finite() {
                 let instant_drop = ((recent_price - current_price) / recent_price) * 100.0;
-                if instant_drop >= 3.0 && instant_drop <= 70.0 {
-                    // Basic confidence for single-point drops
-                    let confidence = (25.0 + instant_drop * 0.8).min(60.0);
-                    if confidence >= 28.0 {
+                if instant_drop >= 8.0 && instant_drop <= 50.0 {
+                    // Higher minimum drop requirement
+                    // Conservative confidence for single-point drops
+                    let confidence = (20.0 + instant_drop * 0.6).min(50.0); // Reduced scaling
+                    if confidence >= 35.0 {
+                        // Higher confidence threshold
                         if is_debug_entry_enabled() {
                             log(
                                 LogTag::Entry,
@@ -221,7 +223,11 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                                 )
                             );
                         }
-                        return (true, confidence, format!("Instant drop -{:.1}%", instant_drop));
+                        return (
+                            true,
+                            confidence,
+                            format!("Conservative instant drop -{:.1}%", instant_drop),
+                        );
                     }
                 }
             }
@@ -238,16 +244,16 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     let best = detect_best_drop(&price_history, current_price);
 
     if let Some(sig) = best {
-        // Enhanced confidence calculation based on database analysis
-        let mut confidence = 25.0; // Reduced base from 30.0
+        // Enhanced confidence calculation with conservative approach
+        let mut confidence = 20.0; // Reduced base from 25.0
 
-        // Drop magnitude (non-linear curve favoring 8-15% sweet spot)
+        // Drop magnitude (more conservative scoring)
         let drop_score = calculate_drop_magnitude_score(sig.drop_percent);
-        confidence += drop_score * 35.0; // Optimized from linear 50.0 scaling
+        confidence += drop_score * 25.0; // Reduced from 35.0 scaling
 
-        // Transaction activity (NEW - high impact factor)
+        // Transaction activity (reduced impact for conservative approach)
         let activity_score = calculate_scalp_activity_score(activity_score);
-        confidence += activity_score * 25.0; // Increased weight for scalping
+        confidence += activity_score * 15.0; // Reduced from 25.0
 
         // ATH Prevention Analysis
         let (ath_safe, max_ath_pct) = check_ath_risk(&price_history, current_price).await;
@@ -266,28 +272,28 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             return (false, 15.0, format!("ATH prevention: {:.1}% of recent high", max_ath_pct));
         }
 
-        // ATH safety bonus
-        confidence += 8.0;
+        // ATH safety bonus (conservative)
+        confidence += 6.0; // Reduced from 8.0
         if max_ath_pct < 70.0 {
-            confidence += 5.0; // Extra bonus for being well below highs
+            confidence += 3.0; // Reduced from 5.0 for being well below highs
         }
 
-        // Transaction activity (enhanced for scalping)
-        confidence += activity_score * 25.0; // Increased from 20.0        // Liquidity impact (significantly increased)
-        let liquidity_score = calculate_liquidity_score(reserve_sol);
-        confidence += liquidity_score * 15.0; // Increased from 5.0
+        // Transaction activity (reduced impact for conservative approach)
+        confidence += activity_score * 15.0; // Reduced from 25.0
 
-        // Window preference (heavily favor ultra-fast drops for scalping)
+        // Liquidity impact (moderate increase)
+        let liquidity_score = calculate_liquidity_score(reserve_sol);
+        confidence += liquidity_score * 10.0; // Reduced from 15.0
+
+        // Window preference (favor longer-term drops for stability)
         confidence += match sig.window_sec {
-            1 => 30.0, // Ultra-fast scalp (new)
-            3 => 28.0, // Very fast scalp (new)
-            5 => 25.0, // Fast scalp (increased from 18.0)
-            10 => 20.0, // Quick scalp (increased from 15.0)
-            20 => 15.0, // Medium scalp (new)
-            30 => 12.0, // Standard scalp (keep existing)
-            45 => 8.0, // Slower scalp (new)
-            60 => 5.0, // Slowest acceptable (reduced from 8.0)
-            _ => 1.0,
+            30 => 20.0, // Short-term but not too aggressive
+            60 => 25.0, // 1-minute window (good balance)
+            120 => 30.0, // 2-minute window (preferred)
+            180 => 28.0, // 3-minute window (good)
+            300 => 25.0, // 5-minute window (standard)
+            600 => 20.0, // 10-minute window (longer term)
+            _ => 10.0,
         };
 
         // Velocity adjustments (keep existing logic)
@@ -298,44 +304,44 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             confidence -= 6.0;
         }
 
-        // Perfect scalping multiplier (compound effect for ideal conditions)
-        let is_perfect_scalp =
-            sig.drop_percent >= 5.0 &&
-            sig.drop_percent <= 12.0 && // Tighter range for scalping
-            sig.window_sec <= 10 && // Ultra-fast requirement
-            reserve_sol >= 100.0 && // Good liquidity for scalping
-            reserve_sol <= 500.0 && // Not too high for slippage
-            activity_score >= 0.8 && // High activity requirement
+        // Conservative entry conditions (less aggressive requirements)
+        let is_good_entry =
+            sig.drop_percent >= 6.0 &&
+            sig.drop_percent <= 20.0 && // Balanced range for conservative entry
+            sig.window_sec >= 60 && // Minimum 1-minute window for stability
+            reserve_sol >= 50.0 && // Good liquidity requirement
+            reserve_sol <= 800.0 && // Reasonable maximum
+            activity_score >= 0.6 && // Moderate activity requirement
             ath_safe; // ATH safe requirement
-        if is_perfect_scalp {
-            confidence *= 1.4; // 40% boost for perfect scalping conditions
+        if is_good_entry {
+            confidence *= 1.25; // 25% boost for good conservative conditions
         }
 
         confidence = confidence.clamp(0.0, 95.0);
 
-        // Entry decision with scalping-optimized threshold
-        let approved = confidence >= 35.0; // Increased from 28.0% for quality scalping
+        // Conservative entry confidence threshold
+        let approved = confidence >= 45.0; // Increased from 35.0% for higher quality entries
 
         if is_debug_entry_enabled() {
             log(
                 LogTag::Entry,
-                "SCALP_ANALYSIS_COMPLETE",
+                "ENTRY_ANALYSIS_COMPLETE",
                 &format!(
-                    "🎯 {} scalp: -{:.1}%/{}s → conf {:.1}% → {} [activity:{:.1} liquidity:{:.0} ath_safe:{} ath_pct:{:.1}% perfect:{}]",
+                    "🎯 {} entry: -{:.1}%/{}s → conf {:.1}% → {} [activity:{:.1} liquidity:{:.0} ath_safe:{} ath_pct:{:.1}% good_entry:{}]",
                     token.symbol,
                     sig.drop_percent,
                     sig.window_sec,
                     confidence,
                     if approved {
-                        "SCALP_ENTER"
+                        "ENTER"
                     } else {
-                        "SCALP_REJECT"
+                        "REJECT"
                     },
                     activity_score,
                     reserve_sol,
                     ath_safe,
                     max_ath_pct,
-                    is_perfect_scalp
+                    is_good_entry
                 )
             );
         }
@@ -344,16 +350,16 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             approved,
             confidence,
             if approved {
-                let reason = if is_perfect_scalp {
+                let reason = if is_good_entry {
                     format!(
-                        "Perfect scalp: -{:.1}%/{}s, {:.0} SOL, ATH-safe, high activity",
+                        "Conservative entry: -{:.1}%/{}s, {:.0} SOL, ATH-safe, good activity",
                         sig.drop_percent,
                         sig.window_sec,
                         reserve_sol
                     )
                 } else {
                     format!(
-                        "Fast scalp: -{:.1}%/{}s, ATH-safe (conf: {:.1}%)",
+                        "Standard entry: -{:.1}%/{}s, ATH-safe (conf: {:.1}%)",
                         sig.drop_percent,
                         sig.window_sec,
                         confidence
@@ -362,7 +368,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 reason
             } else {
                 format!(
-                    "Scalp analysis: -{:.1}%/{}s, conf {:.1}% < 35%, ATH: {:.1}%, activity: {:.1}",
+                    "Entry analysis: -{:.1}%/{}s, conf {:.1}% < 45%, ATH: {:.1}%, activity: {:.1}",
                     sig.drop_percent,
                     sig.window_sec,
                     confidence,
@@ -381,9 +387,9 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 .collect();
             log(
                 LogTag::Entry,
-                "NO_SCALP_DROP",
+                "NO_DROP_DETECTED",
                 &format!(
-                    "❌ {} no scalp drops {:.0}-{:.0}% detected in ultra-fast windows [{}]",
+                    "❌ {} no entry drops {:.0}-{:.0}% detected in conservative windows [{}]",
                     token.symbol,
                     MIN_DROP_PERCENT,
                     MAX_DROP_PERCENT,
@@ -391,7 +397,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 )
             );
         }
-        return (false, 20.0, "No scalping opportunity detected in ultra-fast windows".to_string());
+        return (false, 20.0, "No entry opportunity detected in conservative windows".to_string());
     }
 }
 
@@ -401,18 +407,17 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
 // HELPER FUNCTIONS
 // =============================================================================
 
-/// Enhanced activity score for scalping (0.0 to 1.0 scale)
-/// Based on database analysis: >20 txns = 24.2% success, <5 txns = 3.5% success
-/// OPTIMIZED for scalping with higher activity requirements
+/// Conservative activity score for stable entries (0.0 to 1.0 scale)
+/// Based on database analysis with more conservative thresholds
 fn calculate_scalp_activity_score(txns_5min: f64) -> f64 {
-    if txns_5min >= HIGH_ACTIVITY_SCALP {
-        1.0 // Premium scalping activity
-    } else if txns_5min >= MED_ACTIVITY_SCALP {
-        0.8 // Good scalping activity
-    } else if txns_5min >= MIN_ACTIVITY_SCALP {
-        0.5 // Minimum scalping activity
+    if txns_5min >= HIGH_ACTIVITY_ENTRY {
+        1.0 // High activity (conservative threshold)
+    } else if txns_5min >= MED_ACTIVITY_ENTRY {
+        0.7 // Good activity (reduced from 0.8)
+    } else if txns_5min >= MIN_ACTIVITY_ENTRY {
+        0.4 // Minimum activity (reduced from 0.5)
     } else {
-        0.2 // Below scalping threshold
+        0.1 // Below entry threshold (reduced from 0.2)
     }
 }
 
@@ -674,61 +679,62 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
         .unwrap_or(0) as f64;
     let activity_score = calculate_scalp_activity_score(txns_5min);
 
-    // Base profit targets optimized for scalping with 5-10% minimum focus
-    let (mut min_profit, mut max_profit): (f64, f64) = if reserve_sol < 15.0 {
-        // Below scalping minimum liquidity
+    // Base profit targets with conservative approach for better success rates
+    let (mut min_profit, mut max_profit): (f64, f64) = if reserve_sol < 25.0 {
+        // Below minimum liquidity threshold
+        (35.0, 80.0) // Higher targets for risky low liquidity
+    } else if reserve_sol < 100.0 {
+        // Low liquidity tier
         (25.0, 60.0)
-    } else if reserve_sol < 50.0 {
-        // Low liquidity tier (higher targets for risk)
+    } else if reserve_sol < 300.0 {
+        // Medium liquidity tier (good for conservative trading)
         (18.0, 45.0)
-    } else if reserve_sol < 150.0 {
-        // Medium liquidity tier (optimal for scalping)
-        (12.0, 35.0)
-    } else if reserve_sol < 400.0 {
-        // High liquidity tier (sweet spot for fast scalping)
-        (8.0, 25.0) // Target 8-25% for fast scalping
     } else if reserve_sol < 800.0 {
+        // High liquidity tier (optimal range)
+        (15.0, 35.0) // Conservative 15-35% targets
+    } else if reserve_sol < 1200.0 {
         // Very high liquidity tier
-        (10.0, 30.0)
+        (20.0, 40.0)
     } else {
-        // Beyond scalping range (higher targets)
-        (15.0, 40.0)
+        // Extremely high liquidity (higher targets for potential whale movements)
+        (25.0, 50.0)
     };
 
-    // Activity multiplier for scalping
-    let activity_multiplier = 1.0 + (activity_score - 0.5) * 0.4; // Up to 40% adjustment
+    // Activity multiplier (reduced impact for conservative approach)
+    let activity_multiplier = 1.0 + (activity_score - 0.5) * 0.25; // Reduced from 0.4 to 0.25
     min_profit *= activity_multiplier;
     max_profit *= activity_multiplier;
 
-    // Volatility-based adjustment using recent scalping window (60s vs 1min)
+    // Volatility-based adjustment using longer window for stability (5min vs 1min)
     let pool_service = get_pool_service();
     let price_history = pool_service.get_price_history(&token.mint).await;
     if current_price_opt.is_some() && price_history.len() >= 5 {
         let now = Utc::now();
-        let prices_60s: Vec<f64> = price_history
+        let prices_5min: Vec<f64> = price_history
             .iter()
-            .filter(|(ts, _)| (now - *ts).num_seconds() <= 60) // 1min window for scalping
+            .filter(|(ts, _)| (now - *ts).num_seconds() <= 300) // 5min window for more stability
             .map(|(_, p)| *p)
             .collect();
-        if prices_60s.len() >= 3 {
-            let high_60s = prices_60s.iter().fold(0.0f64, |a, b| a.max(*b));
-            let low_60s = prices_60s.iter().fold(f64::INFINITY, |a, b| a.min(*b));
-            if high_60s.is_finite() && low_60s.is_finite() && high_60s > 0.0 && low_60s > 0.0 {
-                let hl_range_60s = ((high_60s - low_60s) / high_60s) * 100.0;
-                let scale = (hl_range_60s / 40.0).clamp(0.0, 0.6); // Scale based on 40% volatility
-                min_profit *= 1.0 + scale * 0.5; // up to +30%
-                max_profit *= 1.0 + scale * 0.7; // up to +42%
+        if prices_5min.len() >= 3 {
+            let high_5min = prices_5min.iter().fold(0.0f64, |a, b| a.max(*b));
+            let low_5min = prices_5min.iter().fold(f64::INFINITY, |a, b| a.min(*b));
+            if high_5min.is_finite() && low_5min.is_finite() && high_5min > 0.0 && low_5min > 0.0 {
+                let hl_range_5min = ((high_5min - low_5min) / high_5min) * 100.0;
+                let scale = (hl_range_5min / 50.0).clamp(0.0, 0.4); // Reduced scaling
+                min_profit *= 1.0 + scale * 0.3; // Reduced adjustment
+                max_profit *= 1.0 + scale * 0.4; // Reduced adjustment
             }
         }
     }
 
-    // Ensure minimum scalping thresholds
-    min_profit = min_profit.clamp(5.0, 30.0); // 5-30% minimum range for scalping
-    max_profit = max_profit.clamp(15.0, 80.0); // 15-80% maximum range
+    // Ensure conservative profit thresholds
+    min_profit = min_profit.clamp(12.0, 40.0); // 12-40% minimum range (increased from 5-30%)
+    max_profit = max_profit.clamp(25.0, 100.0); // 25-100% maximum range (increased from 15-80%)
 
-    // Ensure proper spread for scalping
-    if max_profit - min_profit < 6.0 {
-        max_profit = (min_profit + 6.0).min(80.0);
+    // Ensure proper spread for conservative trading
+    if max_profit - min_profit < 10.0 {
+        // Increased minimum spread from 6.0 to 10.0
+        max_profit = (min_profit + 10.0).min(100.0);
     }
 
     (min_profit, max_profit)

@@ -199,9 +199,8 @@ pub fn is_dashboard_enabled() -> bool {
 }
 
 /// Run mode - enables actual bot execution (required to start services)
-/// SAFETY: Bot execution disabled - always returns false to prevent accidental trading
 pub fn is_run_enabled() -> bool {
-    false // Bot execution permanently disabled for safety
+    has_arg("--run")
 }
 
 /// Clear all mode - clears all data and resets the system
