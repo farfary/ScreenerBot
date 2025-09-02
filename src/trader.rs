@@ -1765,10 +1765,42 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         };
 
         // Interleave: ensure ~50% of scheduled are tokens with history/active monitoring
-        let monitored_set: std::collections::HashSet<String> = get_pool_service()
-            .get_tokens_with_recent_pools_infos(600).await
-            .into_iter()
-            .collect();
+        // Guard this call with a timeout to prevent rare stalls blocking the cycle
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "SCHEDULER_MONITORED_FETCH",
+                "⏳ Fetching monitored-set (recent pools infos ≤600s) with 2s timeout"
+            );
+        }
+        let pool_service = get_pool_service();
+        let monitored_vec = match
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                pool_service.get_tokens_with_recent_pools_infos(600)
+            ).await
+        {
+            Ok(v) => v,
+            Err(_) => {
+                log(
+                    LogTag::Trader,
+                    "SCHEDULER_WARN",
+                    "⚠️ Monitored-set fetch timed out after 2s; proceeding without bias this cycle"
+                );
+                Vec::new()
+            }
+        };
+        let monitored_set: std::collections::HashSet<String> = monitored_vec.into_iter().collect();
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "SCHEDULER_MONITORED_FETCH",
+                &format!(
+                    "✅ Monitored-set ready: {} tokens with recent pools infos",
+                    monitored_set.len()
+                )
+            );
+        }
         let mut monitored: Vec<Token> = Vec::new();
         let mut others: Vec<Token> = Vec::new();
         for t in base_slice {
@@ -1949,14 +1981,16 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                         if needs_history_boost {
                             // Force a price update by calling get_price which will cache the result
-                            let _ = get_price(
+                            let warm_fut = get_price(
                                 &token.mint,
                                 Some(PriceOptions {
                                     warm_on_miss: true,
                                     ..PriceOptions::default()
                                 }),
                                 false
-                            ).await;
+                            );
+                            // Guard with short timeout to avoid per-task stalls
+                            let _ = tokio::time::timeout(Duration::from_secs(3), warm_fut).await;
                             // Count zero-history warms for summary
                             zero_history_warmed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
@@ -1974,11 +2008,35 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
 
                         // Get current pool price (warm on miss)
-                        let price_result = get_price(
-                            &token.mint,
-                            Some(PriceOptions { warm_on_miss: true, ..PriceOptions::default() }),
-                            false
-                        ).await;
+                        let price_result = match
+                            tokio::time::timeout(
+                                Duration::from_secs(5),
+                                get_price(
+                                    &token.mint,
+                                    Some(PriceOptions {
+                                        warm_on_miss: true,
+                                        ..PriceOptions::default()
+                                    }),
+                                    false
+                                )
+                            ).await
+                        {
+                            Ok(r) => r,
+                            Err(_) => {
+                                if is_debug_trader_enabled() {
+                                    log(
+                                        LogTag::Trader,
+                                        "PRICE_TIMEOUT",
+                                        &format!(
+                                            "⏱️ get_price timed out (5s) for {} ({})",
+                                            token.symbol,
+                                            token.mint
+                                        )
+                                    );
+                                }
+                                None
+                            }
+                        };
 
                         // Try to extract current price; if missing, do one short retry
                         let mut current_price_opt: Option<f64> = match &price_result {
@@ -1993,14 +2051,22 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         if current_price_opt.is_none() {
                             // Optional short retry after warm-up enqueue
                             tokio::time::sleep(Duration::from_millis(600)).await;
-                            let retry = get_price(
-                                &token.mint,
-                                Some(PriceOptions {
-                                    warm_on_miss: false,
-                                    ..PriceOptions::default()
-                                }),
-                                false
-                            ).await;
+                            let retry = match
+                                tokio::time::timeout(
+                                    Duration::from_secs(3),
+                                    get_price(
+                                        &token.mint,
+                                        Some(PriceOptions {
+                                            warm_on_miss: false,
+                                            ..PriceOptions::default()
+                                        }),
+                                        false
+                                    )
+                                ).await
+                            {
+                                Ok(r) => r,
+                                Err(_) => None,
+                            };
                             if let Some(r) = retry {
                                 if let Some(p2) = r.sol_price() {
                                     if p2 > 0.0 && p2.is_finite() {
@@ -2193,11 +2259,15 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                         // Get liquidity tier from pool data
                         let liquidity_tier = if
-                            let Some(price_result) = get_price(
-                                &token.mint,
-                                Some(PriceOptions::default()),
-                                false
-                            ).await
+                            let Some(price_result) = (match
+                                tokio::time::timeout(
+                                    Duration::from_secs(3),
+                                    get_price(&token.mint, Some(PriceOptions::default()), false)
+                                ).await
+                            {
+                                Ok(r) => r,
+                                Err(_) => None,
+                            })
                         {
                             let reserve_sol = price_result.reserve_sol.unwrap_or(0.0);
                             if reserve_sol < 0.0 {
@@ -2307,6 +2377,17 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         }
 
         // Wait for tasks to finish with overall timeout (best-effort)
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "COLLECT_START",
+                &format!(
+                    "⏳ Collecting {} token tasks with {}s overall timeout",
+                    handles.len(),
+                    TOKEN_CHECK_COLLECTION_TIMEOUT_SECS
+                )
+            );
+        }
         let collection_result = tokio::time::timeout(
             Duration::from_secs(TOKEN_CHECK_COLLECTION_TIMEOUT_SECS),
             async {
