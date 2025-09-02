@@ -562,6 +562,22 @@ pub fn update_token_check_info(mint: &str, current_price: Option<f64>, had_drop:
     info.had_recent_drop = had_drop;
 }
 
+// Ensure token is in watchlist after a price failure, with a clear log
+async fn ensure_watchlist_on_price_fail(mint: &str, symbol: &str, reason: &str) {
+    let service = get_pool_service();
+    let watchlist = service.get_watchlist_tokens().await;
+    if !watchlist.iter().any(|m| m == mint) {
+        add_watchlist_tokens(&[mint.to_string()]).await;
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "WATCHLIST_ADD",
+                &format!("📝 Added {} to watchlist (reason: price_fail: {})", symbol, reason)
+            );
+        }
+    }
+}
+
 /// Check if token had recent price drop (within 30 seconds)
 pub async fn check_token_for_recent_drop(token: &Token) -> bool {
     let pool_service = get_pool_service();
@@ -1544,11 +1560,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     _ => {
                                         // Update tracking even for failed price fetches
                                         update_token_check_info(&token.mint, None, false);
+                                        let error_detail = result.error
+                                            .as_ref()
+                                            .map(|e| e.to_string())
+                                            .unwrap_or_else(|| "unknown".to_string());
                                         if is_debug_trader_enabled() {
-                                            let error_detail = result.error
-                                                .as_ref()
-                                                .map(|e| format!(": {}", e))
-                                                .unwrap_or_default();
                                             log(
                                                 LogTag::Trader,
                                                 "PRICE_FAIL",
@@ -1556,10 +1572,16 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                                     "❌ No valid price for {} ({}){} - skipping",
                                                     token.symbol,
                                                     token.mint,
-                                                    error_detail
+                                                    format!(": {}", error_detail)
                                                 )
                                             );
                                         }
+                                        // Ensure it's added to watchlist for background calculation
+                                        ensure_watchlist_on_price_fail(
+                                            &token.mint,
+                                            &token.symbol,
+                                            &error_detail
+                                        ).await;
                                         return;
                                     }
                                 }
@@ -1577,6 +1599,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                         )
                                     );
                                 }
+                                // Ensure it's added to watchlist for background calculation
+                                ensure_watchlist_on_price_fail(
+                                    &token.mint,
+                                    &token.symbol,
+                                    "no_price_result"
+                                ).await;
                                 return;
                             }
                         };

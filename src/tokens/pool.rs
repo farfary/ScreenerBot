@@ -1017,7 +1017,7 @@ impl PoolPriceService {
                         };
 
                         if !priority_tokens_list.is_empty() {
-                            Self::batch_update_token_prices(
+                            let _ = Self::batch_update_token_prices(
                                 &priority_tokens_list,
                                 &price_cache,
                                 &stats_arc,
@@ -1044,19 +1044,19 @@ impl PoolPriceService {
                         ).await;
 
                         if !watchlist_batch.is_empty() {
-                            Self::batch_update_token_prices(
+                            let successful_tokens = Self::batch_update_token_prices(
                                 &watchlist_batch,
                                 &price_cache,
                                 &stats_arc,
                                 "WATCHLIST"
                             ).await;
 
-                            // Update last updated times
-                            {
+                            // Update last updated times ONLY for successful tokens
+                            if !successful_tokens.is_empty() {
                                 let mut last_updated = watchlist_last_updated.write().await;
                                 let now = Utc::now();
-                                for token in &watchlist_batch {
-                                    last_updated.insert(token.clone(), now);
+                                for token in successful_tokens {
+                                    last_updated.insert(token, now);
                                 }
                             }
                         }
@@ -1141,9 +1141,9 @@ impl PoolPriceService {
         price_cache: &Arc<RwLock<HashMap<String, PoolPriceResult>>>,
         stats_arc: &Arc<RwLock<PoolServiceStats>>,
         batch_type: &str
-    ) {
+    ) -> Vec<String> {
         if tokens.is_empty() {
-            return;
+            return Vec::new();
         }
 
         let start_time = Instant::now();
@@ -1194,7 +1194,7 @@ impl PoolPriceService {
                     &format!("No pools found for {} batch tokens", batch_type)
                 );
             }
-            return;
+            return Vec::new();
         }
 
         if is_debug_pool_prices_enabled() {
@@ -1214,6 +1214,7 @@ impl PoolPriceService {
         match calculator.calculate_multiple_token_prices(&pool_token_pairs).await {
             Ok(price_results) => {
                 let mut successful_updates = 0;
+                let mut successful_tokens: Vec<String> = Vec::new();
 
                 // Update price cache for successful calculations
                 {
@@ -1248,6 +1249,7 @@ impl PoolPriceService {
                             });
 
                             successful_updates += 1;
+                            successful_tokens.push(token_address.clone());
 
                             // Reset failure count on successful update
                             {
@@ -1294,6 +1296,8 @@ impl PoolPriceService {
                         )
                     );
                 }
+
+                return successful_tokens;
             }
             Err(e) => {
                 if is_debug_pool_prices_enabled() {
@@ -1311,6 +1315,7 @@ impl PoolPriceService {
                         stats.record_failure();
                     }
                 }
+                return Vec::new();
             }
         }
     }
