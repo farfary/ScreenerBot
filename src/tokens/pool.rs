@@ -377,20 +377,29 @@ impl PoolPriceHistoryCache {
     ) -> bool {
         // Check if price has changed from the last entry
         if let Some(last_entry) = self.entries.last() {
-            // Use a small epsilon for floating point comparison (0.01% difference)
+            // Use appropriate epsilon based on price magnitude for floating point comparison
             let price_diff = (price_sol - last_entry.price_sol).abs();
-            let relative_diff = if last_entry.price_sol != 0.0 {
-                price_diff / last_entry.price_sol.abs()
+
+            // For very small prices (< 0.001 SOL), use absolute difference
+            // For larger prices, use relative difference
+            let is_significant_change = if last_entry.price_sol < 0.001 {
+                // For micro-cap tokens: require at least 0.1% absolute change
+                price_diff >= (last_entry.price_sol * 0.001).max(0.000000001) // min 1e-9 change
+            } else if last_entry.price_sol != 0.0 {
+                // For normal tokens: require 0.05% relative change (looser than before)
+                let relative_diff = price_diff / last_entry.price_sol.abs();
+                relative_diff >= 0.0005 // 0.05% instead of 0.01%
             } else {
-                price_diff
+                // If last price was zero, any non-zero price is significant
+                price_sol != 0.0
             };
 
-            // Check time since last entry for forced insertion (every 60 seconds)
+            // Check time since last entry for forced insertion (reduced to every 15 seconds)
             let time_since_last = Utc::now() - last_entry.timestamp;
-            let force_by_time = time_since_last.num_seconds() >= 60;
+            let force_by_time = time_since_last.num_seconds() >= 15;
 
-            // Only record if price changed by more than 0.01% (1 in 10,000) OR if 60+ seconds passed
-            if relative_diff < 0.0001 && !force_by_time {
+            // Only record if price changed significantly OR if enough time passed
+            if !is_significant_change && !force_by_time {
                 return false; // Price hasn't changed significantly and not enough time passed
             }
         }
@@ -1639,7 +1648,7 @@ impl PoolPriceService {
                                 LogTag::Pool,
                                 "PRIORITY_BATCH_SUCCESS",
                                 &format!(
-                                    "Priority batch update successful for {}: {:.12} SOL",
+                                    "Priority batch update successful for {}: {:.9} SOL",
                                     &token_address[..8],
                                     info.price_sol
                                 )
@@ -1694,64 +1703,67 @@ impl PoolPriceService {
     }
 
     pub async fn get_recent_price_history(&self, token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
-        // First try memory-based pool price history cache for comprehensive history
-        {
+        // Build both aggregated (per-pool) and simple histories, filtered to recent window
+        let recent_cutoff = Utc::now() - chrono::Duration::minutes(15);
+
+        // Aggregated pool history (may be sparse if prices don't change much)
+        let recent_aggregated: Vec<(DateTime<Utc>, f64)> = {
             let pool_cache = self.pool_price_history.read().await;
             if let Some(cache) = pool_cache.get(token_address) {
-                let history = cache.get_combined_price_history();
-                if !cache.pool_caches.is_empty() && !history.is_empty() {
-                    if is_debug_pool_prices_enabled() && !history.is_empty() {
-                        log(
-                            LogTag::Pool,
-                            "PRICE_HISTORY_MEMORY",
-                            &format!(
-                                "📊 Retrieved {} price history entries from memory cache for {}",
-                                history.len(),
-                                token_address
-                            )
-                        );
-                    }
-                    return history;
-                }
+                let hist = cache
+                    .get_combined_price_history()
+                    .into_iter()
+                    .filter(|(ts, _)| *ts >= recent_cutoff)
+                    .collect::<Vec<_>>();
+                hist
+            } else {
+                Vec::new()
             }
-        }
+        };
 
-        // Fallback to in-memory cache (limited to 10 entries), but ensure RECENT points
-        let history = self.price_history.read().await;
-        let fallback_history = history.get(token_address).cloned().unwrap_or_default();
-
-        // Only consider recent entries (last 15 minutes to cover EXTREME window)
-        let recent_cutoff_mem = Utc::now() - chrono::Duration::minutes(15);
-        let recent_fallback: Vec<(DateTime<Utc>, f64)> = fallback_history
-            .clone()
-            .into_iter()
-            .filter(|(timestamp, _)| *timestamp >= recent_cutoff_mem)
-            .collect();
-
-        // If in-memory cache has sufficient RECENT data, return it
-        if recent_fallback.len() >= 3 {
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "PRICE_HISTORY_MEMORY",
-                    &format!(
-                        "📈 Retrieved {} RECENT price history entries from memory cache for {} (<=15min)",
-                        recent_fallback.len(),
-                        token_address
-                    )
-                );
-            }
-            return recent_fallback;
-        }
-
-        // Final fallback: try database for recent price history
-        if let Ok(db_history) = get_price_history_for_token(token_address) {
-            // Filter to recent entries (last 10 minutes) to be more lenient than memory cache
-            // This ensures we capture more database entries while still avoiding very stale data
-            let recent_cutoff = Utc::now() - chrono::Duration::minutes(10);
-            let recent_db_history: Vec<(DateTime<Utc>, f64)> = db_history
+        // Simple in-memory history (up to last 10 points; updated every successful price calc)
+        let recent_simple: Vec<(DateTime<Utc>, f64)> = {
+            let history = self.price_history.read().await;
+            let fallback_history = history.get(token_address).cloned().unwrap_or_default();
+            fallback_history
                 .into_iter()
                 .filter(|(timestamp, _)| *timestamp >= recent_cutoff)
+                .collect()
+        };
+
+        // Choose the richer recent history source
+        let simple_len = recent_simple.len();
+        let aggregated_len = recent_aggregated.len();
+        let (chosen_label, mut chosen) = if simple_len >= aggregated_len {
+            ("SIMPLE", recent_simple)
+        } else {
+            ("AGGREGATED", recent_aggregated)
+        };
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "PRICE_HISTORY_RECENT",
+                &format!(
+                    "📊 Recent history for {} -> SIMPLE: {}, AGGREGATED: {}, chosen: {}",
+                    &token_address[..8],
+                    simple_len,
+                    aggregated_len,
+                    chosen_label
+                )
+            );
+        }
+
+        // If we have at least 2 recent points, return immediately
+        if chosen.len() >= 2 {
+            return chosen;
+        }
+
+        // Final fallback: try database for recent price history (10-minute window)
+        if let Ok(db_history) = get_price_history_for_token(token_address) {
+            let recent_db_history: Vec<(DateTime<Utc>, f64)> = db_history
+                .into_iter()
+                .filter(|(timestamp, _)| *timestamp >= Utc::now() - chrono::Duration::minutes(10))
                 .collect();
 
             if !recent_db_history.is_empty() {
@@ -1760,10 +1772,11 @@ impl PoolPriceService {
                         LogTag::Pool,
                         "PRICE_HISTORY_DB_FALLBACK",
                         &format!(
-                            "🗄️ Retrieved {} recent price history entries from database for {} (memory had {}, using 10min window)",
+                            "🗄️ Retrieved {} recent DB entries for {} (chosen had {} from {} source)",
                             recent_db_history.len(),
                             &token_address[..8],
-                            recent_fallback.len()
+                            chosen.len(),
+                            chosen_label
                         )
                     );
                 }
@@ -1771,8 +1784,8 @@ impl PoolPriceService {
             }
         }
 
-        // Return whatever recent memory we have (may be <3, which will simply yield no detection windows)
-        recent_fallback
+        // Return whatever we have (possibly < 2); callers can decide sufficiency
+        chosen
     }
 
     /// Get comprehensive price history for RL learning system
@@ -1916,7 +1929,7 @@ impl PoolPriceService {
                         LogTag::Pool,
                         "POOL_PRICE_HISTORY_ADDED",
                         &format!(
-                            "💾 Added price {:.12} SOL to pool cache for {}/{} (total entries: {})",
+                            "💾 Added price {:.9} SOL to pool cache for {}/{} (total entries: {})",
                             price_sol,
                             token_address,
                             pool_address,
@@ -1957,7 +1970,7 @@ impl PoolPriceService {
                                 LogTag::Pool,
                                 "DB_STORE_SUCCESS",
                                 &format!(
-                                    "💾 Stored price {:.12} SOL to database for {}",
+                                    "💾 Stored price {:.9} SOL to database for {}",
                                     price_sol,
                                     &token_address[..8]
                                 )
@@ -2018,7 +2031,7 @@ impl PoolPriceService {
                 LogTag::Pool,
                 "PRICE_REQUEST",
                 &format!(
-                    "🎯 POOL PRICE REQUEST for {}: API_price={:.12} SOL (NO CACHING - ALWAYS FRESH)",
+                    "🎯 POOL PRICE REQUEST for {}: API_price={:.9} SOL (NO CACHING - ALWAYS FRESH)",
                     token_address,
                     api_price_sol.unwrap_or(0.0)
                 )
@@ -2063,7 +2076,7 @@ impl PoolPriceService {
                             LogTag::Pool,
                             "FRESH_CALC_SUCCESS",
                             &format!(
-                                "✅ FRESH POOL PRICE calculated for {}: {:.12} SOL from pool {} ({})",
+                                "✅ FRESH POOL PRICE calculated for {}: {:.9} SOL from pool {} ({})",
                                 token_address,
                                 price_sol,
                                 pool_result.pool_address,
@@ -2087,8 +2100,8 @@ impl PoolPriceService {
                                 "PRICE_COMPARISON",
                                 &format!(
                                     "💰 PRICE COMPARISON for {}: \
-                                     📊 API={:.12} SOL vs 🏊 POOL={:.12} SOL \
-                                     📈 Diff={:.12} SOL ({:+.2}%) - Pool: {} ({})",
+                                     📊 API={:.9} SOL vs 🏊 POOL={:.9} SOL \
+                                     📈 Diff={:.9} SOL ({:+.2}%) - Pool: {} ({})",
                                     token_address,
                                     api_price_sol,
                                     price_sol,
@@ -2128,7 +2141,7 @@ impl PoolPriceService {
                                 LogTag::Pool,
                                 "POOL_ONLY_PRICE",
                                 &format!(
-                                    "🏊 POOL-ONLY PRICE for {}: {:.12} SOL (no API price for comparison)",
+                                    "🏊 POOL-ONLY PRICE for {}: {:.9} SOL (no API price for comparison)",
                                     token_address,
                                     price_sol
                                 )
@@ -2157,7 +2170,7 @@ impl PoolPriceService {
                             LogTag::Pool,
                             "MONITOR_CACHE_STORED",
                             &format!(
-                                "💾 CACHED monitor price for {}: {:.12} SOL from pool {}",
+                                "💾 CACHED monitor price for {}: {:.9} SOL from pool {}",
                                 token_address,
                                 pool_result.price_sol.unwrap_or(0.0),
                                 pool_result.pool_address
@@ -2176,8 +2189,8 @@ impl PoolPriceService {
                             pool_result.pool_type.clone(),
                             price_sol,
                             pool_result.price_usd,
-                            None, // reserves_token - not available in current PoolPriceResult
-                            None, // reserves_sol - not available in current PoolPriceResult
+                            pool_result.token_reserve, // propagate token reserve if present
+                            pool_result.sol_reserve, // propagate sol reserve if present
                             pool_result.liquidity_usd,
                             Some(pool_result.volume_24h),
                             &pool_result.source
@@ -2188,7 +2201,7 @@ impl PoolPriceService {
                                 LogTag::Pool,
                                 "HISTORY_ADD",
                                 &format!(
-                                    "📈 Added price {:.12} SOL to history for {}",
+                                    "📈 Added price {:.9} SOL to history for {}",
                                     price_sol,
                                     token_address
                                 )
@@ -3989,9 +4002,9 @@ impl PoolPriceCalculator {
                 "CALC",
                 &format!(
                     "Raydium CPMM Price Calculation for {}:\n  \
-                     SOL Reserve: {} ({:.12} adjusted, {} decimals)\n  \
-                     Token Reserve: {} ({:.12} adjusted, {} decimals)\n  \
-                     Price: {:.12} SOL\n  \
+                     SOL Reserve: {} ({:.9} adjusted, {} decimals)\n  \
+                     Token Reserve: {} ({:.9} adjusted, {} decimals)\n  \
+                     Price: {:.9} SOL\n  \
                      Pool: {} ({})",
                     token_mint,
                     sol_reserve,
@@ -4013,7 +4026,7 @@ impl PoolPriceCalculator {
                     "CALC_WARN",
                     &format!(
                         "WARNING: Zero or negative adjusted values detected! \
-                         SOL_adj: {:.12}, Token_adj: {:.12}",
+                         SOL_adj: {:.9}, Token_adj: {:.9}",
                         sol_adjusted,
                         token_adjusted
                     )

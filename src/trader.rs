@@ -405,9 +405,9 @@ pub async fn has_stale_price_history(token_mint: &str) -> bool {
 
     // Consider history stale if:
     // 1. No history at all
-    // 2. Less than 3 entries (insufficient for entry analysis)
+    // 2. Less than 2 entries (insufficient for entry analysis)
     // 3. Most recent entry is older than 2 minutes (consistent with watchlist logic)
-    if history.is_empty() || history.len() < 3 {
+    if history.is_empty() || history.len() < 2 {
         return true;
     }
 
@@ -443,7 +443,7 @@ pub fn get_confidence_tracking_status() -> String {
     for (i, info) in tracker.iter().enumerate() {
         let age_secs = now.duration_since(info.last_updated).as_secs();
         let price_str = info.last_price
-            .map(|p| format!("{:.10} SOL", p))
+            .map(|p| format!("{:.9} SOL", p))
             .unwrap_or_else(|| "No price".to_string());
 
         status.push_str(
@@ -616,8 +616,13 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
     const FILTERING_TIMEOUT_SECS: u64 = 180;
 
     // 1. Fetch tokens from safe system
+    log(LogTag::Trader, "TOKEN_FETCH_START", "🔄 Fetching tokens from database...");
     if is_debug_trader_enabled() {
-        log(LogTag::Trader, "TOKEN_FETCH_START", "🔄 Fetching tokens from safe system...");
+        log(
+            LogTag::Trader,
+            "DEBUG_TOKEN_FETCH",
+            "� Starting token fetch from get_all_tokens_by_liquidity()"
+        );
     }
 
     let fetch_start = std::time::Instant::now();
@@ -625,13 +630,40 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
         let tokens_from_module: Vec<Token> = match get_all_tokens_by_liquidity().await {
             Ok(api_tokens) => {
                 let fetch_duration = fetch_start.elapsed();
+                log(
+                    LogTag::Trader,
+                    "TOKEN_FETCH_SUCCESS",
+                    &format!(
+                        "✅ Fetched {} tokens from database in {:.3}s",
+                        api_tokens.len(),
+                        fetch_duration.as_secs_f32()
+                    )
+                );
                 if is_debug_trader_enabled() {
                     log(
                         LogTag::Trader,
-                        "TOKEN_FETCH_SUCCESS",
+                        "DEBUG_TOKEN_FETCH_SUCCESS",
                         &format!(
-                            "✅ Fetched {} tokens in {:.3}s",
+                            "🔍 Token fetch details:\n  \
+                             - Raw tokens from DB: {}\n  \
+                             - First 5 tokens: [{}]\n  \
+                             - Fetch duration: {:.3}s",
                             api_tokens.len(),
+                            api_tokens
+                                .iter()
+                                .take(5)
+                                .map(|t|
+                                    format!(
+                                        "{}({:.1}k)",
+                                        t.symbol,
+                                        t.liquidity
+                                            .as_ref()
+                                            .and_then(|l| l.usd)
+                                            .unwrap_or(0.0) / 1000.0
+                                    )
+                                )
+                                .collect::<Vec<_>>()
+                                .join(", "),
                             fetch_duration.as_secs_f32()
                         )
                     );
@@ -696,14 +728,52 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
     };
 
     // 2. Apply filtering with timeout protection
+    log(
+        LogTag::Trader,
+        "FILTER_START",
+        &format!(
+            "🔍 Starting filtering of {} tokens (timeout: {}s)",
+            tokens.len(),
+            FILTERING_TIMEOUT_SECS
+        )
+    );
     if is_debug_trader_enabled() {
         log(
             LogTag::Trader,
-            "FILTER_START",
+            "DEBUG_FILTER_START",
             &format!(
-                "🔍 Starting filtering of {} tokens (timeout: {}s)",
+                "� Filter details:\n  \
+                 - Input tokens: {}\n  \
+                 - With liquidity: {}\n  \
+                 - Timeout: {}s\n  \
+                 - Sample tokens: [{}]",
                 tokens.len(),
-                FILTERING_TIMEOUT_SECS
+                tokens
+                    .iter()
+                    .filter(
+                        |t|
+                            t.liquidity
+                                .as_ref()
+                                .and_then(|l| l.usd)
+                                .unwrap_or(0.0) > 0.0
+                    )
+                    .count(),
+                FILTERING_TIMEOUT_SECS,
+                tokens
+                    .iter()
+                    .take(3)
+                    .map(|t|
+                        format!(
+                            "{}({:.1}k)",
+                            t.symbol,
+                            t.liquidity
+                                .as_ref()
+                                .and_then(|l| l.usd)
+                                .unwrap_or(0.0) / 1000.0
+                        )
+                    )
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )
         );
     }
@@ -731,13 +801,43 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
 
     let (eligible_tokens, rejected_tokens) = match filtering_result {
         Ok(Ok(result)) => {
+            log(
+                LogTag::Trader,
+                "FILTER_SUCCESS",
+                &format!(
+                    "✅ Filtering completed in {:.2}s: {}/{} tokens passed",
+                    filter_duration.as_secs_f32(),
+                    result.0.len(),
+                    tokens.len()
+                )
+            );
             if is_debug_trader_enabled() {
                 log(
                     LogTag::Trader,
-                    "FILTER_SUCCESS",
+                    "DEBUG_FILTER_SUCCESS",
                     &format!(
-                        "✅ Filtering task completed successfully in {:.2}s",
-                        filter_duration.as_secs_f32()
+                        "📊 Filter results:\n  \
+                         - Input tokens: {}\n  \
+                         - Eligible tokens: {}\n  \
+                         - Rejected tokens: {}\n  \
+                         - Pass rate: {:.1}%\n  \
+                         - Processing time: {:.2}s\n  \
+                         - First 3 eligible: [{}]",
+                        tokens.len(),
+                        result.0.len(),
+                        result.1.len(),
+                        if tokens.len() > 0 {
+                            ((result.0.len() as f64) / (tokens.len() as f64)) * 100.0
+                        } else {
+                            0.0
+                        },
+                        filter_duration.as_secs_f32(),
+                        result.0
+                            .iter()
+                            .take(3)
+                            .map(|t| t.symbol.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     )
                 );
             }
@@ -954,14 +1054,36 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         let tokens = match prepare_tokens(cycle_start).await {
             Ok(tokens) => {
+                log(
+                    LogTag::Trader,
+                    "CYCLE_PREPARED",
+                    &format!(
+                        "✅ Token preparation completed: {} eligible tokens ready for entry checking in {:.3}s",
+                        tokens.len(),
+                        cycle_start.elapsed().as_secs_f32()
+                    )
+                );
                 if is_debug_trader_enabled() {
                     log(
                         LogTag::Trader,
-                        "CYCLE_PREPARED",
+                        "DEBUG_TOKENS_PREPARED",
                         &format!(
-                            "✅ Token preparation completed: {} eligible tokens in {:.3}s",
-                            tokens.len(),
-                            cycle_start.elapsed().as_secs_f32()
+                            "🔍 First 5 eligible tokens: [{}]",
+                            tokens
+                                .iter()
+                                .take(5)
+                                .map(|t|
+                                    format!(
+                                        "{}({:.9}k)",
+                                        t.symbol,
+                                        t.liquidity
+                                            .as_ref()
+                                            .and_then(|l| l.usd)
+                                            .unwrap_or(0.0) / 1000.0
+                                    )
+                                )
+                                .collect::<Vec<_>>()
+                                .join(", ")
                         )
                     );
                 }
@@ -1044,6 +1166,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         // Process tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+        let handles_initial_size = tokens.len(); // Track for summary logging
 
         // Intelligently prioritize tokens for watchlist based on price history needs
         // This ensures tokens with insufficient or stale price history get fresh price updates
@@ -1101,12 +1224,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     let history = pool_service.get_recent_price_history(&token.mint).await;
 
                     // Check if token needs price updates based on:
-                    // 1. Insufficient history (< 3 entries)
+                    // 1. Insufficient history (< 2 entries)
                     // 2. Stale history (most recent entry > 2 minutes old)
                     // 3. No history at all
                     let needs_update = if history.is_empty() {
                         true // No history at all
-                    } else if history.len() < 3 {
+                    } else if history.len() < 2 {
                         true // Insufficient history for entry analysis
                     } else {
                         // Check if most recent price is stale (older than 2 minutes)
@@ -1161,7 +1284,56 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             }
         }
 
+        // Log detailed information about token processing
+        log(
+            LogTag::Trader,
+            "TOKEN_PROCESSING_START",
+            &format!(
+                "🔄 Starting token processing: {} tokens queued for entry checking",
+                tokens.len()
+            )
+        );
+
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "DEBUG_TOKEN_PROCESSING",
+                &format!(
+                    "📋 Token processing details:\n  \
+                     - Total eligible tokens: {}\n  \
+                     - Semaphore limit: {} concurrent checks\n  \
+                     - Task timeout: {}s per token\n  \
+                     - Tokens being processed: [{}]",
+                    tokens.len(),
+                    10, // semaphore limit
+                    TOKEN_CHECK_TASK_TIMEOUT_SECS,
+                    tokens
+                        .iter()
+                        .take(10)
+                        .map(|t| t.symbol.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            );
+        }
+
+        let mut processed_count = 0;
         for token in tokens.iter() {
+            processed_count += 1;
+
+            if is_debug_trader_enabled() {
+                log(
+                    LogTag::Trader,
+                    "DEBUG_TOKEN_START",
+                    &format!(
+                        "🎯 Processing token {}/{}: {} ({})",
+                        processed_count,
+                        tokens.len(),
+                        token.symbol,
+                        &token.mint[..8]
+                    )
+                );
+            }
             // Check for shutdown before spawning tasks
             if
                 check_shutdown_or_delay(
@@ -1274,7 +1446,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             log(
                                 LogTag::Trader,
                                 "PRICE_CHECK",
-                                &format!("💰 {} price: {:.10} SOL", token.symbol, current_price)
+                                &format!("💰 {} price: {:.9} SOL", token.symbol, current_price)
                             );
                         }
 
@@ -1287,7 +1459,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 LogTag::Trader,
                                 "ENTRY_CHECK",
                                 &format!(
-                                    "🔍 Checking entry criteria for {} at {:.10} SOL",
+                                    "🔍 Checking entry criteria for {} at {:.9} SOL",
                                     token.symbol,
                                     current_price
                                 )
@@ -1359,7 +1531,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 LogTag::Trader,
                                 "ENTRY_APPROVED",
                                 &format!(
-                                    "🚀 ENTRY APPROVED: {} at {:.10} SOL (confidence: {:.1}%, drop: {})",
+                                    "🚀 ENTRY APPROVED: {} at {:.9} SOL (confidence: {:.1}%, drop: {})",
                                     &token.symbol,
                                     current_price,
                                     confidence,
@@ -1416,13 +1588,29 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             Some("UNKNOWN".to_string())
                         };
 
+                        // Check current position limits before attempting to open
+                        if is_debug_trader_enabled() {
+                            let current_positions =
+                                crate::positions::get_open_positions_count().await;
+                            log(
+                                LogTag::Trader,
+                                "POSITION_LIMITS",
+                                &format!(
+                                    "📊 Position limit check: {}/{} open positions before attempting buy for {}",
+                                    current_positions,
+                                    MAX_OPEN_POSITIONS,
+                                    token.symbol
+                                )
+                            );
+                        }
+
                         // Open position directly
                         if is_debug_trader_enabled() {
                             log(
                                 LogTag::Trader,
                                 "POSITION_OPENING",
                                 &format!(
-                                    "📈 Opening position for {} at {:.10} SOL (size: {} SOL)",
+                                    "📈 Opening position for {} at {:.9} SOL (size: {} SOL)",
                                     token.symbol,
                                     current_price,
                                     TRADE_SIZE_SOL
@@ -1514,6 +1702,22 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 LogTag::Trader,
                 "ERROR",
                 &format!("Token check collection timed out after {} seconds", TOKEN_CHECK_COLLECTION_TIMEOUT_SECS)
+            );
+        }
+
+        // Add cycle summary logging
+        if is_debug_trader_enabled() {
+            let final_positions_count = crate::positions::get_open_positions_count().await;
+            log(
+                LogTag::Trader,
+                "CYCLE_SUMMARY",
+                &format!(
+                    "🔄 Cycle summary: Processed {} eligible tokens → {} tasks → Current positions: {}/{}",
+                    tokens.len(),
+                    handles_initial_size,
+                    final_positions_count,
+                    MAX_OPEN_POSITIONS
+                )
             );
         }
 
@@ -1822,7 +2026,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                 LogTag::Trader,
                                 "HOLD",
                                 &format!(
-                                    "Holding {} ({}) - P&L: {:.2}% ({:.6} SOL), Price: {:.12}",
+                                    "Holding {} ({}) - P&L: {:.2}% ({:.6} SOL), Price: {:.9}",
                                     position.symbol,
                                     position.mint,
                                     pnl_percent,
@@ -1840,7 +2044,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         LogTag::Trader,
                         "WARN",
                         &format!(
-                            "Invalid price for position monitoring: {} ({}) - Price = {:.10}",
+                            "Invalid price for position monitoring: {} ({}) - Price = {:.9}",
                             position.symbol,
                             position.mint,
                             current_price

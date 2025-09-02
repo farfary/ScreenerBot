@@ -46,12 +46,14 @@ pub const TRAIL_TIGHTEN_FULL: f64 = 90.0;
 pub const EXIT_ODDS_THRESHOLD: f64 = 0.65; // below this, favor exiting when EV not positive
 
 // Quick capture windows: (minutes, required profit %)
+// Expanded to catch medium-fast spikes earlier.
 const QUICK_WINDOWS: &[(f64, f64)] = &[
     (1.0, 30.0),
+    (2.0, 25.0),
+    (3.0, 35.0),
     (5.0, 50.0),
-    (15.0, 80.0),
-    // Added: give an extra safety window so we can lock solid runs
     (10.0, 60.0),
+    (15.0, 80.0),
 ];
 
 /// ============================= Helpers =============================
@@ -78,13 +80,14 @@ pub fn trailing_gap(peak_profit: f64, minutes_held: f64) -> f64 {
     // Base: higher profits allow wider absolute gaps (but proportionally smaller).
     // We use piecewise factors to avoid wild swings in the small profit region.
     let mut gap = if peak_profit < 20.0 {
-        peak_profit * 0.4
+        // Slightly tighter for small-to-moderate peaks to reduce giveback
+        peak_profit * 0.35
     } else if peak_profit < 50.0 {
-        peak_profit * 0.3
-    } else if peak_profit < 100.0 {
         peak_profit * 0.25
-    } else {
+    } else if peak_profit < 100.0 {
         peak_profit * 0.2
+    } else {
+        peak_profit * 0.16
     };
 
     // Clamp
@@ -329,6 +332,40 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         }
     }
 
+    // 4c) General peak retention rule (time-agnostic):
+    // If we've printed a meaningful peak at any time, enforce retaining a reasonable fraction
+    // to avoid multi-hour round trips. Less strict than the early rule above but always active.
+    {
+        let meaningful_peak = peak_profit >= 30.0;
+        if meaningful_peak {
+            let retain_frac = if minutes_held <= 20.0 {
+                if peak_profit >= 80.0 { 0.6 } else { 0.5 }
+            } else {
+                if peak_profit >= 80.0 { 0.5 } else { 0.45 }
+            };
+            let must_retain = peak_profit * retain_frac;
+            let big_giveback = pnl_percent < must_retain;
+            let decent_abs_dd = peak_profit - pnl_percent >= 8.0;
+            if big_giveback && decent_abs_dd {
+                if is_debug_profit_enabled() {
+                    log(
+                        LogTag::Profit,
+                        "PEAK_RETAIN_EXIT",
+                        &format!(
+                            "{} pnl={:.2}% peak={:.2}% retain_req={:.2}% t={:.1}m",
+                            position.symbol,
+                            pnl_percent,
+                            peak_profit,
+                            must_retain,
+                            minutes_held
+                        )
+                    );
+                }
+                return true;
+            }
+        }
+    }
+
     // 5) Instant large profits - take them immediately
     if pnl_percent >= INSTANT_EXIT_LEVEL_2 {
         return true;
@@ -399,12 +436,12 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         }
     }
 
-    if pnl_percent < dynamic_min_profit {
+    if pnl_percent < dynamic_min_profit && peak_profit < target_min {
         // However, if time pressure is very high and we're above a small profit, close to avoid forced cap
         if time_pressure > 0.95 && pnl_percent > 2.0 {
             return true;
         }
-        return false;
+        // Do not return here; allow trailing/retention/scoring to handle exits once we have a peak.
     }
 
     // 7) Trailing stop logic (dynamic)
