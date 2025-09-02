@@ -2825,8 +2825,14 @@ impl PoolPriceService {
                 (
                     Some(pool_price_info.price_sol),
                     Some(pool_price_info.pool_type.clone()),
-                    Some(pool_price_info.sol_reserve as f64),
-                    Some(pool_price_info.token_reserve as f64),
+                    Some(
+                        (pool_price_info.sol_reserve as f64) /
+                            (10_f64).powi(pool_price_info.sol_decimals as i32)
+                    ),
+                    Some(
+                        (pool_price_info.token_reserve as f64) /
+                            (10_f64).powi(pool_price_info.token_decimals as i32)
+                    ),
                 )
             }
             Ok(None) => {
