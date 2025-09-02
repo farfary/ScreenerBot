@@ -19,7 +19,7 @@ use chrono::{ DateTime, Utc };
 // =============================================================================
 
 // Simple scalping config
-const MIN_PRICE_POINTS: usize = 3;
+const MIN_PRICE_POINTS: usize = 2;
 const MAX_DATA_AGE_MIN: i64 = 10; // unchanged
 
 // Liquidity filter (very permissive for scalping)
@@ -27,7 +27,7 @@ const MIN_LIQUIDITY_USD: f64 = 50.0;
 const MAX_LIQUIDITY_USD: f64 = 100_000_000.0;
 
 // Detection windows and thresholds
-const WINDOWS_SEC: [i64; 4] = [10, 30, 60, 120];
+const WINDOWS_SEC: [i64; 5] = [5, 10, 30, 60, 120];
 const MIN_DROP_PERCENT: f64 = 10.0; // -10%
 const MAX_DROP_PERCENT: f64 = 50.0; // -50%
 
@@ -89,6 +89,29 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     // Filter out invalid prices (0 or non-finite)
     price_history.retain(|(_, p)| *p > 0.0 && p.is_finite());
 
+    // Proactively refresh once if history is insufficient, then re-fetch
+    if price_history.len() < MIN_PRICE_POINTS {
+        // Force a fresh pool-only price to seed history
+        let _ = crate::tokens::get_price(&token.mint, Some(PriceOptions::pool_only()), false).await;
+        let mut refreshed = pool_service.get_recent_price_history(&token.mint).await;
+        refreshed.retain(|(_, p)| *p > 0.0 && p.is_finite());
+        if refreshed.len() >= price_history.len() {
+            price_history = refreshed;
+        }
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "HISTORY_REFRESHED",
+                &format!(
+                    "{} refreshed history size={} (needed >= {})",
+                    token.symbol,
+                    price_history.len(),
+                    MIN_PRICE_POINTS
+                )
+            );
+        }
+    }
+
     if price_history.len() < MIN_PRICE_POINTS {
         if is_debug_entry_enabled() {
             log(
@@ -121,6 +144,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 1.0
             ) * 45.0; // up to +45
         confidence += match sig.window_sec {
+            5 => 15.0,
             10 => 12.0,
             30 => 8.0,
             60 => 5.0,
