@@ -1262,11 +1262,59 @@ impl RpcClient {
             return Ok(Vec::new());
         }
 
+        // If premium RPC only mode is active, use premium RPC
+        if is_premium_rpc_only() {
+            if is_debug_rpc_enabled() {
+                log(
+                    LogTag::Rpc,
+                    "PREMIUM_ONLY",
+                    "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for get_multiple_accounts"
+                );
+            }
+
+            if let Some(premium_url) = &self.premium_url {
+                let premium_client = SolanaRpcClient::new_with_commitment(
+                    premium_url.clone(),
+                    CommitmentConfig::confirmed()
+                );
+
+                self.record_call_for_url(premium_url, "get_multiple_accounts");
+
+                let url = premium_url.clone();
+                let result = tokio::task
+                    ::spawn_blocking({
+                        let keys = pubkeys.to_vec();
+                        move || {
+                            premium_client.get_multiple_accounts(&keys).map_err(|e| {
+                                let blockchain_error = parse_solana_error(
+                                    &e.to_string(),
+                                    None,
+                                    "get_multiple_accounts"
+                                );
+                                format!("blockchain_error:multi:{}:{}", url, blockchain_error)
+                            })
+                        }
+                    }).await
+                    .map_err(|e| format!("Task error: {}", e))?;
+
+                if result.is_ok() {
+                    self.record_success(Some(premium_url));
+                }
+                return result;
+            } else {
+                return Err(
+                    "Premium RPC URL not configured but premium-only mode is active".to_string()
+                );
+            }
+        }
+
+        // Normal mode: use default client with rate limiting
         self.wait_for_rate_limit().await;
         self.record_call("get_multiple_accounts");
 
         let url = self.url().to_string();
-        tokio::task
+        let url_for_closure = url.clone();
+        let result = tokio::task
             ::spawn_blocking({
                 let client = self.client.clone();
                 let keys = pubkeys.to_vec();
@@ -1277,11 +1325,16 @@ impl RpcClient {
                             None,
                             "get_multiple_accounts"
                         );
-                        format!("blockchain_error:multi:{}:{}", url, blockchain_error)
+                        format!("blockchain_error:multi:{}:{}", url_for_closure, blockchain_error)
                     })
                 }
             }).await
-            .map_err(|e| format!("Task error: {}", e))?
+            .map_err(|e| format!("Task error: {}", e))?;
+
+        if result.is_ok() {
+            self.record_success(Some(&url));
+        }
+        result
     }
 
     /// Get account data with automatic fallback support
@@ -2511,11 +2564,6 @@ impl RpcClient {
         &self,
         wallet_address: &str
     ) -> Result<Vec<TokenAccountInfo>, ScreenerBotError> {
-        // Record call in stats
-        if let Ok(mut stats) = self.stats.lock() {
-            stats.record_call(&self.rpc_url, "getTokenAccountsByOwner");
-        }
-
         let spl_token_payload =
             serde_json::json!({
             "jsonrpc": "2.0",
@@ -2550,6 +2598,81 @@ impl RpcClient {
 
         let client = reqwest::Client::new();
         let mut all_accounts = Vec::new();
+
+        // If premium RPC only mode is active, use only premium RPC
+        if is_premium_rpc_only() {
+            if is_debug_rpc_enabled() {
+                log(
+                    LogTag::Rpc,
+                    "PREMIUM_ONLY",
+                    "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for token accounts"
+                );
+            }
+
+            if let Some(premium_url) = &self.premium_url {
+                // Record call in stats for premium URL
+                if let Ok(mut stats) = self.stats.lock() {
+                    stats.record_call(premium_url, "getTokenAccountsByOwner");
+                }
+
+                for payload in [&spl_token_payload, &token_2022_payload] {
+                    if
+                        let Ok(response) = client
+                            .post(premium_url)
+                            .header("Content-Type", "application/json")
+                            .json(payload)
+                            .send().await
+                    {
+                        if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                            if let Some(result) = rpc_response.get("result") {
+                                if let Some(value) = result.get("value") {
+                                    if let Some(accounts) = value.as_array() {
+                                        let is_token_2022 = payload == &token_2022_payload;
+                                        for account in accounts {
+                                            if
+                                                let Some(parsed_info) = extract_token_account_info(
+                                                    account,
+                                                    is_token_2022
+                                                )
+                                            {
+                                                all_accounts.push(parsed_info);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                self.record_success(Some(premium_url));
+                log(
+                    LogTag::Rpc,
+                    "ATA",
+                    &format!(
+                        "Found {} total token accounts for wallet via premium RPC only",
+                        all_accounts.len()
+                    )
+                );
+                return Ok(all_accounts);
+            } else {
+                return Err(
+                    ScreenerBotError::Configuration(
+                        crate::errors::ConfigurationError::InvalidConfig {
+                            field: "premium_url".to_string(),
+                            reason: "Premium RPC URL not configured but premium-only mode is active".to_string(),
+                        }
+                    )
+                );
+            }
+        }
+
+        // Normal mode: Try main RPC first with fallback to premium on rate limits
+        // Record call in stats
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.record_call(&self.rpc_url, "getTokenAccountsByOwner");
+        }
+
         let mut should_fallback = false;
 
         // Try main RPC first
