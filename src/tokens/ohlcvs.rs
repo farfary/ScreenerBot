@@ -58,7 +58,7 @@ const MAX_MEMORY_CACHE_ENTRIES: usize = 500;
 const DATA_RETENTION_HOURS: i64 = 6;
 
 /// Default limit for OHLCV data points
-const DEFAULT_OHLCV_LIMIT: u32 = 100;
+const DEFAULT_OHLCV_LIMIT: u32 = 200;
 
 /// Maximum limit for OHLCV data points
 const MAX_OHLCV_LIMIT: u32 = 500;
@@ -66,14 +66,14 @@ const MAX_OHLCV_LIMIT: u32 = 500;
 /// Background monitoring interval (30 seconds - more frequent for 1m data)
 const MONITORING_INTERVAL_SECS: u64 = 30;
 
-/// Cache file cleanup interval (30 minutes)
-const CLEANUP_INTERVAL_SECS: u64 = 1800;
+/// Cache file cleanup interval (15 minutes)
+const CLEANUP_INTERVAL_SECS: u64 = 900;
 
 /// Solana network identifier for GeckoTerminal
 const SOLANA_NETWORK: &str = "solana";
 
-/// Cache expiration time for 1-minute data (2 minutes)
-const CACHE_EXPIRY_MINUTES: i64 = 2;
+/// Cache expiration time for 1-minute data (5 minutes)
+const CACHE_EXPIRY_MINUTES: i64 = 5;
 
 // =============================================================================
 // DATA STRUCTURES
