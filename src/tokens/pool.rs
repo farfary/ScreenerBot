@@ -69,6 +69,10 @@ const MAX_CONSECUTIVE_FAILURES: u32 = 5;
 /// Run watchlist cleanup every N seconds (during monitoring loop)
 const WATCHLIST_CLEANUP_INTERVAL_SECS: u64 = 300; // 5 minutes
 
+// Ad-hoc warm-up batching
+const ADHOC_BATCH_SIZE: usize = 50; // how many tokens to warm per tick
+const ADHOC_UPDATE_INTERVAL_SECS: u64 = 2; // batch ad-hoc warms every 2s
+
 /// Minimum liquidity (USD) required to consider a pool usable for price calculation.
 /// Lower this for testing environments if you want stats to increment sooner.
 pub const MIN_POOL_LIQUIDITY_USD: f64 = 10.0;
@@ -602,6 +606,9 @@ pub struct PoolPriceService {
     watchlist_last_accessed: Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
     /// Track consecutive failures for each watchlist token (for failure-based removal)
     watchlist_failure_counts: Arc<RwLock<HashMap<String, u32>>>,
+
+    // Ad-hoc, one-shot warm-up requests (not persisted to watchlist)
+    ad_hoc_refresh_tokens: Arc<RwLock<HashSet<String>>>,
 }
 
 /// Pool service comprehensive statistics
@@ -727,6 +734,9 @@ impl PoolPriceService {
             watchlist_request_counts: Arc::new(RwLock::new(HashMap::new())),
             watchlist_last_accessed: Arc::new(RwLock::new(HashMap::new())),
             watchlist_failure_counts: Arc::new(RwLock::new(HashMap::new())),
+
+            // Ad-hoc warm-up queue
+            ad_hoc_refresh_tokens: Arc::new(RwLock::new(HashSet::new())),
         };
 
         // Load existing price history from database on startup
@@ -970,6 +980,7 @@ impl PoolPriceService {
         let watchlist_last_accessed = self.watchlist_last_accessed.clone();
         let watchlist_failure_counts = self.watchlist_failure_counts.clone();
         let watchlist_request_counts = self.watchlist_request_counts.clone();
+        let ad_hoc_refresh_tokens = self.ad_hoc_refresh_tokens.clone();
 
         // Start main monitoring loop with batch processing
         tokio::spawn(async move {
@@ -983,6 +994,9 @@ impl PoolPriceService {
             let mut cleanup_interval = tokio::time::interval(Duration::from_secs(3600)); // Cleanup every hour
             let mut watchlist_cleanup_interval = tokio::time::interval(
                 Duration::from_secs(WATCHLIST_CLEANUP_INTERVAL_SECS)
+            );
+            let mut ad_hoc_interval = tokio::time::interval(
+                Duration::from_secs(ADHOC_UPDATE_INTERVAL_SECS)
             );
 
             loop {
@@ -1128,6 +1142,40 @@ impl PoolPriceService {
                             &watchlist_last_updated
                         ).await;
                     }
+
+                    // Ad-hoc warm-up processing - every 2 seconds
+                    _ = ad_hoc_interval.tick() => {
+                        // Check if monitoring should continue
+                        {
+                            let active = monitoring_active.read().await;
+                            if !*active {
+                                break;
+                            }
+                        }
+
+                        // Drain up to ADHOC_BATCH_SIZE tokens from ad-hoc queue
+                        let batch: Vec<String> = {
+                            let mut set = ad_hoc_refresh_tokens.write().await;
+                            if set.is_empty() { Vec::new() } else {
+                                let take_n = set.len().min(ADHOC_BATCH_SIZE);
+                                let mut out = Vec::with_capacity(take_n);
+                                for token in set.iter().take(take_n).cloned().collect::<Vec<_>>() {
+                                    out.push(token.clone());
+                                    set.remove(&token);
+                                }
+                                out
+                            }
+                        };
+
+                        if !batch.is_empty() {
+                            let _ = Self::batch_update_token_prices(
+                                &batch,
+                                &price_cache,
+                                &stats_arc,
+                                "ADHOC"
+                            ).await;
+                        }
+                    }
                 }
             }
 
@@ -1271,7 +1319,7 @@ impl PoolPriceService {
                     }
                 }
 
-                // Update stats
+                // Update stats for request outcomes
                 {
                     let mut stats = stats_arc.write().await;
                     for _ in 0..successful_updates {
@@ -1280,6 +1328,25 @@ impl PoolPriceService {
                     }
                     for _ in 0..tokens.len() - successful_updates {
                         stats.record_failure();
+                    }
+                }
+
+                // Update monitoring cycle metrics (treat each batch as one cycle)
+                {
+                    let mut stats = stats_arc.write().await;
+                    let elapsed_ms = start_time.elapsed().as_millis() as f64;
+                    stats.monitoring_cycles = stats.monitoring_cycles.saturating_add(1);
+                    stats.last_cycle_tokens = tokens.len() as u64;
+                    stats.total_cycle_tokens = stats.total_cycle_tokens.saturating_add(
+                        tokens.len() as u64
+                    );
+                    stats.last_cycle_duration_ms = elapsed_ms;
+                    stats.total_cycle_duration_ms += elapsed_ms;
+                    if stats.monitoring_cycles > 0 {
+                        stats.avg_tokens_per_cycle =
+                            (stats.total_cycle_tokens as f64) / (stats.monitoring_cycles as f64);
+                        stats.avg_cycle_duration_ms =
+                            stats.total_cycle_duration_ms / (stats.monitoring_cycles as f64);
                     }
                 }
 
@@ -1313,6 +1380,25 @@ impl PoolPriceService {
                     let mut stats = stats_arc.write().await;
                     for _ in 0..tokens.len() {
                         stats.record_failure();
+                    }
+                }
+
+                // Update monitoring cycle metrics even on failures
+                {
+                    let mut stats = stats_arc.write().await;
+                    let elapsed_ms = start_time.elapsed().as_millis() as f64;
+                    stats.monitoring_cycles = stats.monitoring_cycles.saturating_add(1);
+                    stats.last_cycle_tokens = tokens.len() as u64;
+                    stats.total_cycle_tokens = stats.total_cycle_tokens.saturating_add(
+                        tokens.len() as u64
+                    );
+                    stats.last_cycle_duration_ms = elapsed_ms;
+                    stats.total_cycle_duration_ms += elapsed_ms;
+                    if stats.monitoring_cycles > 0 {
+                        stats.avg_tokens_per_cycle =
+                            (stats.total_cycle_tokens as f64) / (stats.monitoring_cycles as f64);
+                        stats.avg_cycle_duration_ms =
+                            stats.total_cycle_duration_ms / (stats.monitoring_cycles as f64);
                     }
                 }
                 return Vec::new();
@@ -3687,28 +3773,38 @@ impl PoolPriceCalculator {
             );
         }
 
-        // Batch fetch all pool accounts with processed commitment for fresh data
+        // Batch fetch all pool accounts in chunks to leverage getMultipleAccounts throughput
         let rpc_phase_start = Instant::now();
-        let accounts = match
-            tokio::time::timeout(
-                Duration::from_secs(12),
-                self.rpc_client.get_multiple_accounts(&pubkeys)
-            ).await
-        {
-            Ok(Ok(accs)) => accs,
-            Ok(Err(e)) => {
-                return Err(format!("Failed to batch get pool accounts: {}", e));
+        let mut accounts: Vec<Option<Account>> = Vec::with_capacity(pubkeys.len());
+        let chunk_size = 100usize;
+        let mut idx = 0usize;
+        while idx < pubkeys.len() {
+            let end = (idx + chunk_size).min(pubkeys.len());
+            let chunk = &pubkeys[idx..end];
+            match
+                tokio::time::timeout(
+                    Duration::from_secs(12),
+                    self.rpc_client.get_multiple_accounts(chunk)
+                ).await
+            {
+                Ok(Ok(accs)) => {
+                    accounts.extend(accs);
+                }
+                Ok(Err(e)) => {
+                    return Err(format!("Failed to batch get pool accounts: {}", e));
+                }
+                Err(_) => {
+                    return Err("RPC get_multiple_accounts chunk timed out after 12s".to_string());
+                }
             }
-            Err(_) => {
-                return Err("RPC get_multiple_accounts timed out after 12s".to_string());
-            }
-        };
+            idx = end;
+        }
         if self.debug_enabled {
             log(
                 LogTag::Pool,
                 "RPC_BATCH_ACCOUNTS",
                 &format!(
-                    "Fetched {} accounts in {:.2}ms",
+                    "Fetched {} accounts in {:.2}ms across chunks",
                     accounts.len(),
                     rpc_phase_start.elapsed().as_millis()
                 )
@@ -6403,6 +6499,8 @@ pub struct PriceOptions {
     pub force_refresh: bool,
     /// Timeout for the entire operation (seconds)
     pub timeout_secs: Option<u64>,
+    /// If no fresh cache, enqueue a one-shot warm-up (batch pool calc) without adding to watchlist
+    pub warm_on_miss: bool,
 }
 
 impl Default for PriceOptions {
@@ -6413,6 +6511,7 @@ impl Default for PriceOptions {
             allow_cache: true,
             force_refresh: false,
             timeout_secs: Some(10),
+            warm_on_miss: false,
         }
     }
 }
@@ -6426,6 +6525,7 @@ impl PriceOptions {
             allow_cache: true,
             force_refresh: false,
             timeout_secs: Some(10),
+            warm_on_miss: false,
         }
     }
 
@@ -6437,6 +6537,7 @@ impl PriceOptions {
             allow_cache: true,
             force_refresh: false,
             timeout_secs: Some(10),
+            warm_on_miss: false,
         }
     }
 }
@@ -6620,9 +6721,6 @@ async fn get_price_internal(
                 reserve_token: None,
             };
 
-            // Add token to watchlist so background service will calculate price for next call
-            service.add_watchlist_token(token_address).await;
-
             return Some(result);
         }
     }
@@ -6638,20 +6736,23 @@ async fn get_price_internal(
         );
     }
 
-    // Add token to watchlist so background service will calculate price for next call
-    service.add_watchlist_token(token_address).await;
-
-    if is_debug_pool_prices_enabled() {
-        log(
-            LogTag::Pool,
-            "WATCHLIST_AUTO_ADD",
-            &format!("Added {} to watchlist for background price calculation", &token_address[..8])
-        );
+    // No cached result available - optionally enqueue one-shot warm-up
+    if options.warm_on_miss {
+        let mut ad_hoc = service.ad_hoc_refresh_tokens.write().await;
+        ad_hoc.insert(token_address.to_string());
+        drop(ad_hoc);
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "ADHOC_ENQUEUE",
+                &format!("Enqueued {} for one-shot warm-up", &token_address[..8])
+            );
+        }
     }
 
-    // No cached result available - return error result instead of None
+    // Return error result instead of None
     let error_msg =
-        "No cached price available - added to watchlist for background calculation".to_string();
+        "No cached price available - not monitored; trader should schedule if needed".to_string();
     let result = PriceResult {
         token_address: token_address.to_string(),
         price_sol: None,
@@ -6741,4 +6842,20 @@ pub async fn clear_watchlist_tokens() {
 pub async fn log_pool_state_summary() {
     let service = get_pool_service();
     service.log_state_summary().await;
+}
+
+/// Request a one-shot warm-up for a token without adding it to watchlist
+pub async fn request_price_warmup(token_address: &str) {
+    let service = get_pool_service();
+    let mut ad_hoc = service.ad_hoc_refresh_tokens.write().await;
+    ad_hoc.insert(token_address.to_string());
+}
+
+/// Request warm-up for multiple tokens
+pub async fn request_price_warmup_batch(token_addresses: &[String]) {
+    let service = get_pool_service();
+    let mut ad_hoc = service.ad_hoc_refresh_tokens.write().await;
+    for t in token_addresses {
+        ad_hoc.insert(t.clone());
+    }
 }

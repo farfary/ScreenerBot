@@ -262,6 +262,10 @@ pub struct CachedTokenData {
 impl CachedTokenData {
     /// Check if cache is still valid
     pub fn is_valid(&self) -> bool {
+        // Never treat an empty token set as a valid cache
+        if self.tokens.is_empty() {
+            return false;
+        }
         let age_minutes = self.cached_at.elapsed().as_secs() / 60;
         age_minutes < self.cache_duration_minutes
     }
@@ -1081,7 +1085,59 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
     }
 
     // 6. Smart token prioritization with confidence-based top tokens
-    let mut prioritized_tokens = prioritize_tokens_for_checking(eligible_tokens);
+    // Partition tokens to ensure ~50% are from actively monitored/history-rich set
+    let pool_service = get_pool_service();
+    let recent_pool_tokens = pool_service.get_tokens_with_recent_pools_infos(600).await; // 10 minutes window for active monitoring
+    let recent_set: std::collections::HashSet<String> = recent_pool_tokens.into_iter().collect();
+    let mut with_monitoring: Vec<Token> = Vec::new();
+    let mut without_monitoring: Vec<Token> = Vec::new();
+    for t in eligible_tokens {
+        if recent_set.contains(&t.mint) {
+            with_monitoring.push(t);
+        } else {
+            without_monitoring.push(t);
+        }
+    }
+
+    // Load DB-backed history presence via pool service lightweight cache (kept at startup)
+    // Prefer tokens that have any history entries in memory
+    let mut with_history: Vec<Token> = Vec::new();
+    let mut no_history: Vec<Token> = Vec::new();
+    for t in with_monitoring.into_iter() {
+        let hist = pool_service.get_price_history(&t.mint).await;
+        if !hist.is_empty() {
+            with_history.push(t);
+        } else {
+            no_history.push(t);
+        }
+    }
+
+    // Prioritize monitored tokens (with history first, then without)
+    let mut prioritized_monitored = prioritize_tokens_for_checking(with_history);
+    let mut prioritized_monitored_nohist = prioritize_tokens_for_checking(no_history);
+    prioritized_monitored.append(&mut prioritized_monitored_nohist);
+
+    // Also prioritize tokens not currently in monitoring
+    let prioritized_others = prioritize_tokens_for_checking(without_monitoring);
+
+    // Interleave ~50/50 between monitored and others
+    let mut prioritized_tokens: Vec<Token> = Vec::with_capacity(
+        prioritized_monitored.len() + prioritized_others.len()
+    );
+    let mut i = 0usize;
+    let mut j = 0usize;
+    while i < prioritized_monitored.len() || j < prioritized_others.len() {
+        // Take up to one from monitored
+        if i < prioritized_monitored.len() {
+            prioritized_tokens.push(prioritized_monitored[i].clone());
+            i += 1;
+        }
+        // Take up to one from others
+        if j < prioritized_others.len() {
+            prioritized_tokens.push(prioritized_others[j].clone());
+            j += 1;
+        }
+    }
 
     // Get top 10 confidence tokens for priority monitoring
     let top_confidence_tokens = get_top_confidence_tokens(10);
@@ -1118,7 +1174,7 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
 
     // Prepend confidence tokens to prioritized list
     confidence_tokens_to_add.extend(prioritized_tokens);
-    prioritized_tokens = confidence_tokens_to_add;
+    let mut prioritized_tokens = confidence_tokens_to_add;
 
     // Clean up stale entries periodically
     cleanup_stale_confidence_entries();
@@ -1164,6 +1220,14 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
 
     // Cache the filtered and prioritized tokens for future cycles
     {
+        if prioritized_tokens.is_empty() {
+            log(
+                LogTag::Trader,
+                "CACHE_SKIP_EMPTY",
+                "⚠️ Not caching empty filtered token list; will retry next cycle"
+            );
+            return Ok(prioritized_tokens);
+        }
         let mut cache = FILTERED_TOKENS_CACHE.write().unwrap();
         *cache = Some(CachedTokenData {
             tokens: prioritized_tokens.clone(),
@@ -1370,7 +1434,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let start_raw = SCHEDULER_OFFSET.fetch_add(batch_size, Ordering::Relaxed);
         let start_idx = start_raw % total_tokens;
 
-        let scheduled_tokens: Vec<Token> = if start_idx + batch_size <= total_tokens {
+        let base_slice: Vec<Token> = if start_idx + batch_size <= total_tokens {
             tokens[start_idx..start_idx + batch_size].to_vec()
         } else {
             let first = tokens[start_idx..].to_vec();
@@ -1379,6 +1443,36 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             combined.extend_from_slice(&tokens[..remaining]);
             combined
         };
+
+        // Interleave: ensure ~50% of scheduled are tokens with history/active monitoring
+        let monitored_set: std::collections::HashSet<String> = get_pool_service()
+            .get_tokens_with_recent_pools_infos(600).await
+            .into_iter()
+            .collect();
+        let mut monitored: Vec<Token> = Vec::new();
+        let mut others: Vec<Token> = Vec::new();
+        for t in base_slice {
+            if monitored_set.contains(&t.mint) {
+                monitored.push(t);
+            } else {
+                others.push(t);
+            }
+        }
+        // Cap monitored portion to 50% of batch
+        let target_monitored = (batch_size / 2).max(1);
+        let mut scheduled_tokens: Vec<Token> = Vec::with_capacity(batch_size);
+        let mut i = 0usize;
+        while scheduled_tokens.len() < batch_size && (i < monitored.len() || !others.is_empty()) {
+            if scheduled_tokens.len() < target_monitored && i < monitored.len() {
+                scheduled_tokens.push(monitored[i].clone());
+                i += 1;
+            }
+            if scheduled_tokens.len() < batch_size {
+                if let Some(t) = others.pop() {
+                    scheduled_tokens.push(t);
+                }
+            }
+        }
 
         // Process scheduled tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
@@ -1576,7 +1670,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                                 )
                                             );
                                         }
-                                        // Ensure it's added to watchlist for background calculation
+                                        // Trader-controlled: ensure it's on watchlist for background calculation
                                         ensure_watchlist_on_price_fail(
                                             &token.mint,
                                             &token.symbol,
@@ -1599,7 +1693,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                         )
                                     );
                                 }
-                                // Ensure it's added to watchlist for background calculation
+                                // Trader-controlled: ensure it's on watchlist for background calculation
                                 ensure_watchlist_on_price_fail(
                                     &token.mint,
                                     &token.symbol,

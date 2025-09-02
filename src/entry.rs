@@ -73,7 +73,11 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     }
 
     let (current_price, reserve_sol, activity_score) = match
-        crate::tokens::get_price(&token.mint, Some(PriceOptions::default()), false).await
+        crate::tokens::get_price(
+            &token.mint,
+            Some(PriceOptions { warm_on_miss: true, ..PriceOptions::default() }),
+            false
+        ).await
     {
         Some(result) => {
             let price = result.sol_price().unwrap_or(0.0);
