@@ -166,7 +166,8 @@ pub const MAX_TOKENS_PER_CYCLE: usize = ENTRY_CHECK_CONCURRENCY * 3; // 72 by de
 pub const WATCHLIST_ANALYSIS_LIMIT: usize = 400;
 
 /// Fraction of the cycle interval used as a soft time budget; beyond this we stop scheduling new tasks
-pub const TIME_BUDGET_FRACTION: f64 = 0.9;
+/// Increased to allow more time for token processing after preparation phase
+pub const TIME_BUDGET_FRACTION: f64 = 1.8;
 
 use crate::global::is_debug_trader_enabled;
 use crate::logger::{ log, LogTag };
@@ -1354,9 +1355,10 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             LogTag::Trader,
             "TOKEN_PROCESSING_START",
             &format!(
-                "🔄 Starting token processing: {} tokens scheduled (of {} eligible)",
+                "🔄 Starting token processing: {} tokens scheduled (of {} eligible). Preparation took {:.3}s",
                 scheduled_tokens.len(),
-                total_tokens
+                total_tokens,
+                cycle_start.elapsed().as_secs_f32()
             )
         );
 
@@ -1384,25 +1386,29 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         }
 
         let mut processed_count = 0;
-        // Soft time budget to avoid overrunning cycle interval
-        let cycle_soft_budget = Duration::from_secs_f64(
+        // Separate time tracking: allow generous budget for actual token processing
+        // Don't penalize processing for slow preparation phase
+        let processing_start = std::time::Instant::now();
+        let processing_budget = Duration::from_secs_f64(
             (ENTRY_MONITOR_INTERVAL_SECS as f64) * TIME_BUDGET_FRACTION
         );
 
         for token in scheduled_tokens.iter() {
             processed_count += 1;
 
-            // Stop scheduling new tasks if we exceeded soft time budget
-            if cycle_start.elapsed() >= cycle_soft_budget {
+            // Use processing time (not total cycle time) for budget check
+            // This allows token processing even if preparation took a long time
+            if processing_start.elapsed() >= processing_budget {
                 log(
                     LogTag::Trader,
                     "TIME_BUDGET_REACHED",
                     &format!(
-                        "⏱️ Time budget reached at {:.3}s (limit {:.3}s). Scheduled {}/{} tokens.",
-                        cycle_start.elapsed().as_secs_f32(),
-                        cycle_soft_budget.as_secs_f32(),
+                        "⏱️ Processing time budget reached at {:.3}s (limit {:.3}s). Scheduled {}/{} tokens. Total cycle time: {:.3}s",
+                        processing_start.elapsed().as_secs_f32(),
+                        processing_budget.as_secs_f32(),
                         processed_count - 1,
-                        handles_initial_size
+                        scheduled_tokens.len(),
+                        cycle_start.elapsed().as_secs_f32()
                     )
                 );
                 break;
