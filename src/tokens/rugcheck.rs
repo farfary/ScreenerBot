@@ -3,17 +3,17 @@ use crate::global::is_debug_rugcheck_enabled;
 ///
 /// This module provides a background service for fetching and updating rugcheck data.
 /// It handles rate limiting, database storage, and provides fresh data to the trading system.
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use crate::tokens::blacklist;
 use crate::tokens::cache::TokenDatabase;
-use chrono::{DateTime, Utc};
+use chrono::{ DateTime, Utc };
 use reqwest::Client;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{ Deserialize, Deserializer, Serialize };
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{ AtomicBool, Ordering };
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::{Notify, RwLock};
+use std::time::{ Duration, Instant };
+use tokio::sync::{ Notify, RwLock };
 use tokio::time::interval;
 use tokio::time::sleep as tokio_sleep;
 
@@ -21,10 +21,9 @@ use tokio::time::sleep as tokio_sleep;
 
 /// Custom deserializer that accepts both integers and strings and converts them to String
 fn deserialize_int_or_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-where
-    D: Deserializer<'de>,
+    where D: Deserializer<'de>
 {
-    use serde::de::{self, Visitor};
+    use serde::de::{ self, Visitor };
     use std::fmt;
 
     struct IntOrStringVisitor;
@@ -36,45 +35,27 @@ where
             formatter.write_str("an integer or string")
         }
 
-        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E> where E: de::Error {
             Ok(Some(value.to_string()))
         }
 
-        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> where E: de::Error {
             Ok(Some(value.to_string()))
         }
 
-        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> where E: de::Error {
             Ok(Some(value.to_string()))
         }
 
-        fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
+        fn visit_string<E>(self, value: String) -> Result<Self::Value, E> where E: de::Error {
             Ok(Some(value))
         }
 
-        fn visit_none<E>(self) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
+        fn visit_none<E>(self) -> Result<Self::Value, E> where E: de::Error {
             Ok(None)
         }
 
-        fn visit_unit<E>(self) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
+        fn visit_unit<E>(self) -> Result<Self::Value, E> where E: de::Error {
             Ok(None)
         }
     }
@@ -91,7 +72,7 @@ const RUGCHECK_DATA_EXPIRY_HOURS: u64 = 24; // 24 hours - when rugcheck data exp
 
 // ===== RUGCHECK API RESPONSE STRUCTURES =====
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RugcheckResponse {
     pub mint: String,
     #[serde(rename = "tokenProgram")]
@@ -150,7 +131,7 @@ pub struct RugcheckResponse {
     pub launchpad: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TokenInfo {
     #[serde(rename = "mintAuthority")]
     pub mint_authority: Option<String>,
@@ -163,7 +144,7 @@ pub struct TokenInfo {
     pub freeze_authority: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TokenMeta {
     pub name: Option<String>,
     pub symbol: Option<String>,
@@ -173,7 +154,7 @@ pub struct TokenMeta {
     pub update_authority: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Holder {
     pub address: String,
     #[serde(deserialize_with = "deserialize_int_or_string")]
@@ -188,7 +169,7 @@ pub struct Holder {
     pub insider: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Risk {
     pub name: String,
     pub value: Option<String>,
@@ -197,7 +178,7 @@ pub struct Risk {
     pub level: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileMeta {
     pub description: Option<String>,
     pub name: Option<String>,
@@ -205,7 +186,7 @@ pub struct FileMeta {
     pub image: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TransferFee {
     pub pct: Option<f64>,
     #[serde(rename = "maxAmount")]
@@ -214,14 +195,14 @@ pub struct TransferFee {
     pub authority: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KnownAccount {
     pub name: String,
     #[serde(rename = "type")]
     pub account_type: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Event {
     pub event: i32,
     #[serde(rename = "oldValue")]
@@ -232,7 +213,7 @@ pub struct Event {
     pub created_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Verification {
     pub mint: Option<String>,
     pub payer: Option<String>,
@@ -244,7 +225,7 @@ pub struct Verification {
     pub links: Option<Vec<serde_json::Value>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Market {
     pub pubkey: Option<String>,
     #[serde(rename = "marketType")]
@@ -262,7 +243,7 @@ pub struct Market {
     pub lp: Option<LiquidityPool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LiquidityPool {
     #[serde(rename = "baseMint")]
     pub base_mint: Option<String>,
@@ -319,11 +300,8 @@ pub struct RugcheckCacheEntry {
 
 impl RugcheckCacheEntry {
     pub fn is_expired(&self) -> bool {
-        Utc::now()
-            .signed_duration_since(self.timestamp)
-            .to_std()
-            .unwrap_or(Duration::MAX)
-            > Duration::from_secs(RUGCHECK_DATA_EXPIRY_HOURS * 60 * 60)
+        Utc::now().signed_duration_since(self.timestamp).to_std().unwrap_or(Duration::MAX) >
+            Duration::from_secs(RUGCHECK_DATA_EXPIRY_HOURS * 60 * 60)
     }
 }
 
@@ -378,19 +356,11 @@ impl RugcheckService {
 
     /// Start the background rugcheck service
     pub async fn start_background_service(self: Arc<Self>) {
-        log(
-            LogTag::Rugcheck,
-            "START",
-            "Starting rugcheck background service",
-        );
+        log(LogTag::Rugcheck, "START", "Starting rugcheck background service");
 
         // Initialize rugcheck table
         if let Err(e) = self.initialize_rugcheck_table().await {
-            log(
-                LogTag::Rugcheck,
-                "ERROR",
-                &format!("Failed to initialize rugcheck table: {}", e),
-            );
+            log(LogTag::Rugcheck, "ERROR", &format!("Failed to initialize rugcheck table: {}", e));
             return;
         }
 
@@ -423,11 +393,7 @@ impl RugcheckService {
         }
 
         // Announce end of the background task
-        log(
-            LogTag::Rugcheck,
-            "TASK_END",
-            "✅ Rugcheck service task ended",
-        );
+        log(LogTag::Rugcheck, "TASK_END", "✅ Rugcheck service task ended");
     }
 
     /// Update rugcheck data for priority tokens (open positions, recent discoveries)
@@ -435,11 +401,7 @@ impl RugcheckService {
     pub async fn update_priority_tokens(&self, priority_mints: Vec<String>) -> Result<(), String> {
         if self.is_shutting_down() {
             if is_debug_rugcheck_enabled() {
-                log(
-                    LogTag::Rugcheck,
-                    "SKIP_SHUTDOWN",
-                    "Skip priority update due to shutdown",
-                );
+                log(LogTag::Rugcheck, "SKIP_SHUTDOWN", "Skip priority update due to shutdown");
             }
             return Ok(());
         }
@@ -450,10 +412,7 @@ impl RugcheckService {
         log(
             LogTag::Rugcheck,
             "PRIORITY_UPDATE",
-            &format!(
-                "Updating rugcheck data for {} priority tokens",
-                priority_mints.len()
-            ),
+            &format!("Updating rugcheck data for {} priority tokens", priority_mints.len())
         );
 
         // Filter to only tokens that actually need updating (older than 1 hour for priority)
@@ -471,7 +430,7 @@ impl RugcheckService {
                     }
                 }
                 Ok(None) => true, // No data, needs fetching
-                Err(_) => true,   // Database error, update to be safe
+                Err(_) => true, // Database error, update to be safe
             };
 
             if should_update {
@@ -480,21 +439,14 @@ impl RugcheckService {
         }
 
         if tokens_to_update.is_empty() {
-            log(
-                LogTag::Rugcheck,
-                "PRIORITY_SKIP",
-                "All priority tokens have recent rugcheck data",
-            );
+            log(LogTag::Rugcheck, "PRIORITY_SKIP", "All priority tokens have recent rugcheck data");
             return Ok(());
         }
 
         log(
             LogTag::Rugcheck,
             "PRIORITY_FILTERED",
-            &format!(
-                "Updating {} priority tokens that need refresh",
-                tokens_to_update.len()
-            ),
+            &format!("Updating {} priority tokens that need refresh", tokens_to_update.len())
         );
 
         self.update_rugcheck_data_for_mints(tokens_to_update).await
@@ -506,10 +458,8 @@ impl RugcheckService {
             return Ok(Vec::new());
         }
         // Get all tokens from database
-        let tokens = self
-            .database
-            .get_all_tokens()
-            .await
+        let tokens = self.database
+            .get_all_tokens().await
             .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
 
         let mut expired_mints = Vec::new();
@@ -526,8 +476,7 @@ impl RugcheckService {
                     // Check if rugcheck data is expired
                     let age = Utc::now().signed_duration_since(updated_at);
                     if let Ok(age_duration) = age.to_std() {
-                        if age_duration > Duration::from_secs(RUGCHECK_DATA_EXPIRY_HOURS * 60 * 60)
-                        {
+                        if age_duration > Duration::from_secs(RUGCHECK_DATA_EXPIRY_HOURS * 60 * 60) {
                             expired_mints.push(mint);
                             if is_debug_rugcheck_enabled() && !self.is_shutting_down() {
                                 log(
@@ -535,8 +484,9 @@ impl RugcheckService {
                                     "EXPIRED",
                                     &format!(
                                         "Token {} has expired rugcheck data (age: {:?})",
-                                        token.mint, age_duration
-                                    ),
+                                        token.mint,
+                                        age_duration
+                                    )
                                 );
                             }
                         }
@@ -549,7 +499,7 @@ impl RugcheckService {
                         log(
                             LogTag::Rugcheck,
                             "MISSING",
-                            &format!("Token {} has no rugcheck data - needs fetching", mint),
+                            &format!("Token {} has no rugcheck data - needs fetching", mint)
                         );
                     }
                 }
@@ -557,7 +507,7 @@ impl RugcheckService {
                     log(
                         LogTag::Rugcheck,
                         "DB_ERROR",
-                        &format!("Database error checking rugcheck data for {}: {}", mint, e),
+                        &format!("Database error checking rugcheck data for {}: {}", mint, e)
                     );
                     // On database error, include token to be safe
                     expired_mints.push(mint);
@@ -572,31 +522,19 @@ impl RugcheckService {
     async fn update_all_rugcheck_data(&self) {
         if self.is_shutting_down() {
             if is_debug_rugcheck_enabled() {
-                log(
-                    LogTag::Rugcheck,
-                    "SKIP_SHUTDOWN",
-                    "Skip periodic update due to shutdown",
-                );
+                log(LogTag::Rugcheck, "SKIP_SHUTDOWN", "Skip periodic update due to shutdown");
             }
             return;
         }
         if is_debug_rugcheck_enabled() {
-            log(
-                LogTag::Rugcheck,
-                "UPDATE",
-                "Starting periodic rugcheck data update",
-            );
+            log(LogTag::Rugcheck, "UPDATE", "Starting periodic rugcheck data update");
         }
 
         // Get expired tokens that need updating (24+ hours old)
         let expired_mints = match self.get_expired_tokens().await {
             Ok(mints) => mints,
             Err(e) => {
-                log(
-                    LogTag::Rugcheck,
-                    "ERROR",
-                    &format!("Failed to get expired tokens: {}", e),
-                );
+                log(LogTag::Rugcheck, "ERROR", &format!("Failed to get expired tokens: {}", e));
                 return;
             }
         };
@@ -609,7 +547,7 @@ impl RugcheckService {
                 log(
                     LogTag::Rugcheck,
                     "INFO",
-                    "No expired tokens found - all rugcheck data is current",
+                    "No expired tokens found - all rugcheck data is current"
                 );
             }
             return;
@@ -619,7 +557,7 @@ impl RugcheckService {
             log(
                 LogTag::Rugcheck,
                 "INFO",
-                &format!("Found {} expired tokens to update", expired_mints.len()),
+                &format!("Found {} expired tokens to update", expired_mints.len())
             );
         }
 
@@ -629,7 +567,7 @@ impl RugcheckService {
                 log(
                     LogTag::Rugcheck,
                     "ERROR",
-                    &format!("Failed to update expired rugcheck data: {}", e),
+                    &format!("Failed to update expired rugcheck data: {}", e)
                 );
             }
         }
@@ -641,7 +579,7 @@ impl RugcheckService {
             log(
                 LogTag::Rugcheck,
                 "START",
-                &format!("Starting rugcheck update for {} tokens", total_mints),
+                &format!("Starting rugcheck update for {} tokens", total_mints)
             );
         }
 
@@ -658,14 +596,16 @@ impl RugcheckService {
                 log(
                     LogTag::Rugcheck,
                     "SHUTDOWN",
-                    "Shutdown signal received during token processing",
+                    "Shutdown signal received during token processing"
                 );
                 break;
             }
 
             // Skip tokens that were updated within the last minute to prevent duplicate processing
-            if let Ok(Some((_data, updated_at))) =
-                self.database.get_rugcheck_data_with_timestamp(&mint)
+            if
+                let Ok(Some((_data, updated_at))) = self.database.get_rugcheck_data_with_timestamp(
+                    &mint
+                )
             {
                 let age = Utc::now().signed_duration_since(updated_at);
                 if let Ok(age_duration) = age.to_std() {
@@ -677,8 +617,9 @@ impl RugcheckService {
                                 "SKIP_RECENT",
                                 &format!(
                                     "Skipping {} - recently updated ({:?} ago)",
-                                    mint, age_duration
-                                ),
+                                    mint,
+                                    age_duration
+                                )
                             );
                         }
                         continue;
@@ -691,9 +632,8 @@ impl RugcheckService {
                     success_count += 1;
 
                     // Get the stored data for detailed success logging
-                    if let Ok(Some(data)) = self.database.get_rugcheck_data(&mint) {
-                        let symbol = data
-                            .token_meta
+                    if let Ok(Some(data)) = self.database.get_rugcheck_data_instance(&mint) {
+                        let symbol = data.token_meta
                             .as_ref()
                             .and_then(|meta| meta.symbol.as_ref())
                             .map(|s| s.as_str())
@@ -710,10 +650,14 @@ impl RugcheckService {
                                     "✓ Stored {} | Risk Score: {} | Status: {} | {}/{}",
                                     symbol,
                                     score.map_or("N/A".to_string(), |s| s.to_string()),
-                                    if is_safe { "🟢 SAFE" } else { "🔴 RISKY" },
+                                    if is_safe {
+                                        "🟢 SAFE"
+                                    } else {
+                                        "🔴 RISKY"
+                                    },
                                     success_count,
                                     total_mints
-                                ),
+                                )
                             );
                         }
                     } else if is_debug_rugcheck_enabled() {
@@ -722,26 +666,20 @@ impl RugcheckService {
                             "SUCCESS",
                             &format!(
                                 "✓ Updated rugcheck data for {} ({}/{})",
-                                mint, success_count, total_mints
-                            ),
+                                mint,
+                                success_count,
+                                total_mints
+                            )
                         );
                     }
                 }
                 Err(e) => {
                     if e == "CANCELLED" {
-                        log(
-                            LogTag::Rugcheck,
-                            "CANCELLED",
-                            "Rugcheck update cancelled by shutdown",
-                        );
+                        log(LogTag::Rugcheck, "CANCELLED", "Rugcheck update cancelled by shutdown");
                         break;
                     }
                     error_count += 1;
-                    log(
-                        LogTag::Rugcheck,
-                        "ERROR",
-                        &format!("✗ Failed to update {}: {}", mint, e),
-                    );
+                    log(LogTag::Rugcheck, "ERROR", &format!("✗ Failed to update {}: {}", mint, e));
                 }
             }
         }
@@ -749,10 +687,7 @@ impl RugcheckService {
         log(
             LogTag::Rugcheck,
             "COMPLETE",
-            &format!(
-                "Rugcheck update completed: {} success, {} errors",
-                success_count, error_count
-            ),
+            &format!("Rugcheck update completed: {} success, {} errors", success_count, error_count)
         );
         Ok(())
     }
@@ -784,7 +719,7 @@ impl RugcheckService {
                     log(
                         LogTag::Rugcheck,
                         "SKIP",
-                        &format!("Skipping {} - no rugcheck data available", mint),
+                        &format!("Skipping {} - no rugcheck data available", mint)
                     );
                     // Return Ok to avoid treating this as an error - this is normal
                     return Ok(());
@@ -792,7 +727,7 @@ impl RugcheckService {
                     log(
                         LogTag::Rugcheck,
                         "SKIP_BLACKLISTED",
-                        &format!("Skipping {} - token blacklisted due to 502 error", mint),
+                        &format!("Skipping {} - token blacklisted due to 502 error", mint)
                     );
                     // Return Ok to avoid treating this as an error - token is now blacklisted
                     return Ok(());
@@ -828,10 +763,7 @@ impl RugcheckService {
                 log(
                     LogTag::Rugcheck,
                     "RATE_LIMIT",
-                    &format!(
-                        "Rate limiting: waiting {:?} before fetching {}",
-                        wait_time, mint
-                    ),
+                    &format!("Rate limiting: waiting {:?} before fetching {}", wait_time, mint)
                 );
             }
             if !self.sleep_cancellable(wait_time).await {
@@ -855,14 +787,15 @@ impl RugcheckService {
                     "FETCH",
                     &format!(
                         "Fetching data for token: {} (attempt {}/{})",
-                        mint, attempt, max_retries
-                    ),
+                        mint,
+                        attempt,
+                        max_retries
+                    )
                 );
             }
 
             // Send HTTP request with shutdown-aware cancellation
-            let send_fut = self
-                .client
+            let send_fut = self.client
                 .get(&url)
                 .header("accept", "application/json")
                 .timeout(Duration::from_secs(RUGCHECK_REQUEST_TIMEOUT_SECS))
@@ -871,7 +804,8 @@ impl RugcheckService {
             if self.is_shutting_down() {
                 return Err("CANCELLED".to_string());
             }
-            let send_result = tokio::select! {
+            let send_result =
+                tokio::select! {
                 res = send_fut => res,
                 _ = self.shutdown_notify.notified() => { return Err("CANCELLED".to_string()); }
             };
@@ -886,10 +820,7 @@ impl RugcheckService {
                             log(
                                 LogTag::Rugcheck,
                                 "BLACKLIST_502",
-                                &format!(
-                                    "502 Bad Gateway for {} - blacklisting token and skipping retries",
-                                    mint
-                                ),
+                                &format!("502 Bad Gateway for {} - blacklisting token and skipping retries", mint)
                             );
 
                             // Blacklist the token due to API error
@@ -906,11 +837,13 @@ impl RugcheckService {
                             if self.is_shutting_down() {
                                 return Err("CANCELLED".to_string());
                             }
-                            match (tokio::select! { body = text_fut => body, _ = self.shutdown_notify.notified() => { return Err("CANCELLED".to_string()); } })
-                            {
+                            match (
+                                tokio::select! { body = text_fut => body, _ = self.shutdown_notify.notified() => { return Err("CANCELLED".to_string()); } }
+                            ) {
                                 Ok(error_body) => {
-                                    if error_body.contains("unable to generate report")
-                                        || error_body.contains("not found")
+                                    if
+                                        error_body.contains("unable to generate report") ||
+                                        error_body.contains("not found")
                                     {
                                         log(
                                             LogTag::Rugcheck,
@@ -923,7 +856,7 @@ impl RugcheckService {
                                                 } else {
                                                     "rugcheck cannot generate report"
                                                 }
-                                            ),
+                                            )
                                         );
                                         // Return a special error that indicates no data available
                                         return Err("NO_RUGCHECK_DATA_AVAILABLE".to_string());
@@ -960,8 +893,9 @@ impl RugcheckService {
                                 "RATE_LIMITED",
                                 &format!(
                                     "Rate limited (429) for {}: waiting {:?} before retry",
-                                    mint, wait_time
-                                ),
+                                    mint,
+                                    wait_time
+                                )
                             );
 
                             if attempt < max_retries {
@@ -982,8 +916,11 @@ impl RugcheckService {
                             "RETRY",
                             &format!(
                                 "Attempt {}/{} failed for {}: {}",
-                                attempt, max_retries, mint, last_error
-                            ),
+                                attempt,
+                                max_retries,
+                                mint,
+                                last_error
+                            )
                         );
 
                         // For 502 errors, don't retry - token is already blacklisted
@@ -991,10 +928,7 @@ impl RugcheckService {
                             log(
                                 LogTag::Rugcheck,
                                 "NO_RETRY_502",
-                                &format!(
-                                    "Skipping retries for {} - token blacklisted due to 502",
-                                    mint
-                                ),
+                                &format!("Skipping retries for {} - token blacklisted due to 502", mint)
                             );
                             return Err("TOKEN_BLACKLISTED_502".to_string());
                         }
@@ -1004,18 +938,17 @@ impl RugcheckService {
                         if self.is_shutting_down() {
                             return Err("CANCELLED".to_string());
                         }
-                        match (tokio::select! { parsed = json_fut => parsed, _ = self.shutdown_notify.notified() => { return Err("CANCELLED".to_string()); } })
-                        {
+                        match (
+                            tokio::select! { parsed = json_fut => parsed, _ = self.shutdown_notify.notified() => { return Err("CANCELLED".to_string()); } }
+                        ) {
                             Ok(rugcheck_data) => {
                                 // Extract token information for detailed logging
-                                let symbol = rugcheck_data
-                                    .token_meta
+                                let symbol = rugcheck_data.token_meta
                                     .as_ref()
                                     .and_then(|meta| meta.symbol.as_ref())
                                     .unwrap_or(&rugcheck_data.mint);
 
-                                let name = rugcheck_data
-                                    .token_meta
+                                let name = rugcheck_data.token_meta
                                     .as_ref()
                                     .and_then(|meta| meta.name.as_ref())
                                     .unwrap_or(&symbol);
@@ -1028,8 +961,8 @@ impl RugcheckService {
                                     risks
                                         .iter()
                                         .filter(|r| {
-                                            r.level.as_deref() == Some("high")
-                                                || r.level.as_deref() == Some("critical")
+                                            r.level.as_deref() == Some("high") ||
+                                                r.level.as_deref() == Some("critical")
                                         })
                                         .count()
                                 } else {
@@ -1096,8 +1029,10 @@ impl RugcheckService {
                                     "PARSE_ERROR",
                                     &format!(
                                         "JSON parse error for {} (attempt {}): {}",
-                                        mint, attempt, e
-                                    ),
+                                        mint,
+                                        attempt,
+                                        e
+                                    )
                                 );
 
                                 // For JSON parse errors, don't retry immediately - might be a schema issue
@@ -1108,8 +1043,11 @@ impl RugcheckService {
                                         "RETRY",
                                         &format!(
                                             "Attempt {}/{} failed for {}: {}",
-                                            attempt, max_retries, mint, last_error
-                                        ),
+                                            attempt,
+                                            max_retries,
+                                            mint,
+                                            last_error
+                                        )
                                     );
                                     if !self.sleep_cancellable(wait_time).await {
                                         return Err("CANCELLED".to_string());
@@ -1126,8 +1064,11 @@ impl RugcheckService {
                         "RETRY",
                         &format!(
                             "Attempt {}/{} failed for {}: {}",
-                            attempt, max_retries, mint, last_error
-                        ),
+                            attempt,
+                            max_retries,
+                            mint,
+                            last_error
+                        )
                     );
                 }
             }
@@ -1143,8 +1084,10 @@ impl RugcheckService {
                     "WAIT",
                     &format!(
                         "Waiting {:?} before retry for {} (attempt {} failed)",
-                        wait_time, mint, attempt
-                    ),
+                        wait_time,
+                        mint,
+                        attempt
+                    )
                 );
                 if !self.sleep_cancellable(wait_time).await {
                     return Err("CANCELLED".to_string());
@@ -1158,10 +1101,7 @@ impl RugcheckService {
             }
         }
 
-        Err(format!(
-            "Failed to fetch rugcheck data after {} attempts: {}",
-            max_retries, last_error
-        ))
+        Err(format!("Failed to fetch rugcheck data after {} attempts: {}", max_retries, last_error))
     }
 
     /// Initialize the rugcheck table in the database
@@ -1189,7 +1129,7 @@ impl RugcheckService {
                         log(
                             LogTag::Rugcheck,
                             "CACHE_HIT",
-                            &format!("Cache hit for token: {}", mint),
+                            &format!("Cache hit for token: {}", mint)
                         );
                     }
 
@@ -1198,36 +1138,24 @@ impl RugcheckService {
                     log(
                         LogTag::Rugcheck,
                         "CACHE_EXPIRED",
-                        &format!("Cache expired for token: {}", mint),
+                        &format!("Cache expired for token: {}", mint)
                     );
                 }
             }
         }
 
         // Check database
-        match self.database.get_rugcheck_data(mint) {
+        match self.database.get_rugcheck_data_instance(mint) {
             Ok(Some(data)) => {
-                // Check if data is not too old (optional - uncomment if needed)
-                // let data_age = Utc::now() - data.updated_at.unwrap_or(Utc::now());
-                // if data_age > ChronoDuration::hours(24) {
-                //     log(LogTag::Rugcheck, "DATA_OLD", &format!("Database data is old for token: {}", mint));
-                // } else {
                 // Update cache with fresh database data
                 let cache_entry = RugcheckCacheEntry {
                     data: data.clone(),
                     timestamp: Utc::now(),
                 };
-                self.cache
-                    .write()
-                    .await
-                    .insert(mint.to_string(), cache_entry);
+                self.cache.write().await.insert(mint.to_string(), cache_entry);
 
                 if is_debug_rugcheck_enabled() {
-                    log(
-                        LogTag::Rugcheck,
-                        "DB_HIT",
-                        &format!("Database hit for token: {}", mint),
-                    );
+                    log(LogTag::Rugcheck, "DB_HIT", &format!("Database hit for token: {}", mint));
                 }
 
                 return Ok(Some(data));
@@ -1238,7 +1166,7 @@ impl RugcheckService {
                     log(
                         LogTag::Rugcheck,
                         "NOT_FOUND",
-                        &format!("No rugcheck data found in database for token: {}", mint),
+                        &format!("No rugcheck data found in database for token: {}", mint)
                     );
                 }
                 // Data missing - fetch it now
@@ -1247,7 +1175,7 @@ impl RugcheckService {
                 log(
                     LogTag::Rugcheck,
                     "DB_ERROR",
-                    &format!("Database error for token {}: {}", mint, e),
+                    &format!("Database error for token {}: {}", mint, e)
                 );
                 // Database error - try to fetch fresh data
             }
@@ -1258,30 +1186,26 @@ impl RugcheckService {
             log(
                 LogTag::Rugcheck,
                 "AUTO_FETCH",
-                &format!("Auto-fetching rugcheck data for token: {}", mint),
+                &format!("Auto-fetching rugcheck data for token: {}", mint)
             );
         }
 
         match self.fetch_and_store_rugcheck_data(mint.to_string()).await {
             Ok(_) => {
                 // Successfully fetched and stored - now get it from database
-                match self.database.get_rugcheck_data(mint) {
+                match self.database.get_rugcheck_data_instance(mint) {
                     Ok(Some(data)) => {
                         // Update cache
                         let cache_entry = RugcheckCacheEntry {
                             data: data.clone(),
                             timestamp: Utc::now(),
                         };
-                        self.cache
-                            .write()
-                            .await
-                            .insert(mint.to_string(), cache_entry);
+                        self.cache.write().await.insert(mint.to_string(), cache_entry);
 
                         // Only log detailed success in debug mode to avoid duplication
                         // (The main "STORED" logging is handled by batch update operations)
                         if is_debug_rugcheck_enabled() {
-                            let symbol = data
-                                .token_meta
+                            let symbol = data.token_meta
                                 .as_ref()
                                 .and_then(|meta| meta.symbol.as_ref())
                                 .map(|s| s.as_str())
@@ -1293,8 +1217,8 @@ impl RugcheckService {
                                 risks
                                     .iter()
                                     .filter(|r| {
-                                        r.level.as_deref() == Some("high")
-                                            || r.level.as_deref() == Some("critical")
+                                        r.level.as_deref() == Some("high") ||
+                                            r.level.as_deref() == Some("critical")
                                     })
                                     .count()
                             } else {
@@ -1323,7 +1247,7 @@ impl RugcheckService {
                         log(
                             LogTag::Rugcheck,
                             "FETCH_MISSING",
-                            &format!("Data was fetched but not found in database for: {}", mint),
+                            &format!("Data was fetched but not found in database for: {}", mint)
                         );
                         Ok(None)
                     }
@@ -1331,7 +1255,7 @@ impl RugcheckService {
                         log(
                             LogTag::Rugcheck,
                             "FETCH_DB_ERROR",
-                            &format!("Database error after fetch for {}: {}", mint, e),
+                            &format!("Database error after fetch for {}: {}", mint, e)
                         );
                         Ok(None) // Return None instead of error to prevent filtering failures
                     }
@@ -1342,7 +1266,7 @@ impl RugcheckService {
                     log(
                         LogTag::Rugcheck,
                         "FETCH_FAILED",
-                        &format!("Failed to auto-fetch rugcheck data for {}: {}", mint, e),
+                        &format!("Failed to auto-fetch rugcheck data for {}: {}", mint, e)
                     );
                 }
                 Ok(None) // Return None instead of error - let token pass if rugcheck unavailable
@@ -1355,7 +1279,7 @@ impl RugcheckService {
         log(
             LogTag::Rugcheck,
             "UPDATE_SINGLE",
-            &format!("Updating rugcheck data for single token: {}", mint),
+            &format!("Updating rugcheck data for single token: {}", mint)
         );
 
         self.fetch_and_store_rugcheck_data(mint.to_string()).await
@@ -1365,7 +1289,10 @@ impl RugcheckService {
     pub async fn get_cache_stats(&self) -> (usize, usize) {
         let cache = self.cache.read().await;
         let total_entries = cache.len();
-        let expired_entries = cache.values().filter(|entry| entry.is_expired()).count();
+        let expired_entries = cache
+            .values()
+            .filter(|entry| entry.is_expired())
+            .count();
         (total_entries, expired_entries)
     }
 
@@ -1380,10 +1307,7 @@ impl RugcheckService {
             log(
                 LogTag::Rugcheck,
                 "CLEANUP",
-                &format!(
-                    "Cleaned up {} expired cache entries",
-                    before_count - after_count
-                ),
+                &format!("Cleaned up {} expired cache entries", before_count - after_count)
             );
         }
     }
@@ -1394,7 +1318,7 @@ impl RugcheckService {
 /// Get rugcheck data for a specific token (convenience function)
 pub async fn get_token_rugcheck_data(
     mint: &str,
-    service: &RugcheckService,
+    service: &RugcheckService
 ) -> Result<Option<RugcheckResponse>, String> {
     // Respect shutdown in synchronous callers too
     if service.is_shutting_down() {
@@ -1406,7 +1330,7 @@ pub async fn get_token_rugcheck_data(
 /// Update rugcheck data for a newly discovered token
 pub async fn update_new_token_rugcheck_data(
     mint: &str,
-    service: &RugcheckService,
+    service: &RugcheckService
 ) -> Result<(), String> {
     if service.is_shutting_down() {
         return Ok(());
@@ -1606,11 +1530,13 @@ pub fn get_high_risk_issues(rugcheck_data: &RugcheckResponse) -> Vec<String> {
         for risk in risks {
             if let Some(level) = &risk.level {
                 if level == "critical" || level == "high" {
-                    issues.push(format!(
-                        "{}: {}",
-                        risk.name,
-                        risk.description.as_deref().unwrap_or("No description")
-                    ));
+                    issues.push(
+                        format!(
+                            "{}: {}",
+                            risk.name,
+                            risk.description.as_deref().unwrap_or("No description")
+                        )
+                    );
                 }
             }
         }

@@ -1,135 +1,51 @@
 use crate::global::is_debug_filtering_enabled;
 use crate::logger::{ log, LogTag };
-/// Centralized token filtering system for ScreenerBot
-/// All token filtering logic consolidated into a single function
-/// No structs or models - pure functional approach
 use crate::tokens::Token;
-use crate::tokens::{
-    get_token_decimals_sync,
-    is_token_excluded_from_trading,
-    rugcheck::{ get_high_risk_issues, is_token_safe_for_trading },
-    TokenDatabase,
-};
+use crate::tokens::is_token_excluded_from_trading;
 use crate::trader::MAX_OPEN_POSITIONS;
 use chrono::{ Duration as ChronoDuration, Utc };
 
 // =============================================================================
-// FILTERING CONFIGURATION PARAMETERS (CENTRALIZED FOR EASY ACCESS)
-// =============================================================================
-//
-// 🚀 QUICK PARAMETER REFERENCE:
-//   - MIN_TOKEN_AGE_SECONDS = 3600 (tokens must be at least 1 hour old)
-//   - MAX_TOKEN_AGE_SECONDS = 2592000 (30 days max age)
-//   - Position re-entry cooldown moved to positions.rs (centralized)
-//   - MIN_LIQUIDITY_USD = 1000.0 (minimum liquidity requirement)
-//   - MIN_LP_LOCK_PERCENTAGE = 80.0 (minimum LP lock requirement)
-//   - Note: ATH checking moved to trader for intelligent analysis
-//
-// 🔧 TO ADJUST TRADING BEHAVIOR:
-//   - Make more aggressive: Lower minimums, shorter cooldowns
-//   - Make more conservative: Higher minimums, longer cooldowns
-//   - Adjust risk tolerance: Modify rugcheck and LP lock parameters
-//
+// FILTERING CONFIGURATION PARAMETERS
 // =============================================================================
 
 // ===== AGE FILTERING PARAMETERS =====
-/// Minimum token age in seconds before trading
-/// REDUCED: Allow newer tokens to catch fresh opportunities
-pub const MIN_TOKEN_AGE_SECONDS: i64 = 0; // 2 hours - allow newer gems
-
-/// Maximum token age in seconds
-/// Extended to catch both new gems and established tokens
-pub const MAX_TOKEN_AGE_SECONDS: i64 = 24 * 30 * 24 * 60 * 60; // 2 years for bigger range
+pub const MIN_TOKEN_AGE_SECONDS: i64 = 0;
+pub const MAX_TOKEN_AGE_SECONDS: i64 = 24 * 30 * 24 * 60 * 60; // 2 years
 
 // ===== PRICE ACTION FILTERING PARAMETERS =====
-
-/// Minimum price in SOL to consider valid
 pub const MIN_VALID_PRICE_SOL: f64 = 0.0000000000001;
-
-/// Maximum price in SOL to avoid (prevents overflow issues)
 pub const MAX_VALID_PRICE_SOL: f64 = 0.1;
 
 // ===== LIQUIDITY FILTERING PARAMETERS =====
-/// Minimum liquidity in USD required for trading
-/// ULTRA AGGRESSIVE FOR MOONSHOT HUNTING: Reduced to $1 to catch legendary gems
-pub const MIN_LIQUIDITY_USD: f64 = 1.0; // LEGENDARY MOONSHOT MODE: Catch ANY gem with >$1!
-
-/// Maximum liquidity in USD - EXCLUDE BIG STABLE TOKENS that won't moon
-/// MOONSHOT FOCUS: Cap at $75K to avoid large, stable tokens with low volatility
-pub const MAX_LIQUIDITY_USD: f64 = 500_000.0; // Focus on micro-caps with moonshot potential!
-
-/// MARKET CAP FILTERING - Avoid large market cap tokens that won't have big moves
-/// Maximum market cap in USD to focus on micro-cap gems
-pub const MAX_MARKET_CAP_USD: f64 = 50_000_000_000.0; // $500K max market cap for moonshot hunting
-
-/// Minimum volume/liquidity ratio for activity detection
-/// High ratio indicates active trading despite small liquidity (pump signals)
-pub const MIN_VOLUME_LIQUIDITY_RATIO: f64 = 0.1; // 10% minimum volume/liquidity ratio
+pub const MIN_LIQUIDITY_USD: f64 = 1.0;
+pub const MAX_LIQUIDITY_USD: f64 = 500_000.0;
+pub const MAX_MARKET_CAP_USD: f64 = 50_000_000_000.0;
+pub const MIN_VOLUME_LIQUIDITY_RATIO: f64 = 0.1;
 
 // ===== TRANSACTION ACTIVITY FILTERING PARAMETERS =====
-/// Minimum transaction count in 5 minutes for trading eligibility
-/// MODERATE MODE: Reasonable threshold for real activity
-pub const MIN_TRANSACTIONS_5MIN: i64 = 20; // Minimum 5 transactions in 5 minutes
-
-/// Maximum transaction count in 5 minutes to avoid overly pumped tokens
-/// INCREASED: Allow higher activity for popular tokens
-pub const MAX_TRANSACTIONS_5MIN: i64 = 2000; // Cap at 800 transactions in 5 minutes
-
-/// Minimum transaction count in 1 hour for established activity
-pub const MIN_TRANSACTIONS_1H: i64 = 15; // Minimum 15 transactions in 1 hour
-
-/// Minimum buy/sell ratio for balanced activity (healthy trading)
-/// Range: 0.4 (40% buys) to 2.5 (2.5x more buys than sells)
-pub const MIN_BUY_SELL_RATIO: f64 = 0.4; // At least 40% buys vs sells (more balanced)
-
-/// Maximum buy/sell ratio to avoid pure pump scenarios
-pub const MAX_BUY_SELL_RATIO: f64 = 2.5; // Max 2.5x more buys than sells (more balanced)
+pub const MIN_TRANSACTIONS_5MIN: i64 = 20;
+pub const MAX_TRANSACTIONS_5MIN: i64 = 2000;
+pub const MIN_TRANSACTIONS_1H: i64 = 15;
+pub const MIN_BUY_SELL_RATIO: f64 = 0.4;
+pub const MAX_BUY_SELL_RATIO: f64 = 2.5;
 
 // ===== RUGCHECK SECURITY PARAMETERS =====
-/// IMPORTANT: Rugcheck scores are RISK scores - higher values mean MORE risk, not less!
-/// Maximum allowed rugcheck risk score (0-100 scale) - HIGHER MEANS MORE RISKY
-/// LEGENDARY MOONSHOT MODE: Accept maximum risk for legendary gains
-pub const MAX_RUGCHECK_RISK_SCORE: i32 = 100; // Accept ANY risk for moonshot potential!
-
-/// Emergency override for very risky tokens - any score above this is automatically rejected
-pub const EMERGENCY_MAX_RISK_SCORE: i32 = 100; // No emergency limit - we're fearless!
-
-/// Maximum number of critical-risk issues to tolerate
-pub const MAX_CRITICAL_RISK_ISSUES: usize = 5; // Accept critical issues for moonshot potential
+pub const MAX_RUGCHECK_RISK_SCORE: i32 = 100;
+pub const EMERGENCY_MAX_RISK_SCORE: i32 = 100;
+pub const MAX_CRITICAL_RISK_ISSUES: usize = 5;
 
 // ===== LP LOCK SECURITY PARAMETERS =====
-/// Minimum percentage of LP tokens that must be locked
 pub const MIN_LP_LOCK_PERCENTAGE: f64 = 80.0;
-
-/// Minimum percentage for new/risky tokens
 pub const MIN_LP_LOCK_PERCENTAGE_NEW_TOKENS: f64 = 80.0;
 
 // ===== HISTORICAL PERFORMANCE PARAMETERS =====
-/// Maximum acceptable loss rate for historical performance (0.0-1.0)
-pub const MAX_HISTORICAL_LOSS_RATE: f64 = 0.8; // 80% loss rate
-
-/// Maximum acceptable average loss percentage
-pub const MAX_AVERAGE_LOSS_PERCENTAGE: f64 = 50.0; // 50% average loss
+pub const MAX_HISTORICAL_LOSS_RATE: f64 = 0.8;
+pub const MAX_AVERAGE_LOSS_PERCENTAGE: f64 = 50.0;
 
 // ===== VALIDATION TIMEOUTS =====
-/// Maximum time to wait for database locks (milliseconds)
 pub const DB_LOCK_TIMEOUT_MS: u64 = 5000;
-
-/// Maximum time to wait for price history locks (milliseconds)
 pub const PRICE_HISTORY_LOCK_TIMEOUT_MS: u64 = 3000;
-
-// =============================================================================
-// END OF FILTERING PARAMETERS
-// =============================================================================
-// 📋 PARAMETER CATEGORIES SUMMARY:
-//   • Age Filtering: Controls token age requirements (1 hour - 30 days)
-//   • Position Management: Prevents conflicts and overexposure
-//   • Price Action: Avoids buying near peaks, validates price ranges
-//   • Liquidity: Ensures sufficient trading volume
-//   • Security: Rugcheck and LP lock safety requirements
-//   • Decimal Validation: Ensures token decimals are available for calculations
-//   • Performance: Logging, timeouts, and system limits
-// =============================================================================
 
 // =============================================================================
 // FILTERING RESULT ENUM
@@ -208,8 +124,8 @@ pub enum FilterReason {
     },
 
     // LP lock security risks
-    LPLockRisk {
-        lock_percentage: f64,
+    InsufficientLpLock {
+        current_lock_percentage: f64,
         minimum_required: f64,
     },
 
@@ -266,318 +182,48 @@ pub enum FilterResult {
 // MAIN FILTERING FUNCTION
 // =============================================================================
 
-/// Centralized token filtering function
-/// Returns FilterResult::Approved if token passes all filters
-/// Returns FilterResult::Rejected(reason) if token fails any filter
+/// High-performance token filtering function for 1000 tokens per cycle
 pub fn filter_token_for_trading(token: &Token) -> FilterResult {
-    // Entry debug log with token basic info
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "START_FILTER",
-            &format!(
-                "🔍 Filtering token: {} ({}), Price: {:.10} SOL, Age: {}h, Liquidity: ${:.2}",
-                token.symbol,
-                &token.mint[..8],
-                token.price_dexscreener_sol.unwrap_or(0.0),
-                token.created_at.map_or("Unknown".to_string(), |created| {
-                    let age = (Utc::now() - created).num_hours();
-                    age.to_string()
-                }),
-                token.liquidity.as_ref().map_or(0.0, |l| l.usd.unwrap_or(0.0))
-            )
-        );
-    }
+    // Essential validations only - no debugging overhead for speed
 
-    // 0. BLACKLIST AND EXCLUSION CHECK (ABSOLUTE FIRST - HIGHEST PRIORITY)
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "STEP_0",
-            &format!("🚫 Step 0: Checking blacklist/exclusion for {}", token.symbol)
-        );
-    }
+    // Blacklist/exclusion check (highest priority)
     if let Some(reason) = validate_blacklist_exclusion(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "REJECT_STEP_0",
-                &format!("❌ {}: FAILED Step 0 (Blacklist/Exclusion) - {:?}", token.symbol, reason)
-            );
-        }
         return FilterResult::Rejected(reason);
     }
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "PASS_STEP_0",
-            &format!("✅ {}: PASSED Step 0 (Blacklist/Exclusion)", token.symbol)
-        );
-    }
 
-    // 1. RUGCHECK SECURITY VALIDATION (SECOND - HIGHEST PRIORITY)
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "STEP_1",
-            &format!("🛡️ Step 1: Checking rugcheck security for {}", token.symbol)
-        );
-    }
+    // Security check using cached rugcheck data
     if let Some(reason) = validate_rugcheck_risks(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "REJECT_STEP_1",
-                &format!("❌ {}: FAILED Step 1 (Rugcheck) - {:?}", token.symbol, reason)
-            );
-        }
         return FilterResult::Rejected(reason);
     }
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "PASS_STEP_1",
-            &format!("✅ {}: PASSED Step 1 (Rugcheck)", token.symbol)
-        );
-    }
 
-    // 2. Basic metadata validation
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "STEP_2",
-            &format!("📝 Step 2: Checking metadata for {}", token.symbol)
-        );
-    }
+    // Basic metadata validation
     if let Some(reason) = validate_basic_token_info(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "REJECT_STEP_2",
-                &format!("❌ {}: FAILED Step 2 (Metadata) - {:?}", token.symbol, reason)
-            );
-        }
         return FilterResult::Rejected(reason);
     }
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "PASS_STEP_2",
-            &format!("✅ {}: PASSED Step 2 (Metadata)", token.symbol)
-        );
-    }
 
-    // 3. Age validation
-    if is_debug_filtering_enabled() {
-        log(LogTag::Filtering, "STEP_3", &format!("⏰ Step 3: Checking age for {}", token.symbol));
-    }
+    // Age validation
     if let Some(reason) = validate_token_age(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "REJECT_STEP_3",
-                &format!("❌ {}: FAILED Step 3 (Age) - {:?}", token.symbol, reason)
-            );
-        }
         return FilterResult::Rejected(reason);
     }
-    if is_debug_filtering_enabled() {
-        log(LogTag::Filtering, "PASS_STEP_3", &format!("✅ {}: PASSED Step 3 (Age)", token.symbol));
-    }
 
-    // 4. Liquidity validation
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "STEP_4",
-            &format!("💧 Step 4: Checking liquidity for {}", token.symbol)
-        );
-    }
+    // Liquidity validation
     if let Some(reason) = validate_liquidity(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "REJECT_STEP_4",
-                &format!("❌ {}: FAILED Step 4 (Liquidity) - {:?}", token.symbol, reason)
-            );
-        }
         return FilterResult::Rejected(reason);
     }
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "PASS_STEP_4",
-            &format!("✅ {}: PASSED Step 4 (Liquidity)", token.symbol)
-        );
-    }
 
-    // 5. Holder Distribution Validation (CRITICAL FOR MICRO-CAPS)
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "STEP_5",
-            &format!("👥 Step 5: Checking holder distribution for {}", token.symbol)
-        );
-    }
-    if let Some(reason) = validate_holder_distribution(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "REJECT_STEP_5",
-                &format!("❌ {}: FAILED Step 5 (Holder Distribution) - {:?}", token.symbol, reason)
-            );
-        }
-        return FilterResult::Rejected(reason);
-    }
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "PASS_STEP_5",
-            &format!("✅ {}: PASSED Step 5 (Holder Distribution)", token.symbol)
-        );
-    }
-
-    // 6. Basic Price Validation (Simplified - ATH checking moved to trader)
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "STEP_6",
-            &format!("📈 Step 6: Checking basic price validity for {}", token.symbol)
-        );
-    }
-    if let Some(reason) = validate_basic_price_data(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "REJECT_STEP_6",
-                &format!("❌ {}: FAILED Step 6 (Price Validation) - {:?}", token.symbol, reason)
-            );
-        }
-        return FilterResult::Rejected(reason);
-    }
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "PASS_STEP_6",
-            &format!("✅ {}: PASSED Step 6 (Price Validation)", token.symbol)
-        );
-    }
-
-    // 7. Price validation
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "STEP_7",
-            &format!("💰 Step 7: Checking price data for {}", token.symbol)
-        );
-    }
+    // Price data validation
     if let Some(reason) = validate_price_data(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "REJECT_STEP_7",
-                &format!("❌ {}: FAILED Step 7 (Price Data) - {:?}", token.symbol, reason)
-            );
-        }
         return FilterResult::Rejected(reason);
     }
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "PASS_STEP_7",
-            &format!("✅ {}: PASSED Step 7 (Price Data)", token.symbol)
-        );
-    }
 
-    // 8. Transaction Activity Validation (NEW - moved from trader.rs)
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "STEP_8",
-            &format!("📊 Step 8: Checking transaction activity for {}", token.symbol)
-        );
-    }
+    // Transaction activity validation
     if let Some(reason) = validate_transaction_activity(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "REJECT_STEP_8",
-                &format!("❌ {}: FAILED Step 8 (Transaction Activity) - {:?}", token.symbol, reason)
-            );
-        }
         return FilterResult::Rejected(reason);
     }
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "PASS_STEP_8",
-            &format!("✅ {}: PASSED Step 8 (Transaction Activity)", token.symbol)
-        );
-    }
 
-    // 9. Decimal availability validation
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "STEP_9",
-            &format!("🔢 Step 9: Checking decimal availability for {}", token.symbol)
-        );
-    }
+    // Decimal availability using cached data
     if let Some(reason) = validate_decimal_availability(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "REJECT_STEP_9",
-                &format!("❌ {}: FAILED Step 9 (Decimal Availability) - {:?}", token.symbol, reason)
-            );
-        }
         return FilterResult::Rejected(reason);
-    }
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "PASS_STEP_9",
-            &format!("✅ {}: PASSED Step 9 (Decimal Availability)", token.symbol)
-        );
-    }
-
-    // 10. Position constraints validation
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "STEP_10",
-            &format!("🔒 Step 10: Checking position constraints for {}", token.symbol)
-        );
-    }
-    if let Some(reason) = validate_position_constraints(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "REJECT_STEP_10",
-                &format!(
-                    "❌ {}: FAILED Step 10 (Position Constraints) - {:?}",
-                    token.symbol,
-                    reason
-                )
-            );
-        }
-        return FilterResult::Rejected(reason);
-    }
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "PASS_STEP_10",
-            &format!("✅ {}: PASSED Step 10 (Position Constraints)", token.symbol)
-        );
-    }
-
-    // Token passed all filters
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "ALL_STEPS_PASSED",
-            &format!("🎉 {}: PASSED ALL 10 FILTERING STEPS - ELIGIBLE FOR TRADING", token.symbol)
-        );
     }
 
     FilterResult::Approved
@@ -586,32 +232,6 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
 // =============================================================================
 // INDIVIDUAL FILTER FUNCTIONS
 // =============================================================================
-
-/// Validate basic price data (simplified price validation)
-fn validate_basic_price_data(token: &Token) -> Option<FilterReason> {
-    // Basic price validation - much simpler than before
-    let current_price = token.price_dexscreener_sol.unwrap_or(0.0);
-
-    if current_price <= 0.0 || !current_price.is_finite() {
-        return Some(FilterReason::InvalidPrice);
-    }
-
-    if current_price < MIN_VALID_PRICE_SOL {
-        return Some(FilterReason::PriceTooLow {
-            current_price,
-            minimum_price: MIN_VALID_PRICE_SOL,
-        });
-    }
-
-    if current_price > MAX_VALID_PRICE_SOL {
-        return Some(FilterReason::PriceTooHigh {
-            current_price,
-            maximum_price: MAX_VALID_PRICE_SOL,
-        });
-    }
-
-    None
-}
 
 /// Validate blacklist and exclusion status (ABSOLUTE HIGHEST PRIORITY)
 fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
@@ -660,98 +280,36 @@ fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
     None
 }
 
-/// Validate rugcheck security risks (HIGHEST PRIORITY - RUNS FIRST)
+/// Validate rugcheck security risks using cached data (no API calls)
 fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
-    use crate::tokens::get_global_rugcheck_service;
-
-    // Get rugcheck data using global service if available, fallback to database
-    let rugcheck_data = match get_global_rugcheck_service() {
-        Some(service) => {
-            // Use blocking call to access async service from sync context
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async {
-                    match service.get_rugcheck_data(&token.mint).await {
-                        Ok(Some(data)) => Some(data),
-                        Ok(None) => {
-                            if is_debug_filtering_enabled() {
-                                log(
-                                    LogTag::Filtering,
-                                    "RUGCHECK_MISSING",
-                                    &format!("No rugcheck data for token: {}", token.symbol)
-                                );
-                            }
-                            None
-                        }
-                        Err(e) => {
-                            if is_debug_filtering_enabled() {
-                                log(
-                                    LogTag::Filtering,
-                                    "ERROR",
-                                    &format!(
-                                        "Failed to get rugcheck data for {}: {}",
-                                        token.symbol,
-                                        e
-                                    )
-                                );
-                            }
-                            None
-                        }
-                    }
-                })
-            })
-        }
-        None => {
-            // Fallback to direct database access if service not available
-            let database = match TokenDatabase::new() {
-                Ok(db) => db,
-                Err(e) => {
-                    if is_debug_filtering_enabled() {
-                        log(
-                            LogTag::Filtering,
-                            "ERROR",
-                            &format!("Failed to connect to database for rugcheck: {}", e)
-                        );
-                    }
-                    return None; // Skip validation if database unavailable
-                }
-            };
-
-            match database.get_rugcheck_data(&token.mint) {
-                Ok(Some(data)) => Some(data),
-                Ok(None) => {
-                    if is_debug_filtering_enabled() {
-                        log(
-                            LogTag::Filtering,
-                            "RUGCHECK_MISSING",
-                            &format!("No rugcheck data for token: {}", token.symbol)
-                        );
-                    }
-                    None
-                }
-                Err(e) => {
-                    if is_debug_filtering_enabled() {
-                        log(
-                            LogTag::Filtering,
-                            "ERROR",
-                            &format!("Failed to get rugcheck data for {}: {}", token.symbol, e)
-                        );
-                    }
-                    None
-                }
-            }
-        }
-    };
-
-    let rugcheck_data = match rugcheck_data {
+    // STRICT REQUIREMENT: Token must have rugcheck data
+    let rugcheck_data = match &token.rugcheck_data {
         Some(data) => data,
         None => {
-            return None;
-        } // No rugcheck data available - let it pass
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "RUGCHECK_MISSING",
+                    &format!("❌ Token {} REJECTED: No rugcheck data available", token.symbol)
+                );
+            }
+            return Some(FilterReason::RugcheckRisk {
+                risk_level: "MISSING_DATA".to_string(),
+                reasons: vec!["No rugcheck security data available".to_string()],
+            });
+        }
     };
 
-    // CRITICAL: Hard-coded risk score check - HIGHER SCORES MEAN MORE RISK!
+    // Check if token is marked as rugged
+    if rugcheck_data.rugged.unwrap_or(false) {
+        return Some(FilterReason::RugcheckRisk {
+            risk_level: "CRITICAL".to_string(),
+            reasons: vec!["Token is marked as RUGGED".to_string()],
+        });
+    }
+
+    // Check risk score (higher scores mean more risk)
     if let Some(risk_score) = rugcheck_data.score_normalised.or(rugcheck_data.score) {
-        // Emergency override - immediately reject very risky tokens
         if risk_score >= EMERGENCY_MAX_RISK_SCORE {
             if is_debug_filtering_enabled() {
                 log(
@@ -777,7 +335,6 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
             });
         }
 
-        // Standard risk score check
         if risk_score > MAX_RUGCHECK_RISK_SCORE {
             if is_debug_filtering_enabled() {
                 log(
@@ -802,50 +359,43 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
                 ],
             });
         }
+    }
 
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "RISK_SCORE_OK",
-                &format!(
-                    "Token {} risk score {} <= {} (acceptable risk)",
-                    token.symbol,
-                    risk_score,
-                    MAX_RUGCHECK_RISK_SCORE
-                )
-            );
+    // Check for critical risks
+    if let Some(risks) = &rugcheck_data.risks {
+        let critical_risks: Vec<_> = risks
+            .iter()
+            .filter(|r| r.level.as_deref() == Some("critical"))
+            .collect();
+
+        if critical_risks.len() > MAX_CRITICAL_RISK_ISSUES {
+            return Some(FilterReason::RugcheckRisk {
+                risk_level: "CRITICAL".to_string(),
+                reasons: critical_risks
+                    .iter()
+                    .map(|r| r.name.clone())
+                    .collect(),
+            });
         }
     }
 
-    // Check if token is safe for trading (uses additional analysis beyond score)
-    if !is_token_safe_for_trading(&rugcheck_data) {
-        let risk_issues = get_high_risk_issues(&rugcheck_data);
-        let risk_level = if rugcheck_data.rugged.unwrap_or(false) {
-            "CRITICAL"
-        } else if rugcheck_data.score_normalised.unwrap_or(0) >= 50 {
-            // CORRECTED: high score = high risk
-            "HIGH"
-        } else {
-            "MEDIUM"
-        };
-
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "RUGCHECK_FAIL",
-                &format!(
-                    "Token {} failed rugcheck validation. Risk level: {}, Issues: {:?}",
-                    token.symbol,
-                    risk_level,
-                    risk_issues
-                )
-            );
+    // Check LP lock status from rugcheck data
+    if let Some(markets) = &rugcheck_data.markets {
+        let mut best_lock_pct = 0.0f64;
+        for market in markets {
+            if let Some(lp) = &market.lp {
+                if let Some(pct) = lp.lp_locked_pct {
+                    best_lock_pct = best_lock_pct.max(pct);
+                }
+            }
         }
 
-        return Some(FilterReason::RugcheckRisk {
-            risk_level: risk_level.to_string(),
-            reasons: risk_issues,
-        });
+        if best_lock_pct < MIN_LP_LOCK_PERCENTAGE {
+            return Some(FilterReason::InsufficientLpLock {
+                current_lock_percentage: best_lock_pct,
+                minimum_required: MIN_LP_LOCK_PERCENTAGE,
+            });
+        }
     }
 
     if is_debug_filtering_enabled() {
@@ -911,22 +461,6 @@ fn validate_basic_token_info(token: &Token) -> Option<FilterReason> {
         }
         return Some(FilterReason::EmptyMint);
     }
-
-    // Check description - Make this optional since DexScreener API doesn't provide it
-    // Only warn about missing description but don't reject the token
-    // if
-    //     token.description.is_none() ||
-    //     token.description.as_ref().map_or(true, |desc| desc.trim().is_empty())
-    // {
-    //     if is_debug_filtering_enabled() {
-    //         log(
-    //             LogTag::Filtering,
-    //             "DEBUG_META",
-    //             "⚠️ Description is missing (not required for DexScreener tokens)"
-    //         );
-    //     }
-    //     // Don't return FilterReason::EmptyDescription - just log it
-    // }
 
     None
 }
@@ -1164,224 +698,6 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
                 liquidity_usd
             )
         );
-    }
-
-    None
-}
-
-/// Validate holder distribution to prevent whale concentration risk
-/// CRITICAL FOR MICRO-CAPS: Ensure no single holder can cause >20% loss
-fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
-    use crate::tokens::get_global_rugcheck_service;
-
-    // Get rugcheck data using global service if available, fallback to database
-    let rugcheck_data = match get_global_rugcheck_service() {
-        Some(service) => {
-            // Use blocking call to access async service from sync context
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async {
-                    match service.get_rugcheck_data(&token.mint).await {
-                        Ok(Some(data)) => Some(data),
-                        Ok(None) => {
-                            if is_debug_filtering_enabled() {
-                                log(
-                                    LogTag::Filtering,
-                                    "DEBUG_HOLDERS",
-                                    &format!("No rugcheck/holder data for token: {}", token.symbol)
-                                );
-                            }
-                            None
-                        }
-                        Err(e) => {
-                            if is_debug_filtering_enabled() {
-                                log(
-                                    LogTag::Filtering,
-                                    "DEBUG_HOLDERS",
-                                    &format!(
-                                        "Failed to get holder data for {}: {}",
-                                        token.symbol,
-                                        e
-                                    )
-                                );
-                            }
-                            None
-                        }
-                    }
-                })
-            })
-        }
-        None => {
-            // Fallback to direct database access if service not available
-            let database = match TokenDatabase::new() {
-                Ok(db) => db,
-                Err(e) => {
-                    if is_debug_filtering_enabled() {
-                        log(
-                            LogTag::Filtering,
-                            "DEBUG_HOLDERS",
-                            &format!("Failed to connect to database for holders: {}", e)
-                        );
-                    }
-                    return None; // Skip validation if database unavailable
-                }
-            };
-
-            match database.get_rugcheck_data(&token.mint) {
-                Ok(Some(data)) => Some(data),
-                Ok(None) => {
-                    if is_debug_filtering_enabled() {
-                        log(
-                            LogTag::Filtering,
-                            "DEBUG_HOLDERS",
-                            &format!("No rugcheck/holder data for token: {}", token.symbol)
-                        );
-                    }
-                    None
-                }
-                Err(e) => {
-                    if is_debug_filtering_enabled() {
-                        log(
-                            LogTag::Filtering,
-                            "DEBUG_HOLDERS",
-                            &format!("Failed to get holder data for {}: {}", token.symbol, e)
-                        );
-                    }
-                    None
-                }
-            }
-        }
-    };
-
-    let rugcheck_data = match rugcheck_data {
-        Some(data) => data,
-        None => {
-            return None;
-        } // No holder data - allow through (better than blocking)
-    };
-
-    // Check top holders for concentration risk
-    if let Some(top_holders) = &rugcheck_data.top_holders {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "DEBUG_HOLDERS",
-                &format!("Analyzing {} top holders for {}", top_holders.len(), token.symbol)
-            );
-        }
-
-        let mut total_top_holder_percentage = 0.0;
-        let mut dangerous_holders = Vec::new();
-
-        for (i, holder) in top_holders.iter().take(10).enumerate() {
-            if let Some(pct) = holder.pct {
-                total_top_holder_percentage += pct;
-
-                // Flag holders with >20% as dangerous for micro-caps
-                if pct > 20.0 {
-                    dangerous_holders.push((i + 1, pct));
-                }
-
-                if is_debug_filtering_enabled() {
-                    log(
-                        LogTag::Filtering,
-                        "DEBUG_HOLDERS",
-                        &format!("Holder #{}: {:.2}% (address: {})", i + 1, pct, &holder.address)
-                    );
-                }
-            }
-        }
-
-        // For micro-cap gems, be more lenient but still prevent obvious whale concentration
-        let liquidity_usd = token.liquidity
-            .as_ref()
-            .and_then(|l| l.usd)
-            .unwrap_or(0.0);
-
-        // Much more lenient thresholds for micro-caps since they naturally have higher concentration
-        let (max_single_holder, max_top5_total) = if liquidity_usd < 1000.0 {
-            (85.0, 95.0) // Micro-caps: max 85% single, 95% top 5 (very lenient for new tokens)
-        } else if liquidity_usd < 10000.0 {
-            (70.0, 90.0) // Small caps: max 70% single, 90% top 5
-        } else if liquidity_usd < 50000.0 {
-            (60.0, 85.0) // Medium caps: max 60% single, 85% top 5
-        } else {
-            (40.0, 75.0) // Larger tokens: max 40% single, 75% top 5
-        };
-
-        // Check for dangerous single holders
-        for (rank, pct) in &dangerous_holders {
-            if *pct > max_single_holder {
-                if is_debug_filtering_enabled() {
-                    log(
-                        LogTag::Filtering,
-                        "DEBUG_HOLDERS",
-                        &format!(
-                            "❌ Token {} rejected: Holder #{} has {:.2}% (max allowed: {:.1}%)",
-                            token.symbol,
-                            rank,
-                            pct,
-                            max_single_holder
-                        )
-                    );
-                }
-                return Some(FilterReason::WhaleConcentrationRisk {
-                    holder_rank: *rank,
-                    percentage: *pct,
-                    max_allowed: max_single_holder,
-                });
-            }
-        }
-
-        // Check total top 5 concentration
-        let top5_total: f64 = top_holders
-            .iter()
-            .take(5)
-            .filter_map(|h| h.pct)
-            .sum();
-
-        if top5_total > max_top5_total {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "DEBUG_HOLDERS",
-                    &format!(
-                        "❌ Token {} rejected: Top 5 holders control {:.2}% (max allowed: {:.1}%)",
-                        token.symbol,
-                        top5_total,
-                        max_top5_total
-                    )
-                );
-            }
-            return Some(FilterReason::WhaleConcentrationRisk {
-                holder_rank: 0, // 0 indicates top-5 total
-                percentage: top5_total,
-                max_allowed: max_top5_total,
-            });
-        }
-
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "DEBUG_HOLDERS",
-                &format!(
-                    "✅ Token {} holder distribution acceptable: Top holder: {:.2}%, Top 5: {:.2}%",
-                    token.symbol,
-                    dangerous_holders
-                        .first()
-                        .map(|(_, pct)| *pct)
-                        .unwrap_or(0.0),
-                    top5_total
-                )
-            );
-        }
-    } else {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "DEBUG_HOLDERS",
-                &format!("No top holder data available for {}, allowing through", token.symbol)
-            );
-        }
     }
 
     None
@@ -1659,16 +975,14 @@ fn validate_transaction_activity(token: &Token) -> Option<FilterReason> {
     None
 }
 
-/// Validate that token decimals are available (critical for trading calculations)
+/// Validate that token decimals are available in cached data (no RPC calls)
 fn validate_decimal_availability(token: &Token) -> Option<FilterReason> {
-    // Use the synchronous decimal access function to check if decimals are available
-    // This checks both cache and can fallback to blockchain if needed
-    if get_token_decimals_sync(&token.mint).is_none() {
+    if token.decimals.is_none() {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "DEBUG_DECIMALS",
-                &format!("❌ Token {} decimals not available in cache or blockchain", token.symbol)
+                &format!("❌ Token {} decimals not available in cached data", token.symbol)
             );
         }
         return Some(FilterReason::DecimalsNotAvailable {
@@ -1684,27 +998,6 @@ fn validate_decimal_availability(token: &Token) -> Option<FilterReason> {
         );
     }
 
-    None
-}
-
-/// Validate position-related constraints
-/// Validate position-related constraints
-/// Note: Position validation is deferred to async trading decision point
-/// to avoid runtime blocking issues in high-throughput filtering
-fn validate_position_constraints(_token: &Token) -> Option<FilterReason> {
-    // Position constraints are now validated at trading decision point
-    // to avoid "Cannot start a runtime from within a runtime" errors
-    // when filtering large numbers of tokens in async context
-
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "DEBUG_POSITION",
-            &format!("✅ {}: Position constraints deferred to trading decision", _token.symbol)
-        );
-    }
-
-    // Always pass at filtering stage - position checks happen during trading
     None
 }
 
@@ -1787,7 +1080,7 @@ pub fn is_token_eligible_for_trading(token: &Token) -> bool {
 pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, FilterReason)>) {
     // Performance fix: Limit tokens to prevent timeout on large datasets
     // SMART PRIORITIZATION: prefer tokens likely to have usable data (price, txns, volume)
-    const MAX_TOKENS_FOR_DETAILED_FILTERING: usize = 15000;
+    const MAX_TOKENS_FOR_DETAILED_FILTERING: usize = 1000;
 
     let (tokens_to_process, pre_filtered_rejected) = if
         tokens.len() > MAX_TOKENS_FOR_DETAILED_FILTERING
@@ -1900,7 +1193,7 @@ pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, 
     let mut fast_pass: Vec<&Token> = Vec::with_capacity(tokens_to_process.len());
     for token in &tokens_to_process {
         // Cheap checks (no logging): price validity, liquidity, age, decimals
-        if let Some(reason) = validate_basic_price_data(token) {
+        if let Some(reason) = validate_price_data(token) {
             rejected.push((token.clone(), reason));
             continue;
         }
@@ -2054,7 +1347,7 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             | FilterReason::MaxPositionsReached { .. } => "Position Constraints",
             FilterReason::AccountFrozen | FilterReason::TokenAccountFrozen => "Account Issues",
             FilterReason::RugcheckRisk { .. } => "Security Risks",
-            FilterReason::LPLockRisk { .. } => "LP Lock Security",
+            FilterReason::InsufficientLpLock { .. } => "LP Lock Security",
             FilterReason::WhaleConcentrationRisk { .. } => "Whale Concentration Risk",
             FilterReason::LockAcquisitionFailed => "System Errors",
             FilterReason::DecimalsNotAvailable { .. } => "Decimal Issues",

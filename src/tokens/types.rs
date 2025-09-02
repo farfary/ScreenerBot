@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc};
+use chrono::{ DateTime, Utc };
 /// Data types for the centralized pricing system
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 
 /// Token information from API sources
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,14 +108,17 @@ pub struct SocialInfo {
     pub handle: String,
 }
 
-/// Original Token struct from global.rs for backward compatibility
+/// Token struct with cached rugcheck and decimal data for fast filtering
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Token {
     pub mint: String,
     pub symbol: String,
     pub name: String,
-    // decimals removed - only use decimal_cache.json
     pub chain: String,
+
+    // Cached data for fast filtering (no API calls needed)
+    pub decimals: Option<u8>,
+    pub rugcheck_data: Option<crate::tokens::rugcheck::RugcheckResponse>,
 
     // Existing fields we need to keep
     pub logo_url: Option<String>,
@@ -192,20 +195,57 @@ pub struct TokenRecord {
 // CONVERSION IMPLEMENTATIONS
 // =============================================================================
 
+impl Token {
+    /// Populate rugcheck data and decimals from database
+    pub fn populate_cached_data(&mut self) -> Result<(), String> {
+        // Populate rugcheck data from database
+        match crate::tokens::cache::TokenDatabase::get_rugcheck_data(&self.mint) {
+            Ok(Some(rugcheck_data)) => {
+                self.rugcheck_data = Some(rugcheck_data);
+            }
+            Ok(None) => {
+                if crate::global::is_debug_filtering_enabled() {
+                    crate::logger::log(
+                        crate::logger::LogTag::Filtering,
+                        "RUGCHECK_POPULATE",
+                        &format!("No rugcheck data found for token: {}", self.symbol)
+                    );
+                }
+            }
+            Err(e) => {
+                if crate::global::is_debug_filtering_enabled() {
+                    crate::logger::log(
+                        crate::logger::LogTag::Filtering,
+                        "RUGCHECK_POPULATE",
+                        &format!("Failed to get rugcheck data for {}: {}", self.symbol, e)
+                    );
+                }
+            }
+        }
+
+        // Populate decimals from cache
+        self.decimals = crate::tokens::decimals::get_cached_decimals(&self.mint);
+
+        Ok(())
+    }
+}
+
 impl From<ApiToken> for Token {
     fn from(api_token: ApiToken) -> Self {
         Self {
             mint: api_token.mint,
             symbol: api_token.symbol,
             name: api_token.name,
-            // decimals removed - only use decimal_cache.json
             chain: "solana".to_string(),
+
+            // Initialize cached data as None - will be populated later
+            decimals: None,
+            rugcheck_data: None,
 
             logo_url: api_token.info.as_ref().and_then(|i| i.image_url.clone()),
             coingecko_id: None,
             // Extract the first website URL from info.websites if available
-            website: api_token
-                .info
+            website: api_token.info
                 .as_ref()
                 .and_then(|i| i.websites.as_ref())
                 .and_then(|websites| websites.first())
@@ -214,9 +254,7 @@ impl From<ApiToken> for Token {
             tags: Vec::new(),
             is_verified: false,
             created_at: api_token.pair_created_at.map(|ts| {
-                DateTime::from_timestamp_millis(ts)
-                    .unwrap_or_default()
-                    .with_timezone(&Utc)
+                DateTime::from_timestamp_millis(ts).unwrap_or_default().with_timezone(&Utc)
             }),
 
             price_dexscreener_sol: api_token.price_sol,
@@ -238,8 +276,7 @@ impl From<ApiToken> for Token {
                 image_url: info.image_url,
                 header: None,
                 open_graph: None,
-                websites: info
-                    .websites
+                websites: info.websites
                     .unwrap_or_default()
                     .into_iter()
                     .map(|w| WebsiteLink {
@@ -247,8 +284,7 @@ impl From<ApiToken> for Token {
                         url: w.url,
                     })
                     .collect(),
-                socials: info
-                    .socials
+                socials: info.socials
                     .unwrap_or_default()
                     .into_iter()
                     .map(|s| SocialLink {
@@ -268,7 +304,6 @@ impl From<Token> for ApiToken {
             mint: token.mint.clone(),
             symbol: token.symbol.clone(),
             name: token.name.clone(),
-            // decimals removed - only use decimal_cache.json
             chain_id: token.chain,
             dex_id: token.dex_id.unwrap_or_default(),
             pair_address: token.pair_address.unwrap_or_default(),
@@ -293,7 +328,7 @@ impl From<Token> for ApiToken {
                     info.websites
                         .into_iter()
                         .map(|w| WebsiteInfo { url: w.url })
-                        .collect(),
+                        .collect()
                 ),
                 socials: Some(
                     info.socials
@@ -302,7 +337,7 @@ impl From<Token> for ApiToken {
                             platform: s.link_type,
                             handle: s.url,
                         })
-                        .collect(),
+                        .collect()
                 ),
             }),
             labels: Some(token.labels),

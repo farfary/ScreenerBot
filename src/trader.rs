@@ -175,6 +175,7 @@ use crate::tokens::{
     get_all_tokens_by_liquidity,
     get_price,
     pool::{ add_watchlist_tokens, get_pool_service },
+    cache::TokenDatabase,
     PriceOptions,
     Token,
 };
@@ -192,7 +193,7 @@ use futures;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{ AtomicUsize, Ordering };
 use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::Notify;
@@ -693,10 +694,30 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
                     );
                 }
                 // Convert ApiToken to Token for compatibility with existing code
-                api_tokens
+                let mut converted_tokens: Vec<Token> = api_tokens
                     .into_iter()
                     .map(|api_token| api_token.into())
-                    .collect()
+                    .collect();
+
+                // Populate tokens with rugcheck_data and decimals from database
+                let db = TokenDatabase::new().map_err(|e|
+                    format!("Failed to create database: {}", e)
+                );
+                if let Ok(database) = db {
+                    if
+                        let Err(e) = database.populate_tokens_with_cached_data(
+                            &mut converted_tokens
+                        ).await
+                    {
+                        log(
+                            LogTag::Trader,
+                            "WARN",
+                            &format!("Failed to populate tokens with cached data: {}", e)
+                        );
+                    }
+                }
+
+                converted_tokens
             }
             Err(e) => {
                 let fetch_duration = fetch_start.elapsed();
@@ -1743,7 +1764,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             handles.push(handle);
         }
 
-    // Wait for tasks to finish with overall timeout (best-effort)
+        // Wait for tasks to finish with overall timeout (best-effort)
         let collection_result = tokio::time::timeout(
             Duration::from_secs(TOKEN_CHECK_COLLECTION_TIMEOUT_SECS),
             async {
@@ -1772,17 +1793,17 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         }
 
         // Add cycle summary logging
-    if is_debug_trader_enabled() {
+        if is_debug_trader_enabled() {
             let final_positions_count = crate::positions::get_open_positions_count().await;
-        let actual_tasks = handles_initial_size; // scheduled count
+            let actual_tasks = handles_initial_size; // scheduled count
             log(
                 LogTag::Trader,
                 "CYCLE_SUMMARY",
                 &format!(
-            "🔄 Cycle summary: Scheduled {}/{} tokens → {} tasks spawned → Positions: {}/{}",
-            actual_tasks,
+                    "🔄 Cycle summary: Scheduled {}/{} tokens → {} tasks spawned → Positions: {}/{}",
+                    actual_tasks,
                     total_tokens,
-            actual_tasks,
+                    actual_tasks,
                     final_positions_count,
                     MAX_OPEN_POSITIONS
                 )
@@ -2341,11 +2362,27 @@ pub async fn refresh_stale_price_history(shutdown: Arc<Notify>) {
         let tokens = match get_all_tokens_by_liquidity().await {
             Ok(api_tokens) => {
                 // Convert to Token format and take first 100 for stale checking
-                api_tokens
+                let mut converted_tokens: Vec<Token> = api_tokens
                     .into_iter()
                     .take(100)
                     .map(|api_token| api_token.into())
-                    .collect::<Vec<crate::tokens::Token>>()
+                    .collect();
+
+                // Populate with cached data for stale checking consistency
+                let db = TokenDatabase::new().map_err(|e|
+                    format!("Failed to create database: {}", e)
+                );
+                if let Ok(database) = db {
+                    if
+                        let Err(_e) = database.populate_tokens_with_cached_data(
+                            &mut converted_tokens
+                        ).await
+                    {
+                        // Ignore population errors for stale checking - not critical
+                    }
+                }
+
+                converted_tokens
             }
             Err(_) => {
                 if check_shutdown_or_delay(&shutdown, Duration::from_secs(30)).await {

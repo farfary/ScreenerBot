@@ -939,6 +939,10 @@ impl PoolPriceService {
 
         log(LogTag::Pool, "START", "Starting pool price monitoring service with batch updates");
 
+        // Emit an immediate state summary so operators don't wait for the first interval tick
+        // This is not gated by debug flags and helps confirm wiring on startup
+        self.log_state_summary().await;
+
         // Clone all necessary Arc references for the background task
         let price_cache = self.price_cache.clone();
         let monitoring_active = self.monitoring_active.clone();
@@ -955,6 +959,7 @@ impl PoolPriceService {
             let mut watchlist_interval = tokio::time::interval(
                 Duration::from_secs(WATCHLIST_UPDATE_INTERVAL_SECS)
             );
+            let mut summary_interval = tokio::time::interval(Duration::from_secs(30));
             let mut cleanup_interval = tokio::time::interval(Duration::from_secs(3600)); // Cleanup every hour
 
             loop {
@@ -1032,6 +1037,20 @@ impl PoolPriceService {
                                 }
                             }
                         }
+                    }
+
+                    // Periodic state summary - every 30 seconds
+                    _ = summary_interval.tick() => {
+                        // Check if monitoring should continue
+                        {
+                            let active = monitoring_active.read().await;
+                            if !*active {
+                                break;
+                            }
+                        }
+
+                        let service = get_pool_service();
+                        service.log_state_summary().await;
                     }
 
                     // Periodic cleanup - every hour
@@ -2822,6 +2841,93 @@ impl PoolPriceService {
         stats.clone()
     }
 
+    /// Record an unsupported pool program encountered during price requests
+    pub async fn record_unsupported_program(&self, program_id: &str) {
+        {
+            let mut set = self.unsupported_programs.write().await;
+            if set.insert(program_id.to_string()) {
+                let mut stats = self.stats.write().await;
+                stats.unsupported_programs_count += 1;
+            }
+        }
+    }
+
+    /// Emit a single consolidated state summary log (not gated by debug)
+    pub async fn log_state_summary(&self) {
+        // Gather cache sizes
+        let (pool_cache_len, price_cache_len, availability_cache_len) =
+            self.get_cache_stats().await;
+
+        // Gather watchlist/priority sizes and never updated
+        let (watch_total, watch_never_updated, _last_update) = self.get_watchlist_status().await;
+        let priority_size = {
+            let p = self.priority_tokens.read().await;
+            p.len()
+        };
+
+        // Gather stats snapshot
+        let stats = self.get_enhanced_stats().await;
+
+        // Unsupported programs list
+        let unsupported_list: Vec<String> = {
+            let set = self.unsupported_programs.read().await;
+            set.iter().cloned().collect()
+        };
+
+        // Rates
+        let success_rate = if stats.total_price_requests > 0 {
+            ((stats.successful_calculations as f64) * 100.0) / (stats.total_price_requests as f64)
+        } else {
+            0.0
+        };
+        let cache_hit_rate = if stats.total_price_requests > 0 {
+            ((stats.cache_hits as f64) * 100.0) / (stats.total_price_requests as f64)
+        } else {
+            0.0
+        };
+
+        // Compose single summary string
+        let summary = format!(
+            "\
+Pool State Summary\n\
+  caches: pools={}, prices={}, availability={}\n\
+  history: tokens={}, entries={}\n\
+  requests: total={}, success={}, fail={}, success_rate={:.1}%, cache_hits={}, cache_hit_rate={:.1}%\n\
+  compute: blockchain={}, api_fallbacks={}\n\
+  monitor: cycles={}, last_tokens={}, total_tokens={}, avg_tokens_per_cycle={:.1}, last_ms={:.1}, total_ms={:.1}, avg_ms={:.1}\n\
+  watch: size={}, never_updated={}, priority_size={}\n\
+  unsupported_programs_count={}\n\
+  unsupported_programs=[{}]",
+            pool_cache_len,
+            price_cache_len,
+            availability_cache_len,
+            stats.tokens_with_price_history,
+            stats.total_price_history_entries,
+            stats.total_price_requests,
+            stats.successful_calculations,
+            stats.failed_calculations,
+            success_rate,
+            stats.cache_hits,
+            cache_hit_rate,
+            stats.blockchain_calculations,
+            stats.api_fallbacks,
+            stats.monitoring_cycles,
+            stats.last_cycle_tokens,
+            stats.total_cycle_tokens,
+            stats.avg_tokens_per_cycle,
+            stats.last_cycle_duration_ms,
+            stats.total_cycle_duration_ms,
+            stats.avg_cycle_duration_ms,
+            watch_total,
+            watch_never_updated,
+            priority_size,
+            unsupported_list.len(),
+            unsupported_list.join(", ")
+        );
+
+        log(LogTag::Pool, "STATE_SUMMARY", &summary);
+    }
+
     /// Record a price request (internal tracking)
     async fn record_price_request(&self, success: bool, was_cache_hit: bool, was_blockchain: bool) {
         let mut stats = self.stats.write().await;
@@ -3398,9 +3504,32 @@ impl PoolPriceCalculator {
         }
 
         // Batch fetch all pool accounts with processed commitment for fresh data
-        let accounts = self.rpc_client
-            .get_multiple_accounts(&pubkeys).await
-            .map_err(|e| { format!("Failed to batch get pool accounts: {}", e) })?;
+        let rpc_phase_start = Instant::now();
+        let accounts = match
+            tokio::time::timeout(
+                Duration::from_secs(12),
+                self.rpc_client.get_multiple_accounts(&pubkeys)
+            ).await
+        {
+            Ok(Ok(accs)) => accs,
+            Ok(Err(e)) => {
+                return Err(format!("Failed to batch get pool accounts: {}", e));
+            }
+            Err(_) => {
+                return Err("RPC get_multiple_accounts timed out after 12s".to_string());
+            }
+        };
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "RPC_BATCH_ACCOUNTS",
+                &format!(
+                    "Fetched {} accounts in {:.2}ms",
+                    accounts.len(),
+                    rpc_phase_start.elapsed().as_millis()
+                )
+            );
+        }
 
         // Process each account and decode pool info
         let mut result = HashMap::new();
@@ -3470,6 +3599,8 @@ impl PoolPriceCalculator {
                                 &format!("Unsupported pool program: {}", program_id)
                             );
                         }
+                        // Track unsupported program ID for consolidated summary logs
+                        get_pool_service().record_unsupported_program(&program_id).await;
                         Err(format!("Unsupported pool program: {}", program_id))
                     }
                 };
@@ -3641,13 +3772,16 @@ impl PoolPriceCalculator {
             );
         }
 
-        // Batch fetch all pool infos
+        // Batch fetch all pool infos with timing
+        let fetch_pools_start = Instant::now();
         let pool_infos = self.get_multiple_pool_infos(&pool_addresses).await?;
+        let fetch_pools_ms = fetch_pools_start.elapsed().as_millis();
 
         // Calculate prices for each token-pool pair
         let mut results = HashMap::new();
         let mut successful_calculations = 0;
 
+        let calc_phase_start = Instant::now();
         for (pool_address, token_mint) in pool_token_pairs {
             let cache_key = format!("{}_{}", pool_address, token_mint);
 
@@ -3683,6 +3817,10 @@ impl PoolPriceCalculator {
                                 )
                             );
                         }
+                        // Track unsupported program for price path as well
+                        get_pool_service().record_unsupported_program(
+                            &pool_info.pool_program_id
+                        ).await;
                         Ok(None)
                     }
                 }
@@ -3747,10 +3885,12 @@ impl PoolPriceCalculator {
                 LogTag::Pool,
                 "BATCH_PRICE_SUCCESS",
                 &format!(
-                    "Batch calculated {}/{} prices in {:.2}ms",
+                    "Batch calculated {}/{} prices in {:.2}ms (fetch_pools: {}ms, calc: {}ms)",
                     successful_calculations,
                     pool_token_pairs.len(),
-                    start_time.elapsed().as_millis()
+                    start_time.elapsed().as_millis(),
+                    fetch_pools_ms,
+                    calc_phase_start.elapsed().as_millis()
                 )
             );
         }
@@ -3791,7 +3931,11 @@ static POOL_PRICE_CALCULATOR_INIT: std::sync::Once = std::sync::Once::new();
 pub fn init_global_pool_price_calculator() -> &'static PoolPriceCalculator {
     unsafe {
         POOL_PRICE_CALCULATOR_INIT.call_once(|| {
-            GLOBAL_POOL_PRICE_CALCULATOR = Some(PoolPriceCalculator::new());
+            let mut calc = PoolPriceCalculator::new();
+            if is_debug_pool_prices_enabled() {
+                calc.enable_debug();
+            }
+            GLOBAL_POOL_PRICE_CALCULATOR = Some(calc);
         });
         match GLOBAL_POOL_PRICE_CALCULATOR.as_ref() {
             Some(calc) => calc,
@@ -6366,4 +6510,10 @@ pub async fn clear_priority_tokens() {
 pub async fn clear_watchlist_tokens() {
     let service = get_pool_service();
     service.clear_watchlist_tokens().await;
+}
+
+/// Emit a one-shot consolidated pool state summary log (not gated by debug)
+pub async fn log_pool_state_summary() {
+    let service = get_pool_service();
+    service.log_state_summary().await;
 }

@@ -4996,6 +4996,8 @@ async fn test_real_position_management(
                 liquidity: None,
                 info: None,
                 boosts: None,
+                decimals: None,
+                rugcheck_data: None,
             };
 
             match
@@ -5189,6 +5191,8 @@ fn create_basic_token(token_mint: &str, token_symbol: &str) -> Token {
         liquidity: None,
         info: None,
         boosts: None,
+        decimals: None,
+        rugcheck_data: None,
     }
 }
 

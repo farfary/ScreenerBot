@@ -1,21 +1,21 @@
 // Token database and rugcheck persistence module.
 // NOTE: Legacy in-memory PriceCache removed in favor of TokenPriceService (price.rs).
-use crate::global::{is_debug_monitor_enabled, TOKENS_DATABASE};
-use crate::logger::{log, LogTag};
+use crate::global::{ is_debug_monitor_enabled, TOKENS_DATABASE };
+use crate::logger::{ log, LogTag };
 use crate::tokens::types::*;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::{ DateTime, Utc };
+use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{ Arc, Mutex };
 
 // =============================================================================
 // TOKEN DATABASE (SQLite)
 // =============================================================================
 
 use crate::tokens::types::ApiToken;
-use rusqlite::{params, Connection, Result as SqliteResult};
+use rusqlite::{ params, Connection, Result as SqliteResult };
 
 /// SQLite database for token storage and caching
 #[derive(Clone)]
@@ -73,23 +73,20 @@ impl TokenDatabase {
                 last_updated TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )",
-            [],
+            []
         )?;
 
         // Create indexes for better performance
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON tokens(symbol)",
-            [],
-        )?;
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON tokens(symbol)", [])?;
 
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_tokens_liquidity ON tokens(liquidity_usd DESC)",
-            [],
+            []
         )?;
 
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_tokens_last_updated ON tokens(last_updated)",
-            [],
+            []
         )?;
 
         // Only log on first initialization - reduce log spam
@@ -110,11 +107,7 @@ impl TokenDatabase {
         }
 
         if is_debug_monitor_enabled() {
-            log(
-                LogTag::System,
-                "DATABASE",
-                &format!("Added/updated {} tokens", tokens.len()),
-            );
+            log(LogTag::System, "DATABASE", &format!("Added/updated {} tokens", tokens.len()));
         }
 
         Ok(())
@@ -123,27 +116,21 @@ impl TokenDatabase {
     /// Update existing tokens in database
     pub async fn update_tokens(&self, tokens: &[ApiToken]) -> Result<(), String> {
         for token in tokens {
-            self.insert_or_update_token(token)
+            self
+                .insert_or_update_token(token)
                 .map_err(|e| format!("Failed to update token: {}", e))?;
         }
 
         // Only log on errors or significant updates (> 50 tokens)
         if tokens.len() > 50 {
-            log(
-                LogTag::System,
-                "DATABASE",
-                &format!("Updated {} tokens", tokens.len()),
-            );
+            log(LogTag::System, "DATABASE", &format!("Updated {} tokens", tokens.len()));
         }
         Ok(())
     }
 
     /// Get all tokens from database
     pub async fn get_all_tokens(&self) -> Result<Vec<ApiToken>, String> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Database lock error: {}", e))?;
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
         let mut stmt = connection
             .prepare("SELECT * FROM tokens ORDER BY liquidity_usd DESC")
@@ -164,7 +151,7 @@ impl TokenDatabase {
     /// Get tokens by mints
     pub async fn get_tokens_by_mints(
         &self,
-        mints: &[String],
+        mints: &[String]
     ) -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
         let mut tokens = Vec::new();
 
@@ -180,14 +167,18 @@ impl TokenDatabase {
     /// Get single token by mint
     pub fn get_token_by_mint(
         &self,
-        mint: &str,
+        mint: &str
     ) -> Result<Option<ApiToken>, Box<dyn std::error::Error>> {
-        let connection = self.connection.lock().map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Database lock error: {}", e),
-            )) as Box<dyn std::error::Error>
-        })?;
+        let connection = self.connection
+            .lock()
+            .map_err(|e| {
+                Box::new(
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Database lock error: {}", e)
+                    )
+                ) as Box<dyn std::error::Error>
+            })?;
         let mut stmt = connection.prepare("SELECT * FROM tokens WHERE mint = ?1")?;
 
         let mut rows = stmt.query_map(params![mint], |row| Ok(self.row_to_token(row)?))?;
@@ -202,19 +193,23 @@ impl TokenDatabase {
     /// Get tokens by liquidity threshold for new entry detection
     pub async fn get_tokens_by_liquidity_threshold(
         &self,
-        threshold: f64,
+        threshold: f64
     ) -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
-        let connection = self.connection.lock().map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Database lock error: {}", e),
-            )) as Box<dyn std::error::Error>
-        })?;
+        let connection = self.connection
+            .lock()
+            .map_err(|e| {
+                Box::new(
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Database lock error: {}", e)
+                    )
+                ) as Box<dyn std::error::Error>
+            })?;
 
         let mut stmt = connection.prepare(
             "SELECT * FROM tokens 
              WHERE liquidity_usd >= ?1 
-             ORDER BY liquidity_usd DESC",
+             ORDER BY liquidity_usd DESC"
         )?;
 
         let rows = stmt.query_map(params![threshold], |row| Ok(self.row_to_token(row)?))?;
@@ -229,18 +224,21 @@ impl TokenDatabase {
 
     /// Insert or update token in database
     fn insert_or_update_token(&self, token: &ApiToken) -> Result<(), Box<dyn std::error::Error>> {
-        let labels_json = token
-            .labels
+        let labels_json = token.labels
             .as_ref()
             .map(|labels| serde_json::to_string(labels).unwrap_or_default())
             .unwrap_or_default();
 
-        let connection = self.connection.lock().map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Database lock error: {}", e),
-            )) as Box<dyn std::error::Error>
-        })?;
+        let connection = self.connection
+            .lock()
+            .map_err(|e| {
+                Box::new(
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Database lock error: {}", e)
+                    )
+                ) as Box<dyn std::error::Error>
+            })?;
         connection.execute(
             "INSERT OR REPLACE INTO tokens (
                 mint, symbol, name, chain_id, dex_id, pair_address, pair_url,
@@ -309,12 +307,13 @@ impl TokenDatabase {
         };
 
         let last_updated_str: String = row.get("last_updated")?;
-        let last_updated = chrono::DateTime::parse_from_rfc3339(&last_updated_str)
+        let last_updated = chrono::DateTime
+            ::parse_from_rfc3339(&last_updated_str)
             .map_err(|_e| {
                 rusqlite::Error::InvalidColumnType(
                     0,
                     "last_updated".to_string(),
-                    rusqlite::types::Type::Text,
+                    rusqlite::types::Type::Text
                 )
             })?
             .with_timezone(&chrono::Utc);
@@ -378,7 +377,7 @@ impl TokenDatabase {
                 symbol: row.get::<_, String>("symbol")?,
                 image_url: row.get("info_image_url")?,
                 websites: None, // Not stored in simplified schema
-                socials: None,  // Not stored in simplified schema
+                socials: None, // Not stored in simplified schema
             }),
             labels,
             last_updated,
@@ -387,17 +386,20 @@ impl TokenDatabase {
 
     /// Get database statistics
     pub fn get_stats(&self) -> Result<DatabaseStats, Box<dyn std::error::Error>> {
-        let connection = self.connection.lock().map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Database lock error: {}", e),
-            )) as Box<dyn std::error::Error>
-        })?;
+        let connection = self.connection
+            .lock()
+            .map_err(|e| {
+                Box::new(
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Database lock error: {}", e)
+                    )
+                ) as Box<dyn std::error::Error>
+            })?;
         let mut stmt = connection.prepare("SELECT COUNT(*) FROM tokens")?;
         let total_tokens: i64 = stmt.query_row([], |row| row.get(0))?;
 
-        let mut stmt =
-            connection.prepare("SELECT COUNT(*) FROM tokens WHERE liquidity_usd > 100")?;
+        let mut stmt = connection.prepare("SELECT COUNT(*) FROM tokens WHERE liquidity_usd > 100")?;
         let tokens_with_liquidity: i64 = stmt.query_row([], |row| row.get(0))?;
 
         Ok(DatabaseStats {
@@ -413,12 +415,16 @@ impl TokenDatabase {
     pub async fn cleanup_zero_liquidity_tokens(&self) -> Result<usize, Box<dyn std::error::Error>> {
         // First, collect the candidate tokens (with database lock)
         let tokens_to_check = {
-            let connection = self.connection.lock().map_err(|_e| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Database lock error".to_string(),
-                )) as Box<dyn std::error::Error>
-            })?;
+            let connection = self.connection
+                .lock()
+                .map_err(|_e| {
+                    Box::new(
+                        std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "Database lock error".to_string()
+                        )
+                    ) as Box<dyn std::error::Error>
+                })?;
 
             // Calculate cutoff time (1 hour ago)
             let one_hour_ago = chrono::Utc::now() - chrono::Duration::hours(1);
@@ -429,7 +435,7 @@ impl TokenDatabase {
                 "SELECT mint, symbol, last_updated FROM tokens 
                  WHERE (liquidity_usd IS NULL OR liquidity_usd <= 0.0)
                  AND last_updated < ?1
-                 ORDER BY last_updated ASC",
+                 ORDER BY last_updated ASC"
             )?;
 
             let token_rows = stmt.query_map([&one_hour_ago_str], |row| {
@@ -454,10 +460,7 @@ impl TokenDatabase {
         log(
             LogTag::System,
             "CLEANUP",
-            &format!(
-                "Found {} tokens with zero liquidity older than 1 hour",
-                tokens_to_check.len()
-            ),
+            &format!("Found {} tokens with zero liquidity older than 1 hour", tokens_to_check.len())
         );
 
         // Check which tokens have open positions - we must not delete these
@@ -474,19 +477,23 @@ impl TokenDatabase {
             log(
                 LogTag::System,
                 "CLEANUP",
-                "No tokens eligible for deletion (all have open positions)",
+                "No tokens eligible for deletion (all have open positions)"
             );
             return Ok(0);
         }
 
         // Finally, delete the eligible tokens (with database lock)
         let deleted_count = {
-            let connection = self.connection.lock().map_err(|_e| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Database lock error".to_string(),
-                )) as Box<dyn std::error::Error>
-            })?;
+            let connection = self.connection
+                .lock()
+                .map_err(|_e| {
+                    Box::new(
+                        std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "Database lock error".to_string()
+                        )
+                    ) as Box<dyn std::error::Error>
+                })?;
 
             let mut deleted_count = 0;
             for (mint, symbol, last_updated) in &tokens_to_delete {
@@ -496,16 +503,20 @@ impl TokenDatabase {
                             deleted_count += 1;
 
                             // Also delete rugcheck data for this token
-                            if let Err(e) = connection
-                                .execute("DELETE FROM rugcheck_data WHERE mint = ?1", params![mint])
+                            if
+                                let Err(e) = connection.execute(
+                                    "DELETE FROM rugcheck_data WHERE mint = ?1",
+                                    params![mint]
+                                )
                             {
                                 log(
                                     LogTag::System,
                                     "ERROR",
                                     &format!(
                                         "Failed to delete rugcheck data for token {}: {}",
-                                        mint, e
-                                    ),
+                                        mint,
+                                        e
+                                    )
                                 );
                             }
 
@@ -525,7 +536,7 @@ impl TokenDatabase {
                         log(
                             LogTag::System,
                             "ERROR",
-                            &format!("Failed to delete token {}: {}", mint, e),
+                            &format!("Failed to delete token {}: {}", mint, e)
                         );
                     }
                 }
@@ -537,17 +548,10 @@ impl TokenDatabase {
             log(
                 LogTag::System,
                 "CLEANUP",
-                &format!(
-                    "Database cleanup: Removed {} stale tokens with zero liquidity (>1h old)",
-                    deleted_count
-                ),
+                &format!("Database cleanup: Removed {} stale tokens with zero liquidity (>1h old)", deleted_count)
             );
         } else {
-            log(
-                LogTag::System,
-                "CLEANUP",
-                "Database cleanup: No stale tokens removed",
-            );
+            log(LogTag::System, "CLEANUP", "Database cleanup: No stale tokens removed");
         }
 
         Ok(deleted_count)
@@ -558,16 +562,20 @@ impl TokenDatabase {
     /// This should only be called after fetching and updating latest token data
     pub async fn cleanup_near_zero_liquidity_tokens(
         &self,
-        threshold_usd: f64,
+        threshold_usd: f64
     ) -> Result<usize, Box<dyn std::error::Error>> {
         // First, collect the candidate tokens (with database lock)
         let tokens_to_check = {
-            let connection = self.connection.lock().map_err(|_e| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Database lock error".to_string(),
-                )) as Box<dyn std::error::Error>
-            })?;
+            let connection = self.connection
+                .lock()
+                .map_err(|_e| {
+                    Box::new(
+                        std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "Database lock error".to_string()
+                        )
+                    ) as Box<dyn std::error::Error>
+                })?;
 
             // Calculate cutoff time (1 hour ago)
             let one_hour_ago = chrono::Utc::now() - chrono::Duration::hours(1);
@@ -578,7 +586,7 @@ impl TokenDatabase {
                 "SELECT mint, symbol, last_updated FROM tokens 
                  WHERE (liquidity_usd IS NULL OR liquidity_usd < ?2)
                  AND last_updated < ?1
-                 ORDER BY last_updated ASC",
+                 ORDER BY last_updated ASC"
             )?;
 
             let token_rows = stmt.query_map(params![one_hour_ago_str, threshold_usd], |row| {
@@ -607,7 +615,7 @@ impl TokenDatabase {
                 "Found {} tokens with liquidity below ${:.1} older than 1 hour",
                 tokens_to_check.len(),
                 threshold_usd
-            ),
+            )
         );
 
         // Check which tokens have open positions - we must not delete these
@@ -624,19 +632,23 @@ impl TokenDatabase {
             log(
                 LogTag::System,
                 "CLEANUP",
-                "No tokens eligible for deletion (all have open positions)",
+                "No tokens eligible for deletion (all have open positions)"
             );
             return Ok(0);
         }
 
         // Finally, delete the eligible tokens (with database lock)
         let deleted_count = {
-            let connection = self.connection.lock().map_err(|_e| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Database lock error".to_string(),
-                )) as Box<dyn std::error::Error>
-            })?;
+            let connection = self.connection
+                .lock()
+                .map_err(|_e| {
+                    Box::new(
+                        std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "Database lock error".to_string()
+                        )
+                    ) as Box<dyn std::error::Error>
+                })?;
 
             let mut deleted_count = 0;
             for (mint, symbol, last_updated) in &tokens_to_delete {
@@ -646,16 +658,20 @@ impl TokenDatabase {
                             deleted_count += 1;
 
                             // Also delete rugcheck data for this token
-                            if let Err(e) = connection
-                                .execute("DELETE FROM rugcheck_data WHERE mint = ?1", params![mint])
+                            if
+                                let Err(e) = connection.execute(
+                                    "DELETE FROM rugcheck_data WHERE mint = ?1",
+                                    params![mint]
+                                )
                             {
                                 log(
                                     LogTag::System,
                                     "ERROR",
                                     &format!(
                                         "Failed to delete rugcheck data for token {}: {}",
-                                        mint, e
-                                    ),
+                                        mint,
+                                        e
+                                    )
                                 );
                             }
 
@@ -664,9 +680,11 @@ impl TokenDatabase {
                                     LogTag::System,
                                     "CLEANUP",
                                     &format!(
-                                    "Deleted stale low liquidity token: {} ({}) - last updated: {}",
-                                    symbol, mint, last_updated
-                                ),
+                                        "Deleted stale low liquidity token: {} ({}) - last updated: {}",
+                                        symbol,
+                                        mint,
+                                        last_updated
+                                    )
                                 );
                             }
                         }
@@ -675,7 +693,7 @@ impl TokenDatabase {
                         log(
                             LogTag::System,
                             "ERROR",
-                            &format!("Failed to delete token {}: {}", mint, e),
+                            &format!("Failed to delete token {}: {}", mint, e)
                         );
                     }
                 }
@@ -694,11 +712,7 @@ impl TokenDatabase {
                 )
             );
         } else {
-            log(
-                LogTag::System,
-                "CLEANUP",
-                "Database cleanup: No stale tokens removed",
-            );
+            log(LogTag::System, "CLEANUP", "Database cleanup: No stale tokens removed");
         }
 
         Ok(deleted_count)
@@ -716,30 +730,28 @@ impl TokenDatabase {
     /// Get all tokens with their last update times for monitoring
     /// Returns tokens ordered by liquidity (highest first) with update time information
     pub async fn get_all_tokens_with_update_time(
-        &self,
+        &self
     ) -> Result<Vec<(String, String, DateTime<Utc>, f64)>, String> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Database lock error: {}", e))?;
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
         let mut stmt = connection
             .prepare(
                 "SELECT mint, symbol, last_updated, COALESCE(liquidity_usd, 0.0) as liquidity
                  FROM tokens 
-                 ORDER BY liquidity_usd DESC NULLS LAST",
+                 ORDER BY liquidity_usd DESC NULLS LAST"
             )
             .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
         let token_iter = stmt
             .query_map([], |row| {
                 let last_updated_str: String = row.get("last_updated")?;
-                let last_updated = chrono::DateTime::parse_from_rfc3339(&last_updated_str)
+                let last_updated = chrono::DateTime
+                    ::parse_from_rfc3339(&last_updated_str)
                     .map_err(|e| {
                         rusqlite::Error::InvalidColumnType(
                             0,
                             "last_updated".to_string(),
-                            rusqlite::types::Type::Text,
+                            rusqlite::types::Type::Text
                         )
                     })?
                     .with_timezone(&chrono::Utc);
@@ -765,12 +777,9 @@ impl TokenDatabase {
     /// Returns tokens that haven't been updated within the specified hours
     pub async fn get_tokens_needing_update(
         &self,
-        min_hours_since_update: i64,
+        min_hours_since_update: i64
     ) -> Result<Vec<(String, String, DateTime<Utc>, f64)>, String> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Database lock error: {}", e))?;
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
         let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(min_hours_since_update);
         let cutoff_str = cutoff_time.to_rfc3339();
@@ -780,19 +789,20 @@ impl TokenDatabase {
                 "SELECT mint, symbol, last_updated, COALESCE(liquidity_usd, 0.0) as liquidity
                  FROM tokens 
                  WHERE last_updated < ?1
-                 ORDER BY liquidity_usd DESC NULLS LAST",
+                 ORDER BY liquidity_usd DESC NULLS LAST"
             )
             .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
         let token_iter = stmt
             .query_map([&cutoff_str], |row| {
                 let last_updated_str: String = row.get("last_updated")?;
-                let last_updated = chrono::DateTime::parse_from_rfc3339(&last_updated_str)
+                let last_updated = chrono::DateTime
+                    ::parse_from_rfc3339(&last_updated_str)
                     .map_err(|e| {
                         rusqlite::Error::InvalidColumnType(
                             0,
                             "last_updated".to_string(),
-                            rusqlite::types::Type::Text,
+                            rusqlite::types::Type::Text
                         )
                     })?
                     .with_timezone(&chrono::Utc);
@@ -826,12 +836,14 @@ pub struct DatabaseStats {
 impl TokenDatabase {
     /// Initialize rugcheck table in the database
     pub fn initialize_rugcheck_table(&self) -> Result<(), rusqlite::Error> {
-        let connection = self.connection.lock().map_err(|_| {
-            rusqlite::Error::SqliteFailure(
-                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
-                Some("Failed to acquire database lock".to_string()),
-            )
-        })?;
+        let connection = self.connection
+            .lock()
+            .map_err(|_| {
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                    Some("Failed to acquire database lock".to_string())
+                )
+            })?;
 
         connection.execute(
             "CREATE TABLE IF NOT EXISTS rugcheck_data (
@@ -908,17 +920,17 @@ impl TokenDatabase {
         // Create indexes for better performance
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_rugcheck_score ON rugcheck_data(score DESC)",
-            [],
+            []
         )?;
 
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_rugcheck_rugged ON rugcheck_data(rugged)",
-            [],
+            []
         )?;
 
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_rugcheck_updated ON rugcheck_data(updated_at)",
-            [],
+            []
         )?;
 
         Ok(())
@@ -927,96 +939,84 @@ impl TokenDatabase {
     /// Store rugcheck data in the database
     pub fn store_rugcheck_data(
         &self,
-        data: &crate::tokens::rugcheck::RugcheckResponse,
+        data: &crate::tokens::rugcheck::RugcheckResponse
     ) -> Result<(), rusqlite::Error> {
-        let connection = self.connection.lock().map_err(|_| {
-            rusqlite::Error::SqliteFailure(
-                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
-                Some("Failed to acquire database lock".to_string()),
-            )
-        })?;
+        let connection = self.connection
+            .lock()
+            .map_err(|_| {
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                    Some("Failed to acquire database lock".to_string())
+                )
+            })?;
 
         // Serialize complex fields to JSON
-        let token_extensions_json = data
-            .token_extensions
+        let token_extensions_json = data.token_extensions
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let top_holders_json = data
-            .top_holders
+        let top_holders_json = data.top_holders
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let freeze_authority_json = data
-            .freeze_authority
+        let freeze_authority_json = data.freeze_authority
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let mint_authority_json = data
-            .mint_authority
+        let mint_authority_json = data.mint_authority
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let risks_json = data
-            .risks
+        let risks_json = data.risks
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let locker_owners_json = data
-            .locker_owners
+        let locker_owners_json = data.locker_owners
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let lockers_json = data
-            .lockers
+        let lockers_json = data.lockers
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let markets_json = data
-            .markets
+        let markets_json = data.markets
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let known_accounts_json = data
-            .known_accounts
+        let known_accounts_json = data.known_accounts
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let events_json = data
-            .events
+        let events_json = data.events
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let verification_json = data
-            .verification
+        let verification_json = data.verification
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let insider_networks_json = data
-            .insider_networks
+        let insider_networks_json = data.insider_networks
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let creator_tokens_json = data
-            .creator_tokens
+        let creator_tokens_json = data.creator_tokens
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let launchpad_json = data
-            .launchpad
+        let launchpad_json = data.launchpad
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default())
             .unwrap_or_default();
@@ -1112,39 +1112,39 @@ impl TokenDatabase {
     /// Get rugcheck data for a specific token with timestamp
     pub fn get_rugcheck_data_with_timestamp(
         &self,
-        mint: &str,
+        mint: &str
     ) -> Result<
-        Option<(
-            crate::tokens::rugcheck::RugcheckResponse,
-            chrono::DateTime<chrono::Utc>,
-        )>,
-        rusqlite::Error,
+        Option<(crate::tokens::rugcheck::RugcheckResponse, chrono::DateTime<chrono::Utc>)>,
+        rusqlite::Error
     > {
-        let connection = self.connection.lock().map_err(|_| {
-            rusqlite::Error::SqliteFailure(
-                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
-                Some("Failed to acquire database lock".to_string()),
-            )
-        })?;
+        let connection = self.connection
+            .lock()
+            .map_err(|_| {
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                    Some("Failed to acquire database lock".to_string())
+                )
+            })?;
 
-        let mut stmt =
-            connection.prepare("SELECT *, updated_at FROM rugcheck_data WHERE mint = ?1")?;
+        let mut stmt = connection.prepare(
+            "SELECT *, updated_at FROM rugcheck_data WHERE mint = ?1"
+        )?;
 
         let mut rows = stmt.query_map(params![mint], |row| {
             let rugcheck_response = self.row_to_rugcheck_response(row)?;
             let updated_at_str: String = row.get("updated_at")?;
 
             // Parse SQLite datetime format: "YYYY-MM-DD HH:MM:SS"
-            let updated_at =
-                chrono::NaiveDateTime::parse_from_str(&updated_at_str, "%Y-%m-%d %H:%M:%S")
-                    .map_err(|_| {
-                        rusqlite::Error::InvalidColumnType(
-                            0,
-                            "updated_at".to_string(),
-                            rusqlite::types::Type::Text,
-                        )
-                    })?
-                    .and_utc(); // Convert to UTC DateTime
+            let updated_at = chrono::NaiveDateTime
+                ::parse_from_str(&updated_at_str, "%Y-%m-%d %H:%M:%S")
+                .map_err(|_| {
+                    rusqlite::Error::InvalidColumnType(
+                        0,
+                        "updated_at".to_string(),
+                        rusqlite::types::Type::Text
+                    )
+                })?
+                .and_utc(); // Convert to UTC DateTime
 
             Ok((rugcheck_response, updated_at))
         })?;
@@ -1156,22 +1156,56 @@ impl TokenDatabase {
         }
     }
 
-    /// Get rugcheck data for a specific token
+    /// Get rugcheck data for a specific token (static method)
     pub fn get_rugcheck_data(
-        &self,
-        mint: &str,
-    ) -> Result<Option<crate::tokens::rugcheck::RugcheckResponse>, rusqlite::Error> {
-        let connection = self.connection.lock().map_err(|_| {
-            rusqlite::Error::SqliteFailure(
-                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
-                Some("Failed to acquire database lock".to_string()),
+        mint: &str
+    ) -> Result<Option<crate::tokens::rugcheck::RugcheckResponse>, String> {
+        use std::sync::Arc;
+
+        let connection = Arc::new(
+            std::sync::Mutex::new(
+                Connection::open(&*TOKENS_DATABASE).map_err(|e|
+                    format!("Database connection failed: {}", e)
+                )?
             )
-        })?;
+        );
+
+        let conn = connection.lock().map_err(|_| "Failed to acquire database lock".to_string())?;
+
+        let mut stmt = conn
+            .prepare("SELECT * FROM rugcheck_data WHERE mint = ?1")
+            .map_err(|e| format!("Failed to prepare rugcheck query: {}", e))?;
+
+        let mut rows = stmt
+            .query_map(params![mint], |row| { Self::row_to_rugcheck_response_static(row) })
+            .map_err(|e| format!("Failed to execute rugcheck query: {}", e))?;
+
+        if let Some(row) = rows.next() {
+            Ok(Some(row.map_err(|e| format!("Failed to parse rugcheck row: {}", e))?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get rugcheck data for a specific token (instance method)
+    pub fn get_rugcheck_data_instance(
+        &self,
+        mint: &str
+    ) -> Result<Option<crate::tokens::rugcheck::RugcheckResponse>, rusqlite::Error> {
+        let connection = self.connection
+            .lock()
+            .map_err(|_| {
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                    Some("Failed to acquire database lock".to_string())
+                )
+            })?;
 
         let mut stmt = connection.prepare("SELECT * FROM rugcheck_data WHERE mint = ?1")?;
 
-        let mut rows =
-            stmt.query_map(params![mint], |row| Ok(self.row_to_rugcheck_response(row)?))?;
+        let mut rows = stmt.query_map(params![mint], |row|
+            Ok(self.row_to_rugcheck_response(row)?)
+        )?;
 
         if let Some(row) = rows.next() {
             Ok(Some(row?))
@@ -1181,9 +1215,9 @@ impl TokenDatabase {
     }
 
     /// Convert database row to RugcheckResponse
-    fn row_to_rugcheck_response(
-        &self,
-        row: &rusqlite::Row,
+    /// Static version of row_to_rugcheck_response for static methods
+    fn row_to_rugcheck_response_static(
+        row: &rusqlite::Row
     ) -> Result<crate::tokens::rugcheck::RugcheckResponse, rusqlite::Error> {
         use crate::tokens::rugcheck::*;
 
@@ -1191,188 +1225,105 @@ impl TokenDatabase {
         let token_extensions: Option<serde_json::Value> = row
             .get::<_, Option<String>>("token_extensions")?
             .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
+                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
             });
 
         let top_holders: Option<Vec<Holder>> = row
             .get::<_, Option<String>>("top_holders_json")?
             .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
+                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
             });
 
         let freeze_authority: Option<serde_json::Value> = row
             .get::<_, Option<String>>("freeze_authority_json")?
             .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
+                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
             });
 
         let mint_authority: Option<serde_json::Value> = row
             .get::<_, Option<String>>("mint_authority_json")?
             .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
+                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
             });
 
         let risks: Option<Vec<Risk>> = row.get::<_, Option<String>>("risks_json")?.and_then(|s| {
-            if s.is_empty() {
-                None
-            } else {
-                serde_json::from_str(&s).ok()
-            }
+            if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
         });
 
-        let locker_owners: Option<HashMap<String, serde_json::Value>> = row
-            .get::<_, Option<String>>("locker_owners_json")?
+        let markets: Option<Vec<Market>> = row
+            .get::<_, Option<String>>("markets_json")?
             .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
+                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
             });
 
-        let lockers: Option<HashMap<String, serde_json::Value>> =
-            row.get::<_, Option<String>>("lockers_json")?.and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
-            });
-
-        let markets: Option<Vec<Market>> =
-            row.get::<_, Option<String>>("markets_json")?.and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
-            });
-
-        let known_accounts: Option<HashMap<String, KnownAccount>> = row
+        let known_accounts: Option<Vec<KnownAccount>> = row
             .get::<_, Option<String>>("known_accounts_json")?
             .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
+                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
             });
 
-        let events: Option<Vec<Event>> =
-            row.get::<_, Option<String>>("events_json")?.and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
-            });
+        let events: Option<Vec<Event>> = row.get::<_, Option<String>>("events_json")?.and_then(|s| {
+            if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
+        });
 
-        let verification: Option<crate::tokens::rugcheck::Verification> = row
+        let verification: Option<Verification> = row
             .get::<_, Option<String>>("verification_json")?
             .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
+                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
             });
 
         let insider_networks: Option<serde_json::Value> = row
             .get::<_, Option<String>>("insider_networks_json")?
             .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
+                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
             });
 
         let creator_tokens: Option<serde_json::Value> = row
             .get::<_, Option<String>>("creator_tokens_json")?
             .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
+                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
             });
 
         let launchpad: Option<serde_json::Value> = row
             .get::<_, Option<String>>("launchpad_json")?
             .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str(&s).ok()
-                }
+                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
             });
-
-        // Build TokenInfo
-        let token = Some(TokenInfo {
-            mint_authority: row.get("token_mint_authority")?,
-            supply: row.get("token_supply")?,
-            decimals: row.get("token_decimals")?,
-            is_initialized: row.get("token_is_initialized")?,
-            freeze_authority: row.get("token_freeze_authority")?,
-        });
-
-        // Build TokenMeta
-        let token_meta = Some(TokenMeta {
-            name: row.get("token_meta_name")?,
-            symbol: row.get("token_meta_symbol")?,
-            uri: row.get("token_meta_uri")?,
-            mutable: row.get("token_meta_mutable")?,
-            update_authority: row.get("token_meta_update_authority")?,
-        });
-
-        // Build FileMeta
-        let file_meta = Some(FileMeta {
-            description: row.get("file_meta_description")?,
-            name: row.get("file_meta_name")?,
-            symbol: row.get("file_meta_symbol")?,
-            image: row.get("file_meta_image")?,
-        });
-
-        // Build TransferFee
-        let transfer_fee = Some(TransferFee {
-            pct: row.get("transfer_fee_pct")?,
-            max_amount: row.get("transfer_fee_max_amount")?,
-            authority: row.get("transfer_fee_authority")?,
-        });
 
         Ok(RugcheckResponse {
             mint: row.get("mint")?,
             token_program: row.get("token_program")?,
             creator: row.get("creator")?,
             creator_balance: row.get("creator_balance")?,
-            token,
+            token: Some(TokenInfo {
+                mint_authority: row.get("token_mint_authority")?,
+                supply: row.get("token_supply")?,
+                decimals: row.get("token_decimals")?,
+                is_initialized: row.get("token_is_initialized")?,
+                freeze_authority: row.get("token_freeze_authority")?,
+            }),
             token_extensions,
-            token_meta,
+            token_meta: Some(TokenMeta {
+                name: row.get("token_meta_name")?,
+                symbol: row.get("token_meta_symbol")?,
+                uri: row.get("token_meta_uri")?,
+                mutable: row.get("token_meta_mutable")?,
+                update_authority: row.get("token_meta_update_authority")?,
+            }),
             top_holders,
             freeze_authority,
             mint_authority,
             risks,
             score: row.get("score")?,
             score_normalised: row.get("score_normalised")?,
-            file_meta,
-            locker_owners,
-            lockers,
+            file_meta: Some(FileMeta {
+                description: row.get("file_meta_description")?,
+                name: row.get("file_meta_name")?,
+                symbol: row.get("file_meta_symbol")?,
+                image: row.get("file_meta_image")?,
+            }),
+            locker_owners: None, // Not stored in database yet
+            lockers: None, // Not stored in database yet
             markets,
             total_market_liquidity: row.get("total_market_liquidity")?,
             total_stable_liquidity: row.get("total_stable_liquidity")?,
@@ -1381,8 +1332,12 @@ impl TokenDatabase {
             price: row.get("price")?,
             rugged: row.get("rugged")?,
             token_type: row.get("token_type")?,
-            transfer_fee,
-            known_accounts,
+            transfer_fee: Some(TransferFee {
+                pct: row.get("transfer_fee_pct")?,
+                max_amount: row.get("transfer_fee_max_amount")?,
+                authority: row.get("transfer_fee_authority")?,
+            }),
+            known_accounts: None, // Will be populated from JSON
             events,
             verification,
             graph_insiders_detected: row.get("graph_insiders_detected")?,
@@ -1393,17 +1348,67 @@ impl TokenDatabase {
         })
     }
 
+    fn row_to_rugcheck_response(
+        &self,
+        row: &rusqlite::Row
+    ) -> Result<crate::tokens::rugcheck::RugcheckResponse, rusqlite::Error> {
+        Self::row_to_rugcheck_response_static(row)
+    }
+
     /// Delete rugcheck data for a specific token
     pub fn delete_rugcheck_data(&self, mint: &str) -> Result<bool, rusqlite::Error> {
-        let connection = self.connection.lock().map_err(|_| {
-            rusqlite::Error::SqliteFailure(
-                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
-                Some("Failed to acquire database lock".to_string()),
-            )
-        })?;
+        let connection = self.connection
+            .lock()
+            .map_err(|_| {
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                    Some("Failed to acquire database lock".to_string())
+                )
+            })?;
 
-        let rows_affected =
-            connection.execute("DELETE FROM rugcheck_data WHERE mint = ?1", params![mint])?;
+        let rows_affected = connection.execute(
+            "DELETE FROM rugcheck_data WHERE mint = ?1",
+            params![mint]
+        )?;
         Ok(rows_affected > 0)
+    }
+
+    /// Populate tokens with rugcheck_data and decimals from database
+    pub async fn populate_tokens_with_cached_data(
+        &self,
+        tokens: &mut [crate::tokens::types::Token]
+    ) -> Result<(), String> {
+        use crate::tokens::decimals::get_cached_decimals;
+
+        for token in tokens.iter_mut() {
+            // Populate rugcheck_data from database
+            if token.rugcheck_data.is_none() {
+                match self.get_rugcheck_data_instance(&token.mint) {
+                    Ok(Some(rugcheck_data)) => {
+                        token.rugcheck_data = Some(rugcheck_data);
+                    }
+                    Ok(None) => {
+                        // No rugcheck data found - leave as None
+                    }
+                    Err(e) => {
+                        // Log error but continue with other tokens
+                        log(
+                            LogTag::System,
+                            "ERROR",
+                            &format!("Failed to get rugcheck data for {}: {}", token.mint, e)
+                        );
+                    }
+                }
+            }
+
+            // Populate decimals from cache
+            if token.decimals.is_none() {
+                if let Some(decimals) = get_cached_decimals(&token.mint) {
+                    token.decimals = Some(decimals);
+                }
+            }
+        }
+
+        Ok(())
     }
 }

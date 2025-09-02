@@ -11,7 +11,6 @@ use screenerbot::{
         pool::{
             // New watchlist management functions
             add_priority_token,
-            add_watchlist_token,
             add_watchlist_tokens,
             clear_priority_tokens,
             clear_watchlist_tokens,
@@ -21,34 +20,21 @@ use screenerbot::{
             get_watchlist_status,
             get_watchlist_tokens,
             PriceOptions,
-            PriceResult,
         },
     },
 };
 use std::time::Instant;
-use tokio::time::{sleep, Duration};
+use tokio::time::{ sleep, Duration };
 
 /// Test token for demonstrations (A8C3... pump token)
 const TEST_TOKEN: &str = "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump";
 
 /// Additional test tokens for comprehensive testing
 const TEST_TOKENS: &[(&str, &str)] = &[
-    (
-        "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump",
-        "TANUKI (Pump.fun)",
-    ),
-    (
-        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        "USDC (Stable)",
-    ),
-    (
-        "So11111111111111111111111111111111111111112",
-        "SOL (Native)",
-    ),
-    (
-        "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
-        "Bonk (Popular)",
-    ),
+    ("A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump", "TANUKI (Pump.fun)"),
+    ("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "USDC (Stable)"),
+    ("So11111111111111111111111111111111111111112", "SOL (Native)"),
+    ("DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", "Bonk (Popular)"),
 ];
 
 #[tokio::main]
@@ -107,8 +93,7 @@ async fn test_watchlist_management() -> Result<(), Box<dyn std::error::Error>> {
     println!("✅ Added priority token: {}", TEST_TOKEN);
 
     // Test adding watchlist tokens
-    let watchlist_tokens: Vec<String> = TEST_TOKENS
-        .iter()
+    let watchlist_tokens: Vec<String> = TEST_TOKENS.iter()
         .map(|(addr, _)| addr.to_string())
         .collect();
     add_watchlist_tokens(&watchlist_tokens).await;
@@ -117,7 +102,7 @@ async fn test_watchlist_management() -> Result<(), Box<dyn std::error::Error>> {
     // Check status
     let priority_tokens = get_priority_tokens().await;
     let watchlist = get_watchlist_tokens().await;
-    let (total, never_updated, last_update) = get_watchlist_status().await;
+    let (_total, never_updated, last_update) = get_watchlist_status().await;
 
     println!("📊 Status:");
     println!("  Priority tokens: {}", priority_tokens.len());
@@ -142,7 +127,10 @@ async fn test_batch_processing() -> Result<(), Box<dyn std::error::Error>> {
         let (total, never_updated, last_update) = get_watchlist_status().await;
         println!(
             "  Cycle {}: {} total, {} never updated, last: {:?}",
-            i, total, never_updated, last_update
+            i,
+            total,
+            never_updated,
+            last_update
         );
 
         if never_updated == 0 {
@@ -224,10 +212,7 @@ async fn test_performance_comparison() -> Result<(), Box<dyn std::error::Error>>
     println!("  Total calls: {}", iterations);
     println!("  Successful: {}", successful_calls);
     println!("  Average duration: {:?}", total_duration / iterations);
-    println!(
-        "  Success rate: {:.1}%",
-        ((successful_calls as f64) / (iterations as f64)) * 100.0
-    );
+    println!("  Success rate: {:.1}%", ((successful_calls as f64) / (iterations as f64)) * 100.0);
 
     Ok(())
 }
