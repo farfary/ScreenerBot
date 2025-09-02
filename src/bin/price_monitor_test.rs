@@ -167,7 +167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   🎯 Pools available: {}", if availability { "✅" } else { "❌" });
 
         // Show history count with more detail
-        let history = pool_service.get_recent_price_history(TEST_TOKEN).await;
+        let history = pool_service.get_price_history(TEST_TOKEN).await;
         if !history.is_empty() {
             println!("   📈 Recent history entries: {}", history.len());
             if history.len() > 1 {

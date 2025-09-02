@@ -144,7 +144,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         );
     }
 
-    let mut price_history = pool_service.get_recent_price_history(&token.mint).await;
+    let mut price_history = pool_service.get_price_history(&token.mint).await;
     // Filter out invalid prices (0 or non-finite)
     price_history.retain(|(_, p)| *p > 0.0 && p.is_finite());
 
@@ -152,7 +152,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     if price_history.len() < MIN_PRICE_POINTS {
         // Force a fresh pool-only price to seed history
         let _ = crate::tokens::get_price(&token.mint, Some(PriceOptions::default()), false).await;
-        let mut refreshed = pool_service.get_recent_price_history(&token.mint).await;
+        let mut refreshed = pool_service.get_price_history(&token.mint).await;
         refreshed.retain(|(_, p)| *p > 0.0 && p.is_finite());
         if refreshed.len() >= price_history.len() {
             price_history = refreshed;
@@ -580,7 +580,7 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
 
     // Volatility-based adjustment using recent window
     let pool_service = get_pool_service();
-    let price_history = pool_service.get_recent_price_history(&token.mint).await;
+    let price_history = pool_service.get_price_history(&token.mint).await;
     if current_price_opt.is_some() && price_history.len() >= 3 {
         let now = Utc::now();
         let prices_60: Vec<f64> = price_history

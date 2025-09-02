@@ -1986,118 +1986,71 @@ impl PoolPriceService {
         *self.monitoring_active.read().await
     }
 
-    pub async fn get_recent_price_history(&self, token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
-        // Build both aggregated (per-pool) and simple histories, filtered to recent window
-        let recent_cutoff = Utc::now() - chrono::Duration::minutes(15);
+    /// Get complete price history combining database and in-memory data (no duplicates)
+    pub async fn get_price_history(&self, token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
+        use std::collections::HashMap;
 
-        // Aggregated pool history (may be sparse if prices don't change much)
-        let recent_aggregated: Vec<(DateTime<Utc>, f64)> = {
+        // Collect all price history from different sources
+        let mut all_prices: HashMap<i64, f64> = HashMap::new(); // timestamp_millis -> price
+
+        // 1. Get aggregated pool history (comprehensive, from all pools)
+        {
             let pool_cache = self.pool_price_history.read().await;
             if let Some(cache) = pool_cache.get(token_address) {
-                let hist = cache
-                    .get_combined_price_history()
-                    .into_iter()
-                    .filter(|(ts, _)| *ts >= recent_cutoff)
-                    .collect::<Vec<_>>();
-                hist
-            } else {
-                Vec::new()
+                let hist = cache.get_combined_price_history();
+                for (ts, price) in hist {
+                    let timestamp_millis = ts.timestamp_millis();
+                    all_prices.insert(timestamp_millis, price);
+                }
             }
-        };
+        }
 
-        // Simple in-memory history (up to last 10 points; updated every successful price calc)
-        let recent_simple: Vec<(DateTime<Utc>, f64)> = {
+        // 2. Get simple in-memory history (recent points)
+        {
             let history = self.price_history.read().await;
-            let fallback_history = history.get(token_address).cloned().unwrap_or_default();
-            fallback_history
-                .into_iter()
-                .filter(|(timestamp, _)| *timestamp >= recent_cutoff)
-                .collect()
-        };
+            if let Some(simple_history) = history.get(token_address) {
+                for (ts, price) in simple_history {
+                    let timestamp_millis = ts.timestamp_millis();
+                    all_prices.insert(timestamp_millis, *price);
+                }
+            }
+        }
 
-        // Choose the richer recent history source
-        let simple_len = recent_simple.len();
-        let aggregated_len = recent_aggregated.len();
-        let (chosen_label, mut chosen) = if simple_len >= aggregated_len {
-            ("SIMPLE", recent_simple)
-        } else {
-            ("AGGREGATED", recent_aggregated)
-        };
+        // 3. Get database history (persistent storage)
+        if let Ok(db_history) = get_price_history_for_token(token_address) {
+            for (ts, price) in db_history {
+                let timestamp_millis = ts.timestamp_millis();
+                all_prices.insert(timestamp_millis, price);
+            }
+        }
+
+        // Convert back to Vec and sort by timestamp
+        let mut combined_history: Vec<(DateTime<Utc>, f64)> = all_prices
+            .into_iter()
+            .map(|(timestamp_millis, price)| {
+                let timestamp = DateTime::from_timestamp(
+                    timestamp_millis / 1000,
+                    ((timestamp_millis % 1000) * 1_000_000) as u32
+                ).unwrap_or_else(|| DateTime::from_timestamp(0, 0).unwrap());
+                (timestamp, price)
+            })
+            .collect();
+
+        combined_history.sort_by_key(|(timestamp, _)| *timestamp);
 
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
-                "PRICE_HISTORY_RECENT",
+                "PRICE_HISTORY_COMBINED",
                 &format!(
-                    "📊 Recent history for {} -> SIMPLE: {}, AGGREGATED: {}, chosen: {}",
+                    "� Complete history for {}: {} unique price points from all sources",
                     &token_address[..8],
-                    simple_len,
-                    aggregated_len,
-                    chosen_label
+                    combined_history.len()
                 )
             );
         }
 
-        // If we have at least 2 recent points, return immediately
-        if chosen.len() >= 2 {
-            return chosen;
-        }
-
-        // Final fallback: try database for recent price history (10-minute window)
-        if let Ok(db_history) = get_price_history_for_token(token_address) {
-            let recent_db_history: Vec<(DateTime<Utc>, f64)> = db_history
-                .into_iter()
-                .filter(|(timestamp, _)| *timestamp >= Utc::now() - chrono::Duration::minutes(10))
-                .collect();
-
-            if !recent_db_history.is_empty() {
-                if is_debug_pool_prices_enabled() {
-                    log(
-                        LogTag::Pool,
-                        "PRICE_HISTORY_DB_FALLBACK",
-                        &format!(
-                            "🗄️ Retrieved {} recent DB entries for {} (chosen had {} from {} source)",
-                            recent_db_history.len(),
-                            &token_address[..8],
-                            chosen.len(),
-                            chosen_label
-                        )
-                    );
-                }
-                return recent_db_history;
-            }
-        }
-
-        // Return whatever we have (possibly < 2); callers can decide sufficiency
-        chosen
-    }
-
-    /// Get comprehensive price history for RL learning system
-    pub async fn get_comprehensive_price_history(
-        &self,
-        token_address: &str
-    ) -> Vec<(DateTime<Utc>, f64)> {
-        let cache = self.pool_price_history.read().await;
-        if let Some(token_cache) = cache.get(token_address) {
-            let history = token_cache.get_combined_price_history();
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "PRICE_HISTORY",
-                    &format!(
-                        "📊 Analysis: Retrieved {} comprehensive price history entries for {} from {} pools",
-                        history.len(),
-                        token_address,
-                        token_cache.pool_caches.len()
-                    )
-                );
-            }
-
-            history
-        } else {
-            // No cache available, return empty history
-            Vec::new()
-        }
+        combined_history
     }
 
     /// Get the best pool for a token based on activity and liquidity

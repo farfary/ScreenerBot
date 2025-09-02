@@ -565,7 +565,7 @@ pub fn update_token_check_info(mint: &str, current_price: Option<f64>, had_drop:
 /// Check if token had recent price drop (within 30 seconds)
 pub async fn check_token_for_recent_drop(token: &Token) -> bool {
     let pool_service = get_pool_service();
-    let history = pool_service.get_recent_price_history(&token.mint).await;
+    let history = pool_service.get_price_history(&token.mint).await;
 
     if history.len() < 2 {
         return false;
@@ -1506,9 +1506,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         let pool_service = get_pool_service();
 
                         // ENHANCEMENT: Check if token has insufficient price history and force an update if needed
-                        let history_before = pool_service.get_recent_price_history(
-                            &token.mint
-                        ).await;
+                        let history_before = pool_service.get_price_history(&token.mint).await;
                         let needs_history_boost = history_before.len() < 3;
 
                         if needs_history_boost {
@@ -1659,7 +1657,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                         // Compute percent change from recent history if available
                         let change = {
-                            let history = pool_service.get_recent_price_history(&token.mint).await;
+                            let history = pool_service.get_price_history(&token.mint).await;
                             if history.len() >= 2 {
                                 let prev = history[history.len() - 2].1;
                                 if prev > 0.0 {
