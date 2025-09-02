@@ -22,7 +22,7 @@
 
 /// WARNING: If premium RPC fails when this is enabled, operations will fail
 /// instead of falling back to other endpoints.
-const FORCE_PREMIUM_RPC_ONLY: bool = false;
+const FORCE_PREMIUM_RPC_ONLY: bool = true;
 
 /// RPC RATE LIMITING CONFIGURATION
 /// Maximum calls per second for main RPC (premium RPC has no limits)

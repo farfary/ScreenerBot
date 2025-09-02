@@ -45,13 +45,13 @@ const PRICE_CACHE_TTL_SECONDS: i64 = 60;
 // =============================================================================
 
 /// Priority tokens update interval (5 seconds exactly)
-const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 3;
+const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 1;
 
 /// Watchlist batch size for random updates
 const WATCHLIST_BATCH_SIZE: usize = 25;
 
 /// Watchlist update interval (spread updates over time)
-const WATCHLIST_UPDATE_INTERVAL_SECS: u64 = 3;
+const WATCHLIST_UPDATE_INTERVAL_SECS: u64 = 1;
 
 /// Maximum tokens per DexScreener API call
 const MAX_TOKENS_PER_BATCH: usize = 30;
@@ -1263,6 +1263,22 @@ impl PoolPriceService {
             Ok(price_results) => {
                 let mut successful_updates = 0;
                 let mut successful_tokens: Vec<String> = Vec::new();
+                // Defer history writes until after cache lock is released
+                let mut history_updates: Vec<
+                    (
+                        String, // token_address
+                        String, // pool_address
+                        String, // dex_id
+                        Option<String>, // pool_type
+                        f64, // price_sol
+                        Option<f64>, // price_usd
+                        Option<f64>, // reserves_token
+                        Option<f64>, // reserves_sol
+                        f64, // liquidity_usd
+                        Option<f64>, // volume_24h
+                        String, // source
+                    )
+                > = Vec::new();
 
                 // Update price cache for successful calculations
                 {
@@ -1299,6 +1315,31 @@ impl PoolPriceService {
                             successful_updates += 1;
                             successful_tokens.push(token_address.clone());
 
+                            // Queue history persistence for this successful update
+                            let pool_type = Some(
+                                get_pool_program_display_name(&info.pool_program_id)
+                            );
+                            let reserves_token = Some(
+                                (info.token_reserve as f64) /
+                                    (10_f64).powi(info.token_decimals as i32)
+                            );
+                            let reserves_sol = Some(
+                                (info.sol_reserve as f64) / (10_f64).powi(info.sol_decimals as i32)
+                            );
+                            history_updates.push((
+                                token_address.clone(),
+                                pool_address.clone(),
+                                format!("batch_{}", batch_type),
+                                pool_type,
+                                info.price_sol,
+                                None,
+                                reserves_token,
+                                reserves_sol,
+                                0.0,
+                                None,
+                                "pool_batch".to_string(),
+                            ));
+
                             // Reset failure count on successful update
                             {
                                 let mut failure_counts =
@@ -1316,6 +1357,38 @@ impl PoolPriceService {
                                 failure_counts.insert(token_address.clone(), current_failures + 1);
                             }
                         }
+                    }
+                }
+
+                // Persist price history outside of cache lock
+                if !history_updates.is_empty() {
+                    let service_ref = get_pool_service();
+                    for (
+                        token_address,
+                        pool_address,
+                        dex_id,
+                        pool_type,
+                        price_sol,
+                        price_usd,
+                        reserves_token,
+                        reserves_sol,
+                        liquidity_usd,
+                        volume_24h,
+                        source,
+                    ) in history_updates {
+                        service_ref.add_price_to_pool_history(
+                            &token_address,
+                            &pool_address,
+                            &dex_id,
+                            pool_type.clone(),
+                            price_sol,
+                            price_usd,
+                            reserves_token,
+                            reserves_sol,
+                            liquidity_usd,
+                            volume_24h,
+                            &source
+                        ).await;
                     }
                 }
 
@@ -6702,6 +6775,24 @@ async fn get_price_internal(
                 age.num_seconds(),
                 PRICE_CACHE_TTL_SECONDS
             );
+
+            // Optionally enqueue ad-hoc warm-up for expired cache
+            if options.warm_on_miss {
+                let mut ad_hoc = service.ad_hoc_refresh_tokens.write().await;
+                ad_hoc.insert(token_address.to_string());
+                drop(ad_hoc);
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "ADHOC_ENQUEUE_EXPIRED",
+                        &format!(
+                            "Enqueued {} for warm-up due to expired cache (age {}s)",
+                            &token_address[..8],
+                            age.num_seconds()
+                        )
+                    );
+                }
+            }
 
             let result = PriceResult {
                 token_address: token_address.to_string(),

@@ -90,7 +90,7 @@ pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 6 * 60; // 6 hours
 pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 5;
 
 /// New entry signals check interval (seconds) - optimized for fastest price checking
-pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 5;
+pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 3;
 
 /// Open positions monitoring interval (seconds) - maximum priority price checking every 5 seconds
 pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 5;
@@ -161,6 +161,9 @@ pub const ENTRY_CHECK_CONCURRENCY: usize = 24; // previously 10
 /// Max number of tokens to fully process per cycle (rotated across cycles)
 /// Rule of thumb: ~3x concurrency to keep workers fed without overloading services
 pub const MAX_TOKENS_PER_CYCLE: usize = ENTRY_CHECK_CONCURRENCY * 2;
+/// Maximum number of tokens to keep after prioritization per cache refresh
+/// This caps the working set early to reduce churn and focus checks
+pub const PREPARED_TOKENS_CAP: usize = 200;
 
 /// Limit tokens analyzed for watchlist seeding per cycle (keeps history refresh light)
 
@@ -224,6 +227,12 @@ pub struct TokenCheckInfo {
     pub last_price: Option<f64>,
     pub check_count: usize,
     pub had_recent_drop: bool,
+    pub entry_check_count: usize,
+    pub pool_type: Option<String>,
+    pub pool_address: Option<String>,
+    pub pool_price_sol: Option<f64>,
+    pub reserve_sol: Option<f64>,
+    pub reserve_token: Option<f64>,
 }
 
 /// Global token tracking state
@@ -246,6 +255,83 @@ pub struct TokenConfidenceInfo {
 /// Global confidence-based token ranking system
 pub static TOKEN_CONFIDENCE_TRACKER: Lazy<Arc<std::sync::RwLock<Vec<TokenConfidenceInfo>>>> =
     Lazy::new(|| Arc::new(std::sync::RwLock::new(Vec::new())));
+
+// =============================================================================
+// LIGHTWEIGHT TOKEN META CACHE FOR SUMMARIES
+// =============================================================================
+
+#[derive(Clone, Debug)]
+struct TokenMetaBrief {
+    symbol: String,
+    name: String,
+    liquidity_usd: Option<f64>,
+    market_cap: Option<f64>,
+    cached_at: Instant,
+}
+
+static TOKEN_META_CACHE: Lazy<Arc<std::sync::RwLock<HashMap<String, TokenMetaBrief>>>> = Lazy::new(
+    || Arc::new(std::sync::RwLock::new(HashMap::new()))
+);
+
+const TOKEN_META_TTL_SECS: u64 = 600; // 10 minutes
+
+fn format_usd_short(v: f64) -> String {
+    let abs_v = v.abs();
+    if abs_v >= 1_000_000_000.0 {
+        format!("${:.1}B", v / 1_000_000_000.0)
+    } else if abs_v >= 1_000_000.0 {
+        format!("${:.1}M", v / 1_000_000.0)
+    } else if abs_v >= 1_000.0 {
+        format!("${:.1}k", v / 1_000.0)
+    } else {
+        format!("${:.0}", v)
+    }
+}
+
+fn get_token_meta_brief(mint: &str) -> Option<TokenMetaBrief> {
+    // Try cache first
+    {
+        let cache = TOKEN_META_CACHE.read().ok()?;
+        if let Some(meta) = cache.get(mint) {
+            if meta.cached_at.elapsed().as_secs() < TOKEN_META_TTL_SECS {
+                return Some(meta.clone());
+            }
+        }
+    }
+
+    // Load from DB (sync API) and cache it
+    let db = match crate::tokens::cache::TokenDatabase::new() {
+        Ok(db) => db,
+        Err(_) => {
+            return None;
+        }
+    };
+
+    match db.get_token_by_mint(mint) {
+        Ok(Some(api_token)) => {
+            let meta = TokenMetaBrief {
+                symbol: api_token.symbol.clone(),
+                name: api_token.name.clone(),
+                liquidity_usd: api_token.liquidity.as_ref().and_then(|l| l.usd),
+                market_cap: api_token.market_cap,
+                cached_at: Instant::now(),
+            };
+            if let Ok(mut cache) = TOKEN_META_CACHE.write() {
+                cache.insert(mint.to_string(), meta.clone());
+            }
+            Some(meta)
+        }
+        _ => None,
+    }
+}
+
+fn fmt_opt9(v: Option<f64>) -> String {
+    v.map(|x| format!("{:.9}", x)).unwrap_or_else(|| "-".to_string())
+}
+
+fn short8(s: &str) -> String {
+    if s.len() > 8 { s[..8].to_string() } else { s.to_string() }
+}
 
 // =============================================================================
 // TOKEN CACHE FOR PERFORMANCE OPTIMIZATION
@@ -549,13 +635,25 @@ pub fn get_confidence_tracking_status() -> String {
 }
 
 /// Update token tracking after checking a token
-pub fn update_token_check_info(mint: &str, current_price: Option<f64>, had_drop: bool) {
+pub fn update_token_check_info(
+    mint: &str,
+    current_price: Option<f64>,
+    had_drop: bool,
+    entry_checked: bool,
+    pool: Option<&crate::tokens::PriceResult>
+) {
     let mut tracker = TOKEN_CHECK_TRACKER.write().unwrap();
     let info = tracker.entry(mint.to_string()).or_insert(TokenCheckInfo {
         last_check_time: Instant::now(),
         last_price: None,
         check_count: 0,
+        entry_check_count: 0,
         had_recent_drop: false,
+        pool_type: None,
+        pool_address: None,
+        pool_price_sol: None,
+        reserve_sol: None,
+        reserve_token: None,
     });
 
     info.last_check_time = Instant::now();
@@ -564,6 +662,212 @@ pub fn update_token_check_info(mint: &str, current_price: Option<f64>, had_drop:
     }
     info.check_count += 1;
     info.had_recent_drop = had_drop;
+    if entry_checked {
+        info.entry_check_count += 1;
+    }
+
+    // Update pool fields if provided
+    if let Some(p) = pool {
+        // Only overwrite with Some values to preserve last known good
+        if let Some(t) = &p.pool_type {
+            info.pool_type = Some(t.clone());
+        }
+        if let Some(addr) = &p.pool_address {
+            info.pool_address = Some(addr.clone());
+        }
+        if let Some(pp) = p.pool_price_sol.or(p.price_sol) {
+            info.pool_price_sol = Some(pp);
+        }
+        if let Some(rs) = p.reserve_sol {
+            info.reserve_sol = Some(rs);
+        }
+        if let Some(rt) = p.reserve_token {
+            info.reserve_token = Some(rt);
+        }
+    }
+}
+
+/// Print a compact per-cycle summary of price availability and token check stats
+fn log_cycle_price_summary(available: usize, unavailable: usize, zero_hist_warmed: usize) {
+    let tracker = TOKEN_CHECK_TRACKER.read().unwrap();
+
+    // Top tokens by total checks
+    let mut top_by_checks: Vec<(&String, &TokenCheckInfo)> = tracker.iter().collect();
+    top_by_checks.sort_by(|a, b| b.1.check_count.cmp(&a.1.check_count));
+    let top_by_checks_lines = top_by_checks
+        .iter()
+        .take(10)
+        .enumerate()
+        .map(|(idx, (mint, info))| {
+            let last_price = info.last_price
+                .map(|p| format!("{:.9}", p))
+                .unwrap_or_else(|| "-".to_string());
+            let meta = get_token_meta_brief(mint);
+            let sym_name = meta
+                .as_ref()
+                .map(|m| format!("{} ({})", m.symbol, m.name))
+                .unwrap_or_else(|| "-".to_string());
+            let liq = meta
+                .as_ref()
+                .and_then(|m| m.liquidity_usd)
+                .map(|v| format_usd_short(v))
+                .unwrap_or_else(|| "-".to_string());
+            let mcap = meta
+                .as_ref()
+                .and_then(|m| m.market_cap)
+                .map(|v| format_usd_short(v))
+                .unwrap_or_else(|| "-".to_string());
+            // Use last stored pool info from tracker
+            let ptype = info.pool_type.clone().unwrap_or_default();
+            let paddr = info.pool_address.clone().unwrap_or_default();
+            let pprice = info.pool_price_sol;
+            let rsol = info.reserve_sol;
+            let rtok = info.reserve_token;
+            let pool_str = if paddr.is_empty() {
+                "pool:-".to_string()
+            } else {
+                format!(
+                    "pool:{}/{} p:{} rs:{} tok:{}",
+                    if ptype.is_empty() {
+                        "-".to_string()
+                    } else {
+                        ptype
+                    },
+                    short8(&paddr),
+                    fmt_opt9(pprice),
+                    fmt_opt9(rsol),
+                    fmt_opt9(rtok)
+                )
+            };
+            format!(
+                "  {}. {} {} | liq:{} | mcap:{} | last:{} SOL | {} | checks:{} | entry_checks:{}",
+                idx + 1,
+                &mint[..8],
+                sym_name,
+                liq,
+                mcap,
+                last_price,
+                pool_str,
+                info.check_count,
+                info.entry_check_count
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Top tokens by entry checks
+    let mut top_by_entries: Vec<(&String, &TokenCheckInfo)> = tracker.iter().collect();
+    top_by_entries.sort_by(|a, b| b.1.entry_check_count.cmp(&a.1.entry_check_count));
+    let top_by_entries_lines = top_by_entries
+        .iter()
+        .take(10)
+        .enumerate()
+        .map(|(idx, (mint, info))| {
+            let last_price = info.last_price
+                .map(|p| format!("{:.9}", p))
+                .unwrap_or_else(|| "-".to_string());
+            let meta = get_token_meta_brief(mint);
+            let sym_name = meta
+                .as_ref()
+                .map(|m| format!("{} ({})", m.symbol, m.name))
+                .unwrap_or_else(|| "-".to_string());
+            let liq = meta
+                .as_ref()
+                .and_then(|m| m.liquidity_usd)
+                .map(|v| format_usd_short(v))
+                .unwrap_or_else(|| "-".to_string());
+            let mcap = meta
+                .as_ref()
+                .and_then(|m| m.market_cap)
+                .map(|v| format_usd_short(v))
+                .unwrap_or_else(|| "-".to_string());
+            // Use last stored pool info from tracker
+            let ptype = info.pool_type.clone().unwrap_or_default();
+            let paddr = info.pool_address.clone().unwrap_or_default();
+            let pprice = info.pool_price_sol;
+            let rsol = info.reserve_sol;
+            let rtok = info.reserve_token;
+            let pool_str = if paddr.is_empty() {
+                "pool:-".to_string()
+            } else {
+                format!(
+                    "pool:{}/{} p:{} rs:{} tok:{}",
+                    if ptype.is_empty() {
+                        "-".to_string()
+                    } else {
+                        ptype
+                    },
+                    short8(&paddr),
+                    fmt_opt9(pprice),
+                    fmt_opt9(rsol),
+                    fmt_opt9(rtok)
+                )
+            };
+            format!(
+                "  {}. {} {} | liq:{} | mcap:{} | last:{} SOL | {} | entry_checks:{} | checks:{}",
+                idx + 1,
+                &mint[..8],
+                sym_name,
+                liq,
+                mcap,
+                last_price,
+                pool_str,
+                info.entry_check_count,
+                info.check_count
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Overall tracker stats
+    let tracked_tokens = tracker.len();
+    let tokens_with_price = tracker
+        .iter()
+        .filter(|(_, info)| info.last_price.is_some())
+        .count();
+    let tokens_without_price = tracked_tokens.saturating_sub(tokens_with_price);
+
+    let avg_checks = if tracked_tokens > 0 {
+        (
+            tracker
+                .iter()
+                .map(|(_, i)| i.check_count as u64)
+                .sum::<u64>() as f64
+        ) / (tracked_tokens as f64)
+    } else {
+        0.0
+    };
+    let avg_entry_checks = if tracked_tokens > 0 {
+        (
+            tracker
+                .iter()
+                .map(|(_, i)| i.entry_check_count as u64)
+                .sum::<u64>() as f64
+        ) / (tracked_tokens as f64)
+    } else {
+        0.0
+    };
+
+    let summary = format!(
+        "===== ENTRY PRICE SUMMARY =====\n\
+        • Prices: avail={} | unavail={} | zero-warm={}\n\
+        • Tracker: tracked={} | with_price={} | without_price={}\n\
+        • Averages: checks={:.1} | entry_checks={:.1}\n\
+        • Top by checks (max 10):\n{}\n\
+        • Top by entry checks (max 10):\n{}",
+        available,
+        unavailable,
+        zero_hist_warmed,
+        tracked_tokens,
+        tokens_with_price,
+        tokens_without_price,
+        avg_checks,
+        avg_entry_checks,
+        top_by_checks_lines,
+        top_by_entries_lines
+    );
+
+    log(LogTag::Trader, "PRICE_SUMMARY", &summary);
 }
 
 // Ensure token is in watchlist after a price failure, with a clear log
@@ -1218,6 +1522,22 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
         );
     }
 
+    // Apply hard cap to prioritized tokens to keep working set bounded
+    if prioritized_tokens.len() > PREPARED_TOKENS_CAP {
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "PREPARED_CAP",
+                &format!(
+                    "🔧 Capping prepared tokens: {} → {} (configured cap)",
+                    prioritized_tokens.len(),
+                    PREPARED_TOKENS_CAP
+                )
+            );
+        }
+        prioritized_tokens.truncate(PREPARED_TOKENS_CAP);
+    }
+
     // Cache the filtered and prioritized tokens for future cycles
     {
         if prioritized_tokens.is_empty() {
@@ -1475,6 +1795,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         }
 
         // Process scheduled tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
+        // Per-cycle aggregation counters (atomic to update from tasks)
+        let price_available_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let price_unavailable_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let zero_history_warmed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
         let handles_initial_size = scheduled_tokens.len(); // Track for summary logging
 
@@ -1595,6 +1920,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             // Clone necessary variables for the task
             let token = token.clone();
             let shutdown_clone = shutdown.clone();
+            let price_available_count = price_available_count.clone();
+            let price_unavailable_count = price_unavailable_count.clone();
+            let zero_history_warmed = zero_history_warmed.clone();
             // Spawn a new task for this token with overall timeout
             let handle = tokio::spawn(async move {
                 // Keep the permit alive for the duration of this task
@@ -1623,16 +1951,21 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             // Force a price update by calling get_price which will cache the result
                             let _ = get_price(
                                 &token.mint,
-                                Some(PriceOptions::default()),
+                                Some(PriceOptions {
+                                    warm_on_miss: true,
+                                    ..PriceOptions::default()
+                                }),
                                 false
                             ).await;
+                            // Count zero-history warms for summary
+                            zero_history_warmed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
                             if is_debug_trader_enabled() {
                                 log(
                                     LogTag::Trader,
                                     "HISTORY_BOOST",
                                     &format!(
-                                        "🔄 Force-updated price for {} (had {} history entries)",
+                                        "🔄 Enqueued warm-up for {} (history entries before: {})",
                                         token.symbol,
                                         history_before.len()
                                     )
@@ -1640,56 +1973,80 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             }
                         }
 
-                        // Get current pool price
+                        // Get current pool price (warm on miss)
                         let price_result = get_price(
                             &token.mint,
-                            Some(PriceOptions::default()),
+                            Some(PriceOptions { warm_on_miss: true, ..PriceOptions::default() }),
                             false
                         ).await;
 
-                        let current_price = match &price_result {
+                        // Try to extract current price; if missing, do one short retry
+                        let mut current_price_opt: Option<f64> = match &price_result {
                             Some(result) =>
                                 match result.sol_price() {
-                                    Some(p) if p > 0.0 && p.is_finite() => p,
-                                    _ => {
-                                        // Update tracking even for failed price fetches
-                                        update_token_check_info(&token.mint, None, false);
-                                        let error_detail = result.error
-                                            .as_ref()
-                                            .map(|e| e.to_string())
-                                            .unwrap_or_else(|| "unknown".to_string());
+                                    Some(p) if p > 0.0 && p.is_finite() => Some(p),
+                                    _ => None,
+                                }
+                            None => None,
+                        };
+
+                        if current_price_opt.is_none() {
+                            // Optional short retry after warm-up enqueue
+                            tokio::time::sleep(Duration::from_millis(600)).await;
+                            let retry = get_price(
+                                &token.mint,
+                                Some(PriceOptions {
+                                    warm_on_miss: false,
+                                    ..PriceOptions::default()
+                                }),
+                                false
+                            ).await;
+                            if let Some(r) = retry {
+                                if let Some(p2) = r.sol_price() {
+                                    if p2 > 0.0 && p2.is_finite() {
                                         if is_debug_trader_enabled() {
                                             log(
                                                 LogTag::Trader,
-                                                "PRICE_FAIL",
+                                                "PRICE_RETRY_HIT",
                                                 &format!(
-                                                    "❌ No valid price for {} ({}){} - skipping",
+                                                    "✅ Retry hit for {} ({}) at {:.9} SOL",
                                                     token.symbol,
                                                     token.mint,
-                                                    format!(": {}", error_detail)
+                                                    p2
                                                 )
                                             );
                                         }
-                                        // Trader-controlled: ensure it's on watchlist for background calculation
-                                        ensure_watchlist_on_price_fail(
-                                            &token.mint,
-                                            &token.symbol,
-                                            &error_detail
-                                        ).await;
-                                        return;
+                                        current_price_opt = Some(p2);
                                     }
                                 }
+                            }
+                        }
+
+                        let current_price = match current_price_opt {
+                            Some(p) => p,
                             None => {
                                 // Update tracking even for failed price fetches
-                                update_token_check_info(&token.mint, None, false);
+                                update_token_check_info(
+                                    &token.mint,
+                                    None,
+                                    false,
+                                    false,
+                                    price_result.as_ref()
+                                );
+                                let error_detail = price_result
+                                    .as_ref()
+                                    .and_then(|r| r.error.as_ref())
+                                    .cloned()
+                                    .unwrap_or_else(|| "retry_failed".to_string());
                                 if is_debug_trader_enabled() {
                                     log(
                                         LogTag::Trader,
                                         "PRICE_FAIL",
                                         &format!(
-                                            "❌ No price result for {} ({}) - skipping",
+                                            "❌ No valid price for {} ({}){} - skipping",
                                             token.symbol,
-                                            token.mint
+                                            token.mint,
+                                            format!(": {}", error_detail)
                                         )
                                     );
                                 }
@@ -1697,8 +2054,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 ensure_watchlist_on_price_fail(
                                     &token.mint,
                                     &token.symbol,
-                                    "no_price_result"
+                                    &error_detail
                                 ).await;
+                                price_unavailable_count.fetch_add(
+                                    1,
+                                    std::sync::atomic::Ordering::Relaxed
+                                );
                                 return;
                             }
                         };
@@ -1710,6 +2071,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 &format!("💰 {} price: {:.9} SOL", token.symbol, current_price)
                             );
                         }
+                        price_available_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
                         // Check for recent drops
                         let had_recent_drop = check_token_for_recent_drop(&token).await;
@@ -1759,7 +2121,13 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         );
 
                         // Update token tracking info
-                        update_token_check_info(&token.mint, Some(current_price), had_recent_drop);
+                        update_token_check_info(
+                            &token.mint,
+                            Some(current_price),
+                            had_recent_drop,
+                            true,
+                            price_result.as_ref()
+                        );
 
                         if !approved {
                             // Token passed filtering but doesn't meet entry criteria
@@ -1965,6 +2333,13 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 &format!("Token check collection timed out after {} seconds", TOKEN_CHECK_COLLECTION_TIMEOUT_SECS)
             );
         }
+
+        // Print per-cycle summary for prices and checks
+        log_cycle_price_summary(
+            price_available_count.load(std::sync::atomic::Ordering::Relaxed),
+            price_unavailable_count.load(std::sync::atomic::Ordering::Relaxed),
+            zero_history_warmed.load(std::sync::atomic::Ordering::Relaxed)
+        );
 
         // Add cycle summary logging
         if is_debug_trader_enabled() {

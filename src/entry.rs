@@ -334,7 +334,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             let recent_prices: Vec<String> = price_history
                 .iter()
                 .take(5)
-                .map(|(ts, price)| format!("{:.6}@{}", price, ts.format("%H:%M:%S")))
+                .map(|(ts, price)| format!("{:.9}@{}", price, ts.format("%H:%M:%S")))
                 .collect();
             log(
                 LogTag::Entry,
