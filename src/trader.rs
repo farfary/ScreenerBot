@@ -148,6 +148,14 @@ pub const SELL_OPERATION_SHUTDOWN_CHECK_MS: u64 = 1;
 /// Collection shutdown check delay (milliseconds)
 pub const COLLECTION_SHUTDOWN_CHECK_MS: u64 = 1;
 
+// -----------------------------------------------------------------------------
+// Concurrency Configuration
+// -----------------------------------------------------------------------------
+
+/// Number of concurrent token checks during entry scanning
+/// Higher values speed up scanning but increase load on price services
+pub const ENTRY_CHECK_CONCURRENCY: usize = 24; // previously 10
+
 use crate::global::is_debug_trader_enabled;
 use crate::logger::{ log, LogTag };
 use crate::positions_lib::calculate_position_pnl;
@@ -1143,7 +1151,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         // Limit concurrent token checks to avoid overwhelming services
         use tokio::sync::Semaphore;
-        let semaphore = Arc::new(Semaphore::new(10)); // Increased to 10 concurrent checks for better performance
+        let semaphore = Arc::new(Semaphore::new(ENTRY_CHECK_CONCURRENCY));
 
         // Log filtering summary
         log_filtering_summary(&tokens);
