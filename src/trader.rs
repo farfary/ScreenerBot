@@ -1801,29 +1801,132 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 )
             );
         }
-        let mut monitored: Vec<Token> = Vec::new();
-        let mut others: Vec<Token> = Vec::new();
-        for t in base_slice {
-            if monitored_set.contains(&t.mint) {
-                monitored.push(t);
-            } else {
-                others.push(t);
-            }
+
+        // Wrap the entire token scheduling logic in a timeout to prevent hangs
+        if is_debug_trader_enabled() {
+            log(LogTag::Trader, "SCHEDULER_START", "🔄 Starting token scheduling with 5s timeout");
         }
-        // Cap monitored portion to 50% of batch
-        let target_monitored = (batch_size / 2).max(1);
-        let mut scheduled_tokens: Vec<Token> = Vec::with_capacity(batch_size);
-        let mut i = 0usize;
-        while scheduled_tokens.len() < batch_size && (i < monitored.len() || !others.is_empty()) {
-            if scheduled_tokens.len() < target_monitored && i < monitored.len() {
-                scheduled_tokens.push(monitored[i].clone());
-                i += 1;
-            }
-            if scheduled_tokens.len() < batch_size {
-                if let Some(t) = others.pop() {
-                    scheduled_tokens.push(t);
+
+        let scheduled_tokens = match
+            tokio::time::timeout(Duration::from_secs(5), async {
+                if is_debug_trader_enabled() {
+                    log(
+                        LogTag::Trader,
+                        "SCHEDULER_SORT_START",
+                        &format!(
+                            "🔄 Starting token sorting: {} base tokens, {} monitored, batch_size: {}",
+                            base_slice.len(),
+                            monitored_set.len(),
+                            batch_size
+                        )
+                    );
                 }
+
+                let mut monitored: Vec<Token> = Vec::new();
+                let mut others: Vec<Token> = Vec::new();
+                for t in base_slice {
+                    if monitored_set.contains(&t.mint) {
+                        monitored.push(t);
+                    } else {
+                        others.push(t);
+                    }
+                }
+
+                if is_debug_trader_enabled() {
+                    log(
+                        LogTag::Trader,
+                        "SCHEDULER_SORT_COMPLETE",
+                        &format!(
+                            "📊 Token sorting complete: {} monitored, {} others",
+                            monitored.len(),
+                            others.len()
+                        )
+                    );
+                }
+
+                // Cap monitored portion to 50% of batch
+                let target_monitored = (batch_size / 2).max(1);
+                let mut scheduled_tokens: Vec<Token> = Vec::with_capacity(batch_size);
+                let mut i = 0usize;
+                let mut loop_iterations = 0u32;
+                const MAX_LOOP_ITERATIONS: u32 = 10000; // Defensive limit to prevent infinite loops
+
+                while
+                    scheduled_tokens.len() < batch_size &&
+                    (i < monitored.len() || !others.is_empty())
+                {
+                    loop_iterations += 1;
+                    if loop_iterations > MAX_LOOP_ITERATIONS {
+                        log(
+                            LogTag::Trader,
+                            "SCHEDULER_LOOP_LIMIT",
+                            &format!(
+                                "⚠️ Scheduling loop hit iteration limit ({}), breaking. Scheduled: {}, Target: {}",
+                                MAX_LOOP_ITERATIONS,
+                                scheduled_tokens.len(),
+                                batch_size
+                            )
+                        );
+                        break;
+                    }
+
+                    let before_len = scheduled_tokens.len();
+                    if scheduled_tokens.len() < target_monitored && i < monitored.len() {
+                        scheduled_tokens.push(monitored[i].clone());
+                        i += 1;
+                    }
+                    if scheduled_tokens.len() < batch_size {
+                        if let Some(t) = others.pop() {
+                            scheduled_tokens.push(t);
+                        }
+                    }
+
+                    // Defensive check: ensure we're making progress
+                    if scheduled_tokens.len() == before_len {
+                        log(
+                            LogTag::Trader,
+                            "SCHEDULER_NO_PROGRESS",
+                            &format!("⚠️ Scheduling loop made no progress at iteration {}. Breaking to prevent hang.", loop_iterations)
+                        );
+                        break;
+                    }
+                }
+
+                if is_debug_trader_enabled() && loop_iterations > 100 {
+                    log(
+                        LogTag::Trader,
+                        "SCHEDULER_LOOP_INFO",
+                        &format!(
+                            "🔄 Scheduling loop completed after {} iterations. Final: {} scheduled",
+                            loop_iterations,
+                            scheduled_tokens.len()
+                        )
+                    );
+                }
+
+                scheduled_tokens
+            }).await
+        {
+            Ok(tokens) => tokens,
+            Err(_) => {
+                log(
+                    LogTag::Trader,
+                    "SCHEDULER_TIMEOUT",
+                    "⚠️ Token scheduling timed out after 5s, using empty schedule to prevent cycle hang"
+                );
+                Vec::new() // Return empty to prevent the entire cycle from hanging
             }
+        };
+
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "SCHEDULER_SUCCESS",
+                &format!(
+                    "✅ Token scheduling completed: {} tokens ready for processing",
+                    scheduled_tokens.len()
+                )
+            );
         }
 
         // Process scheduled tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
