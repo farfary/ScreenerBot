@@ -19,6 +19,7 @@ pub use crate::arguments::{
     is_debug_filtering_enabled,
     is_debug_monitor_enabled,
     is_debug_ohlcv_enabled,
+    is_debug_pool_calculator_enabled,
     is_debug_pool_prices_enabled,
     is_debug_price_service_enabled,
     is_debug_profit_enabled,

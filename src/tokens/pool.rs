@@ -1,3 +1,4 @@
+use crate::arguments::is_debug_pool_calculator_enabled;
 use crate::global::{ is_debug_pool_prices_enabled, CACHE_POOL_DIR };
 /// Pool Price System
 ///
@@ -1230,7 +1231,7 @@ impl PoolPriceService {
 
         let start_time = Instant::now();
 
-        if is_debug_pool_prices_enabled() {
+        if is_debug_pool_calculator_enabled() {
             log(
                 LogTag::Pool,
                 "BATCH_START",
@@ -1457,7 +1458,7 @@ impl PoolPriceService {
                     }
                 }
 
-                if is_debug_pool_prices_enabled() {
+                if is_debug_pool_calculator_enabled() {
                     log(
                         LogTag::Pool,
                         "BATCH_SUCCESS",
@@ -2568,19 +2569,21 @@ impl PoolPriceService {
                 if is_debug_pool_prices_enabled() {
                     if let Some(price_sol) = pool_result.price_sol {
                         // Log the pool price calculation
-                        log(
-                            LogTag::Pool,
-                            "FRESH_CALC_SUCCESS",
-                            &format!(
-                                "✅ FRESH POOL PRICE calculated for {}: {:.9} SOL from pool {} ({})",
-                                token_address,
-                                price_sol,
-                                pool_result.pool_address,
-                                pool_result.pool_type
-                                    .as_ref()
-                                    .unwrap_or(&"Unknown Pool".to_string())
-                            )
-                        );
+                        if is_debug_pool_calculator_enabled() {
+                            log(
+                                LogTag::Pool,
+                                "FRESH_CALC_SUCCESS",
+                                &format!(
+                                    "✅ FRESH POOL PRICE calculated for {}: {:.9} SOL from pool {} ({})",
+                                    token_address,
+                                    price_sol,
+                                    pool_result.pool_address,
+                                    pool_result.pool_type
+                                        .as_ref()
+                                        .unwrap_or(&"Unknown Pool".to_string())
+                                )
+                            );
+                        }
 
                         // Show diff between API and pool price if both available
                         if let Some(api_price_sol) = api_price_sol {
@@ -2644,15 +2647,17 @@ impl PoolPriceService {
                             );
                         }
                     } else {
-                        log(
-                            LogTag::Pool,
-                            "CALC_NO_PRICE",
-                            &format!(
-                                "❌ CALCULATION FAILED: No price could be calculated for {} from pool {}",
-                                token_address,
-                                pool_result.pool_address
-                            )
-                        );
+                        if is_debug_pool_calculator_enabled() {
+                            log(
+                                LogTag::Pool,
+                                "CALC_NO_PRICE",
+                                &format!(
+                                    "❌ CALCULATION FAILED: No price could be calculated for {} from pool {}",
+                                    token_address,
+                                    pool_result.pool_address
+                                )
+                            );
+                        }
                     }
                 }
 
@@ -3105,7 +3110,7 @@ impl PoolPriceService {
             pool_calculation_result
         {
             Ok(Some(pool_price_info)) => {
-                if is_debug_pool_prices_enabled() {
+                if is_debug_pool_calculator_enabled() {
                     log(
                         LogTag::Pool,
                         "CALC_REAL_BLOCKCHAIN",
@@ -3845,17 +3850,23 @@ impl PoolPriceCalculator {
     /// Create new pool price calculator (always uses centralized RPC system).
     pub fn new() -> Self {
         let rpc_client = get_rpc_client();
+        let debug_enabled = is_debug_pool_calculator_enabled();
+
+        if debug_enabled {
+            log(LogTag::Pool, "DEBUG", "Pool calculator debug mode enabled");
+        }
+
         Self {
             rpc_client,
             stats: Arc::new(RwLock::new(PoolStats::new())),
-            debug_enabled: false,
+            debug_enabled,
         }
     }
 
-    /// Enable debug mode
+    /// Enable debug mode (overrides global setting)
     pub fn enable_debug(&mut self) {
         self.debug_enabled = true;
-        log(LogTag::Pool, "DEBUG", "Pool calculator debug mode enabled");
+        log(LogTag::Pool, "DEBUG", "Pool calculator debug mode enabled (overridden)");
     }
 
     /// Refresh only the reserve values in a PoolInfo (keeps cached metadata, fetches fresh reserves)
