@@ -257,6 +257,60 @@ pub static TOKEN_CONFIDENCE_TRACKER: Lazy<Arc<std::sync::RwLock<Vec<TokenConfide
     Lazy::new(|| Arc::new(std::sync::RwLock::new(Vec::new())));
 
 // =============================================================================
+// INVALID POOL TOKENS BLACKLIST SYSTEM
+// =============================================================================
+
+/// Information about a token that failed pool validation
+#[derive(Clone, Debug)]
+pub struct InvalidPoolTokenInfo {
+    pub mint: String,
+    pub symbol: String,
+    pub failure_reason: String,
+    pub failed_at: Instant,
+    pub retry_after: Instant,
+    pub failure_count: u32,
+    pub last_pool_check_error: Option<String>,
+}
+
+impl InvalidPoolTokenInfo {
+    /// Create new invalid pool token info
+    pub fn new(mint: String, symbol: String, reason: String) -> Self {
+        let now = Instant::now();
+        Self {
+            mint,
+            symbol,
+            failure_reason: reason,
+            failed_at: now,
+            retry_after: now + Duration::from_secs(3600), // Retry after 1 hour initially
+            failure_count: 1,
+            last_pool_check_error: None,
+        }
+    }
+
+    /// Check if this token is ready for retry
+    pub fn can_retry(&self) -> bool {
+        Instant::now() > self.retry_after
+    }
+
+    /// Update retry time based on failure count (exponential backoff)
+    pub fn update_retry_time(&mut self) {
+        self.failure_count += 1;
+        let backoff_hours = std::cmp::min((self.failure_count as u64) * 2, 24); // Max 24 hours
+        self.retry_after = Instant::now() + Duration::from_secs(backoff_hours * 3600);
+    }
+
+    /// Check if this entry is stale (older than 7 days)
+    pub fn is_stale(&self) -> bool {
+        Instant::now().duration_since(self.failed_at).as_secs() > 7 * 24 * 3600 // 7 days
+    }
+}
+
+/// Global blacklist for tokens with invalid/unsupported pools
+pub static INVALID_POOL_TOKENS: Lazy<
+    Arc<std::sync::RwLock<HashMap<String, InvalidPoolTokenInfo>>>
+> = Lazy::new(|| Arc::new(std::sync::RwLock::new(HashMap::new())));
+
+// =============================================================================
 // LIGHTWEIGHT TOKEN META CACHE FOR SUMMARIES
 // =============================================================================
 
@@ -634,6 +688,163 @@ pub fn get_confidence_tracking_status() -> String {
     status
 }
 
+// =============================================================================
+// INVALID POOL TOKENS BLACKLIST MANAGEMENT
+// =============================================================================
+
+/// Add a token to the invalid pool blacklist
+pub fn add_to_invalid_pool_blacklist(mint: &str, symbol: &str, reason: &str) {
+    // Use the pool service blacklist instead
+    let mint = mint.to_string();
+    let symbol = symbol.to_string();
+    let reason = reason.to_string();
+
+    tokio::spawn(async move {
+        crate::tokens::pool::add_to_invalid_pool_blacklist(&mint, Some(&symbol), &reason).await;
+    });
+}
+
+/// Check if a token is in the invalid pool blacklist and not ready for retry
+pub fn is_token_in_invalid_pool_blacklist(mint: &str) -> bool {
+    // Use async tokio block_on to call the pool service async function
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle
+            ::current()
+            .block_on(async { crate::tokens::pool::is_in_invalid_pool_blacklist(mint).await })
+    })
+}
+
+/// Remove a token from the invalid pool blacklist (for manual override)
+pub fn remove_from_invalid_pool_blacklist(mint: &str) -> bool {
+    let mut blacklist = INVALID_POOL_TOKENS.write().unwrap();
+
+    if let Some(info) = blacklist.remove(mint) {
+        log(
+            LogTag::Trader,
+            "BLACKLIST_REMOVE",
+            &format!(
+                "⚪ Manually removed {} ({}) from invalid pool blacklist",
+                info.symbol,
+                &mint[..8]
+            )
+        );
+        true
+    } else {
+        false
+    }
+}
+
+/// Get tokens ready for retry (not actively blacklisted but tracked)
+pub fn get_tokens_ready_for_pool_retry() -> Vec<String> {
+    let blacklist = INVALID_POOL_TOKENS.read().unwrap();
+    blacklist
+        .values()
+        .filter(|info| info.can_retry())
+        .map(|info| info.mint.clone())
+        .collect()
+}
+
+/// Clean up stale entries from invalid pool blacklist
+pub fn cleanup_invalid_pool_blacklist() -> usize {
+    let mut blacklist = INVALID_POOL_TOKENS.write().unwrap();
+    let before_count = blacklist.len();
+
+    blacklist.retain(|_, info| !info.is_stale());
+
+    let removed_count = before_count - blacklist.len();
+    if removed_count > 0 {
+        log(
+            LogTag::Trader,
+            "BLACKLIST_CLEANUP",
+            &format!(
+                "🧹 Cleaned up {} stale invalid pool blacklist entries ({} remaining)",
+                removed_count,
+                blacklist.len()
+            )
+        );
+    }
+
+    removed_count
+}
+
+/// Get invalid pool blacklist status for debugging
+pub fn get_invalid_pool_blacklist_status() -> String {
+    let blacklist = INVALID_POOL_TOKENS.read().unwrap();
+    let now = Instant::now();
+
+    if blacklist.is_empty() {
+        return "Invalid pool blacklist is empty".to_string();
+    }
+
+    let mut active_blacklist = Vec::new();
+    let mut ready_for_retry = Vec::new();
+
+    for (mint, info) in blacklist.iter() {
+        if info.can_retry() {
+            ready_for_retry.push((mint, info));
+        } else {
+            active_blacklist.push((mint, info));
+        }
+    }
+
+    let mut status = format!(
+        "Invalid Pool Blacklist Status: {} total ({} active, {} ready for retry)\n",
+        blacklist.len(),
+        active_blacklist.len(),
+        ready_for_retry.len()
+    );
+
+    if !active_blacklist.is_empty() {
+        status.push_str("Active Blacklist (blocked from checks):\n");
+        for (i, (mint, info)) in active_blacklist.iter().enumerate() {
+            let retry_in_hours = info.retry_after.duration_since(now).as_secs() / 3600;
+            status.push_str(
+                &format!(
+                    "  {}. {} ({}) - {} | attempts: {} | retry in: {}h\n",
+                    i + 1,
+                    info.symbol,
+                    &mint[..8],
+                    info.failure_reason,
+                    info.failure_count,
+                    retry_in_hours
+                )
+            );
+            if i >= 9 {
+                status.push_str(
+                    &format!("  ... and {} more active entries\n", active_blacklist.len() - 10)
+                );
+                break;
+            }
+        }
+    }
+
+    if !ready_for_retry.is_empty() {
+        status.push_str("Ready for Retry (tracking only):\n");
+        for (i, (mint, info)) in ready_for_retry.iter().enumerate() {
+            let hours_since_fail = now.duration_since(info.failed_at).as_secs() / 3600;
+            status.push_str(
+                &format!(
+                    "  {}. {} ({}) - {} | attempts: {} | failed {}h ago\n",
+                    i + 1,
+                    info.symbol,
+                    &mint[..8],
+                    info.failure_reason,
+                    info.failure_count,
+                    hours_since_fail
+                )
+            );
+            if i >= 9 {
+                status.push_str(
+                    &format!("  ... and {} more retry entries\n", ready_for_retry.len() - 10)
+                );
+                break;
+            }
+        }
+    }
+
+    status
+}
+
 /// Update token tracking after checking a token
 pub fn update_token_check_info(
     mint: &str,
@@ -848,11 +1059,22 @@ fn log_cycle_price_summary(available: usize, unavailable: usize, zero_hist_warme
         0.0
     };
 
+    // Blacklist stats
+    let blacklist = INVALID_POOL_TOKENS.read().unwrap();
+    let blacklist_total = blacklist.len();
+    let blacklist_active = blacklist
+        .values()
+        .filter(|info| !info.can_retry())
+        .count();
+    let blacklist_ready_for_retry = blacklist_total - blacklist_active;
+    drop(blacklist);
+
     let summary = format!(
         "===== ENTRY PRICE SUMMARY =====\n\
         • Prices: avail={} | unavail={} | zero-warm={}\n\
         • Tracker: tracked={} | with_price={} | without_price={}\n\
         • Averages: checks={:.1} | entry_checks={:.1}\n\
+        • Blacklist: total={} | active={} | retry_ready={}\n\
         • Top by checks (max 10):\n{}\n\
         • Top by entry checks (max 10):\n{}",
         available,
@@ -863,6 +1085,9 @@ fn log_cycle_price_summary(available: usize, unavailable: usize, zero_hist_warme
         tokens_without_price,
         avg_checks,
         avg_entry_checks,
+        blacklist_total,
+        blacklist_active,
+        blacklist_ready_for_retry,
         top_by_checks_lines,
         top_by_entries_lines
     );
@@ -1388,14 +1613,53 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
         }
     }
 
-    // 6. Smart token prioritization with confidence-based top tokens
+    // 6. Quick blacklist filtering only (no bulk validation)
+    let mut tokens_after_blacklist = Vec::new();
+    let mut blacklisted_count = 0;
+
+    // Clean up blacklist periodically
+    cleanup_invalid_pool_blacklist();
+
+    for token in eligible_tokens {
+        // Only skip tokens that are already known to be blacklisted (no RPC calls)
+        if is_token_in_invalid_pool_blacklist(&token.mint) {
+            blacklisted_count += 1;
+            if is_debug_trader_enabled() {
+                log(
+                    LogTag::Trader,
+                    "POOL_BLACKLISTED",
+                    &format!(
+                        "⚫ Skipping blacklisted token: {} ({})",
+                        token.symbol,
+                        &token.mint[..8]
+                    )
+                );
+            }
+            continue;
+        }
+        tokens_after_blacklist.push(token);
+    }
+
+    if blacklisted_count > 0 {
+        log(
+            LogTag::Trader,
+            "BLACKLIST_FILTER",
+            &format!(
+                "⚫ Filtered out {} blacklisted tokens, {} remaining",
+                blacklisted_count,
+                tokens_after_blacklist.len()
+            )
+        );
+    }
+
+    // 7. Smart token prioritization with confidence-based top tokens
     // Partition tokens to ensure ~50% are from actively monitored/history-rich set
     let pool_service = get_pool_service();
     let recent_pool_tokens = pool_service.get_tokens_with_recent_pools_infos(600).await; // 10 minutes window for active monitoring
     let recent_set: std::collections::HashSet<String> = recent_pool_tokens.into_iter().collect();
     let mut with_monitoring: Vec<Token> = Vec::new();
     let mut without_monitoring: Vec<Token> = Vec::new();
-    for t in eligible_tokens {
+    for t in tokens_after_blacklist {
         if recent_set.contains(&t.mint) {
             with_monitoring.push(t);
         } else {
@@ -2207,6 +2471,27 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     .and_then(|r| r.error.as_ref())
                                     .cloned()
                                     .unwrap_or_else(|| "retry_failed".to_string());
+
+                                // Check if this is a structural pool failure that should trigger blacklisting
+                                // Only blacklist on permanent issues, NOT temporary price unavailability
+                                if let Some(price_result) = price_result.as_ref() {
+                                    if let Some(error) = &price_result.error {
+                                        if
+                                            error.contains("Unsupported pool program") ||
+                                            error.contains("unknown pool program") ||
+                                            error.contains("decode failed") ||
+                                            error.contains("Failed to decode pool") ||
+                                            error.contains("Invalid pool program")
+                                        {
+                                            add_to_invalid_pool_blacklist(
+                                                &token.mint,
+                                                &token.symbol,
+                                                error
+                                            );
+                                        }
+                                    }
+                                }
+
                                 if is_debug_trader_enabled() {
                                     log(
                                         LogTag::Trader,
@@ -2219,12 +2504,17 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                         )
                                     );
                                 }
+
                                 // Trader-controlled: ensure it's on watchlist for background calculation
-                                ensure_watchlist_on_price_fail(
-                                    &token.mint,
-                                    &token.symbol,
-                                    &error_detail
-                                ).await;
+                                // But only if it's not a permanent pool issue
+                                if !is_token_in_invalid_pool_blacklist(&token.mint) {
+                                    ensure_watchlist_on_price_fail(
+                                        &token.mint,
+                                        &token.symbol,
+                                        &error_detail
+                                    ).await;
+                                }
+
                                 price_unavailable_count.fetch_add(
                                     1,
                                     std::sync::atomic::Ordering::Relaxed

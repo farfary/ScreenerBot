@@ -557,15 +557,17 @@ impl TokenDatabase {
         Ok(deleted_count)
     }
 
-    /// Cleanup tokens with near-zero liquidity from the database
-    /// Only removes tokens that have liquidity below threshold AND are older than 1 hour
+    /// Cleanup tokens with near-zero liquidity AND security issues from the database
+    /// Removes tokens that have:
+    /// 1. Liquidity below threshold AND are older than 1 hour
+    /// 2. Security issues (minting enabled, freeze enabled, high risk tokens)
     /// This should only be called after fetching and updating latest token data
     pub async fn cleanup_near_zero_liquidity_tokens(
         &self,
         threshold_usd: f64
     ) -> Result<usize, Box<dyn std::error::Error>> {
         // First, collect the candidate tokens (with database lock)
-        let tokens_to_check = {
+        let (liquidity_tokens, security_tokens) = {
             let connection = self.connection
                 .lock()
                 .map_err(|_e| {
@@ -597,14 +599,44 @@ impl TokenDatabase {
                 ))
             })?;
 
-            let mut tokens_to_check = Vec::new();
+            let mut liquidity_tokens = Vec::new();
             for row in token_rows {
-                tokens_to_check.push(row?);
+                liquidity_tokens.push(row?);
             }
-            tokens_to_check
+
+            // Also collect tokens with security issues regardless of age
+            // Join with rugcheck_data to find tokens with problematic authorities
+            let mut security_stmt = connection.prepare(
+                "SELECT t.mint, t.symbol, t.last_updated FROM tokens t
+                 INNER JOIN rugcheck_data r ON t.mint = r.mint
+                 WHERE (
+                     r.token_mint_authority IS NOT NULL OR 
+                     r.token_freeze_authority IS NOT NULL OR
+                     r.freeze_authority_json IS NOT NULL OR
+                     r.mint_authority_json IS NOT NULL OR
+                     r.risks_json LIKE '%mint%' OR 
+                     r.risks_json LIKE '%freeze%' OR
+                     r.risks_json LIKE '%authority%'
+                 )"
+            )?;
+
+            let security_rows = security_stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>("mint")?,
+                    row.get::<_, String>("symbol")?,
+                    row.get::<_, String>("last_updated")?,
+                ))
+            })?;
+
+            let mut security_tokens = Vec::new();
+            for row in security_rows {
+                security_tokens.push(row?);
+            }
+
+            (liquidity_tokens, security_tokens)
         }; // connection lock released here
 
-        if tokens_to_check.is_empty() {
+        if liquidity_tokens.is_empty() && security_tokens.is_empty() {
             return Ok(0);
         }
 
@@ -612,19 +644,35 @@ impl TokenDatabase {
             LogTag::System,
             "CLEANUP",
             &format!(
-                "Found {} tokens with liquidity below ${:.1} older than 1 hour",
-                tokens_to_check.len(),
-                threshold_usd
+                "Found {} tokens with low liquidity (<${:.1}) and {} tokens with security issues",
+                liquidity_tokens.len(),
+                threshold_usd,
+                security_tokens.len()
             )
         );
 
-        // Check which tokens have open positions - we must not delete these
+        // Combine all tokens and check for open positions
         // (this is done outside the database lock to avoid holding it across async calls)
         let mut tokens_to_delete = Vec::new();
-        for (mint, symbol, last_updated) in tokens_to_check {
-            // Check if this token has an open position
+        let mut liquidity_count = 0;
+        let mut security_count = 0;
+
+        // Process liquidity-based candidates
+        for (mint, symbol, last_updated) in liquidity_tokens {
             if !self.has_open_position(&mint).await {
-                tokens_to_delete.push((mint, symbol, last_updated));
+                tokens_to_delete.push((mint, symbol, last_updated, "low_liquidity".to_string()));
+                liquidity_count += 1;
+            }
+        }
+
+        // Process security-based candidates (check each token's rugcheck data for specific issues)
+        for (mint, symbol, last_updated) in security_tokens {
+            if !self.has_open_position(&mint).await {
+                // Check if token has specific security issues
+                if let Some(reason) = self.check_security_issues(&mint).await {
+                    tokens_to_delete.push((mint, symbol, last_updated, reason));
+                    security_count += 1;
+                }
             }
         }
 
@@ -632,13 +680,23 @@ impl TokenDatabase {
             log(
                 LogTag::System,
                 "CLEANUP",
-                "No tokens eligible for deletion (all have open positions)"
+                "No tokens eligible for deletion (all have open positions or no security issues)"
             );
             return Ok(0);
         }
 
+        log(
+            LogTag::System,
+            "CLEANUP",
+            &format!(
+                "Selected for deletion: {} low liquidity tokens, {} security risk tokens",
+                liquidity_count,
+                security_count
+            )
+        );
+
         // Finally, delete the eligible tokens (with database lock)
-        let deleted_count = {
+        let (deleted_count, deleted_mints) = {
             let connection = self.connection
                 .lock()
                 .map_err(|_e| {
@@ -651,11 +709,13 @@ impl TokenDatabase {
                 })?;
 
             let mut deleted_count = 0;
-            for (mint, symbol, last_updated) in &tokens_to_delete {
+            let mut deleted_mints = Vec::new();
+            for (mint, symbol, last_updated, reason) in &tokens_to_delete {
                 match connection.execute("DELETE FROM tokens WHERE mint = ?1", params![mint]) {
                     Ok(rows_affected) => {
                         if rows_affected > 0 {
                             deleted_count += 1;
+                            deleted_mints.push(mint.clone());
 
                             // Also delete rugcheck data for this token
                             if
@@ -680,9 +740,10 @@ impl TokenDatabase {
                                     LogTag::System,
                                     "CLEANUP",
                                     &format!(
-                                        "Deleted stale low liquidity token: {} ({}) - last updated: {}",
+                                        "Deleted token: {} ({}) - reason: {} - last updated: {}",
                                         symbol,
                                         mint,
+                                        reason,
                                         last_updated
                                     )
                                 );
@@ -698,21 +759,32 @@ impl TokenDatabase {
                     }
                 }
             }
-            deleted_count
+            (deleted_count, deleted_mints)
         }; // connection lock released here
+
+        // Clear deleted tokens from in-memory caches (outside database lock)
+        for mint in deleted_mints {
+            if let Err(e) = self.clear_token_from_caches(&mint).await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Failed to clear {} from caches: {}", mint, e)
+                );
+            }
+        }
 
         if deleted_count > 0 {
             log(
                 LogTag::System,
                 "CLEANUP",
                 &format!(
-                    "Database cleanup: Removed {} stale tokens with liquidity below ${:.1} (>1h old)",
+                    "Database cleanup: Removed {} tokens (low liquidity <${:.1} + security issues)",
                     deleted_count,
                     threshold_usd
                 )
             );
         } else {
-            log(LogTag::System, "CLEANUP", "Database cleanup: No stale tokens removed");
+            log(LogTag::System, "CLEANUP", "Database cleanup: No problematic tokens removed");
         }
 
         Ok(deleted_count)
@@ -725,6 +797,87 @@ impl TokenDatabase {
 
         // Use the async positions manager API to check for open positions
         is_open_position(mint).await
+    }
+
+    /// Check if a token has security issues that warrant removal
+    /// Returns Some(reason) if token should be removed, None otherwise
+    async fn check_security_issues(&self, mint: &str) -> Option<String> {
+        // Get rugcheck data for this token
+        match self.get_rugcheck_data_instance(mint) {
+            Ok(Some(rugcheck_data)) => {
+                // Check for active mint authority (dangerous - can mint unlimited tokens)
+                // First check the JSON field, then the basic text field
+                if let Some(mint_authority) = &rugcheck_data.mint_authority {
+                    match mint_authority {
+                        serde_json::Value::String(s) if !s.is_empty() => {
+                            return Some("mint_authority_enabled".to_string());
+                        }
+                        serde_json::Value::Null => {
+                            // Null is good - mint authority disabled
+                        }
+                        _ => {
+                            // Any other value indicates active mint authority
+                            return Some("mint_authority_enabled".to_string());
+                        }
+                    }
+                }
+
+                // Also check the basic token mint authority field
+                if let Some(token) = &rugcheck_data.token {
+                    if let Some(mint_auth) = &token.mint_authority {
+                        if !mint_auth.is_empty() {
+                            return Some("token_mint_authority_enabled".to_string());
+                        }
+                    }
+
+                    // Check token freeze authority
+                    if let Some(freeze_auth) = &token.freeze_authority {
+                        if !freeze_auth.is_empty() {
+                            return Some("token_freeze_authority_enabled".to_string());
+                        }
+                    }
+                }
+
+                // Check for active freeze authority (dangerous - can freeze user accounts)
+                if let Some(freeze_authority) = &rugcheck_data.freeze_authority {
+                    match freeze_authority {
+                        serde_json::Value::String(s) if !s.is_empty() => {
+                            return Some("freeze_authority_enabled".to_string());
+                        }
+                        serde_json::Value::Null => {
+                            // Null is good - freeze authority disabled
+                        }
+                        _ => {
+                            // Any other value indicates active freeze authority
+                            return Some("freeze_authority_enabled".to_string());
+                        }
+                    }
+                }
+
+                // Check for specific risks in rugcheck data
+                if let Some(risks) = &rugcheck_data.risks {
+                    for risk in risks {
+                        let risk_name = risk.name.to_lowercase();
+                        // Look for critical security risks
+                        if risk_name.contains("mint") && risk_name.contains("authority") {
+                            return Some(format!("security_risk_{}", risk_name.replace(' ', "_")));
+                        }
+                        if risk_name.contains("freeze") && risk_name.contains("authority") {
+                            return Some(format!("security_risk_{}", risk_name.replace(' ', "_")));
+                        }
+                        if
+                            risk_name.contains("ownership") &&
+                            risk.level.as_ref().map_or(false, |l| l == "high")
+                        {
+                            return Some(format!("security_risk_{}", risk_name.replace(' ', "_")));
+                        }
+                    }
+                }
+
+                None // No security issues found
+            }
+            _ => None, // No rugcheck data or error - don't delete based on security
+        }
     }
 
     /// Get all tokens with their last update times for monitoring
@@ -1409,6 +1562,16 @@ impl TokenDatabase {
             }
         }
 
+        Ok(())
+    }
+
+    /// Clear token from all pool service caches (used during cleanup)
+    pub async fn clear_token_from_caches(
+        &self,
+        token_mint: &str
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pool_service = crate::tokens::pool::get_pool_service();
+        pool_service.clear_token_from_all_caches(token_mint).await;
         Ok(())
     }
 }

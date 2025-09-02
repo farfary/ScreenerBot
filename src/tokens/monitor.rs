@@ -1,14 +1,14 @@
 use crate::global::is_debug_monitor_enabled;
 /// Token monitoring system for periodic updates of database tokens
 /// Updates existing tokens based on liquidity priority and time constraints
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::dexscreener::get_global_dexscreener_api;
-use chrono::{DateTime, Utc};
+use chrono::{ DateTime, Utc };
 use futures::TryFutureExt;
 use rand::seq::SliceRandom;
 use std::sync::Arc;
-use tokio::time::{sleep, Duration};
+use tokio::time::{ sleep, Duration };
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
@@ -60,10 +60,8 @@ impl TokenMonitor {
         let now = Utc::now();
 
         // Get all tokens from database
-        let all_tokens = self
-            .database
-            .get_all_tokens_with_update_time()
-            .await
+        let all_tokens = self.database
+            .get_all_tokens_with_update_time().await
             .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
 
         if all_tokens.is_empty() {
@@ -87,10 +85,12 @@ impl TokenMonitor {
         }
 
         // Always prioritize forced updates first
-        forced_update_tokens
-            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)); // Sort by liquidity descending
-        tokens_needing_update
-            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)); // Sort by liquidity descending
+        forced_update_tokens.sort_by(|a, b|
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+        ); // Sort by liquidity descending
+        tokens_needing_update.sort_by(|a, b|
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+        ); // Sort by liquidity descending
 
         // Combine lists: forced updates first, then regular updates
         let mut selected_tokens = Vec::new();
@@ -122,7 +122,7 @@ impl TokenMonitor {
                     selected_tokens.len(),
                     forced_count,
                     selected_tokens.len() - forced_count
-                ),
+                )
             );
         }
 
@@ -139,7 +139,7 @@ impl TokenMonitor {
             log(
                 LogTag::Monitor,
                 "UPDATE",
-                &format!("Updating {} tokens with fresh data", mints.len()),
+                &format!("Updating {} tokens with fresh data", mints.len())
             );
         }
 
@@ -148,17 +148,14 @@ impl TokenMonitor {
             log(
                 LogTag::Monitor,
                 "API_REQUEST",
-                &format!(
-                    "Requesting token data from DexScreener API for {} tokens",
-                    mints.len()
-                ),
+                &format!("Requesting token data from DexScreener API for {} tokens", mints.len())
             );
         }
 
         let tokens_result = {
-            let api = get_global_dexscreener_api()
-                .await
-                .map_err(|e| format!("Failed to get global API client: {}", e))?;
+            let api = get_global_dexscreener_api().await.map_err(|e|
+                format!("Failed to get global API client: {}", e)
+            )?;
             let mut api_instance = api.lock().await;
             api_instance.get_tokens_info(mints).await
         };
@@ -167,11 +164,7 @@ impl TokenMonitor {
             Ok(tokens) => {
                 if tokens.is_empty() {
                     if is_debug_monitor_enabled() {
-                        log(
-                            LogTag::Monitor,
-                            "WARN",
-                            "No token data returned from API for batch",
-                        );
+                        log(LogTag::Monitor, "WARN", "No token data returned from API for batch");
                     }
                     return Ok(0);
                 }
@@ -184,7 +177,7 @@ impl TokenMonitor {
                             "API returned {} tokens out of {} requested",
                             tokens.len(),
                             mints.len()
-                        ),
+                        )
                     );
                 }
 
@@ -196,7 +189,7 @@ impl TokenMonitor {
                             log(
                                 LogTag::Monitor,
                                 "SUCCESS",
-                                &format!("Updated {} tokens in database", updated_count),
+                                &format!("Updated {} tokens in database", updated_count)
                             );
                         }
                         Ok(updated_count)
@@ -205,18 +198,14 @@ impl TokenMonitor {
                         log(
                             LogTag::Monitor,
                             "ERROR",
-                            &format!("Failed to update tokens in database: {}", e),
+                            &format!("Failed to update tokens in database: {}", e)
                         );
                         Err(format!("Database update failed: {}", e))
                     }
                 }
             }
             Err(e) => {
-                log(
-                    LogTag::Monitor,
-                    "ERROR",
-                    &format!("Failed to get token info from API: {}", e),
-                );
+                log(LogTag::Monitor, "ERROR", &format!("Failed to get token info from API: {}", e));
                 Err(format!("API request failed: {}", e))
             }
         }
@@ -229,26 +218,18 @@ impl TokenMonitor {
 
         if tokens_to_update.is_empty() {
             if is_debug_monitor_enabled() {
-                log(
-                    LogTag::Monitor,
-                    "IDLE",
-                    "No tokens need updating at this time",
-                );
+                log(LogTag::Monitor, "IDLE", "No tokens need updating at this time");
             }
             return Ok(());
         }
 
-        if is_debug_monitor_enabled(){
+        if is_debug_monitor_enabled() {
             log(
                 LogTag::Monitor,
                 "START",
-                &format!(
-                    "Starting monitoring cycle for {} tokens",
-                    tokens_to_update.len()
-                ),
+                &format!("Starting monitoring cycle for {} tokens", tokens_to_update.len())
             );
         }
-        
 
         let mut total_updated = 0;
 
@@ -259,11 +240,7 @@ impl TokenMonitor {
                     total_updated += updated_count;
                 }
                 Err(e) => {
-                    log(
-                        LogTag::Monitor,
-                        "BATCH_ERROR",
-                        &format!("Batch update failed: {}", e),
-                    );
+                    log(LogTag::Monitor, "BATCH_ERROR", &format!("Batch update failed: {}", e));
                     // Continue with next batch even if one fails
                 }
             }
@@ -278,10 +255,7 @@ impl TokenMonitor {
             log(
                 LogTag::Monitor,
                 "COMPLETE",
-                &format!(
-                    "Monitoring cycle completed: {} tokens updated",
-                    total_updated
-                ),
+                &format!("Monitoring cycle completed: {} tokens updated", total_updated)
             );
         }
 
@@ -289,10 +263,7 @@ impl TokenMonitor {
             log(
                 LogTag::Monitor,
                 "WAITING",
-                &format!(
-                    "Waiting {} seconds for next monitoring cycle",
-                    MONITOR_CYCLE_SECONDS
-                ),
+                &format!("Waiting {} seconds for next monitoring cycle", MONITOR_CYCLE_SECONDS)
             );
         }
 
@@ -306,39 +277,27 @@ impl TokenMonitor {
                 LogTag::Monitor,
                 "CLEANUP_START",
                 &format!(
-                    "Starting cleanup cycle for tokens with liquidity below ${:.1}",
+                    "Starting cleanup cycle for tokens with liquidity below ${:.1} and security issues",
                     NEAR_ZERO_LIQUIDITY_USD
-                ),
+                )
             );
         }
 
-        match self
-            .database
-            .cleanup_near_zero_liquidity_tokens(NEAR_ZERO_LIQUIDITY_USD)
-            .await
-        {
+        match self.database.cleanup_near_zero_liquidity_tokens(NEAR_ZERO_LIQUIDITY_USD).await {
             Ok(deleted_count) => {
                 if deleted_count > 0 {
                     log(
                         LogTag::Monitor,
                         "CLEANUP_SUCCESS",
-                        &format!("Cleanup cycle completed: {} tokens removed", deleted_count),
+                        &format!("Cleanup cycle completed: {} tokens removed", deleted_count)
                     );
                 } else if is_debug_monitor_enabled() {
-                    log(
-                        LogTag::Monitor,
-                        "CLEANUP_IDLE",
-                        "Cleanup cycle: No tokens removed",
-                    );
+                    log(LogTag::Monitor, "CLEANUP_IDLE", "Cleanup cycle: No tokens removed");
                 }
                 Ok(())
             }
             Err(e) => {
-                log(
-                    LogTag::Monitor,
-                    "CLEANUP_ERROR",
-                    &format!("Cleanup cycle failed: {}", e),
-                );
+                log(LogTag::Monitor, "CLEANUP_ERROR", &format!("Cleanup cycle failed: {}", e));
                 Err(format!("Cleanup cycle failed: {}", e))
             }
         }
@@ -394,29 +353,21 @@ impl TokenMonitor {
 
 /// Start token monitoring background task
 pub async fn start_token_monitoring(
-    shutdown: Arc<tokio::sync::Notify>,
+    shutdown: Arc<tokio::sync::Notify>
 ) -> Result<tokio::task::JoinHandle<()>, String> {
-    log(
-        LogTag::Monitor,
-        "START",
-        "Starting token monitoring background task",
-    );
+    log(LogTag::Monitor, "START", "Starting token monitoring background task");
 
     let handle = tokio::spawn(async move {
         let mut monitor = match TokenMonitor::new() {
             Ok(monitor) => {
-                log(
-                    LogTag::Monitor,
-                    "INIT",
-                    "Token monitor instance created successfully",
-                );
+                log(LogTag::Monitor, "INIT", "Token monitor instance created successfully");
                 monitor
             }
             Err(e) => {
                 log(
                     LogTag::Monitor,
                     "ERROR",
-                    &format!("Failed to initialize token monitor: {}", e),
+                    &format!("Failed to initialize token monitor: {}", e)
                 );
                 return;
             }
@@ -432,7 +383,6 @@ pub async fn start_token_monitoring(
 
 /// Manual monitoring cycle for testing
 pub async fn run_monitoring_cycle_once() -> Result<(), String> {
-    let mut monitor =
-        TokenMonitor::new().map_err(|e| format!("Failed to create monitor: {}", e))?;
+    let mut monitor = TokenMonitor::new().map_err(|e| format!("Failed to create monitor: {}", e))?;
     monitor.run_monitoring_cycle().await
 }

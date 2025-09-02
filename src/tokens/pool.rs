@@ -335,6 +335,36 @@ impl TokenAvailability {
     }
 }
 
+/// Information about a token that failed pool validation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InvalidPoolTokenInfo {
+    pub token_address: String,
+    pub symbol: Option<String>,
+    pub error_reason: String,
+    pub first_failed: DateTime<Utc>,
+    pub last_attempt: DateTime<Utc>,
+    pub attempt_count: u32,
+}
+
+impl InvalidPoolTokenInfo {
+    pub fn new(token_address: String, symbol: Option<String>, error_reason: String) -> Self {
+        let now = Utc::now();
+        Self {
+            token_address,
+            symbol,
+            error_reason,
+            first_failed: now,
+            last_attempt: now,
+            attempt_count: 1,
+        }
+    }
+
+    pub fn increment_attempt(&mut self) {
+        self.last_attempt = Utc::now();
+        self.attempt_count += 1;
+    }
+}
+
 /// Pool-specific price history entry for persistent caching
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoolPriceHistoryEntry {
@@ -593,6 +623,9 @@ pub struct PoolPriceService {
     // Per-token backoff after repeated timeouts
     backoff_state: Arc<RwLock<HashMap<String, BackoffEntry>>>,
 
+    // Token-level blacklist for invalid/unsupported pools
+    invalid_pool_tokens: Arc<RwLock<HashMap<String, InvalidPoolTokenInfo>>>,
+
     // NEW WATCHLIST MANAGEMENT: Background service with batch updates
     /// Priority tokens (positions) - updated every 5 seconds exactly
     priority_tokens: Arc<RwLock<HashSet<String>>>,
@@ -727,6 +760,7 @@ impl PoolPriceService {
             in_flight_updates: Arc::new(RwLock::new(HashSet::new())),
             unsupported_programs: Arc::new(RwLock::new(HashSet::new())),
             backoff_state: Arc::new(RwLock::new(HashMap::new())),
+            invalid_pool_tokens: Arc::new(RwLock::new(HashMap::new())),
             // Initialize watchlist management
             priority_tokens: Arc::new(RwLock::new(HashSet::new())),
             watchlist_tokens: Arc::new(RwLock::new(HashSet::new())),
@@ -1694,6 +1728,21 @@ impl PoolPriceService {
 
     /// Add token to watchlist
     pub async fn add_watchlist_token(&self, token_address: &str) {
+        // Don't add blacklisted tokens to watchlist
+        if self.is_in_invalid_pool_blacklist(token_address).await {
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "WATCHLIST_BLACKLIST_SKIP",
+                    &format!(
+                        "🚫 Skipping blacklisted token {} for watchlist",
+                        safe_truncate(token_address, 8)
+                    )
+                );
+            }
+            return;
+        }
+
         let mut watchlist = self.watchlist_tokens.write().await;
         let is_new_token = !watchlist.contains(token_address);
         watchlist.insert(token_address.to_string());
@@ -1755,6 +1804,55 @@ impl PoolPriceService {
         }
     }
 
+    /// Clear all cache entries for a specific token (for cleanup purposes)
+    pub async fn clear_token_from_all_caches(&self, token_address: &str) {
+        // Remove from priority and watchlist
+        self.remove_priority_token(token_address).await;
+        self.remove_watchlist_token(token_address).await;
+
+        // Clear pool cache
+        let mut pool_cache = self.pool_cache.write().await;
+        pool_cache.remove(token_address);
+        drop(pool_cache);
+
+        // Clear price cache
+        let mut price_cache = self.price_cache.write().await;
+        price_cache.remove(token_address);
+        drop(price_cache);
+
+        // Clear availability cache
+        let mut availability_cache = self.availability_cache.write().await;
+        availability_cache.remove(token_address);
+        drop(availability_cache);
+
+        // Clear price history
+        let mut price_history = self.price_history.write().await;
+        price_history.remove(token_address);
+        drop(price_history);
+
+        // Clear pool-specific price history
+        let mut pool_price_history = self.pool_price_history.write().await;
+        pool_price_history.remove(token_address);
+        drop(pool_price_history);
+
+        // Remove from invalid pool tokens blacklist
+        let mut invalid_pool_tokens = self.invalid_pool_tokens.write().await;
+        invalid_pool_tokens.remove(token_address);
+        drop(invalid_pool_tokens);
+
+        // Remove from backoff state
+        let mut backoff_state = self.backoff_state.write().await;
+        backoff_state.remove(token_address);
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "CACHE_CLEAR",
+                &format!("Cleared all caches for token {}", safe_truncate(token_address, 8))
+            );
+        }
+    }
+
     /// Add multiple tokens to watchlist (batch operation)
     pub async fn add_watchlist_tokens(&self, token_addresses: &[String]) {
         let mut watchlist = self.watchlist_tokens.write().await;
@@ -1764,6 +1862,21 @@ impl PoolPriceService {
         for token_address in token_addresses {
             // Skip if already in watchlist
             if watchlist.contains(token_address) {
+                continue;
+            }
+
+            // Skip if blacklisted
+            if self.is_in_invalid_pool_blacklist(token_address).await {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "BATCH_BLACKLIST_SKIP",
+                        &format!(
+                            "🚫 Skipping blacklisted token {} in batch add",
+                            safe_truncate(token_address, 8)
+                        )
+                    );
+                }
                 continue;
             }
 
@@ -2394,6 +2507,21 @@ impl PoolPriceService {
         api_price_sol: Option<f64>,
         options: &PriceOptions
     ) -> Option<PoolPriceResult> {
+        // First check if token is in invalid pool blacklist
+        if self.is_in_invalid_pool_blacklist(token_address).await {
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "BLACKLIST_SKIP",
+                    &format!(
+                        "🚫 Skipping blacklisted token {} (invalid pool)",
+                        safe_truncate(token_address, 8)
+                    )
+                );
+            }
+            return None;
+        }
+
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
@@ -2588,6 +2716,21 @@ impl PoolPriceService {
                         "CALC_ERROR",
                         &format!("❌ CALCULATION ERROR for {}: {}", token_address, e)
                     );
+                }
+
+                // Check if this is an error type that should trigger permanent blacklisting
+                // Only blacklist on structural/permanent pool issues, NOT temporary data unavailability
+                let should_blacklist =
+                    e.contains("Unsupported pool program") ||
+                    e.contains("unknown pool program") ||
+                    e.contains("decode failed") ||
+                    e.contains("Failed to decode pool") ||
+                    e.contains("Invalid pool program") ||
+                    e.contains("Pool parsing failed");
+
+                if should_blacklist {
+                    // Add to permanent blacklist to avoid repeated processing
+                    self.add_to_invalid_pool_blacklist(token_address, None, &e).await;
                 }
 
                 // Store error result in cache so get_price() can retrieve it with error details
@@ -3244,6 +3387,75 @@ impl PoolPriceService {
         }
     }
 
+    /// Add a token to the invalid pool blacklist
+    pub async fn add_to_invalid_pool_blacklist(
+        &self,
+        token_address: &str,
+        symbol: Option<&str>,
+        error_reason: &str
+    ) {
+        let mut blacklist = self.invalid_pool_tokens.write().await;
+        if let Some(existing) = blacklist.get_mut(token_address) {
+            existing.increment_attempt();
+        } else {
+            let info = InvalidPoolTokenInfo::new(
+                token_address.to_string(),
+                symbol.map(|s| s.to_string()),
+                error_reason.to_string()
+            );
+            blacklist.insert(token_address.to_string(), info);
+
+            log(
+                LogTag::Pool,
+                "INVALID_POOL_BLACKLIST_ADD",
+                &format!(
+                    "🚫 Added {} to invalid pool blacklist: {}",
+                    safe_truncate(token_address, 8),
+                    error_reason
+                )
+            );
+        }
+    }
+
+    /// Check if a token is in the invalid pool blacklist
+    pub async fn is_in_invalid_pool_blacklist(&self, token_address: &str) -> bool {
+        let blacklist = self.invalid_pool_tokens.read().await;
+        blacklist.contains_key(token_address)
+    }
+
+    /// Get invalid pool blacklist stats for summary
+    pub async fn get_invalid_pool_blacklist_stats(&self) -> (usize, Vec<String>) {
+        let blacklist = self.invalid_pool_tokens.read().await;
+        let count = blacklist.len();
+        let recent_errors: Vec<String> = blacklist
+            .values()
+            .take(5) // Show up to 5 recent errors in summary
+            .map(|info| {
+                format!(
+                    "{}:{}",
+                    safe_truncate(&info.token_address, 8),
+                    &info.error_reason[..std::cmp::min(20, info.error_reason.len())]
+                )
+            })
+            .collect();
+        (count, recent_errors)
+    }
+
+    /// Clear the invalid pool blacklist (for testing/reset)
+    pub async fn clear_invalid_pool_blacklist(&self) {
+        let mut blacklist = self.invalid_pool_tokens.write().await;
+        let count = blacklist.len();
+        blacklist.clear();
+
+        if count > 0 {
+            log(
+                LogTag::Pool,
+                "INVALID_POOL_BLACKLIST_CLEAR",
+                &format!("🗑️ Cleared {} tokens from invalid pool blacklist", count)
+            );
+        }
+    }
+
     /// Emit a single consolidated state summary log (not gated by debug)
     pub async fn log_state_summary(&self) {
         // Gather cache sizes
@@ -3265,6 +3477,9 @@ impl PoolPriceService {
             let set = self.unsupported_programs.read().await;
             set.iter().cloned().collect()
         };
+
+        // Invalid pool blacklist stats
+        let (blacklist_count, blacklist_examples) = self.get_invalid_pool_blacklist_stats().await;
 
         // Rates
         let success_rate = if stats.total_price_requests > 0 {
@@ -3288,6 +3503,7 @@ Pool State Summary\n\
   compute: blockchain={}, api_fallbacks={}\n\
   monitor: cycles={}, last_tokens={}, total_tokens={}, avg_tokens_per_cycle={:.1}, last_ms={:.1}, total_ms={:.1}, avg_ms={:.1}\n\
   watch: size={}, never_updated={}, priority_size={}\n\
+  blacklist: invalid_pools={} ({})\n\
   unsupported_programs_count={}\n\
   unsupported_programs=[{}]",
             pool_cache_len,
@@ -3313,6 +3529,8 @@ Pool State Summary\n\
             watch_total,
             watch_never_updated,
             priority_size,
+            blacklist_count,
+            blacklist_examples.join(", "),
             unsupported_list.len(),
             unsupported_list.join(", ")
         );
@@ -6949,4 +7167,36 @@ pub async fn request_price_warmup_batch(token_addresses: &[String]) {
     for t in token_addresses {
         ad_hoc.insert(t.clone());
     }
+}
+
+// =============================================================================
+// GLOBAL INVALID POOL BLACKLIST FUNCTIONS
+// =============================================================================
+
+/// Add a token to the invalid pool blacklist
+pub async fn add_to_invalid_pool_blacklist(
+    token_address: &str,
+    symbol: Option<&str>,
+    error_reason: &str
+) {
+    let service = get_pool_service();
+    service.add_to_invalid_pool_blacklist(token_address, symbol, error_reason).await;
+}
+
+/// Check if a token is in the invalid pool blacklist
+pub async fn is_in_invalid_pool_blacklist(token_address: &str) -> bool {
+    let service = get_pool_service();
+    service.is_in_invalid_pool_blacklist(token_address).await
+}
+
+/// Get invalid pool blacklist stats for summary
+pub async fn get_invalid_pool_blacklist_stats() -> (usize, Vec<String>) {
+    let service = get_pool_service();
+    service.get_invalid_pool_blacklist_stats().await
+}
+
+/// Clear the invalid pool blacklist (for testing/reset)
+pub async fn clear_invalid_pool_blacklist() {
+    let service = get_pool_service();
+    service.clear_invalid_pool_blacklist().await
 }
