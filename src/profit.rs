@@ -21,39 +21,39 @@ use chrono::Utc;
 
 /// ============================= Tunables =============================
 
-// Loss & risk (percent)
+// Loss & risk (percent) - Tighter for scalping
 
-pub const STOP_LOSS_PERCENT: f64 = -40.0; // Hard kill after initial grace
-pub const EXTREME_LOSS_PERCENT: f64 = -55.0; // Emergency immediate kill
+pub const STOP_LOSS_PERCENT: f64 = -30.0; // Tighter stop loss for scalping (was -40.0)
+pub const EXTREME_LOSS_PERCENT: f64 = -45.0; // Emergency exit (was -55.0)
 
-// Time (minutes)
-pub const MAX_HOLD_MINUTES: f64 = 120.0; // Absolute maximum hold duration
+// Time (minutes) - Shorter hold times for scalping
+pub const MAX_HOLD_MINUTES: f64 = 90.0; // Reduced from 120.0 for faster scalping
 
-// Profit ladders (percent)
-pub const BASE_MIN_PROFIT_PERCENT: f64 = 10.0; // Minimum gate to consider discretionary sells
-pub const INSTANT_EXIT_LEVEL_1: f64 = 100.0; // Strong immediate take
-pub const INSTANT_EXIT_LEVEL_2: f64 = 150.0; // Very strong immediate take
+// Profit ladders (percent) - Lower thresholds for scalping
+pub const BASE_MIN_PROFIT_PERCENT: f64 = 5.0; // Reduced from 10.0 for scalping
+pub const INSTANT_EXIT_LEVEL_1: f64 = 20.0; // Reduced from 100.0 for faster exits
+pub const INSTANT_EXIT_LEVEL_2: f64 = 35.0; // Reduced from 150.0 for scalping
 
-// Trailing stop dynamics (gaps are in percentage points of profit)
-pub const TRAIL_MIN_GAP: f64 = 5.0; // Tightest trailing gap (% of profit)
-pub const TRAIL_MAX_GAP: f64 = 35.0; // Widest trailing gap
+// Trailing stop dynamics (tighter for scalping)
+pub const TRAIL_MIN_GAP: f64 = 3.0; // Reduced from 5.0 for tighter trailing
+pub const TRAIL_MAX_GAP: f64 = 20.0; // Reduced from 35.0 for scalping
 
-// Trailing tighten schedule (minutes)
-pub const TRAIL_TIGHTEN_START: f64 = 45.0;
-pub const TRAIL_TIGHTEN_FULL: f64 = 90.0;
+// Trailing tighten schedule (faster for scalping)
+pub const TRAIL_TIGHTEN_START: f64 = 30.0; // Reduced from 45.0
+pub const TRAIL_TIGHTEN_FULL: f64 = 60.0; // Reduced from 90.0
 
-// Odds model threshold
-pub const EXIT_ODDS_THRESHOLD: f64 = 0.65; // below this, favor exiting when EV not positive
+// Odds model threshold (higher for scalping quality)
+pub const EXIT_ODDS_THRESHOLD: f64 = 0.7; // Increased from 0.65
 
-// Quick capture windows: (minutes, required profit %)
-// Expanded to catch medium-fast spikes earlier.
+// Quick capture windows for scalping: (minutes, required profit %)
 const QUICK_WINDOWS: &[(f64, f64)] = &[
-    (1.0, 30.0),
-    (2.0, 25.0),
-    (3.0, 35.0),
-    (5.0, 50.0),
-    (10.0, 60.0),
-    (15.0, 80.0),
+    (0.5, 15.0), // 30 seconds: 15% profit
+    (1.0, 12.0), // 1 minute: 12% profit
+    (2.0, 18.0), // 2 minutes: 18% profit
+    (3.0, 22.0), // 3 minutes: 22% profit
+    (5.0, 25.0), // 5 minutes: 25% profit
+    (8.0, 30.0), // 8 minutes: 30% profit
+    (12.0, 35.0), // 12 minutes: 35% profit
 ];
 
 /// ============================= Helpers =============================
