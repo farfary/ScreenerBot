@@ -24,7 +24,7 @@ pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
 /// Quote request timeout (seconds) - unified for all routers
 pub const QUOTE_TIMEOUT_SECS: u64 = 15;
 
-/// API request timeout (seconds) - unified for all routers  
+/// API request timeout (seconds) - unified for all routers
 pub const API_TIMEOUT_SECS: u64 = 30;
 
 /// Retry attempts for failed requests - unified for all routers
@@ -39,7 +39,7 @@ pub const PRIORITY_CONFIRMATION_TIMEOUT_SECS: u64 = 30;
 /// Transaction confirmation maximum attempts - Regular transactions (increased for better reliability)
 pub const TRANSACTION_CONFIRMATION_MAX_ATTEMPTS: u32 = 20;
 
-/// Transaction confirmation maximum attempts - Priority transactions  
+/// Transaction confirmation maximum attempts - Priority transactions
 pub const PRIORITY_CONFIRMATION_MAX_ATTEMPTS: u32 = 15;
 
 /// Transaction confirmation retry delay (milliseconds) - Regular transactions
@@ -55,9 +55,9 @@ pub const PRIORITY_CONFIRMATION_RETRY_DELAY_MS: u64 = 1000;
 // SLIPPAGE CONFIGURATION (Unified - sourced from trader)
 // =============================================================================
 pub use crate::trader::{
-	SLIPPAGE_QUOTE_DEFAULT_PCT as QUOTE_SLIPPAGE_PERCENT,
-	SLIPPAGE_QUOTE_DEFAULT_PCT as INTERNAL_SLIPPAGE_PERCENT, // kept for legacy naming
-	SLIPPAGE_EXIT_RETRY_STEPS_PCT as SELL_RETRY_SLIPPAGES,
+    SLIPPAGE_QUOTE_DEFAULT_PCT as QUOTE_SLIPPAGE_PERCENT,
+    SLIPPAGE_QUOTE_DEFAULT_PCT as INTERNAL_SLIPPAGE_PERCENT, // kept for legacy naming
+    SLIPPAGE_EXIT_RETRY_STEPS_PCT as SELL_RETRY_SLIPPAGES,
 };
 
 // =============================================================================
@@ -97,7 +97,7 @@ pub const JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT: bool = false;
 /// Jupiter default priority fee (lamports) - Used in transaction execution, not quotes
 pub const JUPITER_DEFAULT_PRIORITY_FEE: u64 = 10_000;
 
-/// Jupiter default swap mode - "ExactIn" or "ExactOut"  
+/// Jupiter default swap mode - "ExactIn" or "ExactOut"
 /// ExactIn: Specify exact input amount, output amount is calculated
 /// ExactOut: Specify exact output amount, input amount is calculated
 pub const JUPITER_DEFAULT_SWAP_MODE: &str = "ExactIn";
