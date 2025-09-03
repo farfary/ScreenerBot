@@ -1,18 +1,18 @@
-use crate::global::{is_debug_decimals_enabled, TOKENS_DATABASE};
+use crate::global::{ is_debug_decimals_enabled, TOKENS_DATABASE };
 /// Token decimals fetching from Solana blockchain
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use crate::rpc::get_rpc_client;
 use crate::tokens::is_system_or_stable_token;
 use crate::utils::safe_truncate;
 use once_cell::sync::Lazy;
-use rusqlite::{Connection, Result as SqliteResult};
+use rusqlite::{ Connection, Result as SqliteResult };
 use solana_program::program_pack::Pack;
 use solana_sdk::pubkey::Pubkey;
 use spl_token::state::Mint;
 use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::{ Arc, Mutex };
 
 // =============================================================================
 // DECIMAL CONSTANTS
@@ -25,12 +25,14 @@ pub const SOL_DECIMALS: u8 = 9;
 pub const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 
 // In-memory cache for frequently accessed decimals to avoid database hits
-static DECIMAL_CACHE: Lazy<Arc<Mutex<HashMap<String, u8>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+static DECIMAL_CACHE: Lazy<Arc<Mutex<HashMap<String, u8>>>> = Lazy::new(||
+    Arc::new(Mutex::new(HashMap::new()))
+);
 
 // Cache for failed token lookups to avoid repeated failures
-static FAILED_DECIMALS_CACHE: Lazy<Arc<Mutex<HashMap<String, String>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+static FAILED_DECIMALS_CACHE: Lazy<Arc<Mutex<HashMap<String, String>>>> = Lazy::new(||
+    Arc::new(Mutex::new(HashMap::new()))
+);
 
 /// Initialize decimals database tables
 fn init_decimals_database() -> SqliteResult<()> {
@@ -44,7 +46,7 @@ fn init_decimals_database() -> SqliteResult<()> {
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )",
-        [],
+        []
     )?;
 
     // Create failed decimals table for retryable vs permanent failures
@@ -56,17 +58,14 @@ fn init_decimals_database() -> SqliteResult<()> {
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )",
-        [],
+        []
     )?;
 
     // Create indices for performance
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_decimals_updated ON decimals(updated_at)",
-        [],
-    )?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_decimals_updated ON decimals(updated_at)", [])?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_failed_decimals_permanent ON failed_decimals(is_permanent)",
-        [],
+        []
     )?;
 
     Ok(())
@@ -76,8 +75,9 @@ fn init_decimals_database() -> SqliteResult<()> {
 fn get_decimals_from_db(mint: &str) -> Result<Option<u8>, String> {
     init_decimals_database().map_err(|e| format!("Database init error: {}", e))?;
 
-    let conn = Connection::open(TOKENS_DATABASE)
-        .map_err(|e| format!("Database connection error: {}", e))?;
+    let conn = Connection::open(TOKENS_DATABASE).map_err(|e|
+        format!("Database connection error: {}", e)
+    )?;
 
     let mut stmt = conn
         .prepare("SELECT decimals FROM decimals WHERE mint = ?1")
@@ -99,13 +99,16 @@ fn get_decimals_from_db(mint: &str) -> Result<Option<u8>, String> {
 fn save_decimals_to_db(mint: &str, decimals: u8) -> Result<(), String> {
     init_decimals_database().map_err(|e| format!("Database init error: {}", e))?;
 
-    let conn = Connection::open(TOKENS_DATABASE)
-        .map_err(|e| format!("Database connection error: {}", e))?;
+    let conn = Connection::open(TOKENS_DATABASE).map_err(|e|
+        format!("Database connection error: {}", e)
+    )?;
 
-    conn.execute(
-        "INSERT OR REPLACE INTO decimals (mint, decimals, updated_at) VALUES (?1, ?2, datetime('now'))",
-        [mint, &decimals.to_string()]
-    ).map_err(|e| format!("Database save error: {}", e))?;
+    conn
+        .execute(
+            "INSERT OR REPLACE INTO decimals (mint, decimals, updated_at) VALUES (?1, ?2, datetime('now'))",
+            [mint, &decimals.to_string()]
+        )
+        .map_err(|e| format!("Database save error: {}", e))?;
 
     Ok(())
 }
@@ -114,17 +117,16 @@ fn save_decimals_to_db(mint: &str, decimals: u8) -> Result<(), String> {
 fn get_failed_decimals_from_db(mint: &str) -> Result<Option<(String, bool)>, String> {
     init_decimals_database().map_err(|e| format!("Database init error: {}", e))?;
 
-    let conn = Connection::open(TOKENS_DATABASE)
-        .map_err(|e| format!("Database connection error: {}", e))?;
+    let conn = Connection::open(TOKENS_DATABASE).map_err(|e|
+        format!("Database connection error: {}", e)
+    )?;
 
     let mut stmt = conn
         .prepare("SELECT error_message, is_permanent FROM failed_decimals WHERE mint = ?1")
         .map_err(|e| format!("Database prepare error: {}", e))?;
 
     let mut rows = stmt
-        .query_map([mint], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)? == 1))
-        })
+        .query_map([mint], |row| { Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)? == 1)) })
         .map_err(|e| format!("Database query error: {}", e))?;
 
     if let Some(row) = rows.next() {
@@ -139,13 +141,16 @@ fn get_failed_decimals_from_db(mint: &str) -> Result<Option<(String, bool)>, Str
 fn save_failed_decimals_to_db(mint: &str, error: &str, is_permanent: bool) -> Result<(), String> {
     init_decimals_database().map_err(|e| format!("Database init error: {}", e))?;
 
-    let conn = Connection::open(TOKENS_DATABASE)
-        .map_err(|e| format!("Database connection error: {}", e))?;
+    let conn = Connection::open(TOKENS_DATABASE).map_err(|e|
+        format!("Database connection error: {}", e)
+    )?;
 
-    conn.execute(
-        "INSERT OR REPLACE INTO failed_decimals (mint, error_message, is_permanent, updated_at) VALUES (?1, ?2, ?3, datetime('now'))",
-        [mint, error, &(if is_permanent { 1 } else { 0 }).to_string()]
-    ).map_err(|e| format!("Database save error: {}", e))?;
+    conn
+        .execute(
+            "INSERT OR REPLACE INTO failed_decimals (mint, error_message, is_permanent, updated_at) VALUES (?1, ?2, ?3, datetime('now'))",
+            [mint, error, &(if is_permanent { 1 } else { 0 }).to_string()]
+        )
+        .map_err(|e| format!("Database save error: {}", e))?;
 
     Ok(())
 }
@@ -154,10 +159,12 @@ fn save_failed_decimals_to_db(mint: &str, error: &str, is_permanent: bool) -> Re
 fn remove_failed_decimals_from_db(mint: &str) -> Result<(), String> {
     init_decimals_database().map_err(|e| format!("Database init error: {}", e))?;
 
-    let conn = Connection::open(TOKENS_DATABASE)
-        .map_err(|e| format!("Database connection error: {}", e))?;
+    let conn = Connection::open(TOKENS_DATABASE).map_err(|e|
+        format!("Database connection error: {}", e)
+    )?;
 
-    conn.execute("DELETE FROM failed_decimals WHERE mint = ?1", [mint])
+    conn
+        .execute("DELETE FROM failed_decimals WHERE mint = ?1", [mint])
         .map_err(|e| format!("Database delete error: {}", e))?;
 
     Ok(())
@@ -176,7 +183,7 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
             log(
                 LogTag::Decimals,
                 "SKIP_SYSTEM",
-                &format!("Skipping system/stable token: {}", mint),
+                &format!("Skipping system/stable token: {}", mint)
             );
         }
         return Err("System or stable token excluded from processing".to_string());
@@ -206,7 +213,7 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
                 log(
                     LogTag::Decimals,
                     "DB_ERROR",
-                    &format!("Database read error for {}: {}", mint, e),
+                    &format!("Database read error for {}: {}", mint, e)
                 );
             }
             // Continue to fetch despite database error
@@ -221,7 +228,7 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
                     log(
                         LogTag::Decimals,
                         "CACHED_FAIL",
-                        &format!("Skipping permanently failed token {}: {}", mint, error),
+                        &format!("Skipping permanently failed token {}: {}", mint, error)
                     );
                 }
                 return Err(error);
@@ -233,8 +240,9 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
                         "RETRY_CACHED",
                         &format!(
                             "Retrying previously failed token {} (network error): {}",
-                            mint, error
-                        ),
+                            mint,
+                            error
+                        )
                     );
                 }
                 // Continue to fetch - don't return early
@@ -248,7 +256,7 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
                 log(
                     LogTag::Decimals,
                     "DB_ERROR",
-                    &format!("Database failed read error for {}: {}", mint, e),
+                    &format!("Database failed read error for {}: {}", mint, e)
                 );
             }
             // Continue to fetch despite database error
@@ -300,7 +308,7 @@ fn cache_failed_token(mint: &str, error: &str) {
             log(
                 LogTag::Decimals,
                 "DB_SAVE_ERROR",
-                &format!("Failed to save failed token to database {}: {}", mint, e),
+                &format!("Failed to save failed token to database {}: {}", mint, e)
             );
         }
     }
@@ -314,10 +322,7 @@ fn cache_failed_token(mint: &str, error: &str) {
         log(
             LogTag::Decimals,
             "CACHE_FAIL",
-            &format!(
-                "Cached failed lookup for {} (permanent: {}): {}",
-                mint, is_permanent, error
-            ),
+            &format!("Cached failed lookup for {} (permanent: {}): {}", mint, is_permanent, error)
         );
     }
 }
@@ -327,35 +332,37 @@ fn should_cache_as_failed(error: &str) -> bool {
     let error_lower = error.to_lowercase();
 
     // Real blockchain state errors - cache as failed
-    if error_lower.contains("account not found")
-        || error_lower.contains("invalid account")
-        || error_lower.contains("account does not exist")
-        || error_lower.contains("invalid mint")
-        || error_lower.contains("empty")
-        || error_lower.contains("account owner is not spl token program")
+    if
+        error_lower.contains("account not found") ||
+        error_lower.contains("invalid account") ||
+        error_lower.contains("account does not exist") ||
+        error_lower.contains("invalid mint") ||
+        error_lower.contains("empty") ||
+        error_lower.contains("account owner is not spl token program")
     {
         return true;
     }
 
     // Rate limiting and temporary issues - retry with different RPC
-    if error_lower.contains("429")
-        || error_lower.contains("too many requests")
-        || error_lower.contains("rate limit")
-        || error_lower.contains("rate limited")
-        || error_lower.contains("timeout")
-        || error_lower.contains("connection")
-        || error_lower.contains("network")
-        || error_lower.contains("unavailable")
-        || error_lower.contains("error sending request")
-        || error_lower.contains("request failed")
-        || error_lower.contains("connection refused")
-        || error_lower.contains("connection reset")
-        || error_lower.contains("timed out")
-        || error_lower.contains("dns")
-        || error_lower.contains("ssl")
-        || error_lower.contains("tls")
-        || error_lower.contains("failed to get multiple accounts")
-        || error_lower.contains("batch fetch failed")
+    if
+        error_lower.contains("429") ||
+        error_lower.contains("too many requests") ||
+        error_lower.contains("rate limit") ||
+        error_lower.contains("rate limited") ||
+        error_lower.contains("timeout") ||
+        error_lower.contains("connection") ||
+        error_lower.contains("network") ||
+        error_lower.contains("unavailable") ||
+        error_lower.contains("error sending request") ||
+        error_lower.contains("request failed") ||
+        error_lower.contains("connection refused") ||
+        error_lower.contains("connection reset") ||
+        error_lower.contains("timed out") ||
+        error_lower.contains("dns") ||
+        error_lower.contains("ssl") ||
+        error_lower.contains("tls") ||
+        error_lower.contains("failed to get multiple accounts") ||
+        error_lower.contains("batch fetch failed")
     {
         return false;
     }
@@ -366,26 +373,71 @@ fn should_cache_as_failed(error: &str) -> bool {
 
 /// Batch fetch token decimals using the centralized RPC client with automatic fallback
 async fn batch_fetch_decimals_with_fallback(
-    mint_pubkeys: &[Pubkey],
+    mint_pubkeys: &[Pubkey]
 ) -> Result<Vec<(Pubkey, Result<u8, String>)>, String> {
     let rpc_client = get_rpc_client();
 
-    // Split into chunks of 100 (Solana RPC limit)
-    const MAX_ACCOUNTS_PER_CALL: usize = 100;
+    // Split into chunks of 50 to avoid provider HTTP 413 (Request Entity Too Large) limits
+    // Some providers enforce tighter POST body limits; 50 is safer in practice.
+    const MAX_ACCOUNTS_PER_CALL: usize = 50;
     let mut all_results = Vec::new();
 
     for chunk in mint_pubkeys.chunks(MAX_ACCOUNTS_PER_CALL) {
         // Get multiple accounts in one RPC call using centralized client
-        let accounts = rpc_client.get_multiple_accounts(chunk).await.map_err(|e| {
+        let accounts_res = rpc_client.get_multiple_accounts(chunk).await.map_err(|e| {
             // Improve error categorization
             if e.contains("429") || e.contains("rate limit") || e.contains("Too Many Requests") {
                 format!("Rate limited: {}", e)
-            } else if e.contains("error sending request") || e.contains("connection") {
+            } else if e.contains("413") || e.to_lowercase().contains("entity too large") {
+                // Explicit hint for provider body-size limit
+                format!(
+                    "Request too large (413). Reduce batch size (currently {}): {}",
+                    chunk.len(),
+                    e
+                )
+            } else if
+                e.contains("error sending request") ||
+                e.to_lowercase().contains("connection")
+            {
                 format!("Network error: {}", e)
             } else {
                 format!("Failed to get multiple accounts: {}", e)
             }
-        })?;
+        });
+
+        // If a 413 or batch-size-related error occurs, fall back to smaller sub-chunks (e.g., 25)
+        let accounts = match accounts_res {
+            Ok(accs) => accs,
+            Err(err_msg) => {
+                let lower = err_msg.to_lowercase();
+                if lower.contains("413") || lower.contains("entity too large") {
+                    // Split the current chunk further to 25 to bypass body-size limits
+                    let mut recovered: Vec<Option<solana_sdk::account::Account>> =
+                        Vec::with_capacity(chunk.len());
+                    for sub in chunk.chunks(25) {
+                        match rpc_client.get_multiple_accounts(sub).await {
+                            Ok(part) => recovered.extend(part.into_iter()),
+                            Err(e) => {
+                                // If even sub-chunks fail, propagate the original 413 with context
+                                return Err(
+                                    format!(
+                                        "Batch sub-request failed after 413 fallback (sub-size {}): {} | original: {}",
+                                        sub.len(),
+                                        e,
+                                        err_msg
+                                    )
+                                );
+                            }
+                        }
+                        // Small delay to be polite
+                        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                    }
+                    recovered
+                } else {
+                    return Err(err_msg);
+                }
+            }
+        };
 
         // Process each account result
         for (i, account_option) in accounts.iter().enumerate() {
@@ -396,13 +448,11 @@ async fn batch_fetch_decimals_with_fallback(
                     // Check if account exists and has data
                     if account.data.is_empty() {
                         Err("Account not found or empty".to_string())
-                    } else if account.owner != spl_token::id()
-                        && account.owner != spl_token_2022::id()
+                    } else if
+                        account.owner != spl_token::id() &&
+                        account.owner != spl_token_2022::id()
                     {
-                        Err(format!(
-                            "Account owner is not SPL Token program: {}",
-                            account.owner
-                        ))
+                        Err(format!("Account owner is not SPL Token program: {}", account.owner))
                     } else {
                         // Parse mint data based on program type
                         if account.owner == spl_token::id() {
@@ -433,11 +483,7 @@ async fn batch_fetch_decimals_with_fallback(
 /// Parse SPL Token mint data to extract decimals
 fn parse_spl_token_mint(data: &[u8]) -> Result<u8, String> {
     if data.len() < Mint::LEN {
-        return Err(format!(
-            "Invalid mint data length: expected {}, got {}",
-            Mint::LEN,
-            data.len()
-        ));
+        return Err(format!("Invalid mint data length: expected {}, got {}", Mint::LEN, data.len()));
     }
 
     // Parse using SPL Token library
@@ -451,10 +497,9 @@ fn parse_token_2022_mint(data: &[u8]) -> Result<u8, String> {
     // For Token-2022, the decimals are at the same position as in standard SPL Token
     // The first 9 bytes are the same structure for both token programs
     if data.len() < 44 {
-        return Err(format!(
-            "Invalid Token-2022 mint data length: expected at least 44, got {}",
-            data.len()
-        ));
+        return Err(
+            format!("Invalid Token-2022 mint data length: expected at least 44, got {}", data.len())
+        );
     }
 
     // Decimals are at offset 44 in both SPL Token and SPL Token-2022
@@ -485,7 +530,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                 log(
                     LogTag::Decimals,
                     "SKIP_SYSTEM",
-                    &format!("Skipping system/stable token: {}", mint),
+                    &format!("Skipping system/stable token: {}", mint)
                 );
             }
             continue;
@@ -498,7 +543,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                     log(
                         LogTag::Decimals,
                         "INVALID_MINT",
-                        &format!("Invalid mint address {}: {}", mint, e),
+                        &format!("Invalid mint address {}: {}", mint, e)
                     );
                 }
                 invalid_results.push((mint.clone(), Err(format!("Invalid mint address: {}", e))));
@@ -544,7 +589,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                     log(
                         LogTag::Decimals,
                         "DB_ERROR",
-                        &format!("Database read error for {}: {}", mint_str, e),
+                        &format!("Database read error for {}: {}", mint_str, e)
                     );
                 }
                 // Continue to process despite database error
@@ -563,7 +608,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                 log(
                     LogTag::Decimals,
                     "SKIP_FAILED",
-                    &format!("Skipping permanently failed token {}: {}", mint_str, error),
+                    &format!("Skipping permanently failed token {}: {}", mint_str, error)
                 );
             }
         } else {
@@ -573,7 +618,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                     log(
                         LogTag::Decimals,
                         "RETRY_BATCH",
-                        &format!("Retrying token {} (network error): {}", mint_str, error),
+                        &format!("Retrying token {} (network error): {}", mint_str, error)
                     );
                 }
             }
@@ -603,7 +648,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                 "Fetching decimals for {} tokens (batch operation, cached: {})",
                 uncached_mints.len(),
                 cached_results.len()
-            ),
+            )
         );
     }
 
@@ -612,8 +657,10 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
     let mut new_cache_entries = HashMap::new();
 
     if !uncached_mints.is_empty() {
-        let uncached_pubkeys: Vec<Pubkey> =
-            uncached_mints.iter().map(|(_, pubkey)| *pubkey).collect();
+        let uncached_pubkeys: Vec<Pubkey> = uncached_mints
+            .iter()
+            .map(|(_, pubkey)| *pubkey)
+            .collect();
 
         match batch_fetch_decimals_with_fallback(&uncached_pubkeys).await {
             Ok(batch_results) => {
@@ -630,8 +677,9 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                                         "DB_SAVE_ERROR",
                                         &format!(
                                             "Failed to save decimals to database {}: {}",
-                                            mint_str, e
-                                        ),
+                                            mint_str,
+                                            e
+                                        )
                                     );
                                 }
                             }
@@ -648,7 +696,11 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                                         log(
                                             LogTag::Decimals,
                                             "DB_REMOVE_ERROR",
-                                            &format!("Failed to remove failed token from database {}: {}", mint_str, e)
+                                            &format!(
+                                                "Failed to remove failed token from database {}: {}",
+                                                mint_str,
+                                                e
+                                            )
                                         );
                                     }
                                 }
@@ -682,7 +734,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                                 log(
                                     LogTag::Decimals,
                                     "FETCH_ERROR",
-                                    &format!("Token {} failed: {}", mint_str, e),
+                                    &format!("Token {} failed: {}", mint_str, e)
                                 );
                             }
                         }
@@ -690,7 +742,10 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                 }
 
                 if is_debug_decimals_enabled() && !fetch_results.is_empty() {
-                    let success_count = fetch_results.iter().filter(|(_, r)| r.is_ok()).count();
+                    let success_count = fetch_results
+                        .iter()
+                        .filter(|(_, r)| r.is_ok())
+                        .count();
                     log(
                         LogTag::Decimals,
                         "BATCH_SUCCESS",
@@ -716,7 +771,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                             uncached_mints.len(),
                             e,
                             should_cache
-                        ),
+                        )
                     );
                 }
 
@@ -729,7 +784,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                             log(
                                 LogTag::Decimals,
                                 "BATCH_RETRY_LATER",
-                                &format!("Network error for {}, will retry later: {}", mint_str, e),
+                                &format!("Network error for {}, will retry later: {}", mint_str, e)
                             );
                         }
                     }
@@ -756,13 +811,8 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                         old_size,
                         new_size,
                         new_cache_entries.len(),
-                        new_cache_entries
-                            .keys()
-                            .take(3)
-                            .cloned()
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    ),
+                        new_cache_entries.keys().take(3).cloned().collect::<Vec<_>>().join(", ")
+                    )
                 );
             }
         }
@@ -780,10 +830,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                 all_results.push(fetch_result.clone());
             } else {
                 // This shouldn't happen, but handle gracefully
-                all_results.push((
-                    mint_str.clone(),
-                    Err("Failed to fetch decimals".to_string()),
-                ));
+                all_results.push((mint_str.clone(), Err("Failed to fetch decimals".to_string())));
             }
         }
     }
@@ -824,7 +871,7 @@ pub fn get_cached_decimals(mint: &str) -> Option<u8> {
 
 /// Batch get token decimals from blockchain with caching - efficient for multiple tokens
 pub async fn get_multiple_token_decimals_from_chain(
-    mints: &[String],
+    mints: &[String]
 ) -> Vec<(String, Result<u8, String>)> {
     if mints.is_empty() {
         return Vec::new();
@@ -882,10 +929,7 @@ pub fn clear_decimals_cache() {
             log(
                 LogTag::Decimals,
                 "CACHE_CLEAR",
-                &format!(
-                    "Cleared in-memory decimal cache ({} entries), database preserved",
-                    old_size
-                ),
+                &format!("Cleared in-memory decimal cache ({} entries), database preserved", old_size)
             );
         }
     }
@@ -897,10 +941,7 @@ pub fn clear_decimals_cache() {
             log(
                 LogTag::Decimals,
                 "FAILED_CACHE_CLEAR",
-                &format!(
-                    "Cleared in-memory failed cache ({} entries), database preserved",
-                    old_size
-                ),
+                &format!("Cleared in-memory failed cache ({} entries), database preserved", old_size)
             );
         }
     }
@@ -921,8 +962,9 @@ pub fn get_cache_stats() -> (usize, usize) {
 pub fn get_database_stats() -> Result<(usize, usize), String> {
     init_decimals_database().map_err(|e| format!("Database init error: {}", e))?;
 
-    let conn = Connection::open(TOKENS_DATABASE)
-        .map_err(|e| format!("Database connection error: {}", e))?;
+    let conn = Connection::open(TOKENS_DATABASE).map_err(|e|
+        format!("Database connection error: {}", e)
+    )?;
 
     // Count decimals
     let mut stmt = conn
@@ -947,8 +989,9 @@ pub fn get_database_stats() -> Result<(usize, usize), String> {
 pub fn cleanup_retryable_failed_cache() -> Result<(usize, usize), String> {
     init_decimals_database().map_err(|e| format!("Database init error: {}", e))?;
 
-    let conn = Connection::open(TOKENS_DATABASE)
-        .map_err(|e| format!("Database connection error: {}", e))?;
+    let conn = Connection::open(TOKENS_DATABASE).map_err(|e|
+        format!("Database connection error: {}", e)
+    )?;
 
     // Delete non-permanent failures from database
     let removed_count = conn
@@ -974,24 +1017,21 @@ pub fn cleanup_retryable_failed_cache() -> Result<(usize, usize), String> {
             log(
                 LogTag::Decimals,
                 "MEMORY_CLEANUP",
-                &format!(
-                    "Cleaned in-memory failed cache: removed {} retryable errors",
-                    memory_removed
-                ),
+                &format!("Cleaned in-memory failed cache: removed {} retryable errors", memory_removed)
             );
         }
     }
 
     if is_debug_decimals_enabled() {
         log(
-                    LogTag::Decimals,
-                    "CACHE_CLEANUP",
-                    &format!(
+            LogTag::Decimals,
+            "CACHE_CLEANUP",
+            &format!(
                 "Cleaned failed cache database: removed {} retryable errors, kept {} permanent errors",
-                        removed_count,
+                removed_count,
                 permanent_count
-                    )
-                );
+            )
+        );
     }
 
     Ok((removed_count, permanent_count as usize))
@@ -1001,8 +1041,9 @@ pub fn cleanup_retryable_failed_cache() -> Result<(usize, usize), String> {
 pub fn get_failed_cache_stats() -> Result<(usize, usize, Vec<String>), String> {
     init_decimals_database().map_err(|e| format!("Database init error: {}", e))?;
 
-    let conn = Connection::open(TOKENS_DATABASE)
-        .map_err(|e| format!("Database connection error: {}", e))?;
+    let conn = Connection::open(TOKENS_DATABASE).map_err(|e|
+        format!("Database connection error: {}", e)
+    )?;
 
     // Get total count
     let mut stmt = conn
@@ -1027,11 +1068,7 @@ pub fn get_failed_cache_stats() -> Result<(usize, usize, Vec<String>), String> {
 
     let rows = stmt
         .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, i32>(2)? == 1,
-            ))
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i32>(2)? == 1))
         })
         .map_err(|e| format!("Database query error: {}", e))?;
 
@@ -1039,19 +1076,10 @@ pub fn get_failed_cache_stats() -> Result<(usize, usize, Vec<String>), String> {
     for row in rows {
         let (mint, error, is_permanent) = row.map_err(|e| format!("Database row error: {}", e))?;
         let permanent_flag = if is_permanent { "[P]" } else { "[T]" };
-        sample_errors.push(format!(
-            "{}: {} {}",
-            safe_truncate(&mint, 8),
-            error,
-            permanent_flag
-        ));
+        sample_errors.push(format!("{}: {} {}", safe_truncate(&mint, 8), error, permanent_flag));
     }
 
-    Ok((
-        total_count as usize,
-        permanent_count as usize,
-        sample_errors,
-    ))
+    Ok((total_count as usize, permanent_count as usize, sample_errors))
 }
 
 // =============================================================================
@@ -1060,20 +1088,20 @@ pub fn get_failed_cache_stats() -> Result<(usize, usize, Vec<String>), String> {
 
 /// Convert lamports to SOL using the proper SOL decimals constant
 pub fn lamports_to_sol(lamports: u64) -> f64 {
-    lamports as f64 / LAMPORTS_PER_SOL as f64
+    (lamports as f64) / (LAMPORTS_PER_SOL as f64)
 }
 
 /// Convert SOL to lamports using the proper SOL decimals constant
 pub fn sol_to_lamports(sol: f64) -> u64 {
-    (sol * LAMPORTS_PER_SOL as f64) as u64
+    (sol * (LAMPORTS_PER_SOL as f64)) as u64
 }
 
 /// Convert token amount to UI amount using provided decimals
 pub fn raw_to_ui_amount(raw_amount: u64, decimals: u8) -> f64 {
-    raw_amount as f64 / 10f64.powi(decimals as i32)
+    (raw_amount as f64) / (10f64).powi(decimals as i32)
 }
 
 /// Convert UI amount to raw token amount using provided decimals
 pub fn ui_to_raw_amount(ui_amount: f64, decimals: u8) -> u64 {
-    (ui_amount * 10f64.powi(decimals as i32)) as u64
+    (ui_amount * (10f64).powi(decimals as i32)) as u64
 }

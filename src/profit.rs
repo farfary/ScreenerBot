@@ -45,6 +45,11 @@ pub const TRAIL_TIGHTEN_FULL: f64 = 60.0; // Reduced from 90.0
 // Odds model threshold (higher for scalping quality)
 pub const EXIT_ODDS_THRESHOLD: f64 = 0.7; // Increased from 0.65
 
+// Early-hold protection (seconds)
+// Prevents non-emergency exits in the first moments after entry to avoid churn on noise.
+// Quick-capture profit exits and extreme/stop-loss still apply.
+pub const EARLY_HOLD_GRACE_SECS: f64 = 45.0; // ~45s grace
+
 // Quick capture windows for scalping: (minutes, required profit %)
 const QUICK_WINDOWS: &[(f64, f64)] = &[
     (0.5, 15.0), // 30 seconds: 15% profit
@@ -166,16 +171,15 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         return false;
     }
 
-    // Time held in minutes (clamp >= 0)
-    let minutes_held = {
-        let secs = (Utc::now() - position.entry_time).num_seconds();
-        let m = (secs as f64) / 60.0;
-        if m.is_sign_negative() {
-            0.0
-        } else {
-            m
-        }
+    // Time held in minutes/seconds (clamp >= 0)
+    let (minutes_held, seconds_held) = {
+        let secs_i = (Utc::now() - position.entry_time).num_seconds();
+        let secs = secs_i.max(0) as f64;
+        (secs / 60.0, secs)
     };
+
+    // Early-hold grace flag
+    let early_hold_active = seconds_held < EARLY_HOLD_GRACE_SECS;
 
     // Peak profit (percentage)
     let highest = position.price_highest.max(current_price);
@@ -445,7 +449,8 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     }
 
     // 7) Trailing stop logic (dynamic)
-    if peak_profit >= target_min {
+    // Suppress trailing exits during the early-hold grace to avoid churn on tiny spikes.
+    if peak_profit >= target_min && !early_hold_active {
         // baseline gap derived from peak profit and age
         let mut gap = trailing_gap(peak_profit, minutes_held);
 
@@ -495,6 +500,24 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     }
 
     // 8) Scoring-based exit decision (lightweight, reuses existing signals)
+    // Suppress scoring exits during the early-hold grace; rely on quick-capture or hard stops.
+    if early_hold_active {
+        // Skip SCORE_EXIT during grace
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Profit,
+                "GRACE_HOLD",
+                &format!(
+                    "{} pnl={:.2}% peak={:.2}% t={:.1}s — suppressing scoring/trailing exits",
+                    position.symbol,
+                    pnl_percent,
+                    peak_profit,
+                    seconds_held
+                )
+            );
+        }
+        return false;
+    }
     // Score components: negative adds to exit_score; positive subtracts (hold bias).
     let odds = continuation_odds(pnl_percent, minutes_held);
     let future_gap =
