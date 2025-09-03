@@ -77,8 +77,10 @@ pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 20.0;
 // Position Timing Configuration - Improved for longer holding
 // -----------------------------------------------------------------------------
 
-/// Re-entry cooldown after closing a position (minutes) - prevents immediate re-buy of same token
-/// Centralized here ONLY (no per-token cooldown checks elsewhere)
+/// Per-token re-entry cooldown after closing a position (minutes) - prevents immediate re-buy of same token
+/// This is applied in apply_cooldown_filter() and is separate from:
+/// - Global position open cooldown (5s between any opens) - in positions.rs
+/// - Frozen account cooldowns (account-specific) - in positions.rs
 pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 120; // 2 hours
 
 // -----------------------------------------------------------------------------
@@ -464,8 +466,10 @@ fn short8(s: &str) -> String {
 // (duplicate block removed)
 
 // =============================================================================
-// RECENTLY CLOSED TOKENS CACHE (Per-token re-entry cooldown)
+// PER-TOKEN RE-ENTRY COOLDOWN CACHE
 // =============================================================================
+// Caches recently closed position mints to prevent immediate re-entry
+// This is separate from global position cooldowns and frozen account cooldowns
 
 #[derive(Clone)]
 struct RecentlyClosedCache {
@@ -1425,6 +1429,36 @@ pub fn prioritize_tokens_for_checking(mut tokens: Vec<Token>) -> Vec<Token> {
     tokens
 }
 
+/// Apply per-token re-entry cooldown filter to exclude recently closed positions
+/// This is separate from:
+/// - Global position open cooldown (5s between any position opens) - handled in positions.rs
+/// - Frozen account cooldowns (account-specific freezes) - handled in positions.rs
+/// This must be called on every cycle with fresh data, never cached
+async fn apply_cooldown_filter(tokens: Vec<Token>) -> Vec<Token> {
+    let recently_closed_mints = get_recently_closed_mints_set().await;
+    let before_cooldown = tokens.len();
+    let tokens_after_cooldown: Vec<Token> = tokens
+        .into_iter()
+        .filter(|t| !recently_closed_mints.contains(&t.mint))
+        .collect();
+
+    let removed_for_cooldown = before_cooldown.saturating_sub(tokens_after_cooldown.len());
+    if removed_for_cooldown > 0 {
+        log(
+            LogTag::Trader,
+            "COOLDOWN_FILTER",
+            &format!(
+                "⏳ Excluded {} tokens within {}m cooldown after close; {} remaining",
+                removed_for_cooldown,
+                POSITION_CLOSE_COOLDOWN_MINUTES,
+                tokens_after_cooldown.len()
+            )
+        );
+    }
+
+    tokens_after_cooldown
+}
+
 // =============================================================================
 // TOKEN PREPARATION AND TRADING FUNCTIONS
 // =============================================================================
@@ -1853,27 +1887,9 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
         );
     }
 
-    // 6b. Apply centralized per-token re-entry cooldown (exclude recently closed tokens)
-    let recently_closed_mints = get_recently_closed_mints_set().await;
-    let before_cooldown = tokens_after_blacklist.len();
-    let tokens_after_cooldown: Vec<Token> = tokens_after_blacklist
-        .into_iter()
-        .filter(|t| !recently_closed_mints.contains(&t.mint))
-        .collect();
-
-    let removed_for_cooldown = before_cooldown.saturating_sub(tokens_after_cooldown.len());
-    if removed_for_cooldown > 0 {
-        log(
-            LogTag::Trader,
-            "COOLDOWN_FILTER",
-            &format!(
-                "⏳ Excluded {} tokens within {}m cooldown after close; {} remaining",
-                removed_for_cooldown,
-                POSITION_CLOSE_COOLDOWN_MINUTES,
-                tokens_after_cooldown.len()
-            )
-        );
-    }
+    // 6b. Note: Per-token re-entry cooldown now applied after token retrieval for cache-independence
+    // This ensures recently closed positions are always filtered with fresh data
+    let tokens_after_blacklist = tokens_after_blacklist; // Cooldown will be applied by caller
 
     // 7. Smart token prioritization with confidence-based top tokens
     // Partition tokens to ensure ~50% are from actively monitored/history-rich set
@@ -1882,7 +1898,7 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
     let recent_set: std::collections::HashSet<String> = recent_pool_tokens.into_iter().collect();
     let mut with_monitoring: Vec<Token> = Vec::new();
     let mut without_monitoring: Vec<Token> = Vec::new();
-    for t in tokens_after_cooldown {
+    for t in tokens_after_blacklist {
         if recent_set.contains(&t.mint) {
             with_monitoring.push(t);
         } else {
@@ -2124,7 +2140,10 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         }
 
         let tokens = match prepare_tokens(cycle_start).await {
-            Ok(tokens) => {
+            Ok(prepared_tokens) => {
+                // Apply cooldown filter with fresh data (never cached)
+                let tokens = apply_cooldown_filter(prepared_tokens).await;
+
                 log(
                     LogTag::Trader,
                     "CYCLE_PREPARED",
