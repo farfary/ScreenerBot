@@ -35,6 +35,7 @@ pub const REENTRY_CLOSE_PRICE_PROXIMITY_PCT: f64 = 3.5; // within X% of prior ex
 pub const REENTRY_CAP_DISCOUNT_PCT: f64 = 12.0; // reduce prior exit-based target by this percent
 pub const REENTRY_MIN_PROFIT_OVERRIDE_PCT: f64 = 4.0; // ensure at least modest profit before triggering
 pub const REENTRY_MAX_CAP_PCT: f64 = 45.0; // never cap above this (protect runners)
+pub const REENTRY_ADDITIONAL_DISCOUNT_PER_PRIOR_PCT: f64 = 2.5; // extra discount per additional qualifying higher prior exit
 
 /// ============================= Tunables =============================
 
@@ -130,17 +131,16 @@ async fn get_reentry_cap_percent(position: &Position) -> Option<f64> {
     } else {
         return None;
     };
-    // Access underlying helper if available; if not (older build), bail.
-    // We call get_recent_closed_positions_for_mint via &PositionsDatabase; if method missing compile will flag.
-    let recent = match
-        db.get_recent_closed_positions_for_mint(&position.mint, REENTRY_LOOKBACK_POSITIONS).await
+    // Use lightweight price-only fetch to minimize DB parsing & lock time
+    let recent_prices = match
+        db.get_recent_closed_exit_prices_for_mint(&position.mint, REENTRY_LOOKBACK_POSITIONS).await
     {
         Ok(v) => v,
         Err(_) => {
             return None;
         }
     };
-    if recent.is_empty() {
+    if recent_prices.is_empty() {
         return None;
     }
 
@@ -150,10 +150,10 @@ async fn get_reentry_cap_percent(position: &Position) -> Option<f64> {
     }
 
     // Collect exit prices above our entry (we re-entered lower than past exit)
-    let mut higher_exits: Vec<f64> = recent
+    let mut higher_exits: Vec<f64> = recent_prices
         .into_iter()
-        .filter_map(|p| p.effective_exit_price.or(p.exit_price))
-        .filter(|&ep| ep.is_finite() && ep > entry_price * 1.005) // require >0.5% higher to avoid noise
+        .filter_map(|(exit_p, eff_p)| eff_p.or(exit_p))
+        .filter(|&ep| ep.is_finite() && ep > entry_price * 1.005)
         .collect();
     if higher_exits.is_empty() {
         return None;
@@ -166,7 +166,11 @@ async fn get_reentry_cap_percent(position: &Position) -> Option<f64> {
     if raw_profit_pct <= 0.0 {
         return None;
     }
-    let discounted = (raw_profit_pct * (1.0 - REENTRY_CAP_DISCOUNT_PCT / 100.0)).max(
+    // Add extra discount proportional to number of additional higher exits (excluding reference)
+    let extra_discount =
+        (higher_exits.len().saturating_sub(1) as f64) * REENTRY_ADDITIONAL_DISCOUNT_PER_PRIOR_PCT;
+    let total_discount = (REENTRY_CAP_DISCOUNT_PCT + extra_discount).min(40.0); // cap total discount at 40%
+    let discounted = (raw_profit_pct * (1.0 - total_discount / 100.0)).max(
         REENTRY_MIN_PROFIT_OVERRIDE_PCT
     );
     let capped = discounted.min(REENTRY_MAX_CAP_PCT);

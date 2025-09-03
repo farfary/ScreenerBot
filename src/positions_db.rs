@@ -195,6 +195,7 @@ const POSITIONS_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_positions_mint ON positions(mint);",
     "CREATE INDEX IF NOT EXISTS idx_positions_entry_time ON positions(entry_time DESC);",
     "CREATE INDEX IF NOT EXISTS idx_positions_exit_time ON positions(exit_time DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_positions_mint_exit_time ON positions(mint, exit_time DESC);",
     "CREATE INDEX IF NOT EXISTS idx_positions_entry_signature ON positions(entry_transaction_signature);",
     "CREATE INDEX IF NOT EXISTS idx_positions_exit_signature ON positions(exit_transaction_signature);",
     "CREATE INDEX IF NOT EXISTS idx_positions_state ON positions(id, position_type, exit_time);",
@@ -970,6 +971,43 @@ impl PositionsDatabase {
             }
         }
         Ok(positions)
+    }
+
+    /// Lightweight variant: only fetch (exit_price, effective_exit_price) for recent verified exits
+    /// to reduce row size & parsing overhead for re-entry heuristics.
+    pub async fn get_recent_closed_exit_prices_for_mint(
+        &self,
+        mint: &str,
+        limit: usize
+    ) -> Result<Vec<(Option<f64>, Option<f64>)>, String> {
+        let conn = self.get_connection()?;
+        let mut stmt = conn
+            .prepare(
+                r#"
+            SELECT exit_price, effective_exit_price
+            FROM positions
+            WHERE mint = ?1 AND transaction_exit_verified = 1
+              AND exit_price IS NOT NULL AND exit_time IS NOT NULL
+            ORDER BY datetime(exit_time) DESC
+            LIMIT ?2
+            "#
+            )
+            .map_err(|e| format!("Failed to prepare recent closed exit prices query: {}", e))?;
+
+        let mut out: Vec<(Option<f64>, Option<f64>)> = Vec::new();
+        let rows = stmt
+            .query_map(params![mint, limit as i64], |row| {
+                let exit_p: Option<f64> = row.get(0).ok();
+                let eff_exit_p: Option<f64> = row.get(1).ok();
+                Ok((exit_p, eff_exit_p))
+            })
+            .map_err(|e| format!("Failed to execute recent closed exit prices query: {}", e))?;
+        for r in rows {
+            if let Ok(v) = r {
+                out.push(v);
+            }
+        }
+        Ok(out)
     }
 
     /// Get positions by state

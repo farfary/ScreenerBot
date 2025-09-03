@@ -11,6 +11,55 @@ use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
 use crate::tokens::{ get_pool_service, Token, PriceOptions };
 use chrono::{ DateTime, Utc };
+use once_cell::sync::Lazy;
+use std::sync::RwLock as StdRwLock;
+use std::time::{ Instant, Duration };
+
+// Lightweight TTL cache for recent exit prices to reduce DB pressure.
+struct ExitPriceCacheEntry {
+    prices: Vec<f64>,
+    fetched_at: Instant,
+}
+static RECENT_EXIT_PRICE_CACHE: Lazy<
+    StdRwLock<std::collections::HashMap<String, ExitPriceCacheEntry>>
+> = Lazy::new(|| StdRwLock::new(std::collections::HashMap::new()));
+const EXIT_PRICE_CACHE_TTL: Duration = Duration::from_secs(30); // short TTL to stay fresh
+
+async fn get_cached_recent_exit_prices(mint: &str, limit: usize) -> Vec<f64> {
+    // 1. Check cache
+    if let Ok(map) = RECENT_EXIT_PRICE_CACHE.read() {
+        if let Some(entry) = map.get(mint) {
+            if entry.fetched_at.elapsed() < EXIT_PRICE_CACHE_TTL {
+                return entry.prices.clone();
+            }
+        }
+    }
+    // 2. Fetch minimal data
+    use crate::positions_db::get_positions_database;
+    let mut out = Vec::new();
+    if let Ok(db_lock) = get_positions_database().await {
+        let guard = db_lock.lock().await;
+        if let Some(ref db) = *guard {
+            if let Ok(rows) = db.get_recent_closed_exit_prices_for_mint(mint, limit).await {
+                for (exit_p, eff_p) in rows.into_iter() {
+                    if let Some(p) = eff_p.or(exit_p) {
+                        if p.is_finite() && p > 0.0 {
+                            out.push(p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // 3. Store
+    if let Ok(mut mapw) = RECENT_EXIT_PRICE_CACHE.write() {
+        mapw.insert(mint.to_string(), ExitPriceCacheEntry {
+            prices: out.clone(),
+            fetched_at: Instant::now(),
+        });
+    }
+    out
+}
 
 // =============================================================================
 // CONSERVATIVE TRADING CONFIGURATION PARAMETERS
@@ -42,6 +91,16 @@ const HIGH_ACTIVITY_ENTRY: f64 = 20.0; // Reduced from 25.0 for high activity
 const MED_ACTIVITY_ENTRY: f64 = 8.0; // Reduced from 12.0 for medium activity
 const MIN_ACTIVITY_ENTRY: f64 = 3.0; // Reduced from 5.0 for minimum activity
 
+// ============================= Re-Entry Adaptive Thresholds =============================
+// Each additional prior closed verified position for same token (recent) demands deeper fresh drop
+// to avoid catching a decaying downtrend too early.
+pub const REENTRY_LOOKBACK_MAX: usize = 6; // how many prior exits to inspect
+pub const REENTRY_DROP_EXTRA_PER_ENTRY_PCT: f64 = 2.2; // each prior entry adds this % to required min drop
+pub const REENTRY_DROP_EXTRA_MAX_PCT: f64 = 14.0; // cap additional drop requirement
+pub const REENTRY_MIN_DISCOUNT_TO_LAST_EXIT_PCT: f64 = 4.0; // require current price at least this % below most recent verified exit
+pub const REENTRY_LOCAL_STABILITY_SECS: i64 = 45; // need some sideways stabilization length
+pub const REENTRY_LOCAL_MAX_VOLATILITY_PCT: f64 = 9.0; // if intrarange > this then treat as unstable (need deeper drop)
+
 // =============================================================================
 // SIMPLE DROP SIGNAL
 // =============================================================================
@@ -54,6 +113,56 @@ struct SimpleDropSignal {
     current_price: f64,
     samples: usize,
     velocity_per_minute: f64,
+}
+
+/// Analyze recent micro-structure for stabilization after a drop.
+/// Returns (local_low, local_high, stabilization_score[0..1], intrarange_pct)
+fn analyze_local_structure(
+    price_history: &[(DateTime<Utc>, f64)],
+    seconds: i64
+) -> (f64, f64, f64, f64) {
+    if seconds <= 5 {
+        return (0.0, 0.0, 0.0, 0.0);
+    }
+    let now = Utc::now();
+    let mut prices: Vec<f64> = price_history
+        .iter()
+        .filter(|(ts, _)| (now - *ts).num_seconds() <= seconds)
+        .map(|(_, p)| *p)
+        .filter(|p| *p > 0.0 && p.is_finite())
+        .collect();
+    if prices.len() < 3 {
+        return (0.0, 0.0, 0.0, 0.0);
+    }
+    let mut local_low = f64::INFINITY;
+    let mut local_high: f64 = 0.0;
+    for p in &prices {
+        local_low = local_low.min(*p);
+        local_high = local_high.max(*p);
+    }
+    if !local_low.is_finite() || local_low <= 0.0 || local_high <= 0.0 {
+        return (0.0, 0.0, 0.0, 0.0);
+    }
+    let intrarange_pct = ((local_high - local_low) / local_high) * 100.0;
+    // Stabilization: measure proportion of prices within upper half after first third timeframe.
+    let third = (prices.len() / 3).max(1);
+    let latter_slice = &prices[third..];
+    let median_after: f64 = {
+        let mut s = latter_slice.to_vec();
+        s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        s[s.len() / 2]
+    };
+    // Score favors tight range & median recovery in upper half.
+    let tight_factor = (
+        1.0 - (intrarange_pct / REENTRY_LOCAL_MAX_VOLATILITY_PCT).clamp(0.0, 1.0)
+    ).max(0.0);
+    let recovery_factor = if local_high > local_low {
+        ((median_after - local_low) / (local_high - local_low)).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let stabilization_score = (0.55 * tight_factor + 0.45 * recovery_factor).clamp(0.0, 1.0);
+    (local_low, local_high, stabilization_score, intrarange_pct)
 }
 
 // =============================================================================
@@ -73,6 +182,11 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     }
 
     let pool_service = get_pool_service();
+
+    // Pull recent exit prices via cache helper (minimal DB load)
+    let prior_exit_prices = get_cached_recent_exit_prices(&token.mint, REENTRY_LOOKBACK_MAX).await;
+    let prior_count = prior_exit_prices.len();
+    let last_exit_price = prior_exit_prices.first().cloned();
 
     // Get current pool price and liquidity first
     if is_debug_entry_enabled() {
@@ -240,14 +354,67 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         );
     }
 
-    // Detect best drop across windows
-    let best = detect_best_drop(&price_history, current_price);
+    // Local structure before selecting best drop (short horizon for stabilization)
+    let (_ll, _lh, stabilization_score, intrarange_pct) = analyze_local_structure(
+        &price_history,
+        REENTRY_LOCAL_STABILITY_SECS
+    );
+
+    // Adaptive extra drop requirement for re-entry scenarios
+    let mut adaptive_min_drop = MIN_DROP_PERCENT;
+    if prior_count > 0 {
+        let extra = ((prior_count as f64) * REENTRY_DROP_EXTRA_PER_ENTRY_PCT).min(
+            REENTRY_DROP_EXTRA_MAX_PCT
+        );
+        adaptive_min_drop += extra; // require deeper fresh drop
+        if let Some(last_exit) = last_exit_price {
+            // Ensure current price meaningfully below last exit to avoid chasing
+            if last_exit > 0.0 && current_price > 0.0 {
+                let discount_pct = ((last_exit - current_price) / last_exit) * 100.0;
+                if discount_pct < REENTRY_MIN_DISCOUNT_TO_LAST_EXIT_PCT {
+                    if is_debug_entry_enabled() {
+                        log(
+                            LogTag::Entry,
+                            "REENTRY_DISCOUNT_INSUFFICIENT",
+                            &format!(
+                                "{} reentry discount {:.2}% < {:.2}% last_exit={:.9} cur={:.9} prior_count={}",
+                                token.symbol,
+                                discount_pct,
+                                REENTRY_MIN_DISCOUNT_TO_LAST_EXIT_PCT,
+                                last_exit,
+                                current_price,
+                                prior_count
+                            )
+                        );
+                    }
+                    return (
+                        false,
+                        18.0,
+                        format!(
+                            "Re-entry discount too small {:.2}% < {:.2}%",
+                            discount_pct,
+                            REENTRY_MIN_DISCOUNT_TO_LAST_EXIT_PCT
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    // Detect best drop across windows with adaptive minimum
+    let best = {
+        let raw = detect_best_drop(&price_history, current_price);
+        match raw {
+            Some(sig) if sig.drop_percent >= adaptive_min_drop => Some(sig),
+            _ => None,
+        }
+    };
 
     if let Some(sig) = best {
         // Enhanced confidence calculation with conservative approach
         let mut confidence = 20.0; // Reduced base from 25.0
 
-        // Drop magnitude (more conservative scoring)
+        // Drop magnitude with adaptive base
         let drop_score = calculate_drop_magnitude_score(sig.drop_percent);
         confidence += drop_score * 25.0; // Reduced from 35.0 scaling
 
@@ -304,17 +471,28 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             confidence -= 6.0;
         }
 
-        // Conservative entry conditions (less aggressive requirements)
+        // Conservative entry conditions (adaptive)
         let is_good_entry =
-            sig.drop_percent >= 6.0 &&
-            sig.drop_percent <= 20.0 && // Balanced range for conservative entry
-            sig.window_sec >= 60 && // Minimum 1-minute window for stability
-            reserve_sol >= 50.0 && // Good liquidity requirement
-            reserve_sol <= 800.0 && // Reasonable maximum
-            activity_score >= 0.6 && // Moderate activity requirement
-            ath_safe; // ATH safe requirement
+            sig.drop_percent >= adaptive_min_drop &&
+            sig.drop_percent <= 20.0 + ((prior_count as f64) * 3.0).min(15.0) &&
+            sig.window_sec >= 60 &&
+            reserve_sol >= 50.0 &&
+            reserve_sol <= 800.0 &&
+            activity_score >= 0.6 &&
+            ath_safe &&
+            stabilization_score >= 0.25; // require some stabilization
         if is_good_entry {
             confidence *= 1.25; // 25% boost for good conservative conditions
+        }
+
+        // Stabilization influence: boost if stabilized, penalize if volatile
+        if stabilization_score >= 0.55 {
+            confidence += 6.0;
+        } else if stabilization_score < 0.2 {
+            confidence -= 5.0;
+        }
+        if intrarange_pct > REENTRY_LOCAL_MAX_VOLATILITY_PCT {
+            confidence -= 4.0;
         }
 
         confidence = confidence.clamp(0.0, 95.0);
@@ -327,7 +505,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 LogTag::Entry,
                 "ENTRY_ANALYSIS_COMPLETE",
                 &format!(
-                    "🎯 {} entry: -{:.1}%/{}s → conf {:.1}% → {} [activity:{:.1} liquidity:{:.0} ath_safe:{} ath_pct:{:.1}% good_entry:{}]",
+                    "🎯 {} entry: -{:.1}%/{}s → conf {:.1}% → {} [activity:{:.1} liquidity:{:.0} ath_safe:{} ath_pct:{:.1}% good_entry:{} prior_exits:{} adapt_min_drop:{:.1}% stab:{:.2} intrarange:{:.1}%]",
                     token.symbol,
                     sig.drop_percent,
                     sig.window_sec,
@@ -341,7 +519,11 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                     reserve_sol,
                     ath_safe,
                     max_ath_pct,
-                    is_good_entry
+                    is_good_entry,
+                    prior_count,
+                    adaptive_min_drop,
+                    stabilization_score,
+                    intrarange_pct
                 )
             );
         }
@@ -368,12 +550,16 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 reason
             } else {
                 format!(
-                    "Entry analysis: -{:.1}%/{}s, conf {:.1}% < 45%, ATH: {:.1}%, activity: {:.1}",
+                    "Entry analysis: -{:.1}%/{}s, conf {:.1}% < 45%, ATH: {:.1}%, activity: {:.1}, prior_exits:{}, adapt_min_drop:{:.1}%, stab:{:.2} intrarange:{:.1}%",
                     sig.drop_percent,
                     sig.window_sec,
                     confidence,
                     max_ath_pct,
-                    activity_score
+                    activity_score,
+                    prior_count,
+                    adaptive_min_drop,
+                    stabilization_score,
+                    intrarange_pct
                 )
             },
         );
@@ -389,11 +575,12 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 LogTag::Entry,
                 "NO_DROP_DETECTED",
                 &format!(
-                    "❌ {} no entry drops {:.0}-{:.0}% detected in conservative windows [{}]",
+                    "❌ {} no entry drops >= adapt_min_drop {:.1}% (base {:.1}%) detected in windows [{}] prior_exits:{}",
                     token.symbol,
+                    adaptive_min_drop,
                     MIN_DROP_PERCENT,
-                    MAX_DROP_PERCENT,
-                    recent_prices.join(", ")
+                    recent_prices.join(", "),
+                    prior_count
                 )
             );
         }
