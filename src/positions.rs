@@ -1003,8 +1003,47 @@ pub async fn close_position_direct(
     let mut last_error = String::new();
     let mut best_quote: Option<UnifiedQuote> = None;
     let mut quote_slippage_used = 0.0;
+    // Compute classification of exit (profit vs loss) for slippage policy & proceeds validation
+    let profit_percent_for_exit = if entry_price > 0.0 {
+        ((exit_price - entry_price) / entry_price) * 100.0
+    } else { 0.0 };
+    let is_loss_exit = profit_percent_for_exit < 0.0;
+    // Max allowed slippage for profitable exits (user requirement)
+    const MAX_PROFIT_EXIT_SLIPPAGE_PCT: f64 = 3.0; // hard cap for profit-taking
+    // Allow a bit more flexibility for loss / emergency exits to guarantee execution
+    const MAX_LOSS_EXIT_SLIPPAGE_PCT: f64 = 12.0; // still lower than historical 20% upper bound
+    let max_slippage_allowed = if is_loss_exit { MAX_LOSS_EXIT_SLIPPAGE_PCT } else { MAX_PROFIT_EXIT_SLIPPAGE_PCT };
+
+    if is_debug_swaps_enabled() {
+        log(
+            LogTag::Positions,
+            "DEBUG",
+            &format!(
+                "🎯 Exit classification for {}: profit_pct={:.2} is_loss_exit={} max_slippage_allowed={:.1}%",
+                symbol,
+                profit_percent_for_exit,
+                is_loss_exit,
+                max_slippage_allowed
+            )
+        );
+    }
 
     for &slippage in SELL_RETRY_SLIPPAGES.iter() {
+        // Enforce dynamic slippage ceiling based on exit classification
+        if slippage > max_slippage_allowed {
+            if is_debug_swaps_enabled() {
+                log(
+                    LogTag::Positions,
+                    "DEBUG",
+                    &format!(
+                        "⛔ Skipping slippage {:.1}% (exceeds allowed {:.1}% for this exit type)",
+                        slippage,
+                        max_slippage_allowed
+                    )
+                );
+            }
+            continue; // don't attempt with larger slippage
+        }
         if is_debug_swaps_enabled() {
             log(
                 LogTag::Positions,
@@ -1021,21 +1060,81 @@ pub async fn close_position_direct(
             ).await
         {
             Ok(Ok(quote)) => {
-                best_quote = Some(quote);
-                quote_slippage_used = slippage;
+                // ================= Proceeds Validation Layer =================
+                // We require that the quoted output SOL aligns with our expected proceeds within tolerance.
+                // For profit exits we enforce a hard 3% shortfall tolerance relative to expected profit-adjusted proceeds.
+                let quoted_output_sol = lamports_to_sol(quote.output_amount);
+                // Reconstruct expected proceeds from entry size + intended profit (based on exit_price) + extra profit buffer.
+                // This avoids relying on raw token balance ratios (token taxes / burns) and keeps decision anchored to cost basis.
+                let expected_profit_sol = if profit_percent_for_exit > 0.0 {
+                    (entry_size_sol * (profit_percent_for_exit / 100.0)).max(0.0)
+                } else { 0.0 };
+                let target_required_sol = if profit_percent_for_exit > 0.0 {
+                    // Add extra needed profit buffer (covers fees / slip) only for profitable exits
+                    entry_size_sol + expected_profit_sol + PROFIT_EXTRA_NEEDED_SOL
+                } else {
+                    // For loss exits we just target whatever the market gives (no extra buffer enforcement)
+                    quoted_output_sol // will be accepted below
+                };
+                // Compute shortfall percent vs required (only for profit exits)
+                let shortfall_pct = if profit_percent_for_exit > 0.0 && target_required_sol > 0.0 {
+                    ((target_required_sol - quoted_output_sol) / target_required_sol) * 100.0
+                } else { 0.0 };
+                let within_tolerance = is_loss_exit || shortfall_pct <= MAX_PROFIT_EXIT_SLIPPAGE_PCT;
+
                 if is_debug_swaps_enabled() {
                     log(
                         LogTag::Positions,
                         "DEBUG",
                         &format!(
-                            "✅ Quote obtained with {:.1}% slippage: {} tokens -> {} SOL",
-                            slippage,
-                            token_balance,
-                            lamports_to_sol(best_quote.as_ref().unwrap().output_amount)
+                            "📐 Proceeds check: quoted={:.8} SOL required={:.8} SOL shortfall={:.2}% within_tolerance={} (profit_exit={})",
+                            quoted_output_sol,
+                            target_required_sol,
+                            shortfall_pct.max(0.0),
+                            within_tolerance,
+                            !is_loss_exit
                         )
                     );
                 }
-                break;
+
+                if within_tolerance {
+                    if is_debug_swaps_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG",
+                            &format!(
+                                "✅ Quote accepted with {:.1}% slippage: output {:.8} SOL (required {:.8} SOL)",
+                                slippage,
+                                quoted_output_sol,
+                                target_required_sol
+                            )
+                        );
+                    }
+                    best_quote = Some(quote);
+                    quote_slippage_used = slippage;
+                    break;
+                } else {
+                    // Reject quote - proceed to next slippage (still bounded by max_slippage_allowed)
+                    last_error = format!(
+                        "Quote shortfall {:.2}% exceeds allowed {:.2}% (quoted {:.8} < required {:.8} SOL)",
+                        shortfall_pct,
+                        MAX_PROFIT_EXIT_SLIPPAGE_PCT,
+                        quoted_output_sol,
+                        target_required_sol
+                    );
+                    log(
+                        LogTag::Positions,
+                        "PROCEEDS_REJECT",
+                        &format!(
+                            "❌ Rejecting quote at {:.1}% slippage for {}: {}",
+                            slippage,
+                            symbol,
+                            last_error
+                        )
+                    );
+                    // try next slippage (if any remain within allowed bound)
+                    continue;
+                }
             }
             Ok(Err(e)) => {
                 last_error = e.to_string();
