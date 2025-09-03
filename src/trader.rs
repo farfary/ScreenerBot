@@ -633,9 +633,10 @@ pub const TOKEN_CACHE_DURATION_MINUTES: u64 = 10;
 
 /// Clear the token cache (useful for debugging or forced refresh)
 pub fn clear_token_cache() {
-    let mut cache = FILTERED_TOKENS_CACHE.write().unwrap();
-    *cache = None;
-    log(LogTag::Trader, "CACHE_CLEARED", "🗑️ Token cache manually cleared");
+    if let Some(mut cache) = safe_write_lock(&FILTERED_TOKENS_CACHE, "clear_token_cache") {
+        *cache = None;
+        log(LogTag::Trader, "CACHE_CLEARED", "🗑️ Token cache manually cleared");
+    }
 }
 
 /// Get token cache status for debugging
