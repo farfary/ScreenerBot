@@ -17,6 +17,7 @@ pub mod positions_types; // Position type definitions
 pub mod profit;
 pub mod rpc;
 pub mod run;
+pub mod solscan; // Solscan API integration
 pub mod summary;
 pub mod swaps;
 pub mod tokens;

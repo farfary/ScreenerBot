@@ -53,6 +53,26 @@ path = "src/bin/main_positions_analyze.rs"
 name = "main_token_holders"
 path = "src/bin/main_token_holders.rs"
 
+[[bin]]
+name = "test_solscan"
+path = "src/bin/test_solscan.rs"
+
+[[bin]]
+name = "test_solscan_basic"
+path = "src/bin/test_solscan_basic.rs"
+
+[[bin]]
+name = "test_solscan_free"
+path = "src/bin/test_solscan_free.rs"
+
+[[bin]]
+name = "test_public_solscan"
+path = "src/bin/test_public_solscan.rs"
+
+[[bin]]
+name = "test_disable_flag"
+path = "src/bin/test_disable_flag.rs"
+
 
 
 [dependencies]
