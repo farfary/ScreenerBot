@@ -29,10 +29,10 @@ pub const EXTREME_LOSS_PERCENT: f64 = -45.0; // Emergency exit (was -55.0)
 // Time (minutes) - Shorter hold times for scalping
 pub const MAX_HOLD_MINUTES: f64 = 90.0; // Reduced from 120.0 for faster scalping
 
-// Profit ladders (percent) - Lower thresholds for scalping
-pub const BASE_MIN_PROFIT_PERCENT: f64 = 5.0; // Reduced from 10.0 for scalping
-pub const INSTANT_EXIT_LEVEL_1: f64 = 20.0; // Reduced from 100.0 for faster exits
-pub const INSTANT_EXIT_LEVEL_2: f64 = 35.0; // Reduced from 150.0 for scalping
+// Profit ladders (percent) - Aggressive but allow runners
+pub const BASE_MIN_PROFIT_PERCENT: f64 = 5.0; // base min profit gate
+pub const INSTANT_EXIT_LEVEL_1: f64 = 20.0; // level 1 now conditional (needs context)
+pub const INSTANT_EXIT_LEVEL_2: f64 = 35.0; // still relatively low but gives room for 20-30% runners
 
 // Trailing stop dynamics (tighter for scalping)
 pub const TRAIL_MIN_GAP: f64 = 3.0; // Reduced from 5.0 for tighter trailing
@@ -48,19 +48,32 @@ pub const EXIT_ODDS_THRESHOLD: f64 = 0.7; // Increased from 0.65
 // Early-hold protection (seconds)
 // Prevents non-emergency exits in the first moments after entry to avoid churn on noise.
 // Quick-capture profit exits and extreme/stop-loss still apply.
-pub const EARLY_HOLD_GRACE_SECS: f64 = 20.0; // ~45s grace
+pub const EARLY_HOLD_GRACE_SECS: f64 = 8.0; // Reduced to 8s for faster spike capture
 
-// Quick capture windows for scalping: (minutes, required profit %)
-// More aggressive early capture to handle monitoring delays
+// Quick capture windows (post initial fast tier phase): (minutes, required profit %)
+// Only include mid/late windows not already covered by FAST_TIERS logic.
 const QUICK_WINDOWS: &[(f64, f64)] = &[
-    (0.33, 12.0), // 20 seconds: 12% profit (catches spikes between 5s intervals)
-    (0.5, 15.0), // 30 seconds: 15% profit
-    (1.0, 10.0), // 1 minute: 10% profit (reduced from 12%)
-    (2.0, 15.0), // 2 minutes: 15% profit (reduced from 18%)
-    (3.0, 20.0), // 3 minutes: 20% profit (reduced from 22%)
-    (5.0, 25.0), // 5 minutes: 25% profit
-    (8.0, 30.0), // 8 minutes: 30% profit
-    (12.0, 35.0), // 12 minutes: 35% profit
+    (3.0, 50.0), // 3 minutes: 50% profit
+    (5.0, 60.0), // 5 minutes: 60% profit
+    (8.0, 70.0), // 8 minutes: 70% profit
+    (12.0, 80.0), // 12 minutes: 80% profit
+];
+
+/// Fast tier specification for unified early exit evaluation.
+/// (max_minutes, min_profit_percent, tag, require_retrace_percent)
+/// `require_retrace_percent` if >0 means we only exit if we've retraced at least that percent
+/// from the local peak (peak_profit - pnl_percent >= retrace_threshold).
+const FAST_TIERS: &[(f64, f64, &str, f64)] = &[
+    // Allow very fast banking of extreme spikes, unconditional.
+    (0.25, 40.0, "FAST_40PCT_SUB15S", 0.0),
+    (0.5, 55.0, "FAST_55PCT_SUB30S", 0.0),
+    // Moderate spikes: allow partial letting runners continue unless retrace occurs.
+    (0.5, 25.0, "FAST_25PCT_COND", 4.0),
+    (0.75, 35.0, "FAST_35PCT_COND", 5.0),
+    (1.0, 45.0, "FAST_45PCT_COND", 6.0),
+    // Extended early window up to 2m with conditional exits to still capture decays.
+    (1.5, 55.0, "FAST_55PCT_COND_EXT", 8.0),
+    (2.0, 65.0, "FAST_65PCT_COND_EXT", 10.0),
 ];
 
 /// ============================= Helpers =============================
@@ -263,25 +276,40 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         return true;
     }
 
-    // 3a) Ultra-fast profit capture for immediate spikes (handles monitoring delays)
-    // Capture any profit >= 12% within the first minute, especially early spikes
-    if minutes_held <= 1.0 && pnl_percent >= 12.0 {
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "ULTRA_FAST_CAPTURE",
-                &format!(
-                    "{} pnl={:.2}% t={:.1}m (immediate spike capture)",
-                    position.symbol,
-                    pnl_percent,
-                    minutes_held
-                )
-            );
+    // 3a) Unified fast tier evaluation (early spike handling with optional retrace requirement)
+    if minutes_held <= 2.0 {
+        // only evaluate during early phase
+        for (max_min, min_profit, tag, retrace_req) in FAST_TIERS.iter() {
+            if minutes_held <= *max_min && pnl_percent >= *min_profit {
+                let retrace_ok = if *retrace_req <= 0.0 {
+                    true
+                } else {
+                    peak_profit - pnl_percent >= *retrace_req
+                };
+                if retrace_ok {
+                    if is_debug_profit_enabled() {
+                        log(
+                            LogTag::Profit,
+                            *tag,
+                            &format!(
+                                "{} pnl={:.2}% peak={:.2}% dd={:.2}% t={:.3}m req={:.1}% retrace_req={:.1}%",
+                                position.symbol,
+                                pnl_percent,
+                                peak_profit,
+                                peak_profit - pnl_percent,
+                                minutes_held,
+                                min_profit,
+                                retrace_req
+                            )
+                        );
+                    }
+                    return true;
+                }
+            }
         }
-        return true;
     }
 
-    // 3b) Round-trip neutral exit: after a meaningful peak, if we round-trip back to ~flat,
+    // 3c) Round-trip neutral exit: after a meaningful peak, if we round-trip back to ~flat,
     // prefer to exit instead of waiting for another full cycle.
     if peak_profit >= target_min && minutes_held >= 8.0 && pnl_percent <= 1.0 {
         if is_debug_profit_enabled() {
@@ -318,14 +346,49 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         return true;
     }
 
-    // 4) Quick capture windows (fast large moves)
+    // 4b) Exceptional profit immediate capture (overrides most other logic)
+    // For truly exceptional moves, capture immediately regardless of timing
+    if pnl_percent >= 200.0 {
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Profit,
+                "EXCEPTIONAL_PROFIT_200PCT",
+                &format!(
+                    "{} pnl={:.2}% t={:.1}m (exceptional 200%+ capture)",
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held
+                )
+            );
+        }
+        return true;
+    }
+
+    // 4c) Very high profit timed capture
+    if pnl_percent >= 150.0 && minutes_held <= 5.0 {
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Profit,
+                "VERY_HIGH_PROFIT_150PCT",
+                &format!(
+                    "{} pnl={:.2}% t={:.1}m (150%+ timed capture)",
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held
+                )
+            );
+        }
+        return true;
+    }
+
+    // 4d) Quick capture windows (fast large moves)
     for (window_minutes, required_profit) in QUICK_WINDOWS {
         if minutes_held <= *window_minutes && pnl_percent >= *required_profit {
             return true;
         }
     }
 
-    // 4a) Early moderate peak retention (handles 15-40% spikes better):
+    // 4e) Early moderate peak retention (handles 15-40% spikes better):
     // For peaks that are meaningful but below the "strong peak" threshold,
     // still protect against major givebacks to prevent round-trips to losses
     {
@@ -355,7 +418,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         }
     }
 
-    // 4b) Big-peak retention rule (anti-giveback):
+    // 4f) Big-peak retention rule (anti-giveback):
     // If we printed a strong early peak, require we retain a reasonable fraction of it.
     // Rationale: after big impulse moves, reversals are violent; we prefer to bank a
     // chunk rather than round-trip. Tunables chosen conservatively.
@@ -386,7 +449,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         }
     }
 
-    // 4c) General peak retention rule (time-agnostic):
+    // 4g) General peak retention rule (time-agnostic):
     // If we've printed a meaningful peak at any time, enforce retaining a reasonable fraction
     // to avoid multi-hour round trips. Less strict than the early rule above but always active.
     {
@@ -420,13 +483,34 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         }
     }
 
-    // 5) Instant large profits - take them immediately
+    // 5) Instant large profits (level 2 unconditional; level 1 conditional to let strong trends continue)
     if pnl_percent >= INSTANT_EXIT_LEVEL_2 {
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Profit,
+                "INSTANT_EXIT_L2",
+                &format!("{} pnl={:.2}% t={:.1}m", position.symbol, pnl_percent, minutes_held)
+            );
+        }
         return true;
     }
     if pnl_percent >= INSTANT_EXIT_LEVEL_1 {
-        // If we've had a meaningful drawdown off the peak or held a while, lock it in
-        if drawdown >= 10.0 || minutes_held > 10.0 {
+        // Require either some holding time OR a drawdown off the peak to avoid killing fresh momentum.
+        let drawdown_from_peak = peak_profit - pnl_percent;
+        if minutes_held >= 1.0 || drawdown_from_peak >= 4.0 {
+            if is_debug_profit_enabled() {
+                log(
+                    LogTag::Profit,
+                    "INSTANT_EXIT_L1",
+                    &format!(
+                        "{} pnl={:.2}% dd={:.2}% t={:.2}m",
+                        position.symbol,
+                        pnl_percent,
+                        drawdown_from_peak,
+                        minutes_held
+                    )
+                );
+            }
             return true;
         }
     }
