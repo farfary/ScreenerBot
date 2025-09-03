@@ -441,6 +441,266 @@ pub static INVALID_POOL_TOKENS: Lazy<
 > = Lazy::new(|| Arc::new(std::sync::RwLock::new(HashMap::new())));
 
 // =============================================================================
+// POSITION SELL DECISION CACHE AND RETRY SYSTEM
+// =============================================================================
+
+/// Represents a cached decision to sell a position with retry tracking
+#[derive(Clone, Debug)]
+pub struct SellDecisionInfo {
+    pub position_id: String,
+    pub mint: String,
+    pub symbol: String,
+    pub decision_reason: String,
+    pub decision_time: Instant,
+    pub first_attempt_time: Option<Instant>,
+    pub last_attempt_time: Option<Instant>,
+    pub attempt_count: u32,
+    pub next_retry_time: Instant,
+    pub last_error: Option<String>,
+    pub max_retries: u32,
+    pub is_emergency_sell: bool, // High priority sells (stop loss, etc.)
+}
+
+impl SellDecisionInfo {
+    /// Create new sell decision
+    pub fn new(
+        position_id: String,
+        mint: String,
+        symbol: String,
+        reason: String,
+        is_emergency: bool,
+    ) -> Self {
+        let now = Instant::now();
+        Self {
+            position_id,
+            mint,
+            symbol,
+            decision_reason: reason,
+            decision_time: now,
+            first_attempt_time: None,
+            last_attempt_time: None,
+            attempt_count: 0,
+            next_retry_time: now, // Can attempt immediately
+            last_error: None,
+            max_retries: if is_emergency { 10 } else { 5 }, // More retries for emergency sells
+            is_emergency_sell: is_emergency,
+        }
+    }
+
+    /// Check if this decision is ready for retry
+    pub fn can_retry(&self) -> bool {
+        if self.attempt_count >= self.max_retries {
+            return false;
+        }
+        Instant::now() >= self.next_retry_time
+    }
+
+    /// Update retry timing after failed attempt with exponential backoff
+    pub fn mark_attempt_failed(&mut self, error: String) {
+        let now = Instant::now();
+        
+        if self.first_attempt_time.is_none() {
+            self.first_attempt_time = Some(now);
+        }
+        
+        self.last_attempt_time = Some(now);
+        self.attempt_count += 1;
+        self.last_error = Some(error);
+
+        // Exponential backoff: emergency sells retry faster
+        let base_delay_secs = if self.is_emergency_sell { 30 } else { 60 };
+        let backoff_multiplier = 2_u32.pow(std::cmp::min(self.attempt_count, 6)); // Cap at 2^6 = 64x
+        let delay_secs = base_delay_secs * backoff_multiplier;
+        
+        // Cap maximum delay: 5 min for emergency, 15 min for normal
+        let max_delay = if self.is_emergency_sell { 300 } else { 900 };
+        let final_delay = std::cmp::min(delay_secs, max_delay);
+        
+        self.next_retry_time = now + Duration::from_secs(final_delay as u64);
+    }
+
+    /// Check if this decision is stale (older than configured time)
+    pub fn is_stale(&self) -> bool {
+        let max_age_secs = if self.is_emergency_sell { 
+            3600 // Emergency sells valid for 1 hour
+        } else { 
+            1800 // Normal sells valid for 30 minutes
+        };
+        
+        Instant::now().duration_since(self.decision_time).as_secs() > max_age_secs
+    }
+
+    /// Get human-readable status for logging
+    pub fn status_string(&self) -> String {
+        let age_secs = Instant::now().duration_since(self.decision_time).as_secs();
+        let next_retry_in = if self.next_retry_time > Instant::now() {
+            self.next_retry_time.duration_since(Instant::now()).as_secs()
+        } else {
+            0
+        };
+
+        format!(
+            "Decision: {} | Age: {}s | Attempts: {}/{} | Next retry: {}s | Emergency: {}",
+            self.decision_reason,
+            age_secs,
+            self.attempt_count,
+            self.max_retries,
+            next_retry_in,
+            self.is_emergency_sell
+        )
+    }
+}
+
+/// Global cache for sell decisions awaiting execution/retry
+pub static SELL_DECISION_CACHE: Lazy<
+    Arc<std::sync::RwLock<HashMap<String, SellDecisionInfo>>>
+> = Lazy::new(|| Arc::new(std::sync::RwLock::new(HashMap::new())));
+
+/// Add a position to the sell decision cache
+pub fn cache_sell_decision(
+    position_id: &str,
+    mint: &str,
+    symbol: &str,
+    reason: &str,
+    is_emergency: bool,
+) {
+    if let Some(mut cache) = safe_write_lock(&SELL_DECISION_CACHE, "cache_sell_decision") {
+        let decision = SellDecisionInfo::new(
+            position_id.to_string(),
+            mint.to_string(),
+            symbol.to_string(),
+            reason.to_string(),
+            is_emergency,
+        );
+        
+        cache.insert(position_id.to_string(), decision);
+        
+        log(
+            LogTag::Trader,
+            "SELL_DECISION_CACHED",
+            &format!(
+                "🎯 Cached sell decision for position {}: {} (emergency: {})",
+                position_id, reason, is_emergency
+            ),
+        );
+    }
+}
+
+/// Remove a position from sell decision cache (after successful sale)
+pub fn remove_sell_decision(position_id: &str) -> bool {
+    if let Some(mut cache) = safe_write_lock(&SELL_DECISION_CACHE, "remove_sell_decision") {
+        if let Some(decision) = cache.remove(position_id) {
+            log(
+                LogTag::Trader,
+                "SELL_DECISION_COMPLETED",
+                &format!(
+                    "✅ Completed sell decision for position {}: {} after {} attempts",
+                    position_id, decision.decision_reason, decision.attempt_count
+                ),
+            );
+            return true;
+        }
+    }
+    false
+}
+
+/// Mark a sell attempt as failed and update retry timing
+pub fn mark_sell_attempt_failed(position_id: &str, error: &str) {
+    if let Some(mut cache) = safe_write_lock(&SELL_DECISION_CACHE, "mark_sell_attempt_failed") {
+        if let Some(decision) = cache.get_mut(position_id) {
+            decision.mark_attempt_failed(error.to_string());
+            
+            log(
+                LogTag::Trader,
+                "SELL_ATTEMPT_FAILED",
+                &format!(
+                    "❌ Sell attempt failed for position {}: {} | {}",
+                    position_id, error, decision.status_string()
+                ),
+            );
+        }
+    }
+}
+
+/// Get positions ready for sell retry
+pub fn get_positions_ready_for_sell_retry() -> Vec<SellDecisionInfo> {
+    if let Some(cache) = safe_read_lock(&SELL_DECISION_CACHE, "get_positions_ready_for_sell_retry") {
+        cache
+            .values()
+            .filter(|decision| decision.can_retry() && !decision.is_stale())
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    }
+}
+
+/// Clean up stale sell decisions
+pub fn cleanup_stale_sell_decisions() -> usize {
+    if let Some(mut cache) = safe_write_lock(&SELL_DECISION_CACHE, "cleanup_stale_sell_decisions") {
+        let before_count = cache.len();
+        cache.retain(|_, decision| !decision.is_stale());
+        let removed_count = before_count - cache.len();
+        
+        if removed_count > 0 {
+            log(
+                LogTag::Trader,
+                "SELL_DECISIONS_CLEANUP",
+                &format!(
+                    "🧹 Cleaned up {} stale sell decisions ({} -> {})",
+                    removed_count, before_count, cache.len()
+                ),
+            );
+        }
+        
+        removed_count
+    } else {
+        0
+    }
+}
+
+/// Get sell decision cache status for debugging
+pub fn get_sell_decision_cache_status() -> String {
+    if let Some(cache) = safe_read_lock(&SELL_DECISION_CACHE, "get_sell_decision_cache_status") {
+        if cache.is_empty() {
+            return "Sell Decision Cache: Empty".to_string();
+        }
+
+        let total = cache.len();
+        let emergency_count = cache.values().filter(|d| d.is_emergency_sell).count();
+        let ready_for_retry = cache.values().filter(|d| d.can_retry() && !d.is_stale()).count();
+        let exhausted_retries = cache.values().filter(|d| d.attempt_count >= d.max_retries).count();
+        let stale_count = cache.values().filter(|d| d.is_stale()).count();
+
+        let mut status = format!(
+            "Sell Decision Cache: {} total ({} emergency, {} ready for retry, {} exhausted, {} stale)\n",
+            total, emergency_count, ready_for_retry, exhausted_retries, stale_count
+        );
+
+        // Show details for first few entries
+        for (i, (pos_id, decision)) in cache.iter().enumerate() {
+            if i >= 5 { // Limit to first 5 for readability
+                if total > 5 {
+                    status.push_str(&format!("... and {} more\n", total - 5));
+                }
+                break;
+            }
+            
+            status.push_str(&format!(
+                "  {}: {} | {}\n",
+                pos_id,
+                decision.mint.get(..8).unwrap_or(&decision.mint),
+                decision.status_string()
+            ));
+        }
+
+        status
+    } else {
+        "Sell Decision Cache: Lock error".to_string()
+    }
+}
+
+// =============================================================================
 // LIGHTWEIGHT TOKEN META CACHE FOR SUMMARIES
 // =============================================================================
 
@@ -3376,6 +3636,59 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             })
             .collect();
 
+        // First, process any cached sell decisions that are ready for retry
+        let retry_decisions = get_positions_ready_for_sell_retry();
+        if !retry_decisions.is_empty() {
+            log(
+                LogTag::Trader,
+                "SELL_RETRY_PROCESSING",
+                &format!("Processing {} cached sell decisions for retry", retry_decisions.len()),
+            );
+
+            for decision in retry_decisions {
+                // Verify position still exists and is open
+                if let Some(position) = open_positions_data.iter().find(|p| p.mint == decision.mint) {
+                    // Get current price for this position
+                    if let Some((current_price, _)) = price_map.get(&position.mint) {
+                        // Fetch full token from database
+                        if let Some(full_token) = crate::tokens::get_token_from_db(&position.mint).await {
+                            log(
+                                LogTag::Trader,
+                                "SELL_RETRY",
+                                &format!(
+                                    "🔄 Retrying sell for {} ({}): {} - Attempt {}/{}",
+                                    position.symbol,
+                                    decision.position_id,
+                                    decision.decision_reason,
+                                    decision.attempt_count + 1,
+                                    decision.max_retries
+                                ),
+                            );
+
+                            positions_to_close.push((
+                                position.clone(),
+                                full_token,
+                                *current_price,
+                                decision.decision_reason.clone(),
+                                Some(decision.clone()), // Include decision info for tracking
+                            ));
+                        }
+                    }
+                } else {
+                    // Position no longer exists, remove from cache
+                    remove_sell_decision(&decision.position_id);
+                    log(
+                        LogTag::Trader,
+                        "SELL_DECISION_STALE",
+                        &format!("Position {} no longer exists, removing cached sell decision", decision.position_id),
+                    );
+                }
+            }
+        }
+
+        // Clean up stale sell decisions periodically
+        cleanup_stale_sell_decisions();
+
         // Now process each position with async calls (mutex is released)
         for position in open_positions_data.into_iter() {
             let position = position; // local copy for calculations/logs
@@ -3460,8 +3773,42 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         );
                     }
 
+                    // Check if we already have a cached sell decision for this position
+                    let position_id = format!("{}_{}", position.mint, position.entry_time.timestamp());
+                    
+                    if let Some(cache_guard) = safe_read_lock(&SELL_DECISION_CACHE, "check_cached_decision") {
+                        if let Some(cached_decision) = cache_guard.get(&position_id) {
+                            if !cached_decision.is_stale() {
+                                // We already have a cached decision, it will be processed in the retry section
+                                if is_debug_trader_enabled() {
+                                    debug_trader_log(
+                                        "SELL_CACHED",
+                                        &format!(
+                                            "{} | Cached sell decision exists: {} | {}",
+                                            position.symbol,
+                                            cached_decision.decision_reason,
+                                            cached_decision.status_string()
+                                        )
+                                    );
+                                }
+                                continue;
+                            }
+                        }
+                    }
+
                     if should_exit {
-                        // CRITICAL: Check pool availability before selling
+                        // Determine sell reason and urgency
+                        let sell_reason = if debug_force_sell {
+                            "Debug force sell".to_string()
+                        } else {
+                            format!("Trading decision: P&L {:.2}% ({:.6} SOL)", pnl_percent, pnl_sol)
+                        };
+                        
+                        let is_emergency = debug_force_sell || 
+                            pnl_percent <= -20.0 || // Stop loss situations
+                            pnl_percent >= 50.0;   // High profit situations
+                        
+                        // CRITICAL: Check pool availability before caching sell decision
                         let pool_service = get_pool_service();
                         let has_pool_availability = pool_service.check_token_availability(
                             &position.mint
@@ -3481,15 +3828,26 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             continue;
                         }
 
-                        // Fetch full token from database
+                        // Cache the sell decision instead of immediately processing
+                        cache_sell_decision(
+                            &position_id,
+                            &position.mint,
+                            &position.symbol,
+                            &sell_reason,
+                            is_emergency,
+                        );
+
+                        // Fetch full token from database for immediate processing
                         let Some(full_token) = crate::tokens::get_token_from_db(
                             &position.mint
                         ).await else {
+                            // If token not found in DB, remove the cached decision since we can't trade it
+                            remove_sell_decision(&position_id);
                             log(
                                 LogTag::Trader,
                                 "ERROR",
                                 &format!(
-                                    "Token not found in DB for mint {} — skipping sell",
+                                    "Token not found in DB for mint {} — removing cached sell decision",
                                     position.mint
                                 )
                             );
@@ -3498,22 +3856,25 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                         log(
                             LogTag::Trader,
-                            "SELL",
+                            "SELL_DECISION",
                             &format!(
-                                "Sell signal for {} ({}) - P&L: {:.2}% ({:.6} SOL) - SHOULD EXIT",
+                                "Cached sell decision for {} ({}) - P&L: {:.2}% ({:.6} SOL) - {} (Emergency: {})",
                                 position.symbol,
                                 position.mint,
                                 pnl_percent,
-                                pnl_sol
+                                pnl_sol,
+                                sell_reason,
+                                is_emergency
                             )
                         );
 
+                        // Add to immediate processing (first attempt)
                         positions_to_close.push((
-                            position.clone(), // keep for logging only
+                            position.clone(),
                             full_token,
                             current_price,
-                            now,
-                            1.0, // High urgency since we decided to exit
+                            sell_reason.clone(),
+                            None, // No cached decision yet (this is the first attempt)
                         ));
                     } else {
                         if is_debug_trader_enabled() {
@@ -3568,7 +3929,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             let mut handles = Vec::new();
 
             // Process all sell orders concurrently
-            for (position, token, exit_price, _exit_time, _sell_urgency) in positions_to_close {
+            for (position, token, exit_price, sell_reason, cached_decision_opt) in positions_to_close {
                 // Check for shutdown before spawning tasks
                 if
                     check_shutdown_or_delay(
@@ -3599,6 +3960,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                 // Clone shutdown for use in the spawned sell task
                 let shutdown_for_task = shutdown.clone();
+                let cached_decision_for_task = cached_decision_opt.clone();
+                
                 // We already have the position from the analysis phase for logging only
                 let handle = tokio::spawn(async move {
                     let _permit = permit; // Keep permit alive for duration of task
@@ -3608,6 +3971,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                     let position = position;
                     let token_symbol = token.symbol.clone();
+                    let position_id = format!("{}_{}", position.mint, position.entry_time.timestamp());
 
                     // Check for shutdown before starting sell operation (non-blocking check)
                     let shutdown_check = tokio::time::timeout(
@@ -3615,7 +3979,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         shutdown_for_task.notified()
                     ).await;
                     if shutdown_check.is_ok() {
-                        return false;
+                        return (false, position_id, "Shutdown requested".to_string());
                     }
 
                     // Wrap the sell operation in a timeout
@@ -3641,23 +4005,31 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                 "SUCCESS",
                                 &format!("Successfully closed position for {}", token_symbol)
                             );
-                            true
+                            
+                            // Remove successful sell decision from cache
+                            remove_sell_decision(&position_id);
+                            
+                            (true, position_id, "Success".to_string())
                         }
                         Ok(Err(e)) => {
+                            let error_msg = format!("Failed to close position for {}: {}", token_symbol, e);
                             log(
                                 LogTag::Trader,
                                 "ERROR",
-                                &format!("Failed to close position for {}: {}", token_symbol, e)
+                                &error_msg
                             );
-                            false
+                            
+                            (false, position_id, error_msg)
                         }
                         Err(_) => {
+                            let error_msg = format!("Sell operation for {} timed out", token_symbol);
                             log(
                                 LogTag::Trader,
                                 "ERROR",
-                                &format!("Sell operation for {} timed out", token_symbol)
+                                &error_msg
                             );
-                            false
+                            
+                            (false, position_id, error_msg)
                         }
                     }
                 });
@@ -3692,14 +4064,27 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         {
                             Ok(task_result) =>
                                 match task_result {
-                                    Ok(success) => {
+                                    Ok((success, position_id, message)) => {
                                         completed += 1;
                                         if success {
                                             successful += 1;
+                                        } else {
+                                            // Mark failed sell attempt for retry
+                                            mark_sell_attempt_failed(&position_id, &message);
+                                            log(
+                                                LogTag::Trader,
+                                                "WARN",
+                                                &format!("Sell attempt failed for position {}: {}", position_id, message)
+                                            );
                                         }
                                     }
-                                    Err(_) => {
+                                    Err(e) => {
                                         completed += 1;
+                                        log(
+                                            LogTag::Trader,
+                                            "ERROR",
+                                            &format!("Sell task panicked: {}", e)
+                                        );
                                     }
                                 }
                             Err(_) => {
