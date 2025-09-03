@@ -1,4 +1,5 @@
 use screenerbot::{
+    configs::read_configs,
     logger::{ init_file_logging, log, LogTag },
     websocket,
     utils::get_wallet_address,
@@ -14,11 +15,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     log(LogTag::System, "INFO", &format!("Monitoring wallet: {}", &wallet_address[..8]));
 
+    // Load WebSocket URL from config, fallback to default
+    let ws_url = match read_configs() {
+        Ok(config) => {
+            log(LogTag::System, "INFO", &format!("📡 Using premium WebSocket URL from config"));
+            config.rpc_url_ws_premium
+        }
+        Err(e) => {
+            log(
+                LogTag::System,
+                "INFO",
+                &format!("⚠️ Failed to load config ({}), using default WebSocket", e)
+            );
+            websocket::SolanaWebSocketClient::get_default_ws_url()
+        }
+    };
+
     // Start WebSocket monitoring
-    let mut receiver = websocket::start_websocket_monitoring(
-        wallet_address,
-        Some(websocket::SolanaWebSocketClient::get_default_ws_url())
-    ).await?;
+    let mut receiver = websocket::start_websocket_monitoring(wallet_address, Some(ws_url)).await?;
 
     log(LogTag::System, "INFO", "🔌 WebSocket monitoring started - waiting for transactions...");
 

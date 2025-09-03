@@ -16,6 +16,7 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::time::Duration;
 
+use crate::configs::read_configs;
 use crate::errors::blockchain::parse_structured_solana_error;
 use crate::global::is_debug_transactions_enabled;
 use crate::logger::{ log, LogTag };
@@ -146,9 +147,28 @@ impl TransactionsManager {
             &format!("🔌 Initializing WebSocket monitoring for wallet: {}", &wallet_address[..8])
         );
 
-        // TODO: Add config support for custom WebSocket URLs
-        // For now, use default mainnet WebSocket
-        let ws_url = websocket::SolanaWebSocketClient::get_default_ws_url();
+        // Load WebSocket URL from config, fallback to default if config loading fails
+        let ws_url = match read_configs() {
+            Ok(config) => {
+                log(
+                    LogTag::Transactions,
+                    "WEBSOCKET_CONFIG",
+                    &format!(
+                        "📡 Using premium WebSocket URL from config: {}",
+                        &config.rpc_url_ws_premium
+                    )
+                );
+                config.rpc_url_ws_premium
+            }
+            Err(e) => {
+                log(
+                    LogTag::Transactions,
+                    "WEBSOCKET_FALLBACK",
+                    &format!("⚠️ Failed to load config ({}), using default WebSocket URL", e)
+                );
+                websocket::SolanaWebSocketClient::get_default_ws_url()
+            }
+        };
 
         // Start WebSocket monitoring and get receiver
         let receiver = websocket::start_websocket_monitoring(wallet_address, Some(ws_url)).await?;

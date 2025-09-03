@@ -328,6 +328,7 @@ pub enum LogTag {
     RlLearn,
     Summary,
     Transactions,
+    Websocket,
     Positions,
     Test,
     Other(String),
@@ -356,6 +357,7 @@ impl std::fmt::Display for LogTag {
             LogTag::RlLearn => format!("{:<8}", "RL_LEARN").bright_cyan().bold(), // 🤖 AI cyan
             LogTag::Summary => format!("{:<8}", "SUMMARY").bright_white().bold(), // 📊 Summary white
             LogTag::Transactions => format!("{:<8}", "TX").bright_blue().bold(), // 📝 Transactions blue
+            LogTag::Websocket => format!("{:<8}", "WS").bright_cyan().bold(), // 🌐 WebSocket cyan
             LogTag::Positions => format!("{:<8}", "Positions").bright_yellow().bold(), // 📊 Positions yellow
             LogTag::Test => format!("{:<8}", "TEST").bright_blue().bold(), // 🧪 Test blue
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
@@ -460,6 +462,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Transactions =>
             format!("{:<width$}", "TX", width = TAG_WIDTH)
                 .bright_blue()
+                .bold(),
+        LogTag::Websocket =>
+            format!("{:<width$}", "WS", width = TAG_WIDTH)
+                .bright_cyan()
                 .bold(),
         LogTag::Positions =>
             format!("{:<width$}", "Positions", width = TAG_WIDTH)
@@ -582,6 +588,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::RlLearn => "RL_LEARN",
         LogTag::Summary => "SUMMARY",
         LogTag::Transactions => "TX",
+        LogTag::Websocket => "WS",
         LogTag::Positions => "Positions",
         LogTag::Test => "TEST",
         LogTag::Other(ref s) => s,

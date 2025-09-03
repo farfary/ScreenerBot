@@ -150,6 +150,11 @@ pub fn is_debug_transactions_enabled() -> bool {
     has_arg("--debug-transactions")
 }
 
+/// WebSocket module debug mode
+pub fn is_debug_websocket_enabled() -> bool {
+    has_arg("--debug-websocket")
+}
+
 /// RPC operations debug mode
 pub fn is_debug_rpc_enabled() -> bool {
     has_arg("--debug-rpc")
@@ -253,6 +258,7 @@ pub fn print_help() {
     println!("    --debug-system            System operations debug mode");
     println!("    --debug-trader            Trader module debug mode");
     println!("    --debug-transactions      Transactions module debug mode");
+    println!("    --debug-websocket         WebSocket connection debug mode");
     println!("    --debug-wallet            Wallet operations debug mode");
     println!();
     println!("EXAMPLES:");
@@ -292,6 +298,7 @@ pub fn is_any_debug_enabled() -> bool {
         is_debug_summary_enabled() ||
         is_debug_summary_logging_enabled() ||
         is_debug_transactions_enabled() ||
+        is_debug_websocket_enabled() ||
         is_debug_rpc_enabled() ||
         is_debug_positions_enabled() ||
         is_debug_ata_enabled()
@@ -354,6 +361,9 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     }
     if is_debug_transactions_enabled() {
         modes.push("transactions");
+    }
+    if is_debug_websocket_enabled() {
+        modes.push("websocket");
     }
     if is_debug_rpc_enabled() {
         modes.push("rpc");

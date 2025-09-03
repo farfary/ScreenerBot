@@ -29,6 +29,8 @@ pub struct Configs {
     pub rpc_url: String,
     /// Premium RPC URL for enhanced performance operations
     pub rpc_url_premium: String,
+    /// Premium WebSocket URL for real-time transaction monitoring
+    pub rpc_url_ws_premium: String,
     /// List of fallback RPC URLs for redundancy
     pub rpc_fallbacks: Vec<String>,
     /// Solscan API token for external transaction analysis (optional)
@@ -251,6 +253,7 @@ pub fn create_default_config() -> Configs {
         main_wallet_private: "your_base58_private_key_here".to_string(),
         rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
         rpc_url_premium: "https://your-premium-rpc-url.com".to_string(),
+        rpc_url_ws_premium: "wss://your-premium-ws-url.com".to_string(),
         rpc_fallbacks: vec![
             "https://fallback1.com".to_string(),
             "https://fallback2.com".to_string()
@@ -338,6 +341,7 @@ mod tests {
             main_wallet_private: "[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]".to_string(),
             rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
             rpc_url_premium: "https://premium.com".to_string(),
+            rpc_url_ws_premium: "wss://premium-ws.com".to_string(),
             rpc_fallbacks: vec![],
             solscan_api_token: None,
         };
