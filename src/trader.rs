@@ -468,7 +468,7 @@ impl SellDecisionInfo {
         mint: String,
         symbol: String,
         reason: String,
-        is_emergency: bool,
+        is_emergency: bool
     ) -> Self {
         let now = Instant::now();
         Self {
@@ -482,7 +482,11 @@ impl SellDecisionInfo {
             attempt_count: 0,
             next_retry_time: now, // Can attempt immediately
             last_error: None,
-            max_retries: if is_emergency { 10 } else { 5 }, // More retries for emergency sells
+            max_retries: if is_emergency {
+                20
+            } else {
+                15
+            }, // Many more retries with smart timing
             is_emergency_sell: is_emergency,
         }
     }
@@ -495,38 +499,54 @@ impl SellDecisionInfo {
         Instant::now() >= self.next_retry_time
     }
 
-    /// Update retry timing after failed attempt with exponential backoff
+    /// Update retry timing after failed attempt with DYNAMIC strategy for trading
     pub fn mark_attempt_failed(&mut self, error: String) {
         let now = Instant::now();
-        
+
         if self.first_attempt_time.is_none() {
             self.first_attempt_time = Some(now);
         }
-        
+
         self.last_attempt_time = Some(now);
         self.attempt_count += 1;
         self.last_error = Some(error);
 
-        // Exponential backoff: emergency sells retry faster
-        let base_delay_secs = if self.is_emergency_sell { 30 } else { 60 };
-        let backoff_multiplier = 2_u32.pow(std::cmp::min(self.attempt_count, 6)); // Cap at 2^6 = 64x
-        let delay_secs = base_delay_secs * backoff_multiplier;
-        
-        // Cap maximum delay: 5 min for emergency, 15 min for normal
-        let max_delay = if self.is_emergency_sell { 300 } else { 900 };
-        let final_delay = std::cmp::min(delay_secs, max_delay);
-        
-        self.next_retry_time = now + Duration::from_secs(final_delay as u64);
+        // DYNAMIC RETRY STRATEGY: 10 fast attempts, then intelligent backoff
+        use rand::Rng;
+        let delay_secs = if self.attempt_count <= 10 {
+            // First 10 attempts: 5-10 seconds (randomized to avoid timing patterns)
+            rand::thread_rng().gen_range(5..=10)
+        } else {
+            // After 10 fast attempts: Dynamic backoff with min/max bounds
+            let (min_delay, max_delay) = if self.is_emergency_sell {
+                (15, 120) // Emergency: 15 seconds to 2 minutes
+            } else {
+                (30, 300) // Normal: 30 seconds to 5 minutes
+            };
+
+            // Progressive backoff: starts at min, grows to max
+            let backoff_attempts = self.attempt_count - 10; // Attempts beyond the fast phase
+            let max_progression = 8.0; // After 8 backoff attempts, stay at max
+            let progression = ((backoff_attempts as f64) / max_progression).min(1.0); // 0.0 to 1.0
+
+            // Interpolate between min and max with randomization (±20%)
+            let target_delay = (min_delay as f64) + progression * ((max_delay - min_delay) as f64);
+            let randomized_delay = target_delay * rand::thread_rng().gen_range(0.8..=1.2);
+
+            randomized_delay.round() as u64
+        };
+
+        self.next_retry_time = now + Duration::from_secs(delay_secs);
     }
 
     /// Check if this decision is stale (older than configured time)
     pub fn is_stale(&self) -> bool {
-        let max_age_secs = if self.is_emergency_sell { 
+        let max_age_secs = if self.is_emergency_sell {
             3600 // Emergency sells valid for 1 hour
-        } else { 
+        } else {
             1800 // Normal sells valid for 30 minutes
         };
-        
+
         Instant::now().duration_since(self.decision_time).as_secs() > max_age_secs
     }
 
@@ -549,6 +569,70 @@ impl SellDecisionInfo {
             self.is_emergency_sell
         )
     }
+
+    /// Demo the new retry schedule (for testing/debugging)
+    pub fn demo_retry_schedule(is_emergency: bool) -> String {
+        let mut output = Vec::new();
+        output.push(format!("🚀 NEW DYNAMIC RETRY SCHEDULE (Emergency: {})", is_emergency));
+        output.push("".to_string());
+
+        // Fast phase (10 attempts)
+        output.push("📈 FAST PHASE - First 10 attempts: 5-10 seconds each".to_string());
+        for i in 1..=10 {
+            output.push(format!("  Attempt {}: 5-10 seconds", i));
+        }
+
+        output.push("".to_string());
+
+        // Dynamic backoff phase
+        let (min_delay, max_delay) = if is_emergency { (15, 120) } else { (30, 300) };
+        output.push(
+            format!("⚖️  DYNAMIC BACKOFF - Attempts 11+: {}-{} seconds", min_delay, max_delay)
+        );
+
+        // Show progression
+        for backoff_attempt in 0..8 {
+            let attempt_num = 11 + backoff_attempt;
+            let progression = ((backoff_attempt as f64) / 8.0).min(1.0);
+            let target_delay = (min_delay as f64) + progression * ((max_delay - min_delay) as f64);
+            output.push(format!("  Attempt {}: ~{:.0} seconds (±20%)", attempt_num, target_delay));
+        }
+
+        let max_retries = if is_emergency { 20 } else { 15 };
+        output.push(format!("  Attempts 19-{}: ~{} seconds (±20%)", max_retries, max_delay));
+
+        output.push("".to_string());
+        output.push(format!("🎯 Total max attempts: {}", max_retries));
+
+        output.join("\n")
+    }
+
+    /// Preview the retry schedule for debugging (static method)
+    pub fn preview_retry_schedule(is_emergency: bool) -> String {
+        let mut schedule = Vec::new();
+        for attempt in 1..=8 {
+            let delay_secs = match attempt {
+                1 => if is_emergency { 2 } else { 3 }
+                2 => if is_emergency { 5 } else { 8 }
+                3 => if is_emergency { 15 } else { 20 }
+                4 => if is_emergency { 30 } else { 45 }
+                5 => if is_emergency { 60 } else { 90 }
+                6 => if is_emergency { 120 } else { 180 }
+                7 => if is_emergency { 180 } else { 300 }
+                _ => if is_emergency { 300 } else { 600 }
+            };
+            schedule.push(format!("Attempt {}: {}s", attempt, delay_secs));
+        }
+        format!(
+            "Retry schedule for {} sells:\n{}",
+            if is_emergency {
+                "EMERGENCY"
+            } else {
+                "NORMAL"
+            },
+            schedule.join(", ")
+        )
+    }
 }
 
 /// Global cache for sell decisions awaiting execution/retry
@@ -562,7 +646,7 @@ pub fn cache_sell_decision(
     mint: &str,
     symbol: &str,
     reason: &str,
-    is_emergency: bool,
+    is_emergency: bool
 ) {
     if let Some(mut cache) = safe_write_lock(&SELL_DECISION_CACHE, "cache_sell_decision") {
         let decision = SellDecisionInfo::new(
@@ -570,18 +654,32 @@ pub fn cache_sell_decision(
             mint.to_string(),
             symbol.to_string(),
             reason.to_string(),
-            is_emergency,
+            is_emergency
         );
-        
+
         cache.insert(position_id.to_string(), decision);
-        
+
+        // Show the new dynamic retry schedule
+        let retry_info = if is_emergency {
+            "10x fast (5-10s), then 15s→120s dynamic backoff, max 20 attempts"
+        } else {
+            "10x fast (5-10s), then 30s→300s dynamic backoff, max 15 attempts"
+        };
+
         log(
             LogTag::Trader,
             "SELL_DECISION_CACHED",
             &format!(
-                "🎯 Cached sell decision for position {}: {} (emergency: {})",
-                position_id, reason, is_emergency
-            ),
+                "🎯 Cached {} sell for {}: {} | Strategy: {}",
+                if is_emergency {
+                    "EMERGENCY"
+                } else {
+                    "NORMAL"
+                },
+                symbol,
+                reason,
+                retry_info
+            )
         );
     }
 }
@@ -595,8 +693,10 @@ pub fn remove_sell_decision(position_id: &str) -> bool {
                 "SELL_DECISION_COMPLETED",
                 &format!(
                     "✅ Completed sell decision for position {}: {} after {} attempts",
-                    position_id, decision.decision_reason, decision.attempt_count
-                ),
+                    position_id,
+                    decision.decision_reason,
+                    decision.attempt_count
+                )
             );
             return true;
         }
@@ -609,14 +709,16 @@ pub fn mark_sell_attempt_failed(position_id: &str, error: &str) {
     if let Some(mut cache) = safe_write_lock(&SELL_DECISION_CACHE, "mark_sell_attempt_failed") {
         if let Some(decision) = cache.get_mut(position_id) {
             decision.mark_attempt_failed(error.to_string());
-            
+
             log(
                 LogTag::Trader,
                 "SELL_ATTEMPT_FAILED",
                 &format!(
                     "❌ Sell attempt failed for position {}: {} | {}",
-                    position_id, error, decision.status_string()
-                ),
+                    position_id,
+                    error,
+                    decision.status_string()
+                )
             );
         }
     }
@@ -641,18 +743,20 @@ pub fn cleanup_stale_sell_decisions() -> usize {
         let before_count = cache.len();
         cache.retain(|_, decision| !decision.is_stale());
         let removed_count = before_count - cache.len();
-        
+
         if removed_count > 0 {
             log(
                 LogTag::Trader,
                 "SELL_DECISIONS_CLEANUP",
                 &format!(
                     "🧹 Cleaned up {} stale sell decisions ({} -> {})",
-                    removed_count, before_count, cache.len()
-                ),
+                    removed_count,
+                    before_count,
+                    cache.len()
+                )
             );
         }
-        
+
         removed_count
     } else {
         0
@@ -667,31 +771,50 @@ pub fn get_sell_decision_cache_status() -> String {
         }
 
         let total = cache.len();
-        let emergency_count = cache.values().filter(|d| d.is_emergency_sell).count();
-        let ready_for_retry = cache.values().filter(|d| d.can_retry() && !d.is_stale()).count();
-        let exhausted_retries = cache.values().filter(|d| d.attempt_count >= d.max_retries).count();
-        let stale_count = cache.values().filter(|d| d.is_stale()).count();
+        let emergency_count = cache
+            .values()
+            .filter(|d| d.is_emergency_sell)
+            .count();
+        let ready_for_retry = cache
+            .values()
+            .filter(|d| d.can_retry() && !d.is_stale())
+            .count();
+        let exhausted_retries = cache
+            .values()
+            .filter(|d| d.attempt_count >= d.max_retries)
+            .count();
+        let stale_count = cache
+            .values()
+            .filter(|d| d.is_stale())
+            .count();
 
         let mut status = format!(
             "Sell Decision Cache: {} total ({} emergency, {} ready for retry, {} exhausted, {} stale)\n",
-            total, emergency_count, ready_for_retry, exhausted_retries, stale_count
+            total,
+            emergency_count,
+            ready_for_retry,
+            exhausted_retries,
+            stale_count
         );
 
         // Show details for first few entries
         for (i, (pos_id, decision)) in cache.iter().enumerate() {
-            if i >= 5 { // Limit to first 5 for readability
+            if i >= 5 {
+                // Limit to first 5 for readability
                 if total > 5 {
                     status.push_str(&format!("... and {} more\n", total - 5));
                 }
                 break;
             }
-            
-            status.push_str(&format!(
-                "  {}: {} | {}\n",
-                pos_id,
-                decision.mint.get(..8).unwrap_or(&decision.mint),
-                decision.status_string()
-            ));
+
+            status.push_str(
+                &format!(
+                    "  {}: {} | {}\n",
+                    pos_id,
+                    decision.mint.get(..8).unwrap_or(&decision.mint),
+                    decision.status_string()
+                )
+            );
         }
 
         status
@@ -776,12 +899,6 @@ fn fmt_opt9(v: Option<f64>) -> String {
 fn short8(s: &str) -> String {
     if s.len() > 8 { s[..8].to_string() } else { s.to_string() }
 }
-
-// =============================================================================
-// TOKEN CACHE FOR PERFORMANCE OPTIMIZATION
-// =============================================================================
-
-// (duplicate block removed)
 
 // =============================================================================
 // PER-TOKEN RE-ENTRY COOLDOWN CACHE
@@ -3642,16 +3759,24 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             log(
                 LogTag::Trader,
                 "SELL_RETRY_PROCESSING",
-                &format!("Processing {} cached sell decisions for retry", retry_decisions.len()),
+                &format!("Processing {} cached sell decisions for retry", retry_decisions.len())
             );
 
             for decision in retry_decisions {
                 // Verify position still exists and is open
-                if let Some(position) = open_positions_data.iter().find(|p| p.mint == decision.mint) {
+                if
+                    let Some(position) = open_positions_data
+                        .iter()
+                        .find(|p| p.mint == decision.mint)
+                {
                     // Get current price for this position
                     if let Some((current_price, _)) = price_map.get(&position.mint) {
                         // Fetch full token from database
-                        if let Some(full_token) = crate::tokens::get_token_from_db(&position.mint).await {
+                        if
+                            let Some(full_token) = crate::tokens::get_token_from_db(
+                                &position.mint
+                            ).await
+                        {
                             log(
                                 LogTag::Trader,
                                 "SELL_RETRY",
@@ -3662,7 +3787,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                     decision.decision_reason,
                                     decision.attempt_count + 1,
                                     decision.max_retries
-                                ),
+                                )
                             );
 
                             positions_to_close.push((
@@ -3680,7 +3805,10 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     log(
                         LogTag::Trader,
                         "SELL_DECISION_STALE",
-                        &format!("Position {} no longer exists, removing cached sell decision", decision.position_id),
+                        &format!(
+                            "Position {} no longer exists, removing cached sell decision",
+                            decision.position_id
+                        )
                     );
                 }
             }
@@ -3774,9 +3902,18 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     }
 
                     // Check if we already have a cached sell decision for this position
-                    let position_id = format!("{}_{}", position.mint, position.entry_time.timestamp());
-                    
-                    if let Some(cache_guard) = safe_read_lock(&SELL_DECISION_CACHE, "check_cached_decision") {
+                    let position_id = format!(
+                        "{}_{}",
+                        position.mint,
+                        position.entry_time.timestamp()
+                    );
+
+                    if
+                        let Some(cache_guard) = safe_read_lock(
+                            &SELL_DECISION_CACHE,
+                            "check_cached_decision"
+                        )
+                    {
                         if let Some(cached_decision) = cache_guard.get(&position_id) {
                             if !cached_decision.is_stale() {
                                 // We already have a cached decision, it will be processed in the retry section
@@ -3801,13 +3938,18 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         let sell_reason = if debug_force_sell {
                             "Debug force sell".to_string()
                         } else {
-                            format!("Trading decision: P&L {:.2}% ({:.6} SOL)", pnl_percent, pnl_sol)
+                            format!(
+                                "Trading decision: P&L {:.2}% ({:.6} SOL)",
+                                pnl_percent,
+                                pnl_sol
+                            )
                         };
-                        
-                        let is_emergency = debug_force_sell || 
+
+                        let is_emergency =
+                            debug_force_sell ||
                             pnl_percent <= -20.0 || // Stop loss situations
-                            pnl_percent >= 50.0;   // High profit situations
-                        
+                            pnl_percent >= 50.0; // High profit situations
+
                         // CRITICAL: Check pool availability before caching sell decision
                         let pool_service = get_pool_service();
                         let has_pool_availability = pool_service.check_token_availability(
@@ -3834,7 +3976,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             &position.mint,
                             &position.symbol,
                             &sell_reason,
-                            is_emergency,
+                            is_emergency
                         );
 
                         // Fetch full token from database for immediate processing
@@ -3929,7 +4071,13 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             let mut handles = Vec::new();
 
             // Process all sell orders concurrently
-            for (position, token, exit_price, sell_reason, cached_decision_opt) in positions_to_close {
+            for (
+                position,
+                token,
+                exit_price,
+                sell_reason,
+                cached_decision_opt,
+            ) in positions_to_close {
                 // Check for shutdown before spawning tasks
                 if
                     check_shutdown_or_delay(
@@ -3961,7 +4109,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 // Clone shutdown for use in the spawned sell task
                 let shutdown_for_task = shutdown.clone();
                 let cached_decision_for_task = cached_decision_opt.clone();
-                
+
                 // We already have the position from the analysis phase for logging only
                 let handle = tokio::spawn(async move {
                     let _permit = permit; // Keep permit alive for duration of task
@@ -3971,7 +4119,11 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                     let position = position;
                     let token_symbol = token.symbol.clone();
-                    let position_id = format!("{}_{}", position.mint, position.entry_time.timestamp());
+                    let position_id = format!(
+                        "{}_{}",
+                        position.mint,
+                        position.entry_time.timestamp()
+                    );
 
                     // Check for shutdown before starting sell operation (non-blocking check)
                     let shutdown_check = tokio::time::timeout(
@@ -4005,30 +4157,27 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                 "SUCCESS",
                                 &format!("Successfully closed position for {}", token_symbol)
                             );
-                            
+
                             // Remove successful sell decision from cache
                             remove_sell_decision(&position_id);
-                            
+
                             (true, position_id, "Success".to_string())
                         }
                         Ok(Err(e)) => {
-                            let error_msg = format!("Failed to close position for {}: {}", token_symbol, e);
-                            log(
-                                LogTag::Trader,
-                                "ERROR",
-                                &error_msg
+                            let error_msg = format!(
+                                "Failed to close position for {}: {}",
+                                token_symbol,
+                                e
                             );
-                            
+                            log(LogTag::Trader, "ERROR", &error_msg);
+
                             (false, position_id, error_msg)
                         }
                         Err(_) => {
-                            let error_msg = format!("Sell operation for {} timed out", token_symbol);
-                            log(
-                                LogTag::Trader,
-                                "ERROR",
-                                &error_msg
-                            );
-                            
+                            let error_msg =
+                                format!("Sell operation for {} timed out", token_symbol);
+                            log(LogTag::Trader, "ERROR", &error_msg);
+
                             (false, position_id, error_msg)
                         }
                     }
@@ -4074,7 +4223,11 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                             log(
                                                 LogTag::Trader,
                                                 "WARN",
-                                                &format!("Sell attempt failed for position {}: {}", position_id, message)
+                                                &format!(
+                                                    "Sell attempt failed for position {}: {}",
+                                                    position_id,
+                                                    message
+                                                )
                                             );
                                         }
                                     }
