@@ -774,12 +774,17 @@ impl RpcRateLimiter {
 
         // After 5 consecutive successes, reduce interval back towards normal
         if self.consecutive_successes >= 5 {
+            let had_previous_429s = self.consecutive_429s > 0;
             self.consecutive_429s = self.consecutive_429s.saturating_sub(1);
             self.consecutive_successes = 0;
 
             if self.consecutive_429s == 0 {
                 self.current_interval = self.base_interval;
-                log(LogTag::Rpc, "RATE_LIMIT", "Rate limit backoff reset to normal");
+                // Only log rate limit reset if we actually had 429 errors to recover from
+                // This prevents spam when using premium-only RPC mode
+                if had_previous_429s {
+                    log(LogTag::Rpc, "RATE_LIMIT", "Rate limit backoff reset to normal");
+                }
             } else {
                 let backoff_factor = self.backoff_multiplier.powi(self.consecutive_429s as i32);
                 let new_interval_ms = ((self.base_interval.as_millis() as f64) *
