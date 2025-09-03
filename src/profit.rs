@@ -18,6 +18,23 @@ use crate::logger::{ log, LogTag };
 use crate::positions_lib::calculate_position_pnl;
 use crate::positions_types::Position;
 use chrono::Utc;
+use once_cell::sync::Lazy;
+use std::sync::RwLock as StdRwLock;
+
+// Re-entry adaptive exit cache: key = mint + entry_time_unix -> capped profit percent
+static REENTRY_CAP_CACHE: Lazy<StdRwLock<std::collections::HashMap<String, f64>>> = Lazy::new(||
+    StdRwLock::new(std::collections::HashMap::new())
+);
+
+/// Re-entry optimization tunables
+/// Goal: On re-entering a token that previously had higher exit prices, avoid waiting
+/// for unrealistic prior highs (downtrend bias). We cap expectations near the most
+/// recent verified exits that are ABOVE our current entry price, with a discount.
+pub const REENTRY_LOOKBACK_POSITIONS: usize = 5; // how many prior exits to inspect
+pub const REENTRY_CLOSE_PRICE_PROXIMITY_PCT: f64 = 3.5; // within X% of prior exit => allow early bank
+pub const REENTRY_CAP_DISCOUNT_PCT: f64 = 12.0; // reduce prior exit-based target by this percent
+pub const REENTRY_MIN_PROFIT_OVERRIDE_PCT: f64 = 4.0; // ensure at least modest profit before triggering
+pub const REENTRY_MAX_CAP_PCT: f64 = 45.0; // never cap above this (protect runners)
 
 /// ============================= Tunables =============================
 
@@ -81,6 +98,84 @@ const FAST_TIERS: &[(f64, f64, &str, f64)] = &[
 #[inline]
 fn clamp01(v: f64) -> f64 {
     if v.is_finite() { v.max(0.0).min(1.0) } else { 0.0 }
+}
+
+/// Compute (and cache) a re-entry adaptive profit cap for a position.
+/// Logic:
+/// 1. Fetch up to REENTRY_LOOKBACK_POSITIONS prior closed + verified positions for same mint.
+/// 2. Filter those whose exit_price is > current entry_price (indicates we re-entered lower).
+/// 3. Take the minimum of those qualifying exit prices (most conservative prior achieved level).
+/// 4. Convert to percent profit relative to current entry.
+/// 5. Apply discount REENTRY_CAP_DISCOUNT_PCT to reflect downtrend decay.
+/// 6. Clamp to [REENTRY_MIN_PROFIT_OVERRIDE_PCT, REENTRY_MAX_CAP_PCT].
+/// 7. Cache per (mint + entry_time) to avoid repeated DB hits.
+async fn get_reentry_cap_percent(position: &Position) -> Option<f64> {
+    use crate::positions_db::get_positions_database;
+    // Build cache key
+    let key = format!("{}:{}", position.mint, position.entry_time.timestamp());
+    if let Some(cached) = REENTRY_CAP_CACHE.read().unwrap().get(&key).cloned() {
+        return Some(cached);
+    }
+
+    // Need prior exits
+    let db_lock = match get_positions_database().await {
+        Ok(db) => db,
+        Err(_) => {
+            return None;
+        }
+    };
+    let db_guard = db_lock.lock().await;
+    let db = if let Some(ref db) = *db_guard {
+        db
+    } else {
+        return None;
+    };
+    // Access underlying helper if available; if not (older build), bail.
+    // We call get_recent_closed_positions_for_mint via &PositionsDatabase; if method missing compile will flag.
+    let recent = match
+        db.get_recent_closed_positions_for_mint(&position.mint, REENTRY_LOOKBACK_POSITIONS).await
+    {
+        Ok(v) => v,
+        Err(_) => {
+            return None;
+        }
+    };
+    if recent.is_empty() {
+        return None;
+    }
+
+    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+    if entry_price <= 0.0 || !entry_price.is_finite() {
+        return None;
+    }
+
+    // Collect exit prices above our entry (we re-entered lower than past exit)
+    let mut higher_exits: Vec<f64> = recent
+        .into_iter()
+        .filter_map(|p| p.effective_exit_price.or(p.exit_price))
+        .filter(|&ep| ep.is_finite() && ep > entry_price * 1.005) // require >0.5% higher to avoid noise
+        .collect();
+    if higher_exits.is_empty() {
+        return None;
+    }
+
+    // Use conservative minimum of higher exits
+    higher_exits.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let reference_exit = higher_exits[0];
+    let raw_profit_pct = ((reference_exit - entry_price) / entry_price) * 100.0;
+    if raw_profit_pct <= 0.0 {
+        return None;
+    }
+    let discounted = (raw_profit_pct * (1.0 - REENTRY_CAP_DISCOUNT_PCT / 100.0)).max(
+        REENTRY_MIN_PROFIT_OVERRIDE_PCT
+    );
+    let capped = discounted.min(REENTRY_MAX_CAP_PCT);
+
+    // Store
+    if let Ok(mut m) = REENTRY_CAP_CACHE.write() {
+        m.insert(key, capped);
+    }
+    Some(capped)
 }
 
 /// Compute a dynamic trailing gap (in percentage points) from peak profit and time held.
@@ -326,6 +421,33 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
             );
         }
         return true;
+    }
+
+    // Re-entry adaptive cap (only if no custom profit targets provided on position)
+    if position.profit_target_min.is_none() && position.profit_target_max.is_none() {
+        if let Some(cap_pct) = get_reentry_cap_percent(position).await {
+            if
+                pnl_percent >= cap_pct &&
+                !early_hold_active &&
+                cap_pct >= REENTRY_MIN_PROFIT_OVERRIDE_PCT
+            {
+                if is_debug_profit_enabled() {
+                    log(
+                        LogTag::Profit,
+                        "REENTRY_CAP_EXIT",
+                        &format!(
+                            "{} pnl={:.2}% >= reentry_cap={:.2}% (entry={:.6} peak={:.2}%)",
+                            position.symbol,
+                            pnl_percent,
+                            cap_pct,
+                            entry,
+                            peak_profit
+                        )
+                    );
+                }
+                return true;
+            }
+        }
     }
 
     // 4)A Target-based take-profit: if we hit the configured maximum target, exit cleanly.
