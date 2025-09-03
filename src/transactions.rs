@@ -42,6 +42,7 @@ use crate::transactions_types::{
     TransactionType,
 };
 use crate::utils::get_wallet_address;
+use crate::websocket;
 
 // Import the implementation methods
 use crate::transactions_lib;
@@ -74,6 +75,12 @@ pub struct TransactionsManager {
     // Deferred retries for transactions that failed to process
     // This helps avoid losing verifications due to temporary RPC lag or network issues
     pub deferred_retries: HashMap<String, DeferredRetry>,
+
+    // WebSocket receiver for real-time transaction monitoring
+    pub websocket_receiver: Option<tokio::sync::mpsc::UnboundedReceiver<String>>,
+
+    // Pending transactions that need to be rechecked for status updates
+    pub pending_transactions: HashMap<String, chrono::DateTime<chrono::Utc>>,
 }
 
 impl TransactionsManager {
@@ -124,7 +131,207 @@ impl TransactionsManager {
             token_database,
             transaction_database,
             deferred_retries: HashMap::new(),
+            websocket_receiver: None, // Will be set up later
+            pending_transactions: HashMap::new(), // Track pending transactions for reprocessing
         })
+    }
+
+    /// Initialize WebSocket monitoring for real-time transaction detection
+    pub async fn initialize_websocket_monitoring(&mut self) -> Result<(), String> {
+        let wallet_address = self.wallet_pubkey.to_string();
+
+        log(
+            LogTag::Transactions,
+            "WEBSOCKET_INIT",
+            &format!("🔌 Initializing WebSocket monitoring for wallet: {}", &wallet_address[..8])
+        );
+
+        // TODO: Add config support for custom WebSocket URLs
+        // For now, use default mainnet WebSocket
+        let ws_url = websocket::SolanaWebSocketClient::get_default_ws_url();
+
+        // Start WebSocket monitoring and get receiver
+        let receiver = websocket::start_websocket_monitoring(wallet_address, Some(ws_url)).await?;
+
+        self.websocket_receiver = Some(receiver);
+
+        log(
+            LogTag::Transactions,
+            "WEBSOCKET_READY",
+            "✅ WebSocket monitoring initialized successfully"
+        );
+
+        Ok(())
+    }
+
+    /// Process pending transactions to check if they've been confirmed/finalized
+    pub async fn process_pending_transactions(&mut self) -> Result<usize, String> {
+        if self.pending_transactions.is_empty() {
+            return Ok(0);
+        }
+
+        let mut confirmed_count = 0;
+        let mut signatures_to_remove = Vec::new();
+        let now = chrono::Utc::now();
+
+        // Collect signatures that need to be rechecked (older than 30 seconds)
+        let mut signatures_to_recheck = Vec::new();
+        for (signature, first_seen) in &self.pending_transactions {
+            if now.signed_duration_since(*first_seen).num_seconds() > 30 {
+                signatures_to_recheck.push(signature.clone());
+            }
+        }
+
+        // Now process the collected signatures without borrowing conflicts
+        for signature in signatures_to_recheck {
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "PENDING_RECHECK",
+                    &format!("🔄 Rechecking pending transaction: {}", &signature[..8])
+                );
+            }
+
+            // Reprocess the transaction to check current status
+            match self.process_transaction(&signature).await {
+                Ok(tx) => {
+                    // Check if transaction is now confirmed/finalized
+                    if
+                        matches!(
+                            tx.status,
+                            TransactionStatus::Confirmed | TransactionStatus::Finalized
+                        )
+                    {
+                        confirmed_count += 1;
+                        signatures_to_remove.push(signature.clone());
+
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "PENDING_CONFIRMED",
+                                &format!("✅ Pending transaction {} now confirmed", &signature[..8])
+                            );
+                        }
+                    } else if matches!(tx.status, TransactionStatus::Failed(_)) {
+                        // Transaction failed, remove from pending
+                        signatures_to_remove.push(signature.clone());
+
+                        log(
+                            LogTag::Transactions,
+                            "PENDING_FAILED",
+                            &format!("❌ Pending transaction {} failed", &signature[..8])
+                        );
+                    }
+                    // If still pending, keep it in the list
+                }
+                Err(e) => {
+                    // If we can't fetch the transaction anymore, remove from pending
+                    if e.contains("not found") {
+                        signatures_to_remove.push(signature.clone());
+                        log(
+                            LogTag::Transactions,
+                            "PENDING_NOT_FOUND",
+                            &format!(
+                                "🗑️ Pending transaction {} not found, removing",
+                                &signature[..8]
+                            )
+                        );
+                    }
+                    // For other errors, keep trying later
+                }
+            }
+        }
+
+        // Remove confirmed/failed/not-found transactions from pending list
+        for signature in signatures_to_remove {
+            self.pending_transactions.remove(&signature);
+        }
+
+        if self.debug_enabled && confirmed_count > 0 {
+            log(
+                LogTag::Transactions,
+                "PENDING_SUMMARY",
+                &format!(
+                    "✅ Processed {} pending transactions, {} confirmed",
+                    confirmed_count,
+                    confirmed_count
+                )
+            );
+        }
+
+        Ok(confirmed_count)
+    }
+
+    /// Fallback check - get last 100 transactions when WebSocket is not available
+    pub async fn do_websocket_fallback_check(&mut self) -> Result<usize, String> {
+        log(
+            LogTag::Transactions,
+            "FALLBACK",
+            "🔄 Performing fallback check of last 100 transactions"
+        );
+
+        // Get RPC client
+        let rpc_client = get_rpc_client();
+
+        // Get the last 100 transactions from RPC
+        let signatures = rpc_client
+            .get_wallet_signatures_main_rpc(
+                &self.wallet_pubkey,
+                100, // Last 100 transactions for fallback
+                None // Start from most recent
+            ).await
+            .map_err(|e| format!("Failed to fetch signatures in fallback: {}", e))?;
+
+        let mut new_transaction_count = 0;
+        for sig_info in &signatures {
+            let signature = &sig_info.signature;
+
+            // Check if we already know about this transaction
+            if !self.is_signature_known(signature).await {
+                log(
+                    LogTag::Transactions,
+                    "FALLBACK_NEW",
+                    &format!("🆕 Found new transaction in fallback: {}", &signature[..8])
+                );
+
+                // Add to known signatures first
+                if let Err(e) = self.add_known_signature(signature).await {
+                    log(
+                        LogTag::Transactions,
+                        "ERROR",
+                        &format!("Failed to add fallback signature to known: {}", e)
+                    );
+                }
+
+                // Process the transaction
+                match self.process_transaction(signature).await {
+                    Ok(_) => {
+                        new_transaction_count += 1;
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Transactions,
+                            "ERROR",
+                            &format!(
+                                "Failed to process fallback transaction {}: {}",
+                                &signature[..8],
+                                e
+                            )
+                        );
+                    }
+                }
+            }
+        }
+
+        if new_transaction_count > 0 {
+            log(
+                LogTag::Transactions,
+                "FALLBACK_SUCCESS",
+                &format!("✅ Fallback check complete - found {} new transactions", new_transaction_count)
+            );
+        }
+
+        Ok(new_transaction_count)
     }
 
     /// Load existing cached signatures to avoid re-processing
@@ -168,166 +375,81 @@ impl TransactionsManager {
 
     /// Perform initial discovery and backfill of recent transactions on startup
     /// This ensures we have a complete picture of recent wallet activity
+    /// UPDATED: Fetch exactly 1000 transactions at startup as requested
     pub async fn startup_transaction_discovery(&mut self) -> Result<(), String> {
         log(
             LogTag::Transactions,
             "STARTUP_DISCOVERY",
-            "🔍 Starting comprehensive transaction discovery and backfill"
+            "🔍 Starting initial fetch of 1000 transactions"
         );
 
         let rpc_client = get_rpc_client();
         let mut total_processed = 0;
         let mut total_cached = 0;
-        let mut batch_number = 0;
-        let mut before_signature: Option<String> = None;
 
-        // Step 1: Check last 1000 transactions in batches of 1000
-        loop {
-            batch_number += 1;
+        // Fetch exactly 1000 transactions in a single batch
+        log(LogTag::Transactions, "STARTUP_DISCOVERY", "📦 Fetching 1000 most recent transactions");
 
-            if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "STARTUP_DISCOVERY",
-                    &format!("📦 Fetching batch {} (1000 signatures)", batch_number)
-                );
-            }
+        // Fetch batch of signatures using rate-limited RPC
+        let signatures = rpc_client
+            .get_wallet_signatures_main_rpc(
+                &self.wallet_pubkey,
+                1000, // Exactly 1000 transactions as requested
+                None // Start from most recent
+            ).await
+            .map_err(|e| format!("Failed to fetch 1000 transactions: {}", e))?;
 
-            // Fetch batch of signatures using rate-limited RPC
-            let signatures = rpc_client
-                .get_wallet_signatures_main_rpc(
-                    &self.wallet_pubkey,
-                    1000, // Batch size as requested
-                    before_signature.as_deref()
-                ).await
-                .map_err(|e| format!("Failed to fetch signature batch {}: {}", batch_number, e))?;
+        if signatures.is_empty() {
+            log(LogTag::Transactions, "STARTUP_DISCOVERY", "📭 No transactions found for wallet");
+            return Ok(());
+        }
 
-            if signatures.is_empty() {
-                if self.debug_enabled {
-                    log(
-                        LogTag::Transactions,
-                        "STARTUP_DISCOVERY",
-                        "📭 No more signatures found - discovery complete"
+        let mut new_in_batch = 0;
+
+        // Process each signature in the batch
+        for sig_info in &signatures {
+            let signature = &sig_info.signature;
+            total_processed += 1;
+
+            // Always add to known signatures and process new transactions
+            if !self.is_signature_known(signature).await {
+                // New signature - add it to known signatures and cache it
+                self.add_known_signature(signature).await?;
+                new_in_batch += 1;
+                total_cached += 1;
+
+                // Process the transaction to cache its data
+                if let Err(e) = self.process_transaction(signature).await {
+                    let error_msg = format!(
+                        "Failed to process startup transaction {}: {}",
+                        &signature[..8],
+                        e
                     );
-                }
-                break;
-            }
+                    log(LogTag::Transactions, "WARN", &error_msg);
 
-            let mut new_in_batch = 0;
-            let mut known_found = false;
-
-            // Process each signature in the batch
-            for sig_info in &signatures {
-                let signature = &sig_info.signature;
-                total_processed += 1;
-
-                // If we find a known signature, we can potentially stop
-                if self.is_signature_known(signature).await {
-                    known_found = true;
-
-                    // If this is the first batch and we found known signatures early,
-                    // we might have recent gaps to fill
-                    if batch_number == 1 && new_in_batch > 0 {
-                        if self.debug_enabled {
-                            log(
-                                LogTag::Transactions,
-                                "STARTUP_DISCOVERY",
-                                &format!("🔗 Found known signature after {} new ones - continuing to fill gaps", new_in_batch)
-                            );
-                        }
-                        continue; // Continue processing this batch to fill gaps
-                    }
-                } else {
-                    // New signature - add it to known signatures and cache it
-                    self.add_known_signature(signature).await?;
-                    new_in_batch += 1;
-                    total_cached += 1;
-
-                    // Process the transaction to cache its data
-                    if let Err(e) = self.process_transaction(signature).await {
-                        let error_msg = format!(
-                            "Failed to process startup transaction {}: {}",
-                            &signature[..8],
-                            e
+                    // Save failed state to database for startup processing
+                    if let Err(db_err) = self.save_failed_transaction_state(&signature, &e).await {
+                        log(
+                            LogTag::Transactions,
+                            "ERROR",
+                            &format!(
+                                "Failed to save startup transaction failure state for {}: {}",
+                                &signature[..8],
+                                db_err
+                            )
                         );
-                        log(LogTag::Transactions, "WARN", &error_msg);
-
-                        // Save failed state to database for startup processing
-                        if
-                            let Err(db_err) = self.save_failed_transaction_state(
-                                &signature,
-                                &e
-                            ).await
-                        {
-                            log(
-                                LogTag::Transactions,
-                                "ERROR",
-                                &format!(
-                                    "Failed to save startup transaction failure state for {}: {}",
-                                    &signature[..8],
-                                    db_err
-                                )
-                            );
-                        }
                     }
                 }
-
-                // Update before_signature for next batch
-                before_signature = Some(signature.clone());
             }
-
-            if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "STARTUP_DISCOVERY",
-                    &format!(
-                        "📈 Batch {} complete: {} new, {} total processed",
-                        batch_number,
-                        new_in_batch,
-                        total_processed
-                    )
-                );
-            }
-
-            // Stopping conditions
-            if batch_number == 1 && new_in_batch == 0 {
-                // First batch had no new transactions - we're caught up
-                log(
-                    LogTag::Transactions,
-                    "STARTUP_DISCOVERY",
-                    "✅ All recent transactions already known - no backfill needed"
-                );
-                break;
-            } else if batch_number > 1 && new_in_batch == 0 && known_found {
-                // Later batch with no new transactions and known signatures found - we're done
-                log(
-                    LogTag::Transactions,
-                    "STARTUP_DISCOVERY",
-                    "✅ Reached known transaction boundary - backfill complete"
-                );
-                break;
-            } else if total_processed >= 10000 {
-                // Safety limit to prevent excessive API calls
-                log(
-                    LogTag::Transactions,
-                    "STARTUP_DISCOVERY",
-                    "⚠️ Reached safety limit of 10,000 transactions - stopping discovery"
-                );
-                break;
-            }
-
-            // Rate limiting between batches
-            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         log(
             LogTag::Transactions,
             "STARTUP_DISCOVERY",
             &format!(
-                "🎯 Discovery complete: processed {} signatures, cached {} new transactions across {} batches",
+                "🎯 Discovery complete: processed {} signatures, cached {} new transactions",
                 total_processed,
-                total_cached,
-                batch_number
+                total_cached
             )
         );
 
@@ -844,6 +966,17 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         // Don't return here - continue with normal operation even if discovery fails
     }
 
+    // Initialize WebSocket monitoring after startup discovery
+    if let Err(e) = manager.initialize_websocket_monitoring().await {
+        log(
+            LogTag::Transactions,
+            "ERROR",
+            &format!("Failed to initialize WebSocket monitoring: {}", e)
+        );
+        // Fall back to polling if WebSocket fails
+        log(LogTag::Transactions, "INFO", "Falling back to polling-based monitoring");
+    }
+
     // CRITICAL: Initialize global transaction manager for positions manager integration
     if let Err(e) = initialize_global_transaction_manager(wallet_address).await {
         log(
@@ -869,10 +1002,10 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         "🟢 Position recalculation complete - traders can now operate"
     );
 
-    // Enhanced dual-loop monitoring system with gap detection
-    let mut next_normal_check =
-        tokio::time::Instant::now() + Duration::from_secs(NORMAL_CHECK_INTERVAL_SECS);
+    // NEW: WebSocket-based monitoring with periodic checks
     let mut next_gap_check = tokio::time::Instant::now() + Duration::from_secs(300); // Gap detection every 5 minutes
+    let mut next_fallback_check = tokio::time::Instant::now() + Duration::from_secs(30); // Fallback check if WebSocket fails
+    let mut next_pending_check = tokio::time::Instant::now() + Duration::from_secs(30); // Check pending transactions every 30 seconds
 
     loop {
         tokio::select! {
@@ -880,22 +1013,168 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                 log(LogTag::Transactions, "INFO", "TransactionsManager service shutting down");
                 break;
             }
-            _ = tokio::time::sleep_until(next_normal_check) => {
-                // Normal transaction monitoring every 10 seconds
-                match do_monitoring_cycle(&mut manager).await {
-                    Ok((new_transaction_count, _)) => {
-                        if manager.debug_enabled {
-                            log(LogTag::Transactions, "SUCCESS", &format!(
-                                "Found {} swap transactions",
-                                new_transaction_count
+            // NEW: WebSocket real-time transaction monitoring
+            result = async {
+                if let Some(ref mut receiver) = manager.websocket_receiver {
+                    receiver.recv().await
+                } else {
+                    // No WebSocket receiver available, wait indefinitely
+                    std::future::pending().await
+                }
+            } => {
+                match result {
+                    Some(signature) => {
+                        // NEW: Real-time transaction detected via WebSocket
+                        if !manager.is_signature_known(&signature).await {
+                            log(
+                                LogTag::Transactions,
+                                "WEBSOCKET_NEW",
+                                &format!("🆕 Processing WebSocket transaction: {}", &signature[..8])
+                            );
+
+                            // Add to known signatures first
+                            if let Err(e) = manager.add_known_signature(&signature).await {
+                                log(
+                                    LogTag::Transactions,
+                                    "ERROR",
+                                    &format!("Failed to add WebSocket signature to known: {}", e)
+                                );
+                            }
+
+                            // Process the transaction
+                            match manager.process_transaction(&signature).await {
+                                Ok(tx) => {
+                                    // Check transaction status
+                                    match tx.status {
+                                        TransactionStatus::Pending => {
+                                            // Transaction is pending, add to pending list for later reprocessing
+                                            manager.pending_transactions.insert(signature.clone(), chrono::Utc::now());
+                                            log(
+                                                LogTag::Transactions,
+                                                "WEBSOCKET_PENDING",
+                                                &format!("⏳ WebSocket transaction {} is pending, will recheck later", &signature[..8])
+                                            );
+                                        }
+                                        TransactionStatus::Confirmed | TransactionStatus::Finalized => {
+                                            // Transaction is confirmed/finalized, fully processed
+                                            manager.new_transactions_count += 1;
+                                            if manager.debug_enabled {
+                                                log(
+                                                    LogTag::Transactions,
+                                                    "WEBSOCKET_SUCCESS",
+                                                    &format!("✅ WebSocket transaction {} processed successfully", &signature[..8])
+                                                );
+                                            }
+                                        }
+                                        TransactionStatus::Failed(_) => {
+                                            // Transaction failed, but we still count it as processed
+                                            manager.new_transactions_count += 1;
+                                            log(
+                                                LogTag::Transactions,
+                                                "WEBSOCKET_FAILED",
+                                                &format!("❌ WebSocket transaction {} failed but processed", &signature[..8])
+                                            );
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    log(
+                                        LogTag::Transactions,
+                                        "WARN",
+                                        &format!("Failed to process WebSocket transaction {}: {}", &signature[..8], e)
+                                    );
+
+                                    // Save failed state to database
+                                    if let Err(db_err) = manager.save_failed_transaction_state(&signature, &e).await {
+                                        log(
+                                            LogTag::Transactions,
+                                            "ERROR",
+                                            &format!("Failed to save WebSocket transaction failure state for {}: {}", &signature[..8], db_err)
+                                        );
+                                    }
+
+                                    // Create deferred retry
+                                    let retry = DeferredRetry {
+                                        signature: signature.clone(),
+                                        next_retry_at: chrono::Utc::now() + chrono::Duration::minutes(5),
+                                        remaining_attempts: 3,
+                                        current_delay_secs: 300,
+                                        last_error: Some(e),
+                                    };
+
+                                    if let Err(retry_err) = manager.store_deferred_retry(&retry).await {
+                                        log(
+                                            LogTag::Transactions,
+                                            "ERROR",
+                                            &format!("Failed to store WebSocket deferred retry for {}: {}", &signature[..8], retry_err)
+                                        );
+                                    }
+                                }
+                            }
+                        } else if manager.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "WEBSOCKET_DUPLICATE",
+                                &format!("🔄 WebSocket transaction {} already known, skipping", &signature[..8])
+                            );
+                        }
+                    }
+                    None => {
+                        // WebSocket channel closed, try to reinitialize
+                        log(
+                            LogTag::Transactions,
+                            "WEBSOCKET_RECONNECT",
+                            "WebSocket channel closed, attempting to reinitialize"
+                        );
+                        
+                        if let Err(e) = manager.initialize_websocket_monitoring().await {
+                            log(
+                                LogTag::Transactions,
+                                "ERROR",
+                                &format!("Failed to reinitialize WebSocket: {}", e)
+                            );
+                        }
+                    }
+                }
+            }
+            // Fallback check (less frequent, only if WebSocket is not working)
+            _ = tokio::time::sleep_until(next_fallback_check) => {
+                if manager.websocket_receiver.is_none() {
+                    // WebSocket not available, do fallback check
+                    match manager.do_websocket_fallback_check().await {
+                        Ok(new_transaction_count) => {
+                            if new_transaction_count > 0 {
+                                log(LogTag::Transactions, "FALLBACK_SUCCESS", &format!(
+                                    "Found {} new transactions via fallback check",
+                                    new_transaction_count
+                                ));
+                            }
+                        }
+                        Err(e) => {
+                            log(LogTag::Transactions, "ERROR", &format!("Fallback check error: {}", e));
+                        }
+                    }
+                }
+                next_fallback_check = tokio::time::Instant::now() + Duration::from_secs(30);
+            }
+            _ = tokio::time::sleep_until(next_pending_check) => {
+                // Process pending transactions every 30 seconds
+                match manager.process_pending_transactions().await {
+                    Ok(processed_count) => {
+                        if processed_count > 0 {
+                            log(LogTag::Transactions, "PENDING_CHECK", &format!(
+                                "⏱️  Processed {} pending transactions",
+                                processed_count
                             ));
+                        } else if manager.debug_enabled {
+                            log(LogTag::Transactions, "PENDING_CHECK", "No pending transactions to process");
                         }
                     }
                     Err(e) => {
-                        log(LogTag::Transactions, "ERROR", &format!("Normal monitoring error: {}", e));
+                        log(LogTag::Transactions, "ERROR", &format!("Pending transaction processing error: {}", e));
                     }
                 }
-                next_normal_check = tokio::time::Instant::now() + Duration::from_secs(NORMAL_CHECK_INTERVAL_SECS);
+                next_pending_check = tokio::time::Instant::now() + Duration::from_secs(30);
             }
             _ = tokio::time::sleep_until(next_gap_check) => {
                 // Periodic gap detection and backfill every 5 minutes
@@ -916,7 +1195,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                 }
                 next_gap_check = tokio::time::Instant::now() + Duration::from_secs(300);
 
-                // Periodic cleanup of expired deferred retries every 5 minutes (with gap detection)
+                // Periodic cleanup of expired deferred retries every 5 minutes
                 if let Err(e) = manager.cleanup_expired_deferred_retries().await {
                     log(LogTag::Transactions, "ERROR", &format!("Deferred retries cleanup error: {}", e));
                 }
@@ -927,83 +1206,108 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
     log(LogTag::Transactions, "INFO", "TransactionsManager service stopped");
 }
 
-/// Perform one normal monitoring cycle and return number of new transactions found
-async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(usize, bool), String> {
-    // Check for new transactions
-    let new_signatures = manager.check_new_transactions().await?;
-    let new_transaction_count = new_signatures.len();
+/// Check last 100 transactions when WebSocket fails (fallback mechanism)
+async fn do_websocket_fallback_check(manager: &mut TransactionsManager) -> Result<usize, String> {
+    if manager.debug_enabled {
+        log(
+            LogTag::Transactions,
+            "FALLBACK_CHECK",
+            "🔄 WebSocket fallback: checking last 100 transactions"
+        );
+    }
 
-    // Process new transactions
-    for signature in new_signatures {
-        match manager.process_transaction(&signature).await {
-            Ok(_) => {
-                // Successfully processed
-            }
-            Err(e) => {
+    let rpc_client = get_rpc_client();
+
+    // Get last 100 transactions
+    let signatures = rpc_client
+        .get_wallet_signatures_main_rpc(&manager.wallet_pubkey, 100, None).await
+        .map_err(|e| format!("Failed to fetch last 100 transactions for fallback: {}", e))?;
+
+    let mut new_transaction_count = 0;
+
+    // Process any new signatures we haven't seen yet
+    for sig_info in signatures {
+        let signature = sig_info.signature;
+
+        if !manager.is_signature_known(&signature).await {
+            // New signature found - add to known signatures
+            manager.add_known_signature(&signature).await?;
+            new_transaction_count += 1;
+
+            if manager.debug_enabled {
                 log(
                     LogTag::Transactions,
-                    "WARN",
-                    &format!("Failed to process transaction {}: {}", &signature[..8], e)
+                    "FALLBACK_NEW",
+                    &format!("🆕 Fallback found new transaction: {}", &signature[..8])
                 );
+            }
 
-                // CRITICAL: Save failed transaction state to database
-                if let Err(db_err) = manager.save_failed_transaction_state(&signature, &e).await {
-                    log(
-                        LogTag::Transactions,
-                        "ERROR",
-                        &format!(
-                            "Failed to save failed transaction state for {}: {}",
-                            &signature[..8],
-                            db_err
-                        )
-                    );
+            // Process the transaction
+            match manager.process_transaction(&signature).await {
+                Ok(tx) => {
+                    // Handle transaction status like WebSocket processing
+                    match tx.status {
+                        TransactionStatus::Pending => {
+                            manager.pending_transactions.insert(
+                                signature.clone(),
+                                chrono::Utc::now()
+                            );
+                            log(
+                                LogTag::Transactions,
+                                "FALLBACK_PENDING",
+                                &format!("⏳ Fallback transaction {} is pending", &signature[..8])
+                            );
+                        }
+                        TransactionStatus::Confirmed | TransactionStatus::Finalized => {
+                            manager.new_transactions_count += 1;
+                        }
+                        TransactionStatus::Failed(_) => {
+                            manager.new_transactions_count += 1;
+                        }
+                    }
                 }
-
-                // Create deferred retry for failed processing
-                let retry = DeferredRetry {
-                    signature: signature.clone(),
-                    next_retry_at: Utc::now() + chrono::Duration::minutes(5),
-                    remaining_attempts: 3,
-                    current_delay_secs: 300, // 5 minutes
-                    last_error: Some(e),
-                };
-
-                if let Err(retry_err) = manager.store_deferred_retry(&retry).await {
+                Err(e) => {
                     log(
                         LogTag::Transactions,
-                        "ERROR",
+                        "WARN",
                         &format!(
-                            "Failed to store deferred retry for {}: {}",
+                            "Failed to process fallback transaction {}: {}",
                             &signature[..8],
-                            retry_err
+                            e
                         )
                     );
+
+                    // Save failed transaction state
+                    if
+                        let Err(db_err) = manager.save_failed_transaction_state(
+                            &signature,
+                            &e
+                        ).await
+                    {
+                        log(
+                            LogTag::Transactions,
+                            "ERROR",
+                            &format!(
+                                "Failed to save fallback transaction failure state for {}: {}",
+                                &signature[..8],
+                                db_err
+                            )
+                        );
+                    }
                 }
             }
         }
     }
 
-    // Check and verify position transactions
-    // Position verification now handled by PositionsManager
-    // PositionsManager automatically processes verified transactions
-
-    // Log stats periodically
-    // Update statistics
-    if manager.debug_enabled {
-        let stats = manager.get_stats();
+    if new_transaction_count > 0 && manager.debug_enabled {
         log(
             LogTag::Transactions,
-            "STATS",
-            &format!(
-                "Total: {}, New: {}, Cached: {}",
-                stats.total_transactions,
-                stats.new_transactions_count,
-                stats.known_signatures_count
-            )
+            "FALLBACK_SUMMARY",
+            &format!("✅ Fallback check complete: found {} new transactions", new_transaction_count)
         );
     }
 
-    Ok((new_transaction_count, false)) // Second value no longer used in simplified system
+    Ok(new_transaction_count)
 }
 
 // =============================================================================

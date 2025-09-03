@@ -28,4 +28,5 @@ pub mod transactions_debug; // Transaction debugging utilities
 pub mod transactions_lib; // Transaction analysis library
 pub mod transactions_types; // Transaction type definitions
 pub mod utils;
-pub mod wallet; // Wallet balance monitoring // Bot execution module
+pub mod wallet; // Wallet balance monitoring
+pub mod websocket; // WebSocket client for real-time transaction monitoring

@@ -73,6 +73,10 @@ path = "src/bin/test_public_solscan.rs"
 name = "test_disable_flag"
 path = "src/bin/test_disable_flag.rs"
 
+[[bin]]
+name = "test_websocket"
+path = "src/bin/test_websocket.rs"
+
 
 
 [dependencies]
@@ -88,6 +92,9 @@ once_cell = "1.19"
 
 # Optimized HTTP client
 reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+
+# WebSocket support for real-time transaction monitoring
+tokio-tungstenite = { version = "0.21", features = ["connect", "rustls-tls-native-roots"] }
 
 # Database with bundled sqlite for faster builds
 rusqlite = { version = "0.29", features = ["bundled"] }
@@ -132,7 +139,6 @@ spl-token-confidential-transfer-ciphertext-arithmetic = "0.3.0"
 axum = { version = "0.7", features = ["ws"], default-features = false, optional = true }
 tower = { version = "0.4", default-features = false, optional = true }
 tower-http = { version = "0.5", features = ["cors"], default-features = false, optional = true }
-tokio-tungstenite = { version = "0.21", features = ["connect", "rustls-tls-native-roots"], default-features = false, optional = true }
 futures = "0.3"
 futures-util = "0.3"
 url = "2.4"
@@ -191,7 +197,7 @@ openssl = { version = "0.10", features = ["vendored"], optional = true }
 default = ["web", "telegram", "logging"]
 
 # Core features
-web = ["dep:axum", "dep:tower", "dep:tower-http", "dep:tokio-tungstenite", "dep:tiny_http"]
+web = ["dep:axum", "dep:tower", "dep:tower-http", "dep:tiny_http"]
 telegram = ["dep:teloxide", "dep:tokio-util", "dep:num-format"]
 logging = ["dep:fern", "dep:env_logger", "dep:dotenv"]
 
