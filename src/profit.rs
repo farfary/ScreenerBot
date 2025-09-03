@@ -20,6 +20,132 @@ use crate::positions_types::Position;
 use chrono::Utc;
 use once_cell::sync::Lazy;
 use std::sync::RwLock as StdRwLock;
+use std::time::{ Instant, Duration };
+
+// ============================= ATH (Recent High Proximity) Adaptation =============================
+// We incorporate 1m OHLCV recent highs to adapt exits when price is very near short / mid / long
+// lookback highs. Near recent highs the probability of sharp rejection increases; we respond by:
+// * Tightening trailing gaps further.
+// * Slightly lowering max profit target (bank sooner) while keeping min intact.
+// * Adding a small nudge to exit scoring under extreme proximity.
+// Design is lightweight: single cached fetch per mint every ATH_CACHE_TTL_SEC seconds.
+
+const ATH_WINDOW_15M_SECS: i64 = 15 * 60;   // 15 minutes
+const ATH_WINDOW_1H_SECS: i64  = 60 * 60;   // 1 hour
+const ATH_WINDOW_6H_SECS: i64  = 6 * 60 * 60; // 6 hours
+
+// Proximity classification thresholds (distance from high as % of high)
+const ATH_DIST_EXTREME: f64 = 1.5;  // <=1.5% from recent 6h high -> extreme
+const ATH_DIST_HIGH: f64    = 3.0;  // <=3%  -> high
+const ATH_DIST_ELEVATED: f64= 5.0;  // <=5%  -> elevated
+
+// Effects (multipliers / reductions)
+const ATH_TRAIL_TIGHTEN_EXTREME: f64 = 0.70; // 30% tighter
+const ATH_TRAIL_TIGHTEN_HIGH: f64    = 0.80; // 20% tighter
+const ATH_TRAIL_TIGHTEN_ELEV: f64    = 0.90; // 10% tighter
+const ATH_TARGET_MAX_REDUCTION_EXTREME: f64 = 0.75; // reduce target_max by 25%
+const ATH_TARGET_MAX_REDUCTION_HIGH: f64    = 0.85; // reduce by 15%
+const ATH_TARGET_MAX_REDUCTION_ELEV: f64    = 0.92; // reduce by 8%
+const ATH_SCORE_NUDGE_EXTREME: f64 = 0.25; // add to exit_score
+const ATH_SCORE_NUDGE_HIGH: f64    = 0.15;
+const ATH_SCORE_NUDGE_ELEV: f64    = 0.08;
+
+const ATH_CACHE_TTL_SEC: u64 = 20; // refresh at most every 20s per mint
+const ATH_MAX_OHLCV_POINTS: u32 = 400; // ~6h of 1m candles
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AthLevel { None, Elevated, High, Extreme }
+
+#[derive(Clone, Debug)]
+struct AthCached {
+    last_fetch: Instant,
+    high_15m: f64,
+    high_1h: f64,
+    high_6h: f64,
+}
+
+static ATH_CACHE: Lazy<StdRwLock<std::collections::HashMap<String, AthCached>>> = Lazy::new(||
+    StdRwLock::new(std::collections::HashMap::new())
+);
+
+struct AthContext {
+    level: AthLevel,
+    distance_pct: f64, // distance from 6h high (percent)
+    high_6h: f64,
+    trail_factor: f64,
+    target_max_factor: f64,
+    score_nudge: f64,
+}
+
+impl Default for AthContext {
+    fn default() -> Self {
+        Self {
+            level: AthLevel::None,
+            distance_pct: f64::INFINITY,
+            high_6h: 0.0,
+            trail_factor: 1.0,
+            target_max_factor: 1.0,
+            score_nudge: 0.0,
+        }
+    }
+}
+
+async fn fetch_ath_context(mint: &str, current_price: f64) -> AthContext {
+    if current_price <= 0.0 || !current_price.is_finite() { return AthContext::default(); }
+
+    // 1. Try cache
+    if let Ok(map) = ATH_CACHE.read() {
+        if let Some(c) = map.get(mint) {
+            if c.last_fetch.elapsed() < Duration::from_secs(ATH_CACHE_TTL_SEC) {
+                return build_ath_context_from_cached(c, current_price);
+            }
+        }
+    }
+
+    // 2. Refresh
+    let ohlcv = match crate::tokens::ohlcvs::get_latest_ohlcv(mint, ATH_MAX_OHLCV_POINTS).await {
+        Ok(v) => v,
+        Err(_) => return AthContext::default(),
+    };
+    if ohlcv.is_empty() { return AthContext::default(); }
+    let now_ts = chrono::Utc::now().timestamp();
+    let mut high_15m = 0.0; let mut high_1h = 0.0; let mut high_6h = 0.0;
+    for p in &ohlcv {
+        let age = now_ts - p.timestamp;
+        if age < 0 { continue; }
+        if age as i64 <= ATH_WINDOW_6H_SECS { if p.high > high_6h { high_6h = p.high; } }
+        if age as i64 <= ATH_WINDOW_1H_SECS { if p.high > high_1h { high_1h = p.high; } }
+        if age as i64 <= ATH_WINDOW_15M_SECS { if p.high > high_15m { high_15m = p.high; } }
+    }
+    // Fallback chaining (ensure non-zero if any window produced values)
+    if high_15m == 0.0 { high_15m = high_1h.max(high_6h); }
+    if high_1h == 0.0 { high_1h = high_6h.max(high_15m); }
+    if high_6h == 0.0 { high_6h = high_1h.max(high_15m); }
+    if high_6h <= 0.0 { return AthContext::default(); }
+
+    // Store cache
+    if let Ok(mut mapw) = ATH_CACHE.write() {
+        mapw.insert(mint.to_string(), AthCached { last_fetch: Instant::now(), high_15m, high_1h, high_6h });
+    }
+
+    build_ath_context_from_cached(&AthCached { last_fetch: Instant::now(), high_15m, high_1h, high_6h }, current_price)
+}
+
+fn build_ath_context_from_cached(c: &AthCached, current_price: f64) -> AthContext {
+    let high = c.high_6h.max(c.high_1h).max(c.high_15m);
+    if high <= 0.0 || !high.is_finite() || !current_price.is_finite() { return AthContext::default(); }
+    let distance_pct = if current_price >= high { 0.0 } else { ((high - current_price) / high) * 100.0 };
+    let (level, trail_factor, target_max_factor, score_nudge) = if distance_pct <= ATH_DIST_EXTREME {
+        (AthLevel::Extreme, ATH_TRAIL_TIGHTEN_EXTREME, ATH_TARGET_MAX_REDUCTION_EXTREME, ATH_SCORE_NUDGE_EXTREME)
+    } else if distance_pct <= ATH_DIST_HIGH {
+        (AthLevel::High, ATH_TRAIL_TIGHTEN_HIGH, ATH_TARGET_MAX_REDUCTION_HIGH, ATH_SCORE_NUDGE_HIGH)
+    } else if distance_pct <= ATH_DIST_ELEVATED {
+        (AthLevel::Elevated, ATH_TRAIL_TIGHTEN_ELEV, ATH_TARGET_MAX_REDUCTION_ELEV, ATH_SCORE_NUDGE_ELEV)
+    } else {
+        (AthLevel::None, 1.0, 1.0, 0.0)
+    };
+    AthContext { level, distance_pct, high_6h: high, trail_factor, target_max_factor, score_nudge }
+}
 
 // Re-entry adaptive exit cache: key = mint + entry_time_unix -> capped profit percent
 static REENTRY_CAP_CACHE: Lazy<StdRwLock<std::collections::HashMap<String, f64>>> = Lazy::new(||
@@ -321,7 +447,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     let trailing_time_pressure_multiplier = 1.0 - time_pressure * 0.35; // up to 35% tighter trailing gaps
 
-    // ============================= Profit Targets Integration =============================
+    // ============================= Profit Targets Integration (ATH Adaptive) =============================
     // Use position-specific targets when available. Keep it simple and local.
     let target_min = position.profit_target_min
         .unwrap_or(BASE_MIN_PROFIT_PERCENT)
@@ -331,6 +457,33 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         .clamp(1.0, 500.0);
     if target_max < target_min {
         target_max = (target_min + 1.0).min(500.0);
+    }
+
+    // Fetch ATH proximity context (cheap cached). We ONLY adapt if no custom user-provided max target.
+    let mut ath_ctx: AthContext = AthContext::default();
+    let ath_adapt_allowed = position.profit_target_max.is_none();
+    if ath_adapt_allowed {
+        ath_ctx = fetch_ath_context(&position.mint, current_price).await;
+        if ath_ctx.level != AthLevel::None {
+            // Apply target max reduction
+            let reduced = (target_max * ath_ctx.target_max_factor).max(target_min + 0.5);
+            if reduced < target_max { target_max = reduced; }
+            if is_debug_profit_enabled() {
+                log(
+                    LogTag::Profit,
+                    "ATH_ADAPT",
+                    &format!(
+                        "{} ath_level={:?} dist={:.2}% tmax_adj={:.2}% trail_fac={:.2} score_nudge={:.2}",
+                        position.symbol,
+                        ath_ctx.level,
+                        ath_ctx.distance_pct,
+                        target_max,
+                        ath_ctx.trail_factor,
+                        ath_ctx.score_nudge
+                    )
+                );
+            }
+        }
     }
 
     // 1) Extreme loss immediate kill (no questions)
@@ -711,8 +864,8 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     // 7) Trailing stop logic (dynamic)
     // Suppress trailing exits during the early-hold grace to avoid churn on tiny spikes.
     if peak_profit >= target_min && !early_hold_active {
-        // baseline gap derived from peak profit and age
-        let mut gap = trailing_gap(peak_profit, minutes_held);
+    // baseline gap derived from peak profit and age
+    let mut gap = trailing_gap(peak_profit, minutes_held);
 
         // Micro trailing for early profits:
         // - For modest peaks (10% - 25%): keep very tight to avoid full givebacks.
@@ -729,8 +882,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
             }
         }
 
-        // Apply time-pressure multiplier (tighten gap as approaching max hold)
-        gap *= trailing_time_pressure_multiplier;
+    // Apply time-pressure multiplier (tighten gap as approaching max hold)
+    gap *= trailing_time_pressure_multiplier;
+    // Apply ATH tightening factor (if active)
+    if ath_ctx.level != AthLevel::None { gap *= ath_ctx.trail_factor; }
 
         // Additional adaptive tightening if we've been showing large drawdown relative to gap
         if minutes_held > 30.0 && drawdown > gap * 0.6 {
@@ -846,6 +1001,8 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     // Normalize and threshold
     let mut score_threshold = 1.2; // calibrated to act after 1-3 weak signals or one strong
+    // ATH proximity adds a nudge to exit_score (risk of rejection) if adaptation allowed
+    if ath_ctx.level != AthLevel::None { exit_score += ath_ctx.score_nudge; }
     // Lower threshold under high time pressure to favor exits as cap approaches
     score_threshold -= 0.2 * time_pressure; // down to ~1.0 at full pressure
     if exit_score >= score_threshold {
