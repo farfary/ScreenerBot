@@ -96,10 +96,7 @@ impl SolanaWebSocketClient {
             log(
                 LogTag::Websocket,
                 "START",
-                &format!(
-                    "🔌 Starting WebSocket monitoring for wallet: {}",
-                    &self.wallet_address[..8]
-                )
+                &format!("🔌 Starting WebSocket monitoring for wallet: {}", &self.wallet_address)
             );
         }
 
@@ -134,7 +131,7 @@ impl SolanaWebSocketClient {
             log(
                 LogTag::Websocket,
                 "SUBSCRIBE",
-                &format!("📡 Subscribing to logs for wallet: {}", &self.wallet_address[..8])
+                &format!("📡 Subscribing to logs for wallet: {}", &self.wallet_address)
             );
         }
 
@@ -202,10 +199,7 @@ impl SolanaWebSocketClient {
                                         log(
                                             LogTag::Websocket,
                                             "NEW_TX",
-                                            &format!(
-                                                "🆕 New transaction detected: {}",
-                                                &signature[..8]
-                                            )
+                                            &format!("🆕 New transaction detected: {}", signature)
                                         );
                                     }
 
