@@ -73,9 +73,9 @@ pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 ///
 /// ONLY these constants should be referenced by other modules; duplicates elsewhere should be removed.
 pub const SLIPPAGE_QUOTE_DEFAULT_PCT: f64 = 5.0; // matches legacy QUOTE_SLIPPAGE_PERCENT
-pub const SLIPPAGE_EXIT_PROFIT_SHORTFALL_PCT: f64 = 8.0; // Increased from 3.0% - profit exits need more flexibility
-pub const SLIPPAGE_EXIT_LOSS_SHORTFALL_PCT: f64 = 15.0; // Increased from 12.0% - stop losses need maximum flexibility
-pub const SLIPPAGE_EXIT_RETRY_STEPS_PCT: &[f64] = &[3.0, 5.0, 8.0, 12.0, 15.0]; // Added 15.0% for maximum flexibility
+pub const SLIPPAGE_EXIT_PROFIT_SHORTFALL_PCT: f64 = 3.0; // replaces MAX_PROFIT_EXIT_SLIPPAGE_PCT
+pub const SLIPPAGE_EXIT_LOSS_SHORTFALL_PCT: f64 = 12.0; // replaces MAX_LOSS_EXIT_SLIPPAGE_PCT
+pub const SLIPPAGE_EXIT_RETRY_STEPS_PCT: &[f64] = &[3.0, 5.0, 8.0, 12.0]; // unified; 20% & 15/25/35/50 legacy removed
 
 // Backwards-compat temporary aliases (TODO: remove after codebase fully migrated)
 pub const MAX_PROFIT_EXIT_SLIPPAGE_PCT: f64 = SLIPPAGE_EXIT_PROFIT_SHORTFALL_PCT;
