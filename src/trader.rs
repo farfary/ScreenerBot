@@ -81,7 +81,7 @@ pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 20.0;
 /// This is applied in apply_cooldown_filter() and is separate from:
 /// - Global position open cooldown (5s between any opens) - in positions.rs
 /// - Frozen account cooldowns (account-specific) - in positions.rs
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 24 * 60; // 2 hours
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 24 * 60; // 24 hours
 
 // -----------------------------------------------------------------------------
 // Trading Logic Configuration
@@ -1436,10 +1436,21 @@ pub fn prioritize_tokens_for_checking(mut tokens: Vec<Token>) -> Vec<Token> {
 /// This must be called on every cycle with fresh data, never cached
 async fn apply_cooldown_filter(tokens: Vec<Token>) -> Vec<Token> {
     let recently_closed_mints = get_recently_closed_mints_set().await;
+    if recently_closed_mints.is_empty() {
+        return tokens;
+    }
+
     let before_cooldown = tokens.len();
+    let mut removed: Vec<String> = Vec::new();
     let tokens_after_cooldown: Vec<Token> = tokens
         .into_iter()
-        .filter(|t| !recently_closed_mints.contains(&t.mint))
+        .filter(|t| {
+            let exclude = recently_closed_mints.contains(&t.mint);
+            if exclude && removed.len() < 10 {
+                removed.push(t.mint.clone());
+            }
+            !exclude
+        })
         .collect();
 
     let removed_for_cooldown = before_cooldown.saturating_sub(tokens_after_cooldown.len());
@@ -1448,15 +1459,37 @@ async fn apply_cooldown_filter(tokens: Vec<Token>) -> Vec<Token> {
             LogTag::Trader,
             "COOLDOWN_FILTER",
             &format!(
-                "⏳ Excluded {} tokens within {}m cooldown after close; {} remaining",
+                "⏳ Excluded {} tokens (sample: [{}]) within {}m cooldown; {} remain",
                 removed_for_cooldown,
+                removed.join(","),
                 POSITION_CLOSE_COOLDOWN_MINUTES,
                 tokens_after_cooldown.len()
             )
         );
     }
-
     tokens_after_cooldown
+}
+
+/// Return human-readable status of current cooldown set for diagnostics
+pub async fn get_cooldown_status(sample: usize) -> String {
+    let recently_closed_mints = get_recently_closed_mints_set().await;
+    if recently_closed_mints.is_empty() {
+        return "Cooldown: none".to_string();
+    }
+    let mut mints: Vec<String> = recently_closed_mints.into_iter().collect();
+    mints.sort();
+    let total = mints.len();
+    let sample_list = mints.into_iter().take(sample).collect::<Vec<_>>().join(",");
+    format!(
+        "Cooldown: {} mints (showing {}): [{}] (window={}m)",
+        total,
+        sample_list
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .count(),
+        sample_list,
+        POSITION_CLOSE_COOLDOWN_MINUTES
+    )
 }
 
 // =============================================================================
