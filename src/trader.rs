@@ -63,6 +63,24 @@ pub const TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT: f64 = -40.0;
 
 pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 
+/// ================= Slippage Configuration (Exit) =================
+/// Unified slippage & proceeds policy
+/// Naming pattern:
+///   SLIPPAGE_QUOTE_DEFAULT_PCT        -> default quote slippage tolerance for routers
+///   SLIPPAGE_EXIT_PROFIT_SHORTFALL_PCT -> max allowed shortfall vs required proceeds (profit exits)
+///   SLIPPAGE_EXIT_LOSS_SHORTFALL_PCT   -> max allowed shortfall (loss / emergency exits)
+///   SLIPPAGE_EXIT_RETRY_STEPS_PCT      -> progressive retry slippage attempts (filtered by shortfall caps)
+///
+/// ONLY these constants should be referenced by other modules; duplicates elsewhere should be removed.
+pub const SLIPPAGE_QUOTE_DEFAULT_PCT: f64 = 5.0; // matches legacy QUOTE_SLIPPAGE_PERCENT
+pub const SLIPPAGE_EXIT_PROFIT_SHORTFALL_PCT: f64 = 3.0; // replaces MAX_PROFIT_EXIT_SLIPPAGE_PCT
+pub const SLIPPAGE_EXIT_LOSS_SHORTFALL_PCT: f64 = 12.0;  // replaces MAX_LOSS_EXIT_SLIPPAGE_PCT
+pub const SLIPPAGE_EXIT_RETRY_STEPS_PCT: &[f64] = &[3.0, 5.0, 8.0, 12.0]; // unified; 20% & 15/25/35/50 legacy removed
+
+// Backwards-compat temporary aliases (TODO: remove after codebase fully migrated)
+pub const MAX_PROFIT_EXIT_SLIPPAGE_PCT: f64 = SLIPPAGE_EXIT_PROFIT_SHORTFALL_PCT;
+pub const MAX_LOSS_EXIT_SLIPPAGE_PCT: f64 = SLIPPAGE_EXIT_LOSS_SHORTFALL_PCT;
+
 // -----------------------------------------------------------------------------
 // Debug Mode Configuration
 // -----------------------------------------------------------------------------

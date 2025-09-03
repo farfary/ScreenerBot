@@ -63,6 +63,7 @@ use chrono::{ DateTime, Duration as ChronoDuration, Utc };
 use serde::{ Deserialize, Serialize };
 use std::{ collections::{ HashMap, HashSet }, str::FromStr, sync::{ Arc, LazyLock } };
 use tokio::{ sync::{ Mutex, Notify, OwnedMutexGuard, RwLock }, time::{ sleep, Duration } };
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug)]
 pub struct PositionLockGuard {
@@ -143,6 +144,63 @@ static CRITICAL_OPERATIONS: LazyLock<RwLock<HashSet<String>>> = LazyLock::new(||
     RwLock::new(HashSet::new())
 );
 
+// ==================== PROCEEDS METRICS (EXIT QUALITY) ====================
+#[derive(Debug, Clone, Default)]
+pub struct ProceedsMetricsSnapshot {
+    pub accepted_quotes: u64,
+    pub rejected_quotes: u64,
+    pub accepted_profit_quotes: u64,
+    pub accepted_loss_quotes: u64,
+    pub total_shortfall_bps_sum: u64, // sum of shortfall * 100 (bps relative to required) for accepted profit quotes
+    pub worst_shortfall_bps: u64,     // max shortfall bps observed (accepted profit quotes)
+    pub average_shortfall_bps: f64,   // derived
+    pub last_update_unix: i64,
+}
+
+struct ProceedsMetricsInternal {
+    accepted_quotes: AtomicU64,
+    rejected_quotes: AtomicU64,
+    accepted_profit_quotes: AtomicU64,
+    accepted_loss_quotes: AtomicU64,
+    total_shortfall_bps_sum: AtomicU64,
+    worst_shortfall_bps: AtomicU64,
+    last_update_unix: AtomicU64,
+}
+
+impl ProceedsMetricsInternal {
+    const fn new() -> Self {
+        Self {
+            accepted_quotes: AtomicU64::new(0),
+            rejected_quotes: AtomicU64::new(0),
+            accepted_profit_quotes: AtomicU64::new(0),
+            accepted_loss_quotes: AtomicU64::new(0),
+            total_shortfall_bps_sum: AtomicU64::new(0),
+            worst_shortfall_bps: AtomicU64::new(0),
+            last_update_unix: AtomicU64::new(0),
+        }
+    }
+    fn snapshot(&self) -> ProceedsMetricsSnapshot {
+        let profit_count = self.accepted_profit_quotes.load(Ordering::Relaxed);
+        let total_shortfall_sum = self.total_shortfall_bps_sum.load(Ordering::Relaxed);
+        ProceedsMetricsSnapshot {
+            accepted_quotes: self.accepted_quotes.load(Ordering::Relaxed),
+            rejected_quotes: self.rejected_quotes.load(Ordering::Relaxed),
+            accepted_profit_quotes: profit_count,
+            accepted_loss_quotes: self.accepted_loss_quotes.load(Ordering::Relaxed),
+            total_shortfall_bps_sum: total_shortfall_sum,
+            worst_shortfall_bps: self.worst_shortfall_bps.load(Ordering::Relaxed),
+            average_shortfall_bps: if profit_count > 0 { total_shortfall_sum as f64 / profit_count as f64 } else { 0.0 },
+            last_update_unix: self.last_update_unix.load(Ordering::Relaxed) as i64,
+        }
+    }
+}
+
+static PROCEEDS_METRICS: LazyLock<ProceedsMetricsInternal> = LazyLock::new(|| ProceedsMetricsInternal::new());
+
+pub async fn get_proceeds_metrics_snapshot() -> ProceedsMetricsSnapshot {
+    PROCEEDS_METRICS.snapshot()
+}
+
 // Safety constants for verification system
 const VERIFICATION_BATCH_SIZE: usize = 10;
 const POSITION_OPEN_COOLDOWN_SECS: i64 = 5; // No global cooldown (from backup)
@@ -150,8 +208,8 @@ const POSITION_OPEN_COOLDOWN_SECS: i64 = 5; // No global cooldown (from backup)
 // Verification safety windows - reduced for better UX
 const ENTRY_VERIFICATION_MAX_SECS: i64 = 90; // hard cap for entry verification age before treating as timeout
 
-// Sell retry slippages (progressive)
-const SELL_RETRY_SLIPPAGES: &[f64] = &[3.0, 5.0, 8.0, 12.0, 20.0];
+// Sell retry slippages now sourced from trader unified constants
+use crate::trader::SLIPPAGE_EXIT_RETRY_STEPS_PCT;
 
 // ==================== POSITION LOCKING ====================
 
@@ -1009,9 +1067,8 @@ pub async fn close_position_direct(
     } else { 0.0 };
     let is_loss_exit = profit_percent_for_exit < 0.0;
     // Max allowed slippage for profitable exits (user requirement)
-    const MAX_PROFIT_EXIT_SLIPPAGE_PCT: f64 = 3.0; // hard cap for profit-taking
-    // Allow a bit more flexibility for loss / emergency exits to guarantee execution
-    const MAX_LOSS_EXIT_SLIPPAGE_PCT: f64 = 12.0; // still lower than historical 20% upper bound
+    // Configurable slippage caps imported from trader module
+    use crate::trader::{MAX_PROFIT_EXIT_SLIPPAGE_PCT, MAX_LOSS_EXIT_SLIPPAGE_PCT, PROFIT_EXTRA_NEEDED_SOL};
     let max_slippage_allowed = if is_loss_exit { MAX_LOSS_EXIT_SLIPPAGE_PCT } else { MAX_PROFIT_EXIT_SLIPPAGE_PCT };
 
     if is_debug_swaps_enabled() {
@@ -1028,7 +1085,7 @@ pub async fn close_position_direct(
         );
     }
 
-    for &slippage in SELL_RETRY_SLIPPAGES.iter() {
+    for &slippage in SLIPPAGE_EXIT_RETRY_STEPS_PCT.iter() {
         // Enforce dynamic slippage ceiling based on exit classification
         if slippage > max_slippage_allowed {
             if is_debug_swaps_enabled() {
@@ -1110,6 +1167,36 @@ pub async fn close_position_direct(
                             )
                         );
                     }
+                    // Metrics update for accepted quote
+                    PROCEEDS_METRICS.accepted_quotes.fetch_add(1, Ordering::Relaxed);
+                    let now_unix = Utc::now().timestamp() as u64;
+                    PROCEEDS_METRICS.last_update_unix.store(now_unix, Ordering::Relaxed);
+                    if is_loss_exit {
+                        PROCEEDS_METRICS.accepted_loss_quotes.fetch_add(1, Ordering::Relaxed);
+                    } else {
+                        PROCEEDS_METRICS.accepted_profit_quotes.fetch_add(1, Ordering::Relaxed);
+                        let shortfall_bps = (shortfall_pct.max(0.0) * 100.0).round() as u64; // 1% = 100 bps
+                        PROCEEDS_METRICS.total_shortfall_bps_sum.fetch_add(shortfall_bps, Ordering::Relaxed);
+                        // Track worst observed shortfall
+                        loop {
+                            let current_worst = PROCEEDS_METRICS.worst_shortfall_bps.load(Ordering::Relaxed);
+                            if shortfall_bps <= current_worst { break; }
+                            if PROCEEDS_METRICS.worst_shortfall_bps.compare_exchange(current_worst, shortfall_bps, Ordering::Relaxed, Ordering::Relaxed).is_ok() { break; }
+                        }
+                    }
+                    if !is_loss_exit {
+                        log(
+                            LogTag::Positions,
+                            "PROCEEDS_ACCEPT",
+                            &format!(
+                                "📊 Proceeds ok: shortfall={:.2}% (<= {:.2}% cap) output={:.8} required={:.8}",
+                                shortfall_pct.max(0.0),
+                                MAX_PROFIT_EXIT_SLIPPAGE_PCT,
+                                quoted_output_sol,
+                                target_required_sol
+                            )
+                        );
+                    }
                     best_quote = Some(quote);
                     quote_slippage_used = slippage;
                     break;
@@ -1132,6 +1219,8 @@ pub async fn close_position_direct(
                             last_error
                         )
                     );
+                    PROCEEDS_METRICS.rejected_quotes.fetch_add(1, Ordering::Relaxed);
+                    PROCEEDS_METRICS.last_update_unix.store(Utc::now().timestamp() as u64, Ordering::Relaxed);
                     // try next slippage (if any remain within allowed bound)
                     continue;
                 }

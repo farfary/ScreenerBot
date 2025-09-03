@@ -52,18 +52,13 @@ pub const FAST_FAILURE_THRESHOLD_ATTEMPTS: u32 = 10;
 pub const PRIORITY_CONFIRMATION_RETRY_DELAY_MS: u64 = 1000;
 
 // =============================================================================
-// SLIPPAGE CONFIGURATION (Used by all routers)
+// SLIPPAGE CONFIGURATION (Unified - sourced from trader)
 // =============================================================================
-
-/// Default slippage tolerance for quotes (percentage - used by all routers)
-pub const QUOTE_SLIPPAGE_PERCENT: f64 = 5.0;
-
-/// Internal slippage tolerance for our calculations and validations (percentage)
-pub const INTERNAL_SLIPPAGE_PERCENT: f64 = 5.0;
-
-/// Sell retry slippage progression (used when sell fails and needs retry)
-/// Progressive slippage: attempt 1 -> 15%, attempt 2 -> 25%, attempt 3 -> 35%, attempt 4 -> 50%
-pub const SELL_RETRY_SLIPPAGES: [f64; 4] = [15.0, 25.0, 35.0, 50.0];
+pub use crate::trader::{
+	SLIPPAGE_QUOTE_DEFAULT_PCT as QUOTE_SLIPPAGE_PERCENT,
+	SLIPPAGE_QUOTE_DEFAULT_PCT as INTERNAL_SLIPPAGE_PERCENT, // kept for legacy naming
+	SLIPPAGE_EXIT_RETRY_STEPS_PCT as SELL_RETRY_SLIPPAGES,
+};
 
 // =============================================================================
 // GMGN ROUTER SPECIFIC CONFIGURATION
