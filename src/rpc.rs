@@ -26,7 +26,7 @@ const FORCE_PREMIUM_RPC_ONLY: bool = true;
 
 /// RPC RATE LIMITING CONFIGURATION
 /// Maximum calls per second for main RPC (premium RPC has no limits)
-const MAX_RPC_CALLS_PER_SECOND: u64 = 4;
+const MAX_RPC_CALLS_PER_SECOND: u64 = 20;
 
 use crate::errors::blockchain::CommitmentLevel;
 use crate::errors::{ parse_solana_error, BlockchainError, ScreenerBotError };

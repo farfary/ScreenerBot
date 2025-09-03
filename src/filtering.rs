@@ -102,12 +102,8 @@ pub enum FilterReason {
     },
     NoCreationDate,
 
-    // Position-related failures
+    // Position-related failures (non-cooldown; cooldown is handled exclusively in trader)
     ExistingOpenPosition,
-    RecentlyClosed {
-        minutes_ago: i64,
-        cooldown_minutes: i64,
-    },
     MaxPositionsReached {
         current: usize,
         max: usize,
@@ -1342,9 +1338,8 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             | FilterReason::TooYoung { .. }
             | FilterReason::TooOld { .. }
             | FilterReason::NoCreationDate => "Age Constraints",
-            | FilterReason::ExistingOpenPosition
-            | FilterReason::RecentlyClosed { .. }
-            | FilterReason::MaxPositionsReached { .. } => "Position Constraints",
+            FilterReason::ExistingOpenPosition | FilterReason::MaxPositionsReached { .. } =>
+                "Position Constraints",
             FilterReason::AccountFrozen | FilterReason::TokenAccountFrozen => "Account Issues",
             FilterReason::RugcheckRisk { .. } => "Security Risks",
             FilterReason::InsufficientLpLock { .. } => "LP Lock Security",

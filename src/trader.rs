@@ -49,7 +49,7 @@ pub const MIN_PROFIT_THRESHOLD_ENABLED: bool = true;
 
 /// Minimum profit threshold percentage (e.g., 5.0 for 5%, -5.0 for -5%)
 /// Positions below this P&L will not be sold regardless of other exit conditions
-pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 3.0;
+pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
 
 /// Time-based override: Allow sell decisions after this duration (hours)
 /// Positions held longer than this can bypass profit threshold if in significant loss
@@ -78,7 +78,8 @@ pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 20.0;
 // -----------------------------------------------------------------------------
 
 /// Re-entry cooldown after closing a position (minutes) - prevents immediate re-buy of same token
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 6 * 60; // 6 hours
+/// Centralized here ONLY (no per-token cooldown checks elsewhere)
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 120; // 2 hours
 
 // -----------------------------------------------------------------------------
 // Trading Logic Configuration
@@ -177,7 +178,7 @@ use crate::positions_lib::calculate_position_pnl;
 use crate::tokens::{
     get_all_tokens_by_liquidity,
     get_price,
-    pool::{ add_watchlist_tokens, get_pool_service },
+    pool::{ add_watchlist_tokens, get_pool_service, request_price_warmup_batch },
     cache::TokenDatabase,
     PriceOptions,
     Token,
@@ -191,7 +192,7 @@ use crate::filtering::log_filtering_summary;
 // IMPORTS AND DEPENDENCIES
 // =============================================================================
 
-use chrono::Utc;
+use chrono::{ Utc, Duration as ChronoDuration };
 use futures;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -201,6 +202,10 @@ use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::Notify;
 use tabled::{ Tabled, Table, settings::{ Style, object::Rows, Alignment, Modify } };
+use std::collections::HashSet;
+use std::sync::RwLock as StdRwLock;
+
+use crate::positions_db;
 
 // =============================================================================
 // GLOBAL STATE AND STATIC STORAGE
@@ -455,6 +460,74 @@ fn short8(s: &str) -> String {
 // =============================================================================
 // TOKEN CACHE FOR PERFORMANCE OPTIMIZATION
 // =============================================================================
+
+// (duplicate block removed)
+
+// =============================================================================
+// RECENTLY CLOSED TOKENS CACHE (Per-token re-entry cooldown)
+// =============================================================================
+
+#[derive(Clone)]
+struct RecentlyClosedCache {
+    mints: HashSet<String>,
+    cached_at: Instant,
+}
+
+impl RecentlyClosedCache {
+    fn is_valid(&self, ttl_secs: u64) -> bool {
+        self.cached_at.elapsed().as_secs() < ttl_secs
+    }
+}
+
+static RECENTLY_CLOSED_CACHE: Lazy<Arc<StdRwLock<Option<RecentlyClosedCache>>>> = Lazy::new(||
+    Arc::new(StdRwLock::new(None))
+);
+
+const RECENTLY_CLOSED_TTL_SECS: u64 = 60; // refresh every minute
+
+async fn get_recently_closed_mints_set() -> HashSet<String> {
+    // Try cache first
+    if let Some(cache) = RECENTLY_CLOSED_CACHE.read().unwrap().as_ref() {
+        if cache.is_valid(RECENTLY_CLOSED_TTL_SECS) {
+            return cache.mints.clone();
+        }
+    }
+
+    // Load from DB: fetch closed positions and keep those within cooldown
+    let now = Utc::now();
+    let cutoff = now - ChronoDuration::minutes(POSITION_CLOSE_COOLDOWN_MINUTES);
+    let mut mints: HashSet<String> = HashSet::new();
+
+    match positions_db::get_closed_positions().await {
+        Ok(positions) => {
+            for p in positions.into_iter() {
+                if let Some(exit_time) = p.exit_time {
+                    if exit_time > cutoff {
+                        mints.insert(p.mint);
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "WARN",
+                &format!("Failed to load recently closed positions for cooldown filter: {}", e)
+            );
+        }
+    }
+
+    // Update cache
+    {
+        let mut cache = RECENTLY_CLOSED_CACHE.write().unwrap();
+        *cache = Some(RecentlyClosedCache {
+            mints: mints.clone(),
+            cached_at: Instant::now(),
+        });
+    }
+
+    mints
+}
 
 /// Cached token data structure for 10-minute caching
 #[derive(Clone, Debug)]
@@ -1780,6 +1853,28 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
         );
     }
 
+    // 6b. Apply centralized per-token re-entry cooldown (exclude recently closed tokens)
+    let recently_closed_mints = get_recently_closed_mints_set().await;
+    let before_cooldown = tokens_after_blacklist.len();
+    let tokens_after_cooldown: Vec<Token> = tokens_after_blacklist
+        .into_iter()
+        .filter(|t| !recently_closed_mints.contains(&t.mint))
+        .collect();
+
+    let removed_for_cooldown = before_cooldown.saturating_sub(tokens_after_cooldown.len());
+    if removed_for_cooldown > 0 {
+        log(
+            LogTag::Trader,
+            "COOLDOWN_FILTER",
+            &format!(
+                "⏳ Excluded {} tokens within {}m cooldown after close; {} remaining",
+                removed_for_cooldown,
+                POSITION_CLOSE_COOLDOWN_MINUTES,
+                tokens_after_cooldown.len()
+            )
+        );
+    }
+
     // 7. Smart token prioritization with confidence-based top tokens
     // Partition tokens to ensure ~50% are from actively monitored/history-rich set
     let pool_service = get_pool_service();
@@ -1787,7 +1882,7 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
     let recent_set: std::collections::HashSet<String> = recent_pool_tokens.into_iter().collect();
     let mut with_monitoring: Vec<Token> = Vec::new();
     let mut without_monitoring: Vec<Token> = Vec::new();
-    for t in tokens_after_blacklist {
+    for t in tokens_after_cooldown {
         if recent_set.contains(&t.mint) {
             with_monitoring.push(t);
         } else {
@@ -2319,6 +2414,39 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     scheduled_tokens.len()
                 )
             );
+        }
+
+        // Proactively warm prices and seed watchlist for the scheduled set
+        if !scheduled_tokens.is_empty() {
+            let warms_all: Vec<String> = scheduled_tokens
+                .iter()
+                .map(|t| t.mint.clone())
+                .collect();
+            let warms_watchlist = warms_all.clone();
+            let warms_for_adhoc = warms_all; // moved into spawn
+            let warm_count = warms_watchlist.len();
+
+            // Best-effort: ad-hoc warmup queue (batch processed every 1s)
+            tokio::spawn(async move {
+                request_price_warmup_batch(&warms_for_adhoc).await;
+            });
+
+            // Light-touch: add to watchlist so monitoring loop can rotate updates
+            // Use small batches implicitly handled by add_watchlist_tokens
+            add_watchlist_tokens(&warms_watchlist).await;
+
+            // Immediate: request batch priority calculation to get prices right away
+            // This uses the calculator to compute multiple tokens quickly and feed cache/history
+            let svc = get_pool_service();
+            let _ = svc.request_priority_price_updates(&warms_watchlist).await;
+
+            if is_debug_trader_enabled() {
+                log(
+                    LogTag::Trader,
+                    "SCHEDULER_WARM_SEED",
+                    &format!("🔥 Seeded {} scheduled tokens for warm-up and watchlist rotation", warm_count)
+                );
+            }
         }
 
         // Process scheduled tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
@@ -3089,8 +3217,12 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             .map(|pos| {
                 let mint = pos.mint.clone();
                 async move {
-                    // Get price data from cache (background service keeps it fresh every 5s)
-                    let price_result = get_price(&mint, None, false).await;
+                    // Get price data with warm-up on miss to reduce stale/no-cache reads
+                    let price_result = get_price(
+                        &mint,
+                        Some(PriceOptions { warm_on_miss: true, ..PriceOptions::default() }),
+                        false
+                    ).await;
 
                     // Extract best available price and price info
                     if let Some(result) = price_result {

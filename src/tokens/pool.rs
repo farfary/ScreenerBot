@@ -39,7 +39,8 @@ use tokio::sync::RwLock;
 const POOL_CACHE_TTL_SECONDS: i64 = 600;
 
 /// Price cache TTL - increased to handle async task delays between pool calculation and entry checks
-const PRICE_CACHE_TTL_SECONDS: i64 = 60;
+/// Raising to reduce "expired" misses during heavy scanning; pool monitor keeps it fresh.
+const PRICE_CACHE_TTL_SECONDS: i64 = 240; // 4 minutes
 
 // =============================================================================
 // BATCH PROCESSING CONFIGURATION
@@ -49,16 +50,18 @@ const PRICE_CACHE_TTL_SECONDS: i64 = 60;
 const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 1;
 
 /// Watchlist batch size for random updates
-const WATCHLIST_BATCH_SIZE: usize = 25;
+/// Larger batches help rotate through more tokens per second under load
+const WATCHLIST_BATCH_SIZE: usize = 150;
 
 /// Watchlist update interval (spread updates over time)
-const WATCHLIST_UPDATE_INTERVAL_SECS: u64 = 1;
+const WATCHLIST_UPDATE_INTERVAL_SECS: u64 = 1; // keep at 1s, rely on bigger batches
 
 /// Maximum tokens per DexScreener API call
 const MAX_TOKENS_PER_BATCH: usize = 30;
 
 /// Maximum watchlist size (user requirement)
-const MAX_WATCHLIST_SIZE: usize = 200;
+/// Increased to reduce eviction thrash while trader schedules many tokens
+const MAX_WATCHLIST_SIZE: usize = 800;
 
 // Watchlist cleanup policies
 /// Remove tokens from watchlist if not accessed for this many hours
@@ -71,17 +74,17 @@ const MAX_CONSECUTIVE_FAILURES: u32 = 5;
 const WATCHLIST_CLEANUP_INTERVAL_SECS: u64 = 300; // 5 minutes
 
 // Ad-hoc warm-up batching
-const ADHOC_BATCH_SIZE: usize = 50; // how many tokens to warm per tick
-const ADHOC_UPDATE_INTERVAL_SECS: u64 = 2; // batch ad-hoc warms every 2s
+const ADHOC_BATCH_SIZE: usize = 300; // how many tokens to warm per tick (increased)
+const ADHOC_UPDATE_INTERVAL_SECS: u64 = 1; // batch ad-hoc warms every 1s (faster warms)
 
 /// Minimum liquidity (USD) required to consider a pool usable for price calculation.
 /// Lower this for testing environments if you want stats to increment sooner.
 pub const MIN_POOL_LIQUIDITY_USD: f64 = 10.0;
 
 // Monitoring concurrency & performance budgeting
-const POOL_MONITOR_CONCURRENCY: usize = 20; // Max concurrent token updates per cycle
-const POOL_MONITOR_CYCLE_BUDGET_MS: u128 = 2500; // Soft per-cycle time budget
-const POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS: u64 = 6; // Guard per token update future
+const POOL_MONITOR_CONCURRENCY: usize = 64; // Max concurrent token updates per cycle
+const POOL_MONITOR_CYCLE_BUDGET_MS: u128 = 6000; // Soft per-cycle time budget
+const POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS: u64 = 10; // Guard per token update future
 
 // Pool price history settings (in-memory + database persistence)
 const POOL_PRICE_HISTORY_MAX_AGE_HOURS: i64 = 24; // Keep 24 hours of history
