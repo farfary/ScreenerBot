@@ -12,7 +12,7 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::{ get_pool_service, Token, PriceOptions };
 use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;
-use std::sync::RwLock as StdRwLock;
+use tokio::sync::RwLock as AsyncRwLock; // switched from StdRwLock
 use std::time::{ Instant, Duration };
 
 // Lightweight TTL cache for recent exit prices to reduce DB pressure.
@@ -21,20 +21,22 @@ struct ExitPriceCacheEntry {
     fetched_at: Instant,
 }
 static RECENT_EXIT_PRICE_CACHE: Lazy<
-    StdRwLock<std::collections::HashMap<String, ExitPriceCacheEntry>>
-> = Lazy::new(|| StdRwLock::new(std::collections::HashMap::new()));
-const EXIT_PRICE_CACHE_TTL: Duration = Duration::from_secs(30); // short TTL to stay fresh
+    AsyncRwLock<std::collections::HashMap<String, ExitPriceCacheEntry>>
+> = Lazy::new(|| AsyncRwLock::new(std::collections::HashMap::new()));
+const EXIT_PRICE_CACHE_TTL: Duration = Duration::from_secs(30);
+const EXIT_PRICE_CACHE_MAX_ENTRIES: usize = 1024; // prune safeguard
 
 async fn get_cached_recent_exit_prices(mint: &str, limit: usize) -> Vec<f64> {
     // 1. Check cache
-    if let Ok(map) = RECENT_EXIT_PRICE_CACHE.read() {
+    {
+        let map = RECENT_EXIT_PRICE_CACHE.read().await;
         if let Some(entry) = map.get(mint) {
             if entry.fetched_at.elapsed() < EXIT_PRICE_CACHE_TTL {
                 return entry.prices.clone();
             }
         }
     }
-    // 2. Fetch minimal data
+    // 2. Fetch minimal data (DB)
     use crate::positions_db::get_positions_database;
     let mut out = Vec::new();
     if let Ok(db_lock) = get_positions_database().await {
@@ -51,12 +53,24 @@ async fn get_cached_recent_exit_prices(mint: &str, limit: usize) -> Vec<f64> {
             }
         }
     }
-    // 3. Store
-    if let Ok(mut mapw) = RECENT_EXIT_PRICE_CACHE.write() {
+    // 3. Store with pruning
+    {
+        let mut mapw = RECENT_EXIT_PRICE_CACHE.write().await;
         mapw.insert(mint.to_string(), ExitPriceCacheEntry {
             prices: out.clone(),
             fetched_at: Instant::now(),
         });
+        if mapw.len() > EXIT_PRICE_CACHE_MAX_ENTRIES {
+            // prune oldest by fetched_at (simple O(n))
+            if
+                let Some(old_key) = mapw
+                    .iter()
+                    .min_by_key(|(_, v)| v.fetched_at)
+                    .map(|(k, _)| k.clone())
+            {
+                mapw.remove(&old_key);
+            }
+        }
     }
     out
 }
@@ -209,7 +223,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             let reserve = result.reserve_sol.unwrap_or(0.0);
 
             // Calculate transaction activity score from token data
-            let activity = token.txns
+            let raw_activity_score = token.txns
                 .as_ref()
                 .and_then(|txns| txns.m5.as_ref())
                 .map(|m5| {
@@ -228,7 +242,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                 }
                 return (false, 10.0, "Invalid price data".to_string());
             }
-            (price, reserve, activity)
+            (price, reserve, raw_activity_score)
         }
         None => {
             if is_debug_entry_enabled() {
@@ -401,6 +415,23 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         }
     }
 
+    // Before detecting best drop, log unreachable adaptive min drop
+    if adaptive_min_drop > MAX_DROP_PERCENT {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "ADAPT_MIN_DROP_TOO_HIGH",
+                &format!(
+                    "{} adaptive_min_drop {:.1}% exceeds MAX {:.1}% prior_exits:{}",
+                    token.symbol,
+                    adaptive_min_drop,
+                    MAX_DROP_PERCENT,
+                    prior_count
+                )
+            );
+        }
+    }
+
     // Detect best drop across windows with adaptive minimum
     let best = {
         let raw = detect_best_drop(&price_history, current_price);
@@ -411,16 +442,11 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     };
 
     if let Some(sig) = best {
-        // Enhanced confidence calculation with conservative approach
-        let mut confidence = 20.0; // Reduced base from 25.0
-
-        // Drop magnitude with adaptive base
+        let mut confidence = 20.0;
         let drop_score = calculate_drop_magnitude_score(sig.drop_percent);
-        confidence += drop_score * 25.0; // Reduced from 35.0 scaling
-
-        // Transaction activity (reduced impact for conservative approach)
-        let activity_score = calculate_scalp_activity_score(activity_score);
-        confidence += activity_score * 15.0; // Reduced from 25.0
+        confidence += drop_score * 25.0;
+        // Transaction activity (single application)
+        confidence += activity_score * 15.0; // single application
 
         // ATH Prevention Analysis
         let (ath_safe, max_ath_pct) = check_ath_risk(&price_history, current_price).await;
@@ -445,8 +471,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             confidence += 3.0; // Reduced from 5.0 for being well below highs
         }
 
-        // Transaction activity (reduced impact for conservative approach)
-        confidence += activity_score * 15.0; // Reduced from 25.0
+        // Transaction activity already applied above - removed duplicate
 
         // Liquidity impact (moderate increase)
         let liquidity_score = calculate_liquidity_score(reserve_sol);
