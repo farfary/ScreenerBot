@@ -93,8 +93,8 @@ pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 5;
 /// New entry signals check interval (seconds) - optimized for fastest price checking
 pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 3;
 
-/// Open positions monitoring interval (seconds) - maximum priority price checking every 5 seconds
-pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 5;
+/// Open positions monitoring interval (seconds) - maximum priority price checking every 2 seconds for faster profit capture
+pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 2;
 
 // -----------------------------------------------------------------------------
 // Task Timeout Configuration

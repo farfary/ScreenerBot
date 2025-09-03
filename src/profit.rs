@@ -48,14 +48,16 @@ pub const EXIT_ODDS_THRESHOLD: f64 = 0.7; // Increased from 0.65
 // Early-hold protection (seconds)
 // Prevents non-emergency exits in the first moments after entry to avoid churn on noise.
 // Quick-capture profit exits and extreme/stop-loss still apply.
-pub const EARLY_HOLD_GRACE_SECS: f64 = 45.0; // ~45s grace
+pub const EARLY_HOLD_GRACE_SECS: f64 = 20.0; // ~45s grace
 
 // Quick capture windows for scalping: (minutes, required profit %)
+// More aggressive early capture to handle monitoring delays
 const QUICK_WINDOWS: &[(f64, f64)] = &[
+    (0.33, 12.0), // 20 seconds: 12% profit (catches spikes between 5s intervals)
     (0.5, 15.0), // 30 seconds: 15% profit
-    (1.0, 12.0), // 1 minute: 12% profit
-    (2.0, 18.0), // 2 minutes: 18% profit
-    (3.0, 22.0), // 3 minutes: 22% profit
+    (1.0, 10.0), // 1 minute: 10% profit (reduced from 12%)
+    (2.0, 15.0), // 2 minutes: 15% profit (reduced from 18%)
+    (3.0, 20.0), // 3 minutes: 20% profit (reduced from 22%)
     (5.0, 25.0), // 5 minutes: 25% profit
     (8.0, 30.0), // 8 minutes: 30% profit
     (12.0, 35.0), // 12 minutes: 35% profit
@@ -261,6 +263,24 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         return true;
     }
 
+    // 3a) Ultra-fast profit capture for immediate spikes (handles monitoring delays)
+    // Capture any profit >= 12% within the first minute, especially early spikes
+    if minutes_held <= 1.0 && pnl_percent >= 12.0 {
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Profit,
+                "ULTRA_FAST_CAPTURE",
+                &format!(
+                    "{} pnl={:.2}% t={:.1}m (immediate spike capture)",
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held
+                )
+            );
+        }
+        return true;
+    }
+
     // 3b) Round-trip neutral exit: after a meaningful peak, if we round-trip back to ~flat,
     // prefer to exit instead of waiting for another full cycle.
     if peak_profit >= target_min && minutes_held >= 8.0 && pnl_percent <= 1.0 {
@@ -301,6 +321,36 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     // 4) Quick capture windows (fast large moves)
     for (window_minutes, required_profit) in QUICK_WINDOWS {
         if minutes_held <= *window_minutes && pnl_percent >= *required_profit {
+            return true;
+        }
+    }
+
+    // 4a) Early moderate peak retention (handles 15-40% spikes better):
+    // For peaks that are meaningful but below the "strong peak" threshold,
+    // still protect against major givebacks to prevent round-trips to losses
+    {
+        let moderate_peak = peak_profit >= 15.0 && peak_profit < 40.0;
+        let very_early = minutes_held <= 5.0; // very early in position lifecycle
+        let retain_frac = 0.4; // keep at least 40% of peak (less strict than strong peaks)
+        let must_retain = peak_profit * retain_frac;
+        let significant_giveback = pnl_percent < must_retain;
+        let meaningful_dd = peak_profit - pnl_percent >= 6.0; // smaller threshold for moderate peaks
+
+        if moderate_peak && very_early && significant_giveback && meaningful_dd {
+            if is_debug_profit_enabled() {
+                log(
+                    LogTag::Profit,
+                    "MODERATE_PEAK_RETAIN_EXIT",
+                    &format!(
+                        "{} pnl={:.2}% peak={:.2}% retain_req={:.2}% t={:.1}m (moderate peak protection)",
+                        position.symbol,
+                        pnl_percent,
+                        peak_profit,
+                        must_retain,
+                        minutes_held
+                    )
+                );
+            }
             return true;
         }
     }
