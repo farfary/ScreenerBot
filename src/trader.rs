@@ -228,6 +228,46 @@ use std::sync::RwLock as StdRwLock;
 use crate::positions_db;
 
 // =============================================================================
+// ERROR HANDLING UTILITIES
+// =============================================================================
+
+/// Safe wrapper for RwLock read operations that logs poison errors instead of panicking
+fn safe_read_lock<'a, T>(
+    lock: &'a std::sync::RwLock<T>,
+    operation: &str
+) -> Option<std::sync::RwLockReadGuard<'a, T>> {
+    match lock.read() {
+        Ok(guard) => Some(guard),
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "LOCK_POISON_ERROR",
+                &format!("🔒 RwLock read poisoned during {}: {}", operation, e)
+            );
+            None
+        }
+    }
+}
+
+/// Safe wrapper for RwLock write operations that logs poison errors instead of panicking
+fn safe_write_lock<'a, T>(
+    lock: &'a std::sync::RwLock<T>,
+    operation: &str
+) -> Option<std::sync::RwLockWriteGuard<'a, T>> {
+    match lock.write() {
+        Ok(guard) => Some(guard),
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "LOCK_POISON_ERROR",
+                &format!("🔒 RwLock write poisoned during {}: {}", operation, e)
+            );
+            None
+        }
+    }
+}
+
+// =============================================================================
 // GLOBAL STATE AND STATIC STORAGE
 // =============================================================================
 
@@ -509,9 +549,11 @@ const RECENTLY_CLOSED_TTL_SECS: u64 = 60; // refresh every minute
 
 async fn get_recently_closed_mints_set() -> HashSet<String> {
     // Try cache first
-    if let Some(cache) = RECENTLY_CLOSED_CACHE.read().unwrap().as_ref() {
-        if cache.is_valid(RECENTLY_CLOSED_TTL_SECS) {
-            return cache.mints.clone();
+    if let Some(cache_guard) = safe_read_lock(&RECENTLY_CLOSED_CACHE, "recently_closed_cache_read") {
+        if let Some(cache) = cache_guard.as_ref() {
+            if cache.is_valid(RECENTLY_CLOSED_TTL_SECS) {
+                return cache.mints.clone();
+            }
         }
     }
 
@@ -540,9 +582,13 @@ async fn get_recently_closed_mints_set() -> HashSet<String> {
     }
 
     // Update cache
+    if
+        let Some(mut cache_guard) = safe_write_lock(
+            &RECENTLY_CLOSED_CACHE,
+            "recently_closed_cache_write"
+        )
     {
-        let mut cache = RECENTLY_CLOSED_CACHE.write().unwrap();
-        *cache = Some(RecentlyClosedCache {
+        *cache_guard = Some(RecentlyClosedCache {
             mints: mints.clone(),
             cached_at: Instant::now(),
         });
@@ -865,13 +911,19 @@ pub fn add_to_invalid_pool_blacklist(mint: &str, symbol: &str, reason: &str) {
 }
 
 /// Check if a token is in the invalid pool blacklist and not ready for retry
+/// Note: This function blocks the async runtime - consider using the async version when possible
 pub fn is_token_in_invalid_pool_blacklist(mint: &str) -> bool {
-    // Use async tokio block_on to call the pool service async function
+    // Use block_in_place to avoid blocking the runtime thread
     tokio::task::block_in_place(|| {
         tokio::runtime::Handle
             ::current()
             .block_on(async { crate::tokens::pool::is_in_invalid_pool_blacklist(mint).await })
     })
+}
+
+/// Async version - preferred when calling from async context
+pub async fn is_token_in_invalid_pool_blacklist_async(mint: &str) -> bool {
+    crate::tokens::pool::is_in_invalid_pool_blacklist(mint).await
 }
 
 /// Remove a token from the invalid pool blacklist (for manual override)
@@ -1415,10 +1467,10 @@ pub fn prioritize_tokens_for_checking(mut tokens: Vec<Token>) -> Vec<Token> {
 
     // Clean up very old entries (>10 minutes) to prevent memory growth
     // Only do this cleanup every ~10 calls to reduce lock contention
-    static mut CLEANUP_COUNTER: u32 = 0;
-    let should_cleanup = unsafe {
-        CLEANUP_COUNTER += 1;
-        CLEANUP_COUNTER % 10 == 0
+    static CLEANUP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let should_cleanup = {
+        let count = CLEANUP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        count % 10 == 0
     };
 
     if should_cleanup {
