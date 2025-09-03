@@ -19,7 +19,7 @@ use crate::positions_lib::calculate_position_pnl;
 use crate::positions_types::Position;
 use chrono::Utc;
 use once_cell::sync::Lazy;
-use std::sync::RwLock as StdRwLock;
+use tokio::sync::RwLock as AsyncRwLock; // replaced StdRwLock
 use std::time::{ Instant, Duration };
 
 // ============================= ATH (Recent High Proximity) Adaptation =============================
@@ -69,8 +69,8 @@ struct AthCached {
     high_6h: f64,
 }
 
-static ATH_CACHE: Lazy<StdRwLock<std::collections::HashMap<String, AthCached>>> = Lazy::new(||
-    StdRwLock::new(std::collections::HashMap::new())
+static ATH_CACHE: Lazy<AsyncRwLock<std::collections::HashMap<String, AthCached>>> = Lazy::new(||
+    AsyncRwLock::new(std::collections::HashMap::new())
 );
 
 struct AthContext {
@@ -99,9 +99,8 @@ async fn fetch_ath_context(mint: &str, current_price: f64) -> AthContext {
     if current_price <= 0.0 || !current_price.is_finite() {
         return AthContext::default();
     }
-
-    // 1. Try cache
-    if let Ok(map) = ATH_CACHE.read() {
+    {
+        let map = ATH_CACHE.read().await;
         if let Some(c) = map.get(mint) {
             if c.last_fetch.elapsed() < Duration::from_secs(ATH_CACHE_TTL_SEC) {
                 return build_ath_context_from_cached(c, current_price);
@@ -159,7 +158,8 @@ async fn fetch_ath_context(mint: &str, current_price: f64) -> AthContext {
     }
 
     // Store cache
-    if let Ok(mut mapw) = ATH_CACHE.write() {
+    {
+        let mut mapw = ATH_CACHE.write().await;
         mapw.insert(mint.to_string(), AthCached {
             last_fetch: Instant::now(),
             high_15m,
@@ -167,7 +167,6 @@ async fn fetch_ath_context(mint: &str, current_price: f64) -> AthContext {
             high_6h,
         });
     }
-
     build_ath_context_from_cached(
         &(AthCached { last_fetch: Instant::now(), high_15m, high_1h, high_6h }),
         current_price
@@ -212,8 +211,8 @@ fn build_ath_context_from_cached(c: &AthCached, current_price: f64) -> AthContex
 }
 
 // Re-entry adaptive exit cache: key = mint + entry_time_unix -> capped profit percent
-static REENTRY_CAP_CACHE: Lazy<StdRwLock<std::collections::HashMap<String, f64>>> = Lazy::new(||
-    StdRwLock::new(std::collections::HashMap::new())
+static REENTRY_CAP_CACHE: Lazy<AsyncRwLock<std::collections::HashMap<String, f64>>> = Lazy::new(||
+    AsyncRwLock::new(std::collections::HashMap::new())
 );
 
 /// Re-entry optimization tunables
@@ -304,8 +303,11 @@ async fn get_reentry_cap_percent(position: &Position) -> Option<f64> {
     use crate::positions_db::get_positions_database;
     // Build cache key
     let key = format!("{}:{}", position.mint, position.entry_time.timestamp());
-    if let Some(cached) = REENTRY_CAP_CACHE.read().unwrap().get(&key).cloned() {
-        return Some(cached);
+    {
+        let map = REENTRY_CAP_CACHE.read().await;
+        if let Some(cached) = map.get(&key).cloned() {
+            return Some(cached);
+        }
     }
 
     // Need prior exits
@@ -365,8 +367,9 @@ async fn get_reentry_cap_percent(position: &Position) -> Option<f64> {
     );
     let capped = discounted.min(REENTRY_MAX_CAP_PCT);
 
-    // Store
-    if let Ok(mut m) = REENTRY_CAP_CACHE.write() {
+    // Store (async lock)
+    {
+        let mut m = REENTRY_CAP_CACHE.write().await;
         m.insert(key, capped);
     }
     Some(capped)
