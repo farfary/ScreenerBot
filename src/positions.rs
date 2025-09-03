@@ -3668,7 +3668,7 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                     log(
                         LogTag::Positions,
                         "VERIFICATION_QUEUE_EMPTY",
-                        "� No pending verifications to process"
+                        "🆗 No pending verifications to process"
                     );
                 }
             }
