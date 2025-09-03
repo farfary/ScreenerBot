@@ -12,7 +12,7 @@ use crate::positions_types::Position;
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
 use crate::tokens::pool_db::get_pool_db_statistics;
-use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
+use crate::trader::{ PROFIT_EXTRA_NEEDED_SOL, SUMMARY_DISPLAY_INTERVAL_SECS };
 use crate::trader::*;
 use crate::transactions::TransactionsManager;
 use crate::transactions_types::{ SwapPnLInfo, Transaction, TransactionType };
