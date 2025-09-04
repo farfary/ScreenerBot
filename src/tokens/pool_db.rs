@@ -730,10 +730,28 @@ impl PoolDbService {
             .commit()
             .map_err(|e| format!("Failed to commit pool metadata batch transaction: {}", e))?;
 
+        // Aggregate source information for better logging
+        let mut source_counts: std::collections::HashMap<
+            String,
+            usize
+        > = std::collections::HashMap::new();
+        for entry in entries {
+            *source_counts.entry(entry.source.clone()).or_insert(0) += 1;
+        }
+
+        let source_summary: Vec<String> = source_counts
+            .into_iter()
+            .map(|(source, count)| format!("{}: {}", source, count))
+            .collect();
+
         log(
             LogTag::Pool,
             "BATCH_STORED",
-            &format!("✅ Stored {} pool metadata entries", entries.len())
+            &format!(
+                "✅ Stored {} pool metadata entries [{}]",
+                entries.len(),
+                source_summary.join(", ")
+            )
         );
 
         Ok(())
@@ -1477,7 +1495,7 @@ pub fn store_pools_from_dexscreener_response(
 
     if count > 0 {
         store_pool_metadata_batch(&pool_metadata_entries)?;
-        log(LogTag::Pool, "API_STORED", &format!("✅ Stored {} pools from DexScreener API", count));
+        // Note: store_pool_metadata_batch already logs BATCH_STORED, no need for duplicate API_STORED log
     }
 
     Ok(count)

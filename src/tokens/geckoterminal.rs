@@ -30,7 +30,7 @@ use chrono::{ DateTime, Utc };
 const GECKOTERMINAL_BASE_URL: &str = "https://api.geckoterminal.com/api/v2";
 
 /// Rate limit: 60 requests per minute according to GeckoTerminal docs
-const GECKOTERMINAL_RATE_LIMIT_PER_MINUTE: usize = 60;
+const GECKOTERMINAL_RATE_LIMIT_PER_MINUTE: usize = 20;
 
 /// Rate limiting delay between requests (2000ms to be more conservative)
 const RATE_LIMIT_DELAY_MS: u64 = 2000;

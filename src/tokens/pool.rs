@@ -1260,16 +1260,28 @@ impl PoolPriceService {
                                             &format!("🔄 Refreshing {} stale pools from database", stale_pools.len())
                                         );
 
-                                        // Update stale pools by fetching fresh data from API
+                                        // Update stale pools by fetching fresh data from API (simplified approach)
                                         for db_pool in stale_pools.iter().take(10) { // Limit to 10 per cycle to avoid rate limits
+                                            // Use direct API calls without service dependency to avoid lifetime issues
                                             if let Ok(pairs) = get_token_pools_from_dexscreener(&db_pool.token_mint).await {
                                                 if !pairs.is_empty() {
-                                                    if let Err(e) = crate::tokens::pool_db::store_pools_from_dexscreener_response(&pairs) {
-                                                        log(
-                                                            LogTag::Pool,
-                                                            "REFRESH_ERROR",
-                                                            &format!("Failed to update stale pool for {}: {}", db_pool.token_mint, e)
-                                                        );
+                                                    match crate::tokens::pool_db::store_pools_from_dexscreener_response(&pairs) {
+                                                        Ok(_) => {
+                                                            if is_debug_pool_prices_enabled() {
+                                                                log(
+                                                                    LogTag::Pool,
+                                                                    "REFRESH_SUCCESS",
+                                                                    &format!("Successfully refreshed stale pool for {}", db_pool.token_mint)
+                                                                );
+                                                            }
+                                                        }
+                                                        Err(e) => {
+                                                            log(
+                                                                LogTag::Pool,
+                                                                "REFRESH_ERROR",
+                                                                &format!("Failed to store refreshed pool for {}: {}", db_pool.token_mint, e)
+                                                            );
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1356,55 +1368,51 @@ impl PoolPriceService {
             let mut gt_success = 0;
             let mut ray_success = 0;
 
-            // Get current pool cache
+            // Process and combine results from all three APIs with deduplication
             let mut pool_cache = self.pool_cache.write().await;
 
-            // Process DexScreener results using the helper function
+            // Collect all pools by token address from all APIs
+            let mut token_pools_map: HashMap<String, Vec<CachedPoolInfo>> = HashMap::new();
+
+            // Process DexScreener results
             let processed_dexscreener_pools = process_dexscreener_batch_results(
                 &dexscreener_result
             );
             for (token_address, cached_pools) in processed_dexscreener_pools {
                 if !cached_pools.is_empty() {
                     dx_success += 1;
-                    pool_cache.insert(token_address, cached_pools);
+                    token_pools_map
+                        .entry(token_address)
+                        .or_insert_with(Vec::new)
+                        .extend(cached_pools);
                 }
             }
             dexscreener_successful += dx_success;
 
-            // Process GeckoTerminal results using the helper function
+            // Process GeckoTerminal results
             let processed_gecko_pools = process_geckoterminal_batch_results(&gecko_result);
             for (token_address, cached_pools) in processed_gecko_pools {
                 gt_success += 1;
-
-                // Merge with existing pools if any
-                let existing_pools = pool_cache.get(&token_address).cloned().unwrap_or_default();
-                let mut combined_pools = existing_pools;
-                combined_pools.extend(cached_pools);
-                pool_cache.insert(token_address, combined_pools);
+                token_pools_map.entry(token_address).or_insert_with(Vec::new).extend(cached_pools);
             }
             geckoterminal_successful += gt_success;
 
-            // Process Raydium results using the helper function
+            // Process Raydium results
             let processed_raydium_pools = process_raydium_batch_results(&raydium_result);
             for (token_address, cached_pools) in processed_raydium_pools {
                 ray_success += 1;
-
-                // Merge with existing pools if any
-                let existing_pools = pool_cache.get(&token_address).cloned().unwrap_or_default();
-                let mut combined_pools = existing_pools;
-                combined_pools.extend(cached_pools);
-                pool_cache.insert(token_address, combined_pools);
+                token_pools_map.entry(token_address).or_insert_with(Vec::new).extend(cached_pools);
             }
             raydium_successful += ray_success;
 
-            // Count tokens that have pools from any source
-            for token_address in chunk {
-                if
-                    pool_cache
-                        .get(token_address)
-                        .map(|pools| !pools.is_empty())
-                        .unwrap_or(false)
-                {
+            // Deduplicate and cache all token pools
+            for (token_address, all_pools) in token_pools_map {
+                if !all_pools.is_empty() {
+                    // Deduplicate pools by pool address
+                    let deduplicated_pools = self.deduplicate_pools(all_pools);
+
+                    // Cache deduplicated pools
+                    pool_cache.insert(token_address, deduplicated_pools);
                     combined_successful += 1;
                 }
             }
@@ -3076,6 +3084,48 @@ impl PoolPriceService {
         }
     }
 
+    /// Get source name from dex_id for database storage
+    fn get_source_from_dex_id(&self, dex_id: &str) -> String {
+        if dex_id.starts_with("gecko_") {
+            "geckoterminal".to_string()
+        } else if dex_id.starts_with("raydium_") {
+            "raydium".to_string()
+        } else {
+            "dexscreener".to_string()
+        }
+    }
+
+    /// Deduplicate pools by pool address, keeping the one with highest liquidity
+    fn deduplicate_pools(&self, pools: Vec<CachedPoolInfo>) -> Vec<CachedPoolInfo> {
+        use std::collections::HashMap;
+
+        let mut pool_map: HashMap<String, CachedPoolInfo> = HashMap::new();
+
+        for pool in pools {
+            let address = pool.pair_address.clone();
+            match pool_map.get(&address) {
+                Some(existing_pool) => {
+                    // Keep pool with higher liquidity
+                    if pool.liquidity_usd > existing_pool.liquidity_usd {
+                        pool_map.insert(address, pool);
+                    }
+                }
+                None => {
+                    pool_map.insert(address, pool);
+                }
+            }
+        }
+
+        let mut deduplicated_pools: Vec<CachedPoolInfo> = pool_map.into_values().collect();
+
+        // Sort by liquidity (highest first)
+        deduplicated_pools.sort_by(|a, b| {
+            b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        deduplicated_pools
+    }
+
     /// Fetch pools from API and cache them
     async fn fetch_and_cache_pools(
         &self,
@@ -3204,12 +3254,12 @@ impl PoolPriceService {
             );
         }
 
-        // Fetch from both APIs for better coverage
+        // Fetch from all three APIs for comprehensive coverage
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
-                "FETCH_DUAL_API_START",
-                &format!("🔄 Fetching pools from DexScreener + GeckoTerminal for {}", token_address)
+                "FETCH_TRIPLE_API_START",
+                &format!("🔄 Fetching pools from DexScreener + GeckoTerminal + Raydium for {}", token_address)
             );
         }
 
@@ -3249,22 +3299,64 @@ impl PoolPriceService {
             }
         };
 
+        // Fetch from Raydium API
+        let (raydium_pools, raydium_error) = match
+            get_token_pools_from_raydium(token_address).await
+        {
+            Ok(pools) => (pools, None),
+            Err(e) => {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "RAYDIUM_ERROR",
+                        &format!("Raydium API error for {}: {}", token_address, e)
+                    );
+                }
+                (Vec::new(), Some(e))
+            }
+        };
+
         let api_duration = Utc::now() - api_start_time;
 
-        // Check if both APIs failed
-        if dexscreener_pairs.is_empty() && geckoterminal_pools.is_empty() {
-            let combined_error = match (dexscreener_error, geckoterminal_error) {
-                (Some(dx_err), Some(gt_err)) =>
+        // Check if all three APIs failed
+        if
+            dexscreener_pairs.is_empty() &&
+            geckoterminal_pools.is_empty() &&
+            raydium_pools.is_empty()
+        {
+            let combined_error = match (dexscreener_error, geckoterminal_error, raydium_error) {
+                (Some(dx_err), Some(gt_err), Some(ray_err)) =>
                     format!(
-                        "Both APIs failed - DexScreener: {}, GeckoTerminal: {}",
+                        "All three APIs failed - DexScreener: {}, GeckoTerminal: {}, Raydium: {}",
+                        dx_err,
+                        gt_err,
+                        ray_err
+                    ),
+                (Some(dx_err), Some(gt_err), None) =>
+                    format!(
+                        "DexScreener failed: {}, GeckoTerminal failed: {}, Raydium returned no pools",
                         dx_err,
                         gt_err
                     ),
-                (Some(dx_err), None) =>
-                    format!("DexScreener failed: {}, GeckoTerminal returned no pools", dx_err),
-                (None, Some(gt_err)) =>
-                    format!("GeckoTerminal failed: {}, DexScreener returned no pools", gt_err),
-                (None, None) => "Both APIs returned no pools".to_string(),
+                (Some(dx_err), None, Some(ray_err)) =>
+                    format!(
+                        "DexScreener failed: {}, Raydium failed: {}, GeckoTerminal returned no pools",
+                        dx_err,
+                        ray_err
+                    ),
+                (None, Some(gt_err), Some(ray_err)) =>
+                    format!(
+                        "GeckoTerminal failed: {}, Raydium failed: {}, DexScreener returned no pools",
+                        gt_err,
+                        ray_err
+                    ),
+                (Some(dx_err), None, None) =>
+                    format!("DexScreener failed: {}, other APIs returned no pools", dx_err),
+                (None, Some(gt_err), None) =>
+                    format!("GeckoTerminal failed: {}, other APIs returned no pools", gt_err),
+                (None, None, Some(ray_err)) =>
+                    format!("Raydium failed: {}, other APIs returned no pools", ray_err),
+                (None, None, None) => "All three APIs returned no pools".to_string(),
             };
 
             // Handle API timeouts gracefully - this is often normal during shutdown
@@ -3282,7 +3374,7 @@ impl PoolPriceService {
                 log(
                     LogTag::Pool,
                     "ERROR",
-                    &format!("Dual API error for {}: {}", token_address, combined_error)
+                    &format!("Triple API error for {}: {}", token_address, combined_error)
                 );
             }
             return Err(format!("Failed to fetch pools from APIs: {}", combined_error));
@@ -3291,19 +3383,20 @@ impl PoolPriceService {
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
-                "FETCH_DUAL_API_COMPLETE",
+                "FETCH_TRIPLE_API_COMPLETE",
                 &format!(
-                    "✅ Dual API fetch complete for {}: DexScreener {} pairs, GeckoTerminal {} pools in {}ms",
+                    "✅ Triple API fetch complete for {}: DexScreener {} pairs, GeckoTerminal {} pools, Raydium {} pools in {}ms",
                     token_address,
                     dexscreener_pairs.len(),
                     geckoterminal_pools.len(),
+                    raydium_pools.len(),
                     api_duration.num_milliseconds()
                 )
             );
         }
 
-        // Convert and combine pools from both sources
-        let mut cached_pools = Vec::new();
+        // Convert and combine pools from all three sources
+        let mut all_pools = Vec::new();
 
         // Process DexScreener pools
         for (index, pair) in dexscreener_pairs.iter().enumerate() {
@@ -3323,7 +3416,7 @@ impl PoolPriceService {
                             )
                         );
                     }
-                    cached_pools.push(cached_pool);
+                    all_pools.push(cached_pool);
                 }
                 Err(e) => {
                     if is_debug_pool_prices_enabled() {
@@ -3372,22 +3465,56 @@ impl PoolPriceService {
                     )
                 );
             }
-            cached_pools.push(cached_pool);
+            all_pools.push(cached_pool);
         }
 
-        // Sort by liquidity (highest first)
-        cached_pools.sort_by(|a, b| {
-            b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        // Process Raydium pools
+        for (index, raydium_pool) in raydium_pools.iter().enumerate() {
+            let cached_pool = CachedPoolInfo {
+                pair_address: raydium_pool.pool_address.clone(),
+                dex_id: format!("raydium_{}", raydium_pool.pool_type),
+                base_token: raydium_pool.base_token.clone(),
+                quote_token: raydium_pool.quote_token.clone(),
+                price_native: raydium_pool.price_native,
+                price_usd: raydium_pool.price_usd,
+                liquidity_usd: raydium_pool.liquidity_usd,
+                volume_24h: raydium_pool.volume_24h,
+                created_at: 0, // Raydium API doesn't provide created_at timestamp
+                cached_at: Utc::now(),
+            };
+
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "FETCH_PARSE_SUCCESS",
+                    &format!(
+                        "✅ [Raydium] Pool #{} for {}: {} ({}, liquidity: ${:.2})",
+                        index + 1,
+                        token_address,
+                        cached_pool.pair_address,
+                        cached_pool.dex_id,
+                        cached_pool.liquidity_usd
+                    )
+                );
+            }
+            all_pools.push(cached_pool);
+        }
+
+        // Deduplicate pools by pool address (keeping highest liquidity)
+        let cached_pools = self.deduplicate_pools(all_pools);
 
         if is_debug_pool_prices_enabled() {
+            let original_count =
+                dexscreener_pairs.len() + geckoterminal_pools.len() + raydium_pools.len();
             log(
                 LogTag::Pool,
-                "FETCH_SORTED",
+                "FETCH_DEDUPLICATED",
                 &format!(
-                    "📊 Sorted {} pools for {} by liquidity (highest first)",
+                    "� Deduplicated {} pools to {} unique pools for {} (removed {} duplicates)",
+                    original_count,
                     cached_pools.len(),
-                    token_address
+                    token_address,
+                    original_count - cached_pools.len()
                 )
             );
 
@@ -3400,7 +3527,7 @@ impl PoolPriceService {
                         "🏆 Pool #{}: {} ({}, liquidity: ${:.2}, native_price: {:.12})",
                         i + 1,
                         pool.pair_address,
-                        pool.dex_id, // Keep API dex_id for debugging pool fetching
+                        pool.dex_id,
                         pool.liquidity_usd,
                         pool.price_native
                     )
@@ -3428,60 +3555,71 @@ impl PoolPriceService {
             }
         }
 
-        // Store pools in database for persistent caching
-        let total_stored = if !dexscreener_pairs.is_empty() || !geckoterminal_pools.is_empty() {
-            let mut total_stored = 0;
+        // Store all pools in database for persistent caching (unified approach)
+        let total_stored = if !cached_pools.is_empty() {
+            // Convert all cached pools to database format for unified storage
+            let mut db_pool_entries = Vec::new();
 
-            // Store DexScreener pools
-            if !dexscreener_pairs.is_empty() {
-                match
-                    crate::tokens::pool_db::store_pools_from_dexscreener_response(
-                        &dexscreener_pairs
-                    )
-                {
-                    Ok(stored_count) => {
-                        total_stored += stored_count;
-                        if stored_count > 0 && is_debug_pool_prices_enabled() {
-                            log(
-                                LogTag::Pool,
-                                "DB_STORED_DEXSCREENER",
-                                &format!(
-                                    "💾 Stored {} DexScreener pools for {} in database",
-                                    stored_count,
-                                    token_address
-                                )
-                            );
-                        }
+            for cached_pool in &cached_pools {
+                // Create DbPoolMetadata from CachedPoolInfo
+                let mut db_pool = crate::tokens::pool_db::DbPoolMetadata::new(
+                    &cached_pool.base_token,
+                    &cached_pool.pair_address,
+                    &cached_pool.dex_id,
+                    "solana", // All our pools are on Solana
+                    &self.get_source_from_dex_id(&cached_pool.dex_id)
+                );
+
+                // Set common fields
+                db_pool.quote_token_address = cached_pool.quote_token.clone();
+                db_pool.price_native = Some(cached_pool.price_native);
+                db_pool.price_usd = Some(cached_pool.price_usd);
+                db_pool.liquidity_usd = Some(cached_pool.liquidity_usd);
+                db_pool.volume_24h = Some(cached_pool.volume_24h);
+
+                if cached_pool.created_at > 0 {
+                    if
+                        let Some(created_dt) = chrono::DateTime::from_timestamp(
+                            cached_pool.created_at as i64,
+                            0
+                        )
+                    {
+                        db_pool.pair_created_at = Some(created_dt.with_timezone(&chrono::Utc));
                     }
-                    Err(e) => {
+                }
+
+                db_pool_entries.push(db_pool);
+            }
+
+            // Store all pools in database using batch operation
+            match crate::tokens::pool_db::store_pool_metadata_batch(&db_pool_entries) {
+                Ok(()) => {
+                    let stored_count = db_pool_entries.len();
+                    if stored_count > 0 && is_debug_pool_prices_enabled() {
                         log(
                             LogTag::Pool,
-                            "DB_STORE_ERROR",
+                            "DB_STORED_UNIFIED",
                             &format!(
-                                "Failed to store DexScreener pools for {} in database: {}",
+                                "💾 Stored {} pools from all sources for {} in database (DexScreener: {}, GeckoTerminal: {}, Raydium: {})",
+                                stored_count,
                                 token_address,
-                                e
+                                dexscreener_pairs.len(),
+                                geckoterminal_pools.len(),
+                                raydium_pools.len()
                             )
                         );
                     }
+                    stored_count
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Pool,
+                        "DB_STORE_ERROR",
+                        &format!("Failed to store pools for {} in database: {}", token_address, e)
+                    );
+                    0
                 }
             }
-
-            // Store GeckoTerminal pools (we'll need to create a similar function for GeckoTerminal format)
-            // For now, we'll just cache them in memory since they're already included in cached_pools
-            if !geckoterminal_pools.is_empty() && is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "DB_STORED_GECKOTERMINAL",
-                    &format!(
-                        "💾 Cached {} GeckoTerminal pools for {} in memory (DB storage TODO)",
-                        geckoterminal_pools.len(),
-                        token_address
-                    )
-                );
-            }
-
-            total_stored
         } else {
             0
         };
