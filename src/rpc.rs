@@ -942,7 +942,12 @@ impl RpcClient {
                     log(
                         LogTag::Rpc,
                         "ROTATE",
-                        &format!("Rotated to RPC URL {} (index {}): {}", *index + 1, *index, new_url)
+                        &format!(
+                            "Rotated to RPC URL {} (index {}): {}",
+                            *index + 1,
+                            *index,
+                            new_url
+                        )
                     );
                 }
 
