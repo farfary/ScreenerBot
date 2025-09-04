@@ -66,7 +66,7 @@ const PRICE_CACHE_TTL_SECONDS: i64 = 240; // 4 minutes
 // =============================================================================
 
 /// Priority tokens update interval (5 seconds exactly)
-const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 1;
+const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 3;
 
 /// Watchlist batch size for random updates
 /// Larger batches help rotate through more tokens per second under load
@@ -80,7 +80,7 @@ const MAX_TOKENS_PER_BATCH: usize = 30;
 
 /// Maximum watchlist size (user requirement)
 /// Increased to reduce eviction thrash while trader schedules many tokens
-const MAX_WATCHLIST_SIZE: usize = 800;
+const MAX_WATCHLIST_SIZE: usize = 150;
 
 // Watchlist cleanup policies
 /// Remove tokens from watchlist if not accessed for this many hours
@@ -96,6 +96,10 @@ const WATCHLIST_CLEANUP_INTERVAL_SECS: u64 = 300; // 5 minutes
 const ADHOC_BATCH_SIZE: usize = 300; // how many tokens to warm per tick (increased)
 const ADHOC_UPDATE_INTERVAL_SECS: u64 = 1; // batch ad-hoc warms every 1s (faster warms)
 
+/// RPC get_multiple_accounts batch size
+/// Controls how many accounts are fetched in each RPC call
+const RPC_MULTIPLE_ACCOUNTS_BATCH_SIZE: usize = 20;
+
 /// Minimum liquidity (USD) required to consider a pool usable for price calculation.
 /// Lower this for testing environments if you want stats to increment sooner.
 pub const MIN_POOL_LIQUIDITY_USD: f64 = 10.0;
@@ -108,7 +112,7 @@ const POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS: u64 = 10; // Guard per token update f
 // Pool price history settings (in-memory + database persistence)
 const POOL_PRICE_HISTORY_MAX_AGE_HOURS: i64 = 24; // Keep 24 hours of history
 const POOL_PRICE_HISTORY_MAX_ENTRIES: usize = 1000; // Max entries per pool cache
-const POOL_PRICE_HISTORY_SAVE_INTERVAL_SECONDS: u64 = 300; // 5 minute intervals
+const POOL_PRICE_HISTORY_SAVE_INTERVAL_SECONDS: u64 = 30; // 5 minute intervals
 
 /// SOL mint address
 pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
@@ -633,6 +637,22 @@ impl TokenAggregatedPriceHistoryCache {
 // MAIN POOL PRICE SERVICE
 // =============================================================================
 
+/// Cycle-based price history cache entry
+#[derive(Debug, Clone)]
+pub struct CyclePriceHistoryCache {
+    pub price_history: Vec<(DateTime<Utc>, f64)>,
+    pub cached_at: Instant,
+    pub cycle_id: u64,
+}
+
+impl CyclePriceHistoryCache {
+    /// Check if cache is valid for current cycle (5 minute TTL)
+    pub fn is_valid_for_cycle(&self, current_cycle_id: u64) -> bool {
+        // Valid if same cycle or cache is less than 5 minutes old
+        self.cycle_id == current_cycle_id || self.cached_at.elapsed().as_secs() < 300
+    }
+}
+
 pub struct PoolPriceService {
     pool_cache: Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>,
     price_cache: Arc<RwLock<HashMap<String, PoolPriceResult>>>,
@@ -640,6 +660,11 @@ pub struct PoolPriceService {
     price_history: Arc<RwLock<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>,
     // New pool-specific memory-based price history cache
     pool_price_history: Arc<RwLock<HashMap<String, TokenAggregatedPriceHistoryCache>>>,
+
+    // NEW: Cycle-based price history cache to avoid duplicate calls
+    cycle_price_history_cache: Arc<RwLock<HashMap<String, CyclePriceHistoryCache>>>,
+    current_cycle_id: Arc<std::sync::atomic::AtomicU64>,
+
     monitoring_active: Arc<RwLock<bool>>,
     // Enhanced statistics tracking
     stats: Arc<RwLock<PoolServiceStats>>,
@@ -782,6 +807,11 @@ impl PoolPriceService {
             availability_cache: Arc::new(RwLock::new(HashMap::new())),
             price_history: Arc::new(RwLock::new(HashMap::new())),
             pool_price_history: Arc::new(RwLock::new(HashMap::new())),
+
+            // Initialize cycle-based cache
+            cycle_price_history_cache: Arc::new(RwLock::new(HashMap::new())),
+            current_cycle_id: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+
             monitoring_active: Arc::new(RwLock::new(false)),
             stats: Arc::new(RwLock::new(PoolServiceStats::default())),
             in_flight_updates: Arc::new(RwLock::new(HashSet::new())),
@@ -2965,14 +2995,39 @@ impl PoolPriceService {
         *self.monitoring_active.read().await
     }
 
-    /// Get complete price history combining database and in-memory data (no duplicates)
+    /// Get complete price history combining database and in-memory data (OPTIMIZED with cycle caching)
     pub async fn get_price_history(&self, token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
-        use std::collections::HashMap;
+        let start_time = Instant::now();
+        let current_cycle = self.current_cycle_id.load(std::sync::atomic::Ordering::Relaxed);
 
-        // Collect all price history from different sources
+        // Check cycle cache first (avoid duplicate calls within same cycle)
+        {
+            let cycle_cache = self.cycle_price_history_cache.read().await;
+            if let Some(cached) = cycle_cache.get(token_address) {
+                if cached.is_valid_for_cycle(current_cycle) {
+                    if is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "PRICE_HISTORY_CACHE_HIT",
+                            &format!(
+                                "🎯 Cycle cache hit for {}: {} points (cycle: {}, age: {:.2}s)",
+                                &token_address[..8],
+                                cached.price_history.len(),
+                                cached.cycle_id,
+                                cached.cached_at.elapsed().as_secs_f64()
+                            )
+                        );
+                    }
+                    return cached.price_history.clone();
+                }
+            }
+        }
+
+        // Cache miss - collect data from all sources
+        use std::collections::HashMap;
         let mut all_prices: HashMap<i64, f64> = HashMap::new(); // timestamp_millis -> price
 
-        // 1. Get aggregated pool history (comprehensive, from all pools)
+        // 1. Get aggregated pool history (comprehensive, from all pools) - READ ONLY
         {
             let pool_cache = self.pool_price_history.read().await;
             if let Some(cache) = pool_cache.get(token_address) {
@@ -2984,7 +3039,7 @@ impl PoolPriceService {
             }
         }
 
-        // 2. Get simple in-memory history (recent points)
+        // 2. Get simple in-memory history (recent points) - READ ONLY
         {
             let history = self.price_history.read().await;
             if let Some(simple_history) = history.get(token_address) {
@@ -2995,11 +3050,55 @@ impl PoolPriceService {
             }
         }
 
-        // 3. Get database history (persistent storage)
-        if let Ok(db_history) = get_price_history_for_token(token_address) {
-            for (ts, price) in db_history {
-                let timestamp_millis = ts.timestamp_millis();
-                all_prices.insert(timestamp_millis, price);
+        // 3. Get database history (persistent storage) - ASYNC with timeout
+        let db_task = {
+            let token_addr = token_address.to_string();
+            tokio::spawn(async move {
+                // Add timeout to database call to prevent blocking
+                match
+                    tokio::time::timeout(
+                        Duration::from_secs(2), // 2 second timeout for DB calls
+                        tokio::task::spawn_blocking(move ||
+                            get_price_history_for_token(&token_addr)
+                        )
+                    ).await
+                {
+                    Ok(Ok(Ok(history))) => Ok(history), // spawn_blocking -> Ok(get_price_history -> Ok(Vec))
+                    Ok(Ok(Err(e))) => Err(format!("Database query failed: {}", e)),
+                    Ok(Err(e)) => Err(format!("Database task panicked: {:?}", e)),
+                    Err(_) => Err("Database call timeout after 2s".to_string()),
+                }
+            })
+        };
+
+        // Wait for database result with additional outer timeout
+        match tokio::time::timeout(Duration::from_secs(3), db_task).await {
+            Ok(Ok(Ok(db_history))) => {
+                for (ts, price) in db_history {
+                    let timestamp_millis = ts.timestamp_millis();
+                    all_prices.insert(timestamp_millis, price);
+                }
+            }
+            Ok(Ok(Err(e))) => {
+                log(
+                    LogTag::Pool,
+                    "PRICE_HISTORY_DB_ERROR",
+                    &format!("⚠️ Database error for {}: {}", &token_address[..8], e)
+                );
+            }
+            Ok(Err(_)) => {
+                log(
+                    LogTag::Pool,
+                    "PRICE_HISTORY_DB_TIMEOUT",
+                    &format!("⏰ Database timeout for {}", &token_address[..8])
+                );
+            }
+            Err(_) => {
+                log(
+                    LogTag::Pool,
+                    "PRICE_HISTORY_DB_OUTER_TIMEOUT",
+                    &format!("🔥 Database outer timeout for {}", &token_address[..8])
+                );
             }
         }
 
@@ -3017,19 +3116,74 @@ impl PoolPriceService {
 
         combined_history.sort_by_key(|(timestamp, _)| *timestamp);
 
+        // Cache the result for this cycle
+        {
+            let mut cycle_cache = self.cycle_price_history_cache.write().await;
+            cycle_cache.insert(token_address.to_string(), CyclePriceHistoryCache {
+                price_history: combined_history.clone(),
+                cached_at: Instant::now(),
+                cycle_id: current_cycle,
+            });
+
+            // Clean up old cache entries (keep last 100 to prevent memory bloat)
+            if cycle_cache.len() > 100 {
+                let mut entries: Vec<(String, Instant)> = cycle_cache
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.cached_at))
+                    .collect();
+                entries.sort_by_key(|(_, cached_at)| *cached_at);
+
+                // Remove oldest 20 entries
+                for (key, _) in entries.into_iter().take(20) {
+                    cycle_cache.remove(&key);
+                }
+            }
+        }
+
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
                 "PRICE_HISTORY_COMBINED",
                 &format!(
-                    "� Complete history for {}: {} unique price points from all sources",
+                    "📊 Complete history for {}: {} unique price points from all sources (took {:.2}ms, cycle: {})",
                     &token_address[..8],
-                    combined_history.len()
+                    combined_history.len(),
+                    start_time.elapsed().as_millis(),
+                    current_cycle
                 )
             );
         }
 
         combined_history
+    }
+
+    /// Increment cycle ID (call this when starting a new trading cycle)
+    pub fn increment_cycle_id(&self) -> u64 {
+        let new_cycle =
+            self.current_cycle_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        log(
+            LogTag::Pool,
+            "CYCLE_INCREMENT",
+            &format!("🔄 Price history cycle incremented to: {}", new_cycle)
+        );
+        new_cycle
+    }
+
+    /// Get current cycle ID
+    pub fn get_current_cycle_id(&self) -> u64 {
+        self.current_cycle_id.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Clear cycle cache manually (useful for testing or memory management)
+    pub async fn clear_cycle_cache(&self) {
+        let mut cycle_cache = self.cycle_price_history_cache.write().await;
+        let count = cycle_cache.len();
+        cycle_cache.clear();
+        log(
+            LogTag::Pool,
+            "CYCLE_CACHE_CLEAR",
+            &format!("🧹 Cleared {} cycle cache entries", count)
+        );
     }
 
     /// Get the best pool for a token based on activity and liquidity
@@ -5015,6 +5169,99 @@ pub async fn request_priority_updates_for_open_positions() -> usize {
     service.request_priority_price_updates(&open_mints).await
 }
 
+/// Increment the price history cycle ID (call at start of new trading cycles)
+pub fn increment_price_history_cycle() -> u64 {
+    get_pool_service().increment_cycle_id()
+}
+
+/// Get current price history cycle ID
+pub fn get_current_price_history_cycle() -> u64 {
+    get_pool_service().get_current_cycle_id()
+}
+
+/// Clear price history cycle cache (useful for testing or memory management)
+pub async fn clear_price_history_cycle_cache() {
+    get_pool_service().clear_cycle_cache().await;
+}
+
+/// Batch pre-load price history for multiple tokens (PERFORMANCE OPTIMIZATION)
+/// This function loads price history for all tokens in a single call to avoid
+/// individual database calls for each token during entry checking
+pub async fn batch_preload_price_history(token_addresses: &[String]) -> usize {
+    if token_addresses.is_empty() {
+        return 0;
+    }
+
+    let start_time = Instant::now();
+    let service = get_pool_service();
+    let current_cycle = service.get_current_cycle_id();
+
+    log(
+        LogTag::Pool,
+        "BATCH_PRELOAD_START",
+        &format!(
+            "🚀 Batch preloading price history for {} tokens (cycle: {})",
+            token_addresses.len(),
+            current_cycle
+        )
+    );
+
+    let mut preloaded_count = 0;
+    let max_concurrent = 5; // Limit concurrent database calls
+
+    // Process tokens in chunks to avoid overwhelming the database
+    for chunk in token_addresses.chunks(max_concurrent) {
+        let mut tasks = Vec::new();
+
+        for token_address in chunk {
+            // Check if already cached for this cycle
+            {
+                let cycle_cache = service.cycle_price_history_cache.read().await;
+                if let Some(cached) = cycle_cache.get(token_address) {
+                    if cached.is_valid_for_cycle(current_cycle) {
+                        continue; // Skip already cached
+                    }
+                }
+            }
+
+            // Spawn async task for this token
+            let token_addr = token_address.clone();
+            let service_ref = service.clone();
+            tasks.push(
+                tokio::spawn(async move { service_ref.get_price_history(&token_addr).await.len() })
+            );
+        }
+
+        // Wait for all tasks in this chunk
+        for task in tasks {
+            if let Ok(history_len) = task.await {
+                if history_len > 0 {
+                    preloaded_count += 1;
+                }
+            }
+        }
+
+        // Small delay between chunks to avoid overwhelming the system
+        if chunk.len() == max_concurrent {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    log(
+        LogTag::Pool,
+        "BATCH_PRELOAD_COMPLETE",
+        &format!(
+            "✅ Batch preload complete: {}/{} tokens preloaded in {:.2}ms (cycle: {})",
+            preloaded_count,
+            token_addresses.len(),
+            start_time.elapsed().as_millis(),
+            current_cycle
+        )
+    );
+
+    preloaded_count
+}
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
@@ -5339,14 +5586,14 @@ impl PoolPriceCalculator {
         // OPTIMIZED: Smaller chunks and shorter timeout to prevent deadlocks
         let rpc_phase_start = Instant::now();
         let mut accounts: Vec<Option<Account>> = Vec::with_capacity(pubkeys.len());
-        let chunk_size = 25usize; // Reduced from 100 to prevent RPC overload
+        let chunk_size = RPC_MULTIPLE_ACCOUNTS_BATCH_SIZE; // Use configurable batch size
         let mut idx = 0usize;
         while idx < pubkeys.len() {
             let end = (idx + chunk_size).min(pubkeys.len());
             let chunk = &pubkeys[idx..end];
             match
                 tokio::time::timeout(
-                    Duration::from_secs(5), // Reduced from 12s to prevent deadlocks
+                    Duration::from_secs(15), // Increased timeout for RPC stability
                     self.rpc_client.get_multiple_accounts(chunk)
                 ).await
             {
@@ -5357,14 +5604,14 @@ impl PoolPriceCalculator {
                     return Err(format!("Failed to batch get pool accounts: {}", e));
                 }
                 Err(_) => {
-                    return Err("RPC get_multiple_accounts chunk timed out after 5s".to_string());
+                    return Err("RPC get_multiple_accounts chunk timed out after 15s".to_string());
                 }
             }
             idx = end;
 
             // Add small delay between chunks to prevent RPC rate limiting
             if idx < pubkeys.len() {
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                tokio::time::sleep(Duration::from_millis(200)).await;
             }
         }
         if self.debug_enabled {

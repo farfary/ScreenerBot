@@ -88,17 +88,17 @@ const MIN_RESERVE_SOL: f64 = 20.0; // Higher minimum for stability
 const MAX_RESERVE_SOL: f64 = 3000.0; // Higher maximum for less restrictive filtering
 
 // CONSERVATIVE entry windows - more balanced approach
-const WINDOWS_SEC: [i64; 6] = [30, 60, 120, 180, 300, 600]; // 30s to 10min windows
-const MIN_DROP_PERCENT: f64 = 5.0; // Higher minimum for quality entries
+const WINDOWS_SEC: [i64; 6] = [10, 20, 40, 80, 160, 320]; // 30s to 10min windows
+const MIN_DROP_PERCENT: f64 = 8.0; // Higher minimum for quality entries
 const MAX_DROP_PERCENT: f64 = 75.0; // Allow larger drops for volatile tokens
 
 // ATH Prevention parameters for scalping
 const ATH_LOOKBACK_15MIN: i64 = 900; // 15 minutes
 const ATH_LOOKBACK_1HR: i64 = 3600; // 1 hour
 const ATH_LOOKBACK_6HR: i64 = 21600; // 6 hours
-const ATH_THRESHOLD_15MIN: f64 = 0.95; // 95% of 15min high
-const ATH_THRESHOLD_1HR: f64 = 0.9; // 90% of 1hr high
-const ATH_THRESHOLD_6HR: f64 = 0.85; // 85% of 6hr high
+const ATH_THRESHOLD_15MIN: f64 = 0.75; // 95% of 15min high
+const ATH_THRESHOLD_1HR: f64 = 0.6; // 90% of 1hr high
+const ATH_THRESHOLD_6HR: f64 = 0.55; // 85% of 6hr high
 
 // Conservative activity thresholds for stable entries
 const HIGH_ACTIVITY_ENTRY: f64 = 20.0; // Reduced from 25.0 for high activity

@@ -6,7 +6,7 @@ use std::fs;
 use std::path::Path;
 
 // =============================================================================
-// CONSTANTS
+// CONSTANTS (PERFORMANCE OPTIMIZED)
 // =============================================================================
 
 /// Database file path
@@ -14,10 +14,6 @@ const POOLS_DB_PATH: &str = "data/pools.db";
 
 /// Maximum age for price history entries (24 hours)
 const MAX_PRICE_HISTORY_AGE_HOURS: i64 = 24;
-
-/// Maximum gap allowed in price history (10 minutes)
-/// If there's a gap longer than this, older entries are considered stale
-const MAX_HISTORY_GAP_MINUTES: i64 = 10;
 
 /// Maximum age for pool metadata cache (10 minutes as per requirements)
 const POOL_METADATA_CACHE_TTL_HOURS: i64 = 24; // Keep for 24 hours, but mark stale after 10 minutes
@@ -427,9 +423,9 @@ impl PoolDbService {
         Ok(())
     }
 
-    /// Get price history for a token with gap detection
-    /// Returns only continuous price history (removes stale data if gaps found)
-    pub fn get_price_history_with_gap_detection(
+    /// Get price history for a token (PERFORMANCE OPTIMIZED)
+    /// Returns raw price history without gap filtering for maximum performance
+    pub fn get_price_history_simple(
         &self,
         token_mint: &str
     ) -> Result<Vec<(DateTime<Utc>, f64)>, String> {
@@ -471,76 +467,7 @@ impl PoolDbService {
             entries.push(entry);
         }
 
-        // Entries are in DESC order (newest first), reverse for gap detection
-        entries.reverse();
-
-        // Apply gap detection - remove entries older than significant gaps
-        let filtered_entries = self.filter_entries_by_gaps(entries, token_mint);
-
-        // Return in DESC order (newest first) for consistency
-        let mut result = filtered_entries;
-        result.reverse();
-
-        Ok(result)
-    }
-
-    /// Get detailed price history for a token (with metadata)
-    pub fn get_detailed_price_history(
-        &self,
-        token_mint: &str
-    ) -> Result<Vec<DbPriceHistoryEntry>, String> {
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open database: {}", e)
-        )?;
-
-        let mut stmt = conn
-            .prepare(
-                "SELECT token_mint, pool_address, dex_id, pool_type, price_sol, 
-                        price_usd, liquidity_usd, volume_24h, source, timestamp
-                 FROM price_history 
-                 WHERE token_mint = ?1 
-                 AND timestamp > datetime('now', '-24 hours')
-                 ORDER BY timestamp DESC"
-            )
-            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
-
-        let entry_iter = stmt
-            .query_map([token_mint], |row| {
-                let timestamp_str: String = row.get(9)?;
-                let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
-                    .map_err(|_|
-                        rusqlite::Error::InvalidColumnType(
-                            9,
-                            "timestamp".to_string(),
-                            rusqlite::types::Type::Text
-                        )
-                    )?
-                    .with_timezone(&Utc);
-
-                Ok(DbPriceHistoryEntry {
-                    id: None,
-                    token_mint: row.get(0)?,
-                    pool_address: row.get(1)?,
-                    dex_id: row.get(2)?,
-                    pool_type: row.get(3)?,
-                    price_sol: row.get(4)?,
-                    price_usd: row.get(5)?,
-                    liquidity_usd: row.get(6)?,
-                    volume_24h: row.get(7)?,
-                    source: row.get(8)?,
-                    timestamp,
-                })
-            })
-            .map_err(|e| format!("Failed to query detailed price history: {}", e))?;
-
-        let mut entries = Vec::new();
-        for entry_result in entry_iter {
-            let entry = entry_result.map_err(|e|
-                format!("Failed to parse detailed price entry: {}", e)
-            )?;
-            entries.push(entry);
-        }
-
+        // Return entries as-is (already in DESC order - newest first)
         Ok(entries)
     }
 
@@ -1095,64 +1022,6 @@ impl PoolDbService {
         Ok(deleted_count)
     }
 
-    // =============================================================================
-    // GAP DETECTION AND CLEANUP
-    // =============================================================================
-
-    /// Filter price entries by gaps - removes entries older than significant gaps
-    fn filter_entries_by_gaps(
-        &self,
-        entries: Vec<(DateTime<Utc>, f64)>,
-        token_mint: &str
-    ) -> Vec<(DateTime<Utc>, f64)> {
-        if entries.len() <= 1 {
-            return entries;
-        }
-
-        let max_gap_duration = chrono::Duration::minutes(MAX_HISTORY_GAP_MINUTES);
-        let mut filtered = Vec::new();
-
-        // Find the first significant gap from the end (most recent)
-        let mut gap_found_at = None;
-
-        // Iterate backwards through entries (entries are ordered oldest to newest)
-        // When iterating backwards: entries[i-1] is NEWER, entries[i] is OLDER
-        for i in (1..entries.len()).rev() {
-            let older_time = entries[i].0; // Older timestamp
-            let newer_time = entries[i - 1].0; // Newer timestamp
-            let gap = newer_time - older_time; // Newer - Older = Positive gap duration
-
-            if gap > max_gap_duration {
-                gap_found_at = Some(i);
-                let token_display = crate::utils::safe_truncate(token_mint, 8);
-                log(
-                    LogTag::Pool,
-                    "GAP_DETECTED",
-                    &format!(
-                        "Token {} - {:.1} minute gap between {} and {} (keeping {} entries after gap, removing {} older entries)",
-                        token_display,
-                        gap.num_minutes() as f64,
-                        older_time.format("%H:%M:%S"),
-                        newer_time.format("%H:%M:%S"),
-                        entries.len() - i,
-                        i
-                    )
-                );
-                break;
-            }
-        }
-
-        // If gap found, keep only entries after the gap
-        if let Some(gap_index) = gap_found_at {
-            filtered.extend_from_slice(&entries[gap_index..]);
-        } else {
-            // No significant gaps, keep all entries
-            filtered = entries;
-        }
-
-        filtered
-    }
-
     /// Clean up old price history entries
     pub fn cleanup_old_entries(&self) -> Result<usize, String> {
         let conn = Connection::open(&self.db_path).map_err(|e|
@@ -1291,10 +1160,10 @@ pub fn store_price_entry(
     service.store_price_entry(&entry)
 }
 
-/// Get price history for a token with gap detection (global function)
+/// Get price history for a token (PERFORMANCE OPTIMIZED - no gap detection)
 pub fn get_price_history_for_token(token_mint: &str) -> Result<Vec<(DateTime<Utc>, f64)>, String> {
     let service = get_pool_db_service()?;
-    service.get_price_history_with_gap_detection(token_mint)
+    service.get_price_history_simple(token_mint)
 }
 
 /// Get all tokens with price history (global function)

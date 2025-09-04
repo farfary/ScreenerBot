@@ -191,7 +191,7 @@ pub const ENTRY_CHECK_CONCURRENCY: usize = 8; // Reduced from 24 to fix performa
 pub const MAX_TOKENS_PER_CYCLE: usize = ENTRY_CHECK_CONCURRENCY * 2;
 /// Maximum number of tokens to keep after prioritization per cache refresh
 /// This caps the working set early to reduce churn and focus checks
-pub const PREPARED_TOKENS_CAP: usize = 200;
+pub const PREPARED_TOKENS_CAP: usize = 100;
 
 /// Limit tokens analyzed for watchlist seeding per cycle (keeps history refresh light)
 
@@ -3007,6 +3007,40 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let processing_budget = Duration::from_secs_f64(
             (ENTRY_MONITOR_INTERVAL_SECS as f64) * TIME_BUDGET_FRACTION
         );
+
+        // PERFORMANCE OPTIMIZATION: Increment price history cycle to avoid duplicate database calls
+        let current_cycle = crate::tokens::pool::increment_price_history_cycle();
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "CYCLE_PRICE_HISTORY",
+                &format!(
+                    "🔄 Starting price history cycle {} for {} tokens",
+                    current_cycle,
+                    scheduled_tokens.len()
+                )
+            );
+        }
+
+        // PERFORMANCE OPTIMIZATION: Batch preload price history for all tokens
+        let token_mints: Vec<String> = scheduled_tokens
+            .iter()
+            .map(|t| t.mint.clone())
+            .collect();
+        let preload_start = std::time::Instant::now();
+        let preloaded_count = crate::tokens::pool::batch_preload_price_history(&token_mints).await;
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "BATCH_PRELOAD_TIMING",
+                &format!(
+                    "📊 Batch preload completed: {}/{} tokens in {:.2}ms",
+                    preloaded_count,
+                    token_mints.len(),
+                    preload_start.elapsed().as_millis()
+                )
+            );
+        }
 
         for token in scheduled_tokens.iter() {
             processed_count += 1;
