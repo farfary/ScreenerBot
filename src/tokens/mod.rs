@@ -47,6 +47,7 @@ pub mod ohlcv_db;
 pub mod ohlcvs;
 pub mod pool;
 pub mod pool_db;
+pub mod raydium;
 pub mod rugcheck;
 pub mod types;
 

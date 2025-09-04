@@ -152,7 +152,7 @@ pub async fn get_token_pools_from_raydium(token_mint: &str) -> Result<Vec<Raydiu
     let start_time = std::time::Instant::now();
     
     if is_debug_api_enabled() {
-        log(LogTag::POOL, "RAYDIUM_API_START", &format!(
+        log(LogTag::Pool, "RAYDIUM_API_START", &format!(
             "🟡 Fetching pools for token {} from Raydium API", 
             &token_mint[..8]
         ));
@@ -195,14 +195,14 @@ pub async fn get_token_pools_from_raydium(token_mint: &str) -> Result<Vec<Raydiu
     }
 
     // Convert to normalized pool format
-    let pools = api_response.data.data.into_iter()
+    let pools: Vec<RaydiumPool> = api_response.data.data.into_iter()
         .map(|pool_info| parse_raydium_pool(pool_info, token_mint))
         .collect();
 
     let elapsed = start_time.elapsed();
     
     if is_debug_api_enabled() {
-        log(LogTag::POOL, "RAYDIUM_API_SUCCESS", &format!(
+        log(LogTag::Pool, "RAYDIUM_API_SUCCESS", &format!(
             "✅ Raydium API: Found {} pools for {} in {:.2}s",
             pools.len(), &token_mint[..8], elapsed.as_secs_f64()
         ));
@@ -216,7 +216,7 @@ pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> Raydi
     let start_time = std::time::Instant::now();
     
     if is_debug_api_enabled() {
-        log(LogTag::POOL, "RAYDIUM_BATCH_START", &format!(
+        log(LogTag::Pool, "RAYDIUM_BATCH_START", &format!(
             "🟡 Starting Raydium batch pool fetch for {} tokens", 
             token_mints.len()
         ));
@@ -237,7 +237,7 @@ pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> Raydi
         match get_token_pools_from_raydium(token_mint).await {
             Ok(token_pools) => {
                 if is_debug_api_enabled() {
-                    log(LogTag::POOL, "RAYDIUM_BATCH_TOKEN_SUCCESS", &format!(
+                    log(LogTag::Pool, "RAYDIUM_BATCH_TOKEN_SUCCESS", &format!(
                         "✅ {}: {} pools from Raydium", 
                         &token_mint[..8], token_pools.len()
                     ));
@@ -247,7 +247,7 @@ pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> Raydi
             }
             Err(e) => {
                 if is_debug_api_enabled() {
-                    log(LogTag::POOL, "RAYDIUM_BATCH_TOKEN_ERROR", &format!(
+                    log(LogTag::Pool, "RAYDIUM_BATCH_TOKEN_ERROR", &format!(
                         "❌ {}: Raydium error - {}", 
                         &token_mint[..8], e
                     ));
@@ -261,7 +261,7 @@ pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> Raydi
     let elapsed = start_time.elapsed();
     
     if is_debug_api_enabled() {
-        log(LogTag::POOL, "RAYDIUM_BATCH_COMPLETE", &format!(
+        log(LogTag::Pool, "RAYDIUM_BATCH_COMPLETE", &format!(
             "🟡 Raydium batch complete: {}/{} successful in {:.2}s",
             successful_tokens, token_mints.len(), elapsed.as_secs_f64()
         ));
@@ -281,11 +281,34 @@ pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> Raydi
 
 /// Parse Raydium pool info into normalized format
 fn parse_raydium_pool(pool_info: RaydiumPoolInfo, target_token: &str) -> RaydiumPool {
-    // Determine which mint is the target token and which is the quote
+    // SOL mint address for price calculations
+    let sol_mint = "So11111111111111111111111111111111111111112";
+    
+    // Determine which mint is the target token and calculate USD price
     let (base_token, quote_token, price_usd) = if pool_info.mint_a.address == target_token {
-        (pool_info.mint_a.address.clone(), pool_info.mint_b.address.clone(), pool_info.price)
+        // Target token is mintA, price is in terms of mintB
+        let price_in_quote = pool_info.price;
+        
+        // If mintB is SOL, we need to convert to USD (assuming SOL ≈ $207)
+        let price_usd = if pool_info.mint_b.address == sol_mint {
+            price_in_quote * 207.0 // Convert SOL price to USD
+        } else {
+            price_in_quote // Assume other quote tokens are already in USD terms
+        };
+        
+        (pool_info.mint_a.address.clone(), pool_info.mint_b.address.clone(), price_usd)
     } else {
-        (pool_info.mint_b.address.clone(), pool_info.mint_a.address.clone(), 1.0 / pool_info.price)
+        // Target token is mintB, price is mintA/mintB, so we need mintB/mintA
+        let price_in_quote = 1.0 / pool_info.price;
+        
+        // If mintA is SOL, we need to convert to USD
+        let price_usd = if pool_info.mint_a.address == sol_mint {
+            price_in_quote * 207.0 // Convert SOL price to USD
+        } else {
+            price_in_quote // Assume other quote tokens are already in USD terms
+        };
+        
+        (pool_info.mint_b.address.clone(), pool_info.mint_a.address.clone(), price_usd)
     };
 
     // Calculate 24h volume
