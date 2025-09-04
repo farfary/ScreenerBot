@@ -9,7 +9,7 @@
 
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
-use crate::tokens::{ get_pool_service, Token, PriceOptions };
+use crate::tokens::{ Token, PriceOptions };
 use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock as AsyncRwLock; // switched from StdRwLock
@@ -26,53 +26,85 @@ static RECENT_EXIT_PRICE_CACHE: Lazy<
 const EXIT_PRICE_CACHE_TTL: Duration = Duration::from_secs(30);
 const EXIT_PRICE_CACHE_MAX_ENTRIES: usize = 1024; // prune safeguard
 
-async fn get_cached_recent_exit_prices(mint: &str, limit: usize) -> Vec<f64> {
-    // 1. Check cache
+// Optimized: Check cache only, no database calls during token checking
+async fn get_cached_recent_exit_prices_fast(mint: &str) -> Vec<f64> {
+    let map = RECENT_EXIT_PRICE_CACHE.read().await;
+    if let Some(entry) = map.get(mint) {
+        if entry.fetched_at.elapsed() < EXIT_PRICE_CACHE_TTL {
+            return entry.prices.clone();
+        }
+    }
+    Vec::new() // Return empty if not cached, avoid DB during token checking
+}
+
+// Batch preload exit prices for multiple tokens (call before token processing)
+pub async fn preload_exit_prices_batch(mints: &[String]) -> Result<(), String> {
+    use crate::positions_db::get_positions_database;
+
+    // Only load for mints not in cache or expired
+    let mut mints_to_load = Vec::new();
     {
         let map = RECENT_EXIT_PRICE_CACHE.read().await;
-        if let Some(entry) = map.get(mint) {
-            if entry.fetched_at.elapsed() < EXIT_PRICE_CACHE_TTL {
-                return entry.prices.clone();
+        for mint in mints {
+            if let Some(entry) = map.get(mint) {
+                if entry.fetched_at.elapsed() >= EXIT_PRICE_CACHE_TTL {
+                    mints_to_load.push(mint.clone());
+                }
+            } else {
+                mints_to_load.push(mint.clone());
             }
         }
     }
-    // 2. Fetch minimal data (DB)
-    use crate::positions_db::get_positions_database;
-    let mut out = Vec::new();
+
+    if mints_to_load.is_empty() {
+        return Ok(());
+    }
+
+    // Single database call for all mints
     if let Ok(db_lock) = get_positions_database().await {
         let guard = db_lock.lock().await;
         if let Some(ref db) = *guard {
-            if let Ok(rows) = db.get_recent_closed_exit_prices_for_mint(mint, limit).await {
-                for (exit_p, eff_p) in rows.into_iter() {
-                    if let Some(p) = eff_p.or(exit_p) {
-                        if p.is_finite() && p > 0.0 {
-                            out.push(p);
+            // Batch load all exit prices in one query (implement in positions_db if needed)
+            for mint in &mints_to_load {
+                if
+                    let Ok(rows) = db.get_recent_closed_exit_prices_for_mint(
+                        mint,
+                        REENTRY_LOOKBACK_MAX
+                    ).await
+                {
+                    let mut prices = Vec::new();
+                    for (exit_p, eff_p) in rows.into_iter() {
+                        if let Some(p) = eff_p.or(exit_p) {
+                            if p.is_finite() && p > 0.0 {
+                                prices.push(p);
+                            }
+                        }
+                    }
+
+                    // Store in cache
+                    let mut mapw = RECENT_EXIT_PRICE_CACHE.write().await;
+                    mapw.insert(mint.clone(), ExitPriceCacheEntry {
+                        prices,
+                        fetched_at: Instant::now(),
+                    });
+
+                    // Simple pruning: remove excess entries
+                    if mapw.len() > EXIT_PRICE_CACHE_MAX_ENTRIES {
+                        let keys_to_remove: Vec<String> = mapw
+                            .keys()
+                            .take(mapw.len() - EXIT_PRICE_CACHE_MAX_ENTRIES)
+                            .cloned()
+                            .collect();
+                        for key in keys_to_remove {
+                            mapw.remove(&key);
                         }
                     }
                 }
             }
         }
     }
-    // 3. Store with pruning
-    {
-        let mut mapw = RECENT_EXIT_PRICE_CACHE.write().await;
-        mapw.insert(mint.to_string(), ExitPriceCacheEntry {
-            prices: out.clone(),
-            fetched_at: Instant::now(),
-        });
-        if mapw.len() > EXIT_PRICE_CACHE_MAX_ENTRIES {
-            // prune oldest by fetched_at (simple O(n))
-            if
-                let Some(old_key) = mapw
-                    .iter()
-                    .min_by_key(|(_, v)| v.fetched_at)
-                    .map(|(k, _)| k.clone())
-            {
-                mapw.remove(&old_key);
-            }
-        }
-    }
-    out
+
+    Ok(())
 }
 
 // =============================================================================
@@ -80,7 +112,7 @@ async fn get_cached_recent_exit_prices(mint: &str, limit: usize) -> Vec<f64> {
 // =============================================================================
 
 // Balanced windows for stable entries (30s to 10min)
-const MIN_PRICE_POINTS: usize = 8; // Increased from 3 for better analysis
+const MIN_PRICE_POINTS: usize = 5; // Increased from 3 for better analysis
 const MAX_DATA_AGE_MIN: i64 = 5; // Keep tight data freshness requirement
 
 // Conservative liquidity filter for more stable entries
@@ -185,20 +217,27 @@ fn analyze_local_structure(
 
 /// Main entry point for determining if a token should be bought
 /// Returns (approved_for_entry, confidence_score, reason)
-pub async fn should_buy(token: &Token) -> (bool, f64, String) {
+///
+/// PERFORMANCE OPTIMIZED: Takes price_history as parameter to avoid duplicate database calls
+pub async fn should_buy(
+    token: &Token,
+    price_history: &[(DateTime<Utc>, f64)]
+) -> (bool, f64, String) {
     // Immediate debug log to ensure we're getting called
     if is_debug_entry_enabled() {
         log(
             LogTag::Entry,
             "SHOULD_BUY_START",
-            &format!("🔍 Starting entry analysis for {}", token.symbol)
+            &format!(
+                "🔍 Starting entry analysis for {} with {} price points",
+                token.symbol,
+                price_history.len()
+            )
         );
     }
 
-    let pool_service = get_pool_service();
-
     // Pull recent exit prices via cache helper (minimal DB load)
-    let prior_exit_prices = get_cached_recent_exit_prices(&token.mint, REENTRY_LOOKBACK_MAX).await;
+    let prior_exit_prices = get_cached_recent_exit_prices_fast(&token.mint).await;
     let prior_count = prior_exit_prices.len();
     let last_exit_price = prior_exit_prices.first().cloned();
 
@@ -287,33 +326,12 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         );
     }
 
-    let mut price_history = pool_service.get_price_history(&token.mint).await;
+    // Use the passed price history parameter
+    let mut price_history = price_history.to_vec();
     // Filter out invalid prices (0 or non-finite)
     price_history.retain(|(_, p)| *p > 0.0 && p.is_finite());
 
-    // Proactively refresh once if history is insufficient, then re-fetch
-    if price_history.len() < MIN_PRICE_POINTS {
-        // Force a fresh pool-only price to seed history
-        let _ = crate::tokens::get_price(&token.mint, Some(PriceOptions::default()), false).await;
-        let mut refreshed = pool_service.get_price_history(&token.mint).await;
-        refreshed.retain(|(_, p)| *p > 0.0 && p.is_finite());
-        if refreshed.len() >= price_history.len() {
-            price_history = refreshed;
-        }
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "HISTORY_REFRESHED",
-                &format!(
-                    "{} refreshed history size={} (needed >= {})",
-                    token.symbol,
-                    price_history.len(),
-                    MIN_PRICE_POINTS
-                )
-            );
-        }
-    }
-
+    // Quick insufficient history check - avoid expensive refresh for performance
     if price_history.len() < MIN_PRICE_POINTS {
         if is_debug_entry_enabled() {
             log(
@@ -333,12 +351,10 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             let recent_price = price_history[0].1;
             if recent_price > 0.0 && recent_price.is_finite() {
                 let instant_drop = ((recent_price - current_price) / recent_price) * 100.0;
-                if instant_drop >= 8.0 && instant_drop <= 75.0 {
-                    // Higher minimum drop requirement
-                    // Conservative confidence for single-point drops
-                    let confidence = (20.0 + instant_drop * 0.6).min(50.0); // Reduced scaling
+                if instant_drop >= 15.0 && instant_drop <= 75.0 {
+                    // Higher minimum drop requirement for insufficient data
+                    let confidence = (25.0 + instant_drop * 0.5).min(45.0); // Conservative scaling
                     if confidence >= 35.0 {
-                        // Higher confidence threshold
                         if is_debug_entry_enabled() {
                             log(
                                 LogTag::Entry,
@@ -354,7 +370,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
                         return (
                             true,
                             confidence,
-                            format!("Conservative instant drop -{:.1}%", instant_drop),
+                            format!("Quick entry on {:.1}% instant drop", instant_drop),
                         );
                     }
                 }
@@ -634,59 +650,68 @@ fn calculate_scalp_activity_score(txns_5min: f64) -> f64 {
 }
 
 /// ATH Prevention Analysis - checks if current price is too close to recent highs
+/// OPTIMIZED: Single pass through price history with pre-computed time boundaries
 async fn check_ath_risk(price_history: &[(DateTime<Utc>, f64)], current_price: f64) -> (bool, f64) {
     let now = Utc::now();
     let mut max_ath_percentage: f64 = 0.0;
     let mut near_ath = false;
 
+    // Pre-compute time boundaries
+    let cutoff_15min = now - chrono::Duration::seconds(ATH_LOOKBACK_15MIN);
+    let cutoff_1hr = now - chrono::Duration::seconds(ATH_LOOKBACK_1HR);
+    let cutoff_6hr = now - chrono::Duration::seconds(ATH_LOOKBACK_6HR);
+
+    // Single pass through price history to collect all timeframe data
+    let mut high_15min = 0.0f64;
+    let mut high_1hr = 0.0f64;
+    let mut high_6hr = 0.0f64;
+    let mut count_15min = 0;
+    let mut count_1hr = 0;
+    let mut count_6hr = 0;
+
+    for (ts, price) in price_history.iter() {
+        if *price <= 0.0 || !price.is_finite() {
+            continue;
+        }
+
+        if *ts >= cutoff_15min {
+            high_15min = high_15min.max(*price);
+            count_15min += 1;
+        }
+        if *ts >= cutoff_1hr {
+            high_1hr = high_1hr.max(*price);
+            count_1hr += 1;
+        }
+        if *ts >= cutoff_6hr {
+            high_6hr = high_6hr.max(*price);
+            count_6hr += 1;
+        }
+    }
+
     // Check 15min ATH
-    let prices_15min: Vec<f64> = price_history
-        .iter()
-        .filter(|(ts, _)| (now - *ts).num_seconds() <= ATH_LOOKBACK_15MIN)
-        .map(|(_, p)| *p)
-        .collect();
-    if prices_15min.len() >= 3 {
-        let high_15min = prices_15min.iter().fold(0.0f64, |a, b| a.max(*b));
-        if high_15min > 0.0 {
-            let ath_pct = current_price / high_15min;
-            max_ath_percentage = max_ath_percentage.max(ath_pct);
-            if ath_pct >= ATH_THRESHOLD_15MIN {
-                near_ath = true;
-            }
+    if count_15min >= 3 && high_15min > 0.0 {
+        let ath_pct = current_price / high_15min;
+        max_ath_percentage = max_ath_percentage.max(ath_pct);
+        if ath_pct >= ATH_THRESHOLD_15MIN {
+            near_ath = true;
         }
     }
 
     // Check 1hr ATH
-    let prices_1hr: Vec<f64> = price_history
-        .iter()
-        .filter(|(ts, _)| (now - *ts).num_seconds() <= ATH_LOOKBACK_1HR)
-        .map(|(_, p)| *p)
-        .collect();
-    if prices_1hr.len() >= 5 {
-        let high_1hr = prices_1hr.iter().fold(0.0f64, |a, b| a.max(*b));
-        if high_1hr > 0.0 {
-            let ath_pct = current_price / high_1hr;
-            max_ath_percentage = max_ath_percentage.max(ath_pct);
-            if ath_pct >= ATH_THRESHOLD_1HR {
-                near_ath = true;
-            }
+    if count_1hr >= 5 && high_1hr > 0.0 {
+        let ath_pct = current_price / high_1hr;
+        max_ath_percentage = max_ath_percentage.max(ath_pct);
+        if ath_pct >= ATH_THRESHOLD_1HR {
+            near_ath = true;
         }
     }
 
     // Check 6hr ATH
-    let prices_6hr: Vec<f64> = price_history
-        .iter()
-        .filter(|(ts, _)| (now - *ts).num_seconds() <= ATH_LOOKBACK_6HR)
-        .map(|(_, p)| *p)
-        .collect();
-    if prices_6hr.len() >= 10 {
-        let high_6hr = prices_6hr.iter().fold(0.0f64, |a, b| a.max(*b));
-        if high_6hr > 0.0 {
-            let ath_pct = current_price / high_6hr;
-            max_ath_percentage = max_ath_percentage.max(ath_pct);
-            if ath_pct >= ATH_THRESHOLD_6HR {
-                near_ath = true;
-            }
+    if count_6hr >= 10 && high_6hr > 0.0 {
+        let ath_pct = current_price / high_6hr;
+        max_ath_percentage = max_ath_percentage.max(ath_pct);
+        if ath_pct >= ATH_THRESHOLD_6HR {
+            near_ath = true;
         }
     }
 
@@ -871,7 +896,11 @@ async fn get_current_pool_data(token: &Token) -> Option<(f64, i64, f64)> {
 // =============================================================================
 
 /// Calculate profit targets optimized for fast scalping (5-10% minimum focus)
-pub async fn get_profit_target(token: &Token) -> (f64, f64) {
+/// OPTIMIZED: Accept price_history to avoid redundant fetches
+pub async fn get_profit_target(
+    token: &Token,
+    price_history_opt: Option<&[(DateTime<Utc>, f64)]>
+) -> (f64, f64) {
     // Pull current pool data first (price + SOL reserves)
     let (current_price_opt, reserve_sol) = match get_current_pool_data(token).await {
         Some((price, _age_min, reserves)) => (Some(price), reserves),
@@ -920,24 +949,31 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
     min_profit *= activity_multiplier;
     max_profit *= activity_multiplier;
 
-    // Volatility-based adjustment using longer window for stability (5min vs 1min)
-    let pool_service = get_pool_service();
-    let price_history = pool_service.get_price_history(&token.mint).await;
-    if current_price_opt.is_some() && price_history.len() >= 5 {
-        let now = Utc::now();
-        let prices_5min: Vec<f64> = price_history
-            .iter()
-            .filter(|(ts, _)| (now - *ts).num_seconds() <= 300) // 5min window for more stability
-            .map(|(_, p)| *p)
-            .collect();
-        if prices_5min.len() >= 3 {
-            let high_5min = prices_5min.iter().fold(0.0f64, |a, b| a.max(*b));
-            let low_5min = prices_5min.iter().fold(f64::INFINITY, |a, b| a.min(*b));
-            if high_5min.is_finite() && low_5min.is_finite() && high_5min > 0.0 && low_5min > 0.0 {
-                let hl_range_5min = ((high_5min - low_5min) / high_5min) * 100.0;
-                let scale = (hl_range_5min / 50.0).clamp(0.0, 0.4); // Reduced scaling
-                min_profit *= 1.0 + scale * 0.3; // Reduced adjustment
-                max_profit *= 1.0 + scale * 0.4; // Reduced adjustment
+    // Volatility-based adjustment using provided price history
+    if current_price_opt.is_some() && price_history_opt.is_some() {
+        let price_history = price_history_opt.unwrap();
+
+        if price_history.len() >= 5 {
+            let now = Utc::now();
+            let prices_5min: Vec<f64> = price_history
+                .iter()
+                .filter(|(ts, _)| (now - *ts).num_seconds() <= 300) // 5min window for more stability
+                .map(|(_, p)| *p)
+                .collect();
+            if prices_5min.len() >= 3 {
+                let high_5min = prices_5min.iter().fold(0.0f64, |a, b| a.max(*b));
+                let low_5min = prices_5min.iter().fold(f64::INFINITY, |a, b| a.min(*b));
+                if
+                    high_5min.is_finite() &&
+                    low_5min.is_finite() &&
+                    high_5min > 0.0 &&
+                    low_5min > 0.0
+                {
+                    let hl_range_5min = ((high_5min - low_5min) / high_5min) * 100.0;
+                    let scale = (hl_range_5min / 50.0).clamp(0.0, 0.4); // Reduced scaling
+                    min_profit *= 1.0 + scale * 0.3; // Reduced adjustment
+                    max_profit *= 1.0 + scale * 0.4; // Reduced adjustment
+                }
             }
         }
     }

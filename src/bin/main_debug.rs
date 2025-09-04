@@ -4905,7 +4905,7 @@ async fn test_real_position_management(
     );
 
     // Get profit targets and liquidity tier for test
-    let (profit_min, profit_max) = get_profit_target(&test_token).await;
+    let (profit_min, profit_max) = get_profit_target(&test_token, None).await;
     let liquidity_tier = Some("TEST".to_string()); // Test tier for debug
 
     // Open position using the PositionsManager

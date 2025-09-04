@@ -3346,7 +3346,14 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
 
                         let entry_start = std::time::Instant::now();
-                        let (approved, confidence, reason) = crate::entry::should_buy(&token).await;
+
+                        // Get updated price history for entry analysis
+                        let price_history = pool_service.get_price_history(&token.mint).await;
+
+                        let (approved, confidence, reason) = crate::entry::should_buy(
+                            &token,
+                            &price_history
+                        ).await;
                         let entry_duration = entry_start.elapsed();
 
                         if is_debug_trader_enabled() {
@@ -3445,7 +3452,10 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         };
 
                         // Get profit targets and liquidity tier
-                        let (profit_min, profit_max) = get_profit_target(&token).await;
+                        let (profit_min, profit_max) = get_profit_target(
+                            &token,
+                            Some(&price_history)
+                        ).await;
 
                         // Get liquidity tier from pool data
                         let liquidity_tier = if
