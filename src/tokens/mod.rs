@@ -39,6 +39,7 @@ pub mod cache;
 pub mod decimals;
 pub mod dexscreener;
 pub mod discovery;
+pub mod geckoterminal;
 pub mod holders;
 pub mod lp_lock;
 pub mod monitor;
