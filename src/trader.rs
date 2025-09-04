@@ -136,7 +136,7 @@ pub const PRICE_CACHE_LOCK_TIMEOUT_MS: u64 = 2000;
 /// Reduced to prevent cycles from taking longer than the 3s interval
 pub const TASK_COLLECTION_TIMEOUT_SECS: u64 = 30;
 
-/// Token check result collection timeout (seconds) 
+/// Token check result collection timeout (seconds)
 /// Reduced to prevent the 116s cycle timeout issue
 pub const TOKEN_CHECK_COLLECTION_TIMEOUT_SECS: u64 = 30;
 

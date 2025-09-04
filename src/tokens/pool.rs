@@ -1901,10 +1901,15 @@ impl PoolPriceService {
             )
         );
         let calculator = get_global_pool_price_calculator();
-        
+
         // Add timeout to prevent batch calculations from hanging the cycle
         let calc_timeout = Duration::from_secs(15); // Max 15s for any batch calculation
-        match tokio::time::timeout(calc_timeout, calculator.calculate_multiple_token_prices(&pool_token_pairs)).await {
+        match
+            tokio::time::timeout(
+                calc_timeout,
+                calculator.calculate_multiple_token_prices(&pool_token_pairs)
+            ).await
+        {
             Ok(Ok(price_results)) => {
                 log(
                     LogTag::Pool,
@@ -2177,7 +2182,7 @@ impl PoolPriceService {
                     )
                 );
 
-                // Update stats for timeout failures  
+                // Update stats for timeout failures
                 {
                     let mut stats = stats_arc.write().await;
                     for _ in 0..tokens.len() {
@@ -5356,7 +5361,7 @@ impl PoolPriceCalculator {
                 }
             }
             idx = end;
-            
+
             // Add small delay between chunks to prevent RPC rate limiting
             if idx < pubkeys.len() {
                 tokio::time::sleep(Duration::from_millis(50)).await;
