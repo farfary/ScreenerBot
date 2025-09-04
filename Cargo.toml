@@ -61,6 +61,14 @@ path = "src/bin/test_websocket.rs"
 name = "main_debug_find_program_pools"
 path = "src/bin/main_debug_find_program_pools.rs"
 
+[[bin]]
+name = "main_debug_decimals"
+path = "src/bin/main_debug_decimals.rs"
+
+[[bin]]
+name = "main_debug_decimals_direct"
+path = "src/bin/main_debug_decimals_direct.rs"
+
 
 
 [dependencies]
