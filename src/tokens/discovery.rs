@@ -731,10 +731,10 @@ impl TokenDiscovery {
                     }
                 }
             }
-        } 
-        
+        }
+
         // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;         // Fetch new tokens from RugCheck
+        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await; // Fetch new tokens from RugCheck
         match fetch_rugcheck_new_tokens().await {
             Ok(mints) => {
                 if is_debug_discovery_enabled() {
