@@ -42,7 +42,7 @@
 pub const MAX_OPEN_POSITIONS: usize = 10;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.005;
+pub const TRADE_SIZE_SOL: f64 = 0.01;
 
 /// Enable minimum profit threshold requirement before allowing sells
 pub const MIN_PROFIT_THRESHOLD_ENABLED: bool = true;
