@@ -1130,6 +1130,116 @@ pub async fn get_token_pairs_from_api(token_address: &str) -> Result<Vec<TokenPa
     }
 }
 
+/// Get token pools from DexScreener API (consistent naming with GeckoTerminal and Raydium)
+pub async fn get_token_pools_from_dexscreener(token_address: &str) -> Result<Vec<TokenPair>, String> {
+    get_token_pairs_from_api(token_address).await
+}
+
+/// Batch result for multiple tokens from DexScreener
+pub struct DexScreenerBatchResult {
+    pub pools: HashMap<String, Vec<TokenPair>>,
+    pub errors: HashMap<String, String>,
+    pub successful_tokens: usize,
+    pub failed_tokens: usize,
+}
+
+/// Get pools for multiple tokens in batch from DexScreener API (consistent naming)
+pub async fn get_batch_token_pools_from_dexscreener(token_addresses: &[String]) -> DexScreenerBatchResult {
+    let start_time = std::time::Instant::now();
+
+    if is_debug_api_enabled() {
+        log(
+            LogTag::Api,
+            "DEXSCREENER_BATCH_START",
+            &format!("🟡 Starting DexScreener batch pool fetch for {} tokens", token_addresses.len())
+        );
+    }
+
+    let mut pools = HashMap::new();
+    let mut errors = HashMap::new();
+    let mut successful_tokens = 0;
+    let mut failed_tokens = 0;
+
+    // Process tokens with rate limiting
+    for (i, token_address) in token_addresses.iter().enumerate() {
+        // Rate limiting: conservative delay between requests (300 req/min = 5 req/sec = 200ms between requests)
+        if i > 0 {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+
+        match get_token_pools_from_dexscreener(token_address).await {
+            Ok(token_pools) => {
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "DEXSCREENER_BATCH_SUCCESS",
+                        &format!("✅ DexScreener: {} found {} pools", &token_address[..8], token_pools.len())
+                    );
+                }
+                pools.insert(token_address.clone(), token_pools);
+                successful_tokens += 1;
+            }
+            Err(e) => {
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "DEXSCREENER_BATCH_ERROR",
+                        &format!("❌ DexScreener: {} failed: {}", &token_address[..8], e)
+                    );
+                }
+                errors.insert(token_address.clone(), e);
+                failed_tokens += 1;
+            }
+        }
+    }
+
+    let elapsed = start_time.elapsed();
+
+    if is_debug_api_enabled() {
+        log(
+            LogTag::Api,
+            "DEXSCREENER_BATCH_COMPLETE",
+            &format!(
+                "✅ DexScreener batch complete: {}/{} successful in {:.2}s",
+                successful_tokens,
+                token_addresses.len(),
+                elapsed.as_secs_f64()
+            )
+        );
+    }
+
+    DexScreenerBatchResult {
+        pools,
+        errors,
+        successful_tokens,
+        failed_tokens,
+    }
+}
+
+/// Helper function to process DexScreener batch results into cache format
+/// This moves the processing logic from pool.rs into dexscreener.rs
+pub fn process_dexscreener_batch_results(
+    dexscreener_result: &DexScreenerBatchResult
+) -> HashMap<String, Vec<crate::tokens::pool::CachedPoolInfo>> {
+    let mut processed_pools = HashMap::new();
+
+    for (token_address, dex_pools) in &dexscreener_result.pools {
+        let mut cached_pools = Vec::new();
+
+        for pool in dex_pools {
+            if let Ok(cached_pool) = crate::tokens::pool::CachedPoolInfo::from_token_pair(pool) {
+                cached_pools.push(cached_pool);
+            }
+        }
+
+        if !cached_pools.is_empty() {
+            processed_pools.insert(token_address.clone(), cached_pools);
+        }
+    }
+
+    processed_pools
+}
+
 // =============================================================================
 // GLOBAL DEXSCREENER API SINGLETON (TRUE SINGLETON)
 // =============================================================================

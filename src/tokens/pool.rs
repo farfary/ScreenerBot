@@ -9,7 +9,25 @@ use crate::global::{ is_debug_pool_prices_enabled, CACHE_POOL_DIR };
 use crate::logger::{ log, LogTag };
 use crate::rpc::get_rpc_client;
 use crate::tokens::decimals::get_cached_decimals;
-use crate::tokens::dexscreener::{ get_token_pairs_from_api, TokenPair };
+use crate::tokens::dexscreener::{ 
+    get_token_pairs_from_api, 
+    get_token_pools_from_dexscreener,
+    get_batch_token_pools_from_dexscreener,
+    process_dexscreener_batch_results,
+    DexScreenerBatchResult,
+    TokenPair 
+};
+use crate::tokens::geckoterminal::{
+    get_token_pools_from_geckoterminal,
+    get_batch_token_pools_from_geckoterminal,
+    process_geckoterminal_batch_results,
+    GeckoTerminalBatchResult,
+};
+use crate::tokens::raydium::{
+    get_token_pools_from_raydium,
+    get_batch_token_pools_from_raydium,
+    RaydiumBatchResult,
+};
 use crate::tokens::is_system_or_stable_token;
 use crate::tokens::pool_db::{
     init_pool_db_service,
@@ -1243,7 +1261,7 @@ impl PoolPriceService {
 
                                         // Update stale pools by fetching fresh data from API
                                         for db_pool in stale_pools.iter().take(10) { // Limit to 10 per cycle to avoid rate limits
-                                            if let Ok(pairs) = crate::tokens::dexscreener::get_token_pairs_from_api(&db_pool.token_mint).await {
+                                            if let Ok(pairs) = get_token_pools_from_dexscreener(&db_pool.token_mint).await {
                                                 if !pairs.is_empty() {
                                                     if let Err(e) = crate::tokens::pool_db::store_pools_from_dexscreener_response(&pairs) {
                                                         log(
@@ -1450,33 +1468,14 @@ impl PoolPriceService {
                 .map(|s| s.clone())
                 .collect();
 
-            // Launch ALL THREE API calls concurrently for maximum speed
-            let dex_futures: Vec<_> = chunk_vec
-                .iter()
-                .map(|token| get_token_pairs_from_api(token))
-                .collect();
-
-            let gecko_future =
-                crate::tokens::geckoterminal::get_batch_token_pools_from_geckoterminal(&chunk_vec);
-            let raydium_future = crate::tokens::raydium::get_batch_token_pools_from_raydium(
-                &chunk_vec
-            );
-
-            // Execute all DexScreener calls concurrently
-            let dex_future = async {
-                let results = futures::future::join_all(dex_futures).await;
-                results
-                    .into_iter()
-                    .zip(chunk_vec.iter())
-                    .filter_map(|(result, token)| {
-                        result.ok().map(|pairs| (token.clone(), pairs))
-                    })
-                    .collect::<Vec<(String, Vec<_>)>>()
-            };
+            // Launch ALL THREE API calls concurrently for maximum speed using batch functions
+            let dexscreener_future = get_batch_token_pools_from_dexscreener(&chunk_vec);
+            let gecko_future = get_batch_token_pools_from_geckoterminal(&chunk_vec);
+            let raydium_future = get_batch_token_pools_from_raydium(&chunk_vec);
 
             // Wait for ALL THREE APIs to complete concurrently
-            let (dex_results, gecko_result, raydium_result) = tokio::join!(
-                dex_future,
+            let (dexscreener_result, gecko_result, raydium_result) = tokio::join!(
+                dexscreener_future,
                 gecko_future,
                 raydium_future
             );
@@ -1488,45 +1487,18 @@ impl PoolPriceService {
             // Get current pool cache
             let mut pool_cache = self.pool_cache.write().await;
 
-            // Process DexScreener results
-            for (token_address, pairs) in dex_results {
-                if !pairs.is_empty() {
+            // Process DexScreener results using the helper function
+            let processed_dexscreener_pools = process_dexscreener_batch_results(&dexscreener_result);
+            for (token_address, cached_pools) in processed_dexscreener_pools {
+                if !cached_pools.is_empty() {
                     dx_success += 1;
-
-                    let cached_pools: Vec<CachedPoolInfo> = pairs
-                        .into_iter()
-                        .map(|pair| {
-                            let price_usd = pair.price_usd
-                                .and_then(|p| p.parse::<f64>().ok())
-                                .unwrap_or(0.0);
-                            let liquidity_usd = pair.liquidity
-                                .as_ref()
-                                .map(|l| l.usd)
-                                .unwrap_or(0.0);
-
-                            CachedPoolInfo {
-                                pair_address: pair.pair_address,
-                                dex_id: format!("dx_{}", pair.dex_id),
-                                base_token: pair.base_token.address,
-                                quote_token: pair.quote_token.address,
-                                price_native: pair.price_native.parse().unwrap_or(0.0),
-                                price_usd,
-                                liquidity_usd,
-                                volume_24h: pair.volume.h24.unwrap_or(0.0),
-                                created_at: pair.pair_created_at.unwrap_or(0),
-                                cached_at: Utc::now(),
-                            }
-                        })
-                        .collect();
-
                     pool_cache.insert(token_address, cached_pools);
                 }
             }
             dexscreener_successful += dx_success;
 
             // Process GeckoTerminal results using the helper function
-            let processed_gecko_pools =
-                crate::tokens::geckoterminal::process_geckoterminal_batch_results(&gecko_result);
+            let processed_gecko_pools = process_geckoterminal_batch_results(&gecko_result);
             for (token_address, cached_pools) in processed_gecko_pools {
                 gt_success += 1;
 
@@ -1555,17 +1527,14 @@ impl PoolPriceService {
                                 price_usd: raydium_pool.price_usd,
                                 liquidity_usd: raydium_pool.liquidity_usd,
                                 volume_24h: raydium_pool.volume_24h,
-                                created_at: 0, // Raydium doesn't provide created_at in the same format
+                                created_at: 0, // Raydium doesn't provide creation time
                                 cached_at: Utc::now(),
                             }
                         })
                         .collect();
 
                     // Merge with existing pools if any
-                    let existing_pools = pool_cache
-                        .get(&token_address)
-                        .cloned()
-                        .unwrap_or_default();
+                    let existing_pools = pool_cache.get(&token_address).cloned().unwrap_or_default();
                     let mut combined_pools = existing_pools;
                     combined_pools.extend(cached_pools);
                     pool_cache.insert(token_address, combined_pools);
@@ -3393,7 +3362,7 @@ impl PoolPriceService {
 
         // Fetch from DexScreener API
         let (dexscreener_pairs, dexscreener_error) = match
-            get_token_pairs_from_api(token_address).await
+            get_token_pools_from_dexscreener(token_address).await
         {
             Ok(pairs) => (pairs, None),
             Err(e) => {
@@ -8394,8 +8363,8 @@ pub async fn test_dual_api_pool_discovery(token_addresses: &[String]) -> Result<
         // Limit to 5 tokens for testing
         log(LogTag::Pool, "DUAL_API_TEST_TOKEN", &format!("🔍 Testing token: {}", token_address));
 
-        // Test DexScreener
-        let dexscreener_result = get_token_pairs_from_api(token_address).await;
+        // Test DexScreener (using new consistent naming)
+        let dexscreener_result = get_token_pools_from_dexscreener(token_address).await;
         let dexscreener_count = match &dexscreener_result {
             Ok(pairs) => pairs.len(),
             Err(_) => 0,
@@ -8491,8 +8460,8 @@ pub async fn test_triple_api_pool_discovery(token_addresses: &[String]) -> Resul
         // Limit to 5 tokens for testing
         log(LogTag::Pool, "TRIPLE_API_TEST_TOKEN", &format!("🔍 Testing token: {}", token_address));
 
-        // Test DexScreener
-        let dexscreener_result = get_token_pairs_from_api(token_address).await;
+        // Test DexScreener (using new consistent naming)
+        let dexscreener_result = get_token_pools_from_dexscreener(token_address).await;
         let dexscreener_count = match &dexscreener_result {
             Ok(pairs) => pairs.len(),
             Err(_) => 0,
