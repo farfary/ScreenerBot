@@ -103,7 +103,7 @@ const ADHOC_UPDATE_INTERVAL_SECS: u64 = 1; // batch ad-hoc warms every 1s (faste
 /// Delay between chunk processing in triple API batch operations (in milliseconds)
 /// This prevents overwhelming APIs with too many rapid consecutive chunk requests
 /// Each chunk contains up to 30 tokens and calls all three APIs (DexScreener, GeckoTerminal, Raydium)
-const TRIPLE_API_CHUNK_DELAY_MS: u64 = 3000; // 3 seconds between chunks
+const TRIPLE_API_CHUNK_DELAY_MS: u64 = 1000; // 1 second between chunks (reduced from 3s for better performance)
 pub const MIN_POOL_LIQUIDITY_USD: f64 = 10.0;
 
 // Monitoring concurrency & performance budgeting
@@ -1066,6 +1066,7 @@ impl PoolPriceService {
                 Duration::from_secs(ADHOC_UPDATE_INTERVAL_SECS)
             );
             let mut pool_refresh_interval = tokio::time::interval(Duration::from_secs(300)); // Refresh stale pools every 5 minutes
+            let mut pool_discovery_interval = tokio::time::interval(Duration::from_secs(60)); // Pool discovery every 1 minute (separate from price calc)
 
             loop {
                 tokio::select! {
@@ -1315,6 +1316,49 @@ impl PoolPriceService {
                             }
                         });
                     }
+
+                    // Pool discovery task - discover pools for tokens in watchlist that don't have cached pools
+                    _ = pool_discovery_interval.tick() => {
+                        // Check if monitoring should continue
+                        {
+                            let active = monitoring_active.read().await;
+                            if !*active {
+                                break;
+                            }
+                        }
+
+                        // Get tokens from watchlist that need pool discovery (don't have cached pools)
+                        let tokens_needing_discovery: Vec<String> = {
+                            let watchlist = watchlist_tokens.read().await;
+                            let mut tokens = Vec::new();
+                            
+                            // Take up to 30 tokens from watchlist for pool discovery
+                            for token in watchlist.iter().take(30) {
+                                tokens.push(token.clone());
+                            }
+                            tokens
+                        };
+
+                        if !tokens_needing_discovery.is_empty() {
+                            // Run pool discovery as separate async task to avoid blocking price calculations
+                            tokio::spawn(async move {
+                                let service = get_pool_service();
+                                let discovered = service.discover_pools_for_tokens(&tokens_needing_discovery).await;
+                                
+                                if discovered > 0 {
+                                    log(
+                                        LogTag::Pool,
+                                        "POOL_DISCOVERY",
+                                        &format!(
+                                            "🔍 Pool discovery cycle: {} pools discovered for {} tokens",
+                                            discovered,
+                                            tokens_needing_discovery.len()
+                                        )
+                                    );
+                                }
+                            });
+                        }
+                    }
                 }
             }
 
@@ -1467,6 +1511,77 @@ impl PoolPriceService {
         (dexscreener_successful, geckoterminal_successful, raydium_successful, combined_successful)
     }
 
+    /// Dedicated pool discovery service - runs separately from price calculation
+    /// This handles the slow triple API calls to discover new pools
+    pub async fn discover_pools_for_tokens(&self, token_addresses: &[String]) -> usize {
+        if token_addresses.is_empty() {
+            return 0;
+        }
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "POOL_DISCOVERY_START",
+                &format!(
+                    "🔍 Starting pool discovery for {} tokens (separate from price calculation)",
+                    token_addresses.len()
+                )
+            );
+        }
+
+        let mut discovered_pools = 0;
+
+        // Only process tokens that don't already have cached pools and aren't blacklisted
+        let mut tokens_needing_discovery = Vec::new();
+        {
+            let cache = self.pool_cache.read().await;
+            for token_address in token_addresses {
+                // Skip blacklisted tokens
+                if is_token_blacklisted(token_address) {
+                    continue;
+                }
+
+                if
+                    !cache.contains_key(token_address) ||
+                    cache.get(token_address).map_or(true, |pools| pools.is_empty())
+                {
+                    tokens_needing_discovery.push(token_address.clone());
+                }
+            }
+        }
+
+        if tokens_needing_discovery.is_empty() {
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "POOL_DISCOVERY_SKIP",
+                    "All tokens already have cached pools, skipping discovery"
+                );
+            }
+            return 0;
+        }
+
+        // Use the triple API batch function for comprehensive discovery
+        let (_dx_success, _gt_success, _ray_success, combined_success) =
+            self.batch_refresh_pools_triple_api(&tokens_needing_discovery).await;
+
+        discovered_pools = combined_success;
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "POOL_DISCOVERY_COMPLETE",
+                &format!(
+                    "🔍 Pool discovery complete: {} pools discovered for {} tokens",
+                    discovered_pools,
+                    tokens_needing_discovery.len()
+                )
+            );
+        }
+
+        discovered_pools
+    }
+
     /// Batch update token prices using pool calculations (OPTIMIZED)
     async fn batch_update_token_prices(
         tokens: &[String],
@@ -1504,18 +1619,10 @@ impl PoolPriceService {
                     pool_token_pairs.push((best_pool.pair_address.clone(), token_address.clone()));
                     tokens_with_pools += 1;
                 }
-            } else {
-                // Try to fetch pools for tokens that don't have cached data
-                if let Ok(pools) = service.fetch_and_cache_pools(token_address).await {
-                    if let Some(best_pool) = pools.first() {
-                        pool_token_pairs.push((
-                            best_pool.pair_address.clone(),
-                            token_address.clone(),
-                        ));
-                        tokens_with_pools += 1;
-                    }
-                }
             }
+            // REMOVED: No longer try to fetch pools for tokens without cached data
+            // This prevents mixing slow pool discovery with fast price calculation
+            // Pool discovery should be handled separately in background tasks
         }
 
         if pool_token_pairs.is_empty() {
@@ -8376,4 +8483,11 @@ pub async fn debug_find_pools_by_program_id(
     );
 
     Ok(matching_pools)
+}
+
+/// Trigger pool discovery for specific tokens (runs in background)
+/// This is separate from price calculation and handles the slow triple API calls
+pub async fn discover_pools_for_tokens(token_addresses: &[String]) -> usize {
+    let service = get_pool_service();
+    service.discover_pools_for_tokens(token_addresses).await
 }
