@@ -788,33 +788,33 @@ impl PoolDbService {
                     .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                     .map(|dt| dt.with_timezone(&Utc));
 
-                let first_seen_str: String = row.get(36)?;
+                let first_seen_str: String = row.get(35)?;
                 let first_seen = DateTime::parse_from_rfc3339(&first_seen_str)
                     .map_err(|_|
                         rusqlite::Error::InvalidColumnType(
-                            36,
+                            35,
                             "first_seen".to_string(),
                             rusqlite::types::Type::Text
                         )
                     )?
                     .with_timezone(&Utc);
 
-                let last_updated_str: String = row.get(37)?;
+                let last_updated_str: String = row.get(36)?;
                 let last_updated = DateTime::parse_from_rfc3339(&last_updated_str)
                     .map_err(|_|
                         rusqlite::Error::InvalidColumnType(
-                            37,
+                            36,
                             "last_updated".to_string(),
                             rusqlite::types::Type::Text
                         )
                     )?
                     .with_timezone(&Utc);
 
-                let last_verified_str: String = row.get(38)?;
+                let last_verified_str: String = row.get(37)?;
                 let last_verified = DateTime::parse_from_rfc3339(&last_verified_str)
                     .map_err(|_|
                         rusqlite::Error::InvalidColumnType(
-                            38,
+                            37,
                             "last_verified".to_string(),
                             rusqlite::types::Type::Text
                         )
@@ -932,33 +932,33 @@ impl PoolDbService {
                     .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                     .map(|dt| dt.with_timezone(&Utc));
 
-                let first_seen_str: String = row.get(36)?;
+                let first_seen_str: String = row.get(35)?;
                 let first_seen = DateTime::parse_from_rfc3339(&first_seen_str)
                     .map_err(|_|
                         rusqlite::Error::InvalidColumnType(
-                            36,
+                            35,
                             "first_seen".to_string(),
                             rusqlite::types::Type::Text
                         )
                     )?
                     .with_timezone(&Utc);
 
-                let last_updated_str: String = row.get(37)?;
+                let last_updated_str: String = row.get(36)?;
                 let last_updated = DateTime::parse_from_rfc3339(&last_updated_str)
                     .map_err(|_|
                         rusqlite::Error::InvalidColumnType(
-                            37,
+                            36,
                             "last_updated".to_string(),
                             rusqlite::types::Type::Text
                         )
                     )?
                     .with_timezone(&Utc);
 
-                let last_verified_str: String = row.get(38)?;
+                let last_verified_str: String = row.get(37)?;
                 let last_verified = DateTime::parse_from_rfc3339(&last_verified_str)
                     .map_err(|_|
                         rusqlite::Error::InvalidColumnType(
-                            38,
+                            37,
                             "last_verified".to_string(),
                             rusqlite::types::Type::Text
                         )
@@ -1546,29 +1546,4 @@ pub fn get_all_pool_addresses(limit: usize) -> Result<Vec<String>, String> {
     }
 
     Ok(addresses)
-}
-
-/// Get all token mints that have pools in the database (global function)
-pub fn get_all_tokens_with_pools() -> Result<Vec<String>, String> {
-    let service = get_pool_db_service()?;
-    let conn = Connection::open(&service.db_path).map_err(|e|
-        format!("Failed to open database: {}", e)
-    )?;
-
-    let mut stmt = conn
-        .prepare(
-            "SELECT DISTINCT token_mint FROM pool_metadata WHERE is_active = 1 ORDER BY token_mint"
-        )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
-
-    let rows = stmt
-        .query_map([], |row| { Ok(row.get::<_, String>(0)?) })
-        .map_err(|e| format!("Failed to execute query: {}", e))?;
-
-    let mut tokens = Vec::new();
-    for row in rows {
-        tokens.push(row.map_err(|e| format!("Failed to read row: {}", e))?);
-    }
-
-    Ok(tokens)
 }

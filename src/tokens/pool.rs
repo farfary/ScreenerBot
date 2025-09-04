@@ -30,7 +30,6 @@ use crate::tokens::raydium::{
     RaydiumBatchResult,
 };
 use crate::tokens::is_system_or_stable_token;
-use crate::tokens::blacklist::{ add_no_pools_token_to_blacklist, is_token_blacklisted };
 use crate::tokens::pool_db::{
     init_pool_db_service,
     store_price_entry,
@@ -99,11 +98,6 @@ const ADHOC_UPDATE_INTERVAL_SECS: u64 = 1; // batch ad-hoc warms every 1s (faste
 
 /// Minimum liquidity (USD) required to consider a pool usable for price calculation.
 /// Lower this for testing environments if you want stats to increment sooner.
-
-/// Delay between chunk processing in triple API batch operations (in milliseconds)
-/// This prevents overwhelming APIs with too many rapid consecutive chunk requests
-/// Each chunk contains up to 30 tokens and calls all three APIs (DexScreener, GeckoTerminal, Raydium)
-const TRIPLE_API_CHUNK_DELAY_MS: u64 = 1000; // 1 second between chunks (reduced from 3s for better performance)
 pub const MIN_POOL_LIQUIDITY_USD: f64 = 10.0;
 
 // Monitoring concurrency & performance budgeting
@@ -828,22 +822,6 @@ impl PoolPriceService {
             }
         });
 
-        // Load existing pool metadata from database on startup
-        tokio::spawn({
-            let pool_cache = service.pool_cache.clone();
-            async move {
-                if let Err(e) = Self::load_pool_metadata_from_db(pool_cache).await {
-                    log(
-                        LogTag::Pool,
-                        "DB_POOL_LOAD_ERROR",
-                        &format!("Failed to load pool metadata from database: {}", e)
-                    );
-                } else {
-                    log(LogTag::Pool, "DB_POOL_LOAD", "🏊 Pool metadata loaded from database");
-                }
-            }
-        });
-
         service
     }
 
@@ -919,96 +897,6 @@ impl PoolPriceService {
             &format!(
                 "📊 Loaded {} price entries for {} tokens from database",
                 loaded_entries,
-                loaded_tokens
-            )
-        );
-
-        Ok(())
-    }
-
-    /// Load existing pool metadata from database into memory cache on startup
-    async fn load_pool_metadata_from_db(
-        pool_cache: Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>
-    ) -> Result<(), String> {
-        // Get all tokens that have pools in database
-        let tokens_with_pools = match crate::tokens::pool_db::get_all_tokens_with_pools() {
-            Ok(tokens) => tokens,
-            Err(e) => {
-                log(
-                    LogTag::Pool,
-                    "DB_POOL_LOAD_ERROR",
-                    &format!("Failed to get tokens with pools: {}", e)
-                );
-                return Err(e);
-            }
-        };
-
-        let mut loaded_tokens = 0;
-        let mut loaded_pools = 0;
-
-        for token_mint in tokens_with_pools {
-            // Get pools for this token from database
-            match crate::tokens::pool_db::get_fresh_pools_for_token(&token_mint) {
-                Ok(db_pools) => {
-                    if !db_pools.is_empty() {
-                        // Convert database pool metadata to cached pool info
-                        let mut cached_pools = Vec::new();
-                        for db_pool in db_pools {
-                            let cached_pool = CachedPoolInfo {
-                                pair_address: db_pool.pool_address.clone(),
-                                dex_id: db_pool.dex_id.clone(),
-                                base_token: db_pool.base_token_address.clone(),
-                                quote_token: db_pool.quote_token_address.clone(),
-                                price_native: db_pool.price_native.unwrap_or(0.0),
-                                price_usd: db_pool.price_usd.unwrap_or(0.0),
-                                liquidity_usd: db_pool.liquidity_usd.unwrap_or(0.0),
-                                volume_24h: db_pool.volume_24h.unwrap_or(0.0),
-                                created_at: db_pool.pair_created_at
-                                    .map(|dt| dt.timestamp() as u64)
-                                    .unwrap_or(0),
-                                cached_at: Utc::now(), // Mark as fresh
-                            };
-                            cached_pools.push(cached_pool);
-                        }
-
-                        // Store in memory cache
-                        {
-                            let mut cache = pool_cache.write().await;
-                            cache.insert(token_mint.clone(), cached_pools.clone());
-                        }
-
-                        loaded_tokens += 1;
-                        loaded_pools += cached_pools.len();
-
-                        if is_debug_pool_prices_enabled() {
-                            log(
-                                LogTag::Pool,
-                                "DB_POOL_LOAD_TOKEN",
-                                &format!(
-                                    "📊 Loaded {} pools for token {}",
-                                    cached_pools.len(),
-                                    &token_mint[..8]
-                                )
-                            );
-                        }
-                    }
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Pool,
-                        "DB_POOL_LOAD_TOKEN_ERROR",
-                        &format!("Failed to load pools for {}: {}", &token_mint[..8], e)
-                    );
-                }
-            }
-        }
-
-        log(
-            LogTag::Pool,
-            "DB_POOL_LOAD_COMPLETE",
-            &format!(
-                "🏊 Loaded {} pools for {} tokens from database into memory cache",
-                loaded_pools,
                 loaded_tokens
             )
         );
@@ -1172,7 +1060,6 @@ impl PoolPriceService {
                 Duration::from_secs(ADHOC_UPDATE_INTERVAL_SECS)
             );
             let mut pool_refresh_interval = tokio::time::interval(Duration::from_secs(300)); // Refresh stale pools every 5 minutes
-            let mut pool_discovery_interval = tokio::time::interval(Duration::from_secs(60)); // Pool discovery every 1 minute (separate from price calc)
 
             loop {
                 tokio::select! {
@@ -1422,49 +1309,6 @@ impl PoolPriceService {
                             }
                         });
                     }
-
-                    // Pool discovery task - discover pools for tokens in watchlist that don't have cached pools
-                    _ = pool_discovery_interval.tick() => {
-                        // Check if monitoring should continue
-                        {
-                            let active = monitoring_active.read().await;
-                            if !*active {
-                                break;
-                            }
-                        }
-
-                        // Get tokens from watchlist that need pool discovery (don't have cached pools)
-                        let tokens_needing_discovery: Vec<String> = {
-                            let watchlist = watchlist_tokens.read().await;
-                            let mut tokens = Vec::new();
-                            
-                            // Take up to 30 tokens from watchlist for pool discovery
-                            for token in watchlist.iter().take(30) {
-                                tokens.push(token.clone());
-                            }
-                            tokens
-                        };
-
-                        if !tokens_needing_discovery.is_empty() {
-                            // Run pool discovery as separate async task to avoid blocking price calculations
-                            tokio::spawn(async move {
-                                let service = get_pool_service();
-                                let discovered = service.discover_pools_for_tokens(&tokens_needing_discovery).await;
-                                
-                                if discovered > 0 {
-                                    log(
-                                        LogTag::Pool,
-                                        "POOL_DISCOVERY",
-                                        &format!(
-                                            "🔍 Pool discovery cycle: {} pools discovered for {} tokens",
-                                            discovered,
-                                            tokens_needing_discovery.len()
-                                        )
-                                    );
-                                }
-                            });
-                        }
-                    }
                 }
             }
 
@@ -1485,11 +1329,10 @@ impl PoolPriceService {
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
-                "TRIPLE_API_CHUNK_START",
+                "TRIPLE_API_BATCH_START",
                 &format!(
-                    "🚀 Starting concurrent triple API chunk processing for {} tokens (chunks of {})",
-                    token_addresses.len(),
-                    MAX_TOKENS_PER_BATCH
+                    "🚀 Starting concurrent triple API batch refresh for {} tokens",
+                    token_addresses.len()
                 )
             );
         }
@@ -1499,9 +1342,8 @@ impl PoolPriceService {
         let mut raydium_successful = 0;
         let mut combined_successful = 0;
 
-        // Split tokens into chunks for optimal performance (each chunk calls all three APIs)
-        // Each chunk processes up to 30 tokens through DexScreener, GeckoTerminal, and Raydium APIs
-        for chunk in token_addresses.chunks(MAX_TOKENS_PER_BATCH) {
+        // Split tokens into batches for optimal performance (larger batches for better concurrency)
+        for chunk in token_addresses.chunks(10) {
             let chunk_start = Instant::now();
 
             // Convert chunk to Vec<String> for API calls
@@ -1578,12 +1420,12 @@ impl PoolPriceService {
             if is_debug_pool_prices_enabled() {
                 log(
                     LogTag::Pool,
-                    "TRIPLE_API_CHUNK_COMPLETE",
+                    "TRIPLE_API_BATCH_CHUNK",
                     &format!(
-                        "🚀 Processed chunk of {} tokens in {}ms: DX {}, GT {}, Ray {}, Combined {}",
+                        "🚀 Processed {} tokens in {}ms: DX {}, GT {}, Ray {}, Combined {}",
                         chunk.len(),
                         chunk_start.elapsed().as_millis(),
-                        dx_success,
+                        dexscreener_successful,
                         gt_success,
                         ray_success,
                         combined_successful
@@ -1591,17 +1433,16 @@ impl PoolPriceService {
                 );
             }
 
-            // Rate limiting between chunks to prevent API overload
-            // Each chunk calls all three APIs concurrently, so we need adequate spacing
-            tokio::time::sleep(Duration::from_millis(TRIPLE_API_CHUNK_DELAY_MS)).await;
+            // Rate limiting between chunks
+            tokio::time::sleep(Duration::from_millis(1000)).await;
         }
 
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
-                "TRIPLE_API_CHUNK_PROCESSING_COMPLETE",
+                "TRIPLE_API_BATCH_COMPLETE",
                 &format!(
-                    "🚀 Triple API chunk processing complete: DX {}/{}, GT {}/{}, Ray {}/{}, Combined {}/{}",
+                    "🚀 Triple API batch complete: DX {}/{}, GT {}/{}, Ray {}/{}, Combined {}/{}",
                     dexscreener_successful,
                     token_addresses.len(),
                     geckoterminal_successful,
@@ -1615,77 +1456,6 @@ impl PoolPriceService {
         }
 
         (dexscreener_successful, geckoterminal_successful, raydium_successful, combined_successful)
-    }
-
-    /// Dedicated pool discovery service - runs separately from price calculation
-    /// This handles the slow triple API calls to discover new pools
-    pub async fn discover_pools_for_tokens(&self, token_addresses: &[String]) -> usize {
-        if token_addresses.is_empty() {
-            return 0;
-        }
-
-        if is_debug_pool_prices_enabled() {
-            log(
-                LogTag::Pool,
-                "POOL_DISCOVERY_START",
-                &format!(
-                    "🔍 Starting pool discovery for {} tokens (separate from price calculation)",
-                    token_addresses.len()
-                )
-            );
-        }
-
-        let mut discovered_pools = 0;
-
-        // Only process tokens that don't already have cached pools and aren't blacklisted
-        let mut tokens_needing_discovery = Vec::new();
-        {
-            let cache = self.pool_cache.read().await;
-            for token_address in token_addresses {
-                // Skip blacklisted tokens
-                if is_token_blacklisted(token_address) {
-                    continue;
-                }
-
-                if
-                    !cache.contains_key(token_address) ||
-                    cache.get(token_address).map_or(true, |pools| pools.is_empty())
-                {
-                    tokens_needing_discovery.push(token_address.clone());
-                }
-            }
-        }
-
-        if tokens_needing_discovery.is_empty() {
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "POOL_DISCOVERY_SKIP",
-                    "All tokens already have cached pools, skipping discovery"
-                );
-            }
-            return 0;
-        }
-
-        // Use the triple API batch function for comprehensive discovery
-        let (_dx_success, _gt_success, _ray_success, combined_success) =
-            self.batch_refresh_pools_triple_api(&tokens_needing_discovery).await;
-
-        discovered_pools = combined_success;
-
-        if is_debug_pool_prices_enabled() {
-            log(
-                LogTag::Pool,
-                "POOL_DISCOVERY_COMPLETE",
-                &format!(
-                    "🔍 Pool discovery complete: {} pools discovered for {} tokens",
-                    discovered_pools,
-                    tokens_needing_discovery.len()
-                )
-            );
-        }
-
-        discovered_pools
     }
 
     /// Batch update token prices using pool calculations (OPTIMIZED)
@@ -1725,10 +1495,18 @@ impl PoolPriceService {
                     pool_token_pairs.push((best_pool.pair_address.clone(), token_address.clone()));
                     tokens_with_pools += 1;
                 }
+            } else {
+                // Try to fetch pools for tokens that don't have cached data
+                if let Ok(pools) = service.fetch_and_cache_pools(token_address).await {
+                    if let Some(best_pool) = pools.first() {
+                        pool_token_pairs.push((
+                            best_pool.pair_address.clone(),
+                            token_address.clone(),
+                        ));
+                        tokens_with_pools += 1;
+                    }
+                }
             }
-            // REMOVED: No longer try to fetch pools for tokens without cached data
-            // This prevents mixing slow pool discovery with fast price calculation
-            // Pool discovery should be handled separately in background tasks
         }
 
         if pool_token_pairs.is_empty() {
@@ -3353,18 +3131,6 @@ impl PoolPriceService {
         &self,
         token_address: &str
     ) -> Result<Vec<CachedPoolInfo>, String> {
-        // Check if token is blacklisted before making any API calls
-        if is_token_blacklisted(token_address) {
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "BLACKLIST_SKIP",
-                    &format!("🚫 Skipping blacklisted token: {}", token_address)
-                );
-            }
-            return Err(format!("Token {} is blacklisted", token_address));
-        }
-
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
@@ -3592,24 +3358,6 @@ impl PoolPriceService {
                     format!("Raydium failed: {}, other APIs returned no pools", ray_err),
                 (None, None, None) => "All three APIs returned no pools".to_string(),
             };
-
-            // Add token to blacklist if no pools were found from any API
-            if combined_error == "All three APIs returned no pools" {
-                // Add to blacklist to prevent future unnecessary API calls
-                if add_no_pools_token_to_blacklist(token_address, "UNKNOWN") {
-                    log(
-                        LogTag::Pool,
-                        "BLACKLIST",
-                        &format!("Added {} to blacklist - no pools available", token_address)
-                    );
-                } else {
-                    log(
-                        LogTag::Pool,
-                        "WARN",
-                        &format!("Failed to add {} to blacklist", token_address)
-                    );
-                }
-            }
 
             // Handle API timeouts gracefully - this is often normal during shutdown
             if combined_error.contains("timeout") || combined_error.contains("shutting down") {
@@ -8589,11 +8337,4 @@ pub async fn debug_find_pools_by_program_id(
     );
 
     Ok(matching_pools)
-}
-
-/// Trigger pool discovery for specific tokens (runs in background)
-/// This is separate from price calculation and handles the slow triple API calls
-pub async fn discover_pools_for_tokens(token_addresses: &[String]) -> usize {
-    let service = get_pool_service();
-    service.discover_pools_for_tokens(token_addresses).await
 }
