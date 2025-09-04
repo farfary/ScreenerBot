@@ -1547,3 +1547,28 @@ pub fn get_all_pool_addresses(limit: usize) -> Result<Vec<String>, String> {
 
     Ok(addresses)
 }
+
+/// Get all token mints that have pools in the database (global function)
+pub fn get_all_tokens_with_pools() -> Result<Vec<String>, String> {
+    let service = get_pool_db_service()?;
+    let conn = Connection::open(&service.db_path).map_err(|e|
+        format!("Failed to open database: {}", e)
+    )?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT token_mint FROM pool_metadata WHERE is_active = 1 ORDER BY token_mint"
+        )
+        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+    let rows = stmt
+        .query_map([], |row| { Ok(row.get::<_, String>(0)?) })
+        .map_err(|e| format!("Failed to execute query: {}", e))?;
+
+    let mut tokens = Vec::new();
+    for row in rows {
+        tokens.push(row.map_err(|e| format!("Failed to read row: {}", e))?);
+    }
+
+    Ok(tokens)
+}

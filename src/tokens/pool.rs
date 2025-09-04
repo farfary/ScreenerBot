@@ -828,6 +828,22 @@ impl PoolPriceService {
             }
         });
 
+        // Load existing pool metadata from database on startup
+        tokio::spawn({
+            let pool_cache = service.pool_cache.clone();
+            async move {
+                if let Err(e) = Self::load_pool_metadata_from_db(pool_cache).await {
+                    log(
+                        LogTag::Pool,
+                        "DB_POOL_LOAD_ERROR",
+                        &format!("Failed to load pool metadata from database: {}", e)
+                    );
+                } else {
+                    log(LogTag::Pool, "DB_POOL_LOAD", "🏊 Pool metadata loaded from database");
+                }
+            }
+        });
+
         service
     }
 
@@ -903,6 +919,96 @@ impl PoolPriceService {
             &format!(
                 "📊 Loaded {} price entries for {} tokens from database",
                 loaded_entries,
+                loaded_tokens
+            )
+        );
+
+        Ok(())
+    }
+
+    /// Load existing pool metadata from database into memory cache on startup
+    async fn load_pool_metadata_from_db(
+        pool_cache: Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>
+    ) -> Result<(), String> {
+        // Get all tokens that have pools in database
+        let tokens_with_pools = match crate::tokens::pool_db::get_all_tokens_with_pools() {
+            Ok(tokens) => tokens,
+            Err(e) => {
+                log(
+                    LogTag::Pool,
+                    "DB_POOL_LOAD_ERROR",
+                    &format!("Failed to get tokens with pools: {}", e)
+                );
+                return Err(e);
+            }
+        };
+
+        let mut loaded_tokens = 0;
+        let mut loaded_pools = 0;
+
+        for token_mint in tokens_with_pools {
+            // Get pools for this token from database
+            match crate::tokens::pool_db::get_fresh_pools_for_token(&token_mint) {
+                Ok(db_pools) => {
+                    if !db_pools.is_empty() {
+                        // Convert database pool metadata to cached pool info
+                        let mut cached_pools = Vec::new();
+                        for db_pool in db_pools {
+                            let cached_pool = CachedPoolInfo {
+                                pair_address: db_pool.pool_address.clone(),
+                                dex_id: db_pool.dex_id.clone(),
+                                base_token: db_pool.base_token_address.clone(),
+                                quote_token: db_pool.quote_token_address.clone(),
+                                price_native: db_pool.price_native.unwrap_or(0.0),
+                                price_usd: db_pool.price_usd.unwrap_or(0.0),
+                                liquidity_usd: db_pool.liquidity_usd.unwrap_or(0.0),
+                                volume_24h: db_pool.volume_24h.unwrap_or(0.0),
+                                created_at: db_pool.pair_created_at
+                                    .map(|dt| dt.timestamp() as u64)
+                                    .unwrap_or(0),
+                                cached_at: Utc::now(), // Mark as fresh
+                            };
+                            cached_pools.push(cached_pool);
+                        }
+
+                        // Store in memory cache
+                        {
+                            let mut cache = pool_cache.write().await;
+                            cache.insert(token_mint.clone(), cached_pools.clone());
+                        }
+
+                        loaded_tokens += 1;
+                        loaded_pools += cached_pools.len();
+
+                        if is_debug_pool_prices_enabled() {
+                            log(
+                                LogTag::Pool,
+                                "DB_POOL_LOAD_TOKEN",
+                                &format!(
+                                    "📊 Loaded {} pools for token {}",
+                                    cached_pools.len(),
+                                    &token_mint[..8]
+                                )
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Pool,
+                        "DB_POOL_LOAD_TOKEN_ERROR",
+                        &format!("Failed to load pools for {}: {}", &token_mint[..8], e)
+                    );
+                }
+            }
+        }
+
+        log(
+            LogTag::Pool,
+            "DB_POOL_LOAD_COMPLETE",
+            &format!(
+                "🏊 Loaded {} pools for {} tokens from database into memory cache",
+                loaded_pools,
                 loaded_tokens
             )
         );
