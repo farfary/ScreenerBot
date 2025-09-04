@@ -36,3 +36,6 @@ cache_tokens.db
 # Backup files
 *_backup.*
 *.backup
+
+
+node_modules
