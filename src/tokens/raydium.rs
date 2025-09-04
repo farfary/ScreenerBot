@@ -1,5 +1,5 @@
 /// Raydium API integration for enhanced pool discovery
-/// 
+///
 /// This module integrates with Raydium's v3 API to fetch pool information
 /// for Solana tokens. Raydium is one of the largest DEXes on Solana and provides
 /// comprehensive pool data including:
@@ -10,9 +10,9 @@
 /// - TVL and liquidity metrics
 
 use crate::global::is_debug_api_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use reqwest::StatusCode;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -150,16 +150,18 @@ pub struct RaydiumBatchResult {
 /// This searches for pools where the token is either mintA or mintB
 pub async fn get_token_pools_from_raydium(token_mint: &str) -> Result<Vec<RaydiumPool>, String> {
     let start_time = std::time::Instant::now();
-    
+
     if is_debug_api_enabled() {
-        log(LogTag::Pool, "RAYDIUM_API_START", &format!(
-            "🟡 Fetching pools for token {} from Raydium API", 
-            &token_mint[..8]
-        ));
+        log(
+            LogTag::Pool,
+            "RAYDIUM_API_START",
+            &format!("🟡 Fetching pools for token {} from Raydium API", &token_mint[..8])
+        );
     }
 
     // Create HTTP client
-    let client = reqwest::Client::builder()
+    let client = reqwest::Client
+        ::builder()
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECONDS))
         .user_agent("ScreenerBot/1.0")
         .build()
@@ -169,12 +171,16 @@ pub async fn get_token_pools_from_raydium(token_mint: &str) -> Result<Vec<Raydiu
     let sol_mint = "So11111111111111111111111111111111111111112";
     let url = format!(
         "{}/pools/info/mint?mint1={}&mint2={}&poolType=all&poolSortField=liquidity&sortType=desc&pageSize=10&page=1",
-        RAYDIUM_BASE_URL, token_mint, sol_mint
+        RAYDIUM_BASE_URL,
+        token_mint,
+        sol_mint
     );
 
     // Make the API request
-    let response = timeout(Duration::from_secs(REQUEST_TIMEOUT_SECONDS), client.get(&url).send())
-        .await
+    let response = timeout(
+        Duration::from_secs(REQUEST_TIMEOUT_SECONDS),
+        client.get(&url).send()
+    ).await
         .map_err(|_| "Raydium API request timed out".to_string())?
         .map_err(|e| format!("HTTP request failed: {}", e))?;
 
@@ -184,10 +190,12 @@ pub async fn get_token_pools_from_raydium(token_mint: &str) -> Result<Vec<Raydiu
     }
 
     // Parse the response
-    let response_text = response.text().await
+    let response_text = response
+        .text().await
         .map_err(|e| format!("Failed to read response body: {}", e))?;
 
-    let api_response: RaydiumApiResponse = serde_json::from_str(&response_text)
+    let api_response: RaydiumApiResponse = serde_json
+        ::from_str(&response_text)
         .map_err(|e| format!("Failed to parse JSON response: {}", e))?;
 
     if !api_response.success {
@@ -195,17 +203,24 @@ pub async fn get_token_pools_from_raydium(token_mint: &str) -> Result<Vec<Raydiu
     }
 
     // Convert to normalized pool format
-    let pools: Vec<RaydiumPool> = api_response.data.data.into_iter()
+    let pools: Vec<RaydiumPool> = api_response.data.data
+        .into_iter()
         .map(|pool_info| parse_raydium_pool(pool_info, token_mint))
         .collect();
 
     let elapsed = start_time.elapsed();
-    
+
     if is_debug_api_enabled() {
-        log(LogTag::Pool, "RAYDIUM_API_SUCCESS", &format!(
-            "✅ Raydium API: Found {} pools for {} in {:.2}s",
-            pools.len(), &token_mint[..8], elapsed.as_secs_f64()
-        ));
+        log(
+            LogTag::Pool,
+            "RAYDIUM_API_SUCCESS",
+            &format!(
+                "✅ Raydium API: Found {} pools for {} in {:.2}s",
+                pools.len(),
+                &token_mint[..8],
+                elapsed.as_secs_f64()
+            )
+        );
     }
 
     Ok(pools)
@@ -214,12 +229,13 @@ pub async fn get_token_pools_from_raydium(token_mint: &str) -> Result<Vec<Raydiu
 /// Get pools for multiple tokens in batch
 pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> RaydiumBatchResult {
     let start_time = std::time::Instant::now();
-    
+
     if is_debug_api_enabled() {
-        log(LogTag::Pool, "RAYDIUM_BATCH_START", &format!(
-            "🟡 Starting Raydium batch pool fetch for {} tokens", 
-            token_mints.len()
-        ));
+        log(
+            LogTag::Pool,
+            "RAYDIUM_BATCH_START",
+            &format!("🟡 Starting Raydium batch pool fetch for {} tokens", token_mints.len())
+        );
     }
 
     let mut pools = HashMap::new();
@@ -237,20 +253,26 @@ pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> Raydi
         match get_token_pools_from_raydium(token_mint).await {
             Ok(token_pools) => {
                 if is_debug_api_enabled() {
-                    log(LogTag::Pool, "RAYDIUM_BATCH_TOKEN_SUCCESS", &format!(
-                        "✅ {}: {} pools from Raydium", 
-                        &token_mint[..8], token_pools.len()
-                    ));
+                    log(
+                        LogTag::Pool,
+                        "RAYDIUM_BATCH_TOKEN_SUCCESS",
+                        &format!(
+                            "✅ {}: {} pools from Raydium",
+                            &token_mint[..8],
+                            token_pools.len()
+                        )
+                    );
                 }
                 pools.insert(token_mint.clone(), token_pools);
                 successful_tokens += 1;
             }
             Err(e) => {
                 if is_debug_api_enabled() {
-                    log(LogTag::Pool, "RAYDIUM_BATCH_TOKEN_ERROR", &format!(
-                        "❌ {}: Raydium error - {}", 
-                        &token_mint[..8], e
-                    ));
+                    log(
+                        LogTag::Pool,
+                        "RAYDIUM_BATCH_TOKEN_ERROR",
+                        &format!("❌ {}: Raydium error - {}", &token_mint[..8], e)
+                    );
                 }
                 errors.insert(token_mint.clone(), e);
                 failed_tokens += 1;
@@ -259,12 +281,18 @@ pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> Raydi
     }
 
     let elapsed = start_time.elapsed();
-    
+
     if is_debug_api_enabled() {
-        log(LogTag::Pool, "RAYDIUM_BATCH_COMPLETE", &format!(
-            "🟡 Raydium batch complete: {}/{} successful in {:.2}s",
-            successful_tokens, token_mints.len(), elapsed.as_secs_f64()
-        ));
+        log(
+            LogTag::Pool,
+            "RAYDIUM_BATCH_COMPLETE",
+            &format!(
+                "🟡 Raydium batch complete: {}/{} successful in {:.2}s",
+                successful_tokens,
+                token_mints.len(),
+                elapsed.as_secs_f64()
+            )
+        );
     }
 
     RaydiumBatchResult {
@@ -283,31 +311,31 @@ pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> Raydi
 fn parse_raydium_pool(pool_info: RaydiumPoolInfo, target_token: &str) -> RaydiumPool {
     // SOL mint address for price calculations
     let sol_mint = "So11111111111111111111111111111111111111112";
-    
+
     // Determine which mint is the target token and calculate USD price
     let (base_token, quote_token, price_usd) = if pool_info.mint_a.address == target_token {
         // Target token is mintA, price is in terms of mintB
         let price_in_quote = pool_info.price;
-        
+
         // If mintB is SOL, we need to convert to USD (assuming SOL ≈ $207)
         let price_usd = if pool_info.mint_b.address == sol_mint {
             price_in_quote * 207.0 // Convert SOL price to USD
         } else {
             price_in_quote // Assume other quote tokens are already in USD terms
         };
-        
+
         (pool_info.mint_a.address.clone(), pool_info.mint_b.address.clone(), price_usd)
     } else {
         // Target token is mintB, price is mintA/mintB, so we need mintB/mintA
         let price_in_quote = 1.0 / pool_info.price;
-        
+
         // If mintA is SOL, we need to convert to USD
         let price_usd = if pool_info.mint_a.address == sol_mint {
             price_in_quote * 207.0 // Convert SOL price to USD
         } else {
             price_in_quote // Assume other quote tokens are already in USD terms
         };
-        
+
         (pool_info.mint_b.address.clone(), pool_info.mint_a.address.clone(), price_usd)
     };
 
@@ -324,11 +352,9 @@ fn parse_raydium_pool(pool_info: RaydiumPoolInfo, target_token: &str) -> Raydium
         .unwrap_or(0.0);
 
     // Create pool name
-    let pool_name = Some(format!("{}-{} ({})", 
-        pool_info.mint_a.symbol, 
-        pool_info.mint_b.symbol,
-        pool_info.pool_type
-    ));
+    let pool_name = Some(
+        format!("{}-{} ({})", pool_info.mint_a.symbol, pool_info.mint_b.symbol, pool_info.pool_type)
+    );
 
     RaydiumPool {
         pool_address: pool_info.id,

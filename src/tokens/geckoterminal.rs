@@ -12,12 +12,15 @@
 /// - Debug logging for troubleshooting
 
 use crate::global::is_debug_api_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use reqwest::StatusCode;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
-use std::time::Duration;
-use tokio::time::timeout;
+use std::time::{ Duration, Instant };
+use tokio::time::{ timeout, sleep };
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use chrono::{ DateTime, Utc };
 
 // =============================================================================
 // GECKOTERMINAL API CONFIGURATION
@@ -28,6 +31,9 @@ const GECKOTERMINAL_BASE_URL: &str = "https://api.geckoterminal.com/api/v2";
 
 /// Rate limit: 60 requests per minute according to GeckoTerminal docs
 const GECKOTERMINAL_RATE_LIMIT_PER_MINUTE: usize = 60;
+
+/// Rate limiting delay between requests (2000ms to be more conservative)
+const RATE_LIMIT_DELAY_MS: u64 = 2000;
 
 /// Maximum tokens per batch request (GeckoTerminal supports multi-token queries)
 const MAX_TOKENS_PER_BATCH: usize = 30;
@@ -138,11 +144,40 @@ pub struct GeckoTerminalBatchResult {
 }
 
 // =============================================================================
+// RATE LIMITING
+// =============================================================================
+
+/// Global rate limiter for GeckoTerminal API
+static RATE_LIMITER: tokio::sync::OnceCell<Arc<Mutex<Instant>>> = tokio::sync::OnceCell::const_new();
+
+/// Initialize the rate limiter
+async fn get_rate_limiter() -> Arc<Mutex<Instant>> {
+    RATE_LIMITER.get_or_init(|| async { Arc::new(Mutex::new(Instant::now())) }).await.clone()
+}
+
+/// Apply rate limiting delay before making API requests
+async fn apply_rate_limit() {
+    let rate_limiter = get_rate_limiter().await;
+    let mut last_request = rate_limiter.lock().await;
+    let now = Instant::now();
+    let elapsed = now.duration_since(*last_request);
+
+    if elapsed < Duration::from_millis(RATE_LIMIT_DELAY_MS) {
+        let delay = Duration::from_millis(RATE_LIMIT_DELAY_MS) - elapsed;
+        sleep(delay).await;
+    }
+
+    *last_request = Instant::now();
+}
+
+// =============================================================================
 // CORE FUNCTIONS
 // =============================================================================
 
 /// Fetch pools for a single token from GeckoTerminal
-pub async fn get_token_pools_from_geckoterminal(token_address: &str) -> Result<Vec<GeckoTerminalPool>, String> {
+pub async fn get_token_pools_from_geckoterminal(
+    token_address: &str
+) -> Result<Vec<GeckoTerminalPool>, String> {
     if is_debug_api_enabled() {
         log(
             LogTag::Api,
@@ -151,21 +186,24 @@ pub async fn get_token_pools_from_geckoterminal(token_address: &str) -> Result<V
         );
     }
 
+    // Apply rate limiting before making the request
+    apply_rate_limit().await;
+
     let url = format!(
         "{}/networks/solana/tokens/{}?include=top_pools",
         GECKOTERMINAL_BASE_URL,
         token_address
     );
 
-    let client = reqwest::Client::builder()
+    let client = reqwest::Client
+        ::builder()
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    let response = match timeout(
-        Duration::from_secs(REQUEST_TIMEOUT_SECS),
-        client.get(&url).send()
-    ).await {
+    let response = match
+        timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS), client.get(&url).send()).await
+    {
         Ok(Ok(response)) => response,
         Ok(Err(e)) => {
             if is_debug_api_enabled() {
@@ -191,6 +229,19 @@ pub async fn get_token_pools_from_geckoterminal(token_address: &str) -> Result<V
 
     if !response.status().is_success() {
         let status = response.status();
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "GECKO_RATE_LIMIT",
+                    &format!("Rate limited for {}, waiting 5s", &token_address[..8])
+                );
+            }
+            // Wait longer for rate limit recovery
+            sleep(Duration::from_secs(5)).await;
+            return Err("Rate limited".to_string());
+        }
+
         if is_debug_api_enabled() {
             log(
                 LogTag::Api,
@@ -222,7 +273,12 @@ pub async fn get_token_pools_from_geckoterminal(token_address: &str) -> Result<V
                 log(
                     LogTag::Api,
                     "GECKO_PARSE_ERROR",
-                    &format!("Failed to parse JSON for {}: {} (body preview: {})", &token_address[..8], e, &body[..std::cmp::min(200, body.len())])
+                    &format!(
+                        "Failed to parse JSON for {}: {} (body preview: {})",
+                        &token_address[..8],
+                        e,
+                        &body[..std::cmp::min(200, body.len())]
+                    )
                 );
             }
             return Err(format!("Failed to parse JSON: {}", e));
@@ -235,7 +291,11 @@ pub async fn get_token_pools_from_geckoterminal(token_address: &str) -> Result<V
         log(
             LogTag::Api,
             "GECKO_SUCCESS",
-            &format!("🦎 Found {} pools for {} from GeckoTerminal", pools.len(), &token_address[..8])
+            &format!(
+                "🦎 Found {} pools for {} from GeckoTerminal",
+                pools.len(),
+                &token_address[..8]
+            )
         );
     }
 
@@ -243,7 +303,9 @@ pub async fn get_token_pools_from_geckoterminal(token_address: &str) -> Result<V
 }
 
 /// Fetch pools for multiple tokens in a single batch request
-pub async fn get_batch_token_pools_from_geckoterminal(token_addresses: &[String]) -> GeckoTerminalBatchResult {
+pub async fn get_batch_token_pools_from_geckoterminal(
+    token_addresses: &[String]
+) -> GeckoTerminalBatchResult {
     let mut result = GeckoTerminalBatchResult {
         pools: HashMap::new(),
         errors: HashMap::new(),
@@ -259,50 +321,26 @@ pub async fn get_batch_token_pools_from_geckoterminal(token_addresses: &[String]
         log(
             LogTag::Api,
             "GECKO_BATCH_START",
-            &format!("🦎 Batch fetching pools for {} tokens from GeckoTerminal", token_addresses.len())
+            &format!(
+                "🦎 Batch fetching pools for {} tokens from GeckoTerminal",
+                token_addresses.len()
+            )
         );
     }
 
     // GeckoTerminal doesn't support true batch requests for multiple tokens,
-    // so we'll need to make individual requests but with concurrency control
-    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(5)); // Limit concurrent requests
-    let mut tasks = Vec::new();
-
+    // so we'll need to make individual requests with proper rate limiting
     for token_address in token_addresses.iter().take(MAX_TOKENS_PER_BATCH) {
-        let token_address = token_address.clone();
-        let semaphore = semaphore.clone();
-        
-        let task = tokio::spawn(async move {
-            let _permit = semaphore.acquire().await.unwrap();
-            let pools_result = get_token_pools_from_geckoterminal(&token_address).await;
-            (token_address, pools_result)
-        });
-        
-        tasks.push(task);
-    }
-
-    // Collect results
-    for task in tasks {
-        match task.await {
-            Ok((token_address, pools_result)) => {
-                match pools_result {
-                    Ok(pools) => {
-                        result.pools.insert(token_address, pools);
-                        result.successful_tokens += 1;
-                    }
-                    Err(error) => {
-                        result.errors.insert(token_address, error);
-                        result.failed_tokens += 1;
-                    }
+        match get_token_pools_from_geckoterminal(token_address).await {
+            Ok(pools) => {
+                if !pools.is_empty() {
+                    result.pools.insert(token_address.clone(), pools);
+                    result.successful_tokens += 1;
                 }
             }
-            Err(e) => {
-                // Task join error - this shouldn't happen normally
-                log(
-                    LogTag::Api,
-                    "GECKO_TASK_ERROR",
-                    &format!("Task join error: {}", e)
-                );
+            Err(error) => {
+                result.errors.insert(token_address.clone(), error);
+                result.failed_tokens += 1;
             }
         }
     }
@@ -323,12 +361,14 @@ pub async fn get_batch_token_pools_from_geckoterminal(token_addresses: &[String]
 }
 
 /// Parse GeckoTerminal API response into normalized pool format
-fn parse_geckoterminal_pools(response: &GeckoTerminalResponse, token_address: &str) -> Result<Vec<GeckoTerminalPool>, String> {
+fn parse_geckoterminal_pools(
+    response: &GeckoTerminalResponse,
+    token_address: &str
+) -> Result<Vec<GeckoTerminalPool>, String> {
     let mut pools = Vec::new();
 
     // Get token data
-    let token_data = response.data.as_ref()
-        .ok_or("No token data in response")?;
+    let token_data = response.data.as_ref().ok_or("No token data in response")?;
 
     // Get pool references from relationships
     let pool_refs = if let Some(relationships) = &token_data.relationships {
@@ -346,8 +386,7 @@ fn parse_geckoterminal_pools(response: &GeckoTerminalResponse, token_address: &s
     };
 
     // Get included data (pool details)
-    let included = response.included.as_ref()
-        .ok_or("No included data in response")?;
+    let included = response.included.as_ref().ok_or("No included data in response")?;
 
     // Match pool references with included pool data
     for pool_ref in pool_refs {
@@ -356,7 +395,11 @@ fn parse_geckoterminal_pools(response: &GeckoTerminalResponse, token_address: &s
         }
 
         // Find matching pool in included data
-        if let Some(pool_data) = included.iter().find(|item| item.id == pool_ref.id && item.data_type == "pool") {
+        if
+            let Some(pool_data) = included
+                .iter()
+                .find(|item| item.id == pool_ref.id && item.data_type == "pool")
+        {
             if let Some(pool) = parse_single_pool(pool_data, token_address)? {
                 pools.push(pool);
             }
@@ -364,22 +407,26 @@ fn parse_geckoterminal_pools(response: &GeckoTerminalResponse, token_address: &s
     }
 
     // Sort by liquidity (highest first)
-    pools.sort_by(|a, b| b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal));
+    pools.sort_by(|a, b|
+        b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
+    );
 
     Ok(pools)
 }
 
 /// Parse a single pool from included data
-fn parse_single_pool(pool_data: &GeckoTerminalIncluded, token_address: &str) -> Result<Option<GeckoTerminalPool>, String> {
-    let attributes = pool_data.attributes.as_ref()
-        .ok_or("No pool attributes")?;
+fn parse_single_pool(
+    pool_data: &GeckoTerminalIncluded,
+    token_address: &str
+) -> Result<Option<GeckoTerminalPool>, String> {
+    let attributes = pool_data.attributes.as_ref().ok_or("No pool attributes")?;
 
     // Parse attributes as GeckoTerminalPoolAttributes
-    let pool_attrs: GeckoTerminalPoolAttributes = serde_json::from_value(attributes.clone())
+    let pool_attrs: GeckoTerminalPoolAttributes = serde_json
+        ::from_value(attributes.clone())
         .map_err(|e| format!("Failed to parse pool attributes: {}", e))?;
 
-    let pool_address = pool_attrs.address
-        .ok_or("Missing pool address")?;
+    let pool_address = pool_attrs.address.ok_or("Missing pool address")?;
 
     // Parse price and liquidity data
     let price_usd = pool_attrs.base_token_price_usd
@@ -401,8 +448,7 @@ fn parse_single_pool(pool_data: &GeckoTerminalIncluded, token_address: &str) -> 
         .and_then(|s| s.parse::<f64>().ok())
         .unwrap_or(0.0);
 
-    let created_at = pool_attrs.pool_created_at_block_number
-        .unwrap_or(0);
+    let created_at = pool_attrs.pool_created_at_block_number.unwrap_or(0);
 
     let pool = GeckoTerminalPool {
         pool_address,
@@ -427,19 +473,21 @@ fn parse_single_pool(pool_data: &GeckoTerminalIncluded, token_address: &str) -> 
 /// Check if GeckoTerminal API is available (simple health check)
 pub async fn test_geckoterminal_connection() -> Result<(), String> {
     let url = format!("{}/networks", GECKOTERMINAL_BASE_URL);
-    
-    let client = reqwest::Client::builder()
+
+    let client = reqwest::Client
+        ::builder()
         .timeout(Duration::from_secs(5))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    let response = match timeout(
-        Duration::from_secs(5),
-        client.get(&url).send()
-    ).await {
+    let response = match timeout(Duration::from_secs(5), client.get(&url).send()).await {
         Ok(Ok(response)) => response,
-        Ok(Err(e)) => return Err(format!("HTTP request failed: {}", e)),
-        Err(_) => return Err("Request timeout".to_string()),
+        Ok(Err(e)) => {
+            return Err(format!("HTTP request failed: {}", e));
+        }
+        Err(_) => {
+            return Err("Request timeout".to_string());
+        }
     };
 
     if response.status().is_success() {
@@ -452,4 +500,39 @@ pub async fn test_geckoterminal_connection() -> Result<(), String> {
 /// Get rate limit information
 pub fn get_rate_limit_info() -> (usize, usize) {
     (GECKOTERMINAL_RATE_LIMIT_PER_MINUTE, MAX_TOKENS_PER_BATCH)
+}
+
+/// Helper function to process GeckoTerminal batch results into cache format
+/// This moves the processing logic from pool.rs into geckoterminal.rs
+pub fn process_geckoterminal_batch_results(
+    gecko_result: &GeckoTerminalBatchResult
+) -> HashMap<String, Vec<crate::tokens::pool::CachedPoolInfo>> {
+    let mut processed_pools = HashMap::new();
+
+    for (token_address, gecko_pools) in &gecko_result.pools {
+        if !gecko_pools.is_empty() {
+            // Convert GeckoTerminal pools to CachedPoolInfo format
+            let cached_pools: Vec<crate::tokens::pool::CachedPoolInfo> = gecko_pools
+                .iter()
+                .map(|gecko_pool| {
+                    crate::tokens::pool::CachedPoolInfo {
+                        pair_address: gecko_pool.pool_address.clone(),
+                        dex_id: format!("gt_{}", gecko_pool.dex_id),
+                        base_token: gecko_pool.base_token.clone(),
+                        quote_token: gecko_pool.quote_token.clone(),
+                        price_native: gecko_pool.price_native,
+                        price_usd: gecko_pool.price_usd,
+                        liquidity_usd: gecko_pool.liquidity_usd,
+                        volume_24h: gecko_pool.volume_24h,
+                        created_at: gecko_pool.created_at,
+                        cached_at: Utc::now(),
+                    }
+                })
+                .collect();
+
+            processed_pools.insert(token_address.clone(), cached_pools);
+        }
+    }
+
+    processed_pools
 }
