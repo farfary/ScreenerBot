@@ -383,6 +383,21 @@ async fn batch_fetch_decimals_with_fallback(
     let mut all_results = Vec::new();
 
     for chunk in mint_pubkeys.chunks(MAX_ACCOUNTS_PER_CALL) {
+        if is_debug_decimals_enabled() {
+            log(
+                LogTag::Decimals,
+                "BATCH_START",
+                &format!(
+                    "Fetching {} accounts in batch: [{}]",
+                    chunk.len(),
+                    chunk
+                        .iter()
+                        .map(|p| p.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            );
+        }
         // Get multiple accounts in one RPC call using centralized client
         let accounts_res = rpc_client.get_multiple_accounts(chunk).await.map_err(|e| {
             // Improve error categorization
@@ -442,29 +457,157 @@ async fn batch_fetch_decimals_with_fallback(
         // Process each account result
         for (i, account_option) in accounts.iter().enumerate() {
             let mint_pubkey = chunk[i];
+            let mint_str = mint_pubkey.to_string();
+
+            if is_debug_decimals_enabled() {
+                log(
+                    LogTag::Decimals,
+                    "ACCOUNT_INFO",
+                    &format!("Processing account {} (full address: {})", i + 1, mint_str)
+                );
+            }
 
             let decimals_result = match account_option {
                 Some(account) => {
+                    if is_debug_decimals_enabled() {
+                        log(
+                            LogTag::Decimals,
+                            "ACCOUNT_FOUND",
+                            &format!(
+                                "Account {} exists - Owner: {}, Lamports: {}, Data length: {}",
+                                mint_str,
+                                account.owner,
+                                account.lamports,
+                                account.data.len()
+                            )
+                        );
+                    }
+
                     // Check if account exists and has data
                     if account.data.is_empty() {
-                        Err("Account not found or empty".to_string())
+                        let error_msg = "Account not found or empty".to_string();
+                        if is_debug_decimals_enabled() {
+                            log(
+                                LogTag::Decimals,
+                                "ACCOUNT_EMPTY",
+                                &format!("❌ Account {} has empty data", mint_str)
+                            );
+                        }
+                        Err(error_msg)
                     } else if
                         account.owner != spl_token::id() &&
                         account.owner != spl_token_2022::id()
                     {
-                        Err(format!("Account owner is not SPL Token program: {}", account.owner))
+                        let error_msg = format!(
+                            "Account owner is not SPL Token program: {}",
+                            account.owner
+                        );
+                        if is_debug_decimals_enabled() {
+                            log(
+                                LogTag::Decimals,
+                                "WRONG_OWNER",
+                                &format!(
+                                    "❌ Account {} has wrong owner: {} (expected SPL Token program)",
+                                    mint_str,
+                                    account.owner
+                                )
+                            );
+                        }
+                        Err(error_msg)
                     } else {
                         // Parse mint data based on program type
                         if account.owner == spl_token::id() {
-                            // Standard SPL Token
-                            parse_spl_token_mint(&account.data)
+                            if is_debug_decimals_enabled() {
+                                log(
+                                    LogTag::Decimals,
+                                    "PARSING_SPL",
+                                    &format!("Account {} is SPL Token - parsing mint data", mint_str)
+                                );
+                            }
+
+                            match parse_spl_token_mint(&account.data) {
+                                Ok(decimals) => {
+                                    if is_debug_decimals_enabled() {
+                                        log(
+                                            LogTag::Decimals,
+                                            "DECIMALS_SUCCESS",
+                                            &format!(
+                                                "✅ Account {} extracted {} decimals from SPL Token mint",
+                                                mint_str,
+                                                decimals
+                                            )
+                                        );
+                                    }
+                                    Ok(decimals)
+                                }
+                                Err(e) => {
+                                    if is_debug_decimals_enabled() {
+                                        log(
+                                            LogTag::Decimals,
+                                            "PARSING_ERROR",
+                                            &format!(
+                                                "❌ Account {} SPL Token parsing failed: {}",
+                                                mint_str,
+                                                e
+                                            )
+                                        );
+                                    }
+                                    Err(format!("SPL Token parsing failed: {}", e))
+                                }
+                            }
                         } else {
-                            // SPL Token-2022 (Token Extensions)
-                            parse_token_2022_mint(&account.data)
+                            if is_debug_decimals_enabled() {
+                                log(
+                                    LogTag::Decimals,
+                                    "PARSING_2022",
+                                    &format!("Account {} is SPL Token-2022 - parsing mint data", mint_str)
+                                );
+                            }
+
+                            match parse_token_2022_mint(&account.data) {
+                                Ok(decimals) => {
+                                    if is_debug_decimals_enabled() {
+                                        log(
+                                            LogTag::Decimals,
+                                            "DECIMALS_SUCCESS",
+                                            &format!(
+                                                "✅ Account {} extracted {} decimals from Token-2022 mint",
+                                                mint_str,
+                                                decimals
+                                            )
+                                        );
+                                    }
+                                    Ok(decimals)
+                                }
+                                Err(e) => {
+                                    if is_debug_decimals_enabled() {
+                                        log(
+                                            LogTag::Decimals,
+                                            "PARSING_ERROR",
+                                            &format!(
+                                                "❌ Account {} Token-2022 parsing failed: {}",
+                                                mint_str,
+                                                e
+                                            )
+                                        );
+                                    }
+                                    Err(format!("Token-2022 parsing failed: {}", e))
+                                }
+                            }
                         }
                     }
                 }
-                None => Err("Account not found".to_string()),
+                None => {
+                    let error_msg = "Account not found".to_string();
+                    if is_debug_decimals_enabled() {
+                        log(
+                            LogTag::Decimals,
+                            "ACCOUNT_NOT_FOUND",
+                            &format!("❌ Account {} does not exist on blockchain", mint_str)
+                        );
+                    }
+                    Err(error_msg)
+                }
             };
 
             all_results.push((mint_pubkey, decimals_result));
@@ -477,33 +620,126 @@ async fn batch_fetch_decimals_with_fallback(
         }
     }
 
+    if is_debug_decimals_enabled() {
+        let success_count = all_results
+            .iter()
+            .filter(|(_, r)| r.is_ok())
+            .count();
+        let failed_count = all_results.len() - success_count;
+        log(
+            LogTag::Decimals,
+            "BATCH_COMPLETE",
+            &format!(
+                "Batch processing complete: {} success, {} failed",
+                success_count,
+                failed_count
+            )
+        );
+    }
+
     Ok(all_results)
 }
 
 /// Parse SPL Token mint data to extract decimals
 fn parse_spl_token_mint(data: &[u8]) -> Result<u8, String> {
+    if is_debug_decimals_enabled() {
+        log(
+            LogTag::Decimals,
+            "SPL_PARSE_START",
+            &format!(
+                "Parsing SPL Token mint data - length: {}, expected: {}",
+                data.len(),
+                Mint::LEN
+            )
+        );
+    }
+
     if data.len() < Mint::LEN {
-        return Err(format!("Invalid mint data length: expected {}, got {}", Mint::LEN, data.len()));
+        let error_msg = format!(
+            "Invalid mint data length: expected {}, got {}",
+            Mint::LEN,
+            data.len()
+        );
+        if is_debug_decimals_enabled() {
+            log(LogTag::Decimals, "SPL_PARSE_ERROR", &format!("❌ {}", error_msg));
+        }
+        return Err(error_msg);
     }
 
     // Parse using SPL Token library
-    let mint = Mint::unpack(data).map_err(|e| format!("Failed to unpack SPL Token mint: {}", e))?;
+    let mint = Mint::unpack(data).map_err(|e| {
+        let error_msg = format!("Failed to unpack SPL Token mint: {}", e);
+        if is_debug_decimals_enabled() {
+            log(LogTag::Decimals, "SPL_UNPACK_ERROR", &format!("❌ {}", error_msg));
+        }
+        error_msg
+    })?;
+
+    if is_debug_decimals_enabled() {
+        log(
+            LogTag::Decimals,
+            "SPL_PARSE_SUCCESS",
+            &format!(
+                "✅ SPL Token mint parsed - decimals: {}, supply: {}, mint_authority: {:?}, freeze_authority: {:?}",
+                mint.decimals,
+                mint.supply,
+                mint.mint_authority,
+                mint.freeze_authority
+            )
+        );
+    }
 
     Ok(mint.decimals)
 }
 
 /// Parse SPL Token-2022 mint data to extract decimals
 fn parse_token_2022_mint(data: &[u8]) -> Result<u8, String> {
-    // For Token-2022, the decimals are at the same position as in standard SPL Token
-    // The first 9 bytes are the same structure for both token programs
-    if data.len() < 44 {
-        return Err(
-            format!("Invalid Token-2022 mint data length: expected at least 44, got {}", data.len())
+    if is_debug_decimals_enabled() {
+        log(
+            LogTag::Decimals,
+            "2022_PARSE_START",
+            &format!("Parsing Token-2022 mint data - length: {}, minimum required: 44", data.len())
         );
     }
 
+    // For Token-2022, the decimals are at the same position as in standard SPL Token
+    // The first 44 bytes are the same structure for both token programs
+    if data.len() < 44 {
+        let error_msg = format!(
+            "Invalid Token-2022 mint data length: expected at least 44, got {}",
+            data.len()
+        );
+        if is_debug_decimals_enabled() {
+            log(LogTag::Decimals, "2022_PARSE_ERROR", &format!("❌ {}", error_msg));
+        }
+        return Err(error_msg);
+    }
+
     // Decimals are at offset 44 in both SPL Token and SPL Token-2022
-    Ok(data[44])
+    let decimals = data[44];
+
+    if is_debug_decimals_enabled() {
+        log(
+            LogTag::Decimals,
+            "2022_PARSE_SUCCESS",
+            &format!("✅ Token-2022 mint parsed - decimals: {} (extracted from offset 44)", decimals)
+        );
+
+        // Show some additional data for debugging
+        if data.len() >= 48 {
+            log(
+                LogTag::Decimals,
+                "2022_EXTRA_DATA",
+                &format!(
+                    "Additional Token-2022 data - bytes 0-8: {:?}, bytes 44-48: {:?}",
+                    &data[0..(8).min(data.len())],
+                    &data[44..(48).min(data.len())]
+                )
+            );
+        }
+    }
+
+    Ok(decimals)
 }
 
 /// Batch fetch decimals for multiple tokens using efficient batch RPC calls
