@@ -270,7 +270,7 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
 
 // ==================== CORE POSITION OPERATIONS ====================
 
-/// Open a new position directly (replaces actor message)
+/// Open a new position directly
 pub async fn open_position_direct(
     token: &Token,
     entry_price: f64,
@@ -800,7 +800,7 @@ pub async fn open_position_direct(
     Ok(transaction_signature)
 }
 
-/// Close an existing position directly (replaces actor message)
+/// Close an existing position directly
 pub async fn close_position_direct(
     mint: &str,
     token: &Token,
@@ -952,7 +952,8 @@ pub async fn close_position_direct(
         }
     }
 
-    let _guard = CriticalOperationGuard::new(&format!("SELL {}", symbol));
+    // NOTE: Critical operation guard is handled at the trader level to avoid duplicate guards
+    // Removed: let _guard = CriticalOperationGuard::new(&format!("SELL {}", symbol));
 
     // ✅ ENSURE token remains in watch list during sell process
     let _price_service_result = match
@@ -4045,7 +4046,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
     Ok(())
 }
 
-/// Start the positions manager service (replaces actor spawn)
+/// Start the positions manager service
 pub async fn start_positions_manager_service(shutdown: Arc<Notify>) -> Result<(), String> {
     log(LogTag::Positions, "STARTUP", "🚀 Starting positions manager service");
 
