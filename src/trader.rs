@@ -104,7 +104,7 @@ pub const ENABLE_POSITION_AWARE_DEXSCREENER_CACHE: bool = true;
 /// This is applied in apply_cooldown_filter() and is separate from:
 /// - Global position open cooldown (5s between any opens) - in positions.rs
 /// - Frozen account cooldowns (account-specific) - in positions.rs
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 24 * 60; // 24 hours
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 1 * 60; // 24 hours
 
 // -----------------------------------------------------------------------------
 // Trading Logic Configuration

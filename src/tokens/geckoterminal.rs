@@ -41,6 +41,12 @@ const MAX_TOKENS_PER_BATCH: usize = 30;
 /// Request timeout in seconds
 const REQUEST_TIMEOUT_SECS: u64 = 10;
 
+/// API version header value for OHLCV requests
+const API_VERSION: &str = "20230302";
+
+/// Solana network identifier for GeckoTerminal
+const SOLANA_NETWORK: &str = "solana";
+
 // =============================================================================
 // DATA STRUCTURES
 // =============================================================================
@@ -141,6 +147,42 @@ pub struct GeckoTerminalBatchResult {
     pub errors: HashMap<String, String>,
     pub successful_tokens: usize,
     pub failed_tokens: usize,
+}
+
+/// OHLCV data point
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OhlcvDataPoint {
+    /// Timestamp (Unix seconds)
+    pub timestamp: i64,
+    /// Open price in USD
+    pub open: f64,
+    /// High price in USD
+    pub high: f64,
+    /// Low price in USD
+    pub low: f64,
+    /// Close price in USD
+    pub close: f64,
+    /// Volume in USD
+    pub volume: f64,
+}
+
+/// GeckoTerminal OHLCV API response structures
+#[derive(Debug, Deserialize)]
+struct GeckoTerminalOhlcvResponse {
+    data: GeckoTerminalOhlcvData,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeckoTerminalOhlcvData {
+    id: String,
+    #[serde(rename = "type")]
+    data_type: String,
+    attributes: GeckoTerminalOhlcvAttributes,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeckoTerminalOhlcvAttributes {
+    ohlcv_list: Vec<Vec<f64>>, // [timestamp, open, high, low, close, volume]
 }
 
 // =============================================================================
@@ -464,6 +506,232 @@ fn parse_single_pool(
     };
 
     Ok(Some(pool))
+}
+
+/// Fetch 1-minute OHLCV data from GeckoTerminal API
+pub async fn get_ohlcv_data_from_geckoterminal(
+    pool_address: &str,
+    limit: u32
+) -> Result<Vec<OhlcvDataPoint>, String> {
+    // Apply rate limiting before making the request
+    apply_rate_limit().await;
+
+    let url = format!(
+        "{}/networks/{}/pools/{}/ohlcv/minute",
+        GECKOTERMINAL_BASE_URL,
+        SOLANA_NETWORK,
+        pool_address
+    );
+
+    if is_debug_api_enabled() {
+        log(
+            LogTag::Api,
+            "GECKO_OHLCV_START",
+            &format!("🦎 Fetching 1m OHLCV for pool {} (limit: {})", &pool_address[..8], limit)
+        );
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = match timeout(
+        Duration::from_secs(REQUEST_TIMEOUT_SECS),
+        client
+            .get(&url)
+            .header("Accept", format!("application/json;version={}", API_VERSION))
+            .query(&[
+                ("aggregate", "1".to_string()),
+                ("limit", limit.to_string()),
+                ("currency", "usd".to_string()),
+            ])
+            .send()
+    ).await {
+        Ok(Ok(response)) => response,
+        Ok(Err(e)) => {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "GECKO_OHLCV_ERROR",
+                    &format!("HTTP error for pool {}: {}", &pool_address[..8], e)
+                );
+            }
+            return Err(format!("HTTP request failed: {}", e));
+        }
+        Err(_) => {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "GECKO_OHLCV_TIMEOUT",
+                    &format!("Request timeout for pool {}", &pool_address[..8])
+                );
+            }
+            return Err("Request timeout".to_string());
+        }
+    };
+
+    if !response.status().is_success() {
+        let status = response.status();
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "GECKO_OHLCV_RATE_LIMIT",
+                    &format!("Rate limited for pool {}, waiting 10s", &pool_address[..8])
+                );
+            }
+            sleep(Duration::from_secs(10)).await;
+            return Err("Rate limited".to_string());
+        }
+
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "GECKO_OHLCV_STATUS_ERROR",
+                &format!("HTTP {} for pool {}", status, &pool_address[..8])
+            );
+        }
+
+        match status.as_u16() {
+            404 => return Err(format!("Pool not found: {}", pool_address)),
+            400 => return Err("Bad request - invalid parameters".to_string()),
+            500..=599 => return Err(format!("Server error ({})", status)),
+            _ => return Err(format!("HTTP {}", status)),
+        }
+    }
+
+    let body = match response.text().await {
+        Ok(body) => body,
+        Err(e) => {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "GECKO_OHLCV_BODY_ERROR",
+                    &format!("Failed to read response body for pool {}: {}", &pool_address[..8], e)
+                );
+            }
+            return Err(format!("Failed to read response: {}", e));
+        }
+    };
+
+    let gecko_response: GeckoTerminalOhlcvResponse = match serde_json::from_str(&body) {
+        Ok(response) => response,
+        Err(e) => {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "GECKO_OHLCV_PARSE_ERROR",
+                    &format!(
+                        "Failed to parse JSON for pool {}: {} (body preview: {})",
+                        &pool_address[..8],
+                        e,
+                        &body[..std::cmp::min(200, body.len())]
+                    )
+                );
+            }
+            return Err(format!("Failed to parse JSON: {}", e));
+        }
+    };
+
+    if is_debug_api_enabled() {
+        log(
+            LogTag::Api,
+            "GECKO_OHLCV_RESPONSE",
+            &format!(
+                "✅ GeckoTerminal OHLCV response: type={}, id={}, {} data points",
+                gecko_response.data.data_type,
+                gecko_response.data.id,
+                gecko_response.data.attributes.ohlcv_list.len()
+            )
+        );
+    }
+
+    let data_points: Result<Vec<OhlcvDataPoint>, String> = gecko_response
+        .data
+        .attributes
+        .ohlcv_list
+        .into_iter()
+        .map(|ohlcv| {
+            if ohlcv.len() != 6 {
+                return Err(format!(
+                    "Invalid OHLCV data format: expected 6 values, got {}",
+                    ohlcv.len()
+                ));
+            }
+
+            let timestamp = ohlcv[0] as i64;
+            let open = ohlcv[1];
+            let high = ohlcv[2];
+            let low = ohlcv[3];
+            let close = ohlcv[4];
+            let volume = ohlcv[5];
+
+            // Validate data integrity
+            if timestamp <= 0 {
+                return Err(format!("Invalid timestamp: {}", timestamp));
+            }
+
+            if open <= 0.0 || high <= 0.0 || low <= 0.0 || close <= 0.0 {
+                return Err(format!(
+                    "Invalid price data: open={}, high={}, low={}, close={}",
+                    open, high, low, close
+                ));
+            }
+
+            if volume < 0.0 {
+                return Err(format!("Invalid volume: {}", volume));
+            }
+
+            if high < low {
+                return Err(format!(
+                    "Invalid OHLC relationship: high ({}) < low ({})",
+                    high, low
+                ));
+            }
+
+            if open > high || open < low || close > high || close < low {
+                return Err(format!(
+                    "OHLC values out of range: open={}, high={}, low={}, close={}",
+                    open, high, low, close
+                ));
+            }
+
+            if !open.is_finite()
+                || !high.is_finite()
+                || !low.is_finite()
+                || !close.is_finite()
+                || !volume.is_finite()
+            {
+                return Err("Non-finite values in OHLCV data".to_string());
+            }
+
+            Ok(OhlcvDataPoint {
+                timestamp,
+                open,
+                high,
+                low,
+                close,
+                volume,
+            })
+        })
+        .collect();
+
+    let result = data_points?;
+
+    if is_debug_api_enabled() {
+        log(
+            LogTag::Api,
+            "GECKO_OHLCV_SUCCESS",
+            &format!(
+                "🦎 Retrieved {} OHLCV data points for pool {}",
+                result.len(),
+                &pool_address[..8]
+            )
+        );
+    }
+
+    Ok(result)
 }
 
 // =============================================================================

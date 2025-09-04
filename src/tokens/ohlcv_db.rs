@@ -64,9 +64,9 @@ impl DbOhlcvDataPoint {
         }
     }
 
-    /// Convert to OhlcvDataPoint (from main module)
-    pub fn to_ohlcv_data_point(&self) -> crate::tokens::ohlcvs::OhlcvDataPoint {
-        crate::tokens::ohlcvs::OhlcvDataPoint {
+    /// Convert to OhlcvDataPoint (from geckoterminal module)
+    pub fn to_ohlcv_data_point(&self) -> crate::tokens::geckoterminal::OhlcvDataPoint {
+        crate::tokens::geckoterminal::OhlcvDataPoint {
             timestamp: self.timestamp,
             open: self.open,
             high: self.high,
@@ -228,7 +228,7 @@ impl OhlcvDatabase {
         &self,
         mint: &str,
         pool_address: &str,
-        data_points: &[crate::tokens::ohlcvs::OhlcvDataPoint]
+        data_points: &[crate::tokens::geckoterminal::OhlcvDataPoint]
     ) -> Result<(), String> {
         if data_points.is_empty() {
             return Ok(());
@@ -311,7 +311,7 @@ impl OhlcvDatabase {
         &self,
         mint: &str,
         limit: Option<u32>
-    ) -> Result<Vec<crate::tokens::ohlcvs::OhlcvDataPoint>, String> {
+    ) -> Result<Vec<crate::tokens::geckoterminal::OhlcvDataPoint>, String> {
         let conn = Connection::open(&self.db_path).map_err(|e|
             format!("Failed to open OHLCV database for reading: {}", e)
         )?;

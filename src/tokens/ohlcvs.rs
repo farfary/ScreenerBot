@@ -30,6 +30,7 @@ use crate::tokens::ohlcv_db::{ get_ohlcv_database, init_ohlcv_database };
 use crate::logger::{ log, LogTag };
 use crate::tokens::pool::get_pool_service;
 use crate::tokens::PriceOptions;
+use crate::tokens::geckoterminal::{ get_ohlcv_data_from_geckoterminal, OhlcvDataPoint };
 use chrono::{ DateTime, Duration as ChronoDuration, Utc };
 use reqwest::Client;
 use serde::{ Deserialize, Serialize };
@@ -41,15 +42,6 @@ use tokio::sync::{ Notify, RwLock };
 // =============================================================================
 // CONFIGURATION CONSTANTS
 // =============================================================================
-
-/// GeckoTerminal API base URL
-const GECKOTERMINAL_BASE_URL: &str = "https://api.geckoterminal.com/api/v2";
-
-/// API version header value
-const API_VERSION: &str = "20230302";
-
-/// Rate limit delay between calls (2 seconds to be safe)
-const API_RATE_LIMIT_DELAY_MS: u64 = 2000;
 
 /// Maximum number of cached entries in memory to prevent unbounded growth
 const MAX_MEMORY_CACHE_ENTRIES: usize = 500;
@@ -69,32 +61,12 @@ const MONITORING_INTERVAL_SECS: u64 = 30;
 /// Cache file cleanup interval (15 minutes)
 const CLEANUP_INTERVAL_SECS: u64 = 900;
 
-/// Solana network identifier for GeckoTerminal
-const SOLANA_NETWORK: &str = "solana";
-
 /// Cache expiration time for 1-minute data (5 minutes)
 const CACHE_EXPIRY_MINUTES: i64 = 5;
 
 // =============================================================================
 // DATA STRUCTURES
 // =============================================================================
-
-/// OHLCV data point
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OhlcvDataPoint {
-    /// Timestamp (Unix seconds)
-    pub timestamp: i64,
-    /// Open price in USD
-    pub open: f64,
-    /// High price in USD
-    pub high: f64,
-    /// Low price in USD
-    pub low: f64,
-    /// Close price in USD
-    pub close: f64,
-    /// Volume in USD
-    pub volume: f64,
-}
 
 /// Cached OHLCV data for a token (1-minute only) - now database-backed
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -142,25 +114,6 @@ pub struct OhlcvWatchEntry {
     pub pool_address_cached_at: Option<DateTime<Utc>>, // Track when pool was cached
 }
 
-/// GeckoTerminal API response structures
-#[derive(Debug, Deserialize)]
-struct GeckoTerminalResponse {
-    data: GeckoTerminalData,
-}
-
-#[derive(Debug, Deserialize)]
-struct GeckoTerminalData {
-    id: String,
-    #[serde(rename = "type")]
-    data_type: String,
-    attributes: GeckoTerminalAttributes,
-}
-
-#[derive(Debug, Deserialize)]
-struct GeckoTerminalAttributes {
-    ohlcv_list: Vec<Vec<f64>>, // [timestamp, open, high, low, close, volume]
-}
-
 // =============================================================================
 // MAIN OHLCV SERVICE
 // =============================================================================
@@ -168,14 +121,10 @@ struct GeckoTerminalAttributes {
 /// OHLCV data collection and caching service (1-minute only)
 #[derive(Clone)]
 pub struct OhlcvService {
-    /// HTTP client for API requests
-    client: Client,
     /// In-memory cache for OHLCV data (key: mint)
     cache: Arc<RwLock<HashMap<String, CachedOhlcvData>>>,
     /// Watch list for background monitoring (key: mint)
     watch_list: Arc<RwLock<HashMap<String, OhlcvWatchEntry>>>,
-    /// Rate limiting state
-    last_api_call: Arc<RwLock<Option<Instant>>>,
     /// Service statistics
     stats: Arc<RwLock<OhlcvStats>>,
     /// Monitoring active flag
@@ -200,24 +149,17 @@ impl OhlcvService {
         // Initialize database instead of file cache
         init_ohlcv_database().map_err(|e| format!("Failed to initialize OHLCV database: {}", e))?;
 
-        let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .user_agent("ScreenerBot/1.0")
-            .build()?;
-
         if is_debug_ohlcv_enabled() {
             log(
                 LogTag::Ohlcv,
-                "INIT_CLIENT",
-                "🌐 HTTP client configured for 1-minute OHLCV data with database caching"
+                "INIT_SERVICE",
+                "🌐 OHLCV service initialized with database caching (rate limiting handled by GeckoTerminal module)"
             );
         }
 
         Ok(Self {
-            client,
             cache: Arc::new(RwLock::new(HashMap::new())),
             watch_list: Arc::new(RwLock::new(HashMap::new())),
-            last_api_call: Arc::new(RwLock::new(None)),
             stats: Arc::new(RwLock::new(OhlcvStats::default())),
             monitoring_active: Arc::new(RwLock::new(false)),
         })
@@ -240,10 +182,9 @@ impl OhlcvService {
                 LogTag::Ohlcv,
                 "MONITOR_CONFIG",
                 &format!(
-                    "📋 Monitor config - Interval: {}s, Cleanup: {}s, Rate limit: {}ms, Data retention: {}h",
+                    "📋 Monitor config - Interval: {}s, Cleanup: {}s, Data retention: {}h (rate limiting handled by GeckoTerminal)",
                     MONITORING_INTERVAL_SECS,
                     CLEANUP_INTERVAL_SECS,
-                    API_RATE_LIMIT_DELAY_MS,
                     DATA_RETENTION_HOURS
                 )
             );
@@ -253,8 +194,6 @@ impl OhlcvService {
         let watch_list = self.watch_list.clone();
         let stats = self.stats.clone();
         let monitoring_active = self.monitoring_active.clone();
-        let client = self.client.clone();
-        let last_api_call = self.last_api_call.clone();
 
         tokio::spawn(async move {
             let mut monitoring_interval = tokio::time::interval(
@@ -272,11 +211,9 @@ impl OhlcvService {
                             log(LogTag::Ohlcv, "MONITOR_TICK", "⏰ 1m OHLCV monitoring tick starting");
                         }
                         if let Err(e) = Self::process_watch_list(
-                            &client,
                             &cache,
                             &watch_list,
-                            &stats,
-                            &last_api_call
+                            &stats
                         ).await {
                             log(LogTag::Ohlcv, "ERROR", &format!("Watch list processing failed: {}", e));
                         }
@@ -300,10 +237,8 @@ impl OhlcvService {
                             log(LogTag::Ohlcv, "WATCH_CLEANUP_TICK", "🧹 Watch list cleanup tick starting");
                         }
                         let temp_service = Self {
-                            client: client.clone(),
                             cache: cache.clone(),
                             watch_list: watch_list.clone(),
-                            last_api_call: last_api_call.clone(),
                             stats: stats.clone(),
                             monitoring_active: Arc::new(RwLock::new(true)),
                         };
@@ -976,42 +911,19 @@ impl OhlcvService {
         }
     }
 
-    /// Fetch 1-minute OHLCV data from GeckoTerminal API
+    /// Fetch 1-minute OHLCV data from GeckoTerminal API (delegates to geckoterminal module)
     async fn fetch_ohlcv_from_api(
         &self,
         pool_address: &str,
         limit: u32
     ) -> Result<Vec<OhlcvDataPoint>, String> {
-        // Rate limiting
-        self.enforce_rate_limit().await;
-
-        let url = format!(
-            "{}/networks/{}/pools/{}/ohlcv/minute",
-            GECKOTERMINAL_BASE_URL,
-            SOLANA_NETWORK,
-            pool_address
-        );
-
         if is_debug_ohlcv_enabled() {
             log(
                 LogTag::Ohlcv,
-                "API_CALL",
-                &format!("🌐 1m OHLCV API call: {} (limit: {})", url, limit)
+                "API_DELEGATE",
+                &format!("🔄 Delegating 1m OHLCV API call to GeckoTerminal module for pool {} (limit: {})", &pool_address[..8], limit)
             );
         }
-
-        let response = self.client
-            .get(&url)
-            .header("Accept", format!("application/json;version={}", API_VERSION))
-            .query(
-                &[
-                    ("aggregate", "1".to_string()),
-                    ("limit", limit.to_string()),
-                    ("currency", "usd".to_string()),
-                ]
-            )
-            .send().await
-            .map_err(|e| format!("Request failed: {}", e))?;
 
         // Update API call stats
         {
@@ -1019,185 +931,36 @@ impl OhlcvService {
             stats.total_api_calls += 1;
         }
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-
-            if is_debug_ohlcv_enabled() {
-                log(
-                    LogTag::Ohlcv,
-                    "API_ERROR",
-                    &format!("❌ API error response: {} - {}", status, error_text)
-                );
-            }
-
-            // Handle specific status codes
-            match status.as_u16() {
-                429 => {
-                    // Rate limit exceeded - wait longer before next call
-                    if is_debug_ohlcv_enabled() {
-                        log(
-                            LogTag::Ohlcv,
-                            "RATE_LIMIT_HIT",
-                            "⏳ Rate limit exceeded, waiting 10 seconds"
-                        );
-                    }
-                    tokio::time::sleep(Duration::from_secs(10)).await;
-                    return Err("Rate limit exceeded".to_string());
-                }
-                404 => {
-                    return Err(format!("Pool not found: {}", pool_address));
-                }
-                400 => {
-                    return Err(format!("Bad request - invalid parameters: {}", error_text));
-                }
-                500..=599 => {
-                    return Err(format!("Server error ({}): {}", status, error_text));
-                }
-                _ => {
-                    return Err(format!("API error: {} - {}", status, error_text));
-                }
-            }
-        }
-
-        let gecko_response: GeckoTerminalResponse = response
-            .json().await
-            .map_err(|e| format!("JSON parsing failed: {}", e))?;
-
-        if is_debug_ohlcv_enabled() {
-            log(
-                LogTag::Ohlcv,
-                "API_RESPONSE",
-                &format!(
-                    "✅ GeckoTerminal response: type={}, id={}, {} OHLCV points",
-                    gecko_response.data.data_type,
-                    gecko_response.data.id,
-                    gecko_response.data.attributes.ohlcv_list.len()
-                )
-            );
-        }
-
-        let data_points: Result<
-            Vec<OhlcvDataPoint>,
-            String
-        > = gecko_response.data.attributes.ohlcv_list
-            .into_iter()
-            .map(|ohlcv| {
-                if ohlcv.len() != 6 {
-                    return Err(
-                        format!("Invalid OHLCV data format: expected 6 values, got {}", ohlcv.len())
-                    );
-                }
-
-                let timestamp = ohlcv[0] as i64;
-                let open = ohlcv[1];
-                let high = ohlcv[2];
-                let low = ohlcv[3];
-                let close = ohlcv[4];
-                let volume = ohlcv[5];
-
-                // Validate data integrity
-                if timestamp <= 0 {
-                    return Err(format!("Invalid timestamp: {}", timestamp));
-                }
-
-                if open <= 0.0 || high <= 0.0 || low <= 0.0 || close <= 0.0 {
-                    return Err(
-                        format!(
-                            "Invalid price data: open={}, high={}, low={}, close={}",
-                            open,
-                            high,
-                            low,
-                            close
-                        )
-                    );
-                }
-
-                if volume < 0.0 {
-                    return Err(format!("Invalid volume: {}", volume));
-                }
-
-                if high < low {
-                    return Err(
-                        format!("Invalid OHLC relationship: high ({}) < low ({})", high, low)
-                    );
-                }
-
-                if open > high || open < low || close > high || close < low {
-                    return Err(
-                        format!(
-                            "OHLC values out of range: open={}, high={}, low={}, close={}",
-                            open,
-                            high,
-                            low,
-                            close
-                        )
-                    );
-                }
-
-                if
-                    !open.is_finite() ||
-                    !high.is_finite() ||
-                    !low.is_finite() ||
-                    !close.is_finite() ||
-                    !volume.is_finite()
+        // Delegate to geckoterminal module (which handles rate limiting)
+        match get_ohlcv_data_from_geckoterminal(pool_address, limit).await {
+            Ok(data) => {
+                // Update successful fetch stats
                 {
-                    return Err("Non-finite values in OHLCV data".to_string());
+                    let mut stats = self.stats.write().await;
+                    stats.successful_fetches += 1;
                 }
 
-                Ok(OhlcvDataPoint {
-                    timestamp,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume,
-                })
-            })
-            .collect();
-
-        data_points
-    }
-
-    /// Enforce API rate limiting
-    async fn enforce_rate_limit(&self) {
-        let mut last_call = self.last_api_call.write().await;
-
-        if let Some(last_time) = *last_call {
-            let elapsed = last_time.elapsed();
-            let required_delay = Duration::from_millis(API_RATE_LIMIT_DELAY_MS);
-
-            if elapsed < required_delay {
-                let sleep_duration = required_delay - elapsed;
                 if is_debug_ohlcv_enabled() {
                     log(
                         LogTag::Ohlcv,
-                        "RATE_LIMIT",
-                        &format!(
-                            "⏳ Rate limiting: sleeping {:?} (elapsed: {:?}, required: {:?})",
-                            sleep_duration,
-                            elapsed,
-                            required_delay
-                        )
+                        "API_SUCCESS",
+                        &format!("✅ Retrieved {} OHLCV data points via GeckoTerminal module", data.len())
                     );
                 }
-                tokio::time::sleep(sleep_duration).await;
-            } else if is_debug_ohlcv_enabled() {
-                log(
-                    LogTag::Ohlcv,
-                    "RATE_LIMIT_OK",
-                    &format!(
-                        "✅ Rate limit OK: elapsed {:?} >= required {:?}",
-                        elapsed,
-                        required_delay
-                    )
-                );
-            }
-        } else if is_debug_ohlcv_enabled() {
-            log(LogTag::Ohlcv, "RATE_LIMIT_FIRST", "🆕 First API call, no rate limiting needed");
-        }
 
-        *last_call = Some(Instant::now());
+                Ok(data)
+            }
+            Err(e) => {
+                if is_debug_ohlcv_enabled() {
+                    log(
+                        LogTag::Ohlcv,
+                        "API_ERROR",
+                        &format!("❌ GeckoTerminal module returned error: {}", e)
+                    );
+                }
+                Err(e)
+            }
+        }
     }
 
     /// Clean up old cached data (now database-based)
@@ -1276,11 +1039,9 @@ impl OhlcvService {
 
     /// Process watch list for background monitoring (database-backed)
     async fn process_watch_list(
-        client: &Client,
         cache: &Arc<RwLock<HashMap<String, CachedOhlcvData>>>,
         watch_list: &Arc<RwLock<HashMap<String, OhlcvWatchEntry>>>,
-        stats: &Arc<RwLock<OhlcvStats>>,
-        last_api_call: &Arc<RwLock<Option<Instant>>>
+        stats: &Arc<RwLock<OhlcvStats>>
     ) -> Result<(), String> {
         let tokens_to_update = {
             let watch_list = watch_list.read().await;
@@ -1443,15 +1204,13 @@ impl OhlcvService {
 
                 // Create temporary service instance for this update
                 let temp_service = OhlcvService {
-                    client: client.clone(),
                     cache: cache.clone(),
                     watch_list: watch_list.clone(),
-                    last_api_call: last_api_call.clone(),
                     stats: stats.clone(),
                     monitoring_active: Arc::new(RwLock::new(true)),
                 };
 
-                // Fetch new data
+                // Fetch new data (now delegated to geckoterminal module)
                 match temp_service.fetch_ohlcv_from_api(&pool_address, DEFAULT_OHLCV_LIMIT).await {
                     Ok(data_points) => {
                         // Cache the data in memory
