@@ -1424,7 +1424,7 @@ impl PoolPriceService {
             log(
                 LogTag::Pool,
                 "TRIPLE_API_BATCH_START",
-                &format!("🚀 Starting triple API batch refresh for {} tokens", token_addresses.len())
+                &format!("🚀 Starting concurrent triple API batch refresh for {} tokens", token_addresses.len())
             );
         }
 
@@ -1433,62 +1433,75 @@ impl PoolPriceService {
         let mut raydium_successful = 0;
         let mut combined_successful = 0;
 
-        // Split tokens into smaller batches for optimal performance
-        for chunk in token_addresses.chunks(5) {
+        // Split tokens into batches for optimal performance (larger batches for better concurrency)
+        for chunk in token_addresses.chunks(10) {
             let chunk_start = Instant::now();
             
             // Convert chunk to Vec<String> for API calls
             let chunk_vec: Vec<String> = chunk.iter().map(|s| s.clone()).collect();
             
-            // Launch all three API calls concurrently
+            // Launch ALL THREE API calls concurrently for maximum speed
+            let dex_futures: Vec<_> = chunk_vec.iter()
+                .map(|token| get_token_pairs_from_api(token))
+                .collect();
+            
             let gecko_future = crate::tokens::geckoterminal::get_batch_token_pools_from_geckoterminal(&chunk_vec);
             let raydium_future = crate::tokens::raydium::get_batch_token_pools_from_raydium(&chunk_vec);
+            
+            // Execute all DexScreener calls concurrently
+            let dex_future = async {
+                let results = futures::future::join_all(dex_futures).await;
+                results.into_iter()
+                    .zip(chunk_vec.iter())
+                    .filter_map(|(result, token)| {
+                        result.ok().map(|pairs| (token.clone(), pairs))
+                    })
+                    .collect::<Vec<(String, Vec<_>)>>()
+            };
 
-            // Wait for GeckoTerminal and Raydium APIs to complete
-            let (gecko_result, raydium_result) = tokio::join!(
+            // Wait for ALL THREE APIs to complete concurrently
+            let (dex_results, gecko_result, raydium_result) = tokio::join!(
+                dex_future,
                 gecko_future,
                 raydium_future
             );
 
+            let mut dx_success = 0;
             let mut gt_success = 0;
             let mut ray_success = 0;
 
             // Get current pool cache
             let mut pool_cache = self.pool_cache.write().await;
 
-            // Process individual DexScreener calls for each token
-            for token_address in chunk {
-                match get_token_pairs_from_api(token_address).await {
-                    Ok(pairs) => {
-                        if !pairs.is_empty() {
-                            dexscreener_successful += 1;
-                            
-                            let cached_pools: Vec<CachedPoolInfo> = pairs.into_iter().map(|pair| {
-                                let price_usd = pair.price_usd
-                                    .and_then(|p| p.parse::<f64>().ok())
-                                    .unwrap_or(0.0);
-                                let liquidity_usd = pair.liquidity.as_ref().map(|l| l.usd).unwrap_or(0.0);
-                                
-                                CachedPoolInfo {
-                                    pair_address: pair.pair_address,
-                                    dex_id: format!("dx_{}", pair.dex_id),
-                                    base_token: pair.base_token.address,
-                                    quote_token: pair.quote_token.address,
-                                    price_native: pair.price_native.parse().unwrap_or(0.0),
-                                    price_usd,
-                                    liquidity_usd,
-                                    volume_24h: pair.volume.h24.unwrap_or(0.0),
-                                    created_at: pair.pair_created_at.unwrap_or(0),
-                                    cached_at: Utc::now(),
-                                }
-                            }).collect();
-
-                            pool_cache.insert(token_address.clone(), cached_pools);
+            // Process DexScreener results
+            for (token_address, pairs) in dex_results {
+                if !pairs.is_empty() {
+                    dx_success += 1;
+                    
+                    let cached_pools: Vec<CachedPoolInfo> = pairs.into_iter().map(|pair| {
+                        let price_usd = pair.price_usd
+                            .and_then(|p| p.parse::<f64>().ok())
+                            .unwrap_or(0.0);
+                        let liquidity_usd = pair.liquidity.as_ref().map(|l| l.usd).unwrap_or(0.0);
+                        
+                        CachedPoolInfo {
+                            pair_address: pair.pair_address,
+                            dex_id: format!("dx_{}", pair.dex_id),
+                            base_token: pair.base_token.address,
+                            quote_token: pair.quote_token.address,
+                            price_native: pair.price_native.parse().unwrap_or(0.0),
+                            price_usd,
+                            liquidity_usd,
+                            volume_24h: pair.volume.h24.unwrap_or(0.0),
+                            created_at: pair.pair_created_at.unwrap_or(0),
+                            cached_at: Utc::now(),
                         }
-                    }
-                    Err(_) => {} // Ignore DexScreener errors
+                    }).collect();
+
+                    pool_cache.insert(token_address, cached_pools);
                 }
             }
+            dexscreener_successful += dx_success;
 
             // Process GeckoTerminal results
             for (token_address, gecko_pools) in gecko_result.pools {
