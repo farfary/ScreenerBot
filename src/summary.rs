@@ -31,6 +31,9 @@ use std::time::{ Duration, Instant };
 use tabled::{ settings::{ object::Rows, Alignment, Modify, Style }, Table, Tabled };
 use tokio::sync::{ Mutex, Notify };
 
+/// Maximum number of recent closed positions to display in summary
+const MAX_RECENT_CLOSED_POSITIONS: usize = 20;
+
 /// Display structure for closed positions with specific "Exit" column
 #[derive(Tabled)]
 pub struct ClosedPositionDisplay {
@@ -574,7 +577,7 @@ pub async fn print_positions_snapshot() {
         );
     }
 
-    // Build closed positions first (last 10, sorted by close time)
+    // Build closed positions first (last 20, sorted by close time)
     if !closed_positions.is_empty() {
         if is_debug_summary_enabled() {
             log(
@@ -591,8 +594,8 @@ pub async fn print_positions_snapshot() {
         let closed_iter: Vec<_> = sorted_closed
             .iter()
             .rev() // Most recent first
-            .take(10) // Take last 10
-            .rev() // Reverse back so oldest of the 10 is first
+            .take(MAX_RECENT_CLOSED_POSITIONS) // Take last 20
+            .rev() // Reverse back so oldest of the 20 is first
             .collect();
 
         let mut recent_closed = Vec::new();
@@ -623,7 +626,9 @@ pub async fn print_positions_snapshot() {
                 );
             }
 
-            positions_output.push_str(&format!("\n📋 Recently Closed Positions (Last 10):\n"));
+            positions_output.push_str(
+                &format!("\n📋 Recently Closed Positions (Last {}):\n", MAX_RECENT_CLOSED_POSITIONS)
+            );
             let table_start = Instant::now();
             let mut closed_table = Table::new(recent_closed);
             closed_table
