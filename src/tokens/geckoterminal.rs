@@ -4,12 +4,19 @@
 /// to complement DexScreener data. Many tokens have pools on one platform
 /// but not the other, so using both sources significantly improves coverage.
 ///
+/// CRITICAL RATE LIMITING IMPLEMENTATION:
+/// - MAXIMUM 30 calls per minute (conservative limit)
+/// - MAXIMUM 1 concurrent call at any time (enforced by semaphore)
+/// - MINIMUM 2 seconds between calls
+/// - All functions use unified rate limiting to prevent conflicts
+/// - Rate limit tracking includes both time-based and count-based limits
+///
 /// Key features:
-/// - Batch token pool fetching (up to 30 tokens per call)
-/// - Rate limiting (60 requests per minute)
+/// - Batch token pool fetching (serialized to respect rate limits)
+/// - Strict concurrency control (semaphore ensures single call)
 /// - Pool data normalization to match DexScreener format
 /// - Error handling and timeout management
-/// - Debug logging for troubleshooting
+/// - Debug logging for troubleshooting and rate limit monitoring
 
 use crate::global::is_debug_api_enabled;
 use crate::logger::{ log, LogTag };
@@ -29,10 +36,10 @@ use chrono::{ DateTime, Utc };
 /// GeckoTerminal API base URL
 const GECKOTERMINAL_BASE_URL: &str = "https://api.geckoterminal.com/api/v2";
 
-/// Rate limit: 60 requests per minute according to GeckoTerminal docs
-const GECKOTERMINAL_RATE_LIMIT_PER_MINUTE: usize = 20;
+/// Rate limit: 30 requests per minute (conservative limit)
+const GECKOTERMINAL_RATE_LIMIT_PER_MINUTE: usize = 30;
 
-/// Rate limiting delay between requests (2000ms to be more conservative)
+/// Rate limiting delay between requests (2000ms to ensure no concurrent calls)
 const RATE_LIMIT_DELAY_MS: u64 = 2000;
 
 /// Maximum tokens per batch request (GeckoTerminal supports multi-token queries)
@@ -186,30 +193,158 @@ struct GeckoTerminalOhlcvAttributes {
 }
 
 // =============================================================================
-// RATE LIMITING
+// RATE LIMITING AND CONCURRENCY CONTROL
 // =============================================================================
 
-/// Global rate limiter for GeckoTerminal API
-static RATE_LIMITER: tokio::sync::OnceCell<Arc<Mutex<Instant>>> = tokio::sync::OnceCell::const_new();
-
-/// Initialize the rate limiter
-async fn get_rate_limiter() -> Arc<Mutex<Instant>> {
-    RATE_LIMITER.get_or_init(|| async { Arc::new(Mutex::new(Instant::now())) }).await.clone()
+/// Rate limiting state to track both time and call count
+#[derive(Debug)]
+struct RateLimitState {
+    last_request: Instant,
+    call_timestamps: Vec<Instant>,
 }
 
-/// Apply rate limiting delay before making API requests
-async fn apply_rate_limit() {
-    let rate_limiter = get_rate_limiter().await;
-    let mut last_request = rate_limiter.lock().await;
-    let now = Instant::now();
-    let elapsed = now.duration_since(*last_request);
+impl RateLimitState {
+    fn new() -> Self {
+        Self {
+            last_request: Instant::now() - Duration::from_secs(60), // Initialize in the past
+            call_timestamps: Vec::new(),
+        }
+    }
 
-    if elapsed < Duration::from_millis(RATE_LIMIT_DELAY_MS) {
-        let delay = Duration::from_millis(RATE_LIMIT_DELAY_MS) - elapsed;
+    fn cleanup_old_calls(&mut self) {
+        let one_minute_ago = Instant::now() - Duration::from_secs(60);
+        self.call_timestamps.retain(|&timestamp| timestamp > one_minute_ago);
+    }
+
+    fn can_make_request(&mut self) -> bool {
+        self.cleanup_old_calls();
+
+        // Check if we've hit the rate limit (30 calls per minute)
+        if self.call_timestamps.len() >= GECKOTERMINAL_RATE_LIMIT_PER_MINUTE {
+            return false;
+        }
+
+        // Check if enough time has passed since last request (2 seconds minimum)
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.last_request);
+        elapsed >= Duration::from_millis(RATE_LIMIT_DELAY_MS)
+    }
+
+    fn record_request(&mut self) {
+        let now = Instant::now();
+        self.last_request = now;
+        self.call_timestamps.push(now);
+        self.cleanup_old_calls();
+    }
+
+    fn time_until_next_request(&self) -> Option<Duration> {
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.last_request);
+
+        if elapsed < Duration::from_millis(RATE_LIMIT_DELAY_MS) {
+            Some(Duration::from_millis(RATE_LIMIT_DELAY_MS) - elapsed)
+        } else {
+            None
+        }
+    }
+
+    fn time_until_rate_limit_reset(&self) -> Option<Duration> {
+        if self.call_timestamps.len() < GECKOTERMINAL_RATE_LIMIT_PER_MINUTE {
+            return None;
+        }
+
+        if let Some(&oldest_call) = self.call_timestamps.first() {
+            let one_minute_from_oldest = oldest_call + Duration::from_secs(60);
+            let now = Instant::now();
+
+            if one_minute_from_oldest > now {
+                Some(one_minute_from_oldest - now)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+}
+
+/// Global rate limiter and concurrency control for GeckoTerminal API
+/// This ensures only ONE call at a time and tracks rate limits properly
+static GECKO_API_SEMAPHORE: tokio::sync::OnceCell<Arc<tokio::sync::Semaphore>> = tokio::sync::OnceCell::const_new();
+static GECKO_RATE_LIMITER: tokio::sync::OnceCell<Arc<Mutex<RateLimitState>>> = tokio::sync::OnceCell::const_new();
+
+/// Initialize the semaphore for single concurrent call
+async fn get_api_semaphore() -> Arc<tokio::sync::Semaphore> {
+    GECKO_API_SEMAPHORE.get_or_init(|| async {
+        Arc::new(tokio::sync::Semaphore::new(1)) // Only 1 concurrent call allowed
+    }).await.clone()
+}
+
+/// Initialize the rate limiter
+async fn get_rate_limiter() -> Arc<Mutex<RateLimitState>> {
+    GECKO_RATE_LIMITER.get_or_init(|| async {
+        Arc::new(Mutex::new(RateLimitState::new()))
+    }).await.clone()
+}
+
+/// Apply strict rate limiting and concurrency control before making API requests
+/// Returns a guard that must be held for the duration of the API call
+async fn apply_rate_limit_and_concurrency_control() -> Result<
+    tokio::sync::OwnedSemaphorePermit,
+    String
+> {
+    // Get semaphore permit first (ensures only 1 concurrent call)
+    let semaphore = get_api_semaphore().await;
+    let permit = semaphore
+        .clone()
+        .acquire_owned().await
+        .map_err(|e| format!("Failed to acquire semaphore: {}", e))?;
+
+    // Apply rate limiting
+    let rate_limiter = get_rate_limiter().await;
+
+    loop {
+        let mut state = rate_limiter.lock().await;
+
+        if state.can_make_request() {
+            state.record_request();
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "GECKO_RATE_LIMIT",
+                    &format!(
+                        "🦎 GeckoTerminal API call permitted ({}/30 calls in last minute)",
+                        state.call_timestamps.len()
+                    )
+                );
+            }
+            break;
+        }
+
+        // Determine how long to wait
+        let delay = if let Some(time_until_reset) = state.time_until_rate_limit_reset() {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "GECKO_RATE_LIMIT_WAIT",
+                    &format!(
+                        "🦎 Rate limit hit (30/30), waiting {}ms for reset",
+                        time_until_reset.as_millis()
+                    )
+                );
+            }
+            time_until_reset
+        } else if let Some(time_until_next) = state.time_until_next_request() {
+            time_until_next
+        } else {
+            Duration::from_millis(RATE_LIMIT_DELAY_MS)
+        };
+
+        drop(state); // Release lock before sleeping
         sleep(delay).await;
     }
 
-    *last_request = Instant::now();
+    Ok(permit)
 }
 
 // =============================================================================
@@ -228,8 +363,8 @@ pub async fn get_token_pools_from_geckoterminal(
         );
     }
 
-    // Apply rate limiting before making the request
-    apply_rate_limit().await;
+    // Apply strict rate limiting and get exclusive access
+    let _permit = apply_rate_limit_and_concurrency_control().await?;
 
     let url = format!(
         "{}/networks/solana/tokens/{}?include=top_pools",
@@ -345,6 +480,8 @@ pub async fn get_token_pools_from_geckoterminal(
 }
 
 /// Fetch pools for multiple tokens in a single batch request
+/// Note: GeckoTerminal doesn't support true batch requests, so we serialize individual calls
+/// with strict rate limiting to ensure no concurrent calls and respect 30 calls/minute limit
 pub async fn get_batch_token_pools_from_geckoterminal(
     token_addresses: &[String]
 ) -> GeckoTerminalBatchResult {
@@ -364,25 +501,53 @@ pub async fn get_batch_token_pools_from_geckoterminal(
             LogTag::Api,
             "GECKO_BATCH_START",
             &format!(
-                "🦎 Batch fetching pools for {} tokens from GeckoTerminal",
+                "🦎 Batch fetching pools for {} tokens from GeckoTerminal (SERIALIZED)",
                 token_addresses.len()
             )
         );
     }
 
-    // GeckoTerminal doesn't support true batch requests for multiple tokens,
-    // so we'll need to make individual requests with proper rate limiting
+    // Process tokens one by one to ensure no concurrent calls
+    // This is required by GeckoTerminal's strict rate limiting
     for token_address in token_addresses.iter().take(MAX_TOKENS_PER_BATCH) {
         match get_token_pools_from_geckoterminal(token_address).await {
             Ok(pools) => {
                 if !pools.is_empty() {
                     result.pools.insert(token_address.clone(), pools);
                     result.successful_tokens += 1;
+
+                    if is_debug_api_enabled() {
+                        log(
+                            LogTag::Api,
+                            "GECKO_BATCH_SUCCESS",
+                            &format!(
+                                "🦎 Success for {}: {} pools found",
+                                &token_address[..8],
+                                result.pools.get(token_address).unwrap().len()
+                            )
+                        );
+                    }
+                } else {
+                    if is_debug_api_enabled() {
+                        log(
+                            LogTag::Api,
+                            "GECKO_BATCH_NO_POOLS",
+                            &format!("🦎 No pools found for {}", &token_address[..8])
+                        );
+                    }
                 }
             }
             Err(error) => {
-                result.errors.insert(token_address.clone(), error);
+                result.errors.insert(token_address.clone(), error.clone());
                 result.failed_tokens += 1;
+
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "GECKO_BATCH_ERROR",
+                        &format!("🦎 Error for {}: {}", &token_address[..8], error)
+                    );
+                }
             }
         }
     }
@@ -392,9 +557,10 @@ pub async fn get_batch_token_pools_from_geckoterminal(
             LogTag::Api,
             "GECKO_BATCH_COMPLETE",
             &format!(
-                "🦎 GeckoTerminal batch complete: {}/{} successful",
+                "🦎 GeckoTerminal batch complete: {}/{} successful, {} errors",
                 result.successful_tokens,
-                result.successful_tokens + result.failed_tokens
+                result.successful_tokens + result.failed_tokens,
+                result.failed_tokens
             )
         );
     }
@@ -513,8 +679,8 @@ pub async fn get_ohlcv_data_from_geckoterminal(
     pool_address: &str,
     limit: u32
 ) -> Result<Vec<OhlcvDataPoint>, String> {
-    // Apply rate limiting before making the request
-    apply_rate_limit().await;
+    // Apply strict rate limiting and get exclusive access
+    let _permit = apply_rate_limit_and_concurrency_control().await?;
 
     let url = format!(
         "{}/networks/{}/pools/{}/ohlcv/minute",
@@ -757,6 +923,9 @@ pub async fn get_ohlcv_data_from_geckoterminal(
 
 /// Check if GeckoTerminal API is available (simple health check)
 pub async fn test_geckoterminal_connection() -> Result<(), String> {
+    // Apply strict rate limiting and get exclusive access for health check
+    let _permit = apply_rate_limit_and_concurrency_control().await?;
+
     let url = format!("{}/networks", GECKOTERMINAL_BASE_URL);
 
     let client = reqwest::Client
@@ -785,6 +954,19 @@ pub async fn test_geckoterminal_connection() -> Result<(), String> {
 /// Get rate limit information
 pub fn get_rate_limit_info() -> (usize, usize) {
     (GECKOTERMINAL_RATE_LIMIT_PER_MINUTE, MAX_TOKENS_PER_BATCH)
+}
+
+/// Get current rate limit status (async because it needs to check the state)
+pub async fn get_current_rate_limit_status() -> (usize, usize, Option<u64>) {
+    let rate_limiter = get_rate_limiter().await;
+    let mut state = rate_limiter.lock().await;
+    state.cleanup_old_calls();
+
+    let current_calls = state.call_timestamps.len();
+    let max_calls = GECKOTERMINAL_RATE_LIMIT_PER_MINUTE;
+    let reset_in_ms = state.time_until_rate_limit_reset().map(|d| d.as_millis() as u64);
+
+    (current_calls, max_calls, reset_in_ms)
 }
 
 /// Helper function to process GeckoTerminal batch results into cache format
