@@ -10,8 +10,6 @@ use crate::positions::*;
 use crate::positions_lib::{ calculate_position_pnl, calculate_position_total_fees };
 use crate::positions_types::Position;
 use crate::rpc::get_global_rpc_stats;
-use crate::tokens::pool::get_pool_service;
-use crate::tokens::pool_db::get_pool_db_statistics;
 use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
 use crate::trader::*;
 use crate::transactions::TransactionsManager;
@@ -20,7 +18,6 @@ use crate::utils::check_shutdown_or_delay;
 use crate::utils::get_wallet_address;
 use crate::utils::*;
 use crate::wallet::get_current_wallet_status;
-// New pool price system is now integrated via background services
 
 use chrono::Utc;
 use std::collections::HashMap;
@@ -150,67 +147,6 @@ pub struct AtaCleanupDisplay {
     failed_cache: String,
     #[tabled(rename = "⏰ Last Cleanup")]
     last_cleanup: String,
-}
-
-/// Display structure for pool service statistics
-#[derive(Tabled)]
-pub struct PoolServiceDisplay {
-    #[tabled(rename = "🏊 Memory Cache")]
-    memory_cache: String,
-    #[tabled(rename = "💰 Price Cache")]
-    price_cache: String,
-    #[tabled(rename = "⏳ Cycles")]
-    cycles: String,
-    #[tabled(rename = "📦 Avg/Chunk")]
-    avg_per_chunk: String,
-    #[tabled(rename = "⏰ Last/Avg (ms)")]
-    last_avg_ms: String,
-    #[tabled(rename = "📞 Total Requests")]
-    total_requests: String,
-    #[tabled(rename = "✅ Success Rate")]
-    success_rate: String,
-    #[tabled(rename = "🔄 Cache Hits")]
-    cache_hit_rate: String,
-    #[tabled(rename = "⛓️ Blockchain")]
-    blockchain_calcs: String,
-    #[tabled(rename = "📈 Memory History")]
-    memory_history: String,
-    #[tabled(rename = "📡 Watch (tot/exp/never)")]
-    watch_snapshot: String,
-}
-
-/// Display structure for memory cache statistics
-#[derive(Tabled)]
-pub struct PoolMemoryCacheDisplay {
-    #[tabled(rename = "🏊 Pool Cache")]
-    pool_cache: String,
-    #[tabled(rename = "💰 Price Cache")]
-    price_cache: String,
-    #[tabled(rename = "� Availability Cache")]
-    availability_cache: String,
-    #[tabled(rename = "📊 Total Entries")]
-    total_entries: String,
-    #[tabled(rename = "� Storage Type")]
-    storage_type: String,
-    #[tabled(rename = "� Cache Performance")]
-    cache_performance: String,
-}
-
-/// Display structure for database statistics
-#[derive(Tabled)]
-pub struct PoolDatabaseDisplay {
-    #[tabled(rename = "🗄️ Total History")]
-    total_history: String,
-    #[tabled(rename = "📅 Recent (24h)")]
-    recent_history: String,
-    #[tabled(rename = "🪙 Tracked Tokens")]
-    tracked_tokens: String,
-    #[tabled(rename = "💾 Storage")]
-    storage_location: String,
-    #[tabled(rename = "🧹 Auto Cleanup")]
-    auto_cleanup: String,
-    #[tabled(rename = "🔧 Gap Detection")]
-    gap_detection: String,
 }
 
 /// Display structure for RPC URL usage statistics
@@ -400,9 +336,6 @@ pub async fn print_positions_snapshot() {
     if is_debug_summary_enabled() && !is_dashboard_enabled() {
         log(LogTag::Summary, "DEBUG", "Starting positions table display generation");
     }
-
-    // The new pool price system runs in background and continuously updates prices
-    // for open positions, so we don't need to refresh them here
 
     // Get positions directly from positions manager
     let collect_start = Instant::now();
@@ -871,277 +804,12 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
         last_cleanup: ata_stats.last_cleanup_time.unwrap_or_else(|| "Never".to_string()),
     };
 
-    // Get pool service statistics with timeout protection
-    let pool_service = get_pool_service();
-    let pool_stats_start = Instant::now();
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            "[build_summary_report] Fetching pool service stats (cache, enhanced, disk)"
-        );
-    }
-
-    // Add timeout protection for pool service calls
-    let cache_stats_start = Instant::now();
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            "[build_summary_report] Starting pool service cache stats call"
-        );
-    }
-    let (pool_cache_count, price_cache_count, _availability_cache_count) = match
-        tokio::time::timeout(Duration::from_secs(3), pool_service.get_cache_stats()).await
-    {
-        Ok(stats) => {
-            if is_debug_summary_enabled() {
-                log(
-                    LogTag::Summary,
-                    "DEBUG",
-                    &format!(
-                        "[build_summary_report] Pool cache stats obtained in {} ms",
-                        cache_stats_start.elapsed().as_millis()
-                    )
-                );
-            }
-            stats
-        }
-        Err(_) => {
-            log(
-                LogTag::Summary,
-                "WARN",
-                &format!(
-                    "[build_summary_report] Pool cache stats timeout after {} ms - using default",
-                    cache_stats_start.elapsed().as_millis()
-                )
-            );
-            (0, 0, 0)
-        }
-    };
-
-    let enhanced_stats_start = Instant::now();
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            "[build_summary_report] Starting pool service enhanced stats call"
-        );
-    }
-    let enhanced_stats = match
-        tokio::time::timeout(Duration::from_secs(3), pool_service.get_enhanced_stats()).await
-    {
-        Ok(stats) => {
-            if is_debug_summary_enabled() {
-                log(
-                    LogTag::Summary,
-                    "DEBUG",
-                    &format!(
-                        "[build_summary_report] Pool enhanced stats obtained in {} ms",
-                        enhanced_stats_start.elapsed().as_millis()
-                    )
-                );
-            }
-            stats
-        }
-        Err(_) => {
-            log(
-                LogTag::Summary,
-                "WARN",
-                &format!(
-                    "[build_summary_report] Pool enhanced stats timeout after {} ms - using default",
-                    enhanced_stats_start.elapsed().as_millis()
-                )
-            );
-            crate::tokens::pool::PoolServiceStats::default()
-        }
-    };
-
-    // Get memory cache statistics with timeout
-    let memory_cache_start = Instant::now();
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            "[build_summary_report] Starting pool service memory cache stats call"
-        );
-    }
-    let memory_cache_stats = match
-        tokio::time::timeout(Duration::from_secs(2), pool_service.get_cache_stats()).await
-    {
-        Ok(stats) => {
-            if is_debug_summary_enabled() {
-                log(
-                    LogTag::Summary,
-                    "DEBUG",
-                    &format!(
-                        "[build_summary_report] Pool memory cache stats obtained in {} ms",
-                        memory_cache_start.elapsed().as_millis()
-                    )
-                );
-            }
-            stats
-        }
-        _ => {
-            log(
-                LogTag::Summary,
-                "WARN",
-                &format!(
-                    "[build_summary_report] Pool memory cache stats timeout after {} ms - using default",
-                    memory_cache_start.elapsed().as_millis()
-                )
-            );
-            (0, 0, 0)
-        }
-    };
-
-    // Get database statistics with timeout
-    let database_stats_start = Instant::now();
-    if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "[build_summary_report] Fetching pool database statistics");
-    }
-    let database_stats = match
-        tokio::time::timeout(
-            Duration::from_secs(1),
-            tokio::task::spawn_blocking(|| get_pool_db_statistics())
-        ).await
-    {
-        Ok(task_result) =>
-            match task_result {
-                Ok(stats_result) =>
-                    match stats_result {
-                        Ok(stats) => {
-                            if is_debug_summary_enabled() {
-                                log(
-                                    LogTag::Summary,
-                                    "DEBUG",
-                                    &format!(
-                                        "[build_summary_report] Pool database stats obtained in {} ms",
-                                        database_stats_start.elapsed().as_millis()
-                                    )
-                                );
-                            }
-                            Some(stats)
-                        }
-                        Err(e) => {
-                            if is_debug_summary_enabled() {
-                                log(
-                                    LogTag::Summary,
-                                    "DEBUG",
-                                    &format!("Database stats error: {}", e)
-                                );
-                            }
-                            None
-                        }
-                    }
-                Err(_) => {
-                    log(LogTag::Summary, "WARN", "Database stats task panicked");
-                    None
-                }
-            }
-        Err(_) => {
-            log(
-                LogTag::Summary,
-                "WARN",
-                &format!(
-                    "Database stats timeout after {} ms",
-                    database_stats_start.elapsed().as_millis()
-                )
-            );
-            None
-        }
-    };
-
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            &format!(
-                "[build_summary_report] Pool service stats fetched in {} ms",
-                pool_stats_start.elapsed().as_millis()
-            )
-        );
-    }
-
-    let pool_service_stats = PoolServiceDisplay {
-        memory_cache: format!("{} pools", pool_cache_count),
-        price_cache: format!("{} prices", price_cache_count),
-        cycles: format!("{}", enhanced_stats.monitoring_cycles),
-        avg_per_chunk: if enhanced_stats.monitoring_cycles > 0 {
-            format!("{:.1}", enhanced_stats.avg_tokens_per_cycle)
-        } else {
-            "N/A".to_string()
-        },
-        last_avg_ms: if enhanced_stats.monitoring_cycles > 0 {
-            format!(
-                "{:.0}/{:.0}",
-                enhanced_stats.last_cycle_duration_ms,
-                enhanced_stats.avg_cycle_duration_ms
-            )
-        } else {
-            "-".to_string()
-        },
-        total_requests: format!("{}", enhanced_stats.total_price_requests),
-        success_rate: if enhanced_stats.total_price_requests > 0 {
-            format!("{:.1}%", enhanced_stats.get_success_rate())
-        } else {
-            "N/A".to_string()
-        },
-        cache_hit_rate: if enhanced_stats.total_price_requests > 0 {
-            format!("{:.1}%", enhanced_stats.get_cache_hit_rate())
-        } else {
-            "0.0%".to_string()
-        },
-        blockchain_calcs: format!("{}", enhanced_stats.blockchain_calculations),
-        memory_history: format!("{} tokens", enhanced_stats.tokens_with_price_history),
-        watch_snapshot: format!(
-            "{}/{}/{}",
-            enhanced_stats.watch_total,
-            enhanced_stats.watch_expired,
-            enhanced_stats.watch_never_checked
-        ),
-    };
-
-    // Build memory cache display with accurate information
-    let (pool_cache_count, price_cache_count, availability_cache_count) = memory_cache_stats;
-    let memory_cache_display = PoolMemoryCacheDisplay {
-        pool_cache: format!("{} pools", pool_cache_count),
-        price_cache: format!("{} prices", price_cache_count),
-        availability_cache: format!("{} tokens", availability_cache_count),
-        total_entries: format!(
-            "{}",
-            pool_cache_count + price_cache_count + availability_cache_count
-        ),
-        storage_type: "In-Memory".to_string(),
-        cache_performance: if enhanced_stats.total_price_requests > 0 {
-            format!("{:.1}% hit rate", enhanced_stats.get_cache_hit_rate())
-        } else {
-            "No requests yet".to_string()
-        },
-    };
-
-    // Build database display with statistics
-    let database_display = if
-        let Some((total_entries, recent_entries, unique_tokens)) = database_stats
-    {
-        Some(PoolDatabaseDisplay {
-            total_history: format!("{} entries", total_entries),
-            recent_history: format!("{} entries", recent_entries),
-            tracked_tokens: format!("{} tokens", unique_tokens),
-            storage_location: "data/pools.db".to_string(),
-            auto_cleanup: "24h retention".to_string(),
-            gap_detection: "10min threshold".to_string(),
-        })
-    } else {
-        None
-    };
-
     // Build all table strings first, then display in one shot
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",
-            "[build_summary_report] Starting static tables build (overview, stats, performance, ATA, pool, memory)"
+            "[build_summary_report] Starting static tables build (overview, stats, performance, ATA)"
         );
     }
     let tables_build_start = Instant::now();
@@ -1187,37 +855,6 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
     let mut ata_table = Table::new(vec![ata_cleanup]);
     ata_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     summary_output.push_str(&format!("{}\n", ata_table));
-
-    // Build Pool Service Statistics table
-    summary_output.push_str("\n🏊 Pool Service Statistics\n");
-    let mut pool_table = Table::new(vec![pool_service_stats]);
-    pool_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    summary_output.push_str(&format!("{}\n", pool_table));
-
-    // Diagnostic hint: pools cached but no price requests counted (placed after table for visibility)
-    if enhanced_stats.total_price_requests == 0 && pool_cache_count > 0 {
-        summary_output.push_str(
-            "ℹ️ Pool diagnostics: Cached pools present but no price requests yet. Causes: no priority tokens, liquidity gate, or monitoring just started.\n"
-        );
-    }
-
-    // Build Pool Memory Cache Statistics table
-    summary_output.push_str("\n🧠 Pool Memory Cache Statistics\n");
-    let mut memory_cache_table = Table::new(vec![memory_cache_display]);
-    memory_cache_table
-        .with(Style::rounded())
-        .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    summary_output.push_str(&format!("{}\n", memory_cache_table));
-
-    // Build Pool Database Statistics table (if available)
-    if let Some(db_display) = database_display {
-        summary_output.push_str("\n🗄️ Pool Database Statistics\n");
-        let mut database_table = Table::new(vec![db_display]);
-        database_table
-            .with(Style::rounded())
-            .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-        summary_output.push_str(&format!("{}\n", database_table));
-    }
 
     // Build Recent Swaps table (last 20)
     if is_debug_summary_enabled() {
