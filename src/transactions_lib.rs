@@ -3561,6 +3561,9 @@ impl TransactionsManager {
                 "CAMMCzo5YL8w4VFF8KVHrK22GGUQpMDdHdVPZo2vadqQ" => {
                     return "Raydium CAMM".to_string();
                 }
+                "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => {
+                    return "Raydium CLMM".to_string();
+                }
                 "CPMMoo8L3wrBtphwOYMpCX4LtjRWB3gjCMFdukgp6EEh" => {
                     return "Raydium CPMM".to_string();
                 }
@@ -3592,6 +3595,9 @@ impl TransactionsManager {
                     }
                     if log_text.contains("CAMMCzo5YL8w4VFF8KVHrK22GGUQpMDdHdVPZo2vadqQ") {
                         return "Jupiter (via Raydium CAMM)".to_string();
+                    }
+                    if log_text.contains("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK") {
+                        return "Jupiter (via Raydium CLMM)".to_string();
                     }
                     if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
                         return "Jupiter (via Orca)".to_string();
@@ -3634,7 +3640,10 @@ impl TransactionsManager {
             return "Raydium CLMM".to_string();
         }
         if log_text.contains("CAMMCzo5YL8w4VFF8KVHrK22GGUQpMDdHdVPZo2vadqQ") {
-            return "Raydium CPMM".to_string();
+            return "Raydium CAMM".to_string();
+        }
+        if log_text.contains("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK") {
+            return "Raydium CLMM".to_string();
         }
         if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
             return "Orca".to_string();

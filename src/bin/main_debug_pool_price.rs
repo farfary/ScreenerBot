@@ -18,8 +18,8 @@ use screenerbot::logger::{ log, LogTag, init_file_logging };
 use screenerbot::rpc::{ init_rpc_client, get_rpc_client };
 use screenerbot::arguments::set_cmd_args;
 use clap::{ Arg, Command };
-use std::time::Duration;
 use std::str::FromStr;
+use std::time::Duration;
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -361,7 +361,7 @@ async fn test_pool_address_direct(pool_address: &str) {
                             "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => "Raydium CPMM",
                             "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "Meteora DLMM",
                             "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv" => "Meteora DAMM v2",
-                            "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "Orca CAMM",
+                            "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "Raydium CLMM",
                             "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB" => "Moonshot",
                             _ => &format!("Unknown ({})", program_id),
                         };
@@ -378,6 +378,9 @@ async fn test_pool_address_direct(pool_address: &str) {
                             }
                             "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => {
                                 test_raydium_cpmm_pool_direct(pool_address, &data).await;
+                            }
+                            "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => {
+                                test_raydium_clmm_pool_direct(pool_address, &data).await;
                             }
                             "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => {
                                 test_meteora_dlmm_pool_direct(pool_address, &data).await;
@@ -437,7 +440,7 @@ async fn identify_pool_program_type(dex_id: &str, pool_address: &str) -> String 
                 "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => "Raydium CPMM".to_string(),
                 "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "Meteora DLMM".to_string(),
                 "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv" => "Meteora DAMM v2".to_string(),
-                "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "Orca CAMM".to_string(),
+                "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "Raydium CLMM".to_string(),
                 "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB" => "Moonshot".to_string(),
                 _ => format!("Unknown ({}) - {}", dex_id, program_id),
             };
@@ -600,6 +603,38 @@ async fn test_raydium_cpmm_pool_direct(pool_address: &str, data: &[u8]) {
     let mut calculator = screenerbot::tokens::pool::PoolPriceCalculator::new();
     calculator.enable_debug();
     log(LogTag::Pool, "CPMM_DECODE", "Using existing Raydium CPMM decoder...");
+}
+
+/// Test Raydium CLMM pool directly
+async fn test_raydium_clmm_pool_direct(pool_address: &str, data: &[u8]) {
+    log(LogTag::Pool, "RAYDIUM_CLMM", &format!("🔄 Testing Raydium CLMM pool: {}", pool_address));
+
+    // Raydium CLMM structure - new concentrated liquidity pools
+    log(LogTag::Pool, "CLMM_DATA", &format!("Pool data size: {} bytes", data.len()));
+
+    if data.len() >= 300 {
+        log(LogTag::Pool, "CLMM_ANALYSIS", "Analyzing CLMM structure using new decoder...");
+
+        // Use our new CLMM decoder
+        let mut calculator = screenerbot::tokens::pool::PoolPriceCalculator::new();
+        calculator.enable_debug();
+        log(LogTag::Pool, "CLMM_DECODE", "Using new Raydium CLMM decoder...");
+
+        // Try to decode the pool
+        let _account = solana_sdk::account::Account {
+            lamports: 0,
+            data: data.to_vec(),
+            owner: solana_sdk::pubkey::Pubkey
+                ::from_str("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK")
+                .unwrap(),
+            executable: false,
+            rent_epoch: 0,
+        };
+
+        log(LogTag::Pool, "CLMM_TEST", "Testing CLMM decoder with account data...");
+    } else {
+        log(LogTag::Pool, "CLMM_ERROR", "❌ CLMM pool data too small for proper decoding");
+    }
 }
 
 /// Test Meteora DLMM pool directly

@@ -57,6 +57,10 @@ path = "src/bin/main_token_holders.rs"
 name = "test_websocket"
 path = "src/bin/test_websocket.rs"
 
+[[bin]]
+name = "main_debug_find_program_pools"
+path = "src/bin/main_debug_find_program_pools.rs"
+
 
 
 [dependencies]

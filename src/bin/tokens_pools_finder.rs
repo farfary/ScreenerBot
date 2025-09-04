@@ -9,6 +9,7 @@ use screenerbot::tokens::pool::{
     METEORA_DAMM_V2_PROGRAM_ID,
     METEORA_DLMM_PROGRAM_ID,
     RAYDIUM_CPMM_PROGRAM_ID,
+    RAYDIUM_CLMM_PROGRAM_ID,
     RAYDIUM_LEGACY_AMM_PROGRAM_ID,
 };
 
@@ -32,6 +33,11 @@ const PROGRAMS: &[ProgramScan] = &[
         id: RAYDIUM_CPMM_PROGRAM_ID,
         name: "RAYDIUM CPMM",
         mint_offsets: &[168, 200],
+    },
+    ProgramScan {
+        id: RAYDIUM_CLMM_PROGRAM_ID,
+        name: "RAYDIUM CLMM",
+        mint_offsets: &[73, 105], // mintA at 73, mintB at 105
     },
     ProgramScan {
         id: RAYDIUM_LEGACY_AMM_PROGRAM_ID,

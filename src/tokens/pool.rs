@@ -112,6 +112,9 @@ pub const PUMP_FUN_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52
 /// Raydium Legacy AMM Program ID
 pub const RAYDIUM_LEGACY_AMM_PROGRAM_ID: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
 
+/// Raydium CLMM (Concentrated Liquidity Market Maker) Program ID
+pub const RAYDIUM_CLMM_PROGRAM_ID: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK";
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
@@ -121,6 +124,7 @@ pub fn get_pool_program_display_name(program_id: &str) -> String {
     match program_id {
         RAYDIUM_CPMM_PROGRAM_ID => "RAYDIUM CPMM".to_string(),
         RAYDIUM_LEGACY_AMM_PROGRAM_ID => "RAYDIUM LEGACY AMM".to_string(),
+        RAYDIUM_CLMM_PROGRAM_ID => "RAYDIUM CLMM".to_string(),
         METEORA_DAMM_V2_PROGRAM_ID => "METEORA DAMM v2".to_string(),
         METEORA_DLMM_PROGRAM_ID => "METEORA DLMM".to_string(),
         ORCA_WHIRLPOOL_PROGRAM_ID => "ORCA WHIRLPOOL".to_string(),
@@ -1036,6 +1040,7 @@ impl PoolPriceService {
             let mut ad_hoc_interval = tokio::time::interval(
                 Duration::from_secs(ADHOC_UPDATE_INTERVAL_SECS)
             );
+            let mut pool_refresh_interval = tokio::time::interval(Duration::from_secs(300)); // Refresh stale pools every 5 minutes
 
             loop {
                 tokio::select! {
@@ -1213,6 +1218,65 @@ impl PoolPriceService {
                                 "ADHOC"
                             ).await;
                         }
+                    }
+
+                    // Pool refresh task - update stale pools from database every 5 minutes
+                    _ = pool_refresh_interval.tick() => {
+                        // Check if monitoring should continue
+                        {
+                            let active = monitoring_active.read().await;
+                            if !*active {
+                                break;
+                            }
+                        }
+
+                        // Refresh stale pools from the database
+                        tokio::spawn(async {
+                            match crate::tokens::pool_db::get_stale_pools(50) { // Refresh up to 50 stale pools per cycle
+                                Ok(stale_pools) => {
+                                    if !stale_pools.is_empty() {
+                                        log(
+                                            LogTag::Pool,
+                                            "REFRESH_STALE",
+                                            &format!("🔄 Refreshing {} stale pools from database", stale_pools.len())
+                                        );
+
+                                        // Update stale pools by fetching fresh data from API
+                                        for db_pool in stale_pools.iter().take(10) { // Limit to 10 per cycle to avoid rate limits
+                                            if let Ok(pairs) = crate::tokens::dexscreener::get_token_pairs_from_api(&db_pool.token_mint).await {
+                                                if !pairs.is_empty() {
+                                                    if let Err(e) = crate::tokens::pool_db::store_pools_from_dexscreener_response(&pairs) {
+                                                        log(
+                                                            LogTag::Pool,
+                                                            "REFRESH_ERROR",
+                                                            &format!("Failed to update stale pool for {}: {}", db_pool.token_mint, e)
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                            // Add small delay to avoid overwhelming the API
+                                            tokio::time::sleep(Duration::from_millis(100)).await;
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    log(
+                                        LogTag::Pool,
+                                        "REFRESH_ERROR",
+                                        &format!("Failed to get stale pools: {}", e)
+                                    );
+                                }
+                            }
+
+                            // Also cleanup expired pool metadata
+                            if let Err(e) = crate::tokens::pool_db::cleanup_expired_pool_metadata() {
+                                log(
+                                    LogTag::Pool,
+                                    "CLEANUP_ERROR",
+                                    &format!("Failed to cleanup expired pool metadata: {}", e)
+                                );
+                            }
+                        });
                     }
                 }
             }
@@ -2860,7 +2924,7 @@ impl PoolPriceService {
             );
         }
 
-        // Check pool cache first
+        // Check memory pool cache first
         {
             let pool_cache = self.pool_cache.read().await;
             if let Some(cached_pools) = pool_cache.get(token_address) {
@@ -2884,16 +2948,95 @@ impl PoolPriceService {
                     log(
                         LogTag::Pool,
                         "FETCH_CACHE_EXPIRED",
-                        &format!("⏰ Pool cache EXPIRED for {}, will fetch fresh pools from API", token_address)
+                        &format!("⏰ Memory pool cache EXPIRED for {}, checking database cache", token_address)
                     );
                 }
             } else if is_debug_pool_prices_enabled() {
                 log(
                     LogTag::Pool,
                     "FETCH_CACHE_MISS",
-                    &format!("❓ No cached pools for {}, will fetch from API", token_address)
+                    &format!("❓ No cached pools in memory for {}, checking database cache", token_address)
                 );
             }
+        }
+
+        // Check database cache for fresh pools
+        if
+            let Ok(fresh_db_pools) =
+                crate::tokens::pool_db::get_fresh_pools_for_token(token_address)
+        {
+            if !fresh_db_pools.is_empty() {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "FETCH_DB_HIT",
+                        &format!(
+                            "💾 Found {} fresh pools in database for {}, converting to memory cache",
+                            fresh_db_pools.len(),
+                            token_address
+                        )
+                    );
+                }
+
+                // Convert database pools to memory cache format
+                let mut cached_pools = Vec::new();
+                for db_pool in fresh_db_pools {
+                    let cached_pool = CachedPoolInfo {
+                        pair_address: db_pool.pool_address,
+                        dex_id: db_pool.dex_id,
+                        base_token: db_pool.base_token_address,
+                        quote_token: db_pool.quote_token_address,
+                        price_native: db_pool.price_native.unwrap_or(0.0),
+                        price_usd: db_pool.price_usd.unwrap_or(0.0),
+                        liquidity_usd: db_pool.liquidity_usd.unwrap_or(0.0),
+                        volume_24h: db_pool.volume_24h.unwrap_or(0.0),
+                        created_at: db_pool.pair_created_at
+                            .map(|dt| dt.timestamp() as u64)
+                            .unwrap_or(0),
+                        cached_at: db_pool.last_updated,
+                    };
+                    cached_pools.push(cached_pool);
+                }
+
+                // Sort by liquidity (highest first)
+                cached_pools.sort_by(|a, b| {
+                    b.liquidity_usd
+                        .partial_cmp(&a.liquidity_usd)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+
+                // Store in memory cache for fast access
+                {
+                    let mut pool_cache = self.pool_cache.write().await;
+                    pool_cache.insert(token_address.to_string(), cached_pools.clone());
+
+                    if is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "FETCH_DB_CACHED",
+                            &format!(
+                                "💾 Loaded {} pools from database to memory cache for {}",
+                                cached_pools.len(),
+                                token_address
+                            )
+                        );
+                    }
+                }
+
+                return Ok(cached_pools);
+            } else if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "FETCH_DB_MISS",
+                    &format!("❓ No fresh pools in database for {}, will fetch from API", token_address)
+                );
+            }
+        } else if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "FETCH_DB_ERROR",
+                &format!("❌ Error checking database cache for {}, will fetch from API", token_address)
+            );
         }
 
         // Fetch from API
@@ -3012,7 +3155,7 @@ impl PoolPriceService {
             }
         }
 
-        // Cache the results
+        // Cache the results in memory
         {
             let mut pool_cache = self.pool_cache.write().await;
             pool_cache.insert(token_address.to_string(), cached_pools.clone());
@@ -3029,6 +3172,32 @@ impl PoolPriceService {
                         Utc::now().format("%H:%M:%S%.3f")
                     )
                 );
+            }
+        }
+
+        // Store pools in database for persistent caching
+        if !pairs.is_empty() {
+            match crate::tokens::pool_db::store_pools_from_dexscreener_response(&pairs) {
+                Ok(stored_count) => {
+                    if stored_count > 0 && is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "DB_STORED",
+                            &format!(
+                                "💾 Stored {} pools for {} in database",
+                                stored_count,
+                                token_address
+                            )
+                        );
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Pool,
+                        "DB_STORE_ERROR",
+                        &format!("Failed to store pools for {} in database: {}", token_address, e)
+                    );
+                }
             }
         }
 
@@ -3382,6 +3551,72 @@ impl PoolPriceService {
         stats.last_updated = Utc::now();
 
         stats.clone()
+    }
+
+    /// Get comprehensive pool statistics including database metrics
+    pub async fn get_comprehensive_pool_statistics(&self) -> Result<serde_json::Value, String> {
+        let (pool_cache_size, price_cache_size, availability_cache_size) =
+            self.get_cache_stats().await;
+        let enhanced_stats = self.get_enhanced_stats().await;
+
+        // Get database statistics
+        let (total_db_pools, active_db_pools, fresh_db_pools, unique_tokens) =
+            crate::tokens::pool_db::get_pool_metadata_statistics()?;
+
+        let (total_price_entries, recent_price_entries, unique_price_tokens) =
+            crate::tokens::pool_db::get_pool_db_statistics()?;
+
+        // Get watchlist statistics
+        let priority_count = { self.priority_tokens.read().await.len() };
+        let watchlist_count = { self.watchlist_tokens.read().await.len() };
+
+        let stats =
+            serde_json::json!({
+            "memory_cache": {
+                "pool_cache_tokens": pool_cache_size,
+                "price_cache_tokens": price_cache_size,
+                "availability_cache_tokens": availability_cache_size
+            },
+            "database_cache": {
+                "total_pools": total_db_pools,
+                "active_pools": active_db_pools,
+                "fresh_pools": fresh_db_pools,
+                "unique_tokens_with_pools": unique_tokens,
+                "total_price_entries": total_price_entries,
+                "recent_price_entries": recent_price_entries,
+                "unique_tokens_with_prices": unique_price_tokens
+            },
+            "monitoring": {
+                "priority_tokens": priority_count,
+                "watchlist_tokens": watchlist_count,
+                "monitoring_active": self.is_monitoring_active().await
+            },
+            "performance": {
+                "total_price_requests": enhanced_stats.total_price_requests,
+                "successful_calculations": enhanced_stats.successful_calculations,
+                "failed_calculations": enhanced_stats.failed_calculations,
+                "cache_hits": enhanced_stats.cache_hits,
+                "blockchain_calculations": enhanced_stats.blockchain_calculations,
+                "api_fallbacks": enhanced_stats.api_fallbacks,
+                "success_rate": enhanced_stats.get_success_rate(),
+                "cache_hit_rate": enhanced_stats.get_cache_hit_rate()
+            },
+            "monitoring_cycles": {
+                "total_cycles": enhanced_stats.monitoring_cycles,
+                "last_cycle_tokens": enhanced_stats.last_cycle_tokens,
+                "avg_tokens_per_cycle": enhanced_stats.avg_tokens_per_cycle,
+                "last_cycle_duration_ms": enhanced_stats.last_cycle_duration_ms,
+                "avg_cycle_duration_ms": enhanced_stats.avg_cycle_duration_ms
+            },
+            "errors": {
+                "vault_timeouts": enhanced_stats.vault_timeouts,
+                "unsupported_programs": enhanced_stats.unsupported_programs_count,
+                "backoff_skips": enhanced_stats.calc_skips_backoff
+            },
+            "last_updated": enhanced_stats.last_updated
+        });
+
+        Ok(stats)
     }
 
     /// Record an unsupported pool program encountered during price requests
@@ -3894,7 +4129,10 @@ impl PoolPriceCalculator {
 
         // Refresh reserves based on pool type
         match pool_info.pool_program_id.as_str() {
-            RAYDIUM_CPMM_PROGRAM_ID | METEORA_DAMM_V2_PROGRAM_ID | ORCA_WHIRLPOOL_PROGRAM_ID => {
+            | RAYDIUM_CPMM_PROGRAM_ID
+            | RAYDIUM_CLMM_PROGRAM_ID
+            | METEORA_DAMM_V2_PROGRAM_ID
+            | ORCA_WHIRLPOOL_PROGRAM_ID => {
                 // These pools use vault balances
                 if
                     let (Some(vault_0), Some(vault_1)) = (
@@ -4152,6 +4390,12 @@ impl PoolPriceCalculator {
                         }
                         self.decode_raydium_legacy_amm_pool(pool_address, account).await
                     }
+                    RAYDIUM_CLMM_PROGRAM_ID => {
+                        if self.debug_enabled {
+                            log(LogTag::Pool, "DECODER_SELECT", "Using Raydium CLMM decoder");
+                        }
+                        self.decode_raydium_clmm_pool(pool_address, account).await
+                    }
                     METEORA_DAMM_V2_PROGRAM_ID => {
                         if self.debug_enabled {
                             log(LogTag::Pool, "DECODER_SELECT", "Using Meteora DAMM v2 decoder");
@@ -4275,6 +4519,9 @@ impl PoolPriceCalculator {
             RAYDIUM_LEGACY_AMM_PROGRAM_ID => {
                 self.calculate_raydium_legacy_amm_price(&pool_info, token_mint).await?
             }
+            RAYDIUM_CLMM_PROGRAM_ID => {
+                self.calculate_raydium_clmm_price(&pool_info, token_mint).await?
+            }
             METEORA_DAMM_V2_PROGRAM_ID => {
                 self.calculate_meteora_damm_v2_price(&pool_info, token_mint).await?
             }
@@ -4378,6 +4625,9 @@ impl PoolPriceCalculator {
                     }
                     RAYDIUM_LEGACY_AMM_PROGRAM_ID => {
                         self.calculate_raydium_legacy_amm_price(pool_info, token_mint).await
+                    }
+                    RAYDIUM_CLMM_PROGRAM_ID => {
+                        self.calculate_raydium_clmm_price(pool_info, token_mint).await
                     }
                     METEORA_DAMM_V2_PROGRAM_ID => {
                         self.calculate_meteora_damm_v2_price(pool_info, token_mint).await
@@ -4745,6 +4995,313 @@ impl PoolPriceCalculator {
                     price_sol,
                     pool_info.pool_address,
                     pool_info.pool_type
+                )
+            );
+
+            // Additional validation checks
+            if sol_adjusted <= 0.0 || token_adjusted <= 0.0 {
+                log(
+                    LogTag::Pool,
+                    "CALC_WARN",
+                    &format!(
+                        "WARNING: Zero or negative adjusted values detected! \
+                         SOL_adj: {:.9}, Token_adj: {:.9}",
+                        sol_adjusted,
+                        token_adjusted
+                    )
+                );
+            }
+
+            // Check for extremely small or large prices that might indicate decimal issues
+            if price_sol < 0.000000001 || price_sol > 1000.0 {
+                log(
+                    LogTag::Pool,
+                    "CALC_WARN",
+                    &format!(
+                        "WARNING: Unusual price detected: {:.12} SOL. \
+                         Check if decimals are correct (SOL: {}, Token: {})",
+                        price_sol,
+                        sol_decimals,
+                        token_decimals
+                    )
+                );
+            }
+        }
+
+        Ok(
+            Some(PoolPriceInfo {
+                pool_address: pool_info.pool_address.clone(),
+                pool_program_id: pool_info.pool_program_id.clone(),
+                pool_type: pool_info.pool_type.clone(),
+                token_mint: token_mint.to_string(),
+                price_sol,
+                token_reserve,
+                sol_reserve,
+                token_decimals,
+                sol_decimals,
+            })
+        )
+    }
+
+    /// Decode Raydium CLMM (Concentrated Liquidity Market Maker) pool data from account bytes
+    async fn decode_raydium_clmm_pool(
+        &self,
+        pool_address: &str,
+        account: &Account
+    ) -> Result<PoolInfo, String> {
+        if account.data.len() < 300 {
+            return Err("Invalid Raydium CLMM pool account data length".to_string());
+        }
+
+        let data = &account.data;
+        let mut offset = 8; // Skip discriminator
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "CLMM_DEBUG",
+                &format!(
+                    "Raydium CLMM pool {} - data length: {} bytes, decoding structure...",
+                    pool_address,
+                    data.len()
+                )
+            );
+        }
+
+        // Decode Raydium CLMM pool structure based on provided schema:
+        // blob(8), u8("bump"), publicKey("ammConfig"), publicKey("creator"),
+        // publicKey("mintA"), publicKey("mintB"), publicKey("vaultA"), publicKey("vaultB"),
+        // publicKey("observationId"), u8("mintDecimalsA"), u8("mintDecimalsB"),
+        // u16("tickSpacing"), u128("liquidity"), u128("sqrtPriceX64"), s32("tickCurrent"),
+        // u32(), u128("feeGrowthGlobalX64A"), u128("feeGrowthGlobalX64B"),
+        // u64("protocolFeesTokenA"), u64("protocolFeesTokenB"),
+        // u128("swapInAmountTokenA"), u128("swapOutAmountTokenB")
+
+        let _bump = Self::read_u8_at_offset(data, &mut offset)?; // bump
+        let _amm_config = Self::read_pubkey_at_offset(data, &mut offset)?; // ammConfig
+        let _creator = Self::read_pubkey_at_offset(data, &mut offset)?; // creator
+        let mint_a = Self::read_pubkey_at_offset(data, &mut offset)?; // mintA (SOL)
+        let mint_b = Self::read_pubkey_at_offset(data, &mut offset)?; // mintB (target token)
+        let vault_a = Self::read_pubkey_at_offset(data, &mut offset)?; // vaultA (SOL vault)
+        let vault_b = Self::read_pubkey_at_offset(data, &mut offset)?; // vaultB (token vault)
+        let _observation_id = Self::read_pubkey_at_offset(data, &mut offset)?; // observationId
+
+        let mint_decimals_a = Self::read_u8_at_offset(data, &mut offset)?; // mintDecimalsA
+        let mint_decimals_b = Self::read_u8_at_offset(data, &mut offset)?; // mintDecimalsB
+
+        let _tick_spacing = u16::from_le_bytes(
+            data[offset..offset + 2].try_into().unwrap_or([0; 2])
+        ); // tickSpacing
+        offset += 2;
+
+        let liquidity = u128::from_le_bytes(
+            data[offset..offset + 16].try_into().unwrap_or([0; 16])
+        ); // liquidity
+        offset += 16;
+
+        let sqrt_price_x64 = u128::from_le_bytes(
+            data[offset..offset + 16].try_into().unwrap_or([0; 16])
+        ); // sqrtPriceX64
+        offset += 16;
+
+        let _tick_current = i32::from_le_bytes(
+            data[offset..offset + 4].try_into().unwrap_or([0; 4])
+        ); // tickCurrent
+        offset += 4;
+
+        // Skip u32() padding
+        offset += 4;
+
+        let _fee_growth_global_a = u128::from_le_bytes(
+            data[offset..offset + 16].try_into().unwrap_or([0; 16])
+        ); // feeGrowthGlobalX64A
+        offset += 16;
+
+        let _fee_growth_global_b = u128::from_le_bytes(
+            data[offset..offset + 16].try_into().unwrap_or([0; 16])
+        ); // feeGrowthGlobalX64B
+        offset += 16;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "CLMM_EXTRACT",
+                &format!(
+                    "Extracted Raydium CLMM pool structure:\n\
+                    - Mint A (SOL): {}\n\
+                    - Mint B (target): {}\n\
+                    - Vault A (SOL): {}\n\
+                    - Vault B (target): {}\n\
+                    - Mint Decimals A: {}\n\
+                    - Mint Decimals B: {}\n\
+                    - Liquidity: {}\n\
+                    - Sqrt Price X64: {}",
+                    mint_a,
+                    mint_b,
+                    vault_a,
+                    vault_b,
+                    mint_decimals_a,
+                    mint_decimals_b,
+                    liquidity,
+                    sqrt_price_x64
+                )
+            );
+        }
+
+        // For Raydium CLMM, get reserves from the vault accounts
+        let vault_a_str = vault_a.to_string();
+        let vault_b_str = vault_b.to_string();
+
+        let (vault_a_balance, vault_b_balance) = match
+            self.get_vault_balances(&vault_a_str, &vault_b_str).await
+        {
+            Ok((va, vb)) => {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Pool,
+                        "CLMM_VAULT_SUCCESS",
+                        &format!(
+                            "Successfully fetched Raydium CLMM vault balances:\n\
+                            - Vault A {} (SOL) balance: {}\n\
+                            - Vault B {} (token) balance: {}",
+                            vault_a_str,
+                            va,
+                            vault_b_str,
+                            vb
+                        )
+                    );
+                }
+                (va, vb)
+            }
+            Err(e) => {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Pool,
+                        "CLMM_VAULT_ERROR",
+                        &format!("Vault balance fetch failed: {}", e)
+                    );
+                }
+                return Err(format!("Failed to get vault balances for Raydium CLMM pool: {}", e));
+            }
+        };
+
+        // Use decimal cache system with pool data as fallback
+        let mint_a_decimals = get_cached_decimals(&mint_a.to_string()).unwrap_or(mint_decimals_a);
+        let mint_b_decimals = get_cached_decimals(&mint_b.to_string()).unwrap_or(mint_decimals_b);
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "CLMM_DECODE",
+                &format!(
+                    "Raydium CLMM pool {} decoded:\n\
+                    - Token A (SOL): {} ({} decimals, {} reserve)\n\
+                    - Token B (target): {} ({} decimals, {} reserve)\n\
+                    - Token Vault A: {}\n\
+                    - Token Vault B: {}\n\
+                    - Liquidity: {}\n\
+                    - Sqrt Price X64: {}",
+                    pool_address,
+                    mint_a,
+                    mint_a_decimals,
+                    vault_a_balance,
+                    mint_b,
+                    mint_b_decimals,
+                    vault_b_balance,
+                    vault_a,
+                    vault_b,
+                    liquidity,
+                    sqrt_price_x64
+                )
+            );
+        }
+
+        Ok(PoolInfo {
+            pool_address: pool_address.to_string(),
+            pool_program_id: RAYDIUM_CLMM_PROGRAM_ID.to_string(),
+            pool_type: get_pool_program_display_name(RAYDIUM_CLMM_PROGRAM_ID),
+            token_0_mint: mint_a.to_string(), // SOL
+            token_1_mint: mint_b.to_string(), // Target token
+            token_0_vault: Some(vault_a.to_string()),
+            token_1_vault: Some(vault_b.to_string()),
+            token_0_reserve: vault_a_balance, // SOL reserve
+            token_1_reserve: vault_b_balance, // Token reserve
+            token_0_decimals: mint_a_decimals,
+            token_1_decimals: mint_b_decimals,
+            lp_mint: None, // CLMM uses concentrated liquidity
+            lp_supply: Some(liquidity as u64), // Use liquidity value
+            creator: Some(_creator),
+            status: None,
+            liquidity_usd: None,
+            sqrt_price: Some(sqrt_price_x64), // Store sqrt_price for concentrated liquidity calculation
+        })
+    }
+
+    /// Calculate price for Raydium CLMM pool
+    async fn calculate_raydium_clmm_price(
+        &self,
+        pool_info: &PoolInfo,
+        token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
+        // Determine which token is SOL and which is the target token
+        let (sol_reserve, token_reserve, sol_decimals, token_decimals, _is_token_0) = if
+            pool_info.token_0_mint == SOL_MINT &&
+            pool_info.token_1_mint == token_mint
+        {
+            (
+                pool_info.token_0_reserve,
+                pool_info.token_1_reserve,
+                pool_info.token_0_decimals,
+                pool_info.token_1_decimals,
+                false,
+            )
+        } else if pool_info.token_1_mint == SOL_MINT && pool_info.token_0_mint == token_mint {
+            (
+                pool_info.token_1_reserve,
+                pool_info.token_0_reserve,
+                pool_info.token_1_decimals,
+                pool_info.token_0_decimals,
+                true,
+            )
+        } else {
+            return Err(format!("Pool does not contain SOL or target token {}", token_mint));
+        };
+
+        // Validate reserves
+        if sol_reserve == 0 || token_reserve == 0 {
+            return Err("Pool has zero reserves".to_string());
+        }
+
+        // For CLMM pools, we can use the vault balances for basic price calculation
+        // The sqrt_price is also available for more precise calculations, but for now
+        // we'll use the same approach as regular AMM pools
+        let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
+        let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals as i32);
+
+        let price_sol = sol_adjusted / token_adjusted;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "CALC",
+                &format!(
+                    "Raydium CLMM Price Calculation for {}:\n  \
+                     SOL Reserve: {} ({:.9} adjusted, {} decimals)\n  \
+                     Token Reserve: {} ({:.9} adjusted, {} decimals)\n  \
+                     Price: {:.9} SOL\n  \
+                     Pool: {} ({})\n  \
+                     Sqrt Price X64: {:?}",
+                    token_mint,
+                    sol_reserve,
+                    sol_adjusted,
+                    sol_decimals,
+                    token_reserve,
+                    token_adjusted,
+                    token_decimals,
+                    price_sol,
+                    pool_info.pool_address,
+                    pool_info.pool_type,
+                    pool_info.sqrt_price
                 )
             );
 
@@ -7213,4 +7770,87 @@ pub async fn get_invalid_pool_blacklist_stats() -> (usize, Vec<String>) {
 pub async fn clear_invalid_pool_blacklist() {
     let service = get_pool_service();
     service.clear_invalid_pool_blacklist().await
+}
+
+// =============================================================================
+// DEBUG FUNCTIONS FOR POOL ANALYSIS
+// =============================================================================
+
+/// Debug function: Get pools with specific program ID from database
+/// This searches the database and validates program IDs on-chain
+pub async fn debug_find_pools_by_program_id(
+    program_id: &str,
+    max_pools: usize
+) -> Result<Vec<String>, String> {
+    use crate::rpc::get_rpc_client;
+    use solana_sdk::pubkey::Pubkey;
+    use std::str::FromStr;
+
+    // Parse target program ID
+    let target_pubkey = Pubkey::from_str(program_id).map_err(|e|
+        format!("Invalid program ID: {}", e)
+    )?;
+
+    // Get pool addresses from database
+    let pool_addresses = crate::tokens::pool_db::get_all_pool_addresses(max_pools)?;
+
+    log(
+        LogTag::Pool,
+        "DEBUG_PROGRAM_SEARCH",
+        &format!("🔍 Searching {} pools for program ID: {}", pool_addresses.len(), program_id)
+    );
+
+    let mut matching_pools = Vec::new();
+    let rpc_client = get_rpc_client();
+
+    for (i, pool_addr) in pool_addresses.iter().enumerate() {
+        if i % 25 == 0 && i > 0 {
+            log(
+                LogTag::Pool,
+                "DEBUG_PROGRESS",
+                &format!(
+                    "🔄 Checked {}/{} pools, found {} matches",
+                    i,
+                    pool_addresses.len(),
+                    matching_pools.len()
+                )
+            );
+        }
+
+        let pool_pubkey = match Pubkey::from_str(pool_addr) {
+            Ok(pubkey) => pubkey,
+            Err(_) => {
+                continue;
+            }
+        };
+
+        match rpc_client.get_account(&pool_pubkey).await {
+            Ok(account) => {
+                if account.owner == target_pubkey {
+                    log(
+                        LogTag::Pool,
+                        "DEBUG_FOUND",
+                        &format!("✅ Found pool with program ID {}: {}", program_id, pool_addr)
+                    );
+                    matching_pools.push(pool_addr.clone());
+                }
+            }
+            Err(_) => {
+                // Pool might not exist - continue searching
+            }
+        }
+    }
+
+    log(
+        LogTag::Pool,
+        "DEBUG_COMPLETE",
+        &format!(
+            "🎯 Found {} pools with program ID {} out of {} checked",
+            matching_pools.len(),
+            program_id,
+            pool_addresses.len()
+        )
+    );
+
+    Ok(matching_pools)
 }
