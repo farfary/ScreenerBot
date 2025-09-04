@@ -31,7 +31,7 @@ use tokio::sync::{ Mutex, Notify };
 const MAX_RECENT_CLOSED_POSITIONS: usize = 20;
 
 /// Summary display refresh interval (seconds) - optimized for 5s priority checking
-pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 15;
+pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 60;
 
 /// Display structure for closed positions with specific "Exit" column
 #[derive(Tabled)]

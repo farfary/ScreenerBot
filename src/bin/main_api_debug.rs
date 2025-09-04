@@ -121,18 +121,6 @@ async fn test_triple_api_pool_discovery(token_addresses: &[String]) -> Result<()
 
 #[tokio::main]
 async fn main() {
-    let args: Vec<String> = std::env::args().collect();
-
-    if args.len() < 2 {
-        println!("Usage: {} <token_address> [token_address2] [token_address3] ...", args[0]);
-        println!("Example: {} EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", args[0]);
-        println!(
-            "Example: {} So11111111111111111111111111111111111111112 EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-            args[0]
-        );
-        return;
-    }
-
     println!("🚀 Initializing APIs...");
 
     // Initialize DexScreener API
@@ -144,13 +132,13 @@ async fn main() {
     println!("\n🔍 Testing Triple API Integration (DexScreener + GeckoTerminal + Raydium)");
     println!("================================================================");
 
-    // Get token addresses from command line arguments
-    let token_addresses: Vec<String> = args[1..].to_vec();
-    let test_tokens: Vec<(String, String)> = token_addresses
-        .iter()
-        .enumerate()
-        .map(|(i, addr)| (format!("Token{}", i + 1), addr.clone()))
-        .collect();
+    // Test tokens - using popular Solana tokens
+    let test_tokens = vec![
+        ("SOL", "So11111111111111111111111111111111111111112"),
+        ("USDC", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
+        ("BONK", "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"),
+        ("WIF", "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm")
+    ];
 
     for (symbol, mint) in &test_tokens {
         println!("\n🪙 Testing token: {} ({})", symbol, mint);

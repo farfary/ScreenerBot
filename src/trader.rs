@@ -104,7 +104,7 @@ pub const ENABLE_POSITION_AWARE_DEXSCREENER_CACHE: bool = true;
 /// This is applied in apply_cooldown_filter() and is separate from:
 /// - Global position open cooldown (5s between any opens) - in positions.rs
 /// - Frozen account cooldowns (account-specific) - in positions.rs
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 1 * 60; // 24 hours
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 6 * 60; // 24 hours
 
 // -----------------------------------------------------------------------------
 // Trading Logic Configuration
@@ -126,19 +126,23 @@ pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 2;
 pub const SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 60;
 
 /// Individual token check task timeout (seconds)
-pub const TOKEN_CHECK_TASK_TIMEOUT_SECS: u64 = 60;
+/// Reduced to prevent individual tasks from blocking the cycle
+pub const TOKEN_CHECK_TASK_TIMEOUT_SECS: u64 = 20;
 
 /// Price cache lock acquire timeout (milliseconds)
 pub const PRICE_CACHE_LOCK_TIMEOUT_MS: u64 = 2000;
 
 /// Task collection timeout for concurrent operations (seconds)
-pub const TASK_COLLECTION_TIMEOUT_SECS: u64 = 120;
+/// Reduced to prevent cycles from taking longer than the 3s interval
+pub const TASK_COLLECTION_TIMEOUT_SECS: u64 = 30;
 
-/// Token check result collection timeout (seconds)
-pub const TOKEN_CHECK_COLLECTION_TIMEOUT_SECS: u64 = 120;
+/// Token check result collection timeout (seconds) 
+/// Reduced to prevent the 116s cycle timeout issue
+pub const TOKEN_CHECK_COLLECTION_TIMEOUT_SECS: u64 = 30;
 
 /// Individual token check handle timeout (seconds)
-pub const TOKEN_CHECK_HANDLE_TIMEOUT_SECS: u64 = 120;
+/// Reduced to match shorter collection timeout
+pub const TOKEN_CHECK_HANDLE_TIMEOUT_SECS: u64 = 25;
 
 /// Sell operations collection timeout (seconds) - must accommodate multiple 3-min operations
 pub const SELL_OPERATIONS_COLLECTION_TIMEOUT_SECS: u64 = 240;
@@ -176,13 +180,14 @@ pub const COLLECTION_SHUTDOWN_CHECK_MS: u64 = 1;
 // -----------------------------------------------------------------------------
 
 /// Number of concurrent token checks during entry scanning
-/// Higher values speed up scanning but increase load on price services
-pub const ENTRY_CHECK_CONCURRENCY: usize = 24; // previously 10
+/// Reduced from 24 to prevent overwhelming pool services and API endpoints
+/// This prevents the 116s cycle timeout issue by reducing service contention
+pub const ENTRY_CHECK_CONCURRENCY: usize = 8; // Reduced from 24 to fix performance
 
 // Capacity-aware Scheduling
 // -------------------------
 /// Max number of tokens to fully process per cycle (rotated across cycles)
-/// Rule of thumb: ~3x concurrency to keep workers fed without overloading services
+/// Rule of thumb: ~2x concurrency to keep workers fed without overloading services
 pub const MAX_TOKENS_PER_CYCLE: usize = ENTRY_CHECK_CONCURRENCY * 2;
 /// Maximum number of tokens to keep after prioritization per cache refresh
 /// This caps the working set early to reduce churn and focus checks
@@ -2011,8 +2016,8 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
 
     use crate::filtering::{ filter_tokens_with_reasons, log_transaction_activity_stats };
 
-    // Timeout for filtering operations - increased for larger token sets
-    const FILTERING_TIMEOUT_SECS: u64 = 180;
+    // Timeout for filtering operations - aggressive reduction to prevent deadlocks
+    const FILTERING_TIMEOUT_SECS: u64 = 20; // Reduced from 60s to prevent blocking
 
     // 1. Fetch tokens from safe system
     log(LogTag::Trader, "TOKEN_FETCH_START", "🔄 Fetching tokens from database...");
@@ -2146,7 +2151,7 @@ pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Toke
         tokens_from_module
     };
 
-    // 2. Apply filtering with timeout protection
+    // 2. Apply filtering with timeout protection and progress tracking
     log(
         LogTag::Trader,
         "FILTER_START",

@@ -805,6 +805,13 @@ impl PoolPriceService {
             let price_history = service.price_history.clone();
             let pool_price_history = service.pool_price_history.clone();
             async move {
+                let start_time = std::time::Instant::now();
+                log(
+                    LogTag::Pool,
+                    "DB_LOAD_START",
+                    "📊 Starting price history loading from database"
+                );
+
                 if
                     let Err(e) = Self::load_price_history_from_db(
                         price_history,
@@ -814,10 +821,55 @@ impl PoolPriceService {
                     log(
                         LogTag::Pool,
                         "DB_LOAD_ERROR",
-                        &format!("Failed to load price history from database: {}", e)
+                        &format!(
+                            "❌ Failed to load price history from database after {:.2}s: {}",
+                            start_time.elapsed().as_secs_f64(),
+                            e
+                        )
                     );
                 } else {
-                    log(LogTag::Pool, "DB_LOAD", "📊 Price history loaded from database");
+                    log(
+                        LogTag::Pool,
+                        "DB_LOAD",
+                        &format!(
+                            "✅ Price history loaded from database in {:.2}s",
+                            start_time.elapsed().as_secs_f64()
+                        )
+                    );
+                }
+            }
+        });
+
+        // Load existing pool metadata from database on startup
+        tokio::spawn({
+            let pool_cache = service.pool_cache.clone();
+            async move {
+                let start_time = std::time::Instant::now();
+                log(
+                    LogTag::Pool,
+                    "POOL_META_LOAD_START",
+                    "🏊 Starting pool metadata loading from database"
+                );
+
+                if let Err(e) = Self::load_pool_metadata_from_db(pool_cache).await {
+                    log(
+                        LogTag::Pool,
+                        "POOL_META_LOAD_ERROR",
+                        &format!(
+                            "❌ Failed to load pool metadata from database after {:.2}s: {}",
+                            start_time.elapsed().as_secs_f64(),
+                            e
+                        )
+                    );
+                } else {
+                    log(
+                        LogTag::Pool,
+                        "POOL_META_LOAD",
+                        &format!(
+                            "✅ Pool metadata loaded from database in {:.2}s",
+                            start_time.elapsed().as_secs_f64()
+                        )
+                    );
                 }
             }
         });
@@ -898,6 +950,143 @@ impl PoolPriceService {
                 "📊 Loaded {} price entries for {} tokens from database",
                 loaded_entries,
                 loaded_tokens
+            )
+        );
+
+        Ok(())
+    }
+
+    /// Load pool metadata from database into memory cache on startup
+    async fn load_pool_metadata_from_db(
+        pool_cache: Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>
+    ) -> Result<(), String> {
+        log(LogTag::Pool, "POOL_META_DB_START", "🔍 Loading all pool metadata from database");
+
+        // Get all unique tokens that have pools in the database (use pool_metadata table, not price history)
+        let tokens_with_pools = match crate::tokens::pool_db::get_pool_db_service() {
+            Ok(service) => {
+                let conn = rusqlite::Connection
+                    ::open("data/pools.db")
+                    .map_err(|e| format!("Failed to open database: {}", e))?;
+
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT DISTINCT token_mint FROM pool_metadata WHERE is_active = 1 ORDER BY last_updated DESC"
+                    )
+                    .map_err(|e| format!("Failed to prepare query: {}", e))?;
+
+                let token_iter = stmt
+                    .query_map([], |row| { Ok(row.get::<_, String>(0)?) })
+                    .map_err(|e| format!("Failed to execute query: {}", e))?;
+
+                let mut tokens = Vec::new();
+                for token_result in token_iter {
+                    match token_result {
+                        Ok(token) => tokens.push(token),
+                        Err(e) => {
+                            log(
+                                LogTag::Pool,
+                                "POOL_META_DB_ROW_ERROR",
+                                &format!("Failed to read token row: {}", e)
+                            );
+                        }
+                    }
+                }
+                tokens
+            }
+            Err(e) => {
+                log(
+                    LogTag::Pool,
+                    "POOL_META_DB_ERROR",
+                    &format!("Failed to get pool database service: {}", e)
+                );
+                return Err(e);
+            }
+        };
+
+        log(
+            LogTag::Pool,
+            "POOL_META_DB_FOUND",
+            &format!("📊 Found {} tokens with pools in database", tokens_with_pools.len())
+        );
+
+        let mut loaded_tokens = 0;
+        let mut loaded_pools = 0;
+
+        for token_mint in &tokens_with_pools {
+            // Load all pools for this token from database (including stale ones during startup)
+            match crate::tokens::pool_db::get_pools_for_token(&token_mint) {
+                Ok(db_pools) => {
+                    if !db_pools.is_empty() {
+                        // Convert database pool metadata to cached pool info
+                        let mut cached_pools = Vec::new();
+
+                        for db_pool in db_pools {
+                            let cached_pool = CachedPoolInfo {
+                                pair_address: db_pool.pool_address,
+                                dex_id: db_pool.dex_id,
+                                base_token: db_pool.base_token_address,
+                                quote_token: db_pool.quote_token_address,
+                                price_native: db_pool.price_native.unwrap_or(0.0),
+                                price_usd: db_pool.price_usd.unwrap_or(0.0),
+                                liquidity_usd: db_pool.liquidity_usd.unwrap_or(0.0),
+                                volume_24h: db_pool.volume_24h.unwrap_or(0.0),
+                                created_at: db_pool.pair_created_at
+                                    .map(|dt| dt.timestamp() as u64)
+                                    .unwrap_or(0),
+                                cached_at: Utc::now(), // Mark as freshly loaded
+                            };
+                            cached_pools.push(cached_pool);
+                        }
+
+                        // Sort by liquidity (highest first)
+                        cached_pools.sort_by(|a, b| {
+                            b.liquidity_usd
+                                .partial_cmp(&a.liquidity_usd)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        });
+
+                        // Store in memory cache
+                        {
+                            let mut cache = pool_cache.write().await;
+                            cache.insert(token_mint.clone(), cached_pools.clone());
+                        }
+
+                        loaded_tokens += 1;
+                        loaded_pools += cached_pools.len();
+
+                        if loaded_tokens <= 10 || loaded_tokens % 50 == 0 {
+                            log(
+                                LogTag::Pool,
+                                "POOL_META_DB_TOKEN_OK",
+                                &format!(
+                                    "✅ Loaded {} pools for token: {}... ({}/{} tokens)",
+                                    cached_pools.len(),
+                                    &token_mint[..8],
+                                    loaded_tokens,
+                                    tokens_with_pools.len()
+                                )
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Pool,
+                        "POOL_META_DB_TOKEN_ERROR",
+                        &format!("Failed to load pools for {}: {}", &token_mint[..8], e)
+                    );
+                }
+            }
+        }
+
+        log(
+            LogTag::Pool,
+            "POOL_META_DB_COMPLETE",
+            &format!(
+                "📊 Pool metadata loading complete: {} tokens loaded with {} total pools from database",
+                loaded_tokens,
+                loaded_pools
             )
         );
 
@@ -1017,6 +1206,9 @@ impl PoolPriceService {
 
     /// Start background monitoring service with batch updates
     pub async fn start_monitoring(&self) {
+        let start_time = std::time::Instant::now();
+        log(LogTag::Pool, "MONITORING_START", "🚀 Starting pool monitoring initialization...");
+
         let mut monitoring_active = self.monitoring_active.write().await;
         if *monitoring_active {
             log(LogTag::Pool, "WARNING", "Pool monitoring already active");
@@ -1025,11 +1217,27 @@ impl PoolPriceService {
         *monitoring_active = true;
         drop(monitoring_active);
 
-        log(LogTag::Pool, "START", "Starting pool price monitoring service with batch updates");
+        log(
+            LogTag::Pool,
+            "START",
+            &format!(
+                "🎯 Pool price monitoring service starting (setup took {:.2}s)",
+                start_time.elapsed().as_secs_f64()
+            )
+        );
 
         // Emit an immediate state summary so operators don't wait for the first interval tick
         // This is not gated by debug flags and helps confirm wiring on startup
+        let summary_start = std::time::Instant::now();
         self.log_state_summary().await;
+        log(
+            LogTag::Pool,
+            "SUMMARY_TIMING",
+            &format!(
+                "📊 Initial state summary completed in {:.2}s",
+                summary_start.elapsed().as_secs_f64()
+            )
+        );
 
         // Clone all necessary Arc references for the background task
         let price_cache = self.price_cache.clone();
@@ -1045,6 +1253,8 @@ impl PoolPriceService {
 
         // Start main monitoring loop with batch processing
         tokio::spawn(async move {
+            log(LogTag::Pool, "MONITORING_INIT", "🔄 Initializing monitoring intervals");
+
             let mut priority_interval = tokio::time::interval(
                 Duration::from_secs(PRIORITY_UPDATE_INTERVAL_SECS)
             );
@@ -1052,7 +1262,7 @@ impl PoolPriceService {
                 Duration::from_secs(WATCHLIST_UPDATE_INTERVAL_SECS)
             );
             let mut summary_interval = tokio::time::interval(Duration::from_secs(30));
-            let mut cleanup_interval = tokio::time::interval(Duration::from_secs(3600)); // Cleanup every hour
+            let mut cleanup_interval = tokio::time::interval(Duration::from_secs(300)); // Cleanup every hour
             let mut watchlist_cleanup_interval = tokio::time::interval(
                 Duration::from_secs(WATCHLIST_CLEANUP_INTERVAL_SECS)
             );
@@ -1061,29 +1271,42 @@ impl PoolPriceService {
             );
             let mut pool_refresh_interval = tokio::time::interval(Duration::from_secs(300)); // Refresh stale pools every 5 minutes
 
+            log(LogTag::Pool, "MONITORING_START", "🚀 Pool monitoring main loop starting");
+
             loop {
                 tokio::select! {
                     // Priority tokens - update every 5 seconds exactly
                     _ = priority_interval.tick() => {
+                        let priority_start = std::time::Instant::now();
+                        log(LogTag::Pool, "PRIORITY_TICK", "🎯 Priority tokens interval tick starting");
+                        
                         // Check if monitoring should continue
                         {
                             let active = monitoring_active.read().await;
                             if !*active {
+                                log(LogTag::Pool, "MONITORING_STOP", "❌ Monitoring stopped - priority tick");
                                 break;
                             }
                         }
 
                         // Update priority tokens (open positions)
+                        log(LogTag::Pool, "PRIORITY_FETCH", "📊 Fetching open positions...");
+                        let positions_start = std::time::Instant::now();
                         let open_positions = match crate::positions::get_open_mints().await {
-                            mints => mints,
+                            mints => {
+                                log(LogTag::Pool, "PRIORITY_FETCH", &format!("✅ Fetched {} open positions in {:.2}s", mints.len(), positions_start.elapsed().as_secs_f64()));
+                                mints
+                            },
                         };
 
                         // Add open positions to priority tokens
                         {
+                            let priority_add_start = std::time::Instant::now();
                             let mut priority = priority_tokens.write().await;
                             for token in &open_positions {
                                 priority.insert(token.clone());
                             }
+                            log(LogTag::Pool, "PRIORITY_ADD", &format!("📥 Added {} tokens to priority in {:.3}s", open_positions.len(), priority_add_start.elapsed().as_secs_f64()));
                         }
 
                         // Get current priority tokens for batch update
@@ -1093,33 +1316,49 @@ impl PoolPriceService {
                         };
 
                         if !priority_tokens_list.is_empty() {
+                            let batch_start = std::time::Instant::now();
+                            log(LogTag::Pool, "PRIORITY_UPDATE", &format!("🎯 Starting batch update for {} priority tokens", priority_tokens_list.len()));
                             let _ = Self::batch_update_token_prices(
                                 &priority_tokens_list,
                                 &price_cache,
                                 &stats_arc,
                                 "PRIORITY"
                             ).await;
+                            log(LogTag::Pool, "PRIORITY_DONE", &format!("✅ Priority tokens batch update completed in {:.2}s", batch_start.elapsed().as_secs_f64()));
+                        } else {
+                            log(LogTag::Pool, "PRIORITY_EMPTY", "⚪ No priority tokens to update");
                         }
+                        
+                        log(LogTag::Pool, "PRIORITY_TOTAL", &format!("🏁 Priority tick completed in {:.2}s", priority_start.elapsed().as_secs_f64()));
                     }
 
                     // Watchlist tokens - random batch updates
                     _ = watchlist_interval.tick() => {
+                        let watchlist_start = std::time::Instant::now();
+                        log(LogTag::Pool, "WATCHLIST_TICK", "📋 Watchlist tokens interval tick starting");
+                        
                         // Check if monitoring should continue
                         {
                             let active = monitoring_active.read().await;
                             if !*active {
+                                log(LogTag::Pool, "MONITORING_STOP", "❌ Monitoring stopped - watchlist tick");
                                 break;
                             }
                         }
 
                         // Get random batch of watchlist tokens for update
+                        let batch_select_start = std::time::Instant::now();
+                        log(LogTag::Pool, "WATCHLIST_BATCH", "📋 Getting watchlist batch...");
                         let watchlist_batch = Self::get_random_watchlist_batch(
                             &watchlist_tokens,
                             &watchlist_last_updated,
                             WATCHLIST_BATCH_SIZE
                         ).await;
+                        log(LogTag::Pool, "WATCHLIST_BATCH", &format!("📊 Selected {} watchlist tokens in {:.3}s", watchlist_batch.len(), batch_select_start.elapsed().as_secs_f64()));
 
                         if !watchlist_batch.is_empty() {
+                            let batch_update_start = std::time::Instant::now();
+                            log(LogTag::Pool, "WATCHLIST_UPDATE", &format!("📋 Starting batch update for {} watchlist tokens", watchlist_batch.len()));
                             let successful_tokens = Self::batch_update_token_prices(
                                 &watchlist_batch,
                                 &price_cache,
@@ -1129,41 +1368,58 @@ impl PoolPriceService {
 
                             // Update last updated times ONLY for successful tokens
                             if !successful_tokens.is_empty() {
+                                let update_times_start = std::time::Instant::now();
                                 let mut last_updated = watchlist_last_updated.write().await;
                                 let now = Utc::now();
                                 for token in successful_tokens {
                                     last_updated.insert(token, now);
                                 }
+                                log(LogTag::Pool, "WATCHLIST_DONE", &format!("✅ Watchlist batch completed in {:.2}s (update times took {:.3}s)", batch_update_start.elapsed().as_secs_f64(), update_times_start.elapsed().as_secs_f64()));
+                            } else {
+                                log(LogTag::Pool, "WATCHLIST_FAIL", &format!("❌ No watchlist tokens updated successfully (took {:.2}s)", batch_update_start.elapsed().as_secs_f64()));
                             }
+                        } else {
+                            log(LogTag::Pool, "WATCHLIST_EMPTY", "⚪ No watchlist tokens to update");
                         }
+                        
+                        log(LogTag::Pool, "WATCHLIST_TOTAL", &format!("🏁 Watchlist tick completed in {:.2}s", watchlist_start.elapsed().as_secs_f64()));
                     }
 
                     // Periodic state summary - every 30 seconds
                     _ = summary_interval.tick() => {
+                        log(LogTag::Pool, "SUMMARY_TICK", "📊 State summary interval tick");
+                        
                         // Check if monitoring should continue
                         {
                             let active = monitoring_active.read().await;
                             if !*active {
+                                log(LogTag::Pool, "MONITORING_STOP", "❌ Monitoring stopped - summary tick");
                                 break;
                             }
                         }
 
                         let service = get_pool_service();
+                        log(LogTag::Pool, "SUMMARY_START", "📊 Generating state summary");
                         service.log_state_summary().await;
+                        log(LogTag::Pool, "SUMMARY_DONE", "📊 State summary complete");
                     }
 
                     // Periodic cleanup - every hour
                     _ = cleanup_interval.tick() => {
+                        log(LogTag::Pool, "CLEANUP_TICK", "🧹 Cleanup interval tick");
+                        
                         // Check if monitoring should continue
                         {
                             let active = monitoring_active.read().await;
                             if !*active {
+                                log(LogTag::Pool, "MONITORING_STOP", "❌ Monitoring stopped - cleanup tick");
                                 break;
                             }
                         }
 
                         // Note: We can't call self.cleanup_price_history() here because we're in a static context
                         // Instead, we'll spawn the cleanup directly
+                        log(LogTag::Pool, "CLEANUP_START", "🧹 Starting database cleanup");
                         tokio::spawn(async {
                             match crate::tokens::pool_db::cleanup_old_price_entries() {
                                 Ok(deleted_count) => {
@@ -1173,6 +1429,8 @@ impl PoolPriceService {
                                             "DB_CLEANUP",
                                             &format!("🧹 Periodic cleanup removed {} old database entries", deleted_count),
                                         );
+                                    } else {
+                                        log(LogTag::Pool, "DB_CLEANUP", "🧹 No old database entries to clean");
                                     }
                                 }
                                 Err(e) => {
@@ -1188,14 +1446,18 @@ impl PoolPriceService {
 
                     // Watchlist cleanup - every 5 minutes
                     _ = watchlist_cleanup_interval.tick() => {
+                        log(LogTag::Pool, "WATCHLIST_CLEANUP_TICK", "🧹 Watchlist cleanup interval tick");
+                        
                         // Check if monitoring should continue
                         {
                             let active = monitoring_active.read().await;
                             if !*active {
+                                log(LogTag::Pool, "MONITORING_STOP", "❌ Monitoring stopped - watchlist cleanup tick");
                                 break;
                             }
                         }
 
+                        log(LogTag::Pool, "WATCHLIST_CLEANUP_START", "🧹 Starting watchlist cleanup");
                         Self::cleanup_watchlist_tokens(
                             &watchlist_tokens,
                             &watchlist_last_accessed,
@@ -1203,14 +1465,18 @@ impl PoolPriceService {
                             &watchlist_request_counts,
                             &watchlist_last_updated
                         ).await;
+                        log(LogTag::Pool, "WATCHLIST_CLEANUP_DONE", "🧹 Watchlist cleanup complete");
                     }
 
                     // Ad-hoc warm-up processing - every 2 seconds
                     _ = ad_hoc_interval.tick() => {
+                        log(LogTag::Pool, "ADHOC_TICK", "🔥 Ad-hoc warm-up interval tick");
+                        
                         // Check if monitoring should continue
                         {
                             let active = monitoring_active.read().await;
                             if !*active {
+                                log(LogTag::Pool, "MONITORING_STOP", "❌ Monitoring stopped - ad-hoc tick");
                                 break;
                             }
                         }
@@ -1230,21 +1496,28 @@ impl PoolPriceService {
                         };
 
                         if !batch.is_empty() {
+                            log(LogTag::Pool, "ADHOC_UPDATE", &format!("🔥 Processing {} ad-hoc warm-up tokens", batch.len()));
                             let _ = Self::batch_update_token_prices(
                                 &batch,
                                 &price_cache,
                                 &stats_arc,
                                 "ADHOC"
                             ).await;
+                            log(LogTag::Pool, "ADHOC_DONE", "🔥 Ad-hoc warm-up complete");
+                        } else {
+                            log(LogTag::Pool, "ADHOC_EMPTY", "⚪ No ad-hoc tokens to process");
                         }
                     }
 
                     // Pool refresh task - update stale pools from database every 5 minutes
                     _ = pool_refresh_interval.tick() => {
+                        log(LogTag::Pool, "POOL_REFRESH_TICK", "🔄 Pool refresh interval tick");
+                        
                         // Check if monitoring should continue
                         {
                             let active = monitoring_active.read().await;
                             if !*active {
+                                log(LogTag::Pool, "MONITORING_STOP", "❌ Monitoring stopped - pool refresh tick");
                                 break;
                             }
                         }
@@ -1369,8 +1642,6 @@ impl PoolPriceService {
             let mut ray_success = 0;
 
             // Process and combine results from all three APIs with deduplication
-            let mut pool_cache = self.pool_cache.write().await;
-
             // Collect all pools by token address from all APIs
             let mut token_pools_map: HashMap<String, Vec<CachedPoolInfo>> = HashMap::new();
 
@@ -1392,28 +1663,47 @@ impl PoolPriceService {
             // Process GeckoTerminal results
             let processed_gecko_pools = process_geckoterminal_batch_results(&gecko_result);
             for (token_address, cached_pools) in processed_gecko_pools {
-                gt_success += 1;
-                token_pools_map.entry(token_address).or_insert_with(Vec::new).extend(cached_pools);
+                if !cached_pools.is_empty() {
+                    gt_success += 1;
+                    token_pools_map
+                        .entry(token_address)
+                        .or_insert_with(Vec::new)
+                        .extend(cached_pools);
+                }
             }
             geckoterminal_successful += gt_success;
 
             // Process Raydium results
             let processed_raydium_pools = process_raydium_batch_results(&raydium_result);
             for (token_address, cached_pools) in processed_raydium_pools {
-                ray_success += 1;
-                token_pools_map.entry(token_address).or_insert_with(Vec::new).extend(cached_pools);
+                if !cached_pools.is_empty() {
+                    ray_success += 1;
+                    token_pools_map
+                        .entry(token_address)
+                        .or_insert_with(Vec::new)
+                        .extend(cached_pools);
+                }
             }
             raydium_successful += ray_success;
 
-            // Deduplicate and cache all token pools
-            for (token_address, all_pools) in token_pools_map {
-                if !all_pools.is_empty() {
-                    // Deduplicate pools by pool address
-                    let deduplicated_pools = self.deduplicate_pools(all_pools);
+            // Store to database AND update in-memory cache
+            {
+                let mut pool_cache = self.pool_cache.write().await;
 
-                    // Cache deduplicated pools
-                    pool_cache.insert(token_address, deduplicated_pools);
-                    combined_successful += 1;
+                // Deduplicate and cache all token pools
+                for (token_address, all_pools) in token_pools_map {
+                    if !all_pools.is_empty() {
+                        // Deduplicate pools by pool address
+                        let deduplicated_pools = self.deduplicate_pools(all_pools);
+
+                        // Store in database for persistence
+                        // Convert to database format and store
+                        self.store_pools_to_database(&token_address, &deduplicated_pools).await;
+
+                        // Cache in memory for immediate access
+                        pool_cache.insert(token_address, deduplicated_pools);
+                        combined_successful += 1;
+                    }
                 }
             }
 
@@ -1466,76 +1756,168 @@ impl PoolPriceService {
         batch_type: &str
     ) -> Vec<String> {
         if tokens.is_empty() {
+            log(
+                LogTag::Pool,
+                "BATCH_EMPTY",
+                &format!("🔄 {} batch empty - no tokens to process", batch_type)
+            );
             return Vec::new();
         }
 
         let start_time = Instant::now();
-
-        if is_debug_pool_calculator_enabled() {
-            log(
-                LogTag::Pool,
-                "BATCH_START",
-                &format!(
-                    "Starting {} batch update for {} tokens using batch pool calculation",
-                    batch_type,
-                    tokens.len()
-                )
-            );
-        }
+        log(
+            LogTag::Pool,
+            "BATCH_START",
+            &format!("🔄 Starting {} batch update for {} tokens", batch_type, tokens.len())
+        );
 
         // Get pool service for collecting pool addresses
+        let service_start = Instant::now();
+        log(LogTag::Pool, "BATCH_SERVICE", &format!("🔄 {} Getting pool service...", batch_type));
         let service = get_pool_service();
+        log(
+            LogTag::Pool,
+            "BATCH_SERVICE",
+            &format!(
+                "✅ {} Got pool service in {:.3}s",
+                batch_type,
+                service_start.elapsed().as_secs_f64()
+            )
+        );
+
         let mut pool_token_pairs = Vec::new();
         let mut tokens_with_pools = 0;
 
         // Collect pool addresses for all tokens
-        for token_address in tokens {
+        let collect_start = Instant::now();
+        log(
+            LogTag::Pool,
+            "BATCH_COLLECT",
+            &format!("🔄 {} Collecting pool addresses for {} tokens...", batch_type, tokens.len())
+        );
+
+        for (i, token_address) in tokens.iter().enumerate() {
+            let token_start = Instant::now();
+
             if let Some(cached_pools) = service.get_cached_pools_infos(token_address).await {
                 if let Some(best_pool) = cached_pools.first() {
                     pool_token_pairs.push((best_pool.pair_address.clone(), token_address.clone()));
                     tokens_with_pools += 1;
+                    if i < 5 || (i + 1) % 10 == 0 {
+                        // Log first 5 and every 10th token
+                        log(
+                            LogTag::Pool,
+                            "BATCH_TOKEN_FOUND",
+                            &format!(
+                                "✅ {} Token {}/{} ({}...) found pool in {:.3}s",
+                                batch_type,
+                                i + 1,
+                                tokens.len(),
+                                &token_address[..8],
+                                token_start.elapsed().as_secs_f64()
+                            )
+                        );
+                    }
+                } else {
+                    if i < 5 {
+                        // Only log first few no-pool cases to avoid spam
+                        log(
+                            LogTag::Pool,
+                            "BATCH_TOKEN_NO_POOL",
+                            &format!(
+                                "⚪ {} Token {}/{} ({}...) no pools in cache",
+                                batch_type,
+                                i + 1,
+                                tokens.len(),
+                                &token_address[..8]
+                            )
+                        );
+                    }
                 }
             } else {
-                // Try to fetch pools for tokens that don't have cached data
-                if let Ok(pools) = service.fetch_and_cache_pools(token_address).await {
-                    if let Some(best_pool) = pools.first() {
-                        pool_token_pairs.push((
-                            best_pool.pair_address.clone(),
-                            token_address.clone(),
-                        ));
-                        tokens_with_pools += 1;
-                    }
+                if i < 5 {
+                    // Only log first few no-cache cases to avoid spam
+                    log(
+                        LogTag::Pool,
+                        "BATCH_TOKEN_NO_CACHE",
+                        &format!(
+                            "⚪ {} Token {}/{} ({}...) no cache entry",
+                            batch_type,
+                            i + 1,
+                            tokens.len(),
+                            &token_address[..8]
+                        )
+                    );
+                }
+
+                // For PRIORITY tokens only, trigger immediate pool discovery
+                if batch_type == "PRIORITY" {
+                    let mut ad_hoc = service.ad_hoc_refresh_tokens.write().await;
+                    ad_hoc.insert(token_address.to_string());
                 }
             }
         }
 
+        log(
+            LogTag::Pool,
+            "BATCH_COLLECT_DONE",
+            &format!(
+                "📊 {} Collected {} pool addresses from {} tokens in {:.2}s",
+                batch_type,
+                pool_token_pairs.len(),
+                tokens.len(),
+                collect_start.elapsed().as_secs_f64()
+            )
+        );
+
         if pool_token_pairs.is_empty() {
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "BATCH_NO_POOLS",
-                    &format!("No pools found for {} batch tokens", batch_type)
-                );
-            }
+            log(
+                LogTag::Pool,
+                "BATCH_NO_POOLS",
+                &format!("⚪ {} No pools found for {} batch tokens", batch_type, tokens.len())
+            );
             return Vec::new();
         }
 
-        if is_debug_pool_prices_enabled() {
-            log(
-                LogTag::Pool,
-                "BATCH_POOLS_READY",
-                &format!(
-                    "{} batch: {} tokens with pools ready for calculation",
-                    batch_type,
-                    tokens_with_pools
-                )
-            );
-        }
+        log(
+            LogTag::Pool,
+            "BATCH_POOLS_READY",
+            &format!(
+                "🔄 {} {} tokens with pools ready for calculation",
+                batch_type,
+                tokens_with_pools
+            )
+        );
 
-        // Use batch pool price calculation
+        // Use batch pool price calculation with timeout to prevent deadlocks
+        let calc_start = Instant::now();
+        log(
+            LogTag::Pool,
+            "BATCH_CALCULATE",
+            &format!(
+                "🔄 {} Starting batch pool price calculation for {} pairs...",
+                batch_type,
+                pool_token_pairs.len()
+            )
+        );
         let calculator = get_global_pool_price_calculator();
-        match calculator.calculate_multiple_token_prices(&pool_token_pairs).await {
-            Ok(price_results) => {
+        
+        // Add timeout to prevent batch calculations from hanging the cycle
+        let calc_timeout = Duration::from_secs(15); // Max 15s for any batch calculation
+        match tokio::time::timeout(calc_timeout, calculator.calculate_multiple_token_prices(&pool_token_pairs)).await {
+            Ok(Ok(price_results)) => {
+                log(
+                    LogTag::Pool,
+                    "BATCH_CALC_SUCCESS",
+                    &format!(
+                        "✅ {} Pool calculation completed in {:.2}s, got {} results",
+                        batch_type,
+                        calc_start.elapsed().as_secs_f64(),
+                        price_results.len()
+                    )
+                );
+
+                let cache_start = Instant::now();
                 let mut successful_updates = 0;
                 let mut successful_tokens: Vec<String> = Vec::new();
                 // Defer history writes until after cache lock is released
@@ -1636,7 +2018,17 @@ impl PoolPriceService {
                 }
 
                 // Persist price history outside of cache lock
+                let history_start = Instant::now();
                 if !history_updates.is_empty() {
+                    log(
+                        LogTag::Pool,
+                        "BATCH_HISTORY",
+                        &format!(
+                            "🔄 {} Persisting {} price history entries...",
+                            batch_type,
+                            history_updates.len()
+                        )
+                    );
                     let service_ref = get_pool_service();
                     for (
                         token_address,
@@ -1665,9 +2057,19 @@ impl PoolPriceService {
                             &source
                         ).await;
                     }
+                    log(
+                        LogTag::Pool,
+                        "BATCH_HISTORY",
+                        &format!(
+                            "✅ {} Price history persisted in {:.3}s",
+                            batch_type,
+                            history_start.elapsed().as_secs_f64()
+                        )
+                    );
                 }
 
                 // Update stats for request outcomes
+                let stats_start = Instant::now();
                 {
                     let mut stats = stats_arc.write().await;
                     for _ in 0..successful_updates {
@@ -1678,6 +2080,15 @@ impl PoolPriceService {
                         stats.record_failure();
                     }
                 }
+                log(
+                    LogTag::Pool,
+                    "BATCH_STATS",
+                    &format!(
+                        "📊 {} Stats updated in {:.3}s",
+                        batch_type,
+                        stats_start.elapsed().as_secs_f64()
+                    )
+                );
 
                 // Update monitoring cycle metrics (treat each batch as one cycle)
                 {
@@ -1698,30 +2109,33 @@ impl PoolPriceService {
                     }
                 }
 
-                if is_debug_pool_calculator_enabled() {
-                    log(
-                        LogTag::Pool,
-                        "BATCH_SUCCESS",
-                        &format!(
-                            "{} batch completed: {}/{} prices calculated in {:.2}ms using batch pool calculation",
-                            batch_type,
-                            successful_updates,
-                            tokens.len(),
-                            start_time.elapsed().as_millis()
-                        )
-                    );
-                }
+                log(
+                    LogTag::Pool,
+                    "BATCH_SUCCESS",
+                    &format!(
+                        "✅ {} batch COMPLETED: {}/{} tokens updated in {:.2}s (cache: {:.3}s, calc: {:.2}s)",
+                        batch_type,
+                        successful_updates,
+                        tokens.len(),
+                        start_time.elapsed().as_secs_f64(),
+                        cache_start.elapsed().as_secs_f64(),
+                        calc_start.elapsed().as_secs_f64()
+                    )
+                );
 
                 return successful_tokens;
             }
-            Err(e) => {
-                if is_debug_pool_prices_enabled() {
-                    log(
-                        LogTag::Pool,
-                        "BATCH_ERROR",
-                        &format!("{} batch failed: {}", batch_type, e)
-                    );
-                }
+            Ok(Err(e)) => {
+                log(
+                    LogTag::Pool,
+                    "BATCH_ERROR",
+                    &format!(
+                        "❌ {} batch FAILED after {:.2}s: {}",
+                        batch_type,
+                        calc_start.elapsed().as_secs_f64(),
+                        e
+                    )
+                );
 
                 // Update stats for failures
                 {
@@ -1749,6 +2163,28 @@ impl PoolPriceService {
                             stats.total_cycle_duration_ms / (stats.monitoring_cycles as f64);
                     }
                 }
+                return Vec::new();
+            }
+            Err(_) => {
+                log(
+                    LogTag::Pool,
+                    "BATCH_TIMEOUT",
+                    &format!(
+                        "⏰ {} batch TIMED OUT after {:.2}s (limit: {}s) - preventing cycle deadlock",
+                        batch_type,
+                        calc_start.elapsed().as_secs_f64(),
+                        calc_timeout.as_secs()
+                    )
+                );
+
+                // Update stats for timeout failures  
+                {
+                    let mut stats = stats_arc.write().await;
+                    for _ in 0..tokens.len() {
+                        stats.record_failure();
+                    }
+                }
+
                 return Vec::new();
             }
         }
@@ -1950,6 +2386,26 @@ impl PoolPriceService {
                 "PRIORITY_ADD",
                 &format!("Added {} to priority tokens", &token_address[..8])
             );
+        }
+
+        // Check if we need to discover pools for this priority token
+        let has_cached_pools = {
+            let cache = self.pool_cache.read().await;
+            cache.get(token_address).map_or(false, |pools| !pools.is_empty())
+        };
+
+        if !has_cached_pools {
+            // Add to ad-hoc refresh queue for immediate pool discovery
+            let mut ad_hoc = self.ad_hoc_refresh_tokens.write().await;
+            ad_hoc.insert(token_address.to_string());
+
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "PRIORITY_DISCOVER",
+                    &format!("Queued {} for priority pool discovery", &token_address[..8])
+                );
+            }
         }
     }
 
@@ -3126,6 +3582,55 @@ impl PoolPriceService {
         deduplicated_pools
     }
 
+    /// Store pools to database for persistence
+    async fn store_pools_to_database(&self, _token_address: &str, cached_pools: &[CachedPoolInfo]) {
+        if cached_pools.is_empty() {
+            return;
+        }
+
+        // Convert CachedPoolInfo to database format for storage
+        let mut db_pools = Vec::new();
+        for pool in cached_pools {
+            let source = self.get_source_from_dex_id(&pool.dex_id);
+            let mut db_pool = crate::tokens::pool_db::DbPoolMetadata::new(
+                &pool.base_token,
+                &pool.pair_address,
+                &pool.dex_id,
+                "solana", // chain_id
+                &source
+            );
+
+            // Fill in pool metadata
+            db_pool.quote_token_address = pool.quote_token.clone();
+            db_pool.price_native = Some(pool.price_native);
+            db_pool.price_usd = Some(pool.price_usd);
+            db_pool.liquidity_usd = Some(pool.liquidity_usd);
+            db_pool.volume_24h = Some(pool.volume_24h);
+
+            if pool.created_at > 0 {
+                if
+                    let Some(created_dt) = chrono::DateTime::from_timestamp(
+                        pool.created_at as i64,
+                        0
+                    )
+                {
+                    db_pool.pair_created_at = Some(created_dt);
+                }
+            }
+
+            db_pools.push(db_pool);
+        }
+
+        // Store to database (errors are logged internally)
+        if let Err(e) = crate::tokens::pool_db::store_pool_metadata_batch(&db_pools) {
+            log(
+                LogTag::Pool,
+                "DB_STORE_ERROR",
+                &format!("Failed to store {} pool metadata entries: {}", db_pools.len(), e)
+            );
+        }
+    }
+
     /// Fetch pools from API and cache them
     async fn fetch_and_cache_pools(
         &self,
@@ -4199,6 +4704,16 @@ impl PoolPriceService {
             )
         };
 
+        // Get database statistics
+        let (db_total_pools, db_active_pools, db_fresh_pools, db_unique_tokens) = match
+            crate::tokens::pool_db::get_pool_metadata_statistics()
+        {
+            Ok(stats) => stats,
+            Err(_) => (0, 0, 0, 0), // Fallback if database query fails
+        };
+
+        let db_stale_pools = db_active_pools.saturating_sub(db_fresh_pools);
+
         // Single comprehensive log call with all information
         log(
             LogTag::Pool,
@@ -4210,9 +4725,14 @@ impl PoolPriceService {
             📊 Cycle #{:<3} | Active Tokens: {} | Total Cache: {} entries\n\
             {} PERFORMANCE: {:.1}% success | {} Cache Hit: {:.1}%\n\
             \n\
-            💾 MEMORY CACHE BREAKDOWN ({} total entries):\n\
-            🔸 Pools: {} cached | Prices: {} cached | Availability: {} tokens\n\
-            🔸 History: {} tokens tracked | {} price history entries\n\
+            💾 MEMORY CACHE BREAKDOWN:\n\
+            🔸 Cached Tokens: {} | Cached Pools: {} | Cached Prices: {}\n\
+            🔸 History Tracking: {} tokens | {} price history entries\n\
+            🔸 Availability Cache: {} tokens tracked\n\
+            \n\
+            🗄️ DATABASE STATE DETAILS:\n\
+            🔸 Total Pool Metadata: {} entries | Unique Tokens: {}\n\
+            🔸 Active Pools: {} | Fresh: {} | Stale: {} (📊 {:.1}% fresh)\n\
             \n\
             📈 REQUEST STATISTICS (Lifecycle totals):\n\
             🔸 Total Requests: {} | ✅ Success: {} | ❌ Failed: {}\n\
@@ -4242,6 +4762,16 @@ impl PoolPriceService {
                 availability_cache_len,
                 stats.tokens_with_price_history,
                 stats.total_price_history_entries,
+                db_total_pools,
+                db_active_pools,
+                db_fresh_pools,
+                db_stale_pools,
+                db_unique_tokens,
+                if db_active_pools > 0 {
+                    ((db_fresh_pools as f64) / (db_active_pools as f64)) * 100.0
+                } else {
+                    0.0
+                },
                 stats.total_price_requests,
                 stats.successful_calculations,
                 total_failed,
@@ -4801,16 +5331,17 @@ impl PoolPriceCalculator {
         }
 
         // Batch fetch all pool accounts in chunks to leverage getMultipleAccounts throughput
+        // OPTIMIZED: Smaller chunks and shorter timeout to prevent deadlocks
         let rpc_phase_start = Instant::now();
         let mut accounts: Vec<Option<Account>> = Vec::with_capacity(pubkeys.len());
-        let chunk_size = 100usize;
+        let chunk_size = 25usize; // Reduced from 100 to prevent RPC overload
         let mut idx = 0usize;
         while idx < pubkeys.len() {
             let end = (idx + chunk_size).min(pubkeys.len());
             let chunk = &pubkeys[idx..end];
             match
                 tokio::time::timeout(
-                    Duration::from_secs(12),
+                    Duration::from_secs(5), // Reduced from 12s to prevent deadlocks
                     self.rpc_client.get_multiple_accounts(chunk)
                 ).await
             {
@@ -4821,10 +5352,15 @@ impl PoolPriceCalculator {
                     return Err(format!("Failed to batch get pool accounts: {}", e));
                 }
                 Err(_) => {
-                    return Err("RPC get_multiple_accounts chunk timed out after 12s".to_string());
+                    return Err("RPC get_multiple_accounts chunk timed out after 5s".to_string());
                 }
             }
             idx = end;
+            
+            // Add small delay between chunks to prevent RPC rate limiting
+            if idx < pubkeys.len() {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
         }
         if self.debug_enabled {
             log(

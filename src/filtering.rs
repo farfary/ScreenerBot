@@ -20,7 +20,7 @@ pub const MAX_VALID_PRICE_SOL: f64 = 0.1;
 // ===== LIQUIDITY FILTERING PARAMETERS =====
 pub const MIN_LIQUIDITY_USD: f64 = 1.0;
 pub const MAX_LIQUIDITY_USD: f64 = 500_000.0;
-pub const MAX_MARKET_CAP_USD: f64 = 50_000_000_000.0;
+pub const MAX_MARKET_CAP_USD: f64 = 10_000_000.0;
 pub const MIN_VOLUME_LIQUIDITY_RATIO: f64 = 0.1;
 
 // ===== TRANSACTION ACTIVITY FILTERING PARAMETERS =====
@@ -1076,7 +1076,8 @@ pub fn is_token_eligible_for_trading(token: &Token) -> bool {
 pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, FilterReason)>) {
     // Performance fix: Limit tokens to prevent timeout on large datasets
     // SMART PRIORITIZATION: prefer tokens likely to have usable data (price, txns, volume)
-    const MAX_TOKENS_FOR_DETAILED_FILTERING: usize = 1000;
+    // Reduced from 500 to 300 to speed up filtering and prevent 30s+ delays
+    const MAX_TOKENS_FOR_DETAILED_FILTERING: usize = 300;
 
     let (tokens_to_process, pre_filtered_rejected) = if
         tokens.len() > MAX_TOKENS_FOR_DETAILED_FILTERING
