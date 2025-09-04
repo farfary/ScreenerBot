@@ -80,7 +80,7 @@ const MAX_TOKENS_PER_BATCH: usize = 30;
 
 /// Maximum watchlist size (user requirement)
 /// Increased to reduce eviction thrash while trader schedules many tokens
-const MAX_WATCHLIST_SIZE: usize = 150;
+const MAX_WATCHLIST_SIZE: usize = 100;
 
 // Watchlist cleanup policies
 /// Remove tokens from watchlist if not accessed for this many hours
@@ -103,11 +103,6 @@ const RPC_MULTIPLE_ACCOUNTS_BATCH_SIZE: usize = 20;
 /// Minimum liquidity (USD) required to consider a pool usable for price calculation.
 /// Lower this for testing environments if you want stats to increment sooner.
 pub const MIN_POOL_LIQUIDITY_USD: f64 = 10.0;
-
-// Monitoring concurrency & performance budgeting
-const POOL_MONITOR_CONCURRENCY: usize = 64; // Max concurrent token updates per cycle
-const POOL_MONITOR_CYCLE_BUDGET_MS: u128 = 6000; // Soft per-cycle time budget
-const POOL_MONITOR_PER_TOKEN_TIMEOUT_SECS: u64 = 10; // Guard per token update future
 
 // Pool price history settings (in-memory + database persistence)
 const POOL_PRICE_HISTORY_MAX_AGE_HOURS: i64 = 24; // Keep 24 hours of history
