@@ -91,6 +91,11 @@ pub const DEBUG_FORCE_SELL_MODE: bool = false;
 /// Debug mode: Force sell timeout in seconds
 pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 20.0;
 
+/// Enable position-aware DexScreener API caching
+/// When enabled: Tokens with open positions never make API calls, always use cached data
+/// When disabled: Normal API behavior for all tokens
+pub const ENABLE_POSITION_AWARE_DEXSCREENER_CACHE: bool = true;
+
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding
 // -----------------------------------------------------------------------------
@@ -4115,6 +4120,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     let _permit = permit; // Keep permit alive for duration of task
 
                     // CRITICAL OPERATION PROTECTION - Prevent shutdown during sell
+                    // NOTE: This is the PRIMARY critical operation guard for sells (positions.rs guard removed to avoid duplicates)
                     let _guard = CriticalOperationGuard::new(&format!("SELL_{}", token.symbol));
 
                     let position = position;
