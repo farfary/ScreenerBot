@@ -147,18 +147,29 @@ impl TransactionsManager {
             &format!("🔌 Initializing WebSocket monitoring for wallet: {}", &wallet_address)
         );
 
-        // Load WebSocket URL from config, fallback to default if config loading fails
+        // Load WebSocket URL from config, use first RPC URL and convert to websocket
         let ws_url = match read_configs() {
             Ok(config) => {
-                log(
-                    LogTag::Transactions,
-                    "WEBSOCKET_CONFIG",
-                    &format!(
-                        "📡 Using premium WebSocket URL from config: {}",
-                        &config.rpc_url_ws_premium
-                    )
-                );
-                config.rpc_url_ws_premium
+                if let Some(first_rpc_url) = config.rpc_urls.first() {
+                    // Convert HTTP RPC URL to WebSocket URL
+                    let ws_url = first_rpc_url
+                        .replace("https://", "wss://")
+                        .replace("http://", "ws://");
+
+                    log(
+                        LogTag::Transactions,
+                        "WEBSOCKET_CONFIG",
+                        &format!("📡 Using WebSocket URL derived from RPC config: {}", &ws_url)
+                    );
+                    ws_url
+                } else {
+                    log(
+                        LogTag::Transactions,
+                        "WEBSOCKET_FALLBACK",
+                        "⚠️ No RPC URLs in config, using default WebSocket URL"
+                    );
+                    websocket::SolanaWebSocketClient::get_default_ws_url()
+                }
             }
             Err(e) => {
                 log(
@@ -492,7 +503,7 @@ impl TransactionsManager {
         }
 
         let rpc_client = get_rpc_client();
-        let tx_data = match rpc_client.get_transaction_details_premium_rpc(signature).await {
+        let tx_data = match rpc_client.get_transaction_details(signature).await {
             Ok(data) => {
                 log(
                     LogTag::Rpc,
@@ -539,8 +550,8 @@ impl TransactionsManager {
             status: TransactionStatus::Finalized,
             transaction_type: TransactionType::Unknown,
             direction: TransactionDirection::Internal,
-            success: tx_data.transaction.meta.as_ref().map_or(false, |meta| meta.err.is_none()),
-            error_message: tx_data.transaction.meta
+            success: tx_data.meta.as_ref().map_or(false, |meta| meta.err.is_none()),
+            error_message: tx_data.meta
                 .as_ref()
                 .and_then(|meta| meta.err.as_ref())
                 .map(|err| {
@@ -557,24 +568,13 @@ impl TransactionsManager {
                         structured_error.error_code.map_or("N/A".to_string(), |c| c.to_string())
                     )
                 }),
-            fee_sol: tx_data.transaction.meta
-                .as_ref()
-                .map_or(0.0, |meta| lamports_to_sol(meta.fee)),
+            fee_sol: tx_data.meta.as_ref().map_or(0.0, |meta| lamports_to_sol(meta.fee)),
             sol_balance_change: 0.0,
             token_transfers: Vec::new(),
             raw_transaction_data: Some(serde_json::to_value(&tx_data).unwrap_or_default()),
-            log_messages: tx_data.transaction.meta
+            log_messages: tx_data.meta
                 .as_ref()
-                .map(|meta| {
-                    match &meta.log_messages {
-                        solana_transaction_status::option_serializer::OptionSerializer::Some(
-                            logs,
-                        ) => {
-                            logs.clone()
-                        }
-                        _ => Vec::new(),
-                    }
-                })
+                .and_then(|meta| meta.log_messages.clone())
                 .unwrap_or_default(),
             instructions: Vec::new(),
             sol_balance_changes: Vec::new(),

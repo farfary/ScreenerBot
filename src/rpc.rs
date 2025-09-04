@@ -85,6 +85,7 @@ pub struct TransactionDetails {
     pub slot: u64,
     pub transaction: TransactionData,
     pub meta: Option<TransactionMeta>,
+    pub block_time: Option<i64>,
 }
 
 /// Transaction data structure
@@ -2355,7 +2356,7 @@ impl RpcClient {
                     signature: "unknown".to_string(),
                     reason: "Failed to send transaction after retries".to_string(),
                     fee_paid: None,
-                    attempts: MAX_ATTEMPTS,
+                    attempts: MAX_ATTEMPTS as u32,
                 })
             })
         )
@@ -2808,7 +2809,7 @@ impl RpcClient {
     }
 
     /// Get transaction details using round-robin RPC rotation
-    pub async fn get_transaction_details_premium(
+    pub async fn get_transaction_details(
         &self,
         transaction_signature: &str
     ) -> Result<TransactionDetails, ScreenerBotError> {
@@ -2906,23 +2907,91 @@ impl RpcClient {
                         );
                     }
 
-                    let transaction_details: TransactionDetails = serde_json
-                        ::from_value(result.clone())
-                        .map_err(|e| {
-                            log(
-                                LogTag::Rpc,
-                                "ERROR",
-                                &format!(
-                                    "Failed to parse transaction details from RPC {}: {}",
-                                    current_url,
-                                    e
+                    // Parse transaction details manually from RPC response
+                    let slot = result
+                        .get("slot")
+                        .and_then(|s| s.as_u64())
+                        .unwrap_or(0);
+                    let block_time = result.get("blockTime").and_then(|bt| bt.as_i64());
+
+                    let transaction_data = if let Some(transaction) = result.get("transaction") {
+                        TransactionData {
+                            message: transaction
+                                .get("message")
+                                .cloned()
+                                .unwrap_or(serde_json::Value::Null),
+                            signatures: transaction
+                                .get("signatures")
+                                .and_then(|s| s.as_array())
+                                .map(|arr|
+                                    arr
+                                        .iter()
+                                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                        .collect()
                                 )
-                            );
-                            ScreenerBotError::Data(DataError::ParseError {
-                                data_type: "transaction details".to_string(),
-                                error: e.to_string(),
-                            })
-                        })?;
+                                .unwrap_or_default(),
+                        }
+                    } else {
+                        TransactionData {
+                            message: serde_json::Value::Null,
+                            signatures: vec![],
+                        }
+                    };
+
+                    let meta = result.get("meta").map(|meta_value| {
+                        TransactionMeta {
+                            err: meta_value.get("err").cloned(),
+                            fee: meta_value
+                                .get("fee")
+                                .and_then(|f| f.as_u64())
+                                .unwrap_or(0),
+                            pre_balances: meta_value
+                                .get("preBalances")
+                                .and_then(|pb| pb.as_array())
+                                .map(|arr|
+                                    arr
+                                        .iter()
+                                        .filter_map(|v| v.as_u64())
+                                        .collect()
+                                )
+                                .unwrap_or_default(),
+                            post_balances: meta_value
+                                .get("postBalances")
+                                .and_then(|pb| pb.as_array())
+                                .map(|arr|
+                                    arr
+                                        .iter()
+                                        .filter_map(|v| v.as_u64())
+                                        .collect()
+                                )
+                                .unwrap_or_default(),
+                            pre_token_balances: meta_value
+                                .get("preTokenBalances")
+                                .and_then(|ptb| { serde_json::from_value(ptb.clone()).ok() }),
+                            post_token_balances: meta_value
+                                .get("postTokenBalances")
+                                .and_then(|ptb| { serde_json::from_value(ptb.clone()).ok() }),
+                            log_messages: meta_value
+                                .get("logMessages")
+                                .and_then(|lm| lm.as_array())
+                                .map(|arr|
+                                    arr
+                                        .iter()
+                                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                        .collect()
+                                ),
+                            inner_instructions: meta_value
+                                .get("innerInstructions")
+                                .and_then(|ii| { serde_json::from_value(ii.clone()).ok() }),
+                        }
+                    });
+
+                    let transaction_details = TransactionDetails {
+                        slot,
+                        transaction: transaction_data,
+                        meta,
+                        block_time,
+                    };
 
                     // Record successful call
                     self.record_success(Some(&current_url));
@@ -3647,161 +3716,69 @@ impl RpcClient {
 
     /// Get transaction details using round-robin RPC rotation
     /// Supports both single transaction and batch processing
-    pub async fn get_transaction_details(
+    /// Get multiple transaction details using round-robin RPC rotation (batch processing)
+    pub async fn get_transaction_details_batch(
         &self,
-        transaction_signatures: &[String] // Changed to support batch - single signature should be passed as &[signature]
-    ) -> Result<
-        Vec<(String, solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta)>,
-        ScreenerBotError
-    > {
-        if transaction_signatures.is_empty() {
-            return Ok(Vec::new());
-        }
+        transaction_signatures: &[String]
+    ) -> Result<Vec<(String, TransactionDetails)>, ScreenerBotError> {
+        let mut results = Vec::new();
 
-        // Use round-robin RPC rotation - get next URL from client
-        let current_url = self.rotate_to_next_url();
+        if transaction_signatures.is_empty() {
+            return Ok(results);
+        }
 
         if is_debug_rpc_enabled() {
             log(
                 LogTag::Rpc,
-                "PREMIUM",
-                &format!(
-                    "Fetching {} transaction details from RPC: {}",
-                    transaction_signatures.len(),
-                    current_url
-                )
+                "TX_BATCH",
+                &format!("Fetching {} transaction details in batch", transaction_signatures.len())
             );
         }
 
-        // Apply rate limiting
-        self.wait_for_rate_limit().await;
-        self.record_call("get_transaction");
-
-        let mut results = Vec::new();
-        let mut successful_fetches = 0;
-
-        // Process each transaction signature
-        for transaction_signature in transaction_signatures {
-            let signature = match solana_sdk::signature::Signature::from_str(transaction_signature) {
-                Ok(sig) => sig,
-                Err(e) => {
-                    log(
-                        LogTag::Rpc,
-                        "ERROR",
-                        &format!("Invalid signature {}: {}", &transaction_signature[..8], e)
-                    );
-                    continue;
-                }
-            };
-
-            // Create client for the current URL
-            let client = SolanaRpcClient::new_with_commitment(
-                current_url.clone(),
-                CommitmentConfig::confirmed()
-            );
-
-            if is_debug_rpc_enabled() {
-                log(
-                    LogTag::Rpc,
-                    "PREMIUM",
-                    &format!(
-                        "Fetching transaction details for {} using RPC: {}",
-                        &transaction_signature[..8],
-                        current_url
-                    )
-                );
-            }
-
-            match
-                client.get_transaction_with_config(
-                    &signature,
-                    solana_client::rpc_config::RpcTransactionConfig {
-                        encoding: Some(
-                            solana_transaction_status::UiTransactionEncoding::JsonParsed
-                        ),
-                        commitment: Some(CommitmentConfig::confirmed()),
-                        max_supported_transaction_version: Some(0),
-                    }
-                )
-            {
-                Ok(transaction) => {
-                    results.push((transaction_signature.clone(), transaction));
-                    successful_fetches += 1;
+        // Process transactions individually but efficiently
+        for signature in transaction_signatures {
+            match self.get_transaction_details(signature).await {
+                Ok(tx_details) => {
+                    results.push((signature.clone(), tx_details));
 
                     if is_debug_rpc_enabled() {
                         log(
                             LogTag::Rpc,
-                            "SUCCESS",
+                            "TX_BATCH_SUCCESS",
                             &format!(
-                                "Retrieved transaction details for {} from {}",
-                                &transaction_signature[..8],
-                                current_url
+                                "Retrieved transaction details for {}",
+                                crate::utils::safe_truncate(signature, 12)
                             )
                         );
                     }
                 }
                 Err(e) => {
-                    let error_msg = e.to_string();
-
-                    // Check for rate limiting errors
-                    if Self::is_rate_limit_error(&error_msg) {
-                        self.record_429_error(Some(&current_url));
-                        log(
-                            LogTag::Rpc,
-                            "WARN",
-                            &format!(
-                                "Rate limited on RPC {} for transaction {}",
-                                current_url,
-                                &transaction_signature[..8]
-                            )
-                        );
-                    } else if
-                        error_msg.contains("Transaction not found") ||
-                        error_msg.contains(
-                            "invalid type: null, expected struct EncodedConfirmedTransactionWithStatusMeta"
+                    log(
+                        LogTag::Rpc,
+                        "TX_BATCH_ERROR",
+                        &format!(
+                            "Failed to get transaction details for {}: {}",
+                            crate::utils::safe_truncate(signature, 12),
+                            e
                         )
-                    {
-                        log(
-                            LogTag::Rpc,
-                            "WARN",
-                            &format!(
-                                "Transaction {} not found or no longer available",
-                                &transaction_signature[..8]
-                            )
-                        );
-                    } else {
-                        log(
-                            LogTag::Rpc,
-                            "ERROR",
-                            &format!(
-                                "Failed to get transaction {} from RPC: {}",
-                                &transaction_signature[..8],
-                                e
-                            )
-                        );
-                    }
+                    );
+                    // Continue with other transactions even if one fails
                 }
             }
 
-            // Small delay between requests to avoid overwhelming RPC when processing multiple transactions
+            // Small delay between requests to avoid overwhelming RPC
             if transaction_signatures.len() > 1 {
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             }
         }
 
-        // Record successful call if we got any transactions
-        if successful_fetches > 0 {
-            self.record_success(Some(&current_url));
-        }
-
         log(
             LogTag::Rpc,
-            "SUCCESS",
+            "TX_BATCH_COMPLETE",
             &format!(
-                "Successfully fetched {}/{} transactions from {}",
-                successful_fetches,
-                transaction_signatures.len(),
-                current_url
+                "Batch completed: {}/{} transactions retrieved",
+                results.len(),
+                transaction_signatures.len()
             )
         );
 

@@ -368,7 +368,7 @@ impl TransactionsManager {
                 );
 
                 // Use batch RPC call to fetch all transactions in this chunk at once
-                match rpc_client.batch_get_transaction_details_premium_rpc(chunk).await {
+                match rpc_client.get_transaction_details_batch(chunk).await {
                     Ok(batch_results) => {
                         log(
                             LogTag::Transactions,
@@ -381,7 +381,7 @@ impl TransactionsManager {
                         );
 
                         // Process each transaction from the batch results
-                        for (signature, encoded_tx) in batch_results {
+                        for (signature, _tx_details) in batch_results {
                             if self.debug_enabled {
                                 log(
                                     LogTag::Transactions,
@@ -393,12 +393,7 @@ impl TransactionsManager {
                                 );
                             }
 
-                            match
-                                self.process_transaction_from_encoded_data(
-                                    &signature,
-                                    encoded_tx
-                                ).await
-                            {
+                            match self.process_transaction_direct(&signature).await {
                                 Ok(transaction) => {
                                     all_transactions.push(transaction);
                                     if self.debug_enabled {
@@ -602,7 +597,7 @@ impl TransactionsManager {
                 );
 
                 // Use batch RPC call to fetch all transactions in this chunk at once
-                match rpc_client.batch_get_transaction_details_premium_rpc(chunk).await {
+                match rpc_client.get_transaction_details_batch(chunk).await {
                     Ok(batch_results) => {
                         log(
                             LogTag::Transactions,
@@ -615,7 +610,7 @@ impl TransactionsManager {
                         );
 
                         // Process each transaction from the batch results
-                        for (signature, encoded_tx) in batch_results {
+                        for (signature, _tx_details) in batch_results {
                             if self.debug_enabled {
                                 log(
                                     LogTag::Transactions,
@@ -627,12 +622,7 @@ impl TransactionsManager {
                                 );
                             }
 
-                            match
-                                self.process_transaction_from_encoded_data(
-                                    &signature,
-                                    encoded_tx
-                                ).await
-                            {
+                            match self.process_transaction_direct(&signature).await {
                                 Ok(transaction) => {
                                     all_transactions.push(transaction);
                                     if self.debug_enabled {
