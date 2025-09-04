@@ -938,11 +938,13 @@ impl RpcClient {
                 let new_url = self.rpc_urls[*index].clone();
                 *current_url = new_url.clone();
 
-                log(
-                    LogTag::Rpc,
-                    "ROTATE",
-                    &format!("Rotated to RPC URL {} (index {}): {}", *index + 1, *index, new_url)
-                );
+                if is_debug_rpc_enabled() {
+                    log(
+                        LogTag::Rpc,
+                        "ROTATE",
+                        &format!("Rotated to RPC URL {} (index {}): {}", *index + 1, *index, new_url)
+                    );
+                }
 
                 new_url
             }

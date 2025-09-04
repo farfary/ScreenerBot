@@ -182,7 +182,7 @@ pub const COLLECTION_SHUTDOWN_CHECK_MS: u64 = 1;
 /// Number of concurrent token checks during entry scanning
 /// Reduced from 24 to prevent overwhelming pool services and API endpoints
 /// This prevents the 116s cycle timeout issue by reducing service contention
-pub const ENTRY_CHECK_CONCURRENCY: usize = 8; // Reduced from 24 to fix performance
+pub const ENTRY_CHECK_CONCURRENCY: usize = 4; // Reduced from 24 to fix performance
 
 // Capacity-aware Scheduling
 // -------------------------
