@@ -16,6 +16,7 @@ use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::timeout;
+use chrono::Utc;
 
 // =============================================================================
 // RAYDIUM API CONFIGURATION
@@ -384,4 +385,38 @@ pub fn get_raydium_rate_limit() -> usize {
 /// Get maximum tokens per batch for Raydium API
 pub fn get_raydium_max_batch_size() -> usize {
     MAX_TOKENS_PER_BATCH
+}
+
+/// Helper function to process Raydium batch results into cache format
+/// This moves the processing logic from pool.rs into raydium.rs
+pub fn process_raydium_batch_results(
+    raydium_result: &RaydiumBatchResult
+) -> HashMap<String, Vec<crate::tokens::pool::CachedPoolInfo>> {
+    let mut processed_pools = HashMap::new();
+
+    for (token_address, raydium_pools) in &raydium_result.pools {
+        if !raydium_pools.is_empty() {
+            let cached_pools: Vec<crate::tokens::pool::CachedPoolInfo> = raydium_pools
+                .iter()
+                .map(|raydium_pool| {
+                    crate::tokens::pool::CachedPoolInfo {
+                        pair_address: raydium_pool.pool_address.clone(),
+                        dex_id: format!("ray_{}", raydium_pool.dex_id),
+                        base_token: raydium_pool.base_token.clone(),
+                        quote_token: raydium_pool.quote_token.clone(),
+                        price_native: raydium_pool.price_native,
+                        price_usd: raydium_pool.price_usd,
+                        liquidity_usd: raydium_pool.liquidity_usd,
+                        volume_24h: raydium_pool.volume_24h,
+                        created_at: 0, // Raydium doesn't provide creation time
+                        cached_at: chrono::Utc::now(),
+                    }
+                })
+                .collect();
+
+            processed_pools.insert(token_address.clone(), cached_pools);
+        }
+    }
+
+    processed_pools
 }

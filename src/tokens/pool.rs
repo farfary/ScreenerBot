@@ -26,6 +26,7 @@ use crate::tokens::geckoterminal::{
 use crate::tokens::raydium::{
     get_token_pools_from_raydium,
     get_batch_token_pools_from_raydium,
+    process_raydium_batch_results,
     RaydiumBatchResult,
 };
 use crate::tokens::is_system_or_stable_token;
@@ -1303,135 +1304,6 @@ impl PoolPriceService {
         });
     }
 
-    /// Batch refresh pools from both DexScreener and GeckoTerminal APIs for better coverage
-    /// This function fetches pools from both sources concurrently and combines the results
-    pub async fn batch_refresh_pools_dual_api(
-        &self,
-        token_addresses: &[String]
-    ) -> (usize, usize, usize) {
-        if token_addresses.is_empty() {
-            return (0, 0, 0);
-        }
-
-        if is_debug_pool_prices_enabled() {
-            log(
-                LogTag::Pool,
-                "DUAL_API_BATCH_START",
-                &format!("🔄 Starting dual API batch refresh for {} tokens", token_addresses.len())
-            );
-        }
-
-        let mut dexscreener_successful = 0;
-        let mut geckoterminal_successful = 0;
-        let mut combined_successful = 0;
-
-        // Split tokens into batches of 30 (max for both APIs)
-        for chunk in token_addresses.chunks(MAX_TOKENS_PER_BATCH) {
-            let chunk_start = Instant::now();
-
-            // Fetch from DexScreener (existing function)
-            let dexscreener_task = async {
-                let mut successful = 0;
-                for token in chunk {
-                    if let Ok(pools) = self.fetch_and_cache_pools(token).await {
-                        if !pools.is_empty() {
-                            successful += 1;
-                        }
-                    }
-                }
-                successful
-            };
-
-            // Fetch from GeckoTerminal in parallel
-            let geckoterminal_task = async {
-                let gecko_result =
-                    crate::tokens::geckoterminal::get_batch_token_pools_from_geckoterminal(
-                        chunk
-                    ).await;
-
-                // Process GeckoTerminal results using the helper function
-                let processed_pools =
-                    crate::tokens::geckoterminal::process_geckoterminal_batch_results(
-                        &gecko_result
-                    );
-
-                // Update memory cache with processed results
-                let mut pool_cache = self.pool_cache.write().await;
-                for (token_address, cached_pools) in processed_pools {
-                    // Merge with existing DexScreener pools if any
-                    let existing_pools = pool_cache
-                        .get(&token_address)
-                        .cloned()
-                        .unwrap_or_default();
-                    let mut combined_pools = existing_pools;
-                    combined_pools.extend(cached_pools);
-
-                    // Sort by liquidity
-                    combined_pools.sort_by(|a, b|
-                        b.liquidity_usd
-                            .partial_cmp(&a.liquidity_usd)
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    );
-
-                    pool_cache.insert(token_address, combined_pools);
-                }
-
-                gecko_result.successful_tokens
-            };
-
-            // Run both APIs concurrently
-            let (dx_success, gt_success) = tokio::join!(dexscreener_task, geckoterminal_task);
-
-            dexscreener_successful += dx_success;
-            geckoterminal_successful += gt_success;
-
-            // Count tokens that got pools from either source
-            {
-                let pool_cache = self.pool_cache.read().await;
-                for token in chunk {
-                    if let Some(pools) = pool_cache.get(token) {
-                        if !pools.is_empty() {
-                            combined_successful += 1;
-                        }
-                    }
-                }
-            }
-
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "DUAL_API_BATCH_CHUNK",
-                    &format!(
-                        "🔄 Processed {} tokens in {}ms: DexScreener {}, GeckoTerminal {}, Combined {}",
-                        chunk.len(),
-                        chunk_start.elapsed().as_millis(),
-                        dx_success,
-                        gt_success,
-                        combined_successful
-                    )
-                );
-            }
-        }
-
-        if is_debug_pool_prices_enabled() {
-            log(
-                LogTag::Pool,
-                "DUAL_API_BATCH_COMPLETE",
-                &format!(
-                    "✅ Dual API batch complete: DexScreener {}/{}, GeckoTerminal {}/{}, Combined {}/{}",
-                    dexscreener_successful,
-                    token_addresses.len(),
-                    geckoterminal_successful,
-                    token_addresses.len(),
-                    combined_successful,
-                    token_addresses.len()
-                )
-            );
-        }
-
-        (dexscreener_successful, geckoterminal_successful, combined_successful)
-    }
-
     /// Batch refresh pools from DexScreener, GeckoTerminal, and Raydium APIs for maximum coverage
     /// This function fetches pools from all three sources concurrently and combines the results
     pub async fn batch_refresh_pools_triple_api(
@@ -1510,35 +1382,16 @@ impl PoolPriceService {
             }
             geckoterminal_successful += gt_success;
 
-            // Process Raydium results
-            for (token_address, raydium_pools) in raydium_result.pools {
-                if !raydium_pools.is_empty() {
-                    ray_success += 1;
+            // Process Raydium results using the helper function
+            let processed_raydium_pools = process_raydium_batch_results(&raydium_result);
+            for (token_address, cached_pools) in processed_raydium_pools {
+                ray_success += 1;
 
-                    let cached_pools: Vec<CachedPoolInfo> = raydium_pools
-                        .into_iter()
-                        .map(|raydium_pool| {
-                            CachedPoolInfo {
-                                pair_address: raydium_pool.pool_address,
-                                dex_id: format!("ray_{}", raydium_pool.dex_id),
-                                base_token: raydium_pool.base_token,
-                                quote_token: raydium_pool.quote_token,
-                                price_native: raydium_pool.price_native,
-                                price_usd: raydium_pool.price_usd,
-                                liquidity_usd: raydium_pool.liquidity_usd,
-                                volume_24h: raydium_pool.volume_24h,
-                                created_at: 0, // Raydium doesn't provide creation time
-                                cached_at: Utc::now(),
-                            }
-                        })
-                        .collect();
-
-                    // Merge with existing pools if any
-                    let existing_pools = pool_cache.get(&token_address).cloned().unwrap_or_default();
-                    let mut combined_pools = existing_pools;
-                    combined_pools.extend(cached_pools);
-                    pool_cache.insert(token_address, combined_pools);
-                }
+                // Merge with existing pools if any
+                let existing_pools = pool_cache.get(&token_address).cloned().unwrap_or_default();
+                let mut combined_pools = existing_pools;
+                combined_pools.extend(cached_pools);
+                pool_cache.insert(token_address, combined_pools);
             }
             raydium_successful += ray_success;
 
@@ -8344,103 +8197,6 @@ pub async fn debug_find_pools_by_program_id(
     );
 
     Ok(matching_pools)
-}
-
-/// Test function to compare pool discovery between DexScreener and GeckoTerminal
-/// This function is useful for debugging and validating the dual API integration
-pub async fn test_dual_api_pool_discovery(token_addresses: &[String]) -> Result<(), String> {
-    if token_addresses.is_empty() {
-        return Err("No token addresses provided".to_string());
-    }
-
-    log(
-        LogTag::Pool,
-        "DUAL_API_TEST_START",
-        &format!("🧪 Testing dual API pool discovery for {} tokens", token_addresses.len())
-    );
-
-    for token_address in token_addresses.iter().take(5) {
-        // Limit to 5 tokens for testing
-        log(LogTag::Pool, "DUAL_API_TEST_TOKEN", &format!("🔍 Testing token: {}", token_address));
-
-        // Test DexScreener (using new consistent naming)
-        let dexscreener_result = get_token_pools_from_dexscreener(token_address).await;
-        let dexscreener_count = match &dexscreener_result {
-            Ok(pairs) => pairs.len(),
-            Err(_) => 0,
-        };
-
-        // Test GeckoTerminal
-        let geckoterminal_result =
-            crate::tokens::geckoterminal::get_token_pools_from_geckoterminal(token_address).await;
-        let geckoterminal_count = match &geckoterminal_result {
-            Ok(pools) => pools.len(),
-            Err(_) => 0,
-        };
-
-        log(
-            LogTag::Pool,
-            "DUAL_API_TEST_RESULT",
-            &format!(
-                "📊 {}: DexScreener {} pools, GeckoTerminal {} pools",
-                &token_address[..8],
-                dexscreener_count,
-                geckoterminal_count
-            )
-        );
-
-        // Log detailed results if pools found
-        if dexscreener_count > 0 {
-            if let Ok(pairs) = &dexscreener_result {
-                for (i, pair) in pairs.iter().take(3).enumerate() {
-                    log(
-                        LogTag::Pool,
-                        "DUAL_API_TEST_DX_POOL",
-                        &format!(
-                            "  🔸 DX Pool {}: {} ({}, ${:.2})",
-                            i + 1,
-                            pair.pair_address,
-                            pair.dex_id,
-                            pair.liquidity
-                                .as_ref()
-                                .map(|l| l.usd)
-                                .unwrap_or(0.0)
-                        )
-                    );
-                }
-            }
-        }
-
-        if geckoterminal_count > 0 {
-            if let Ok(pools) = &geckoterminal_result {
-                for (i, pool) in pools.iter().take(3).enumerate() {
-                    log(
-                        LogTag::Pool,
-                        "DUAL_API_TEST_GT_POOL",
-                        &format!(
-                            "  🦎 GT Pool {}: {} ({}, ${:.2})",
-                            i + 1,
-                            pool.pool_address,
-                            pool.dex_id,
-                            pool.liquidity_usd
-                        )
-                    );
-                }
-            }
-        }
-
-        if dexscreener_count == 0 && geckoterminal_count == 0 {
-            log(
-                LogTag::Pool,
-                "DUAL_API_TEST_NONE",
-                &format!("  ❌ No pools found on either platform for {}", &token_address[..8])
-            );
-        }
-    }
-
-    log(LogTag::Pool, "DUAL_API_TEST_COMPLETE", "🧪 Dual API test completed");
-
-    Ok(())
 }
 
 /// Test function to compare pool discovery between DexScreener, GeckoTerminal, and Raydium
