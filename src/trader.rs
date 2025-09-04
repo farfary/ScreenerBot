@@ -54,7 +54,7 @@ pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
 /// Time-based override: Allow sell decisions after this duration (hours)
 /// Positions held longer than this can bypass profit threshold if in significant loss
 /// This prevents positions from being held indefinitely when they're clearly failing
-pub const TIME_OVERRIDE_DURATION_HOURS: f64 = 72.0;
+pub const TIME_OVERRIDE_DURATION_HOURS: f64 = 7.0 * 24.0;
 
 /// Loss threshold for time-based override (negative percentage, e.g., -20.0 for -20%)
 /// Positions with losses worse than this threshold can bypass profit requirements after time override
