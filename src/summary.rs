@@ -12,7 +12,7 @@ use crate::positions_types::Position;
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
 use crate::tokens::pool_db::get_pool_db_statistics;
-use crate::trader::{ PROFIT_EXTRA_NEEDED_SOL, SUMMARY_DISPLAY_INTERVAL_SECS };
+use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
 use crate::trader::*;
 use crate::transactions::TransactionsManager;
 use crate::transactions_types::{ SwapPnLInfo, Transaction, TransactionType };
@@ -32,6 +32,9 @@ use tokio::sync::{ Mutex, Notify };
 
 /// Maximum number of recent closed positions to display in summary
 const MAX_RECENT_CLOSED_POSITIONS: usize = 20;
+
+/// Summary display refresh interval (seconds) - optimized for 5s priority checking
+pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 15;
 
 /// Display structure for closed positions with specific "Exit" column
 #[derive(Tabled)]

@@ -112,9 +112,6 @@ pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 24 * 60; // 24 hours
 // Monitoring & Display Configuration
 // -----------------------------------------------------------------------------
 
-/// Summary display refresh interval (seconds) - optimized for 5s priority checking
-pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 5;
-
 /// New entry signals check interval (seconds) - optimized for fastest price checking
 pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 3;
 
