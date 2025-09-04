@@ -1771,44 +1771,37 @@ async fn ensure_watchlist_on_price_fail(mint: &str, symbol: &str, reason: &str) 
     }
 }
 
-/// Check if token had recent price drop (within 30 seconds)
-pub async fn check_token_for_recent_drop(token: &Token) -> bool {
-    let pool_service = get_pool_service();
-    let history = pool_service.get_price_history(&token.mint).await;
-
+/// Check if token had recent price drop (within 30 seconds) using provided history (no extra fetch)
+pub fn check_token_for_recent_drop_with_history(
+    history: &[(chrono::DateTime<chrono::Utc>, f64)]
+) -> bool {
     if history.len() < 2 {
         return false;
     }
 
-    // Check for drops in last 30 seconds
     let now = chrono::Utc::now();
     let thirty_seconds_ago = now - chrono::Duration::seconds(30);
 
-    let recent_prices: Vec<_> = history
-        .into_iter()
-        .filter(|(timestamp, _)| *timestamp > thirty_seconds_ago)
-        .collect();
-
-    if recent_prices.len() < 2 {
-        return false;
+    let mut max_recent = 0.0f64;
+    let mut last_price = None;
+    for (ts, price) in history.iter() {
+        if *ts > thirty_seconds_ago {
+            if *price > max_recent {
+                max_recent = *price;
+            }
+            last_price = Some(*price);
+        }
     }
 
-    // Check if there was a significant drop (>2%) in recent period
-    let max_recent = recent_prices
-        .iter()
-        .map(|(_, price)| *price)
-        .fold(0.0f64, f64::max);
-    let current = recent_prices
-        .last()
-        .map(|(_, price)| *price)
-        .unwrap_or(0.0);
-
-    if max_recent > 0.0 && current > 0.0 {
-        let drop_percent = ((max_recent - current) / max_recent) * 100.0;
-        drop_percent > 2.0
-    } else {
-        false
+    if max_recent > 0.0 {
+        if let Some(current) = last_price {
+            if current > 0.0 {
+                let drop_percent = ((max_recent - current) / max_recent) * 100.0;
+                return drop_percent > 2.0;
+            }
+        }
     }
+    false
 }
 
 /// Prioritize tokens for checking based on drops, check history, and fairness
@@ -3329,8 +3322,13 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
                         price_available_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-                        // Check for recent drops
-                        let had_recent_drop = check_token_for_recent_drop(&token).await;
+                        // Fetch price history ONCE for all subsequent analyses (drop, entry, profit targets, change)
+                        let price_history = pool_service.get_price_history(&token.mint).await;
+
+                        // Check for recent drops using already fetched history
+                        let had_recent_drop = check_token_for_recent_drop_with_history(
+                            &price_history
+                        );
 
                         // Entry decision delegated to entry::should_buy
                         if is_debug_trader_enabled() {
@@ -3346,9 +3344,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
 
                         let entry_start = std::time::Instant::now();
-
-                        // Get updated price history for entry analysis
-                        let price_history = pool_service.get_price_history(&token.mint).await;
 
                         let (approved, confidence, reason) = crate::entry::should_buy(
                             &token,
@@ -3437,18 +3432,15 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
 
                         // Compute percent change from recent history if available
-                        let change = {
-                            let history = pool_service.get_price_history(&token.mint).await;
-                            if history.len() >= 2 {
-                                let prev = history[history.len() - 2].1;
-                                if prev > 0.0 {
-                                    ((current_price - prev) / prev) * 100.0
-                                } else {
-                                    0.0
-                                }
+                        let change = if price_history.len() >= 2 {
+                            let prev = price_history[price_history.len() - 2].1;
+                            if prev > 0.0 {
+                                ((current_price - prev) / prev) * 100.0
                             } else {
                                 0.0
                             }
+                        } else {
+                            0.0
                         };
 
                         // Get profit targets and liquidity tier
