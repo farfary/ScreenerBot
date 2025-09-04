@@ -211,18 +211,24 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
         })
     })?;
 
-    // If premium RPC only mode is active, use only premium RPC
+    // If premium RPC only mode is active, use the first available RPC URL (best effort)
     if is_premium_rpc_only() {
         if is_debug_rpc_enabled() {
             log(
                 LogTag::Rpc,
-                "PREMIUM_ONLY",
-                "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for ATA rent"
+                "ROUND_ROBIN",
+                "FORCE_PREMIUM_RPC_ONLY is active - using first available RPC for ATA rent"
             );
         }
 
+        let first_url = configs.rpc_urls.get(0).ok_or_else(|| {
+            ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
+                message: "No RPC URLs configured".to_string(),
+            })
+        })?;
+
         let response = client
-            .post(&configs.rpc_url_premium)
+            .post(first_url)
             .header("Content-Type", "application/json")
             .json(&rpc_payload)
             .send().await?;
@@ -261,111 +267,72 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
             }
         }
 
-        // If premium RPC fails and we're in premium-only mode, fallback to typical rent
+        // If first RPC fails and we're in premium-only mode, fallback to typical rent
         const FALLBACK_ATA_RENT: u64 = 2_039_280;
         log(
             LogTag::Rpc,
             "ATA_RENT_FALLBACK",
-            &format!("Premium RPC failed in premium-only mode, using fallback: {} lamports", FALLBACK_ATA_RENT)
+            &format!("First RPC failed in premium-only mode, using fallback: {} lamports", FALLBACK_ATA_RENT)
         );
 
         return Ok(FALLBACK_ATA_RENT);
     }
 
-    // Normal mode: Try premium RPC first for better reliability
-    let response = client
-        .post(&configs.rpc_url_premium)
-        .header("Content-Type", "application/json")
-        .json(&rpc_payload)
-        .send().await?;
+    // Normal mode: Try each URL in round-robin fashion for better reliability
+    for (index, url) in configs.rpc_urls.iter().enumerate() {
+        let response = client
+            .post(url)
+            .header("Content-Type", "application/json")
+            .json(&rpc_payload)
+            .send().await;
 
-    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-        if let Some(result) = rpc_response.get("result") {
-            if let Some(rent_lamports) = result.as_u64() {
-                // Update cache
-                {
-                    match ATA_RENT_CACHE.try_lock() {
-                        Ok(mut cache) => {
-                            *cache = Some(AtaRentInfo {
+        if let Ok(response) = response {
+            if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                if let Some(result) = rpc_response.get("result") {
+                    if let Some(rent_lamports) = result.as_u64() {
+                        // Update cache
+                        {
+                            match ATA_RENT_CACHE.try_lock() {
+                                Ok(mut cache) => {
+                                    *cache = Some(AtaRentInfo {
+                                        rent_lamports,
+                                        cached_at: Instant::now(),
+                                    });
+                                }
+                                Err(_) => {
+                                    log(
+                                        LogTag::Rpc,
+                                        "WARN",
+                                        "ATA_RENT_CACHE lock contention during update - cache not updated"
+                                    );
+                                }
+                            }
+                        }
+
+                        log(
+                            LogTag::Rpc,
+                            "ATA_RENT",
+                            &format!(
+                                "Retrieved ATA rent from RPC {}: {} lamports ({:.9} SOL)",
+                                index + 1,
                                 rent_lamports,
-                                cached_at: Instant::now(),
-                            });
-                        }
-                        Err(_) => {
-                            log(
-                                LogTag::Rpc,
-                                "WARN",
-                                "ATA_RENT_CACHE lock contention during update - cache not updated"
-                            );
-                        }
+                                lamports_to_sol(rent_lamports)
+                            )
+                        );
+
+                        return Ok(rent_lamports);
                     }
                 }
-
-                log(
-                    LogTag::Rpc,
-                    "ATA_RENT",
-                    &format!(
-                        "Retrieved ATA rent from chain: {} lamports ({:.9} SOL)",
-                        rent_lamports,
-                        lamports_to_sol(rent_lamports)
-                    )
-                );
-
-                return Ok(rent_lamports);
             }
         }
     }
 
-    // Fallback to main RPC if premium fails
-    let response = client
-        .post(&configs.rpc_url)
-        .header("Content-Type", "application/json")
-        .json(&rpc_payload)
-        .send().await?;
-
-    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-        if let Some(result) = rpc_response.get("result") {
-            if let Some(rent_lamports) = result.as_u64() {
-                // Update cache
-                {
-                    match ATA_RENT_CACHE.try_lock() {
-                        Ok(mut cache) => {
-                            *cache = Some(AtaRentInfo {
-                                rent_lamports,
-                                cached_at: Instant::now(),
-                            });
-                        }
-                        Err(_) => {
-                            log(
-                                LogTag::Rpc,
-                                "WARN",
-                                "ATA_RENT_CACHE lock contention during fallback update - cache not updated"
-                            );
-                        }
-                    }
-                }
-
-                log(
-                    LogTag::Rpc,
-                    "ATA_RENT",
-                    &format!(
-                        "Retrieved ATA rent from chain (fallback): {} lamports ({:.9} SOL)",
-                        rent_lamports,
-                        lamports_to_sol(rent_lamports)
-                    )
-                );
-
-                return Ok(rent_lamports);
-            }
-        }
-    }
-
-    // If all fails, return typical ATA rent as last resort
+    // If all RPCs fail, return typical ATA rent as last resort
     const FALLBACK_ATA_RENT: u64 = 2_039_280;
     log(
         LogTag::Rpc,
         "ATA_RENT_FALLBACK",
-        &format!("Using fallback ATA rent: {} lamports", FALLBACK_ATA_RENT)
+        &format!("All RPCs failed, using fallback ATA rent: {} lamports", FALLBACK_ATA_RENT)
     );
 
     Ok(FALLBACK_ATA_RENT)
@@ -387,8 +354,15 @@ pub fn get_websocket_url() -> Result<String, ScreenerBotError> {
             message: format!("Failed to read configs: {}", e),
         })
     })?;
-    let http = cfg.rpc_url;
-    let parsed = Url::parse(&http).map_err(|e| {
+
+    // Use the first RPC URL from the list for websocket derivation
+    let http = cfg.rpc_urls.get(0).ok_or_else(|| {
+        ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
+            message: "No RPC URLs configured".to_string(),
+        })
+    })?;
+
+    let parsed = Url::parse(http).map_err(|e| {
         ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidUrl {
             url: http.clone(),
             error: e.to_string(),
@@ -398,7 +372,6 @@ pub fn get_websocket_url() -> Result<String, ScreenerBotError> {
         "https" => "wss",
         "http" => "ws",
         other => {
-            // Default to secure websocket for unknown schemes
             if is_debug_rpc_enabled() {
                 log(
                     LogTag::Rpc,
@@ -419,20 +392,14 @@ pub fn get_websocket_url() -> Result<String, ScreenerBotError> {
     Ok(ws_url.to_string())
 }
 
-/// Derive a websocket URL from the configured PREMIUM HTTP RPC URL
+/// Derive a websocket URL from a specific HTTP RPC URL
 /// Examples:
 ///  - https://premium.rpc.provider -> wss://premium.rpc.provider
 ///  - http://localhost:8899 -> ws://localhost:8899
-pub fn get_premium_websocket_url() -> Result<String, ScreenerBotError> {
-    let cfg = read_configs().map_err(|e| {
-        ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
-            message: format!("Failed to read configs: {}", e),
-        })
-    })?;
-    let http = cfg.rpc_url_premium;
-    let parsed = Url::parse(&http).map_err(|e| {
+pub fn get_websocket_url_from_http(http_url: &str) -> Result<String, ScreenerBotError> {
+    let parsed = Url::parse(http_url).map_err(|e| {
         ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidUrl {
-            url: http.clone(),
+            url: http_url.to_string(),
             error: e.to_string(),
         })
     })?;
@@ -444,7 +411,7 @@ pub fn get_premium_websocket_url() -> Result<String, ScreenerBotError> {
                 log(
                     LogTag::Rpc,
                     "WS_URL_SCHEME_WARN",
-                    &format!("Unknown scheme '{}' for premium URL, defaulting to wss", other)
+                    &format!("Unknown scheme '{}', defaulting to wss", other)
                 );
             }
             "wss"
@@ -453,8 +420,8 @@ pub fn get_premium_websocket_url() -> Result<String, ScreenerBotError> {
     let mut ws_url = parsed.clone();
     ws_url.set_scheme(ws_scheme).map_err(|_| {
         ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidUrl {
-            url: http.clone(),
-            error: "Failed to set WS scheme (premium)".to_string(),
+            url: http_url.to_string(),
+            error: "Failed to set WS scheme".to_string(),
         })
     })?;
     Ok(ws_url.to_string())
@@ -845,13 +812,15 @@ impl RpcRateLimiter {
     }
 }
 
-/// Centralized RPC client with connection pooling and error handling
+/// Centralized RPC client with round-robin load balancing and error handling
 pub struct RpcClient {
     client: Arc<SolanaRpcClient>,
-    rpc_url: String,
-    premium_url: Option<String>,
-    fallback_urls: Vec<String>,
-    current_url_index: usize,
+    /// List of all available RPC URLs for round-robin usage
+    rpc_urls: Vec<String>,
+    /// Current index for round-robin rotation
+    current_url_index: Arc<std::sync::Mutex<usize>>,
+    /// Current active URL (changes with round-robin)
+    current_url: Arc<std::sync::Mutex<String>>,
     stats: Arc<std::sync::Mutex<RpcStats>>,
     rate_limiter: Arc<tokio::sync::Mutex<RpcRateLimiter>>,
 }
@@ -874,41 +843,38 @@ impl RpcClient {
     pub fn from_config() -> Result<Self, String> {
         let configs = read_configs().map_err(|e| format!("Failed to read configs: {}", e))?;
 
-        let mut all_urls = vec![configs.rpc_url.clone()];
-        all_urls.extend(configs.rpc_fallbacks.clone());
+        if configs.rpc_urls.is_empty() {
+            return Err("No RPC URLs configured".to_string());
+        }
 
         log(
             LogTag::Rpc,
             "INIT",
             &format!(
-                "Initializing RPC client with {} URLs (primary + {} fallbacks), premium: {}",
-                all_urls.len(),
-                configs.rpc_fallbacks.len(),
-                configs.rpc_url_premium
+                "Initializing RPC client with {} URLs for round-robin rotation",
+                configs.rpc_urls.len()
             )
         );
 
-        if !configs.rpc_fallbacks.is_empty() {
-            log(
-                LogTag::Rpc,
-                "FALLBACKS",
-                &format!("Available fallback URLs: {}", configs.rpc_fallbacks.join(", "))
-            );
+        for (i, url) in configs.rpc_urls.iter().enumerate() {
+            log(LogTag::Rpc, "RPC_URL", &format!("RPC URL {}: {}", i + 1, url));
         }
 
-        Self::new_with_urls(&configs.rpc_url, Some(configs.rpc_url_premium), configs.rpc_fallbacks)
+        Self::new_with_urls(configs.rpc_urls)
     }
 
-    /// Create new RPC client with primary URL and fallbacks
-    pub fn new_with_urls(
-        primary_url: &str,
-        premium_url: Option<String>,
-        fallback_urls: Vec<String>
-    ) -> Result<Self, String> {
-        log(LogTag::Rpc, "INIT", &format!("Initializing RPC client with primary: {}", primary_url));
+    /// Create new RPC client with a list of URLs for round-robin rotation
+    pub fn new_with_urls(rpc_urls: Vec<String>) -> Result<Self, String> {
+        if rpc_urls.is_empty() {
+            return Err("RPC URLs list cannot be empty".to_string());
+        }
 
+        log(LogTag::Rpc, "INIT", &format!("Initializing RPC client with {} URLs", rpc_urls.len()));
+
+        // Start with the first URL
+        let first_url = rpc_urls[0].clone();
         let client = SolanaRpcClient::new_with_commitment(
-            primary_url.to_string(),
+            first_url.clone(),
             CommitmentConfig::confirmed()
         );
 
@@ -917,12 +883,11 @@ impl RpcClient {
 
         Ok(Self {
             client: Arc::new(client),
-            rpc_url: primary_url.to_string(),
-            premium_url,
-            fallback_urls,
-            current_url_index: 0,
+            rpc_urls: rpc_urls.clone(),
+            current_url_index: Arc::new(std::sync::Mutex::new(0)),
+            current_url: Arc::new(std::sync::Mutex::new(first_url)),
             stats: Arc::new(std::sync::Mutex::new(stats)),
-            rate_limiter: Arc::new(tokio::sync::Mutex::new(RpcRateLimiter::new_conservative())), // Conservative rate limiting to prevent 429s
+            rate_limiter: Arc::new(tokio::sync::Mutex::new(RpcRateLimiter::new_conservative())),
         })
     }
 
@@ -940,12 +905,11 @@ impl RpcClient {
 
         Self {
             client: Arc::new(client),
-            rpc_url: rpc_url.to_string(),
-            premium_url: None,
-            fallback_urls: Vec::new(),
-            current_url_index: 0,
+            rpc_urls: vec![rpc_url.to_string()],
+            current_url_index: Arc::new(std::sync::Mutex::new(0)),
+            current_url: Arc::new(std::sync::Mutex::new(rpc_url.to_string())),
             stats: Arc::new(std::sync::Mutex::new(stats)),
-            rate_limiter: Arc::new(tokio::sync::Mutex::new(RpcRateLimiter::new_conservative())), // Conservative rate limiting to prevent 429s
+            rate_limiter: Arc::new(tokio::sync::Mutex::new(RpcRateLimiter::new_conservative())),
         }
     }
 
@@ -954,14 +918,20 @@ impl RpcClient {
         self.client.clone()
     }
 
-    /// Get RPC URL
-    pub fn url(&self) -> &str {
-        &self.rpc_url
+    /// Get current RPC URL
+    pub fn url(&self) -> String {
+        match self.current_url.lock() {
+            Ok(url) => url.clone(),
+            Err(_) => {
+                log(LogTag::Rpc, "WARN", "Failed to lock current_url - using first URL");
+                self.rpc_urls.get(0).unwrap_or(&"".to_string()).clone()
+            }
+        }
     }
 
-    /// Get premium RPC URL
-    pub fn premium_url(&self) -> Option<&str> {
-        self.premium_url.as_deref()
+    /// Get all available RPC URLs
+    pub fn get_all_urls(&self) -> Vec<String> {
+        self.rpc_urls.clone()
     }
 
     /// Get RPC statistics
@@ -986,11 +956,94 @@ impl RpcClient {
         }
     }
 
+    /// Rotate to the next RPC URL in round-robin fashion
+    pub fn rotate_to_next_url(&self) -> String {
+        let next_url = match (self.current_url_index.lock(), self.current_url.lock()) {
+            (Ok(mut index), Ok(mut current_url)) => {
+                *index = (*index + 1) % self.rpc_urls.len();
+                let new_url = self.rpc_urls[*index].clone();
+                *current_url = new_url.clone();
+
+                log(
+                    LogTag::Rpc,
+                    "ROTATE",
+                    &format!("Rotated to RPC URL {} (index {}): {}", *index + 1, *index, new_url)
+                );
+
+                new_url
+            }
+            _ => {
+                log(LogTag::Rpc, "WARN", "Failed to rotate URL - lock contention");
+                self.rpc_urls.get(0).unwrap_or(&"".to_string()).clone()
+            }
+        };
+
+        // Update the underlying client to use the new URL
+        let new_client = SolanaRpcClient::new_with_commitment(
+            next_url.clone(),
+            CommitmentConfig::confirmed()
+        );
+
+        // Note: We can't directly update self.client since it's behind Arc
+        // The client will be updated on the next method call that creates a new client
+
+        next_url
+    }
+
+    /// Get the next RPC URL without rotating (for preview)
+    pub fn get_next_url(&self) -> String {
+        match self.current_url_index.lock() {
+            Ok(index) => {
+                let next_index = (*index + 1) % self.rpc_urls.len();
+                self.rpc_urls.get(next_index).unwrap_or(&"".to_string()).clone()
+            }
+            Err(_) => {
+                log(LogTag::Rpc, "WARN", "Failed to get next URL - lock contention");
+                self.rpc_urls.get(0).unwrap_or(&"".to_string()).clone()
+            }
+        }
+    }
+
+    /// Get current RPC URL index
+    pub fn get_current_url_index(&self) -> usize {
+        match self.current_url_index.lock() {
+            Ok(index) => *index,
+            Err(_) => {
+                log(LogTag::Rpc, "WARN", "Failed to get URL index - lock contention");
+                0
+            }
+        }
+    }
+
+    /// Create a new client using the current URL for actual RPC calls
+    fn create_current_client(&self) -> Arc<SolanaRpcClient> {
+        let current_url = self.url();
+        let client = SolanaRpcClient::new_with_commitment(
+            current_url,
+            CommitmentConfig::confirmed()
+        );
+        Arc::new(client)
+    }
+
+    /// Perform round-robin rotation and create a client for the next URL
+    /// This should be called before each RPC operation to ensure load balancing
+    fn prepare_next_rpc_call(&self) -> Arc<SolanaRpcClient> {
+        // Rotate to next URL for round-robin load balancing
+        let current_url = self.rotate_to_next_url();
+
+        // Create a new client with the rotated URL
+        let client = SolanaRpcClient::new_with_commitment(
+            current_url,
+            CommitmentConfig::confirmed()
+        );
+        Arc::new(client)
+    }
+
     /// Record an RPC call for statistics
     fn record_call(&self, method: &str) {
         if let Ok(mut stats) = self.stats.lock() {
-            // Always use the actual RPC URL, not a modified version
-            let url_to_record = self.rpc_url.clone();
+            // Use the current URL for statistics
+            let url_to_record = self.url();
             stats.record_call(&url_to_record, method);
             // Stats are now auto-saved every 3 seconds by background service
         }
@@ -1004,35 +1057,16 @@ impl RpcClient {
         }
     }
 
-    /// Check if current URL is a premium RPC (no rate limiting)
-    fn is_current_url_premium(&self) -> bool {
-        if let Some(premium_url) = &self.premium_url { self.rpc_url == *premium_url } else { false }
-    }
-
-    /// Wait for rate limit if using main RPC (excludes premium RPC) with adaptive backoff
+    /// Wait for rate limit with adaptive backoff
+    /// Now applies to all RPC URLs in the round-robin list
     async fn wait_for_rate_limit(&self) {
-        // Only rate limit the main RPC URL, not fallbacks or premium URLs
-        if self.current_url_index == 0 {
-            // Skip rate limiting for premium RPC URLs
-            if self.is_current_url_premium() {
-                return;
-            }
-
-            // Use the enhanced rate limiter with adaptive backoff
-            let mut rate_limiter = self.rate_limiter.lock().await;
-            rate_limiter.wait_for_main_rpc().await;
-        }
+        let current_url = self.url();
+        let mut rate_limiter = self.rate_limiter.lock().await;
+        rate_limiter.wait_for_url(&current_url).await;
     }
 
     /// Wait for rate limit for a specific URL
     async fn wait_for_rate_limit_url(&self, url: &str) {
-        // Skip rate limiting for premium RPC URLs
-        if let Some(premium_url) = &self.premium_url {
-            if url == premium_url {
-                return;
-            }
-        }
-
         let mut rate_limiter = self.rate_limiter.lock().await;
         rate_limiter.wait_for_url(url).await;
     }
@@ -1063,12 +1097,10 @@ impl RpcClient {
         Some(rate_limiter.get_backoff_status())
     }
 
-    /// Set a custom rate limit interval for premium URLs
-    pub async fn set_premium_rate_limit(&self, interval: Duration) {
-        if let Some(premium_url) = &self.premium_url {
-            let mut rate_limiter = self.rate_limiter.lock().await;
-            rate_limiter.set_url_interval(premium_url, interval);
-        }
+    /// Set a custom rate limit interval for a specific URL
+    pub async fn set_url_rate_limit(&self, url: &str, interval: Duration) {
+        let mut rate_limiter = self.rate_limiter.lock().await;
+        rate_limiter.set_url_interval(url, interval);
     }
 
     /// Reset rate limiter (useful when switching networks or after prolonged downtime)
@@ -1077,38 +1109,55 @@ impl RpcClient {
         rate_limiter.reset();
     }
 
-    /// Create a new client using premium URL (for wallet operations - no rate limiting)
-    pub fn create_premium_client(&self) -> Option<Arc<SolanaRpcClient>> {
-        if let Some(premium_url) = &self.premium_url {
-            log(
-                LogTag::Rpc,
-                "PREMIUM",
-                &format!("Using premium RPC (no rate limits): {}", premium_url)
-            );
-            let client = SolanaRpcClient::new_with_commitment(
-                premium_url.clone(),
-                CommitmentConfig::confirmed()
-            );
-            Some(Arc::new(client))
-        } else {
-            None
-        }
-    }
-
-    /// Create a client specifically for main RPC (for lightweight operations like checking signatures)
-    pub fn create_main_client(&self) -> Arc<SolanaRpcClient> {
+    /// Create a client for the current URL in the round-robin rotation
+    pub fn create_current_rpc_client(&self) -> Arc<SolanaRpcClient> {
+        let current_url = self.url();
         if is_debug_rpc_enabled() {
             log(
                 LogTag::Rpc,
-                "MAIN",
-                &format!("Using main RPC for lightweight operations: {}", self.rpc_url)
+                "CLIENT",
+                &format!("Creating client for current URL: {}", current_url)
             );
         }
         let client = SolanaRpcClient::new_with_commitment(
-            self.rpc_url.clone(),
+            current_url,
             CommitmentConfig::confirmed()
         );
         Arc::new(client)
+    }
+
+    /// Create a client specifically for a given URL (for specific operations)
+    pub fn create_client_for_url(&self, url: &str) -> Arc<SolanaRpcClient> {
+        if is_debug_rpc_enabled() {
+            log(LogTag::Rpc, "CLIENT", &format!("Creating client for specific URL: {}", url));
+        }
+        let client = SolanaRpcClient::new_with_commitment(
+            url.to_string(),
+            CommitmentConfig::confirmed()
+        );
+        Arc::new(client)
+    }
+
+    /// Get next available URL from round-robin (backward compatibility)
+    /// This is used to replace the old premium RPC concept
+    pub fn get_best_available_url(&self) -> String {
+        // Use the current URL, which is already rotated via round-robin
+        self.url()
+    }
+
+    /// Backward compatibility: get premium URL (now returns current round-robin URL)
+    pub fn premium_url(&self) -> Option<String> {
+        Some(self.url())
+    }
+
+    /// Backward compatibility: create premium client (now returns current client)
+    pub fn create_premium_client(&self) -> Option<Arc<SolanaRpcClient>> {
+        Some(self.create_current_rpc_client())
+    }
+
+    /// Backward compatibility: create main client (now returns current client)
+    pub fn create_main_client(&self) -> Arc<SolanaRpcClient> {
+        self.create_current_rpc_client()
     }
 
     /// Check if error should trigger fallback (rate limits, timeouts) vs real errors (account not found)
@@ -1153,11 +1202,25 @@ impl RpcClient {
         response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
     }
 
-    /// Get all available URLs (primary + fallbacks)
-    pub fn get_all_urls(&self) -> Vec<String> {
-        let mut urls = vec![self.rpc_url.clone()];
-        urls.extend(self.fallback_urls.clone());
-        urls
+    /// Switch to next fallback URL (backward compatibility - now uses round-robin)
+    pub async fn switch_to_fallback(&mut self) -> Result<(), String> {
+        self.rotate_to_next_url();
+        Ok(())
+    }
+
+    /// Backward compatibility: access to current URL as rpc_url field
+    pub fn rpc_url(&self) -> String {
+        self.url()
+    }
+
+    /// Backward compatibility: fallback URLs (now returns all URLs except current)
+    pub fn fallback_urls(&self) -> Vec<String> {
+        let current_url = self.url();
+        self.rpc_urls
+            .iter()
+            .filter(|url| *url != &current_url)
+            .cloned()
+            .collect()
     }
 
     /// Switch to next fallback URL
@@ -1198,12 +1261,15 @@ impl RpcClient {
     pub async fn get_account(&self, pubkey: &Pubkey) -> Result<Account, String> {
         self.wait_for_rate_limit().await;
         self.record_call("get_account");
-        let url = self.url().to_string();
+
+        // Use round-robin to get the next RPC URL and create client
+        let client = self.prepare_next_rpc_call();
+        let current_url = self.url();
+
         tokio::task
             ::spawn_blocking({
-                let client = self.client.clone();
                 let pubkey = *pubkey;
-                let url = url.clone();
+                let url = current_url.clone();
                 move || {
                     client.get_account(&pubkey).map_err(|e| {
                         let es = e.to_string();
@@ -5118,9 +5184,42 @@ pub fn parse_pubkey(address: &str) -> Result<Pubkey, String> {
     Pubkey::from_str(address).map_err(|e| format!("Invalid pubkey '{}': {}", address, e))
 }
 
-/// Get premium RPC URL for wallet operations (high priority transactions)
+/// Get premium RPC URL for wallet operations (backward compatibility)
+/// Now returns the first RPC URL from the round-robin list
 pub fn get_premium_transaction_rpc(configs: &crate::global::Configs) -> String {
-    configs.rpc_url_premium.clone()
+    configs.rpc_urls.get(0).unwrap_or(&"https://api.mainnet-beta.solana.com".to_string()).clone()
+}
+
+/// Backward compatibility: get main RPC URL
+/// Returns the first URL from the round-robin list
+pub fn get_main_rpc_url(configs: &crate::global::Configs) -> String {
+    configs.rpc_urls.get(0).unwrap_or(&"https://api.mainnet-beta.solana.com".to_string()).clone()
+}
+
+/// Create a temporary config struct with backward compatibility fields
+/// This helps existing code work with the new structure
+pub fn create_backward_compatible_config(
+    configs: &crate::global::Configs
+) -> BackwardCompatibleConfig {
+    BackwardCompatibleConfig {
+        main_wallet_private: configs.main_wallet_private.clone(),
+        rpc_url: configs.rpc_urls.get(0).unwrap_or(&"".to_string()).clone(),
+        rpc_url_premium: configs.rpc_urls.get(0).unwrap_or(&"".to_string()).clone(),
+        rpc_url_ws_premium: format!("wss://ws.endpoint.com"), // Placeholder
+        rpc_fallbacks: configs.rpc_urls.clone(),
+        solscan_api_token: configs.solscan_api_token.clone(),
+    }
+}
+
+/// Backward compatibility structure for old config access patterns
+#[derive(Debug, Clone)]
+pub struct BackwardCompatibleConfig {
+    pub main_wallet_private: String,
+    pub rpc_url: String,
+    pub rpc_url_premium: String,
+    pub rpc_url_ws_premium: String,
+    pub rpc_fallbacks: Vec<String>,
+    pub solscan_api_token: Option<String>,
 }
 
 #[cfg(test)]

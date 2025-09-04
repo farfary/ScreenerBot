@@ -25,14 +25,8 @@ use crate::global::CONFIG_FILE;
 pub struct Configs {
     /// Private key for the main wallet (supports both base58 and array formats)
     pub main_wallet_private: String,
-    /// Primary RPC URL for Solana blockchain operations
-    pub rpc_url: String,
-    /// Premium RPC URL for enhanced performance operations
-    pub rpc_url_premium: String,
-    /// Premium WebSocket URL for real-time transaction monitoring
-    pub rpc_url_ws_premium: String,
-    /// List of fallback RPC URLs for redundancy
-    pub rpc_fallbacks: Vec<String>,
+    /// List of RPC URLs for round-robin usage - each call cycles through these URLs
+    pub rpc_urls: Vec<String>,
     /// Solscan API token for external transaction analysis (optional)
     pub solscan_api_token: Option<String>,
 }
@@ -211,12 +205,15 @@ pub fn validate_configs(configs: &Configs) -> Result<(), Box<dyn std::error::Err
         return Err("Main wallet private key is empty".into());
     }
 
-    if configs.rpc_url.is_empty() {
-        return Err("RPC URL is empty".into());
+    if configs.rpc_urls.is_empty() {
+        return Err("RPC URLs list is empty".into());
     }
 
-    if configs.rpc_url_premium.is_empty() {
-        return Err("Premium RPC URL is empty".into());
+    // Validate that all RPC URLs are non-empty
+    for (index, url) in configs.rpc_urls.iter().enumerate() {
+        if url.is_empty() {
+            return Err(format!("RPC URL at index {} is empty", index).into());
+        }
     }
 
     // Validate that we can actually load the wallet
@@ -251,10 +248,10 @@ pub fn get_wallet_pubkey_string(configs: &Configs) -> Result<String, Box<dyn std
 pub fn create_default_config() -> Configs {
     Configs {
         main_wallet_private: "your_base58_private_key_here".to_string(),
-        rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
-        rpc_url_premium: "https://your-premium-rpc-url.com".to_string(),
-        rpc_url_ws_premium: "wss://your-premium-ws-url.com".to_string(),
-        rpc_fallbacks: vec![
+        rpc_urls: vec![
+            "https://api.mainnet-beta.solana.com".to_string(),
+            "https://your-premium-rpc-url-1.com".to_string(),
+            "https://your-premium-rpc-url-2.com".to_string(),
             "https://fallback1.com".to_string(),
             "https://fallback2.com".to_string()
         ],
@@ -329,9 +326,7 @@ mod tests {
         let loaded_config = read_configs_from_path(&config_path).unwrap();
 
         // Compare
-        assert_eq!(original_config.rpc_url, loaded_config.rpc_url);
-        assert_eq!(original_config.rpc_url_premium, loaded_config.rpc_url_premium);
-        assert_eq!(original_config.rpc_fallbacks, loaded_config.rpc_fallbacks);
+        assert_eq!(original_config.rpc_urls, loaded_config.rpc_urls);
     }
 
     #[test]
@@ -339,10 +334,7 @@ mod tests {
         // This would need a valid test keypair to work properly
         let test_config = Configs {
             main_wallet_private: "[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]".to_string(),
-            rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
-            rpc_url_premium: "https://premium.com".to_string(),
-            rpc_url_ws_premium: "wss://premium-ws.com".to_string(),
-            rpc_fallbacks: vec![],
+            rpc_urls: vec!["https://api.mainnet-beta.solana.com".to_string()],
             solscan_api_token: None,
         };
 
