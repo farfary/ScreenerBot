@@ -788,33 +788,33 @@ impl PoolDbService {
                     .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                     .map(|dt| dt.with_timezone(&Utc));
 
-                let first_seen_str: String = row.get(35)?;
+                let first_seen_str: String = row.get(36)?;
                 let first_seen = DateTime::parse_from_rfc3339(&first_seen_str)
                     .map_err(|_|
                         rusqlite::Error::InvalidColumnType(
-                            35,
+                            36,
                             "first_seen".to_string(),
                             rusqlite::types::Type::Text
                         )
                     )?
                     .with_timezone(&Utc);
 
-                let last_updated_str: String = row.get(36)?;
+                let last_updated_str: String = row.get(37)?;
                 let last_updated = DateTime::parse_from_rfc3339(&last_updated_str)
                     .map_err(|_|
                         rusqlite::Error::InvalidColumnType(
-                            36,
+                            37,
                             "last_updated".to_string(),
                             rusqlite::types::Type::Text
                         )
                     )?
                     .with_timezone(&Utc);
 
-                let last_verified_str: String = row.get(37)?;
+                let last_verified_str: String = row.get(38)?;
                 let last_verified = DateTime::parse_from_rfc3339(&last_verified_str)
                     .map_err(|_|
                         rusqlite::Error::InvalidColumnType(
-                            37,
+                            38,
                             "last_verified".to_string(),
                             rusqlite::types::Type::Text
                         )
@@ -932,33 +932,33 @@ impl PoolDbService {
                     .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                     .map(|dt| dt.with_timezone(&Utc));
 
-                let first_seen_str: String = row.get(35)?;
+                let first_seen_str: String = row.get(36)?;
                 let first_seen = DateTime::parse_from_rfc3339(&first_seen_str)
                     .map_err(|_|
                         rusqlite::Error::InvalidColumnType(
-                            35,
+                            36,
                             "first_seen".to_string(),
                             rusqlite::types::Type::Text
                         )
                     )?
                     .with_timezone(&Utc);
 
-                let last_updated_str: String = row.get(36)?;
+                let last_updated_str: String = row.get(37)?;
                 let last_updated = DateTime::parse_from_rfc3339(&last_updated_str)
                     .map_err(|_|
                         rusqlite::Error::InvalidColumnType(
-                            36,
+                            37,
                             "last_updated".to_string(),
                             rusqlite::types::Type::Text
                         )
                     )?
                     .with_timezone(&Utc);
 
-                let last_verified_str: String = row.get(37)?;
+                let last_verified_str: String = row.get(38)?;
                 let last_verified = DateTime::parse_from_rfc3339(&last_verified_str)
                     .map_err(|_|
                         rusqlite::Error::InvalidColumnType(
-                            37,
+                            38,
                             "last_verified".to_string(),
                             rusqlite::types::Type::Text
                         )
