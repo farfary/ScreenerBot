@@ -531,23 +531,28 @@ pub async fn get_ohlcv_data_from_geckoterminal(
         );
     }
 
-    let client = reqwest::Client::builder()
+    let client = reqwest::Client
+        ::builder()
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    let response = match timeout(
-        Duration::from_secs(REQUEST_TIMEOUT_SECS),
-        client
-            .get(&url)
-            .header("Accept", format!("application/json;version={}", API_VERSION))
-            .query(&[
-                ("aggregate", "1".to_string()),
-                ("limit", limit.to_string()),
-                ("currency", "usd".to_string()),
-            ])
-            .send()
-    ).await {
+    let response = match
+        timeout(
+            Duration::from_secs(REQUEST_TIMEOUT_SECS),
+            client
+                .get(&url)
+                .header("Accept", format!("application/json;version={}", API_VERSION))
+                .query(
+                    &[
+                        ("aggregate", "1".to_string()),
+                        ("limit", limit.to_string()),
+                        ("currency", "usd".to_string()),
+                    ]
+                )
+                .send()
+        ).await
+    {
         Ok(Ok(response)) => response,
         Ok(Err(e)) => {
             if is_debug_api_enabled() {
@@ -594,10 +599,18 @@ pub async fn get_ohlcv_data_from_geckoterminal(
         }
 
         match status.as_u16() {
-            404 => return Err(format!("Pool not found: {}", pool_address)),
-            400 => return Err("Bad request - invalid parameters".to_string()),
-            500..=599 => return Err(format!("Server error ({})", status)),
-            _ => return Err(format!("HTTP {}", status)),
+            404 => {
+                return Err(format!("Pool not found: {}", pool_address));
+            }
+            400 => {
+                return Err("Bad request - invalid parameters".to_string());
+            }
+            500..=599 => {
+                return Err(format!("Server error ({})", status));
+            }
+            _ => {
+                return Err(format!("HTTP {}", status));
+            }
         }
     }
 
@@ -647,17 +660,13 @@ pub async fn get_ohlcv_data_from_geckoterminal(
         );
     }
 
-    let data_points: Result<Vec<OhlcvDataPoint>, String> = gecko_response
-        .data
-        .attributes
-        .ohlcv_list
+    let data_points: Result<Vec<OhlcvDataPoint>, String> = gecko_response.data.attributes.ohlcv_list
         .into_iter()
         .map(|ohlcv| {
             if ohlcv.len() != 6 {
-                return Err(format!(
-                    "Invalid OHLCV data format: expected 6 values, got {}",
-                    ohlcv.len()
-                ));
+                return Err(
+                    format!("Invalid OHLCV data format: expected 6 values, got {}", ohlcv.len())
+                );
             }
 
             let timestamp = ohlcv[0] as i64;
@@ -673,10 +682,15 @@ pub async fn get_ohlcv_data_from_geckoterminal(
             }
 
             if open <= 0.0 || high <= 0.0 || low <= 0.0 || close <= 0.0 {
-                return Err(format!(
-                    "Invalid price data: open={}, high={}, low={}, close={}",
-                    open, high, low, close
-                ));
+                return Err(
+                    format!(
+                        "Invalid price data: open={}, high={}, low={}, close={}",
+                        open,
+                        high,
+                        low,
+                        close
+                    )
+                );
             }
 
             if volume < 0.0 {
@@ -684,24 +698,27 @@ pub async fn get_ohlcv_data_from_geckoterminal(
             }
 
             if high < low {
-                return Err(format!(
-                    "Invalid OHLC relationship: high ({}) < low ({})",
-                    high, low
-                ));
+                return Err(format!("Invalid OHLC relationship: high ({}) < low ({})", high, low));
             }
 
             if open > high || open < low || close > high || close < low {
-                return Err(format!(
-                    "OHLC values out of range: open={}, high={}, low={}, close={}",
-                    open, high, low, close
-                ));
+                return Err(
+                    format!(
+                        "OHLC values out of range: open={}, high={}, low={}, close={}",
+                        open,
+                        high,
+                        low,
+                        close
+                    )
+                );
             }
 
-            if !open.is_finite()
-                || !high.is_finite()
-                || !low.is_finite()
-                || !close.is_finite()
-                || !volume.is_finite()
+            if
+                !open.is_finite() ||
+                !high.is_finite() ||
+                !low.is_finite() ||
+                !close.is_finite() ||
+                !volume.is_finite()
             {
                 return Err("Non-finite values in OHLCV data".to_string());
             }

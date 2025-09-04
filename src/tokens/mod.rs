@@ -107,9 +107,7 @@ pub use lp_lock::{
     LpLockAnalysis,
     LpLockStatus,
 };
-pub use geckoterminal::{
-    OhlcvDataPoint,
-};
+pub use geckoterminal::{ OhlcvDataPoint };
 pub use ohlcvs::{
     get_latest_ohlcv,
     get_ohlcv_service_clone,

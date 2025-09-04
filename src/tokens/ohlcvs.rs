@@ -921,7 +921,11 @@ impl OhlcvService {
             log(
                 LogTag::Ohlcv,
                 "API_DELEGATE",
-                &format!("🔄 Delegating 1m OHLCV API call to GeckoTerminal module for pool {} (limit: {})", &pool_address[..8], limit)
+                &format!(
+                    "🔄 Delegating 1m OHLCV API call to GeckoTerminal module for pool {} (limit: {})",
+                    &pool_address[..8],
+                    limit
+                )
             );
         }
 
@@ -944,7 +948,10 @@ impl OhlcvService {
                     log(
                         LogTag::Ohlcv,
                         "API_SUCCESS",
-                        &format!("✅ Retrieved {} OHLCV data points via GeckoTerminal module", data.len())
+                        &format!(
+                            "✅ Retrieved {} OHLCV data points via GeckoTerminal module",
+                            data.len()
+                        )
                     );
                 }
 

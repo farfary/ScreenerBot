@@ -9,13 +9,13 @@ use crate::global::{ is_debug_pool_prices_enabled, CACHE_POOL_DIR };
 use crate::logger::{ log, LogTag };
 use crate::rpc::get_rpc_client;
 use crate::tokens::decimals::get_cached_decimals;
-use crate::tokens::dexscreener::{ 
-    get_token_pairs_from_api, 
+use crate::tokens::dexscreener::{
+    get_token_pairs_from_api,
     get_token_pools_from_dexscreener,
     get_batch_token_pools_from_dexscreener,
     process_dexscreener_batch_results,
     DexScreenerBatchResult,
-    TokenPair 
+    TokenPair,
 };
 use crate::tokens::geckoterminal::{
     get_token_pools_from_geckoterminal,
@@ -1360,7 +1360,9 @@ impl PoolPriceService {
             let mut pool_cache = self.pool_cache.write().await;
 
             // Process DexScreener results using the helper function
-            let processed_dexscreener_pools = process_dexscreener_batch_results(&dexscreener_result);
+            let processed_dexscreener_pools = process_dexscreener_batch_results(
+                &dexscreener_result
+            );
             for (token_address, cached_pools) in processed_dexscreener_pools {
                 if !cached_pools.is_empty() {
                     dx_success += 1;

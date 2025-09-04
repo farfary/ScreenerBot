@@ -1131,7 +1131,9 @@ pub async fn get_token_pairs_from_api(token_address: &str) -> Result<Vec<TokenPa
 }
 
 /// Get token pools from DexScreener API (consistent naming with GeckoTerminal and Raydium)
-pub async fn get_token_pools_from_dexscreener(token_address: &str) -> Result<Vec<TokenPair>, String> {
+pub async fn get_token_pools_from_dexscreener(
+    token_address: &str
+) -> Result<Vec<TokenPair>, String> {
     get_token_pairs_from_api(token_address).await
 }
 
@@ -1144,14 +1146,19 @@ pub struct DexScreenerBatchResult {
 }
 
 /// Get pools for multiple tokens in batch from DexScreener API (consistent naming)
-pub async fn get_batch_token_pools_from_dexscreener(token_addresses: &[String]) -> DexScreenerBatchResult {
+pub async fn get_batch_token_pools_from_dexscreener(
+    token_addresses: &[String]
+) -> DexScreenerBatchResult {
     let start_time = std::time::Instant::now();
 
     if is_debug_api_enabled() {
         log(
             LogTag::Api,
             "DEXSCREENER_BATCH_START",
-            &format!("🟡 Starting DexScreener batch pool fetch for {} tokens", token_addresses.len())
+            &format!(
+                "🟡 Starting DexScreener batch pool fetch for {} tokens",
+                token_addresses.len()
+            )
         );
     }
 
@@ -1173,7 +1180,11 @@ pub async fn get_batch_token_pools_from_dexscreener(token_addresses: &[String]) 
                     log(
                         LogTag::Api,
                         "DEXSCREENER_BATCH_SUCCESS",
-                        &format!("✅ DexScreener: {} found {} pools", &token_address[..8], token_pools.len())
+                        &format!(
+                            "✅ DexScreener: {} found {} pools",
+                            &token_address[..8],
+                            token_pools.len()
+                        )
                     );
                 }
                 pools.insert(token_address.clone(), token_pools);
