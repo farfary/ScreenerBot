@@ -19,6 +19,10 @@ use tokio::time::{ sleep, Duration }; // for now_or_never on shutdown future
 /// Increased to 15s to accommodate RugCheck new_tokens endpoint (~10s response time)
 const DISCOVERY_HTTP_TIMEOUT_SECS: u64 = 15;
 
+/// Delay between API calls in discovery cycle (seconds)
+/// Prevents overwhelming external APIs with rapid consecutive requests
+const DISCOVERY_API_DELAY_SECS: u64 = 3;
+
 /// Build a reqwest client with a short timeout suitable for discovery endpoints.
 fn build_discovery_client() -> Result<Client, String> {
     reqwest::Client
@@ -681,6 +685,9 @@ impl TokenDiscovery {
             }
         }
 
+        // Delay between API calls
+        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
+
         // Fetch latest boosted tokens
         match fetch_dexscreener_latest_boosted_tokens().await {
             Ok(mints) => {
@@ -699,6 +706,9 @@ impl TokenDiscovery {
                 }
             }
         }
+
+        // Delay between API calls
+        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
 
         // Fetch tokens with most active boosts
         match fetch_dexscreener_tokens_with_most_active_boosts().await {
@@ -721,7 +731,10 @@ impl TokenDiscovery {
                     }
                 }
             }
-        } // Fetch new tokens from RugCheck
+        } 
+        
+        // Delay between API calls
+        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;         // Fetch new tokens from RugCheck
         match fetch_rugcheck_new_tokens().await {
             Ok(mints) => {
                 if is_debug_discovery_enabled() {
@@ -743,6 +756,9 @@ impl TokenDiscovery {
                 }
             }
         }
+
+        // Delay between API calls
+        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
 
         // Fetch most viewed tokens from RugCheck
         match fetch_rugcheck_most_viewed().await {
@@ -767,6 +783,9 @@ impl TokenDiscovery {
             }
         }
 
+        // Delay between API calls
+        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
+
         // Fetch trending tokens from RugCheck
         match fetch_rugcheck_trending().await {
             Ok(mints) => {
@@ -790,6 +809,9 @@ impl TokenDiscovery {
             }
         }
 
+        // Delay between API calls
+        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
+
         // Fetch verified tokens from RugCheck
         match fetch_rugcheck_verified().await {
             Ok(mints) => {
@@ -812,6 +834,9 @@ impl TokenDiscovery {
                 }
             }
         }
+
+        // Delay between API calls
+        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
 
         // Fetch recently updated tokens from GeckoTerminal
         match fetch_geckoterminal_recently_updated().await {
@@ -840,6 +865,9 @@ impl TokenDiscovery {
             }
         }
 
+        // Delay between API calls
+        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
+
         // Fetch trending pools tokens from GeckoTerminal
         match fetch_geckoterminal_trending_pools().await {
             Ok(mints) => {
@@ -866,6 +894,9 @@ impl TokenDiscovery {
                 }
             }
         }
+
+        // Final delay after last API call
+        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
 
         // Deduplicate mints
         let original_count = all_mints.len();
