@@ -30,6 +30,7 @@ use crate::tokens::raydium::{
     RaydiumBatchResult,
 };
 use crate::tokens::is_system_or_stable_token;
+use crate::tokens::blacklist::{ add_no_pools_token_to_blacklist, is_token_blacklisted };
 use crate::tokens::pool_db::{
     init_pool_db_service,
     store_price_entry,
@@ -98,6 +99,11 @@ const ADHOC_UPDATE_INTERVAL_SECS: u64 = 1; // batch ad-hoc warms every 1s (faste
 
 /// Minimum liquidity (USD) required to consider a pool usable for price calculation.
 /// Lower this for testing environments if you want stats to increment sooner.
+
+/// Delay between chunk processing in triple API batch operations (in milliseconds)
+/// This prevents overwhelming APIs with too many rapid consecutive chunk requests
+/// Each chunk contains up to 30 tokens and calls all three APIs (DexScreener, GeckoTerminal, Raydium)
+const TRIPLE_API_CHUNK_DELAY_MS: u64 = 3000; // 3 seconds between chunks
 pub const MIN_POOL_LIQUIDITY_USD: f64 = 10.0;
 
 // Monitoring concurrency & performance budgeting
@@ -1329,10 +1335,11 @@ impl PoolPriceService {
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
-                "TRIPLE_API_BATCH_START",
+                "TRIPLE_API_CHUNK_START",
                 &format!(
-                    "🚀 Starting concurrent triple API batch refresh for {} tokens",
-                    token_addresses.len()
+                    "🚀 Starting concurrent triple API chunk processing for {} tokens (chunks of {})",
+                    token_addresses.len(),
+                    MAX_TOKENS_PER_BATCH
                 )
             );
         }
@@ -1342,8 +1349,9 @@ impl PoolPriceService {
         let mut raydium_successful = 0;
         let mut combined_successful = 0;
 
-        // Split tokens into batches for optimal performance (larger batches for better concurrency)
-        for chunk in token_addresses.chunks(10) {
+        // Split tokens into chunks for optimal performance (each chunk calls all three APIs)
+        // Each chunk processes up to 30 tokens through DexScreener, GeckoTerminal, and Raydium APIs
+        for chunk in token_addresses.chunks(MAX_TOKENS_PER_BATCH) {
             let chunk_start = Instant::now();
 
             // Convert chunk to Vec<String> for API calls
@@ -1420,12 +1428,12 @@ impl PoolPriceService {
             if is_debug_pool_prices_enabled() {
                 log(
                     LogTag::Pool,
-                    "TRIPLE_API_BATCH_CHUNK",
+                    "TRIPLE_API_CHUNK_COMPLETE",
                     &format!(
-                        "🚀 Processed {} tokens in {}ms: DX {}, GT {}, Ray {}, Combined {}",
+                        "🚀 Processed chunk of {} tokens in {}ms: DX {}, GT {}, Ray {}, Combined {}",
                         chunk.len(),
                         chunk_start.elapsed().as_millis(),
-                        dexscreener_successful,
+                        dx_success,
                         gt_success,
                         ray_success,
                         combined_successful
@@ -1433,16 +1441,17 @@ impl PoolPriceService {
                 );
             }
 
-            // Rate limiting between chunks
-            tokio::time::sleep(Duration::from_millis(1000)).await;
+            // Rate limiting between chunks to prevent API overload
+            // Each chunk calls all three APIs concurrently, so we need adequate spacing
+            tokio::time::sleep(Duration::from_millis(TRIPLE_API_CHUNK_DELAY_MS)).await;
         }
 
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
-                "TRIPLE_API_BATCH_COMPLETE",
+                "TRIPLE_API_CHUNK_PROCESSING_COMPLETE",
                 &format!(
-                    "🚀 Triple API batch complete: DX {}/{}, GT {}/{}, Ray {}/{}, Combined {}/{}",
+                    "🚀 Triple API chunk processing complete: DX {}/{}, GT {}/{}, Ray {}/{}, Combined {}/{}",
                     dexscreener_successful,
                     token_addresses.len(),
                     geckoterminal_successful,
@@ -3131,6 +3140,18 @@ impl PoolPriceService {
         &self,
         token_address: &str
     ) -> Result<Vec<CachedPoolInfo>, String> {
+        // Check if token is blacklisted before making any API calls
+        if is_token_blacklisted(token_address) {
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "BLACKLIST_SKIP",
+                    &format!("🚫 Skipping blacklisted token: {}", token_address)
+                );
+            }
+            return Err(format!("Token {} is blacklisted", token_address));
+        }
+
         if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
@@ -3358,6 +3379,24 @@ impl PoolPriceService {
                     format!("Raydium failed: {}, other APIs returned no pools", ray_err),
                 (None, None, None) => "All three APIs returned no pools".to_string(),
             };
+
+            // Add token to blacklist if no pools were found from any API
+            if combined_error == "All three APIs returned no pools" {
+                // Add to blacklist to prevent future unnecessary API calls
+                if add_no_pools_token_to_blacklist(token_address, "UNKNOWN") {
+                    log(
+                        LogTag::Pool,
+                        "BLACKLIST",
+                        &format!("Added {} to blacklist - no pools available", token_address)
+                    );
+                } else {
+                    log(
+                        LogTag::Pool,
+                        "WARN",
+                        &format!("Failed to add {} to blacklist", token_address)
+                    );
+                }
+            }
 
             // Handle API timeouts gracefully - this is often normal during shutdown
             if combined_error.contains("timeout") || combined_error.contains("shutting down") {
