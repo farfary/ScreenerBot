@@ -22,7 +22,6 @@ use crate::utils::*;
 use crate::wallet::get_current_wallet_status;
 // New pool price system is now integrated via background services
 
-use crate::tokens::discovery::get_discovery_stats;
 use chrono::Utc;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -211,21 +210,6 @@ pub struct PoolDatabaseDisplay {
     gap_detection: String,
 }
 
-/// Display structure for Discovery statistics (printed first, compact)
-#[derive(Tabled)]
-pub struct DiscoveryDisplay {
-    #[tabled(rename = "� Cycles")]
-    cycles: String,
-    #[tabled(rename = "📦 Proc/Add")]
-    proc_add: String,
-    #[tabled(rename = "🧹 Dedup/BL")]
-    filters: String,
-    #[tabled(rename = "📚 Sources (prof/boost/top | new/view/trend/verify)")]
-    sources: String,
-    #[tabled(rename = "⚠️ Error")]
-    error: String,
-}
-
 /// Display structure for RPC URL usage statistics
 #[derive(Tabled)]
 pub struct RpcUrlStatsDisplay {
@@ -407,7 +391,7 @@ pub async fn summary_loop(shutdown: Arc<Notify>) {
     }
 }
 
-/// Collects data and assembles a full positions + discovery + summary snapshot, printing to stdout
+/// Collects data and assembles a full positions + summary snapshot, printing to stdout
 pub async fn print_positions_snapshot() {
     let fn_start = Instant::now();
     if is_debug_summary_enabled() && !is_dashboard_enabled() {
@@ -486,67 +470,6 @@ pub async fn print_positions_snapshot() {
 
     // Build all positions output in one shot
     let mut positions_output = String::new();
-
-    // Discovery section FIRST (less important but requested first)
-    {
-        let discovery_stage_start = Instant::now();
-        if is_debug_summary_enabled() {
-            log(
-                LogTag::Summary,
-                "DEBUG",
-                "[print_positions_snapshot] Starting discovery stats stage"
-            );
-        }
-        // Add timeout protection for discovery stats
-        let ds = match tokio::time::timeout(Duration::from_secs(2), get_discovery_stats()).await {
-            Ok(stats) => stats,
-            Err(_) => {
-                log(LogTag::Summary, "WARN", "Discovery stats timeout - using default");
-                crate::tokens::discovery::DiscoveryStats::default()
-            }
-        };
-        let cycles = format!("{}", ds.total_cycles);
-        let proc_add = format!("{}/{}", ds.last_processed, ds.last_added);
-        let filters = format!("{}/{}", ds.last_deduplicated_removed, ds.last_blacklist_removed);
-        let sources = format!(
-            "{}/{}/{} | {}/{}/{}/{}",
-            ds.per_source.profiles,
-            ds.per_source.boosted,
-            ds.per_source.top_boosts,
-            ds.per_source.rug_new,
-            ds.per_source.rug_viewed,
-            ds.per_source.rug_trending,
-            ds.per_source.rug_verified
-        );
-        let error = ds.last_error.clone().unwrap_or_default();
-
-        let discovery_display = DiscoveryDisplay {
-            cycles,
-            proc_add,
-            filters,
-            sources,
-            error,
-        };
-
-        positions_output.push_str("\n🧭 Discovery\n");
-        let mut discovery_table = Table::new(vec![discovery_display]);
-        discovery_table
-            .with(Style::rounded())
-            .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-        let table_str = format!("{}\n", discovery_table);
-        positions_output.push_str(&table_str);
-        if is_debug_summary_enabled() {
-            log(
-                LogTag::Summary,
-                "DEBUG",
-                &format!(
-                    "[print_positions_snapshot] Discovery stage complete in {} ms (table bytes: {})",
-                    discovery_stage_start.elapsed().as_millis(),
-                    table_str.len()
-                )
-            );
-        }
-    }
 
     // Display bot summary section (now with owned data)
     let closed_refs: Vec<&Position> = closed_positions.iter().collect();

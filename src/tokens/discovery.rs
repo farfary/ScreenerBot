@@ -1214,7 +1214,7 @@ impl TokenDiscovery {
                     total_processed as u64
                 );
                 stats.total_added = stats.total_added.saturating_add(total_added as u64);
-                stats.per_source = cycle_counts;
+                stats.per_source = cycle_counts.clone();
                 stats.last_cycle_completed = Some(Utc::now());
             } else {
                 if is_debug_discovery_enabled() {
@@ -1222,6 +1222,15 @@ impl TokenDiscovery {
                 }
             }
         }
+
+        // Print detailed discovery cycle summary
+        print_discovery_cycle_summary(
+            total_processed,
+            total_added,
+            dedup_removed,
+            blacklisted_count,
+            &cycle_counts
+        ).await;
 
         Ok(())
     }
@@ -1262,6 +1271,151 @@ impl TokenDiscovery {
 
         log(LogTag::Discovery, "STOP", "Discovery loop stopped");
     }
+}
+
+// =============================================================================
+// DISCOVERY CYCLE SUMMARY
+// =============================================================================
+
+/// Print a detailed, colorful summary of the discovery cycle results
+async fn print_discovery_cycle_summary(
+    processed: usize,
+    added: usize,
+    dedup_removed: usize,
+    blacklist_removed: usize,
+    cycle_counts: &DiscoverySourceCounts
+) {
+    // Get current stats for context
+    let stats = get_discovery_stats().await;
+
+    // Calculate cycle duration
+    let cycle_duration = if
+        let (Some(start), Some(end)) = (stats.last_cycle_started, stats.last_cycle_completed)
+    {
+        let duration = end.signed_duration_since(start);
+        if duration.num_seconds() > 0 {
+            format!("{}s", duration.num_seconds())
+        } else {
+            format!("{}ms", duration.num_milliseconds())
+        }
+    } else {
+        "N/A".to_string()
+    };
+
+    let total_fetched =
+        cycle_counts.profiles +
+        cycle_counts.boosted +
+        cycle_counts.top_boosts +
+        cycle_counts.rug_new +
+        cycle_counts.rug_viewed +
+        cycle_counts.rug_trending +
+        cycle_counts.rug_verified +
+        cycle_counts.gecko_updated +
+        cycle_counts.gecko_trending;
+
+    let dex_total = cycle_counts.profiles + cycle_counts.boosted + cycle_counts.top_boosts;
+    let rug_total =
+        cycle_counts.rug_new +
+        cycle_counts.rug_viewed +
+        cycle_counts.rug_trending +
+        cycle_counts.rug_verified;
+    let gecko_total = cycle_counts.gecko_updated + cycle_counts.gecko_trending;
+
+    let success_rate = if stats.total_processed > 0 {
+        ((stats.total_added as f64) / (stats.total_processed as f64)) * 100.0
+    } else {
+        0.0
+    };
+
+    let error_status = if let Some(error) = &stats.last_error {
+        format!("⚠️  LAST ERROR: {}", error)
+    } else {
+        "✅ STATUS: All API endpoints successful - no errors".to_string()
+    };
+
+    let timing_info = if let Some(completed) = stats.last_cycle_completed {
+        let now = Utc::now();
+        let time_since = now.signed_duration_since(completed);
+        format!(
+            "⏰ TIMING: Completed {} | Next cycle in ~{}s",
+            completed.format("%H:%M:%S UTC"),
+            DISCOVERY_CYCLE_SECONDS.saturating_sub(time_since.num_seconds() as u64)
+        )
+    } else {
+        "⏰ TIMING: N/A".to_string()
+    };
+
+    let filtering_info = if dedup_removed > 0 || blacklist_removed > 0 {
+        let mut filter_parts = Vec::new();
+        if dedup_removed > 0 {
+            filter_parts.push(format!("♻️  {} duplicates", dedup_removed));
+        }
+        if blacklist_removed > 0 {
+            filter_parts.push(format!("🚫 {} blacklisted", blacklist_removed));
+        }
+        format!("🧹 FILTERING: Removed {}", filter_parts.join(" + "))
+    } else {
+        "🧹 FILTERING: No tokens filtered".to_string()
+    };
+
+    let results_emoji = if added > 0 { "🎉" } else { "ℹ️" };
+    let results_text = if added > 0 {
+        format!("DISCOVERED {} NEW VALID TOKENS (no duplicates/blacklisted)!", added)
+    } else {
+        "NO NEW TOKENS: All fetched tokens already exist in database".to_string()
+    };
+
+    // Single comprehensive log call with all information
+    log(
+        LogTag::Discovery,
+        "SUMMARY",
+        &format!(
+            "═══════════════════════════════════════════════════════════════\n\
+        🔍 DISCOVERY CYCLE COMPLETE - Comprehensive Token Sweep\n\
+        ═══════════════════════════════════════════════════════════════\n\
+        📊 Cycle #{:<3} | Duration: {} | Total Lifetime: {} cycles\n\
+        🎯 RESULTS: Processed {} | 🆕 NEW VALID: {} | Filtered out: {}\n\
+        {} {}\n\
+        \n\
+        📚 API SOURCE BREAKDOWN ({} total from 9 endpoints):\n\
+        🔸 DexScreener: Profiles({}) + Boosted({}) + TopBoosts({}) = {}\n\
+        🔸 RugCheck: New({}) + Viewed({}) + Trending({}) + Verified({}) = {}\n\
+        🔸 GeckoTerminal: Updated({}) + TrendingPools({}) = {}\n\
+        \n\
+        {}\n\
+        {}\n\
+        📈 LIFETIME STATS: Processed {} | 🆕 Total Valid Added {} | Success Rate {:.1}%\n\
+        {}\n\
+        ═══════════════════════════════════════════════════════════════",
+            stats.total_cycles,
+            cycle_duration,
+            stats.total_cycles,
+            processed,
+            added,
+            dedup_removed + blacklist_removed,
+            results_emoji,
+            results_text,
+            total_fetched,
+            cycle_counts.profiles,
+            cycle_counts.boosted,
+            cycle_counts.top_boosts,
+            dex_total,
+            cycle_counts.rug_new,
+            cycle_counts.rug_viewed,
+            cycle_counts.rug_trending,
+            cycle_counts.rug_verified,
+            rug_total,
+            cycle_counts.gecko_updated,
+            cycle_counts.gecko_trending,
+            gecko_total,
+            filtering_info,
+            error_status,
+            stats.total_processed,
+            stats.total_added,
+            success_rate,
+            timing_info
+        )
+    );
 }
 
 // =============================================================================
