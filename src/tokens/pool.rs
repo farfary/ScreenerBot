@@ -3724,7 +3724,7 @@ impl PoolPriceService {
         // Invalid pool blacklist stats
         let (blacklist_count, blacklist_examples) = self.get_invalid_pool_blacklist_stats().await;
 
-        // Rates
+        // Calculate rates and performance metrics
         let success_rate = if stats.total_price_requests > 0 {
             ((stats.successful_calculations as f64) * 100.0) / (stats.total_price_requests as f64)
         } else {
@@ -3736,49 +3736,110 @@ impl PoolPriceService {
             0.0
         };
 
-        // Compose single summary string
-        let summary = format!(
-            "\
-Pool State Summary\n\
-  caches: pools={}, prices={}, availability={}\n\
-  history: tokens={}, entries={}\n\
-  requests: total={}, success={}, fail={}, success_rate={:.1}%, cache_hits={}, cache_hit_rate={:.1}%\n\
-  compute: blockchain={}, api_fallbacks={}\n\
-  monitor: cycles={}, last_tokens={}, total_tokens={}, avg_tokens_per_cycle={:.1}, last_ms={:.1}, total_ms={:.1}, avg_ms={:.1}\n\
-  watch: size={}, never_updated={}, priority_size={}\n\
-  blacklist: invalid_pools={} ({})\n\
-  unsupported_programs_count={}\n\
-  unsupported_programs=[{}]",
-            pool_cache_len,
-            price_cache_len,
-            availability_cache_len,
-            stats.tokens_with_price_history,
-            stats.total_price_history_entries,
-            stats.total_price_requests,
-            stats.successful_calculations,
-            stats.failed_calculations,
-            success_rate,
-            stats.cache_hits,
-            cache_hit_rate,
-            stats.blockchain_calculations,
-            stats.api_fallbacks,
-            stats.monitoring_cycles,
-            stats.last_cycle_tokens,
-            stats.total_cycle_tokens,
-            stats.avg_tokens_per_cycle,
-            stats.last_cycle_duration_ms,
-            stats.total_cycle_duration_ms,
-            stats.avg_cycle_duration_ms,
-            watch_total,
-            watch_never_updated,
-            priority_size,
-            blacklist_count,
-            blacklist_examples.join(", "),
-            unsupported_list.len(),
-            unsupported_list.join(", ")
-        );
+        let total_cache_entries = pool_cache_len + price_cache_len + availability_cache_len;
+        let total_failed = stats.failed_calculations;
+        let never_checked_pct = if watch_total > 0 {
+            ((watch_never_updated as f64) / (watch_total as f64)) * 100.0
+        } else {
+            0.0
+        };
 
-        log(LogTag::Pool, "STATE_SUMMARY", &summary);
+        // Create performance indicators
+        let performance_emoji = if success_rate >= 90.0 {
+            "🟢"
+        } else if success_rate >= 70.0 {
+            "🟡"
+        } else {
+            "🔴"
+        };
+        let cache_emoji = if cache_hit_rate >= 50.0 {
+            "⚡"
+        } else if cache_hit_rate >= 20.0 {
+            "🔋"
+        } else {
+            "💾"
+        };
+
+        let blacklist_status = if blacklist_count > 0 {
+            format!("⚠️  {} invalid pools filtered", blacklist_count)
+        } else {
+            "✅ No invalid pools detected".to_string()
+        };
+
+        let programs_status = if unsupported_list.is_empty() {
+            "✅ All pool programs supported".to_string()
+        } else {
+            format!(
+                "🚫 {} unsupported programs: {}",
+                unsupported_list.len(),
+                unsupported_list.iter().take(3).cloned().collect::<Vec<_>>().join(", ")
+            )
+        };
+
+        // Single comprehensive log call with all information
+        log(
+            LogTag::Pool,
+            "SUMMARY",
+            &format!(
+                "═══════════════════════════════════════════════════════════════\n\
+            🏊 POOL SERVICE STATE - Comprehensive Price & Cache System\n\
+            ═══════════════════════════════════════════════════════════════\n\
+            📊 Cycle #{:<3} | Active Tokens: {} | Total Cache: {} entries\n\
+            {} PERFORMANCE: {:.1}% success | {} Cache Hit: {:.1}%\n\
+            \n\
+            💾 MEMORY CACHE BREAKDOWN ({} total entries):\n\
+            🔸 Pools: {} cached | Prices: {} cached | Availability: {} tokens\n\
+            🔸 History: {} tokens tracked | {} price history entries\n\
+            \n\
+            📈 REQUEST STATISTICS (Lifecycle totals):\n\
+            🔸 Total Requests: {} | ✅ Success: {} | ❌ Failed: {}\n\
+            🔸 💻 Blockchain Direct: {} | 🌐 API Fallbacks: {} | {} Cache Hits: {}\n\
+            \n\
+            ⚙️  MONITORING PERFORMANCE:\n\
+            🔸 Cycles: {} | Last Tokens: {} | Avg/Cycle: {:.1} tokens\n\
+            🔸 Timing: Last {:.1}ms | Avg {:.1}ms | Total {:.1}ms\n\
+            \n\
+            📡 WATCHLIST STATUS:\n\
+            🔸 Total Watched: {} | 🎯 Priority: {} | ⏸️  Never Updated: {} ({:.1}%)\n\
+            \n\
+            🛡️  SECURITY & FILTERING:\n\
+            🔸 {}\n\
+            🔸 {}\n\
+            ═══════════════════════════════════════════════════════════════",
+                stats.monitoring_cycles,
+                watch_total,
+                total_cache_entries,
+                performance_emoji,
+                success_rate,
+                cache_emoji,
+                cache_hit_rate,
+                total_cache_entries,
+                pool_cache_len,
+                price_cache_len,
+                availability_cache_len,
+                stats.tokens_with_price_history,
+                stats.total_price_history_entries,
+                stats.total_price_requests,
+                stats.successful_calculations,
+                total_failed,
+                stats.blockchain_calculations,
+                stats.api_fallbacks,
+                cache_emoji,
+                stats.cache_hits,
+                stats.monitoring_cycles,
+                stats.last_cycle_tokens,
+                stats.avg_tokens_per_cycle,
+                stats.last_cycle_duration_ms,
+                stats.avg_cycle_duration_ms,
+                stats.total_cycle_duration_ms,
+                watch_total,
+                priority_size,
+                watch_never_updated,
+                never_checked_pct,
+                blacklist_status,
+                programs_status
+            )
+        );
     }
 
     /// Record a price request (internal tracking)
