@@ -1,13 +1,38 @@
 use crate::global::is_debug_pool_calculator_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
+
+/// Decode token account amount from account data
+fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
+    if data.len() < 72 {
+        return Err("Invalid token account data length".to_string());
+    }
+
+    // Token account layout: mint(32) + owner(32) + amount(8) + ...
+    let amount_bytes = &data[64..72];
+    Ok(u64::from_le_bytes(amount_bytes.try_into().map_err(|_| "Invalid amount bytes")?))
+}
 
 /// Pool decoder trait for different pool types
 pub trait PoolDecoder {
     fn decode_pool_data(&self, data: &[u8]) -> Result<DecodedPoolData, String>;
     fn get_reserve_accounts(&self, pool_address: &Pubkey) -> Vec<Pubkey>;
+
+    /// Extract vault/reserve addresses from pool account data without full decoding
+    /// This allows fetching vault accounts in the same batch as pool accounts
+    fn extract_vault_addresses(&self, data: &[u8]) -> Result<Vec<Pubkey>, String>;
+
+    /// Check if this pool type needs additional vault/reserve account fetches
+    fn needs_vault_accounts(&self) -> bool;
+
+    /// Decode pool data with pre-fetched vault account data
+    fn decode_pool_data_with_vaults(
+        &self,
+        pool_data: &[u8],
+        vault_data: &[Option<Vec<u8>>]
+    ) -> Result<DecodedPoolData, String>;
 }
 
 /// Decoded pool data structure
@@ -57,9 +82,7 @@ impl PoolDecoder for RaydiumCpmmDecoder {
             return Err("Invalid pool data: insufficient data for amm_config".to_string());
         }
         let amm_config = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid amm_config pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid amm_config pubkey")?
         );
         offset += 32;
 
@@ -71,9 +94,7 @@ impl PoolDecoder for RaydiumCpmmDecoder {
             return Err("Invalid pool data: insufficient data for token_0_vault".to_string());
         }
         let token_0_vault = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_0_vault pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_0_vault pubkey")?
         );
         offset += 32;
 
@@ -82,9 +103,7 @@ impl PoolDecoder for RaydiumCpmmDecoder {
             return Err("Invalid pool data: insufficient data for token_1_vault".to_string());
         }
         let token_1_vault = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_1_vault pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_1_vault pubkey")?
         );
         offset += 32;
 
@@ -96,9 +115,7 @@ impl PoolDecoder for RaydiumCpmmDecoder {
             return Err("Invalid pool data: insufficient data for token_0_mint".to_string());
         }
         let token_0_mint = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_0_mint pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_0_mint pubkey")?
         );
         offset += 32;
 
@@ -107,9 +124,7 @@ impl PoolDecoder for RaydiumCpmmDecoder {
             return Err("Invalid pool data: insufficient data for token_1_mint".to_string());
         }
         let token_1_mint = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_1_mint pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_1_mint pubkey")?
         );
         offset += 32;
 
@@ -155,9 +170,7 @@ impl PoolDecoder for RaydiumCpmmDecoder {
             return Err("Invalid pool data: insufficient data for token_a_reserve".to_string());
         }
         let token_a_reserve = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid token_a_reserve")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid token_a_reserve")?
         );
         offset += 8;
 
@@ -166,9 +179,7 @@ impl PoolDecoder for RaydiumCpmmDecoder {
             return Err("Invalid pool data: insufficient data for token_b_reserve".to_string());
         }
         let token_b_reserve = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid token_b_reserve")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid token_b_reserve")?
         );
         offset += 8;
 
@@ -204,8 +215,11 @@ impl PoolDecoder for RaydiumCpmmDecoder {
                 "DEBUG",
                 &format!(
                     "Decoded Raydium CPMM: token_0={}, token_1={}, reserve_0={}, reserve_1={}",
-                    token_0_mint, token_1_mint, token_a_reserve, token_b_reserve
-                ),
+                    token_0_mint,
+                    token_1_mint,
+                    token_a_reserve,
+                    token_b_reserve
+                )
             );
         }
 
@@ -224,6 +238,57 @@ impl PoolDecoder for RaydiumCpmmDecoder {
         // For Raydium CPMM, we need to fetch the pool data to get vault addresses
         // This is a placeholder - in practice, you'd need to fetch the pool account data
         vec![]
+    }
+
+    fn extract_vault_addresses(&self, data: &[u8]) -> Result<Vec<Pubkey>, String> {
+        if data.len() < 8 + 32 * 4 {
+            return Err("Not enough data to extract vault addresses".to_string());
+        }
+
+        let mut offset = 8; // Skip discriminator
+        offset += 32; // Skip amm_config
+        offset += 32; // Skip pool_creator
+
+        // Read token_0_vault (32 bytes)
+        let token_0_vault = Pubkey::new_from_array(
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_0_vault")?
+        );
+        offset += 32;
+
+        // Read token_1_vault (32 bytes)
+        let token_1_vault = Pubkey::new_from_array(
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_1_vault")?
+        );
+
+        Ok(vec![token_0_vault, token_1_vault])
+    }
+
+    fn needs_vault_accounts(&self) -> bool {
+        true // Raydium CPMM needs vault account data for reserves
+    }
+
+    fn decode_pool_data_with_vaults(
+        &self,
+        pool_data: &[u8],
+        vault_data: &[Option<Vec<u8>>]
+    ) -> Result<DecodedPoolData, String> {
+        // First decode basic pool structure
+        let mut pool_info = self.decode_pool_data(pool_data)?;
+
+        // If vault data is provided, use it to get accurate reserves
+        if vault_data.len() >= 2 {
+            if let (Some(vault_0_data), Some(vault_1_data)) = (&vault_data[0], &vault_data[1]) {
+                // Decode token account amounts from vault data
+                let vault_0_balance = decode_token_account_amount(vault_0_data)?;
+                let vault_1_balance = decode_token_account_amount(vault_1_data)?;
+
+                // Update reserves with vault balances
+                pool_info.token_a_reserve = vault_0_balance;
+                pool_info.token_b_reserve = vault_1_balance;
+            }
+        }
+
+        Ok(pool_info)
     }
 }
 
@@ -251,9 +316,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for status".to_string());
         }
         let _status = u32::from_le_bytes(
-            data[offset..offset + 4]
-                .try_into()
-                .map_err(|_| "Invalid status")?,
+            data[offset..offset + 4].try_into().map_err(|_| "Invalid status")?
         );
         offset += 4;
 
@@ -262,9 +325,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for nonce".to_string());
         }
         let _nonce = u32::from_le_bytes(
-            data[offset..offset + 4]
-                .try_into()
-                .map_err(|_| "Invalid nonce")?,
+            data[offset..offset + 4].try_into().map_err(|_| "Invalid nonce")?
         );
         offset += 4;
 
@@ -273,9 +334,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for order_num".to_string());
         }
         let _order_num = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid order_num")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid order_num")?
         );
         offset += 8;
 
@@ -284,9 +343,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for depth".to_string());
         }
         let _depth = u32::from_le_bytes(
-            data[offset..offset + 4]
-                .try_into()
-                .map_err(|_| "Invalid depth")?,
+            data[offset..offset + 4].try_into().map_err(|_| "Invalid depth")?
         );
         offset += 4;
 
@@ -323,9 +380,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for min_size".to_string());
         }
         let _min_size = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid min_size")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid min_size")?
         );
         offset += 8;
 
@@ -334,9 +389,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for vol_max_cut_ratio".to_string());
         }
         let _vol_max_cut_ratio = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid vol_max_cut_ratio")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid vol_max_cut_ratio")?
         );
         offset += 8;
 
@@ -345,9 +398,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for amount_wave_ratio".to_string());
         }
         let _amount_wave_ratio = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid amount_wave_ratio")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid amount_wave_ratio")?
         );
         offset += 8;
 
@@ -356,9 +407,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for coin_lot_size".to_string());
         }
         let _coin_lot_size = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid coin_lot_size")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid coin_lot_size")?
         );
         offset += 8;
 
@@ -367,35 +416,25 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for pc_lot_size".to_string());
         }
         let _pc_lot_size = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid pc_lot_size")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid pc_lot_size")?
         );
         offset += 8;
 
         // Read min_price_multiplier (8 bytes)
         if offset + 8 > data.len() {
-            return Err(
-                "Invalid pool data: insufficient data for min_price_multiplier".to_string(),
-            );
+            return Err("Invalid pool data: insufficient data for min_price_multiplier".to_string());
         }
         let _min_price_multiplier = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid min_price_multiplier")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid min_price_multiplier")?
         );
         offset += 8;
 
         // Read max_price_multiplier (8 bytes)
         if offset + 8 > data.len() {
-            return Err(
-                "Invalid pool data: insufficient data for max_price_multiplier".to_string(),
-            );
+            return Err("Invalid pool data: insufficient data for max_price_multiplier".to_string());
         }
         let _max_price_multiplier = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid max_price_multiplier")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid max_price_multiplier")?
         );
         offset += 8;
 
@@ -404,9 +443,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for sys_decimal_value".to_string());
         }
         let _sys_decimal_value = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid sys_decimal_value")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid sys_decimal_value")?
         );
         offset += 8;
 
@@ -415,9 +452,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for fees".to_string());
         }
         let _fees = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid fees")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid fees")?
         );
         offset += 8;
 
@@ -426,9 +461,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for out_put_data".to_string());
         }
         let _out_put_data = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid out_put_data")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid out_put_data")?
         );
         offset += 8;
 
@@ -437,9 +470,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for token_0_mint".to_string());
         }
         let token_0_mint = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_0_mint pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_0_mint pubkey")?
         );
         offset += 32;
 
@@ -448,9 +479,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for token_1_mint".to_string());
         }
         let token_1_mint = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_1_mint pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_1_mint pubkey")?
         );
         offset += 32;
 
@@ -459,9 +488,7 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for token_0_vault".to_string());
         }
         let _token_0_vault = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_0_vault pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_0_vault pubkey")?
         );
         offset += 32;
 
@@ -470,35 +497,25 @@ impl PoolDecoder for RaydiumLegacyDecoder {
             return Err("Invalid pool data: insufficient data for token_1_vault".to_string());
         }
         let _token_1_vault = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_1_vault pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_1_vault pubkey")?
         );
         offset += 32;
 
         // Read token_0_vault_amount (8 bytes)
         if offset + 8 > data.len() {
-            return Err(
-                "Invalid pool data: insufficient data for token_0_vault_amount".to_string(),
-            );
+            return Err("Invalid pool data: insufficient data for token_0_vault_amount".to_string());
         }
         let token_0_reserve = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid token_0_vault_amount")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid token_0_vault_amount")?
         );
         offset += 8;
 
         // Read token_1_vault_amount (8 bytes)
         if offset + 8 > data.len() {
-            return Err(
-                "Invalid pool data: insufficient data for token_1_vault_amount".to_string(),
-            );
+            return Err("Invalid pool data: insufficient data for token_1_vault_amount".to_string());
         }
         let token_1_reserve = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid token_1_vault_amount")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid token_1_vault_amount")?
         );
         offset += 8;
 
@@ -508,8 +525,11 @@ impl PoolDecoder for RaydiumLegacyDecoder {
                 "DEBUG",
                 &format!(
                     "Decoded Raydium Legacy: token_0={}, token_1={}, reserve_0={}, reserve_1={}",
-                    token_0_mint, token_1_mint, token_0_reserve, token_1_reserve
-                ),
+                    token_0_mint,
+                    token_1_mint,
+                    token_0_reserve,
+                    token_1_reserve
+                )
             );
         }
 
@@ -528,6 +548,30 @@ impl PoolDecoder for RaydiumLegacyDecoder {
         // For Raydium Legacy, we need to fetch the pool data to get vault addresses
         // This is a placeholder - in practice, you'd need to fetch the pool account data
         vec![]
+    }
+
+    fn extract_vault_addresses(&self, data: &[u8]) -> Result<Vec<Pubkey>, String> {
+        // Raydium Legacy has vault addresses at different offsets
+        // This is a simplified implementation - full implementation would need actual offsets
+        if data.len() < 200 {
+            return Err("Not enough data to extract vault addresses".to_string());
+        }
+
+        // For now, return empty vector - would need actual Legacy AMM structure
+        Ok(vec![])
+    }
+
+    fn needs_vault_accounts(&self) -> bool {
+        true // Raydium Legacy needs vault account data for reserves
+    }
+
+    fn decode_pool_data_with_vaults(
+        &self,
+        pool_data: &[u8],
+        _vault_data: &[Option<Vec<u8>>]
+    ) -> Result<DecodedPoolData, String> {
+        // For now, just use the basic decode - vault integration would need actual implementation
+        self.decode_pool_data(pool_data)
     }
 }
 
@@ -555,9 +599,7 @@ impl PoolDecoder for MeteoraDbDecoder {
             return Err("Invalid pool data: insufficient data for bin_step".to_string());
         }
         let _bin_step = u16::from_le_bytes(
-            data[offset..offset + 2]
-                .try_into()
-                .map_err(|_| "Invalid bin_step")?,
+            data[offset..offset + 2].try_into().map_err(|_| "Invalid bin_step")?
         );
         offset += 2;
 
@@ -569,9 +611,7 @@ impl PoolDecoder for MeteoraDbDecoder {
             return Err("Invalid pool data: insufficient data for token_0_mint".to_string());
         }
         let token_0_mint = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_0_mint pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_0_mint pubkey")?
         );
         offset += 32;
 
@@ -580,9 +620,7 @@ impl PoolDecoder for MeteoraDbDecoder {
             return Err("Invalid pool data: insufficient data for token_1_mint".to_string());
         }
         let token_1_mint = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_1_mint pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_1_mint pubkey")?
         );
         offset += 32;
 
@@ -591,9 +629,7 @@ impl PoolDecoder for MeteoraDbDecoder {
             return Err("Invalid pool data: insufficient data for token_0_vault".to_string());
         }
         let _token_0_vault = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_0_vault pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_0_vault pubkey")?
         );
         offset += 32;
 
@@ -602,9 +638,7 @@ impl PoolDecoder for MeteoraDbDecoder {
             return Err("Invalid pool data: insufficient data for token_1_vault".to_string());
         }
         let _token_1_vault = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_1_vault pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_1_vault pubkey")?
         );
         offset += 32;
 
@@ -613,9 +647,7 @@ impl PoolDecoder for MeteoraDbDecoder {
             return Err("Invalid pool data: insufficient data for oracle".to_string());
         }
         let _oracle = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid oracle pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid oracle pubkey")?
         );
         offset += 32;
 
@@ -634,9 +666,7 @@ impl PoolDecoder for MeteoraDbDecoder {
             return Err("Invalid pool data: insufficient data for active_id".to_string());
         }
         let _active_id = u32::from_le_bytes(
-            data[offset..offset + 4]
-                .try_into()
-                .map_err(|_| "Invalid active_id")?,
+            data[offset..offset + 4].try_into().map_err(|_| "Invalid active_id")?
         );
         offset += 4;
 
@@ -669,9 +699,7 @@ impl PoolDecoder for MeteoraDbDecoder {
             return Err("Invalid pool data: insufficient data for token_0_reserve".to_string());
         }
         let token_0_reserve = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid token_0_reserve")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid token_0_reserve")?
         );
         offset += 8;
 
@@ -680,9 +708,7 @@ impl PoolDecoder for MeteoraDbDecoder {
             return Err("Invalid pool data: insufficient data for token_1_reserve".to_string());
         }
         let token_1_reserve = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid token_1_reserve")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid token_1_reserve")?
         );
         offset += 8;
 
@@ -692,8 +718,11 @@ impl PoolDecoder for MeteoraDbDecoder {
                 "DEBUG",
                 &format!(
                     "Decoded Meteora DLMM: token_0={}, token_1={}, reserve_0={}, reserve_1={}",
-                    token_0_mint, token_1_mint, token_0_reserve, token_1_reserve
-                ),
+                    token_0_mint,
+                    token_1_mint,
+                    token_0_reserve,
+                    token_1_reserve
+                )
             );
         }
 
@@ -712,6 +741,28 @@ impl PoolDecoder for MeteoraDbDecoder {
         // For Meteora DLMM, we need to fetch the pool data to get vault addresses
         // This is a placeholder - in practice, you'd need to fetch the pool account data
         vec![]
+    }
+
+    fn extract_vault_addresses(&self, data: &[u8]) -> Result<Vec<Pubkey>, String> {
+        // Meteora DLMM has reserve addresses in the pool data
+        if data.len() < 200 {
+            return Err("Not enough data to extract vault addresses".to_string());
+        }
+        // Placeholder - would need actual DLMM structure parsing
+        Ok(vec![])
+    }
+
+    fn needs_vault_accounts(&self) -> bool {
+        true // Meteora DLMM needs reserve account data
+    }
+
+    fn decode_pool_data_with_vaults(
+        &self,
+        pool_data: &[u8],
+        _vault_data: &[Option<Vec<u8>>]
+    ) -> Result<DecodedPoolData, String> {
+        // For now, just use the basic decode
+        self.decode_pool_data(pool_data)
     }
 }
 
@@ -749,9 +800,7 @@ impl PoolDecoder for MeteoraDammDecoder {
             return Err("Invalid pool data: insufficient data for token_0_mint".to_string());
         }
         let token_0_mint = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_0_mint pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_0_mint pubkey")?
         );
         offset += 32;
 
@@ -760,9 +809,7 @@ impl PoolDecoder for MeteoraDammDecoder {
             return Err("Invalid pool data: insufficient data for token_1_mint".to_string());
         }
         let token_1_mint = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_1_mint pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_1_mint pubkey")?
         );
         offset += 32;
 
@@ -771,9 +818,7 @@ impl PoolDecoder for MeteoraDammDecoder {
             return Err("Invalid pool data: insufficient data for token_0_vault".to_string());
         }
         let _token_0_vault = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_0_vault pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_0_vault pubkey")?
         );
         offset += 32;
 
@@ -782,9 +827,7 @@ impl PoolDecoder for MeteoraDammDecoder {
             return Err("Invalid pool data: insufficient data for token_1_vault".to_string());
         }
         let _token_1_vault = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_1_vault pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_1_vault pubkey")?
         );
         offset += 32;
 
@@ -807,9 +850,7 @@ impl PoolDecoder for MeteoraDammDecoder {
             return Err("Invalid pool data: insufficient data for token_0_reserve".to_string());
         }
         let token_0_reserve = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid token_0_reserve")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid token_0_reserve")?
         );
         offset += 8;
 
@@ -818,9 +859,7 @@ impl PoolDecoder for MeteoraDammDecoder {
             return Err("Invalid pool data: insufficient data for token_1_reserve".to_string());
         }
         let token_1_reserve = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid token_1_reserve")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid token_1_reserve")?
         );
         offset += 8;
 
@@ -830,8 +869,11 @@ impl PoolDecoder for MeteoraDammDecoder {
                 "DEBUG",
                 &format!(
                     "Decoded Meteora DAMM: token_0={}, token_1={}, reserve_0={}, reserve_1={}",
-                    token_0_mint, token_1_mint, token_0_reserve, token_1_reserve
-                ),
+                    token_0_mint,
+                    token_1_mint,
+                    token_0_reserve,
+                    token_1_reserve
+                )
             );
         }
 
@@ -850,6 +892,24 @@ impl PoolDecoder for MeteoraDammDecoder {
         // For Meteora DAMM, we need to fetch the pool data to get vault addresses
         // This is a placeholder - in practice, you'd need to fetch the pool account data
         vec![]
+    }
+
+    fn extract_vault_addresses(&self, _data: &[u8]) -> Result<Vec<Pubkey>, String> {
+        // Meteora DAMM has reserves embedded in the pool account
+        Ok(vec![]) // No additional vault accounts needed
+    }
+
+    fn needs_vault_accounts(&self) -> bool {
+        false // Meteora DAMM has reserves in main pool account
+    }
+
+    fn decode_pool_data_with_vaults(
+        &self,
+        pool_data: &[u8],
+        _vault_data: &[Option<Vec<u8>>]
+    ) -> Result<DecodedPoolData, String> {
+        // Just use basic decode since no vault accounts needed
+        self.decode_pool_data(pool_data)
     }
 }
 
@@ -877,9 +937,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for whirlpools_config".to_string());
         }
         let _whirlpools_config = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid whirlpools_config pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid whirlpools_config pubkey")?
         );
         offset += 32;
 
@@ -895,9 +953,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for tick_spacing".to_string());
         }
         let _tick_spacing = u16::from_le_bytes(
-            data[offset..offset + 2]
-                .try_into()
-                .map_err(|_| "Invalid tick_spacing")?,
+            data[offset..offset + 2].try_into().map_err(|_| "Invalid tick_spacing")?
         );
         offset += 2;
 
@@ -913,9 +969,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for fee_rate".to_string());
         }
         let _fee_rate = u16::from_le_bytes(
-            data[offset..offset + 2]
-                .try_into()
-                .map_err(|_| "Invalid fee_rate")?,
+            data[offset..offset + 2].try_into().map_err(|_| "Invalid fee_rate")?
         );
         offset += 2;
 
@@ -924,9 +978,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for protocol_fee_rate".to_string());
         }
         let _protocol_fee_rate = u16::from_le_bytes(
-            data[offset..offset + 2]
-                .try_into()
-                .map_err(|_| "Invalid protocol_fee_rate")?,
+            data[offset..offset + 2].try_into().map_err(|_| "Invalid protocol_fee_rate")?
         );
         offset += 2;
 
@@ -935,9 +987,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for liquidity".to_string());
         }
         let _liquidity = u128::from_le_bytes(
-            data[offset..offset + 16]
-                .try_into()
-                .map_err(|_| "Invalid liquidity")?,
+            data[offset..offset + 16].try_into().map_err(|_| "Invalid liquidity")?
         );
         offset += 16;
 
@@ -946,9 +996,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for sqrt_price".to_string());
         }
         let _sqrt_price = u128::from_le_bytes(
-            data[offset..offset + 16]
-                .try_into()
-                .map_err(|_| "Invalid sqrt_price")?,
+            data[offset..offset + 16].try_into().map_err(|_| "Invalid sqrt_price")?
         );
         offset += 16;
 
@@ -957,9 +1005,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for tick_current_index".to_string());
         }
         let _tick_current_index = i32::from_le_bytes(
-            data[offset..offset + 4]
-                .try_into()
-                .map_err(|_| "Invalid tick_current_index")?,
+            data[offset..offset + 4].try_into().map_err(|_| "Invalid tick_current_index")?
         );
         offset += 4;
 
@@ -968,9 +1014,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for protocol_fee_owed_a".to_string());
         }
         let _protocol_fee_owed_a = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid protocol_fee_owed_a")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid protocol_fee_owed_a")?
         );
         offset += 8;
 
@@ -979,9 +1023,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for protocol_fee_owed_b".to_string());
         }
         let _protocol_fee_owed_b = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid protocol_fee_owed_b")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid protocol_fee_owed_b")?
         );
         offset += 8;
 
@@ -990,9 +1032,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for token_mint_a".to_string());
         }
         let token_0_mint = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_mint_a pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_mint_a pubkey")?
         );
         offset += 32;
 
@@ -1001,9 +1041,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for token_vault_a".to_string());
         }
         let _token_vault_a = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_vault_a pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_vault_a pubkey")?
         );
         offset += 32;
 
@@ -1012,9 +1050,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for fee_growth_global_a".to_string());
         }
         let _fee_growth_global_a = u128::from_le_bytes(
-            data[offset..offset + 16]
-                .try_into()
-                .map_err(|_| "Invalid fee_growth_global_a")?,
+            data[offset..offset + 16].try_into().map_err(|_| "Invalid fee_growth_global_a")?
         );
         offset += 16;
 
@@ -1023,9 +1059,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for token_mint_b".to_string());
         }
         let token_1_mint = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_mint_b pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_mint_b pubkey")?
         );
         offset += 32;
 
@@ -1034,9 +1068,7 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for token_vault_b".to_string());
         }
         let _token_vault_b = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_vault_b pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_vault_b pubkey")?
         );
         offset += 32;
 
@@ -1045,23 +1077,20 @@ impl PoolDecoder for OrcaDecoder {
             return Err("Invalid pool data: insufficient data for fee_growth_global_b".to_string());
         }
         let _fee_growth_global_b = u128::from_le_bytes(
-            data[offset..offset + 16]
-                .try_into()
-                .map_err(|_| "Invalid fee_growth_global_b")?,
+            data[offset..offset + 16].try_into().map_err(|_| "Invalid fee_growth_global_b")?
         );
         offset += 16;
 
         // Read reward_last_updated_timestamp (8 bytes)
         if offset + 8 > data.len() {
             return Err(
-                "Invalid pool data: insufficient data for reward_last_updated_timestamp"
-                    .to_string(),
+                "Invalid pool data: insufficient data for reward_last_updated_timestamp".to_string()
             );
         }
         let _reward_last_updated_timestamp = u64::from_le_bytes(
             data[offset..offset + 8]
                 .try_into()
-                .map_err(|_| "Invalid reward_last_updated_timestamp")?,
+                .map_err(|_| "Invalid reward_last_updated_timestamp")?
         );
         offset += 8;
 
@@ -1078,7 +1107,8 @@ impl PoolDecoder for OrcaDecoder {
                 "DEBUG",
                 &format!(
                     "Decoded Orca Whirlpool: token_0={}, token_1={} (reserves need to be fetched from vaults)",
-                    token_0_mint, token_1_mint
+                    token_0_mint,
+                    token_1_mint
                 )
             );
         }
@@ -1098,6 +1128,28 @@ impl PoolDecoder for OrcaDecoder {
         // For Orca, we need to fetch the pool data to get vault addresses
         // This is a placeholder - in practice, you'd need to fetch the pool account data
         vec![]
+    }
+
+    fn extract_vault_addresses(&self, data: &[u8]) -> Result<Vec<Pubkey>, String> {
+        // Orca Whirlpool has vault addresses in the pool data
+        if data.len() < 200 {
+            return Err("Not enough data to extract vault addresses".to_string());
+        }
+        // Placeholder - would need actual Whirlpool structure parsing
+        Ok(vec![])
+    }
+
+    fn needs_vault_accounts(&self) -> bool {
+        true // Orca Whirlpool needs vault account data
+    }
+
+    fn decode_pool_data_with_vaults(
+        &self,
+        pool_data: &[u8],
+        _vault_data: &[Option<Vec<u8>>]
+    ) -> Result<DecodedPoolData, String> {
+        // For now, just use the basic decode
+        self.decode_pool_data(pool_data)
     }
 }
 
@@ -1122,27 +1174,21 @@ impl PoolDecoder for PumpFunDecoder {
 
         // Read virtual_sol_reserves (8 bytes)
         if offset + 8 > data.len() {
-            return Err(
-                "Invalid pool data: insufficient data for virtual_sol_reserves".to_string(),
-            );
+            return Err("Invalid pool data: insufficient data for virtual_sol_reserves".to_string());
         }
         let _virtual_sol_reserves = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid virtual_sol_reserves")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid virtual_sol_reserves")?
         );
         offset += 8;
 
         // Read virtual_token_reserves (8 bytes)
         if offset + 8 > data.len() {
             return Err(
-                "Invalid pool data: insufficient data for virtual_token_reserves".to_string(),
+                "Invalid pool data: insufficient data for virtual_token_reserves".to_string()
             );
         }
         let _virtual_token_reserves = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid virtual_token_reserves")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid virtual_token_reserves")?
         );
         offset += 8;
 
@@ -1151,9 +1197,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for real_sol_reserves".to_string());
         }
         let token_1_reserve = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid real_sol_reserves")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid real_sol_reserves")?
         );
         offset += 8;
 
@@ -1162,9 +1206,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for real_token_reserves".to_string());
         }
         let token_0_reserve = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid real_token_reserves")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid real_token_reserves")?
         );
         offset += 8;
 
@@ -1173,22 +1215,20 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for bonding_curve".to_string());
         }
         let _bonding_curve = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid bonding_curve pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid bonding_curve pubkey")?
         );
         offset += 32;
 
         // Read associated_bonding_curve (32 bytes)
         if offset + 32 > data.len() {
             return Err(
-                "Invalid pool data: insufficient data for associated_bonding_curve".to_string(),
+                "Invalid pool data: insufficient data for associated_bonding_curve".to_string()
             );
         }
         let _associated_bonding_curve = Pubkey::new_from_array(
             data[offset..offset + 32]
                 .try_into()
-                .map_err(|_| "Invalid associated_bonding_curve pubkey")?,
+                .map_err(|_| "Invalid associated_bonding_curve pubkey")?
         );
         offset += 32;
 
@@ -1197,9 +1237,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for mint".to_string());
         }
         let token_0_mint = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid mint pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid mint pubkey")?
         );
         offset += 32;
 
@@ -1208,9 +1246,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for sol_reserves".to_string());
         }
         let _sol_reserves = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid sol_reserves pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid sol_reserves pubkey")?
         );
         offset += 32;
 
@@ -1219,9 +1255,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for token_reserves".to_string());
         }
         let _token_reserves = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid token_reserves pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid token_reserves pubkey")?
         );
         offset += 32;
 
@@ -1240,9 +1274,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for complete_timestamp".to_string());
         }
         let _complete_timestamp = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid complete_timestamp")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid complete_timestamp")?
         );
         offset += 8;
 
@@ -1251,9 +1283,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for created_timestamp".to_string());
         }
         let _created_timestamp = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid created_timestamp")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid created_timestamp")?
         );
         offset += 8;
 
@@ -1262,9 +1292,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for creator".to_string());
         }
         let _creator = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid creator pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid creator pubkey")?
         );
         offset += 32;
 
@@ -1273,9 +1301,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for metadata".to_string());
         }
         let _metadata = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid metadata pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid metadata pubkey")?
         );
         offset += 32;
 
@@ -1284,9 +1310,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for name".to_string());
         }
         let _name = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid name pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid name pubkey")?
         );
         offset += 32;
 
@@ -1295,9 +1319,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for symbol".to_string());
         }
         let _symbol = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid symbol pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid symbol pubkey")?
         );
         offset += 32;
 
@@ -1306,9 +1328,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for uri".to_string());
         }
         let _uri = Pubkey::new_from_array(
-            data[offset..offset + 32]
-                .try_into()
-                .map_err(|_| "Invalid uri pubkey")?,
+            data[offset..offset + 32].try_into().map_err(|_| "Invalid uri pubkey")?
         );
         offset += 32;
 
@@ -1317,9 +1337,7 @@ impl PoolDecoder for PumpFunDecoder {
             return Err("Invalid pool data: insufficient data for total_supply".to_string());
         }
         let _total_supply = u64::from_le_bytes(
-            data[offset..offset + 8]
-                .try_into()
-                .map_err(|_| "Invalid total_supply")?,
+            data[offset..offset + 8].try_into().map_err(|_| "Invalid total_supply")?
         );
         offset += 8;
 
@@ -1334,8 +1352,9 @@ impl PoolDecoder for PumpFunDecoder {
         offset += 7;
 
         // For Pump.fun, SOL is always the quote token
-        let token_1_mint = Pubkey::from_str("So11111111111111111111111111111111111111112")
-            .map_err(|_| "Invalid SOL mint address")?;
+        let token_1_mint = Pubkey::from_str("So11111111111111111111111111111111111111112").map_err(
+            |_| "Invalid SOL mint address"
+        )?;
         let token_1_decimals = 9; // SOL always has 9 decimals
 
         if debug_enabled {
@@ -1344,8 +1363,11 @@ impl PoolDecoder for PumpFunDecoder {
                 "DEBUG",
                 &format!(
                     "Decoded Pump.fun: token_0={}, token_1={}, reserve_0={}, reserve_1={}",
-                    token_0_mint, token_1_mint, token_0_reserve, token_1_reserve
-                ),
+                    token_0_mint,
+                    token_1_mint,
+                    token_0_reserve,
+                    token_1_reserve
+                )
             );
         }
 
@@ -1364,6 +1386,28 @@ impl PoolDecoder for PumpFunDecoder {
         // For Pump.fun, we need to fetch the pool data to get vault addresses
         // This is a placeholder - in practice, you'd need to fetch the pool account data
         vec![]
+    }
+
+    fn extract_vault_addresses(&self, data: &[u8]) -> Result<Vec<Pubkey>, String> {
+        // Pump.fun has vault addresses in the pool data
+        if data.len() < 200 {
+            return Err("Not enough data to extract vault addresses".to_string());
+        }
+        // Placeholder - would need actual Pump.fun structure parsing
+        Ok(vec![])
+    }
+
+    fn needs_vault_accounts(&self) -> bool {
+        true // Pump.fun needs vault account data
+    }
+
+    fn decode_pool_data_with_vaults(
+        &self,
+        pool_data: &[u8],
+        _vault_data: &[Option<Vec<u8>>]
+    ) -> Result<DecodedPoolData, String> {
+        // For now, just use the basic decode
+        self.decode_pool_data(pool_data)
     }
 }
 
@@ -1441,10 +1485,11 @@ pub fn get_pool_type_display_name(pool_type: &PoolType) -> &'static str {
 /// Decode pool data using the appropriate decoder
 pub fn decode_pool_data_by_program_id(
     program_id: &str,
-    data: &[u8],
+    data: &[u8]
 ) -> Result<DecodedPoolData, String> {
-    let pool_type = get_pool_type_from_program_id(program_id)
-        .ok_or_else(|| format!("Unsupported program ID: {}", program_id))?;
+    let pool_type = get_pool_type_from_program_id(program_id).ok_or_else(||
+        format!("Unsupported program ID: {}", program_id)
+    )?;
 
     let factory = PoolDecoderFactory::new();
     let decoder = factory
@@ -1459,9 +1504,9 @@ pub fn get_supported_program_ids() -> Vec<&'static str> {
     vec![
         "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C", // Raydium CPMM
         "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", // Raydium Legacy
-        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",  // Meteora DLMM
-        "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG",  // Meteora DAMM v2
-        "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",  // Orca Whirlpool
-        "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",  // Pump.fun AMM
+        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo", // Meteora DLMM
+        "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG", // Meteora DAMM v2
+        "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc", // Orca Whirlpool
+        "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" // Pump.fun AMM
     ]
 }

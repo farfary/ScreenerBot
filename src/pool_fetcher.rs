@@ -57,6 +57,15 @@ pub struct TokenMetadataInfo {
     pub last_updated: DateTime<Utc>,
 }
 
+/// Pool data with associated vault account data
+#[derive(Debug, Clone)]
+pub struct PoolDataWithVaults {
+    pub pool_address: String,
+    pub pool_type: crate::pool_decoders::PoolType,
+    pub pool_data: Vec<u8>,
+    pub vault_data: Vec<Option<Vec<u8>>>, // Vault account data in order
+}
+
 /// Pool fetcher service
 pub struct PoolFetcher {
     rpc_client: &'static crate::rpc::RpcClient,
@@ -148,7 +157,7 @@ impl PoolFetcher {
 
         if !tokens_to_fetch.is_empty() {
             let fetched_accounts = self.fetch_token_accounts_batch(&tokens_to_fetch).await?;
-            
+
             // Update cache
             {
                 let mut cache = self.token_account_cache.write().await;
@@ -166,7 +175,8 @@ impl PoolFetcher {
             stats.total_requests += token_mints.len() as u64;
             stats.successful_fetches += result.len() as u64;
             stats.cache_hits += cache_hits;
-            stats.average_fetch_time_ms = (stats.average_fetch_time_ms + start_time.elapsed().as_millis() as f64) / 2.0;
+            stats.average_fetch_time_ms =
+                (stats.average_fetch_time_ms + (start_time.elapsed().as_millis() as f64)) / 2.0;
             stats.last_update = Some(Utc::now());
         }
 
@@ -211,7 +221,7 @@ impl PoolFetcher {
 
         if !tokens_to_fetch.is_empty() {
             let fetched_mints = self.fetch_token_mints_batch(&tokens_to_fetch).await?;
-            
+
             // Update cache
             {
                 let mut cache = self.token_mint_cache.write().await;
@@ -229,7 +239,8 @@ impl PoolFetcher {
             stats.total_requests += token_mints.len() as u64;
             stats.successful_fetches += result.len() as u64;
             stats.cache_hits += cache_hits;
-            stats.average_fetch_time_ms = (stats.average_fetch_time_ms + start_time.elapsed().as_millis() as f64) / 2.0;
+            stats.average_fetch_time_ms =
+                (stats.average_fetch_time_ms + (start_time.elapsed().as_millis() as f64)) / 2.0;
             stats.last_update = Some(Utc::now());
         }
 
@@ -274,7 +285,7 @@ impl PoolFetcher {
 
         if !tokens_to_fetch.is_empty() {
             let fetched_metadata = self.fetch_token_metadata_batch(&tokens_to_fetch).await?;
-            
+
             // Update cache
             {
                 let mut cache = self.token_metadata_cache.write().await;
@@ -292,7 +303,8 @@ impl PoolFetcher {
             stats.total_requests += token_mints.len() as u64;
             stats.successful_fetches += result.len() as u64;
             stats.cache_hits += cache_hits;
-            stats.average_fetch_time_ms = (stats.average_fetch_time_ms + start_time.elapsed().as_millis() as f64) / 2.0;
+            stats.average_fetch_time_ms =
+                (stats.average_fetch_time_ms + (start_time.elapsed().as_millis() as f64)) / 2.0;
             stats.last_update = Some(Utc::now());
         }
 
@@ -314,7 +326,9 @@ impl PoolFetcher {
         // Parse account addresses to Pubkeys
         let pubkeys: Result<Vec<Pubkey>, String> = account_addresses
             .iter()
-            .map(|addr| Pubkey::from_str(addr).map_err(|e| format!("Invalid address {}: {}", addr, e)))
+            .map(|addr|
+                Pubkey::from_str(addr).map_err(|e| format!("Invalid address {}: {}", addr, e))
+            )
             .collect();
 
         let pubkeys = pubkeys?;
@@ -340,7 +354,8 @@ impl PoolFetcher {
             let mut stats = self.stats.write().await;
             stats.total_requests += account_addresses.len() as u64;
             stats.successful_fetches += result.len() as u64;
-            stats.average_fetch_time_ms = (stats.average_fetch_time_ms + start_time.elapsed().as_millis() as f64) / 2.0;
+            stats.average_fetch_time_ms =
+                (stats.average_fetch_time_ms + (start_time.elapsed().as_millis() as f64)) / 2.0;
             stats.last_update = Some(Utc::now());
         }
 
@@ -368,6 +383,129 @@ impl PoolFetcher {
         }
 
         log(LogTag::Pool, "CACHE_CLEAR", "Cleared all pool fetcher caches");
+    }
+
+    /// Fetch pool data with vault accounts in batches (OPTIMIZED for reduced RPC calls)
+    /// This method fetches pool accounts first, extracts vault addresses, then batches vault fetches
+    pub async fn fetch_pools_with_vaults(
+        &self,
+        pool_addresses: &[String]
+    ) -> Result<HashMap<String, PoolDataWithVaults>, String> {
+        if pool_addresses.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let start_time = Instant::now();
+        let mut result = HashMap::new();
+
+        log(
+            LogTag::Pool,
+            "BATCH_POOL_VAULT_FETCH",
+            &format!("🔍 Batch fetching {} pools with vault accounts", pool_addresses.len())
+        );
+
+        // Phase 1: Fetch all pool account data
+        let pool_account_data = self.fetch_account_data(pool_addresses).await?;
+
+        // Phase 2: Extract vault addresses for pools that need them
+        let mut vault_addresses_to_fetch = Vec::new();
+        let mut pool_vault_mapping = HashMap::new(); // pool_address -> vault_indices
+
+        for (pool_address, pool_data) in &pool_account_data {
+            // Determine pool type from program ID (this would need actual program ID detection)
+            let pool_type = self.detect_pool_type_from_data(pool_data)?;
+
+            // Get appropriate decoder
+            let decoder_factory = crate::pool_decoders::PoolDecoderFactory::new();
+            if let Some(decoder) = decoder_factory.get_decoder(&pool_type) {
+                if decoder.needs_vault_accounts() {
+                    // Extract vault addresses from pool data
+                    match decoder.extract_vault_addresses(pool_data) {
+                        Ok(vault_addresses) => {
+                            let start_idx = vault_addresses_to_fetch.len();
+                            vault_addresses_to_fetch.extend(
+                                vault_addresses.iter().map(|addr| addr.to_string())
+                            );
+                            let end_idx = vault_addresses_to_fetch.len();
+                            pool_vault_mapping.insert(pool_address.clone(), (start_idx, end_idx));
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Pool,
+                                "VAULT_EXTRACT_ERROR",
+                                &format!(
+                                    "Failed to extract vault addresses for {}: {}",
+                                    pool_address,
+                                    e
+                                )
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Phase 3: Batch fetch all vault account data
+        let vault_account_data = if !vault_addresses_to_fetch.is_empty() {
+            log(
+                LogTag::Pool,
+                "VAULT_BATCH_FETCH",
+                &format!("Fetching {} vault accounts in batch", vault_addresses_to_fetch.len())
+            );
+            self.fetch_account_data(&vault_addresses_to_fetch).await?
+        } else {
+            HashMap::new()
+        };
+
+        // Phase 4: Combine pool and vault data
+        for (pool_address, pool_data) in pool_account_data {
+            let pool_type = self.detect_pool_type_from_data(&pool_data)?;
+
+            // Get vault data for this pool if available
+            let vault_data = if
+                let Some((start_idx, end_idx)) = pool_vault_mapping.get(&pool_address)
+            {
+                let mut vaults = Vec::new();
+                for i in *start_idx..*end_idx {
+                    if let Some(vault_addr) = vault_addresses_to_fetch.get(i) {
+                        let vault_account = vault_account_data.get(vault_addr).cloned();
+                        vaults.push(vault_account);
+                    }
+                }
+                vaults
+            } else {
+                Vec::new()
+            };
+
+            result.insert(pool_address.clone(), PoolDataWithVaults {
+                pool_address: pool_address.clone(),
+                pool_type,
+                pool_data,
+                vault_data,
+            });
+        }
+
+        log(
+            LogTag::Pool,
+            "BATCH_POOL_VAULT_SUCCESS",
+            &format!(
+                "Successfully fetched {} pools with vaults in {:.2}ms",
+                result.len(),
+                start_time.elapsed().as_millis()
+            )
+        );
+
+        Ok(result)
+    }
+
+    /// Detect pool type from account data (simplified - would need actual owner checking)
+    fn detect_pool_type_from_data(
+        &self,
+        _data: &[u8]
+    ) -> Result<crate::pool_decoders::PoolType, String> {
+        // This is a placeholder - in reality you'd check the account owner program ID
+        // For now, default to Raydium CPMM
+        Ok(crate::pool_decoders::PoolType::RaydiumCpmm)
     }
 
     // =============================================================================
@@ -482,8 +620,9 @@ impl PoolFetcher {
         }
 
         let batch_size = std::cmp::min(100, account_queue.len());
-        let accounts_to_fetch: Vec<crate::pool_discovery::AccountInfo> = 
-            account_queue.drain(0..batch_size).collect();
+        let accounts_to_fetch: Vec<crate::pool_discovery::AccountInfo> = account_queue
+            .drain(0..batch_size)
+            .collect();
 
         log(
             LogTag::Pool,
@@ -632,4 +771,11 @@ pub async fn fetch_token_accounts_for_pool_service(
     tracked_tokens: &[String]
 ) -> Result<usize, String> {
     get_pool_fetcher().fetch_token_accounts_for_pool_service(tracked_tokens).await
+}
+
+/// Fetch pools with vaults optimized (convenience function)
+pub async fn fetch_pools_with_vaults_optimized(
+    pool_addresses: &[String]
+) -> Result<HashMap<String, PoolDataWithVaults>, String> {
+    get_pool_fetcher().fetch_pools_with_vaults(pool_addresses).await
 }

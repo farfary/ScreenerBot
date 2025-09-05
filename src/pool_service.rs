@@ -4,17 +4,17 @@ use crate::pool_cleanup::{ cleanup_service_state, CleanupServiceState };
 use crate::pool_monitor::{ monitor_service_health, MonitorServiceState, TaskState, TaskStatus };
 use crate::pool_tokens::{ init_pool_tokens, update_tracked_tokens_in_state };
 use crate::pool_discovery::{ discover_and_process_pools, PoolData, AccountInfo };
-use crate::pool_fetcher::{ fetch_account_data_for_pool_service, fetch_token_accounts_for_pool_service };
-use crate::pool_interface::{
-    PoolInterface,
-    PoolStats,
-    TokenPriceInfo,
+use crate::pool_fetcher::{
+    fetch_account_data_for_pool_service,
+    fetch_token_accounts_for_pool_service,
 };
+use crate::pool_interface::{ PoolInterface, PoolStats, TokenPriceInfo };
 use async_trait::async_trait;
 use chrono::{ DateTime, Utc };
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 use tokio::sync::{ RwLock, Mutex };
 use tokio::time::{ interval, sleep };
 
@@ -36,11 +36,9 @@ const PRICE_CALC_INTERVAL_SECS: u64 = 1; // 1 second
 const CLEANUP_INTERVAL_SECS: u64 = 3600; // 1 hour
 const STATE_MONITOR_INTERVAL_SECS: u64 = 30; // 30 seconds
 
-
 // =============================================================================
 // DATA STRUCTURES
 // =============================================================================
-
 
 impl PoolData {
     /// Convert PoolData to PoolInfo for calculator
@@ -597,12 +595,7 @@ impl PoolService {
                 break;
             }
 
-            Self::update_task_status(
-                &shared_state,
-                "pool_fetcher",
-                TaskState::Running,
-                None
-            ).await;
+            Self::update_task_status(&shared_state, "pool_fetcher", TaskState::Running, None).await;
 
             // Fetch token account data for all tracked tokens
             let result = Self::fetch_token_accounts_impl(&shared_state).await;
@@ -897,7 +890,11 @@ impl PoolService {
         log(
             LogTag::Pool,
             "TOKENS_LIST_UPDATE",
-            &format!("Loaded {} tokens from database, updated {} tracked tokens", loaded_count, updated_count)
+            &format!(
+                "Loaded {} tokens from database, updated {} tracked tokens",
+                loaded_count,
+                updated_count
+            )
         );
 
         Ok(updated_count)
@@ -1028,10 +1025,7 @@ impl PoolService {
                 account_data_cache: state.account_data_cache.clone(),
             };
 
-            cleanup_service_state(
-                &Arc::new(RwLock::new(cleanup_state)),
-                price_cache
-            ).await?
+            cleanup_service_state(&Arc::new(RwLock::new(cleanup_state)), price_cache).await?
         };
 
         // Apply the cleaned state back to the original shared state
@@ -1103,7 +1097,11 @@ impl PoolService {
                         log(
                             LogTag::Pool,
                             "POOL_CALC_NO_PRICE",
-                            &format!("No price available for {} in pool {}", token_mint, pool_data.pool_address)
+                            &format!(
+                                "No price available for {} in pool {}",
+                                token_mint,
+                                pool_data.pool_address
+                            )
                         );
                     }
                     Err(e) => {
@@ -1140,6 +1138,145 @@ impl PoolService {
         ).await?;
 
         Ok(())
+    }
+
+    /// Optimized pool data fetching with vault accounts (reduces RPC calls)
+    pub async fn fetch_pools_optimized(
+        &self,
+        pool_addresses: &[String]
+    ) -> Result<HashMap<String, TokenPriceInfo>, String> {
+        if pool_addresses.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let start_time = Instant::now();
+
+        log(
+            LogTag::Pool,
+            "OPTIMIZED_FETCH_START",
+            &format!("🚀 Starting optimized fetch for {} pools", pool_addresses.len())
+        );
+
+        // Use the enhanced pool fetcher to get pools with vault data in fewer RPC calls
+        let pool_fetcher = crate::pool_fetcher::get_pool_fetcher();
+        let pools_with_vaults = pool_fetcher.fetch_pools_with_vaults(pool_addresses).await?;
+
+        let mut result = HashMap::new();
+        let decoder_factory = crate::pool_decoders::PoolDecoderFactory::new();
+
+        // Process each pool with its vault data
+        let pools_count = pools_with_vaults.len();
+        for (pool_address, pool_with_vaults) in pools_with_vaults {
+            if let Some(decoder) = decoder_factory.get_decoder(&pool_with_vaults.pool_type) {
+                // Decode pool with vault data for accurate reserves
+                match
+                    decoder.decode_pool_data_with_vaults(
+                        &pool_with_vaults.pool_data,
+                        &pool_with_vaults.vault_data
+                    )
+                {
+                    Ok(decoded_pool) => {
+                        // Convert to PoolInfo for price calculation
+                        let pool_info = crate::pool_calculator::PoolInfo {
+                            pool_address: pool_address.clone(),
+                            pool_program_id: crate::pool_decoders
+                                ::get_program_id_from_pool_type(&pool_with_vaults.pool_type)
+                                .to_string(),
+                            pool_type: crate::pool_decoders
+                                ::get_pool_type_display_name(&pool_with_vaults.pool_type)
+                                .to_string(),
+                            token_0_mint: decoded_pool.token_a_mint.to_string(),
+                            token_1_mint: decoded_pool.token_b_mint.to_string(),
+                            token_0_vault: None,
+                            token_1_vault: None,
+                            token_0_reserve: decoded_pool.token_a_reserve,
+                            token_1_reserve: decoded_pool.token_b_reserve,
+                            token_0_decimals: decoded_pool.token_a_decimals,
+                            token_1_decimals: decoded_pool.token_b_decimals,
+                            lp_mint: None,
+                            lp_supply: None,
+                            creator: None,
+                            status: None,
+                            liquidity_usd: None,
+                            sqrt_price: None,
+                        };
+
+                        // Calculate price for both tokens in the pool
+                        let calculator = crate::pool_calculator::get_pool_calculator();
+
+                        // Try token_0
+                        if
+                            let Ok(Some(price_info)) = calculator.calculate_token_price(
+                                &pool_info,
+                                &pool_info.token_0_mint
+                            ).await
+                        {
+                            let token_price_info = crate::pool_interface::TokenPriceInfo {
+                                token_mint: pool_info.token_0_mint.clone(),
+                                pool_price_sol: Some(price_info.price_sol),
+                                pool_price_usd: None,
+                                api_price_sol: None,
+                                api_price_usd: None,
+                                pool_address: Some(pool_address.clone()),
+                                pool_type: Some(pool_info.pool_type.clone()),
+                                reserve_sol: Some(pool_info.token_1_reserve as f64), // Assuming token_1 is SOL
+                                reserve_token: Some(pool_info.token_0_reserve as f64),
+                                liquidity_usd: None,
+                                volume_24h_usd: None,
+                                calculated_at: chrono::Utc::now(),
+                                error: None,
+                            };
+                            result.insert(pool_info.token_0_mint.clone(), token_price_info);
+                        }
+
+                        // Try token_1
+                        if
+                            let Ok(Some(price_info)) = calculator.calculate_token_price(
+                                &pool_info,
+                                &pool_info.token_1_mint
+                            ).await
+                        {
+                            let token_price_info = crate::pool_interface::TokenPriceInfo {
+                                token_mint: pool_info.token_1_mint.clone(),
+                                pool_price_sol: Some(price_info.price_sol),
+                                pool_price_usd: None,
+                                api_price_sol: None,
+                                api_price_usd: None,
+                                pool_address: Some(pool_address.clone()),
+                                pool_type: Some(pool_info.pool_type.clone()),
+                                reserve_sol: Some(pool_info.token_0_reserve as f64), // Assuming token_0 is SOL
+                                reserve_token: Some(pool_info.token_1_reserve as f64),
+                                liquidity_usd: None,
+                                volume_24h_usd: None,
+                                calculated_at: chrono::Utc::now(),
+                                error: None,
+                            };
+                            result.insert(pool_info.token_1_mint.clone(), token_price_info);
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Pool,
+                            "DECODE_ERROR",
+                            &format!("Failed to decode pool {}: {}", pool_address, e)
+                        );
+                    }
+                }
+            }
+        }
+
+        log(
+            LogTag::Pool,
+            "OPTIMIZED_FETCH_SUCCESS",
+            &format!(
+                "✅ Optimized fetch completed: {} pools processed, {} prices calculated in {:.2}ms",
+                pools_count,
+                result.len(),
+                start_time.elapsed().as_millis()
+            )
+        );
+
+        Ok(result)
     }
 
     /// Get all task statuses for monitoring
@@ -1238,4 +1375,3 @@ pub fn init_pool_service() -> &'static PoolService {
 pub fn get_pool_service() -> &'static PoolService {
     POOL_SERVICE.get().expect("Pool service not initialized")
 }
-
