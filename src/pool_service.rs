@@ -2,6 +2,7 @@ use crate::logger::{ log, LogTag };
 use crate::pool_calculator::get_pool_calculator;
 use crate::pool_cleanup::{ cleanup_service_state, CleanupServiceState };
 use crate::pool_monitor::{ monitor_service_health, MonitorServiceState, TaskState, TaskStatus };
+use crate::pool_tokens::{ init_pool_tokens, update_tracked_tokens_in_state };
 use crate::pool_discovery::{ discover_and_process_pools, PoolData, AccountInfo };
 use crate::pool_fetcher::{ fetch_account_data_for_pool_service, fetch_token_accounts_for_pool_service };
 use crate::pool_interface::{
@@ -138,23 +139,24 @@ impl PoolService {
     }
 
     /// Start the pool service
-    pub async fn start(&self) {
+    pub async fn start(&self) -> Result<(), String> {
         let mut running = self.is_running.write().await;
         if *running {
             log(LogTag::Pool, "SERVICE_ALREADY_RUNNING", "Pool service is already running");
-            return;
+            return Ok(());
         }
         *running = true;
         drop(running);
 
         log(LogTag::Pool, "SERVICE_START", "🚀 Starting Pool Service");
 
-        // Initialize pool calculator, fetcher, discovery, cleanup, and monitor services
+        // Initialize pool calculator, fetcher, discovery, cleanup, monitor, and tokens services
         crate::pool_calculator::init_pool_calculator();
         crate::pool_fetcher::init_pool_fetcher();
         crate::pool_discovery::init_pool_discovery();
         crate::pool_cleanup::init_pool_cleanup();
         crate::pool_monitor::init_pool_monitor();
+        init_pool_tokens().map_err(|e| format!("Failed to initialize pool tokens service: {}", e))?;
 
         // Reset shutdown signal
         {
@@ -206,6 +208,7 @@ impl PoolService {
         }
 
         log(LogTag::Pool, "SERVICE_READY", "✅ Pool Service started successfully");
+        Ok(())
     }
 
     /// Stop the pool service
@@ -878,31 +881,26 @@ impl PoolService {
     // TASK IMPLEMENTATION METHODS
     // =============================================================================
 
-    /// Prepare tokens list from various sources
+    /// Prepare tokens list from database using pool tokens service
     async fn prepare_tokens_list_impl(
         shared_state: &Arc<RwLock<ServiceState>>
     ) -> Result<usize, String> {
-        // TODO: Implement token list preparation
-        // - Fetch trending tokens from APIs (DexScreener, Jupiter, etc.)
-        // - Apply filtering criteria (volume > X, market cap > Y, etc.)
-        // - Update tracked_tokens in shared state
-        // - Remove stale/inactive tokens
+        // Load tokens from database using pool tokens service
+        let loaded_count = crate::pool_tokens::load_tokens_from_database().await?;
 
-        {
+        // Update tracked tokens in shared state
+        let updated_count = {
             let mut state = shared_state.write().await;
-            let now = Utc::now();
+            update_tracked_tokens_in_state(&mut state.tracked_tokens).await?
+        };
 
-            let sample_tokens = vec![
-                "So11111111111111111111111111111111111111112",
-                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-            ];
+        log(
+            LogTag::Pool,
+            "TOKENS_LIST_UPDATE",
+            &format!("Loaded {} tokens from database, updated {} tracked tokens", loaded_count, updated_count)
+        );
 
-            for token in sample_tokens {
-                state.tracked_tokens.insert(token.to_string(), now);
-            }
-        }
-
-        Ok(0)
+        Ok(updated_count)
     }
 
     /// Discover pools for tracked tokens using the pool discovery service

@@ -23,6 +23,8 @@ pub use crate::arguments::{
     is_debug_pool_discovery_enabled,
     is_debug_pool_cleanup_enabled,
     is_debug_pool_monitor_enabled,
+    is_debug_pool_service_enabled,
+    is_debug_pool_tokens_enabled,
     is_debug_pool_prices_enabled,
     is_debug_price_service_enabled,
     is_debug_profit_enabled,

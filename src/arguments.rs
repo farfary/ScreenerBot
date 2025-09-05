@@ -94,6 +94,16 @@ pub fn is_debug_pool_monitor_enabled() -> bool {
     has_arg("--debug-pool-monitor")
 }
 
+/// Pool service debug mode
+pub fn is_debug_pool_service_enabled() -> bool {
+    has_arg("--debug-pool-service")
+}
+
+/// Pool tokens debug mode
+pub fn is_debug_pool_tokens_enabled() -> bool {
+    has_arg("--debug-pool-tokens")
+}
+
 /// Trader module debug mode
 pub fn is_debug_trader_enabled() -> bool {
     has_arg("--debug-trader")
@@ -302,6 +312,8 @@ pub fn is_any_debug_enabled() -> bool {
         is_debug_pool_discovery_enabled() ||
         is_debug_pool_cleanup_enabled() ||
         is_debug_pool_monitor_enabled() ||
+        is_debug_pool_service_enabled() ||
+        is_debug_pool_tokens_enabled() ||
         is_debug_trader_enabled() ||
         is_debug_api_enabled() ||
         is_debug_monitor_enabled() ||
@@ -346,6 +358,12 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     }
     if is_debug_pool_monitor_enabled() {
         modes.push("pool-monitor");
+    }
+    if is_debug_pool_service_enabled() {
+        modes.push("pool-service");
+    }
+    if is_debug_pool_tokens_enabled() {
+        modes.push("pool-tokens");
     }
     if is_debug_trader_enabled() {
         modes.push("trader");
