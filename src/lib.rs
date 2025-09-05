@@ -16,6 +16,7 @@ pub mod pool_tokens; // Pool tokens service for loading tokens from database
 pub mod pool_db; // Pool database module
 pub mod pool_decoders; // Pool data decoders
 pub mod pool_discovery; // Pool discovery service for finding pools via APIs
+pub mod pool_extraction; // Pool data extraction functions
 pub mod pool_fetcher; // Pool token account fetcher service
 pub mod pool_interface; // Pool service interface
 pub mod pool_service; // New modular pool service

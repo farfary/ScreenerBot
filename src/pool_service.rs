@@ -935,7 +935,74 @@ impl PoolService {
     ) -> Result<usize, String> {
         // Use the pool fetcher service to fetch account data
         let mut state = shared_state.write().await;
-        fetch_account_data_for_pool_service(&mut state.account_queue).await
+        // Fetch and collect account data in a single call
+        let fetched_map = crate::pool_fetcher
+            ::get_pool_fetcher()
+            .fetch_and_collect_account_data_for_pool_service(&mut state.account_queue).await?;
+
+        let now = Utc::now();
+        let fetched_len = fetched_map.len();
+        for (addr, data) in fetched_map {
+            state.account_data_cache.insert(addr, (data, now));
+        }
+
+        // Decode pool accounts to update reserves for best pools
+        let sol_mint = "So11111111111111111111111111111111111111112";
+        let mut updated = 0usize;
+        // Prepare a vector of (token_mint, pool_address, program_id)
+        let mut decode_targets: Vec<(String, String, String)> = Vec::new();
+        for (token_mint, pool) in state.best_pools.iter() {
+            decode_targets.push((
+                token_mint.clone(),
+                pool.pool_address.clone(),
+                pool.get_program_id(),
+            ));
+        }
+
+        for (token_mint, pool_addr, program_id) in decode_targets {
+            if let Some((pool_bytes, _ts)) = state.account_data_cache.get(&pool_addr) {
+                match crate::pool_decoders::decode_pool_data_by_program_id(&program_id, pool_bytes) {
+                    Ok(decoded) => {
+                        if let Some(pool) = state.best_pools.get_mut(&token_mint) {
+                            let mint_a = decoded.token_a_mint.to_string();
+                            let mint_b = decoded.token_b_mint.to_string();
+                            if mint_a == sol_mint {
+                                pool.reserve_sol = decoded.token_a_reserve as f64;
+                                pool.reserve_token = decoded.token_b_reserve as f64;
+                            } else if mint_b == sol_mint {
+                                pool.reserve_sol = decoded.token_b_reserve as f64;
+                                pool.reserve_token = decoded.token_a_reserve as f64;
+                            } else {
+                                pool.reserve_token = decoded.token_a_reserve as f64;
+                                pool.reserve_sol = decoded.token_b_reserve as f64;
+                            }
+                            updated += 1;
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Pool,
+                            "DECODE_WARN",
+                            &format!(
+                                "Decode failed for pool {}: {}",
+                                crate::utils::safe_truncate(&pool_addr, 8),
+                                e
+                            )
+                        );
+                    }
+                }
+            }
+        }
+
+        if updated > 0 {
+            log(
+                LogTag::Pool,
+                "RESERVES_UPDATED",
+                &format!("Updated reserves for {} pools", updated)
+            );
+        }
+
+        Ok(fetched_len)
     }
 
     /// Fetch token account data for all tracked tokens

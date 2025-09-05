@@ -3,6 +3,7 @@ use crate::rpc::get_rpc_client;
 use chrono::{ DateTime, Utc };
 use solana_sdk::{ account::Account, pubkey::Pubkey };
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{ Duration, Instant };
@@ -407,40 +408,32 @@ impl PoolFetcher {
         // Phase 1: Fetch all pool account data
         let pool_account_data = self.fetch_account_data(pool_addresses).await?;
 
-        // Phase 2: Extract vault addresses for pools that need them
-        let mut vault_addresses_to_fetch = Vec::new();
-        let mut pool_vault_mapping = HashMap::new(); // pool_address -> vault_indices
+        // Phase 2: Extract vault addresses for pools that need them (Raydium CPMM-fast path)
+        let mut vault_addresses_to_fetch: Vec<String> = Vec::new();
+        let mut pool_vault_mapping: HashMap<String, (usize, usize)> = HashMap::new(); // pool_address -> (start,end)
 
         for (pool_address, pool_data) in &pool_account_data {
-            // Determine pool type from program ID (this would need actual program ID detection)
-            let pool_type = self.detect_pool_type_from_data(pool_data)?;
-
-            // Get appropriate decoder
-            let decoder_factory = crate::pool_decoders::PoolDecoderFactory::new();
-            if let Some(decoder) = decoder_factory.get_decoder(&pool_type) {
-                if decoder.needs_vault_accounts() {
-                    // Extract vault addresses from pool data
-                    match decoder.extract_vault_addresses(pool_data) {
-                        Ok(vault_addresses) => {
-                            let start_idx = vault_addresses_to_fetch.len();
-                            vault_addresses_to_fetch.extend(
-                                vault_addresses.iter().map(|addr| addr.to_string())
-                            );
-                            let end_idx = vault_addresses_to_fetch.len();
-                            pool_vault_mapping.insert(pool_address.clone(), (start_idx, end_idx));
-                        }
-                        Err(e) => {
-                            log(
-                                LogTag::Pool,
-                                "VAULT_EXTRACT_ERROR",
-                                &format!(
-                                    "Failed to extract vault addresses for {}: {}",
-                                    pool_address,
-                                    e
-                                )
-                            );
-                        }
-                    }
+            // Try Raydium CPMM layout to extract two vaults; fallback to none on error
+            match extract_raydium_cpmm_vaults(pool_data) {
+                Ok(vaults) if !vaults.is_empty() => {
+                    let start_idx = vault_addresses_to_fetch.len();
+                    vault_addresses_to_fetch.extend(vaults);
+                    let end_idx = vault_addresses_to_fetch.len();
+                    pool_vault_mapping.insert(pool_address.clone(), (start_idx, end_idx));
+                }
+                Ok(_) => {
+                    // no-op
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Pool,
+                        "VAULT_EXTRACT_WARN",
+                        &format!(
+                            "{} vault extract failed: {}",
+                            crate::utils::safe_truncate(pool_address, 8),
+                            e
+                        )
+                    );
                 }
             }
         }
@@ -459,6 +452,7 @@ impl PoolFetcher {
 
         // Phase 4: Combine pool and vault data
         for (pool_address, pool_data) in pool_account_data {
+            // Default to RaydiumCpmm type for now; expand when decoders are wired
             let pool_type = self.detect_pool_type_from_data(&pool_data)?;
 
             // Get vault data for this pool if available
@@ -619,10 +613,13 @@ impl PoolFetcher {
             return Ok(0);
         }
 
-        let batch_size = std::cmp::min(100, account_queue.len());
-        let accounts_to_fetch: Vec<crate::pool_discovery::AccountInfo> = account_queue
+        // 1) Drain a bounded batch from the queue and dedupe by address
+        let batch_size = std::cmp::min(300, account_queue.len());
+        let mut accounts_to_fetch: Vec<crate::pool_discovery::AccountInfo> = account_queue
             .drain(0..batch_size)
             .collect();
+        let mut seen: HashSet<String> = HashSet::new();
+        accounts_to_fetch.retain(|a| seen.insert(a.address.clone()));
 
         log(
             LogTag::Pool,
@@ -630,11 +627,10 @@ impl PoolFetcher {
             &format!("Starting account data fetch for {} accounts", accounts_to_fetch.len())
         );
 
-        // Group accounts by type for efficient fetching
-        let mut pool_accounts = Vec::new();
-        let mut vault_accounts = Vec::new();
-        let mut other_accounts = Vec::new();
-
+        // 2) Separate pool accounts for first-phase fetch
+        let mut pool_accounts: Vec<String> = Vec::new();
+        let mut vault_accounts: Vec<String> = Vec::new();
+        let mut other_accounts: Vec<String> = Vec::new();
         for account in &accounts_to_fetch {
             match account.account_type.as_str() {
                 "pool" => pool_accounts.push(account.address.clone()),
@@ -643,51 +639,62 @@ impl PoolFetcher {
             }
         }
 
-        let mut fetched_count = 0;
+        let mut fetched_count = 0usize;
 
-        // Fetch pool account data
+        // 3) Phase-1: fetch pool accounts to learn vaults
+        let mut learned_vaults: Vec<String> = Vec::new();
+        let mut pool_data_map: HashMap<String, Vec<u8>> = HashMap::new();
         if !pool_accounts.is_empty() {
             match self.fetch_account_data(&pool_accounts).await {
-                Ok(_account_data) => {
-                    fetched_count += pool_accounts.len();
+                Ok(account_data) => {
+                    fetched_count += account_data.len();
+                    for (addr, data) in &account_data {
+                        // Try extracting Raydium CPMM vaults
+                        if let Ok(vs) = extract_raydium_cpmm_vaults(data) {
+                            for v in vs {
+                                learned_vaults.push(v);
+                            }
+                        }
+                        pool_data_map.insert(addr.clone(), data.clone());
+                    }
                 }
                 Err(e) => {
-                    log(
-                        LogTag::Pool,
-                        "ACCOUNT_FETCH_ERROR",
-                        &format!("Failed to fetch pool account data: {}", e)
-                    );
+                    log(LogTag::Pool, "ACCOUNT_FETCH_ERROR", &format!("Pools fetch failed: {}", e));
                 }
             }
         }
 
-        // Fetch vault account data
-        if !vault_accounts.is_empty() {
-            match self.fetch_account_data(&vault_accounts).await {
-                Ok(_account_data) => {
-                    fetched_count += vault_accounts.len();
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Pool,
-                        "ACCOUNT_FETCH_ERROR",
-                        &format!("Failed to fetch vault account data: {}", e)
-                    );
+        // 4) Add newly learned vaults to the queue for future cycles and also fetch them now
+        if !learned_vaults.is_empty() {
+            // De-dupe against already-planned vaults
+            let current: HashSet<String> = vault_accounts.iter().cloned().collect();
+            for v in learned_vaults.iter() {
+                if !current.contains(v) {
+                    account_queue.push(crate::pool_discovery::AccountInfo {
+                        address: v.clone(),
+                        account_type: "vault".to_string(),
+                        token_mint: "".to_string(),
+                        last_fetched: None,
+                    });
+                    vault_accounts.push(v.clone());
                 }
             }
         }
 
-        // Fetch other account data
-        if !other_accounts.is_empty() {
-            match self.fetch_account_data(&other_accounts).await {
-                Ok(_account_data) => {
-                    fetched_count += other_accounts.len();
+        // 5) Phase-2: fetch vault + other accounts in one combined batch
+        let mut phase2_batch: Vec<String> = Vec::new();
+        phase2_batch.extend(vault_accounts);
+        phase2_batch.extend(other_accounts);
+        if !phase2_batch.is_empty() {
+            match self.fetch_account_data(&phase2_batch).await {
+                Ok(account_data) => {
+                    fetched_count += account_data.len();
                 }
                 Err(e) => {
                     log(
                         LogTag::Pool,
                         "ACCOUNT_FETCH_ERROR",
-                        &format!("Failed to fetch other account data: {}", e)
+                        &format!("Phase2 fetch failed: {}", e)
                     );
                 }
             }
@@ -696,10 +703,85 @@ impl PoolFetcher {
         log(
             LogTag::Pool,
             "ACCOUNT_FETCH_COMPLETE",
-            &format!("Account data fetch completed: {} accounts fetched", fetched_count)
+            &format!("Fetched {} accounts (phase1 pools + phase2 vaults/others)", fetched_count)
         );
 
         Ok(fetched_count)
+    }
+
+    /// Fetch account data for pool service and return the fetched map (address -> data)
+    /// Implements two-phase fetching: pools first (to learn vaults), then vaults/others
+    pub async fn fetch_and_collect_account_data_for_pool_service(
+        &self,
+        account_queue: &mut Vec<crate::pool_discovery::AccountInfo>
+    ) -> Result<HashMap<String, Vec<u8>>, String> {
+        let mut out: HashMap<String, Vec<u8>> = HashMap::new();
+        if account_queue.is_empty() {
+            return Ok(out);
+        }
+
+        // Drain a bounded batch and dedupe by address
+        let batch_size = std::cmp::min(300, account_queue.len());
+        let mut accounts_to_fetch: Vec<crate::pool_discovery::AccountInfo> = account_queue
+            .drain(0..batch_size)
+            .collect();
+        let mut seen: HashSet<String> = HashSet::new();
+        accounts_to_fetch.retain(|a| seen.insert(a.address.clone()));
+
+        // Separate by type
+        let mut pool_accounts: Vec<String> = Vec::new();
+        let mut vault_accounts: Vec<String> = Vec::new();
+        let mut other_accounts: Vec<String> = Vec::new();
+        for a in &accounts_to_fetch {
+            match a.account_type.as_str() {
+                "pool" => pool_accounts.push(a.address.clone()),
+                "vault" => vault_accounts.push(a.address.clone()),
+                _ => other_accounts.push(a.address.clone()),
+            }
+        }
+
+        // Phase-1: pools
+        let mut learned_vaults: Vec<String> = Vec::new();
+        if !pool_accounts.is_empty() {
+            if let Ok(account_data) = self.fetch_account_data(&pool_accounts).await {
+                for (addr, data) in &account_data {
+                    out.insert(addr.clone(), data.clone());
+                    if let Ok(vs) = extract_raydium_cpmm_vaults(data) {
+                        learned_vaults.extend(vs);
+                    }
+                }
+            }
+        }
+
+        // Add learned vaults to queue for future cycles and include in this fetch
+        if !learned_vaults.is_empty() {
+            let existing: HashSet<String> = vault_accounts.iter().cloned().collect();
+            for v in learned_vaults.into_iter() {
+                if !existing.contains(&v) {
+                    account_queue.push(crate::pool_discovery::AccountInfo {
+                        address: v.clone(),
+                        account_type: "vault".to_string(),
+                        token_mint: "".to_string(),
+                        last_fetched: None,
+                    });
+                    vault_accounts.push(v);
+                }
+            }
+        }
+
+        // Phase-2: vaults + others
+        let mut phase2: Vec<String> = Vec::new();
+        phase2.extend(vault_accounts);
+        phase2.extend(other_accounts);
+        if !phase2.is_empty() {
+            if let Ok(account_data) = self.fetch_account_data(&phase2).await {
+                for (addr, data) in account_data.into_iter() {
+                    out.insert(addr, data);
+                }
+            }
+        }
+
+        Ok(out)
     }
 
     /// Fetch token account data for pool service integration
@@ -778,4 +860,43 @@ pub async fn fetch_pools_with_vaults_optimized(
     pool_addresses: &[String]
 ) -> Result<HashMap<String, PoolDataWithVaults>, String> {
     get_pool_fetcher().fetch_pools_with_vaults(pool_addresses).await
+}
+
+// =============================================================================
+// LOCAL HELPERS
+// =============================================================================
+
+/// Try to extract Raydium CPMM token vault addresses from pool account data.
+/// Layout (approx):
+///  - 8 bytes: discriminator
+///  - 32 bytes: amm_config
+///  - 32 bytes: pool_creator
+///  - 32 bytes: token_0_vault
+///  - 32 bytes: token_1_vault
+///  - ... (rest not needed for vault extraction)
+fn extract_raydium_cpmm_vaults(data: &[u8]) -> Result<Vec<String>, String> {
+    // Need at least up to token_1_vault end offset
+    const DISC: usize = 8;
+    const AMM_CFG: usize = 32;
+    const CREATOR: usize = 32;
+    const VAULT: usize = 32;
+    let token0_start = DISC + AMM_CFG + CREATOR; // 72
+    let token1_start = token0_start + VAULT; // 104
+    let token1_end = token1_start + VAULT; // 136
+
+    if data.len() < token1_end {
+        return Err("pool data too short for Raydium CPMM layout".to_string());
+    }
+
+    let t0_bytes: [u8; 32] = data[token0_start..token0_start + 32]
+        .try_into()
+        .map_err(|_| "invalid token_0_vault slice")?;
+    let t1_bytes: [u8; 32] = data[token1_start..token1_start + 32]
+        .try_into()
+        .map_err(|_| "invalid token_1_vault slice")?;
+
+    let t0 = Pubkey::new_from_array(t0_bytes).to_string();
+    let t1 = Pubkey::new_from_array(t1_bytes).to_string();
+
+    Ok(vec![t0, t1])
 }
