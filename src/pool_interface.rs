@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{ DateTime, Utc };
 use std::collections::HashMap;
 
 /// Main interface for the pool service
@@ -19,8 +19,7 @@ pub trait PoolInterface {
 
     /// Get batch prices for multiple tokens
     /// Returns HashMap of token_address -> TokenPriceInfo
-    async fn get_batch_prices(&self, token_addresses: &[String])
-        -> HashMap<String, TokenPriceInfo>;
+    async fn get_batch_prices(&self, token_addresses: &[String]) -> HashMap<String, TokenPriceInfo>;
 }
 
 /// Comprehensive price information including pool and API data
@@ -102,6 +101,8 @@ pub struct PoolStats {
     pub failed_price_fetches: u64,
     pub cache_hits: u64,
     pub last_update: Option<DateTime<Utc>>,
+    pub background_tasks_running: usize,
+    pub total_background_tasks: usize,
 }
 
 /// Price result structure for legacy compatibility

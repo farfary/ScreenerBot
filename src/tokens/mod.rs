@@ -9,19 +9,17 @@ pub use crate::pool_service::{
     check_token_availability,
 };
 
-pub use crate::pool_interface::{ 
-    PoolInterface, 
-    TokenPriceInfo, 
-    PriceResult, 
-    PriceOptions 
-};
+pub use crate::pool_interface::{ PoolInterface, TokenPriceInfo, PriceResult, PriceOptions };
 
 // Pool database functions
-pub use crate::pool_db::{
-    init_pool_db_service,
-    store_price_entry,
-    get_price_history_for_token,
-};
+pub use crate::pool_db::{ init_pool_db_service, store_price_entry, get_price_history_for_token };
+
+// Legacy compatibility functions
+/// Initialize price service (legacy compatibility)
+pub async fn initialize_price_service() -> Result<(), String> {
+    init_pool_service().start().await;
+    Ok(())
+}
 
 use crate::global::{ is_debug_decimals_enabled, is_debug_monitor_enabled };
 /// Centralized Token Management System - Thread-Safe Edition
@@ -46,6 +44,7 @@ pub mod lp_lock;
 pub mod monitor;
 pub mod ohlcv_db;
 pub mod ohlcvs;
+pub mod pool;
 pub mod raydium;
 pub mod rugcheck;
 pub mod types;
