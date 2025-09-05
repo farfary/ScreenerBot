@@ -17,24 +17,7 @@ use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::{ RwLock, Mutex };
 use tokio::time::{ interval, sleep };
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-/// Price cache TTL in seconds
-const PRICE_CACHE_TTL_SECS: i64 = 30;
-
-/// Maximum number of tokens to track
-const MAX_TRACKED_TOKENS: usize = 10000;
-
-/// Task intervals in seconds
-const TOKENS_LIST_INTERVAL_SECS: u64 = 300; // 5 minutes
-const POOL_DISCOVERY_INTERVAL_SECS: u64 = 60; // 1 minute
-const ACCOUNT_FETCH_INTERVAL_SECS: u64 = 5; // 5 seconds
-const PRICE_CALC_INTERVAL_SECS: u64 = 1; // 1 second
-const CLEANUP_INTERVAL_SECS: u64 = 3600; // 1 hour
-const STATE_MONITOR_INTERVAL_SECS: u64 = 30; // 30 seconds
+use crate::pool_constants::*;
 
 // =============================================================================
 // DATA STRUCTURES
@@ -67,11 +50,11 @@ impl PoolData {
     /// Get program ID based on DEX type
     fn get_program_id(&self) -> String {
         match self.dex_type.as_str() {
-            "Raydium" => crate::pool_calculator::RAYDIUM_CPMM_PROGRAM_ID.to_string(),
-            "Meteora" => crate::pool_calculator::METEORA_DAMM_V2_PROGRAM_ID.to_string(),
-            "Orca" => crate::pool_calculator::ORCA_WHIRLPOOL_PROGRAM_ID.to_string(),
-            "Pump Fun" => crate::pool_calculator::PUMP_FUN_AMM_PROGRAM_ID.to_string(),
-            _ => crate::pool_calculator::RAYDIUM_CPMM_PROGRAM_ID.to_string(), // Default
+            "Raydium" => RAYDIUM_CPMM_PROGRAM_ID.to_string(),
+            "Meteora" => METEORA_DAMM_V2_PROGRAM_ID.to_string(),
+            "Orca" => ORCA_WHIRLPOOL_PROGRAM_ID.to_string(),
+            "Pump Fun" => PUMP_FUN_AMM_PROGRAM_ID.to_string(),
+            _ => RAYDIUM_CPMM_PROGRAM_ID.to_string(), // Default
         }
     }
 }

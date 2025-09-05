@@ -1,5 +1,6 @@
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_pool_monitor_enabled;
+use crate::pool_constants::*;
 use chrono::{ DateTime, Utc };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -9,12 +10,6 @@ use tokio::sync::RwLock;
 // =============================================================================
 // CONSTANTS
 // =============================================================================
-
-/// Monitor interval in seconds
-const MONITOR_INTERVAL_SECS: u64 = 30; // 30 seconds
-
-/// Task health check timeout in seconds
-const TASK_HEALTH_TIMEOUT_SECS: i64 = 300; // 5 minutes
 
 /// Maximum number of consecutive errors before task restart
 const MAX_CONSECUTIVE_ERRORS: u64 = 5;
@@ -105,7 +100,7 @@ impl PoolMonitorStats {
         if self.total_monitoring_cycles == 0 {
             0.0
         } else {
-            (self.successful_cycles as f64 / self.total_monitoring_cycles as f64) * 100.0
+            ((self.successful_cycles as f64) / (self.total_monitoring_cycles as f64)) * 100.0
         }
     }
 
@@ -116,11 +111,13 @@ impl PoolMonitorStats {
         } else {
             self.failed_cycles += 1;
         }
-        
+
         // Update average health percentage
-        let total_health = self.average_health_percentage * (self.total_monitoring_cycles - 1) as f64 + health_percentage;
-        self.average_health_percentage = total_health / self.total_monitoring_cycles as f64;
-        
+        let total_health =
+            self.average_health_percentage * ((self.total_monitoring_cycles - 1) as f64) +
+            health_percentage;
+        self.average_health_percentage = total_health / (self.total_monitoring_cycles as f64);
+
         self.last_monitoring_cycle = Some(Utc::now());
         self.last_health_check = Some(Utc::now());
     }
@@ -183,7 +180,10 @@ impl PoolMonitorService {
                     if let Some(last_run) = status.last_run {
                         let age = Utc::now().signed_duration_since(last_run);
                         if age.num_seconds() > TASK_HEALTH_TIMEOUT_SECS {
-                            stale_tasks.push((name.clone(), format!("Task hasn't run for {} seconds", age.num_seconds())));
+                            stale_tasks.push((
+                                name.clone(),
+                                format!("Task hasn't run for {} seconds", age.num_seconds()),
+                            ));
                         } else {
                             healthy_tasks += 1;
                         }
@@ -200,7 +200,10 @@ impl PoolMonitorService {
                     if let Some(last_run) = status.last_run {
                         let age = Utc::now().signed_duration_since(last_run);
                         if age.num_seconds() > TASK_HEALTH_TIMEOUT_SECS {
-                            stale_tasks.push((name.clone(), format!("Task hasn't run for {} seconds", age.num_seconds())));
+                            stale_tasks.push((
+                                name.clone(),
+                                format!("Task hasn't run for {} seconds", age.num_seconds()),
+                            ));
                         }
                     }
                 }
@@ -209,7 +212,7 @@ impl PoolMonitorService {
 
         // Calculate health percentage
         let health_percentage = if total_tasks > 0 {
-            (healthy_tasks as f64 / total_tasks as f64) * 100.0
+            ((healthy_tasks as f64) / (total_tasks as f64)) * 100.0
         } else {
             0.0
         };
@@ -234,7 +237,11 @@ impl PoolMonitorService {
 
             // Log stale tasks
             for (task_name, reason) in &stale_tasks {
-                log(LogTag::Pool, "TASK_STALE", &format!("Task {} is stale: {}", task_name, reason));
+                log(
+                    LogTag::Pool,
+                    "TASK_STALE",
+                    &format!("Task {} is stale: {}", task_name, reason)
+                );
             }
         }
 
@@ -276,18 +283,18 @@ impl PoolMonitorService {
     }
 
     /// Check if a task needs to be restarted
-    pub async fn should_restart_task(
-        &self,
-        task_name: &str,
-        task_status: &TaskStatus
-    ) -> bool {
+    pub async fn should_restart_task(&self, task_name: &str, task_status: &TaskStatus) -> bool {
         // Check if task has too many consecutive errors
         if task_status.error_count >= MAX_CONSECUTIVE_ERRORS {
             if self.debug_enabled {
                 log(
                     LogTag::Pool,
                     "TASK_RESTART_NEEDED",
-                    &format!("Task {} needs restart due to {} consecutive errors", task_name, task_status.error_count)
+                    &format!(
+                        "Task {} needs restart due to {} consecutive errors",
+                        task_name,
+                        task_status.error_count
+                    )
                 );
             }
             return true;
@@ -301,7 +308,11 @@ impl PoolMonitorService {
                     log(
                         LogTag::Pool,
                         "TASK_RESTART_NEEDED",
-                        &format!("Task {} needs restart due to staleness ({} seconds)", task_name, age.num_seconds())
+                        &format!(
+                            "Task {} needs restart due to staleness ({} seconds)",
+                            task_name,
+                            age.num_seconds()
+                        )
                     );
                 }
                 return true;
@@ -312,10 +323,7 @@ impl PoolMonitorService {
     }
 
     /// Restart a task (placeholder for future implementation)
-    pub async fn restart_task(
-        &self,
-        task_name: &str
-    ) -> Result<(), String> {
+    pub async fn restart_task(&self, task_name: &str) -> Result<(), String> {
         // TODO: Implement task restart logic
         // This would involve:
         // 1. Stopping the current task
@@ -385,7 +393,7 @@ impl PoolMonitorService {
 
         let total_tasks = state.task_statuses.len();
         let health_percentage = if total_tasks > 0 {
-            (healthy_tasks as f64 / total_tasks as f64) * 100.0
+            ((healthy_tasks as f64) / (total_tasks as f64)) * 100.0
         } else {
             0.0
         };
@@ -425,10 +433,7 @@ pub async fn monitor_service_health(
 }
 
 /// Check if task should be restarted (convenience function)
-pub async fn should_restart_task(
-    task_name: &str,
-    task_status: &TaskStatus
-) -> bool {
+pub async fn should_restart_task(task_name: &str, task_status: &TaskStatus) -> bool {
     get_pool_monitor().should_restart_task(task_name, task_status).await
 }
 

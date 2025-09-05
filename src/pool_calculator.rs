@@ -1,5 +1,6 @@
 use crate::logger::{ log, LogTag };
 use crate::pool_interface::TokenPriceInfo;
+use crate::pool_constants::*;
 use crate::global::is_debug_pool_calculator_enabled;
 use async_trait::async_trait;
 use chrono::{ DateTime, Utc };
@@ -7,19 +8,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{ Duration, Instant };
 use tokio::sync::RwLock;
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-/// Pool program IDs
-pub const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
-pub const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
-pub const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
-pub const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
-pub const PUMP_FUN_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
-pub const RAYDIUM_LEGACY_AMM_PROGRAM_ID: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
-pub const RAYDIUM_CLMM_PROGRAM_ID: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK";
 
 // =============================================================================
 // DATA STRUCTURES
@@ -94,8 +82,10 @@ impl PoolStats {
         }
 
         // Update average calculation time
-        let total_time = self.average_calculation_time_ms * (self.calculations_attempted - 1) as f64;
-        self.average_calculation_time_ms = (total_time + time_ms) / self.calculations_attempted as f64;
+        let total_time =
+            self.average_calculation_time_ms * ((self.calculations_attempted - 1) as f64);
+        self.average_calculation_time_ms =
+            (total_time + time_ms) / (self.calculations_attempted as f64);
 
         // Track pools by program
         *self.pools_by_program.entry(program_id.to_string()).or_insert(0) += 1;
@@ -105,7 +95,7 @@ impl PoolStats {
         if self.calculations_attempted == 0 {
             0.0
         } else {
-            (self.calculations_successful as f64 / self.calculations_attempted as f64) * 100.0
+            ((self.calculations_successful as f64) / (self.calculations_attempted as f64)) * 100.0
         }
     }
 }
@@ -140,7 +130,6 @@ impl PoolCalculator {
         self.debug_enabled = true;
         log(LogTag::Pool, "DEBUG", "Pool calculator debug mode enabled (overridden)");
     }
-
 
     /// Calculate token price from pool information
     pub async fn calculate_token_price(
@@ -214,7 +203,6 @@ impl PoolCalculator {
         self.stats.read().await.clone()
     }
 
-
     // =============================================================================
     // PRIVATE METHODS
     // =============================================================================
@@ -222,37 +210,65 @@ impl PoolCalculator {
     // Placeholder implementations for price calculators
     // These would contain the actual price calculation logic from pool_old.rs
 
-    async fn calculate_raydium_cpmm_price(&self, _pool_info: &PoolInfo, _token_mint: &str) -> Result<Option<PoolPriceInfo>, String> {
+    async fn calculate_raydium_cpmm_price(
+        &self,
+        _pool_info: &PoolInfo,
+        _token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
         // TODO: Implement Raydium CPMM price calculation
         Ok(None)
     }
 
-    async fn calculate_raydium_legacy_amm_price(&self, _pool_info: &PoolInfo, _token_mint: &str) -> Result<Option<PoolPriceInfo>, String> {
+    async fn calculate_raydium_legacy_amm_price(
+        &self,
+        _pool_info: &PoolInfo,
+        _token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
         // TODO: Implement Raydium Legacy AMM price calculation
         Ok(None)
     }
 
-    async fn calculate_raydium_clmm_price(&self, _pool_info: &PoolInfo, _token_mint: &str) -> Result<Option<PoolPriceInfo>, String> {
+    async fn calculate_raydium_clmm_price(
+        &self,
+        _pool_info: &PoolInfo,
+        _token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
         // TODO: Implement Raydium CLMM price calculation
         Ok(None)
     }
 
-    async fn calculate_meteora_damm_v2_price(&self, _pool_info: &PoolInfo, _token_mint: &str) -> Result<Option<PoolPriceInfo>, String> {
+    async fn calculate_meteora_damm_v2_price(
+        &self,
+        _pool_info: &PoolInfo,
+        _token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
         // TODO: Implement Meteora DAMM v2 price calculation
         Ok(None)
     }
 
-    async fn calculate_meteora_dlmm_price(&self, _pool_info: &PoolInfo, _token_mint: &str) -> Result<Option<PoolPriceInfo>, String> {
+    async fn calculate_meteora_dlmm_price(
+        &self,
+        _pool_info: &PoolInfo,
+        _token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
         // TODO: Implement Meteora DLMM price calculation
         Ok(None)
     }
 
-    async fn calculate_orca_whirlpool_price(&self, _pool_info: &PoolInfo, _token_mint: &str) -> Result<Option<PoolPriceInfo>, String> {
+    async fn calculate_orca_whirlpool_price(
+        &self,
+        _pool_info: &PoolInfo,
+        _token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
         // TODO: Implement Orca Whirlpool price calculation
         Ok(None)
     }
 
-    async fn calculate_pump_fun_amm_price(&self, _pool_info: &PoolInfo, _token_mint: &str) -> Result<Option<PoolPriceInfo>, String> {
+    async fn calculate_pump_fun_amm_price(
+        &self,
+        _pool_info: &PoolInfo,
+        _token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
         // TODO: Implement Pump Fun AMM price calculation
         Ok(None)
     }

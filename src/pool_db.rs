@@ -1,25 +1,10 @@
 use crate::logger::{ log, LogTag };
+use crate::pool_constants::*;
 use chrono::{ DateTime, Utc };
 use rusqlite::{ params, Connection, Row };
 use serde::{ Deserialize, Serialize };
 use std::fs;
 use std::path::Path;
-
-// =============================================================================
-// CONSTANTS (PERFORMANCE OPTIMIZED)
-// =============================================================================
-
-/// Database file path
-const POOLS_DB_PATH: &str = "data/pools.db";
-
-/// Maximum age for price history entries (24 hours)
-const MAX_PRICE_HISTORY_AGE_HOURS: i64 = 24;
-
-/// Maximum age for pool metadata cache (10 minutes as per requirements)
-const POOL_METADATA_CACHE_TTL_HOURS: i64 = 24; // Keep for 24 hours, but mark stale after 10 minutes
-
-/// Pool metadata cache staleness threshold (10 minutes)
-const POOL_METADATA_STALE_MINUTES: i64 = 10;
 
 // =============================================================================
 // DATABASE STRUCTURES

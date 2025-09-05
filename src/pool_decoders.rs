@@ -1,6 +1,7 @@
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pool_extraction::*;
+use crate::pool_constants::*;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -1072,12 +1073,12 @@ impl Default for PoolDecoderFactory {
 /// Get pool type from program ID
 pub fn get_pool_type_from_program_id(program_id: &str) -> Option<PoolType> {
     match program_id {
-        "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => Some(PoolType::RaydiumCpmm),
-        "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => Some(PoolType::RaydiumLegacy),
-        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => Some(PoolType::MeteoraDb),
-        "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG" => Some(PoolType::MeteoraDamm),
-        "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" => Some(PoolType::Orca),
-        "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => Some(PoolType::PumpFun),
+        RAYDIUM_CPMM_PROGRAM_ID => Some(PoolType::RaydiumCpmm),
+        RAYDIUM_LEGACY_AMM_PROGRAM_ID => Some(PoolType::RaydiumLegacy),
+        METEORA_DLMM_PROGRAM_ID => Some(PoolType::MeteoraDb),
+        METEORA_DAMM_V2_PROGRAM_ID => Some(PoolType::MeteoraDamm),
+        ORCA_WHIRLPOOL_PROGRAM_ID => Some(PoolType::Orca),
+        PUMP_FUN_AMM_PROGRAM_ID => Some(PoolType::PumpFun),
         _ => None,
     }
 }
@@ -1085,24 +1086,24 @@ pub fn get_pool_type_from_program_id(program_id: &str) -> Option<PoolType> {
 /// Get program ID from pool type
 pub fn get_program_id_from_pool_type(pool_type: &PoolType) -> &'static str {
     match pool_type {
-        PoolType::RaydiumCpmm => "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
-        PoolType::RaydiumLegacy => "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
-        PoolType::MeteoraDb => "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
-        PoolType::MeteoraDamm => "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG",
-        PoolType::Orca => "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
-        PoolType::PumpFun => "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+        PoolType::RaydiumCpmm => RAYDIUM_CPMM_PROGRAM_ID,
+        PoolType::RaydiumLegacy => RAYDIUM_LEGACY_AMM_PROGRAM_ID,
+        PoolType::MeteoraDb => METEORA_DLMM_PROGRAM_ID,
+        PoolType::MeteoraDamm => METEORA_DAMM_V2_PROGRAM_ID,
+        PoolType::Orca => ORCA_WHIRLPOOL_PROGRAM_ID,
+        PoolType::PumpFun => PUMP_FUN_AMM_PROGRAM_ID,
     }
 }
 
 /// Get display name for pool type
 pub fn get_pool_type_display_name(pool_type: &PoolType) -> &'static str {
     match pool_type {
-        PoolType::RaydiumCpmm => "Raydium CPMM",
-        PoolType::RaydiumLegacy => "Raydium Legacy AMM",
-        PoolType::MeteoraDb => "Meteora DLMM",
-        PoolType::MeteoraDamm => "Meteora DAMM v2",
-        PoolType::Orca => "Orca Whirlpool",
-        PoolType::PumpFun => "Pump.fun AMM",
+        PoolType::RaydiumCpmm => RAYDIUM_CPMM_DISPLAY_NAME,
+        PoolType::RaydiumLegacy => RAYDIUM_LEGACY_DISPLAY_NAME,
+        PoolType::MeteoraDb => METEORA_DLMM_DISPLAY_NAME,
+        PoolType::MeteoraDamm => METEORA_DAMM_DISPLAY_NAME,
+        PoolType::Orca => ORCA_WHIRLPOOL_DISPLAY_NAME,
+        PoolType::PumpFun => PUMP_FUN_DISPLAY_NAME,
     }
 }
 
@@ -1125,12 +1126,5 @@ pub fn decode_pool_data_by_program_id(
 
 /// Get all supported program IDs
 pub fn get_supported_program_ids() -> Vec<&'static str> {
-    vec![
-        "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C", // Raydium CPMM
-        "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", // Raydium Legacy
-        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo", // Meteora DLMM
-        "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG", // Meteora DAMM v2
-        "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc", // Orca Whirlpool
-        "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" // Pump.fun AMM
-    ]
+    get_all_program_ids()
 }

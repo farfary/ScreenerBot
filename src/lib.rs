@@ -11,6 +11,7 @@ pub mod global;
 pub mod logger;
 pub mod pool_calculator; // Pool price calculator service
 pub mod pool_cleanup; // Pool cleanup service for data maintenance
+pub mod pool_constants; // Pool constants and program IDs
 pub mod pool_monitor; // Pool monitor service for task health monitoring
 pub mod pool_tokens; // Pool tokens service for loading tokens from database
 pub mod pool_db; // Pool database module

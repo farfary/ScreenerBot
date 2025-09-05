@@ -2,30 +2,12 @@ use crate::logger::{ log, LogTag };
 use crate::global::is_debug_pool_cleanup_enabled;
 use crate::pool_interface::TokenPriceInfo;
 use crate::pool_discovery::{ PoolData, AccountInfo };
+use crate::pool_constants::*;
 use chrono::{ DateTime, Utc };
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{ Duration, Instant };
 use tokio::sync::RwLock;
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-/// Price cache TTL in seconds
-const PRICE_CACHE_TTL_SECS: i64 = 30;
-
-/// Account data cache TTL in seconds
-const ACCOUNT_DATA_CACHE_TTL_SECS: i64 = 300; // 5 minutes
-
-/// Pool data cache TTL in seconds
-const POOL_DATA_CACHE_TTL_SECS: i64 = 600; // 10 minutes
-
-/// Tracked tokens TTL in seconds
-const TRACKED_TOKENS_TTL_SECS: i64 = 1800; // 30 minutes
-
-/// Maximum number of items to clean per operation
-const MAX_CLEANUP_BATCH_SIZE: usize = 1000;
 
 // =============================================================================
 // DATA STRUCTURES
@@ -68,7 +50,7 @@ impl PoolCleanupStats {
         if self.total_cleanups == 0 {
             0.0
         } else {
-            (self.successful_cleanups as f64 / self.total_cleanups as f64) * 100.0
+            ((self.successful_cleanups as f64) / (self.total_cleanups as f64)) * 100.0
         }
     }
 
@@ -80,11 +62,12 @@ impl PoolCleanupStats {
         } else {
             self.failed_cleanups += 1;
         }
-        
+
         // Update average time
-        let total_time = self.average_cleanup_time_ms * (self.total_cleanups - 1) as f64 + time_ms;
-        self.average_cleanup_time_ms = total_time / self.total_cleanups as f64;
-        
+        let total_time =
+            self.average_cleanup_time_ms * ((self.total_cleanups - 1) as f64) + time_ms;
+        self.average_cleanup_time_ms = total_time / (self.total_cleanups as f64);
+
         self.last_cleanup = Some(Utc::now());
     }
 }
@@ -108,7 +91,7 @@ pub trait Cleanupable {
     fn get_best_pools(&self) -> &HashMap<String, PoolData>;
     fn get_account_queue(&self) -> &Vec<AccountInfo>;
     fn get_account_data_cache(&self) -> &HashMap<String, (Vec<u8>, DateTime<Utc>)>;
-    
+
     fn remove_tracked_token(&mut self, token_mint: &str);
     fn remove_best_pool(&mut self, token_mint: &str);
     fn remove_account_queue_item(&mut self, index: usize);
@@ -187,11 +170,7 @@ impl PoolCleanupService {
             stats.account_data_cleaned += account_cleaned as u64;
             stats.pool_data_cleaned += pool_cleaned as u64;
             stats.tracked_tokens_cleaned += tokens_cleaned as u64;
-            stats.record_cleanup(
-                true,
-                start_time.elapsed().as_millis() as f64,
-                total_cleaned
-            );
+            stats.record_cleanup(true, start_time.elapsed().as_millis() as f64, total_cleaned);
         }
 
         if self.debug_enabled {
@@ -409,7 +388,7 @@ impl PoolCleanupService {
     ) -> (usize, usize, usize, usize, usize) {
         let state = shared_state.read().await;
         let price_cache_size = price_cache.read().await.len();
-        
+
         (
             price_cache_size,
             state.tracked_tokens.len(),
@@ -427,14 +406,15 @@ impl PoolCleanupService {
         cleanup_account_data: F2,
         cleanup_pool_data: F3,
         cleanup_tracked_tokens: F4,
-        cleanup_account_queue: F5,
-    ) -> Result<usize, String>
-    where
-        F1: FnOnce() -> Result<usize, String>,
-        F2: FnOnce() -> Result<usize, String>,
-        F3: FnOnce() -> Result<usize, String>,
-        F4: FnOnce() -> Result<usize, String>,
-        F5: FnOnce() -> Result<usize, String>,
+        cleanup_account_queue: F5
+    )
+        -> Result<usize, String>
+        where
+            F1: FnOnce() -> Result<usize, String>,
+            F2: FnOnce() -> Result<usize, String>,
+            F3: FnOnce() -> Result<usize, String>,
+            F4: FnOnce() -> Result<usize, String>,
+            F5: FnOnce() -> Result<usize, String>
     {
         let start_time = Instant::now();
 
@@ -471,11 +451,7 @@ impl PoolCleanupService {
             stats.account_data_cleaned += account_cleaned as u64;
             stats.pool_data_cleaned += pool_cleaned as u64;
             stats.tracked_tokens_cleaned += tokens_cleaned as u64;
-            stats.record_cleanup(
-                true,
-                start_time.elapsed().as_millis() as f64,
-                total_cleaned
-            );
+            stats.record_cleanup(true, start_time.elapsed().as_millis() as f64, total_cleaned);
         }
 
         if self.debug_enabled {
@@ -538,11 +514,7 @@ impl PoolCleanupService {
             stats.account_data_cleaned += account_cleaned as u64;
             stats.pool_data_cleaned += pool_cleaned as u64;
             stats.tracked_tokens_cleaned += tokens_cleaned as u64;
-            stats.record_cleanup(
-                true,
-                start_time.elapsed().as_millis() as f64,
-                total_cleaned
-            );
+            stats.record_cleanup(true, start_time.elapsed().as_millis() as f64, total_cleaned);
         }
 
         if self.debug_enabled {
@@ -627,14 +599,15 @@ pub async fn cleanup_with_functions<F1, F2, F3, F4, F5>(
     cleanup_account_data: F2,
     cleanup_pool_data: F3,
     cleanup_tracked_tokens: F4,
-    cleanup_account_queue: F5,
-) -> Result<usize, String>
-where
-    F1: FnOnce() -> Result<usize, String>,
-    F2: FnOnce() -> Result<usize, String>,
-    F3: FnOnce() -> Result<usize, String>,
-    F4: FnOnce() -> Result<usize, String>,
-    F5: FnOnce() -> Result<usize, String>,
+    cleanup_account_queue: F5
+)
+    -> Result<usize, String>
+    where
+        F1: FnOnce() -> Result<usize, String>,
+        F2: FnOnce() -> Result<usize, String>,
+        F3: FnOnce() -> Result<usize, String>,
+        F4: FnOnce() -> Result<usize, String>,
+        F5: FnOnce() -> Result<usize, String>
 {
     get_pool_cleanup().cleanup_with_functions(
         price_cache,
@@ -642,6 +615,6 @@ where
         cleanup_account_data,
         cleanup_pool_data,
         cleanup_tracked_tokens,
-        cleanup_account_queue,
+        cleanup_account_queue
     ).await
 }

@@ -8,16 +8,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{ Duration, Instant };
 use tokio::sync::RwLock;
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-/// Maximum number of accounts to fetch in one get_multiple_accounts call
-const RPC_MULTIPLE_ACCOUNTS_BATCH_SIZE: usize = 100;
-
-/// Token account cache TTL in seconds
-const TOKEN_ACCOUNT_CACHE_TTL_SECS: i64 = 300; // 5 minutes
+use crate::pool_constants::*;
 
 // =============================================================================
 // DATA STRUCTURES
