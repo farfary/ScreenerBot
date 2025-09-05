@@ -2,7 +2,7 @@ use std::collections::{ HashMap, HashSet };
 
 use screenerbot::logger::{ log, LogTag };
 use screenerbot::rpc::get_rpc_client;
-use screenerbot::tokens::pool::{
+use screenerbot::tokens::pool_old::{
     get_pool_program_display_name,
     PoolInfo,
     PoolPriceCalculator,

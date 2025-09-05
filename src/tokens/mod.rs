@@ -1,6 +1,5 @@
 //// Pool pricing is enabled - use pool interface only
 pub use crate::pool_service::{
-    get_pool_service,
     init_pool_service,
     get_price,
     get_price_full,
@@ -44,7 +43,6 @@ pub mod lp_lock;
 pub mod monitor;
 pub mod ohlcv_db;
 pub mod ohlcvs;
-pub mod pool;
 pub mod raydium;
 pub mod rugcheck;
 pub mod types;

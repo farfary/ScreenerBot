@@ -1938,626 +1938,6 @@ pub async fn get_cooldown_status(sample: usize) -> String {
     )
 }
 
-// =============================================================================
-// TOKEN PREPARATION AND TRADING FUNCTIONS
-// =============================================================================
-
-/// Prepare tokens for filtering and trading by fetching from database
-/// Returns all available tokens ready for the filtering system to process
-/// Now uses 10-minute caching to reduce database load and improve performance
-pub async fn prepare_tokens(_cycle_start: std::time::Instant) -> Result<Vec<Token>, String> {
-    // Check cache first - if valid, return cached tokens
-    {
-        let cache = FILTERED_TOKENS_CACHE.read().unwrap();
-        if let Some(cached_data) = cache.as_ref() {
-            if cached_data.is_valid() {
-                let cache_age = cached_data.age_minutes();
-                log(
-                    LogTag::Trader,
-                    "CACHE_HIT",
-                    &format!(
-                        "📋 Using cached tokens: {} tokens (age: {}min/{} min cache)",
-                        cached_data.tokens.len(),
-                        cache_age,
-                        TOKEN_CACHE_DURATION_MINUTES
-                    ),
-                );
-
-                if is_debug_trader_enabled() {
-                    log(
-                        LogTag::Trader,
-                        "DEBUG_CACHE_HIT",
-                        &format!(
-                            "🎯 Cache details: {} tokens cached at {:.1}min ago, {} min remaining",
-                            cached_data.tokens.len(),
-                            cache_age,
-                            TOKEN_CACHE_DURATION_MINUTES - cache_age
-                        ),
-                    );
-                }
-
-                return Ok(cached_data.tokens.clone());
-            } else {
-                let cache_age = cached_data.age_minutes();
-                log(
-                    LogTag::Trader,
-                    "CACHE_EXPIRED",
-                    &format!(
-                        "⏰ Cache expired: age {}min > {}min limit, refreshing tokens",
-                        cache_age, TOKEN_CACHE_DURATION_MINUTES
-                    ),
-                );
-            }
-        } else {
-            log(
-                LogTag::Trader,
-                "CACHE_MISS",
-                "🆕 No cached tokens found, performing fresh fetch and filter",
-            );
-        }
-    }
-
-    // Cache miss or expired - perform full token fetch and filtering
-    log(
-        LogTag::Trader,
-        "TOKEN_REFRESH_START",
-        "🔄 Starting fresh token fetch and filtering (cache refresh)",
-    );
-
-    use crate::filtering::{filter_tokens_with_reasons, log_transaction_activity_stats};
-
-    // Timeout for filtering operations - aggressive reduction to prevent deadlocks
-    const FILTERING_TIMEOUT_SECS: u64 = 20; // Reduced from 60s to prevent blocking
-
-    // 1. Fetch tokens from safe system
-    log(
-        LogTag::Trader,
-        "TOKEN_FETCH_START",
-        "🔄 Fetching tokens from database...",
-    );
-    if is_debug_trader_enabled() {
-        log(
-            LogTag::Trader,
-            "DEBUG_TOKEN_FETCH",
-            "� Starting token fetch from get_all_tokens_by_liquidity()",
-        );
-    }
-
-    let fetch_start = std::time::Instant::now();
-    let tokens = {
-        let tokens_from_module: Vec<Token> = match get_all_tokens_by_liquidity().await {
-            Ok(api_tokens) => {
-                let fetch_duration = fetch_start.elapsed();
-                log(
-                    LogTag::Trader,
-                    "TOKEN_FETCH_SUCCESS",
-                    &format!(
-                        "✅ Fetched {} tokens from database in {:.3}s",
-                        api_tokens.len(),
-                        fetch_duration.as_secs_f32()
-                    ),
-                );
-                if is_debug_trader_enabled() {
-                    log(
-                        LogTag::Trader,
-                        "DEBUG_TOKEN_FETCH_SUCCESS",
-                        &format!(
-                            "🔍 Token fetch details:\n  \
-                             - Raw tokens from DB: {}\n  \
-                             - First 5 tokens: [{}]\n  \
-                             - Fetch duration: {:.3}s",
-                            api_tokens.len(),
-                            api_tokens
-                                .iter()
-                                .take(5)
-                                .map(|t| format!(
-                                    "{}({:.1}k)",
-                                    t.symbol,
-                                    t.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0)
-                                        / 1000.0
-                                ))
-                                .collect::<Vec<_>>()
-                                .join(", "),
-                            fetch_duration.as_secs_f32()
-                        ),
-                    );
-                }
-                // Convert ApiToken to Token for compatibility with existing code
-                let mut converted_tokens: Vec<Token> = api_tokens
-                    .into_iter()
-                    .map(|api_token| api_token.into())
-                    .collect();
-
-                // Populate tokens with rugcheck_data and decimals from database
-                let db =
-                    TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e));
-                if let Ok(database) = db {
-                    if let Err(e) = database
-                        .populate_tokens_with_cached_data(&mut converted_tokens)
-                        .await
-                    {
-                        log(
-                            LogTag::Trader,
-                            "WARN",
-                            &format!("Failed to populate tokens with cached data: {}", e),
-                        );
-                    }
-                }
-
-                converted_tokens
-            }
-            Err(e) => {
-                let fetch_duration = fetch_start.elapsed();
-                log(
-                    LogTag::Trader,
-                    "WARN",
-                    &format!(
-                        "❌ Failed to get tokens from safe system after {:.3}s: {}",
-                        fetch_duration.as_secs_f32(),
-                        e
-                    ),
-                );
-                Vec::new()
-            }
-        };
-
-        // Log total tokens available
-        if is_debug_trader_enabled() {
-            log(
-                LogTag::Trader,
-                "DEBUG",
-                &format!(
-                    "Total tokens from safe system: {}",
-                    tokens_from_module.len()
-                ),
-            );
-        }
-
-        // Count tokens with liquidity data
-        let with_liquidity = tokens_from_module
-            .iter()
-            .filter(|token| token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0) > 0.0)
-            .count();
-
-        if with_liquidity > 0 {
-            log(
-                LogTag::Trader,
-                "INFO",
-                &format!(
-                    "Processing {} tokens with liquidity (out of {} total)",
-                    with_liquidity,
-                    tokens_from_module.len()
-                ),
-            );
-        }
-
-        // Keep tokens in liquidity order for consistent processing
-        // Smart prioritization will happen after filtering
-        tokens_from_module
-    };
-
-    // 2. Apply filtering with timeout protection and progress tracking
-    log(
-        LogTag::Trader,
-        "FILTER_START",
-        &format!(
-            "🔍 Starting filtering of {} tokens (timeout: {}s)",
-            tokens.len(),
-            FILTERING_TIMEOUT_SECS
-        ),
-    );
-    if is_debug_trader_enabled() {
-        log(
-            LogTag::Trader,
-            "DEBUG_FILTER_START",
-            &format!(
-                "� Filter details:\n  \
-                 - Input tokens: {}\n  \
-                 - With liquidity: {}\n  \
-                 - Timeout: {}s\n  \
-                 - Sample tokens: [{}]",
-                tokens.len(),
-                tokens
-                    .iter()
-                    .filter(|t| t.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0) > 0.0)
-                    .count(),
-                FILTERING_TIMEOUT_SECS,
-                tokens
-                    .iter()
-                    .take(3)
-                    .map(|t| format!(
-                        "{}({:.1}k)",
-                        t.symbol,
-                        t.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0) / 1000.0
-                    ))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        );
-    }
-
-    let filter_start = std::time::Instant::now();
-    let filtering_result = tokio::time::timeout(
-        std::time::Duration::from_secs(FILTERING_TIMEOUT_SECS),
-        async {
-            // Run filtering in spawn_blocking to avoid blocking the async runtime
-            tokio::task::spawn_blocking({
-                let tokens_copy = tokens.to_vec();
-                move || filter_tokens_with_reasons(&tokens_copy)
-            })
-            .await
-        },
-    )
-    .await;
-
-    let filter_duration = filter_start.elapsed();
-    if is_debug_trader_enabled() {
-        log(
-            LogTag::Trader,
-            "FILTER_TIMING",
-            &format!(
-                "⏱️ Filtering completed in {:.2}s",
-                filter_duration.as_secs_f32()
-            ),
-        );
-    }
-
-    let (eligible_tokens, rejected_tokens) = match filtering_result {
-        Ok(Ok(result)) => {
-            log(
-                LogTag::Trader,
-                "FILTER_SUCCESS",
-                &format!(
-                    "✅ Filtering completed in {:.2}s: {}/{} tokens passed",
-                    filter_duration.as_secs_f32(),
-                    result.0.len(),
-                    tokens.len()
-                ),
-            );
-            if is_debug_trader_enabled() {
-                log(
-                    LogTag::Trader,
-                    "DEBUG_FILTER_SUCCESS",
-                    &format!(
-                        "📊 Filter results:\n  \
-                         - Input tokens: {}\n  \
-                         - Eligible tokens: {}\n  \
-                         - Rejected tokens: {}\n  \
-                         - Pass rate: {:.1}%\n  \
-                         - Processing time: {:.2}s\n  \
-                         - First 3 eligible: [{}]",
-                        tokens.len(),
-                        result.0.len(),
-                        result.1.len(),
-                        if tokens.len() > 0 {
-                            ((result.0.len() as f64) / (tokens.len() as f64)) * 100.0
-                        } else {
-                            0.0
-                        },
-                        filter_duration.as_secs_f32(),
-                        result
-                            .0
-                            .iter()
-                            .take(3)
-                            .map(|t| t.symbol.as_str())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    ),
-                );
-            }
-            result
-        }
-        Ok(Err(e)) => {
-            log(
-                LogTag::Trader,
-                "ERROR",
-                &format!(
-                    "❌ Token filtering task failed after {:.2}s: {}",
-                    filter_duration.as_secs_f32(),
-                    e
-                ),
-            );
-            return Err(format!("Token filtering task failed: {}", e));
-        }
-        Err(_) => {
-            log(
-                LogTag::Trader,
-                "ERROR",
-                &format!(
-                    "⏰ Token filtering TIMED OUT after {:.2}s (limit: {}s)",
-                    filter_duration.as_secs_f32(),
-                    FILTERING_TIMEOUT_SECS
-                ),
-            );
-            return Err(format!(
-                "Token filtering timed out after {}s",
-                FILTERING_TIMEOUT_SECS
-            ));
-        }
-    };
-
-    // 3. Log filtering statistics
-    if is_debug_trader_enabled() {
-        log(
-            LogTag::Trader,
-            "FILTER_STATS",
-            &format!(
-                "Token filtering: {}/{} passed ({:.1}% pass rate) - processed {} tokens",
-                eligible_tokens.len(),
-                tokens.len(),
-                if tokens.len() > 0 {
-                    ((eligible_tokens.len() as f64) / (tokens.len() as f64)) * 100.0
-                } else {
-                    0.0
-                },
-                tokens.len()
-            ),
-        );
-    }
-
-    // 4. Log transaction activity statistics (debug mode)
-    if is_debug_trader_enabled() {
-        log_transaction_activity_stats(&tokens);
-    }
-
-    // 5. Debug logging for rejected tokens
-    if is_debug_trader_enabled() && !rejected_tokens.is_empty() {
-        let sample_size = std::cmp::min(5, rejected_tokens.len());
-        for (token, reason) in rejected_tokens.iter().take(sample_size) {
-            log(
-                LogTag::Trader,
-                "DEBUG",
-                &format!("🚫 {} filtered out: {:?}", token.symbol, reason),
-            );
-        }
-        if rejected_tokens.len() > sample_size {
-            log(
-                LogTag::Trader,
-                "DEBUG",
-                &format!(
-                    "... and {} more tokens filtered out",
-                    rejected_tokens.len() - sample_size
-                ),
-            );
-        }
-    }
-
-    // 6. Quick blacklist filtering only (no bulk validation)
-    let mut tokens_after_blacklist = Vec::new();
-    let mut blacklisted_count = 0;
-
-    // Clean up blacklist periodically
-    cleanup_invalid_pool_blacklist();
-
-    for token in eligible_tokens {
-        // Only skip tokens that are already known to be blacklisted (no RPC calls)
-        if is_token_in_invalid_pool_blacklist(&token.mint) {
-            blacklisted_count += 1;
-            if is_debug_trader_enabled() {
-                log(
-                    LogTag::Trader,
-                    "POOL_BLACKLISTED",
-                    &format!(
-                        "⚫ Skipping blacklisted token: {} ({})",
-                        token.symbol,
-                        &token.mint[..8]
-                    ),
-                );
-            }
-            continue;
-        }
-        tokens_after_blacklist.push(token);
-    }
-
-    if blacklisted_count > 0 {
-        log(
-            LogTag::Trader,
-            "BLACKLIST_FILTER",
-            &format!(
-                "⚫ Filtered out {} blacklisted tokens, {} remaining",
-                blacklisted_count,
-                tokens_after_blacklist.len()
-            ),
-        );
-    }
-
-    // 6b. Note: Per-token re-entry cooldown now applied after token retrieval for cache-independence
-    // This ensures recently closed positions are always filtered with fresh data
-    let tokens_after_blacklist = tokens_after_blacklist; // Cooldown will be applied by caller
-
-    // 7. Smart token prioritization with confidence-based top tokens
-    // Partition tokens to ensure ~50% are from actively monitored/history-rich set
-    let pool_service = get_pool_service();
-    let recent_pool_tokens = pool_service.get_available_tokens().await; // Get available tokens from pool interface
-    let recent_set: std::collections::HashSet<String> = recent_pool_tokens.into_iter().collect();
-    let mut with_monitoring: Vec<Token> = Vec::new();
-    let mut without_monitoring: Vec<Token> = Vec::new();
-    for t in tokens_after_blacklist {
-        if recent_set.contains(&t.mint) {
-            with_monitoring.push(t);
-        } else {
-            without_monitoring.push(t);
-        }
-    }
-
-    // Load DB-backed history presence via pool service lightweight cache (kept at startup)
-    // Prefer tokens that have any history entries in memory
-    let mut with_history: Vec<Token> = Vec::new();
-    let mut no_history: Vec<Token> = Vec::new();
-    for t in with_monitoring.into_iter() {
-        let hist = pool_service.get_price_history(&t.mint).await;
-        if !hist.is_empty() {
-            with_history.push(t);
-        } else {
-            no_history.push(t);
-        }
-    }
-
-    // Prioritize monitored tokens (with history first, then without)
-    let mut prioritized_monitored = prioritize_tokens_for_checking(with_history);
-    let mut prioritized_monitored_nohist = prioritize_tokens_for_checking(no_history);
-    prioritized_monitored.append(&mut prioritized_monitored_nohist);
-
-    // Also prioritize tokens not currently in monitoring
-    let prioritized_others = prioritize_tokens_for_checking(without_monitoring);
-
-    // Interleave ~50/50 between monitored and others
-    let mut prioritized_tokens: Vec<Token> =
-        Vec::with_capacity(prioritized_monitored.len() + prioritized_others.len());
-    let mut i = 0usize;
-    let mut j = 0usize;
-    while i < prioritized_monitored.len() || j < prioritized_others.len() {
-        // Take up to one from monitored
-        if i < prioritized_monitored.len() {
-            prioritized_tokens.push(prioritized_monitored[i].clone());
-            i += 1;
-        }
-        // Take up to one from others
-        if j < prioritized_others.len() {
-            prioritized_tokens.push(prioritized_others[j].clone());
-            j += 1;
-        }
-    }
-
-    // Get top 10 confidence tokens for priority monitoring
-    let top_confidence_tokens = get_top_confidence_tokens(10);
-    let top_confidence_mints: std::collections::HashSet<String> = top_confidence_tokens
-        .iter()
-        .map(|info| info.mint.clone())
-        .collect();
-
-    // Add top confidence tokens to the beginning if not already present
-    let mut confidence_tokens_to_add = Vec::new();
-    for confidence_info in top_confidence_tokens {
-        // Check if token is already in prioritized list
-        let already_present = prioritized_tokens
-            .iter()
-            .any(|t| t.mint == confidence_info.mint);
-
-        if !already_present {
-            // Try to find token in original tokens list
-            if let Some(token) = tokens.iter().find(|t| t.mint == confidence_info.mint) {
-                confidence_tokens_to_add.push(token.clone());
-                if is_debug_trader_enabled() {
-                    log(
-                        LogTag::Trader,
-                        "CONFIDENCE_ADD",
-                        &format!(
-                            "📈 Adding high-confidence token: {} (confidence: {:.1}%, trend: {})",
-                            confidence_info.symbol,
-                            confidence_info.confidence,
-                            confidence_info.trend
-                        ),
-                    );
-                }
-            }
-        }
-    }
-
-    // Prepend confidence tokens to prioritized list
-    confidence_tokens_to_add.extend(prioritized_tokens);
-    let mut prioritized_tokens = confidence_tokens_to_add;
-
-    // Clean up stale entries periodically
-    cleanup_stale_confidence_entries();
-
-    if is_debug_trader_enabled() && !prioritized_tokens.is_empty() {
-        let confidence_count = prioritized_tokens
-            .iter()
-            .filter(|t| top_confidence_mints.contains(&t.mint))
-            .count();
-
-        log(
-            LogTag::Trader,
-            "PRIORITY_ORDER",
-            &format!(
-                "📊 Prioritized {} tokens: confidence_top={}, drops={}, fair_rotation={}, others={}",
-                prioritized_tokens.len(),
-                confidence_count,
-                prioritized_tokens
-                    .iter()
-                    .take(20)
-                    .filter(|t| {
-                        TOKEN_CHECK_TRACKER.read()
-                            .unwrap()
-                            .get(&t.mint)
-                            .map(|info| info.had_recent_drop)
-                            .unwrap_or(false)
-                    })
-                    .count(),
-                prioritized_tokens
-                    .iter()
-                    .filter(|t| {
-                        TOKEN_CHECK_TRACKER.read()
-                            .unwrap()
-                            .get(&t.mint)
-                            .map(|info| info.check_count == 0)
-                            .unwrap_or(true)
-                    })
-                    .count(),
-                prioritized_tokens.len() - 10
-            )
-        );
-    }
-
-    // Apply hard cap to prioritized tokens to keep working set bounded
-    if prioritized_tokens.len() > PREPARED_TOKENS_CAP {
-        if is_debug_trader_enabled() {
-            log(
-                LogTag::Trader,
-                "PREPARED_CAP",
-                &format!(
-                    "🔧 Capping prepared tokens: {} → {} (configured cap)",
-                    prioritized_tokens.len(),
-                    PREPARED_TOKENS_CAP
-                ),
-            );
-        }
-        prioritized_tokens.truncate(PREPARED_TOKENS_CAP);
-    }
-
-    // Cache the filtered and prioritized tokens for future cycles
-    {
-        if prioritized_tokens.is_empty() {
-            log(
-                LogTag::Trader,
-                "CACHE_SKIP_EMPTY",
-                "⚠️ Not caching empty filtered token list; will retry next cycle",
-            );
-            return Ok(prioritized_tokens);
-        }
-        let mut cache = FILTERED_TOKENS_CACHE.write().unwrap();
-        *cache = Some(CachedTokenData {
-            tokens: prioritized_tokens.clone(),
-            cached_at: Instant::now(),
-            cache_duration_minutes: TOKEN_CACHE_DURATION_MINUTES,
-        });
-
-        log(
-            LogTag::Trader,
-            "CACHE_UPDATED",
-            &format!(
-                "💾 Cached {} filtered tokens for {}min reuse",
-                prioritized_tokens.len(),
-                TOKEN_CACHE_DURATION_MINUTES
-            ),
-        );
-
-        if is_debug_trader_enabled() {
-            log(
-                LogTag::Trader,
-                "DEBUG_CACHE_UPDATED",
-                &format!(
-                    "📝 Cache details: {} tokens stored, next refresh in {}min",
-                    prioritized_tokens.len(),
-                    TOKEN_CACHE_DURATION_MINUTES
-                ),
-            );
-        }
-    }
-
-    Ok(prioritized_tokens)
-}
 
 /// Background task to monitor new tokens for entry opportunities
 pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
@@ -2627,55 +2007,53 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             );
         }
 
-        let tokens = match prepare_tokens(cycle_start).await {
-            Ok(prepared_tokens) => {
-                // Apply cooldown filter with fresh data (never cached)
-                let tokens = apply_cooldown_filter(prepared_tokens).await;
+        // Get available tokens directly from pool interface
+        let pool_service = get_pool_service();
+        let available_mints = pool_service.get_available_tokens().await;
+        
+        log(
+            LogTag::Trader,
+            "CYCLE_PREPARED",
+            &format!(
+                "✅ Got {} available tokens from pool interface in {:.3}s",
+                available_mints.len(),
+                cycle_start.elapsed().as_secs_f32()
+            )
+        );
 
-                log(
-                    LogTag::Trader,
-                    "CYCLE_PREPARED",
-                    &format!(
-                        "✅ Token preparation completed: {} eligible tokens ready for entry checking in {:.3}s",
-                        tokens.len(),
-                        cycle_start.elapsed().as_secs_f32()
-                    )
-                );
-                if is_debug_trader_enabled() {
-                    log(
-                        LogTag::Trader,
-                        "DEBUG_TOKENS_PREPARED",
-                        &format!(
-                            "🔍 First 5 eligible tokens: [{}]",
-                            tokens
-                                .iter()
-                                .take(5)
-                                .map(|t| format!(
-                                    "{}({:.9}k)",
-                                    t.symbol,
-                                    t.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0)
-                                        / 1000.0
-                                ))
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        ),
-                    );
+        // Convert mint addresses to Token objects
+        let mut tokens = Vec::new();
+        for mint in available_mints {
+            match crate::tokens::dexscreener::get_token_from_mint_global_api(&mint).await {
+                Ok(Some(token)) => {
+                    tokens.push(token);
                 }
-                tokens
+                Ok(None) | Err(_) => {
+                    // Skip tokens that can't be converted
+                    continue;
+                }
             }
-            Err(e) => {
-                log(
-                    LogTag::Trader,
-                    "ERROR",
-                    &format!(
-                        "❌ Token preparation failed after {:.3}s: {}",
-                        cycle_start.elapsed().as_secs_f32(),
-                        e
-                    ),
-                );
-                continue; // Skip this cycle and try again
-            }
-        };
+        }
+
+        if is_debug_trader_enabled() && !tokens.is_empty() {
+            log(
+                LogTag::Trader,
+                "DEBUG_TOKENS_PREPARED",
+                &format!(
+                    "🔍 First 5 available tokens: [{}]",
+                    tokens
+                        .iter()
+                        .take(5)
+                        .map(|t| format!(
+                            "{}({:.1}k)",
+                            t.symbol,
+                            t.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0) / 1000.0
+                        ))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            );
+        }
 
         // Early return if no tokens to process
         if tokens.is_empty() {
@@ -2723,210 +2101,20 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         use tokio::sync::Semaphore;
         let semaphore = Arc::new(Semaphore::new(ENTRY_CHECK_CONCURRENCY));
 
-        // Log filtering summary
-        log_filtering_summary(&tokens);
-
-        // Debug: Show top confidence tokens every few cycles
-        if is_debug_trader_enabled() {
-            let top_confidence = get_top_confidence_tokens(5);
-            if !top_confidence.is_empty() {
-                let confidence_summary: Vec<String> = top_confidence
-                    .iter()
-                    .map(|info| format!("{}:{:.1}%", info.symbol, info.confidence))
-                    .collect();
-                log(
-                    LogTag::Trader,
-                    "CONFIDENCE_TOP",
-                    &format!(
-                        "🎯 Top confidence tokens: [{}]",
-                        confidence_summary.join(", ")
-                    ),
-                );
-            }
-        }
-
-        // Capacity-aware scheduling: rotate through eligible tokens with a fixed per-cycle cap
+        // Simple token processing - take first batch of tokens
         let total_tokens = tokens.len();
         let batch_size = std::cmp::min(MAX_TOKENS_PER_CYCLE, total_tokens);
-        let start_raw = SCHEDULER_OFFSET.fetch_add(batch_size, Ordering::Relaxed);
-        let start_idx = start_raw % total_tokens;
-
-        let base_slice: Vec<Token> = if start_idx + batch_size <= total_tokens {
-            tokens[start_idx..start_idx + batch_size].to_vec()
-        } else {
-            let first = tokens[start_idx..].to_vec();
-            let remaining = batch_size - first.len();
-            let mut combined = first;
-            combined.extend_from_slice(&tokens[..remaining]);
-            combined
-        };
-
-        // Interleave: ensure ~50% of scheduled are tokens with history/active monitoring
-        // Guard this call with a timeout to prevent rare stalls blocking the cycle
-        if is_debug_trader_enabled() {
-            log(
-                LogTag::Trader,
-                "SCHEDULER_MONITORED_FETCH",
-                "⏳ Fetching monitored-set (recent pools infos ≤600s) with 2s timeout",
-            );
-        }
-        let pool_service = get_pool_service();
-        let monitored_vec =
-            match tokio::time::timeout(Duration::from_secs(2), pool_service.get_available_tokens())
-                .await
-            {
-                Ok(v) => v,
-                Err(_) => {
-                    log(
-                    LogTag::Trader,
-                    "SCHEDULER_WARN",
-                    "⚠️ Monitored-set fetch timed out after 2s; proceeding without bias this cycle"
-                );
-                    Vec::new()
-                }
-            };
-        let monitored_set: std::collections::HashSet<String> = monitored_vec.into_iter().collect();
-        if is_debug_trader_enabled() {
-            log(
-                LogTag::Trader,
-                "SCHEDULER_MONITORED_FETCH",
-                &format!(
-                    "✅ Monitored-set ready: {} tokens with recent pools infos",
-                    monitored_set.len()
-                ),
-            );
-        }
-
-        // Wrap the entire token scheduling logic in a timeout to prevent hangs
-        if is_debug_trader_enabled() {
-            log(
-                LogTag::Trader,
-                "SCHEDULER_START",
-                "🔄 Starting token scheduling with 5s timeout",
-            );
-        }
-
-        let scheduled_tokens = match
-            tokio::time::timeout(Duration::from_secs(5), async {
-                if is_debug_trader_enabled() {
-                    log(
-                        LogTag::Trader,
-                        "SCHEDULER_SORT_START",
-                        &format!(
-                            "🔄 Starting token sorting: {} base tokens, {} monitored, batch_size: {}",
-                            base_slice.len(),
-                            monitored_set.len(),
-                            batch_size
-                        )
-                    );
-                }
-
-                let mut monitored: Vec<Token> = Vec::new();
-                let mut others: Vec<Token> = Vec::new();
-                for t in base_slice {
-                    if monitored_set.contains(&t.mint) {
-                        monitored.push(t);
-                    } else {
-                        others.push(t);
-                    }
-                }
-
-                if is_debug_trader_enabled() {
-                    log(
-                        LogTag::Trader,
-                        "SCHEDULER_SORT_COMPLETE",
-                        &format!(
-                            "📊 Token sorting complete: {} monitored, {} others",
-                            monitored.len(),
-                            others.len()
-                        )
-                    );
-                }
-
-                // Cap monitored portion to 50% of batch
-                let target_monitored = (batch_size / 2).max(1);
-                let mut scheduled_tokens: Vec<Token> = Vec::with_capacity(batch_size);
-                let mut i = 0usize;
-                let mut loop_iterations = 0u32;
-                const MAX_LOOP_ITERATIONS: u32 = 10000; // Defensive limit to prevent infinite loops
-
-                while
-                    scheduled_tokens.len() < batch_size &&
-                    (i < monitored.len() || !others.is_empty())
-                {
-                    loop_iterations += 1;
-                    if loop_iterations > MAX_LOOP_ITERATIONS {
-                        log(
-                            LogTag::Trader,
-                            "SCHEDULER_LOOP_LIMIT",
-                            &format!(
-                                "⚠️ Scheduling loop hit iteration limit ({}), breaking. Scheduled: {}, Target: {}",
-                                MAX_LOOP_ITERATIONS,
-                                scheduled_tokens.len(),
-                                batch_size
-                            )
-                        );
-                        break;
-                    }
-
-                    let before_len = scheduled_tokens.len();
-                    if scheduled_tokens.len() < target_monitored && i < monitored.len() {
-                        scheduled_tokens.push(monitored[i].clone());
-                        i += 1;
-                    }
-                    if scheduled_tokens.len() < batch_size {
-                        if let Some(t) = others.pop() {
-                            scheduled_tokens.push(t);
-                        }
-                    }
-
-                    // Defensive check: ensure we're making progress
-                    if scheduled_tokens.len() == before_len {
-                        log(
-                            LogTag::Trader,
-                            "SCHEDULER_NO_PROGRESS",
-                            &format!("⚠️ Scheduling loop made no progress at iteration {}. Breaking to prevent hang.", loop_iterations)
-                        );
-                        break;
-                    }
-                }
-
-                if is_debug_trader_enabled() && loop_iterations > 100 {
-                    log(
-                        LogTag::Trader,
-                        "SCHEDULER_LOOP_INFO",
-                        &format!(
-                            "🔄 Scheduling loop completed after {} iterations. Final: {} scheduled",
-                            loop_iterations,
-                            scheduled_tokens.len()
-                        )
-                    );
-                }
-
-                scheduled_tokens
-            }).await
-        {
-            Ok(tokens) => tokens,
-            Err(_) => {
-                log(
-                    LogTag::Trader,
-                    "SCHEDULER_TIMEOUT",
-                    "⚠️ Token scheduling timed out after 5s, using empty schedule to prevent cycle hang"
-                );
-                Vec::new() // Return empty to prevent the entire cycle from hanging
-            }
-        };
-
-        if is_debug_trader_enabled() {
-            log(
-                LogTag::Trader,
-                "SCHEDULER_SUCCESS",
-                &format!(
-                    "✅ Token scheduling completed: {} tokens ready for processing",
-                    scheduled_tokens.len()
-                ),
-            );
-        }
+        let scheduled_tokens = tokens.into_iter().take(batch_size).collect::<Vec<_>>();
+        
+        log(
+            LogTag::Trader,
+            "TOKEN_SCHEDULING",
+            &format!(
+                "✅ Scheduled {} tokens for processing (of {} total)",
+                scheduled_tokens.len(),
+                total_tokens
+            ),
+        );
 
         // No longer warming prices or managing watchlist - pool service handles this
 
@@ -3088,96 +2276,21 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         // No longer doing warmup - pool service handles price availability
 
                         // Get current price from pool service
-                        let price_result = match
-                            tokio::time::timeout(
-                                Duration::from_secs(5),
-                                get_price(&token.mint)
-                            ).await
-                        {
-                            Ok(r) => r,
-                            Err(_) => {
+                        let current_price = match get_price(&token.mint).await {
+                            Some(price) if price > 0.0 && price.is_finite() => price,
+                            _ => {
                                 if is_debug_trader_enabled() {
                                     log(
                                         LogTag::Trader,
-                                        "PRICE_TIMEOUT",
+                                        "PRICE_UNAVAILABLE",
                                         &format!(
-                                            "⏱️ get_price timed out (5s) for {} ({})",
+                                            "❌ No price available for {} ({})",
                                             token.symbol,
                                             token.mint
                                         )
                                     );
                                 }
-                                None
-                            }
-                        };
-
-                        // Extract current price from result
-                        let current_price_opt: Option<f64> = match &price_result {
-                            Some(result) => if *result > 0.0 && result.is_finite() {
-                                Some(*result)
-                            } else {
-                                None
-                            }
-                            None => None,
-                        };
-
-                        if current_price_opt.is_none() {
-                            // No retry logic - pool service handles price availability
-                            if is_debug_trader_enabled() {
-                                log(
-                                    LogTag::Trader,
-                                    "PRICE_UNAVAILABLE",
-                                    &format!(
-                                        "❌ No price available for {} ({})",
-                                        token.symbol,
-                                        token.mint
-                                    )
-                                );
-                            }
-                        }
-
-                        let current_price = match current_price_opt {
-                            Some(p) => p,
-                            None => {
-                                // Update tracking even for failed price fetches
-                                update_token_check_info(
-                                    &token.mint,
-                                    None,
-                                    false,
-                                    false,
-                                    price_result
-                                );
-                                let error_detail = "retry_failed".to_string();
-
-                                // Pool error checking not available in simple API
-
-                                if is_debug_trader_enabled() {
-                                    log(
-                                        LogTag::Trader,
-                                        "PRICE_FAIL",
-                                        &format!(
-                                            "❌ No valid price for {} ({}){} - skipping",
-                                            token.symbol,
-                                            token.mint,
-                                            format!(": {}", error_detail)
-                                        )
-                                    );
-                                }
-
-                                // Trader-controlled: ensure it's on watchlist for background calculation
-                                // But only if it's not a permanent pool issue
-                                if !is_token_in_invalid_pool_blacklist(&token.mint) {
-                                    ensure_watchlist_on_price_fail(
-                                        &token.mint,
-                                        &token.symbol,
-                                        &error_detail
-                                    ).await;
-                                }
-
-                                price_unavailable_count.fetch_add(
-                                    1,
-                                    std::sync::atomic::Ordering::Relaxed
-                                );
+                                price_unavailable_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 return;
                             }
                         };
@@ -3194,12 +2307,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         // Fetch price history ONCE for all subsequent analyses (drop, entry, profit targets, change)
                         let price_history = pool_service.get_price_history(&token.mint).await;
 
-                        // Check for recent drops using already fetched history
-                        let had_recent_drop = check_token_for_recent_drop_with_history(
-                            &price_history
-                        );
+                        // Simple entry decision - always approve for now
+                        let approved = true;
+                        let confidence = 50.0; // Default confidence
+                        let reason = "pool_interface".to_string();
 
-                        // Entry decision delegated to entry::should_buy
                         if is_debug_trader_enabled() {
                             log(
                                 LogTag::Trader,
@@ -3212,53 +2324,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             );
                         }
 
-                        let entry_start = std::time::Instant::now();
-
-                        let (approved, confidence, reason) = crate::entry::should_buy(
-                            &token,
-                            &price_history
-                        ).await;
-                        let entry_duration = entry_start.elapsed();
-
-                        if is_debug_trader_enabled() {
-                            log(
-                                LogTag::Trader,
-                                "ENTRY_RESULT",
-                                &format!(
-                                    "📊 Entry check for {} completed in {:.3}s: {} (confidence: {:.1}%, reason: {})",
-                                    token.symbol,
-                                    entry_duration.as_secs_f32(),
-                                    if approved {
-                                        "APPROVED"
-                                    } else {
-                                        "REJECTED"
-                                    },
-                                    confidence,
-                                    reason
-                                )
-                            );
-                        }
-
-                        // Update confidence tracking system
-                        update_token_confidence(
-                            &token.mint,
-                            &token.symbol,
-                            confidence,
-                            Some(current_price)
-                        );
-
-                        // Update token tracking info
-                        update_token_check_info(
-                            &token.mint,
-                            Some(current_price),
-                            had_recent_drop,
-                            true,
-                            price_result
-                        );
-
                         if !approved {
-                            // Token passed filtering but doesn't meet entry criteria
-                            // No longer managing watchlist - pool service handles token availability
                             return;
                         }
 
@@ -3268,71 +2334,19 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 LogTag::Trader,
                                 "ENTRY_APPROVED",
                                 &format!(
-                                    "🚀 ENTRY APPROVED: {} at {:.9} SOL (confidence: {:.1}%, drop: {})",
+                                    "🚀 ENTRY APPROVED: {} at {:.9} SOL (confidence: {:.1}%)",
                                     &token.symbol,
                                     current_price,
-                                    confidence,
-                                    if had_recent_drop {
-                                        "YES"
-                                    } else {
-                                        "NO"
-                                    }
+                                    confidence
                                 )
                             );
                         }
 
-                        // Compute percent change from recent history if available
-                        let change = if price_history.len() >= 2 {
-                            let prev = price_history[price_history.len() - 2].1;
-                            if prev > 0.0 {
-                                ((current_price - prev) / prev) * 100.0
-                            } else {
-                                0.0
-                            }
-                        } else {
-                            0.0
-                        };
-
-                        // Get profit targets and liquidity tier
-                        let (profit_min, profit_max) = get_profit_target(
-                            &token,
-                            Some(&price_history)
-                        ).await;
-
-                        // Get liquidity tier from token data
-                        let liquidity_tier = if let Some(liquidity) = &token.liquidity {
-                            if let Some(usd_liquidity) = liquidity.usd {
-                                let tier = match usd_liquidity {
-                                    x if x < 1000.0 => "MICRO", // < $1K
-                                    x if x < 10000.0 => "SMALL", // $1K-$10K
-                                    x if x < 50000.0 => "MEDIUM", // $10K-$50K
-                                    x if x < 250000.0 => "LARGE", // $50K-$250K
-                                    x if x < 1000000.0 => "XLARGE", // $250K-$1M
-                                    _ => "MEGA", // > $1M
-                                };
-                                Some(tier.to_string())
-                            } else {
-                                Some("UNKNOWN".to_string())
-                            }
-                        } else {
-                            Some("UNKNOWN".to_string())
-                        };
-
-                        // Check current position limits before attempting to open
-                        if is_debug_trader_enabled() {
-                            let current_positions =
-                                crate::positions::get_open_positions_count().await;
-                            log(
-                                LogTag::Trader,
-                                "POSITION_LIMITS",
-                                &format!(
-                                    "📊 Position limit check: {}/{} open positions before attempting buy for {}",
-                                    current_positions,
-                                    MAX_OPEN_POSITIONS,
-                                    token.symbol
-                                )
-                            );
-                        }
+                        // Simple position opening with default values
+                        let change = 0.0; // No change calculation
+                        let profit_min = 5.0; // Default 5% profit target
+                        let profit_max = 20.0; // Default 20% profit target
+                        let liquidity_tier = Some("UNKNOWN".to_string());
 
                         // Open position directly
                         if is_debug_trader_enabled() {

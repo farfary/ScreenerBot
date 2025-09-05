@@ -10,7 +10,7 @@
 /// - Test monitoring: cargo run --bin tool_pool_price -- --test-monitoring --duration 30
 /// - Compare prices: cargo run --bin tool_pool_price -- --token <TOKEN_MINT> --compare-api
 
-use screenerbot::tokens::pool::{ get_pool_service, init_pool_service, initialize_price_service };
+use screenerbot::pool_service::{ get_pool_service, init_pool_service };
 use screenerbot::tokens::dexscreener::{ get_token_pairs_from_api, init_dexscreener_api };
 use screenerbot::tokens::decimals::{ get_cached_decimals, get_token_decimals_from_chain };
 use screenerbot::tokens::PriceOptions;
@@ -329,7 +329,7 @@ async fn test_pool_address_direct(pool_address: &str) {
 
     // Try to determine what type of pool this is by fetching the account
     {
-        let mut calculator = screenerbot::tokens::pool::PoolPriceCalculator::new();
+        let mut calculator = screenerbot::tokens::pool_old::PoolPriceCalculator::new();
         calculator.enable_debug();
 
         // Get raw pool data to analyze
@@ -600,7 +600,7 @@ async fn test_raydium_cpmm_pool_direct(pool_address: &str, data: &[u8]) {
     log(LogTag::Pool, "CPMM_DATA", &format!("Pool data size: {} bytes", data.len()));
 
     // Use our existing CPMM decoder (constructor now infallible)
-    let mut calculator = screenerbot::tokens::pool::PoolPriceCalculator::new();
+    let mut calculator = screenerbot::tokens::pool_old::PoolPriceCalculator::new();
     calculator.enable_debug();
     log(LogTag::Pool, "CPMM_DECODE", "Using existing Raydium CPMM decoder...");
 }
@@ -616,7 +616,7 @@ async fn test_raydium_clmm_pool_direct(pool_address: &str, data: &[u8]) {
         log(LogTag::Pool, "CLMM_ANALYSIS", "Analyzing CLMM structure using new decoder...");
 
         // Use our new CLMM decoder
-        let mut calculator = screenerbot::tokens::pool::PoolPriceCalculator::new();
+        let mut calculator = screenerbot::tokens::pool_old::PoolPriceCalculator::new();
         calculator.enable_debug();
         log(LogTag::Pool, "CLMM_DECODE", "Using new Raydium CLMM decoder...");
 
@@ -780,7 +780,7 @@ fn extract_reserves_from_raydium_legacy(data: &[u8]) -> Option<(u64, u64)> {
 
 /// Test monitoring service
 async fn test_monitoring_service(
-    pool_service: &'static screenerbot::tokens::pool::PoolPriceService,
+    pool_service: &'static screenerbot::tokens::pool_old::PoolPriceService,
     matches: &clap::ArgMatches
 ) {
     log(LogTag::Pool, "TEST", "Starting monitoring service test...");
@@ -887,7 +887,7 @@ async fn test_token_pools(token_address: &str) {
 
 /// Compare pool prices with API prices - Enhanced with decimal debugging
 async fn compare_pool_api_prices(
-    pool_service: &'static screenerbot::tokens::pool::PoolPriceService,
+    pool_service: &'static screenerbot::tokens::pool_old::PoolPriceService,
     token_address: &str
 ) {
     log(LogTag::Pool, "TEST", &format!("Comparing pool vs API prices for: {}", token_address));
@@ -1056,7 +1056,7 @@ async fn test_pool_direct(pool_address: &str, token_address: &str) {
 
 /// Test token availability and price calculation
 async fn test_token_availability_and_price(
-    pool_service: &'static screenerbot::tokens::pool::PoolPriceService,
+    pool_service: &'static screenerbot::tokens::pool_old::PoolPriceService,
     token_address: &str
 ) {
     log(LogTag::Pool, "TEST", &format!("Testing availability and price for: {}", token_address));
@@ -1069,7 +1069,7 @@ async fn test_token_availability_and_price(
             "DEBUG",
             "Pool price debugging enabled - will test with direct calculator"
         );
-        let mut calculator = screenerbot::tokens::pool::PoolPriceCalculator::new();
+        let mut calculator = screenerbot::tokens::pool_old::PoolPriceCalculator::new();
         calculator.enable_debug();
         let has_pools = pool_service.check_token_availability(token_address).await;
         log(LogTag::Pool, "AVAILABILITY", &format!("Has pools: {}", has_pools));
@@ -1397,7 +1397,7 @@ async fn dump_pool_hex_data(pool_address: &str) {
 
     // Create calculator to get raw pool data
     {
-        let mut calculator = screenerbot::tokens::pool::PoolPriceCalculator::new();
+        let mut calculator = screenerbot::tokens::pool_old::PoolPriceCalculator::new();
         calculator.enable_debug();
 
         match calculator.get_raw_pool_data(pool_address).await {
