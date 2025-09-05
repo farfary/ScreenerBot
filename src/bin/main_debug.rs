@@ -963,8 +963,8 @@ impl SwapTestConfig {
         // Validate token mint format
         if self.token_mint.len() < 32 || self.token_mint.len() > 44 {
             return Err(format!(
-                "Invalid token mint format: {} (should be 32-44 characters)",
-                self.token_mint
+                    "Invalid token mint format: {} (should be 32-44 characters)",
+                    self.token_mint
             ));
         }
 
@@ -1478,7 +1478,7 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions_type
                 token_amount,
                 router,
             } => (
-                "SOL->Token",
+                    "SOL->Token",
                 format!(
                     "{:.4} SOL -> {:.0} tokens via {}",
                     sol_amount, token_amount, router
@@ -1490,7 +1490,7 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions_type
                 sol_amount,
                 router,
             } => (
-                "Token->SOL",
+                    "Token->SOL",
                 format!(
                     "{:.0} tokens -> {:.4} SOL via {}",
                     token_amount, sol_amount, router
@@ -2329,7 +2329,7 @@ async fn show_unknown_transactions(wallet_pubkey: Pubkey, max_count: usize) {
                                     );
                                     for (j, instruction) in instr_array.iter().take(3).enumerate() {
                                         if let Some(program_id_index) =
-                                            instruction.get("programIdIndex")
+                                                instruction.get("programIdIndex")
                                         {
                                             if let Some(accounts) = instruction.get("accounts") {
                                                 if let Some(accounts_array) = accounts.as_array() {
@@ -2806,7 +2806,7 @@ async fn monitor_transactions(wallet_pubkey: Pubkey, duration_seconds: u64) {
                                     }
                                     Err(e) => {
                                         log(LogTag::Transactions, "ERROR", &format!(
-                                            "Failed to process transaction {}: {}",
+                                            "Failed to process transaction {}: {}", 
                                             &signature[..8], e
                                         ));
                                     }
@@ -3033,9 +3033,9 @@ async fn deep_analyze_transaction(signature: &str) {
                         &format!(
                             "Status: {}",
                             if internal_tx.success {
-                                "✅ SUCCESS"
-                            } else {
-                                "❌ FAILED"
+                            "✅ SUCCESS"
+                        } else {
+                            "❌ FAILED"
                             }
                         ),
                     );
@@ -3475,8 +3475,8 @@ fn log_transaction_summary(transaction: &Transaction) {
     let tx_type_str = match &transaction.transaction_type {
         TransactionType::SwapSolToToken {
             token_mint: _,
-            sol_amount,
-            token_amount,
+                sol_amount,
+                token_amount,
             router,
         } => {
             format!(
@@ -3486,8 +3486,8 @@ fn log_transaction_summary(transaction: &Transaction) {
         }
         TransactionType::SwapTokenToSol {
             token_mint: _,
-            token_amount,
-            sol_amount,
+                token_amount,
+                sol_amount,
             router,
         } => {
             format!(
@@ -4415,7 +4415,7 @@ async fn perform_preflight_checks(
     let minimum_required = sol_amount + 0.01; // Buffer for fees
     if sol_balance < minimum_required {
         return Err(format!(
-            "Insufficient SOL balance: {:.6} SOL, required: {:.6} SOL",
+                "Insufficient SOL balance: {:.6} SOL, required: {:.6} SOL",
             sol_balance, minimum_required
         ));
     }
@@ -4644,16 +4644,16 @@ async fn execute_token_to_sol_test(
     // Check existing token balance
     let token_balance =
         match screenerbot::utils::get_token_balance(&wallet_address, &token.mint).await {
-            Ok(balance) => balance,
-            Err(e) => {
+        Ok(balance) => balance,
+        Err(e) => {
                 log(
                     LogTag::Transactions,
                     "ERROR",
                     &format!("Failed to get token balance: {}", e),
                 );
-                return;
-            }
-        };
+            return;
+        }
+    };
 
     if token_balance == 0 {
         log(
@@ -5168,7 +5168,7 @@ async fn analyze_swap_transaction(
 
             // Add to swap analysis if it's a swap
             if matches!(
-                transaction.transaction_type,
+                    transaction.transaction_type,
                 TransactionType::SwapSolToToken { .. }
                     | TransactionType::SwapTokenToSol { .. }
                     | TransactionType::SwapTokenToToken { .. }
@@ -5613,11 +5613,11 @@ async fn test_real_position_management(
     // Load token with updated information from tokens module
     let test_token =
         match load_token_with_updated_info(token_mint, token_symbol).await {
-            Ok(token) => {
-                log(
-                    LogTag::Transactions,
-                    "POSITION_TEST",
-                    &format!(
+        Ok(token) => {
+            log(
+                LogTag::Transactions,
+                "POSITION_TEST",
+                &format!(
                     "✅ Loaded token: {} ({}) with updated info - Price: {} SOL, Liquidity: {} USD",
                     token.symbol,
                     &token.mint[..8],
@@ -5630,10 +5630,10 @@ async fn test_real_position_management(
                         .map(|l| format!("{:.0}", l))
                         .unwrap_or("N/A".to_string())
                 ),
-                );
-                token
-            }
-            Err(e) => {
+            );
+            token
+        }
+        Err(e) => {
                 log(
                     LogTag::Transactions,
                     "WARNING",
@@ -5644,9 +5644,9 @@ async fn test_real_position_management(
                     "INFO",
                     "Creating basic token for testing...",
                 );
-                create_basic_token(token_mint, token_symbol)
-            }
-        };
+            create_basic_token(token_mint, token_symbol)
+        }
+    };
 
     // Get current price for the test
     let current_price = sol_amount / 1000.0; // Simulate price for testing
@@ -5722,9 +5722,9 @@ async fn test_real_position_management(
         // Get the position again in case it was updated
         let open_positions = positions::get_open_positions().await;
         if let Some(position) = open_positions
-            .iter()
-            .find(|p| p.mint == token_mint)
-            .cloned()
+                .iter()
+                .find(|p| p.mint == token_mint)
+                .cloned()
         {
             let exit_price = current_price * 1.02; // Simulate 2% profit
             let exit_time = chrono::Utc::now();
@@ -6075,9 +6075,9 @@ async fn generate_comprehensive_position_test_report(
     println!(
         "Entry Transaction Verified: {}",
         if position.transaction_entry_verified {
-            "✅ Yes"
-        } else {
-            "❌ No"
+        "✅ Yes"
+    } else {
+        "❌ No"
         }
     );
 
@@ -6283,7 +6283,7 @@ async fn start_lightweight_transaction_monitoring(
                     for signature in new_signatures {
                         // Fast shutdown check between items
                         if screenerbot::utils::check_shutdown_or_delay(
-                            &shutdown,
+                                &shutdown,
                             Duration::from_millis(0),
                         )
                         .await
@@ -7087,10 +7087,10 @@ async fn display_non_empty_token_accounts(accounts: &[&screenerbot::rpc::TokenAc
                     .price_dexscreener_sol
                     .or(token.price_pool_sol)
                     .unwrap_or(0.0);
-                (token.symbol, price)
-            } else {
-                ("UNKNOWN".to_string(), 0.0)
-            };
+            (token.symbol, price)
+        } else {
+            ("UNKNOWN".to_string(), 0.0)
+        };
 
         let value_sol = ui_balance * price_sol;
         total_portfolio_value_sol += value_sol;

@@ -9,8 +9,10 @@ pub mod errors; // New structured error handling
 pub mod filtering;
 pub mod global;
 pub mod logger;
+pub mod pool_calculator; // Pool price calculator service
 pub mod pool_db; // Pool database module
 pub mod pool_decoders; // Pool data decoders
+pub mod pool_fetcher; // Pool token account fetcher service
 pub mod pool_interface; // Pool service interface
 pub mod pool_service; // New modular pool service
 pub mod positions;

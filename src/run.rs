@@ -159,13 +159,12 @@ pub async fn run_bot() -> Result<(), String> {
         }
     };
 
-    // Initialize and start pool service for real-time price calculations and history caching
+    // Initialize pool service for real-time price calculations and history caching
     let _pool_service = crate::pool_service::init_pool_service();
-    crate::pool_service::start_monitoring().await;
     debug_log(
         LogTag::System,
         "INFO",
-        "Pool price service with disk caching initialized and monitoring started",
+        "Pool price service with disk caching initialized",
     );
 
     let shutdown_tokens = shutdown.clone();
@@ -584,9 +583,8 @@ pub async fn run_bot() -> Result<(), String> {
     let cleanup_result = tokio::time::timeout(
         std::time::Duration::from_secs(CLEANUP_TIMEOUT_SECS),
         async {
-            // Stop pool monitoring service
-            crate::pool_service::stop_monitoring().await;
-            debug_log(LogTag::System, "INFO", "Pool monitoring service stopped");
+            // Pool monitoring service cleanup (no longer needed)
+            debug_log(LogTag::System, "INFO", "Pool service cleanup completed");
 
             // Decimals are now automatically saved to database
             debug_log(

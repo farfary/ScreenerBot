@@ -2,10 +2,6 @@
 pub use crate::pool_service::{
     init_pool_service,
     get_pool_service,
-    get_price,
-    get_price_history,
-    get_tokens_with_recent_pools_infos,
-    check_token_availability,
 };
 
 pub use crate::pool_interface::{ PoolInterface, TokenPriceInfo, PriceResult, PriceOptions };

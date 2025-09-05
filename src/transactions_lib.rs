@@ -2,10 +2,11 @@
 use crate::errors::blockchain::{ is_permanent_failure, parse_structured_solana_error };
 use crate::global::is_debug_transactions_enabled;
 use crate::logger::{ log, LogTag };
+use crate::pool_interface::PoolInterface;
+use crate::pool_service::get_pool_service;
 use crate::rpc::get_rpc_client;
 use crate::tokens::decimals::{ lamports_to_sol, raw_to_ui_amount, sol_to_lamports };
 use crate::tokens::{
-    get_price,
     get_token_decimals,
     get_token_decimals_safe,
     PriceOptions,
@@ -2511,9 +2512,9 @@ impl TransactionsManager {
         transaction.token_symbol = Some(symbol.clone());
 
         // Get current market price from price service
-        match get_price(&token_mint).await {
-            Some(price_result) => {
-                if let Some(price_sol) = Some(price_result) {
+        match crate::pool_service::get_pool_service().get_price(&token_mint).await {
+            Some(price_info) => {
+                if let Some(price_sol) = price_info.pool_price_sol.or(price_info.api_price_sol) {
                     transaction.calculated_token_price_sol = Some(price_sol);
                     transaction.price_source = Some(PriceSourceType::CachedPrice);
 

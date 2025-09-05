@@ -764,13 +764,13 @@ impl TokenDatabase {
 
         // Clear deleted tokens from in-memory caches (outside database lock)
         for mint in deleted_mints {
-            if let Err(e) = self.clear_token_from_caches(&mint).await {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!("Failed to clear {} from caches: {}", mint, e)
-                );
-            }
+            // TODO: Implement cache clearing for deleted tokens
+            // This would clear the token from various in-memory caches
+            log(
+                LogTag::System,
+                "DEBUG",
+                &format!("Token {} deleted, cache clearing not implemented", mint)
+            );
         }
 
         if deleted_count > 0 {
@@ -1565,12 +1565,5 @@ impl TokenDatabase {
         Ok(())
     }
 
-    /// Clear token from all pool service caches (used during cleanup)
-    pub async fn clear_token_from_caches(
-        &self,
-        token_mint: &str
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        crate::pool_service::clear_token_from_all_caches(token_mint).await;
-        Ok(())
-    }
+
 }

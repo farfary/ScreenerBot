@@ -28,6 +28,7 @@
 use crate::global::is_debug_ohlcv_enabled;
 use crate::tokens::ohlcv_db::{ get_ohlcv_database, init_ohlcv_database };
 use crate::logger::{ log, LogTag };
+use crate::pool_interface::PoolInterface;
 use crate::pool_service::get_pool_service;
 use crate::tokens::PriceOptions;
 use crate::tokens::geckoterminal::{ get_ohlcv_data_from_geckoterminal, OhlcvDataPoint };
@@ -476,11 +477,11 @@ impl OhlcvService {
         };
 
         // Check if token has a pool
-        let has_pool = crate::pool_service::check_token_availability(mint).await;
+        let has_pool = crate::pool_service::get_pool_service().get_price(mint).await.is_some();
         let pool_address = if has_pool {
             // Get best pool address
             if
-                let Some(result) = crate::tokens::get_price(mint).await
+                let Some(result) = crate::pool_service::get_pool_service().get_price(mint).await
             {
                 if is_debug_ohlcv_enabled() {
                     log(
@@ -489,7 +490,7 @@ impl OhlcvService {
                         &format!(
                             "🏊 Pool found for {}: price {:.9}",
                             mint,
-                            result
+                            result.pool_price_sol.or(result.api_price_sol).unwrap_or(0.0)
                         )
                     );
                 }
@@ -869,7 +870,7 @@ impl OhlcvService {
 
         // Cache miss or expired - get from pool service
         if
-            let Some(result) = crate::tokens::get_price(mint).await
+            let Some(result) = crate::pool_service::get_pool_service().get_price(mint).await
         {
             let pool_address = "pool_address".to_string(); // Placeholder since we only have price now
 
@@ -1158,7 +1159,7 @@ impl OhlcvService {
                         } else {
                             // Pool address cache expired, refresh it
                             if
-                                                    let Some(result) = crate::tokens::get_price(&entry.mint).await
+                                                    let Some(result) = crate::pool_service::get_pool_service().get_price(&entry.mint).await
                             {
                                 "pool_address".to_string() // Placeholder since we only have price now
                             } else {
@@ -1177,7 +1178,7 @@ impl OhlcvService {
                     }
                 } else {
                     if
-                                            let Some(result) = crate::tokens::get_price(&entry.mint).await
+                                            let Some(result) = crate::pool_service::get_pool_service().get_price(&entry.mint).await
                     {
                         "pool_address".to_string() // Placeholder since we only have price now
                     } else {

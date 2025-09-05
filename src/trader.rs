@@ -204,7 +204,7 @@ use crate::pool_interface::{PoolInterface, TokenPriceInfo};
 use crate::pool_service::get_pool_service;
 use crate::positions_lib::calculate_position_pnl;
 use crate::tokens::{
-    cache::TokenDatabase, get_all_tokens_by_liquidity, get_price, PriceOptions, Token,
+    cache::TokenDatabase, get_all_tokens_by_liquidity, PriceOptions, Token,
 };
 use crate::utils::{check_shutdown_or_delay, safe_read_lock, safe_write_lock, debug_trader_log};
 
@@ -1094,13 +1094,13 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let pool_service = get_pool_service();
         let available_mints = pool_service.get_available_tokens().await;
 
-        log(
-            LogTag::Trader,
-            "CYCLE_PREPARED",
-            &format!(
+                log(
+                    LogTag::Trader,
+                    "CYCLE_PREPARED",
+                    &format!(
                 "✅ Got {} available tokens from pool interface in {:.3}s",
                 available_mints.len(),
-                cycle_start.elapsed().as_secs_f32()
+                        cycle_start.elapsed().as_secs_f32()
             ),
         );
 
@@ -1113,24 +1113,24 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         }
 
         if is_debug_trader_enabled() && !price_infos.is_empty() {
-            log(
-                LogTag::Trader,
-                "DEBUG_TOKENS_PREPARED",
-                &format!(
+                    log(
+                        LogTag::Trader,
+                        "DEBUG_TOKENS_PREPARED",
+                        &format!(
                     "🔍 First 5 available tokens: [{}]",
                     price_infos
-                        .iter()
-                        .take(5)
+                                .iter()
+                                .take(5)
                         .map(|p| format!(
                             "{}({:.1}k)",
                             p.token_mint,
                             p.liquidity_usd.unwrap_or(0.0) / 1000.0
-                        ))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-            );
-        }
+                                ))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    );
+                }
 
         // Early return if no tokens to process
         if price_infos.is_empty() {
@@ -1183,12 +1183,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let batch_size = std::cmp::min(MAX_TOKENS_PER_CYCLE, total_tokens);
         let scheduled_tokens = price_infos.into_iter().take(batch_size).collect::<Vec<_>>();
 
-        log(
-            LogTag::Trader,
+            log(
+                LogTag::Trader,
             "TOKEN_SCHEDULING",
-            &format!(
+                &format!(
                 "✅ Scheduled {} tokens for processing (of {} total)",
-                scheduled_tokens.len(),
+                                scheduled_tokens.len(),
                 total_tokens
             ),
         );
@@ -1352,11 +1352,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             match price_info.pool_price_sol.or(price_info.api_price_sol) {
                                 Some(price) if price > 0.0 && price.is_finite() => price,
                                 _ => {
-                                    if is_debug_trader_enabled() {
-                                        log(
-                                            LogTag::Trader,
-                                            "PRICE_UNAVAILABLE",
-                                            &format!(
+                            if is_debug_trader_enabled() {
+                                log(
+                                    LogTag::Trader,
+                                    "PRICE_UNAVAILABLE",
+                                    &format!(
                                                 "❌ No price available for {}",
                                                 price_info.token_mint
                                             ),
@@ -1364,9 +1364,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     }
                                     price_unavailable_count
                                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                    return;
-                                }
-                            };
+                                return;
+                            }
+                        };
 
                         if is_debug_trader_enabled() {
                             log(
@@ -1380,13 +1380,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
                         price_available_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-                        // Fetch price history ONCE for all subsequent analyses (drop, entry, profit targets, change)
-                        let price_history =
-                            pool_service.get_price_history(&price_info.token_mint).await;
-
-                        // Call should_buy with TokenPriceInfo
+                        // Call should_buy with TokenPriceInfo (price history fetched internally)
                         let (approved, confidence, reason) =
-                            crate::entry::should_buy(&price_info, &price_history).await;
+                            crate::entry::should_buy(&price_info).await;
 
                         if is_debug_trader_enabled() {
                             log(
@@ -1463,7 +1459,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         // Add to OHLCV watch list as open position for priority monitoring
                         if position_result.is_ok() {
                             if let Ok(ohlcv_service) =
-                                crate::tokens::get_ohlcv_service_clone().await
+                                    crate::tokens::get_ohlcv_service_clone().await
                             {
                                 ohlcv_service
                                     .add_to_watch_list(&price_info.token_mint, true)

@@ -9,7 +9,7 @@
 
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
-use crate::pool_interface::TokenPriceInfo;
+use crate::pool_interface::{ PoolInterface, TokenPriceInfo };
 use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock as AsyncRwLock; // switched from StdRwLock
@@ -217,12 +217,14 @@ fn analyze_local_structure(
 
 /// Main entry point for determining if a token should be bought
 /// Returns (approved_for_entry, confidence_score, reason)
-///
-/// PERFORMANCE OPTIMIZED: Takes price_history as parameter to avoid duplicate database calls
 pub async fn should_buy(
-    price_info: &TokenPriceInfo,
-    price_history: &[(DateTime<Utc>, f64)]
+    price_info: &TokenPriceInfo
 ) -> (bool, f64, String) {
+    // Fetch price history from pool service
+    let price_history = crate::pool_service::get_pool_service()
+        .get_price_history(&price_info.token_mint)
+        .await;
+
     // Immediate debug log to ensure we're getting called
     if is_debug_entry_enabled() {
         log(
@@ -329,7 +331,7 @@ pub async fn should_buy(
                 let instant_drop = ((recent_price - current_price) / recent_price) * 100.0;
                 if instant_drop >= 15.0 && instant_drop <= 75.0 {
                     // Higher minimum drop requirement for insufficient data
-                    let confidence = (25.0 + instant_drop * 0.5).min(45.0); // Conservative scaling
+                    let confidence = (25.0 + instant_drop * 0.5).min(45.0_f64); // Conservative scaling
                     if confidence >= 35.0 {
                         if is_debug_entry_enabled() {
                             log(

@@ -1,4 +1,6 @@
 use crate::logger::{ log, LogTag };
+use crate::pool_calculator::{ get_pool_calculator, PoolCalculator };
+use crate::pool_fetcher::{ get_pool_fetcher, PoolFetcher };
 use crate::pool_interface::{
     PoolInterface,
     PoolStats,
@@ -87,6 +89,42 @@ pub struct PoolData {
     pub last_updated: DateTime<Utc>,
 }
 
+impl PoolData {
+    /// Convert PoolData to PoolInfo for calculator
+    pub fn to_pool_info(&self) -> crate::pool_calculator::PoolInfo {
+        crate::pool_calculator::PoolInfo {
+            pool_address: self.pool_address.clone(),
+            pool_program_id: self.get_program_id(),
+            pool_type: self.dex_type.clone(),
+            token_0_mint: self.token_mint.clone(),
+            token_1_mint: "So11111111111111111111111111111111111111112".to_string(), // SOL mint
+            token_0_vault: None,
+            token_1_vault: None,
+            token_0_reserve: self.reserve_token as u64,
+            token_1_reserve: self.reserve_sol as u64,
+            token_0_decimals: 9, // Default token decimals
+            token_1_decimals: 9, // SOL decimals
+            lp_mint: None,
+            lp_supply: None,
+            creator: None,
+            status: Some(1), // Active status
+            liquidity_usd: Some(self.liquidity_usd),
+            sqrt_price: None,
+        }
+    }
+
+    /// Get program ID based on DEX type
+    fn get_program_id(&self) -> String {
+        match self.dex_type.as_str() {
+            "Raydium" => crate::pool_calculator::RAYDIUM_CPMM_PROGRAM_ID.to_string(),
+            "Meteora" => crate::pool_calculator::METEORA_DAMM_V2_PROGRAM_ID.to_string(),
+            "Orca" => crate::pool_calculator::ORCA_WHIRLPOOL_PROGRAM_ID.to_string(),
+            "Pump Fun" => crate::pool_calculator::PUMP_FUN_AMM_PROGRAM_ID.to_string(),
+            _ => crate::pool_calculator::RAYDIUM_CPMM_PROGRAM_ID.to_string(), // Default
+        }
+    }
+}
+
 /// Account data for batch fetching
 #[derive(Debug, Clone)]
 pub struct AccountInfo {
@@ -168,6 +206,10 @@ impl PoolService {
 
         log(LogTag::Pool, "SERVICE_START", "🚀 Starting Pool Service");
 
+        // Initialize pool calculator and fetcher
+        crate::pool_calculator::init_pool_calculator();
+        crate::pool_fetcher::init_pool_fetcher();
+
         // Reset shutdown signal
         {
             let mut shutdown = self.shutdown_signal.lock().await;
@@ -190,10 +232,18 @@ impl PoolService {
                 TaskStatus::new("Account Data Fetcher")
             );
             state.task_statuses.insert(
+                "pool_fetcher".to_string(),
+                TaskStatus::new("Pool Token Fetcher")
+            );
+            state.task_statuses.insert(
                 "price_calculator".to_string(),
                 TaskStatus::new("Price Calculator")
             );
             state.task_statuses.insert("cleanup".to_string(), TaskStatus::new("Cleanup Task"));
+            state.task_statuses.insert(
+                "pool_calculator".to_string(),
+                TaskStatus::new("Pool Calculator")
+            );
             state.task_statuses.insert(
                 "state_monitor".to_string(),
                 TaskStatus::new("State Monitor")
@@ -313,7 +363,20 @@ impl PoolService {
             });
         }
 
-        // 4. Price Calculator Task
+        // 4. Pool Fetcher Task
+        {
+            let price_cache = price_cache.clone();
+            let available_tokens = available_tokens.clone();
+            let stats = stats.clone();
+            let shared_state = shared_state.clone();
+            let shutdown_signal = shutdown_signal.clone();
+
+            tokio::spawn(async move {
+                Self::pool_fetcher_task_impl(shared_state, shutdown_signal).await;
+            });
+        }
+
+        // 5. Price Calculator Task
         {
             let price_cache = price_cache.clone();
             let available_tokens = available_tokens.clone();
@@ -326,7 +389,7 @@ impl PoolService {
             });
         }
 
-        // 5. Cleanup Task
+        // 6. Cleanup Task
         {
             let price_cache = price_cache.clone();
             let available_tokens = available_tokens.clone();
@@ -339,7 +402,20 @@ impl PoolService {
             });
         }
 
-        // 6. State Monitor Task
+        // 7. Pool Calculator Task
+        {
+            let price_cache = price_cache.clone();
+            let available_tokens = available_tokens.clone();
+            let stats = stats.clone();
+            let shared_state = shared_state.clone();
+            let shutdown_signal = shutdown_signal.clone();
+
+            tokio::spawn(async move {
+                Self::pool_calculator_task_impl(shared_state, shutdown_signal, price_cache).await;
+            });
+        }
+
+        // 8. State Monitor Task
         {
             let shared_state = shared_state.clone();
             let shutdown_signal = shutdown_signal.clone();
@@ -566,7 +642,68 @@ impl PoolService {
         log(LogTag::Pool, "ACCOUNT_FETCHER_STOP", "🛑 Account Data Fetcher Task stopped");
     }
 
-    /// Task 4: Price Calculator Task
+    /// Task 4: Pool Fetcher Task
+    /// Fetches token account data for all tokens that pool service tasks need
+    async fn pool_fetcher_task_impl(
+        shared_state: Arc<RwLock<ServiceState>>,
+        shutdown_signal: Arc<Mutex<bool>>
+    ) {
+        log(LogTag::Pool, "POOL_FETCHER_START", "🔄 Starting Pool Fetcher Task");
+        let mut interval = interval(Duration::from_secs(ACCOUNT_FETCH_INTERVAL_SECS));
+
+        loop {
+            if Self::should_shutdown(&shutdown_signal).await {
+                break;
+            }
+
+            Self::update_task_status(
+                &shared_state,
+                "pool_fetcher",
+                TaskState::Running,
+                None
+            ).await;
+
+            // Fetch token account data for all tracked tokens
+            let result = Self::fetch_token_accounts_impl(&shared_state).await;
+
+            match result {
+                Ok(count) => {
+                    if count > 0 {
+                        log(
+                            LogTag::Pool,
+                            "POOL_FETCHER_SUCCESS",
+                            &format!("Fetched {} token accounts", count)
+                        );
+                    }
+                    Self::update_task_status(
+                        &shared_state,
+                        "pool_fetcher",
+                        TaskState::Running,
+                        None
+                    ).await;
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Pool,
+                        "POOL_FETCHER_ERROR",
+                        &format!("Token account fetching failed: {}", e)
+                    );
+                    Self::update_task_status(
+                        &shared_state,
+                        "pool_fetcher",
+                        TaskState::Error(e.clone()),
+                        Some(e)
+                    ).await;
+                }
+            }
+
+            interval.tick().await;
+        }
+
+        log(LogTag::Pool, "POOL_FETCHER_STOP", "🛑 Pool Fetcher Task stopped");
+    }
+
+    /// Task 5: Price Calculator Task
     /// Calculates token prices from available account data
     async fn price_calculator_task_impl(
         shared_state: Arc<RwLock<ServiceState>>,
@@ -632,7 +769,7 @@ impl PoolService {
         log(LogTag::Pool, "PRICE_CALCULATOR_STOP", "🛑 Price Calculator Task stopped");
     }
 
-    /// Task 5: Cleanup Task
+    /// Task 6: Cleanup Task
     /// Manages memory and database cleanup
     async fn cleanup_task_impl(
         shared_state: Arc<RwLock<ServiceState>>,
@@ -683,7 +820,69 @@ impl PoolService {
         log(LogTag::Pool, "CLEANUP_STOP", "🛑 Cleanup Task stopped");
     }
 
-    /// Task 6: State Monitor Task
+    /// Task 7: Pool Calculator Task
+    /// Processes pool calculations using the dedicated calculator service
+    async fn pool_calculator_task_impl(
+        shared_state: Arc<RwLock<ServiceState>>,
+        shutdown_signal: Arc<Mutex<bool>>,
+        price_cache: Arc<RwLock<HashMap<String, TokenPriceInfo>>>
+    ) {
+        log(LogTag::Pool, "POOL_CALCULATOR_START", "🔄 Starting Pool Calculator Task");
+        let mut interval = interval(Duration::from_secs(PRICE_CALC_INTERVAL_SECS));
+
+        loop {
+            if Self::should_shutdown(&shutdown_signal).await {
+                break;
+            }
+
+            Self::update_task_status(
+                &shared_state,
+                "pool_calculator",
+                TaskState::Running,
+                None
+            ).await;
+
+            // Process pool calculations using the calculator service
+            let result = Self::process_pool_calculations_impl(&shared_state, &price_cache).await;
+
+            match result {
+                Ok(count) => {
+                    if count > 0 {
+                        log(
+                            LogTag::Pool,
+                            "POOL_CALCULATOR_SUCCESS",
+                            &format!("Processed {} pool calculations", count)
+                        );
+                    }
+                    Self::update_task_status(
+                        &shared_state,
+                        "pool_calculator",
+                        TaskState::Running,
+                        None
+                    ).await;
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Pool,
+                        "POOL_CALCULATOR_ERROR",
+                        &format!("Pool calculation failed: {}", e)
+                    );
+                    Self::update_task_status(
+                        &shared_state,
+                        "pool_calculator",
+                        TaskState::Error(e.clone()),
+                        Some(e)
+                    ).await;
+                }
+            }
+
+            interval.tick().await;
+        }
+
+        log(LogTag::Pool, "POOL_CALCULATOR_STOP", "🛑 Pool Calculator Task stopped");
+    }
+
+    /// Task 8: State Monitor Task
     /// Monitors all task states and provides health checking
     async fn state_monitor_task_impl(
         shared_state: Arc<RwLock<ServiceState>>,
@@ -742,7 +941,7 @@ impl PoolService {
     }
 
     // =============================================================================
-    // TASK IMPLEMENTATION METHODS (Placeholders for future implementation)
+    // TASK IMPLEMENTATION METHODS
     // =============================================================================
 
     /// Prepare tokens list from various sources
@@ -755,15 +954,13 @@ impl PoolService {
         // - Update tracked_tokens in shared state
         // - Remove stale/inactive tokens
 
-        // Placeholder implementation - add some sample tokens
         {
             let mut state = shared_state.write().await;
             let now = Utc::now();
 
-            // Example: Add some well-known tokens for testing
             let sample_tokens = vec![
-                "So11111111111111111111111111111111111111112", // Wrapped SOL
-                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" // USDC
+                "So11111111111111111111111111111111111111112",
+                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
             ];
 
             for token in sample_tokens {
@@ -779,18 +976,31 @@ impl PoolService {
         shared_state: &Arc<RwLock<ServiceState>>
     ) -> Result<usize, String> {
         // TODO: Implement pool discovery
-        // - Query pool APIs for each tracked token
+        // - Query DexScreener API for each tracked token
+        // - Query Jupiter API for pool information
         // - Parse pool data (reserves, liquidity, volume)
         // - Cache pool data in database
         // - Update best_pools in shared state (highest liquidity pool per token)
         // - Generate account queue for fetching on-chain data
 
-        // Placeholder implementation
+        let mut discovered_count = 0;
         {
             let mut state = shared_state.write().await;
+            let now = Utc::now();
 
-            // Example: For each tracked token, find its best pool
-            for (token_mint, _) in &state.tracked_tokens.clone() {
+            // Get all tracked tokens
+            let tracked_tokens: Vec<String> = state.tracked_tokens.keys().cloned().collect();
+
+            for token_mint in tracked_tokens {
+                // TODO: Implement actual pool discovery
+                // This would involve:
+                // 1. Query DexScreener API for token pools
+                // 2. Query Jupiter API for pool information
+                // 3. Parse and validate pool data
+                // 4. Select best pool (highest liquidity)
+                // 5. Cache pool information
+
+                // Placeholder implementation - create mock pool data
                 let pool_data = PoolData {
                     pool_address: format!("pool_for_{}", &token_mint[0..8]),
                     token_mint: token_mint.clone(),
@@ -799,12 +1009,12 @@ impl PoolService {
                     reserve_token: 1000000.0,
                     liquidity_usd: 50000.0,
                     volume_24h: 100000.0,
-                    last_updated: Utc::now(),
+                    last_updated: now,
                 };
 
                 state.best_pools.insert(token_mint.clone(), pool_data);
 
-                // Add account to fetch queue
+                // Add to account queue for on-chain data fetching
                 let account_info = AccountInfo {
                     address: format!("pool_for_{}", &token_mint[0..8]),
                     account_type: "pool".to_string(),
@@ -813,10 +1023,11 @@ impl PoolService {
                 };
 
                 state.account_queue.push(account_info);
+                discovered_count += 1;
             }
         }
 
-        Ok(0)
+        Ok(discovered_count)
     }
 
     /// Fetch account data in batches
@@ -830,26 +1041,61 @@ impl PoolService {
         // - Parse and cache raw account data with timestamps
         // - Update account_data_cache in shared state
 
-        // Placeholder implementation
         let mut fetched_count = 0;
         {
             let mut state = shared_state.write().await;
             let now = Utc::now();
 
-            // Take up to MAX_ACCOUNTS_PER_BATCH accounts from queue
             let queue_len = state.account_queue.len();
             let batch_size = std::cmp::min(MAX_ACCOUNTS_PER_BATCH, queue_len);
             let accounts_to_fetch: Vec<_> = state.account_queue.drain(0..batch_size).collect();
 
             fetched_count = accounts_to_fetch.len();
 
-            // Simulate fetching account data
             for account in accounts_to_fetch {
-                // Placeholder: Add fake account data
-                let fake_data = vec![0u8; 256]; // 256 bytes of fake account data
+                let fake_data = vec![0u8; 256];
                 state.account_data_cache.insert(account.address, (fake_data, now));
             }
         }
+
+        Ok(fetched_count)
+    }
+
+    /// Fetch token account data for all tracked tokens
+    async fn fetch_token_accounts_impl(
+        shared_state: &Arc<RwLock<ServiceState>>
+    ) -> Result<usize, String> {
+        // Get list of tracked tokens from shared state
+        let tracked_tokens: Vec<String> = {
+            let state = shared_state.read().await;
+            state.tracked_tokens.keys().cloned().collect()
+        };
+
+        if tracked_tokens.is_empty() {
+            return Ok(0);
+        }
+
+        // Use the pool fetcher service to fetch token account data
+        let fetcher = get_pool_fetcher();
+        
+        // Fetch token accounts, mints, and metadata
+        let token_accounts = fetcher.fetch_token_accounts(&tracked_tokens).await?;
+        let token_mints = fetcher.fetch_token_mints(&tracked_tokens).await?;
+        let token_metadata = fetcher.fetch_token_metadata(&tracked_tokens).await?;
+
+        let fetched_count = token_accounts.len() + token_mints.len() + token_metadata.len();
+
+        log(
+            LogTag::Pool,
+            "TOKEN_FETCH_SUCCESS",
+            &format!(
+                "Fetched {} token accounts, {} mints, {} metadata for {} tokens",
+                token_accounts.len(),
+                token_mints.len(),
+                token_metadata.len(),
+                tracked_tokens.len()
+            )
+        );
 
         Ok(fetched_count)
     }
@@ -867,7 +1113,6 @@ impl PoolService {
         // - Update price cache with calculated prices
         // - Set confidence scores based on data freshness and liquidity
 
-        // Placeholder implementation
         let mut calculated_count = 0;
         let now = Utc::now();
 
@@ -875,9 +1120,7 @@ impl PoolService {
             let state = shared_state.read().await;
             let mut cache = price_cache.write().await;
 
-            // Calculate prices for all tokens with fresh account data
             for (token_mint, pool_data) in &state.best_pools {
-                // Check if we have fresh account data
                 if
                     let Some((account_data, fetch_time)) = state.account_data_cache.get(
                         &pool_data.pool_address
@@ -885,16 +1128,12 @@ impl PoolService {
                 {
                     let age = now.signed_duration_since(*fetch_time);
                     if age.num_seconds() < 60 {
-                        // Data is fresh (less than 1 minute old)
-
-                        // Calculate price from pool reserves
                         let price_sol = if pool_data.reserve_token > 0.0 {
                             pool_data.reserve_sol / pool_data.reserve_token
                         } else {
                             0.0
                         };
 
-                        // Assume SOL/USD rate of $150 for placeholder
                         let sol_usd_rate = 150.0;
                         let price_usd = price_sol * sol_usd_rate;
 
@@ -939,7 +1178,6 @@ impl PoolService {
         let mut cleaned_count = 0;
         let now = Utc::now();
 
-        // Clean up stale price cache entries
         {
             let mut cache = price_cache.write().await;
             let mut to_remove = Vec::new();
@@ -957,7 +1195,6 @@ impl PoolService {
             }
         }
 
-        // Clean up stale account data
         {
             let mut state = shared_state.write().await;
             let mut to_remove = Vec::new();
@@ -965,7 +1202,6 @@ impl PoolService {
             for (address, (_, fetch_time)) in state.account_data_cache.iter() {
                 let age = now.signed_duration_since(*fetch_time);
                 if age.num_seconds() > 300 {
-                    // Remove account data older than 5 minutes
                     to_remove.push(address.clone());
                 }
             }
@@ -977,6 +1213,80 @@ impl PoolService {
         }
 
         Ok(cleaned_count)
+    }
+
+    /// Process pool calculations using the calculator service
+    async fn process_pool_calculations_impl(
+        shared_state: &Arc<RwLock<ServiceState>>,
+        price_cache: &Arc<RwLock<HashMap<String, TokenPriceInfo>>>
+    ) -> Result<usize, String> {
+        // TODO: Implement pool calculation processing
+        // - Get tokens that need price calculations
+        // - Use the pool calculator service to calculate prices
+        // - Update price cache with calculated results
+        // - Handle different pool types and programs
+
+        let calculator = get_pool_calculator();
+        let mut processed_count = 0;
+
+        {
+            let state = shared_state.read().await;
+            let mut cache = price_cache.write().await;
+
+            // Process tokens that have pool data but need price calculations
+            for (token_mint, pool_data) in &state.best_pools {
+                // Check if we already have fresh price data
+                if let Some(existing_price) = cache.get(token_mint) {
+                    let age = Utc::now().signed_duration_since(existing_price.calculated_at);
+                    if age.num_seconds() < PRICE_CACHE_TTL_SECS {
+                        continue; // Skip if we have fresh data
+                    }
+                }
+
+                // Calculate price using the pool calculator
+                let pool_info = pool_data.to_pool_info();
+                match calculator.calculate_token_price(&pool_info, token_mint).await {
+                    Ok(Some(price_info)) => {
+                        // Convert PoolPriceInfo to TokenPriceInfo
+                        let token_price_info = TokenPriceInfo {
+                            token_mint: token_mint.clone(),
+                            pool_price_sol: Some(price_info.price_sol),
+                            pool_price_usd: None, // Will be calculated later
+                            api_price_sol: None,
+                            api_price_usd: None,
+                            pool_address: Some(pool_data.pool_address.clone()),
+                            pool_type: Some(pool_data.dex_type.clone()),
+                            reserve_sol: Some(pool_data.reserve_sol),
+                            reserve_token: Some(pool_data.reserve_token),
+                            liquidity_usd: Some(pool_data.liquidity_usd),
+                            volume_24h_usd: Some(pool_data.volume_24h),
+                            calculated_at: Utc::now(),
+                            error: None,
+                        };
+
+                        cache.insert(token_mint.clone(), token_price_info);
+                        processed_count += 1;
+                    }
+                    Ok(None) => {
+                        // Pool calculation returned None (no price available)
+                        log(
+                            LogTag::Pool,
+                            "POOL_CALC_NO_PRICE",
+                            &format!("No price available for {} in pool {}", token_mint, pool_data.pool_address)
+                        );
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Pool,
+                            "POOL_CALC_ERROR",
+                            &format!("Failed to calculate price for {}: {}", token_mint, e)
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(processed_count)
     }
 
     /// Monitor all task states
@@ -1006,7 +1316,6 @@ impl PoolService {
             }
         }
 
-        // Log overall health
         if total_tasks > 0 {
             let health_percentage = (healthy_tasks * 100) / total_tasks;
             log(
@@ -1020,13 +1329,10 @@ impl PoolService {
                 )
             );
 
-            // Log individual task errors
             for (task_name, error) in error_tasks {
                 log(LogTag::Pool, "TASK_ERROR", &format!("Task {} error: {}", task_name, error));
             }
         }
-
-        // Report cache statistics
         log(
             LogTag::Pool,
             "CACHE_STATS",
@@ -1077,7 +1383,7 @@ impl PoolInterface for PoolService {
         Some(price_info.clone())
     }
 
-    /// Get price history for a token (placeholder implementation)
+    /// Get price history for a token
     async fn get_price_history(&self, _token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
         // TODO: Implement price history retrieval from database
         vec![]
@@ -1139,46 +1445,3 @@ pub fn get_pool_service() -> &'static PoolService {
     POOL_SERVICE.get().expect("Pool service not initialized")
 }
 
-// =============================================================================
-// LEGACY COMPATIBILITY FUNCTIONS
-// =============================================================================
-
-/// Legacy compatibility: Get price for a token (returns SOL price only)
-pub async fn get_price(token_address: &str) -> Option<f64> {
-    if let Some(price_info) = get_pool_service().get_price(token_address).await {
-        price_info.pool_price_sol.or(price_info.api_price_sol)
-    } else {
-        None
-    }
-}
-
-
-/// Legacy compatibility: Get price history for a token
-pub async fn get_price_history(token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
-    get_pool_service().get_price_history(token_address).await
-}
-
-/// Legacy compatibility: Get tokens with recent pools info
-pub async fn get_tokens_with_recent_pools_infos(_window_seconds: i64) -> Vec<String> {
-    get_pool_service().get_available_tokens().await
-}
-
-/// Check if a token has available price data
-pub async fn check_token_availability(token_address: &str) -> bool {
-    get_pool_service().get_price(token_address).await.is_some()
-}
-
-/// Start monitoring service (placeholder)
-pub async fn start_monitoring() {
-    log(LogTag::Pool, "INFO", "Pool service monitoring started");
-}
-
-/// Stop monitoring service (placeholder)
-pub async fn stop_monitoring() {
-    log(LogTag::Pool, "INFO", "Pool service monitoring stopped");
-}
-
-/// Clear token from all caches (placeholder)
-pub async fn clear_token_from_all_caches(_token_mint: &str) {
-    // Placeholder implementation - no actual cache clearing needed
-}

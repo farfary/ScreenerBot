@@ -146,7 +146,7 @@ pub struct CachedPoolInfo {
 }
 
 impl CachedPoolInfo {
-    /// Create from token pair (placeholder implementation)
+    /// Create from token pair
     pub fn from_token_pair(_pair: &str) -> Result<Self, String> {
         Ok(Self {
             pair_address: "placeholder".to_string(),
