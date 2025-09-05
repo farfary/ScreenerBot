@@ -80,6 +80,20 @@ pub fn is_debug_pool_calculator_enabled() -> bool {
     has_arg("--debug-pool-calculator")
 }
 
+pub fn is_debug_pool_discovery_enabled() -> bool {
+    has_arg("--debug-pool-discovery")
+}
+
+/// Pool cleanup debug mode
+pub fn is_debug_pool_cleanup_enabled() -> bool {
+    has_arg("--debug-pool-cleanup")
+}
+
+/// Pool monitor debug mode
+pub fn is_debug_pool_monitor_enabled() -> bool {
+    has_arg("--debug-pool-monitor")
+}
+
 /// Trader module debug mode
 pub fn is_debug_trader_enabled() -> bool {
     has_arg("--debug-trader")
@@ -247,6 +261,7 @@ pub fn print_help() {
     println!("    --debug-monitor           Monitor module debug mode");
     println!("    --debug-ohlcv             OHLCV analysis debug mode");
     println!("    --debug-pool-calculator   Pool calculator debug mode");
+    println!("    --debug-pool-discovery    Pool discovery debug mode");
     println!("    --debug-pool-prices       Pool prices debug mode");
     println!("    --debug-positions         Positions module debug mode");
     println!("    --debug-profit            Profit calculation debug mode");
@@ -284,6 +299,9 @@ pub fn is_any_debug_enabled() -> bool {
         is_debug_profit_enabled() ||
         is_debug_pool_prices_enabled() ||
         is_debug_pool_calculator_enabled() ||
+        is_debug_pool_discovery_enabled() ||
+        is_debug_pool_cleanup_enabled() ||
+        is_debug_pool_monitor_enabled() ||
         is_debug_trader_enabled() ||
         is_debug_api_enabled() ||
         is_debug_monitor_enabled() ||
@@ -319,6 +337,15 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     }
     if is_debug_pool_calculator_enabled() {
         modes.push("pool-calculator");
+    }
+    if is_debug_pool_discovery_enabled() {
+        modes.push("pool-discovery");
+    }
+    if is_debug_pool_cleanup_enabled() {
+        modes.push("pool-cleanup");
+    }
+    if is_debug_pool_monitor_enabled() {
+        modes.push("pool-monitor");
     }
     if is_debug_trader_enabled() {
         modes.push("trader");

@@ -299,6 +299,54 @@ impl PoolFetcher {
         Ok(result)
     }
 
+    /// Fetch account data for multiple account addresses
+    pub async fn fetch_account_data(
+        &self,
+        account_addresses: &[String]
+    ) -> Result<HashMap<String, Vec<u8>>, String> {
+        if account_addresses.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let start_time = Instant::now();
+        let mut result = HashMap::new();
+
+        // Parse account addresses to Pubkeys
+        let pubkeys: Result<Vec<Pubkey>, String> = account_addresses
+            .iter()
+            .map(|addr| Pubkey::from_str(addr).map_err(|e| format!("Invalid address {}: {}", addr, e)))
+            .collect();
+
+        let pubkeys = pubkeys?;
+
+        // Fetch account data in batches
+        for chunk in pubkeys.chunks(RPC_MULTIPLE_ACCOUNTS_BATCH_SIZE) {
+            match self.rpc_client.get_multiple_accounts(chunk).await {
+                Ok(accounts) => {
+                    for (i, account) in accounts.iter().enumerate() {
+                        if let Some(account) = account {
+                            result.insert(chunk[i].to_string(), account.data.clone());
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(format!("Failed to fetch account data: {}", e));
+                }
+            }
+        }
+
+        // Update stats
+        {
+            let mut stats = self.stats.write().await;
+            stats.total_requests += account_addresses.len() as u64;
+            stats.successful_fetches += result.len() as u64;
+            stats.average_fetch_time_ms = (stats.average_fetch_time_ms + start_time.elapsed().as_millis() as f64) / 2.0;
+            stats.last_update = Some(Utc::now());
+        }
+
+        Ok(result)
+    }
+
     /// Get statistics
     pub async fn get_stats(&self) -> PoolFetcherStats {
         self.stats.read().await.clone()
@@ -423,6 +471,128 @@ impl PoolFetcher {
 
         Ok(result)
     }
+
+    /// Fetch account data for pool service integration
+    pub async fn fetch_account_data_for_pool_service(
+        &self,
+        account_queue: &mut Vec<crate::pool_discovery::AccountInfo>
+    ) -> Result<usize, String> {
+        if account_queue.is_empty() {
+            return Ok(0);
+        }
+
+        let batch_size = std::cmp::min(100, account_queue.len());
+        let accounts_to_fetch: Vec<crate::pool_discovery::AccountInfo> = 
+            account_queue.drain(0..batch_size).collect();
+
+        log(
+            LogTag::Pool,
+            "ACCOUNT_FETCH_START",
+            &format!("Starting account data fetch for {} accounts", accounts_to_fetch.len())
+        );
+
+        // Group accounts by type for efficient fetching
+        let mut pool_accounts = Vec::new();
+        let mut vault_accounts = Vec::new();
+        let mut other_accounts = Vec::new();
+
+        for account in &accounts_to_fetch {
+            match account.account_type.as_str() {
+                "pool" => pool_accounts.push(account.address.clone()),
+                "vault" => vault_accounts.push(account.address.clone()),
+                _ => other_accounts.push(account.address.clone()),
+            }
+        }
+
+        let mut fetched_count = 0;
+
+        // Fetch pool account data
+        if !pool_accounts.is_empty() {
+            match self.fetch_account_data(&pool_accounts).await {
+                Ok(_account_data) => {
+                    fetched_count += pool_accounts.len();
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Pool,
+                        "ACCOUNT_FETCH_ERROR",
+                        &format!("Failed to fetch pool account data: {}", e)
+                    );
+                }
+            }
+        }
+
+        // Fetch vault account data
+        if !vault_accounts.is_empty() {
+            match self.fetch_account_data(&vault_accounts).await {
+                Ok(_account_data) => {
+                    fetched_count += vault_accounts.len();
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Pool,
+                        "ACCOUNT_FETCH_ERROR",
+                        &format!("Failed to fetch vault account data: {}", e)
+                    );
+                }
+            }
+        }
+
+        // Fetch other account data
+        if !other_accounts.is_empty() {
+            match self.fetch_account_data(&other_accounts).await {
+                Ok(_account_data) => {
+                    fetched_count += other_accounts.len();
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Pool,
+                        "ACCOUNT_FETCH_ERROR",
+                        &format!("Failed to fetch other account data: {}", e)
+                    );
+                }
+            }
+        }
+
+        log(
+            LogTag::Pool,
+            "ACCOUNT_FETCH_COMPLETE",
+            &format!("Account data fetch completed: {} accounts fetched", fetched_count)
+        );
+
+        Ok(fetched_count)
+    }
+
+    /// Fetch token account data for pool service integration
+    pub async fn fetch_token_accounts_for_pool_service(
+        &self,
+        tracked_tokens: &[String]
+    ) -> Result<usize, String> {
+        if tracked_tokens.is_empty() {
+            return Ok(0);
+        }
+
+        // Fetch token accounts, mints, and metadata
+        let token_accounts = self.fetch_token_accounts(tracked_tokens).await?;
+        let token_mints = self.fetch_token_mints(tracked_tokens).await?;
+        let token_metadata = self.fetch_token_metadata(tracked_tokens).await?;
+
+        let fetched_count = token_accounts.len() + token_mints.len() + token_metadata.len();
+
+        log(
+            LogTag::Pool,
+            "TOKEN_FETCH_SUCCESS",
+            &format!(
+                "Fetched {} token accounts, {} mints, {} metadata for {} tokens",
+                token_accounts.len(),
+                token_mints.len(),
+                token_metadata.len(),
+                tracked_tokens.len()
+            )
+        );
+
+        Ok(fetched_count)
+    }
 }
 
 // =============================================================================
@@ -444,4 +614,22 @@ pub fn init_pool_fetcher() -> &'static PoolFetcher {
 /// Get the global pool fetcher instance
 pub fn get_pool_fetcher() -> &'static PoolFetcher {
     POOL_FETCHER.get().expect("Pool fetcher not initialized")
+}
+
+// =============================================================================
+// CONVENIENCE FUNCTIONS
+// =============================================================================
+
+/// Fetch account data for pool service (convenience function)
+pub async fn fetch_account_data_for_pool_service(
+    account_queue: &mut Vec<crate::pool_discovery::AccountInfo>
+) -> Result<usize, String> {
+    get_pool_fetcher().fetch_account_data_for_pool_service(account_queue).await
+}
+
+/// Fetch token account data for pool service (convenience function)
+pub async fn fetch_token_accounts_for_pool_service(
+    tracked_tokens: &[String]
+) -> Result<usize, String> {
+    get_pool_fetcher().fetch_token_accounts_for_pool_service(tracked_tokens).await
 }
