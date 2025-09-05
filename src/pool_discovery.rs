@@ -16,6 +16,7 @@ use crate::tokens::raydium::{
     RaydiumBatchResult,
 };
 use crate::pool_interface::CachedPoolInfo;
+use crate::pool_db::{ DbPoolMetadata, store_pool_metadata_batch };
 use chrono::{ DateTime, Utc };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -34,6 +35,9 @@ const BATCH_DELAY_MS: u64 = 1000;
 
 /// Cache TTL for discovered pools (seconds)
 const POOL_CACHE_TTL_SECS: i64 = 300; // 5 minutes
+
+/// SOL mint address for filtering TOKEN/SOL pairs
+const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
 
 // =============================================================================
 // DATA STRUCTURES
@@ -245,20 +249,43 @@ impl PoolDiscoveryService {
             }
             raydium_successful += ray_success;
 
-            // Deduplicate pools by pool address and cache results
+            // Filter for TOKEN/SOL pairs only, deduplicate, store to DB, and cache results
             {
                 let mut discovered_pools = self.discovered_pools.write().await;
 
                 for (token_address, all_pools) in token_pools_map {
-                    if !all_pools.is_empty() {
-                        // Deduplicate pools by pool address
-                        let deduplicated_pools = self.deduplicate_pools(all_pools);
-                        total_pools_found += deduplicated_pools.len();
+                    if all_pools.is_empty() { continue; }
 
-                        // Cache discovered pools
-                        discovered_pools.insert(token_address, deduplicated_pools);
-                        combined_successful += 1;
+                    // Keep only pools where the pair includes SOL on one side
+                    let filtered: Vec<CachedPoolInfo> = all_pools
+                        .into_iter()
+                        .filter(|p| p.base_token == token_address && p.quote_token == SOL_MINT
+                            || p.quote_token == token_address && p.base_token == SOL_MINT)
+                        .collect();
+
+                    if filtered.is_empty() { continue; }
+
+                    // Deduplicate pools (keep highest liquidity per pool address)
+                    let deduplicated_pools = self.deduplicate_pools(filtered);
+                    total_pools_found += deduplicated_pools.len();
+
+                    // Store to database in a batch
+                    if let Err(e) = self.store_pools_to_database(&token_address, &deduplicated_pools).await {
+                        log(
+                            LogTag::Pool,
+                            "DISCOVERY_DB_ERROR",
+                            &format!(
+                                "Failed to store {} pools for {}: {}",
+                                deduplicated_pools.len(),
+                                &token_address[..8],
+                                e
+                            )
+                        );
                     }
+
+                    // Cache discovered pools in memory
+                    discovered_pools.insert(token_address, deduplicated_pools);
+                    combined_successful += 1;
                 }
             }
 
@@ -438,18 +465,69 @@ impl PoolDiscoveryService {
     // PRIVATE METHODS
     // =============================================================================
 
-    /// Deduplicate pools by pool address
+    /// Deduplicate pools by pool address, keeping the one with highest liquidity
     fn deduplicate_pools(&self, pools: Vec<CachedPoolInfo>) -> Vec<CachedPoolInfo> {
-        let mut seen = std::collections::HashSet::new();
-        let mut deduplicated = Vec::new();
+        use std::collections::HashMap;
 
+        let mut by_address: HashMap<String, CachedPoolInfo> = HashMap::new();
         for pool in pools {
-            if seen.insert(pool.pair_address.clone()) {
-                deduplicated.push(pool);
+            match by_address.get(&pool.pair_address) {
+                Some(existing) => {
+                    if pool.liquidity_usd > existing.liquidity_usd {
+                        by_address.insert(pool.pair_address.clone(), pool);
+                    }
+                }
+                None => {
+                    by_address.insert(pool.pair_address.clone(), pool);
+                }
             }
         }
 
-        deduplicated
+        let mut deduped: Vec<CachedPoolInfo> = by_address.into_values().collect();
+        deduped.sort_by(|a, b| b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal));
+        deduped
+    }
+
+    /// Store deduplicated pools to database for persistence
+    async fn store_pools_to_database(&self, token_address: &str, cached_pools: &[CachedPoolInfo]) -> Result<(), String> {
+        if cached_pools.is_empty() { return Ok(()); }
+
+        // Helper to map dex_id prefix to source string
+        fn source_from_dex_id(dex_id: &str) -> &'static str {
+            if dex_id.starts_with("gecko_") { "geckoterminal" }
+            else if dex_id.starts_with("ray_") { "raydium" }
+            else { "dexscreener" }
+        }
+
+        let mut batch: Vec<DbPoolMetadata> = Vec::with_capacity(cached_pools.len());
+        for pool in cached_pools {
+            let source = source_from_dex_id(&pool.dex_id);
+            let mut entry = DbPoolMetadata::new(
+                token_address,
+                &pool.pair_address,
+                &pool.dex_id,
+                "solana",
+                source,
+            );
+
+            // Fill known fields
+            entry.quote_token_address = pool.quote_token.clone();
+            entry.price_native = Some(pool.price_native);
+            entry.price_usd = Some(pool.price_usd);
+            entry.liquidity_usd = Some(pool.liquidity_usd);
+            entry.volume_24h = Some(pool.volume_24h);
+
+            if pool.created_at > 0 {
+                if let Some(dt) = chrono::DateTime::from_timestamp(pool.created_at as i64, 0) {
+                    entry.pair_created_at = Some(dt.with_timezone(&Utc));
+                }
+            }
+
+            batch.push(entry);
+        }
+
+        // Store in a single batch transaction
+        store_pool_metadata_batch(&batch)
     }
 }
 

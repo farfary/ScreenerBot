@@ -1,6 +1,7 @@
 use clap::Parser;
 use screenerbot::logger::{log, LogTag};
 use screenerbot::pool_service;
+use screenerbot::pool_discovery;
 
 /// Pool Service Tool - Initialize and manage pool services
 #[derive(Parser, Debug)]
@@ -51,6 +52,10 @@ fn main() {
 
     // Initialize pool service
     pool_service::init_pool_service();
+    // Initialize pool DB service for persistence used by discovery
+    if let Err(e) = screenerbot::pool_db::init_pool_db_service() {
+        log(LogTag::System, "DB_INIT_WARN", &format!("Pool DB init warning: {}", e));
+    }
     log(LogTag::System, "INIT", "🏊 Pool Service initialized");
 
     // Process token address if provided
@@ -60,7 +65,59 @@ fn main() {
             "TOKEN_ADDRESS",
             &format!("🎯 Processing token address: {}", token_address),
         );
-        // TODO: Add token address processing logic here
+
+        // Initialize discovery and run triple-API discovery for this token
+        let token = token_address.clone();
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+        rt.block_on(async move {
+            let discovery = pool_discovery::init_pool_discovery();
+
+            match discovery.discover_pools_batch(&[token.clone()]).await {
+                Ok(map) => {
+                    if let Some(pools) = map.get(&token) {
+                        log(
+                            LogTag::System,
+                            "DISCOVERY_RESULT",
+                            &format!(
+                                "✅ Discovered {} TOKEN/SOL pools for {}",
+                                pools.len(),
+                                &token[..8]
+                            ),
+                        );
+                        // Log top 3 by liquidity
+                        let mut pools_sorted = pools.clone();
+                        pools_sorted.sort_by(|a, b| b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal));
+                        for (i, p) in pools_sorted.iter().take(3).enumerate() {
+                            log(
+                                LogTag::System,
+                                "POOL",
+                                &format!(
+                                    "#{} {} liq=${:.2} vol24h=${:.2} dex={}",
+                                    i + 1,
+                                    &p.pair_address[..8],
+                                    p.liquidity_usd,
+                                    p.volume_24h,
+                                    p.dex_id
+                                ),
+                            );
+                        }
+                    } else {
+                        log(
+                            LogTag::System,
+                            "DISCOVERY_EMPTY",
+                            &format!("⚪ No pools discovered for {}", &token[..8]),
+                        );
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::System,
+                        "DISCOVERY_ERROR",
+                        &format!("❌ Discovery error for {}: {}", &token[..8], e),
+                    );
+                }
+            }
+        });
     }
 
     // Process pool address if provided
