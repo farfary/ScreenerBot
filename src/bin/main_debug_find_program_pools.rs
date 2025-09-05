@@ -1,8 +1,10 @@
 use screenerbot::arguments::{ get_arg_value, has_arg };
 use screenerbot::logger::{ init_file_logging, log, LogTag };
 use screenerbot::rpc::get_rpc_client;
-use screenerbot::tokens::pool::{ SOL_MINT, RAYDIUM_CLMM_PROGRAM_ID };
-use screenerbot::tokens::pool_db::init_pool_db_service;
+// Pool constants moved to pool_interface module
+const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+const RAYDIUM_CLMM_PROGRAM_ID: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK";
+// Pool DB service moved to pool_service module
 use rusqlite;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
@@ -45,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Initialize database service
-    init_pool_db_service()?;
+    // Pool DB service moved to pool_service module
 
     // Search for pools
     match find_pools_by_program_id(&target_program_id, wsol_pairs_only, max_pools).await {

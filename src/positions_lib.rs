@@ -7,7 +7,7 @@ use crate::{
     },
     positions_types::Position,
     rpc::lamports_to_sol,
-    tokens::pool::remove_priority_token,
+    // Pool priority functions removed - no longer needed
     tokens::{get_token_decimals, get_token_from_mint_global_api, get_token_rugcheck_data_safe},
     trader::PROFIT_EXTRA_NEEDED_SOL,
     utils::safe_truncate,
@@ -779,7 +779,7 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
             // Remove token from priority pool service since position is being cleaned up
             let mint_for_cleanup = position.mint.clone();
             tokio::spawn(async move {
-                remove_priority_token(&mint_for_cleanup).await;
+                // Priority token management removed - no longer needed
             });
 
             Some(position)

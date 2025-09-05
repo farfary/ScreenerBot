@@ -49,7 +49,7 @@ use crate::{
         get_price,
         get_token_decimals,
         get_token_from_db,
-        pool::{ add_priority_token, remove_priority_token },
+        // Pool priority functions removed - no longer needed
         PriceOptions,
         PriceResult,
         Token,
@@ -445,10 +445,7 @@ pub async fn open_position_direct(
 
     // Add token to watch list before opening position
     let _price_service_result = match
-        tokio::time::timeout(
-            tokio::time::Duration::from_secs(10),
-            get_price(&token.mint, Some(PriceOptions::default()), false)
-        ).await
+        tokio::time::timeout(tokio::time::Duration::from_secs(10), get_price(&token.mint)).await
     {
         Ok(result) => result,
         Err(_) => {
@@ -752,7 +749,7 @@ pub async fn open_position_direct(
         }
 
         // Add token to priority pool service for fast price updates
-        add_priority_token(&token.mint).await;
+        // Priority token management removed - no longer needed
 
         if is_debug_positions_enabled() {
             log(
@@ -957,10 +954,7 @@ pub async fn close_position_direct(
 
     // ✅ ENSURE token remains in watch list during sell process
     let _price_service_result = match
-        tokio::time::timeout(
-            tokio::time::Duration::from_secs(10),
-            get_price(&token.mint, Some(PriceOptions::default()), false)
-        ).await
+        tokio::time::timeout(tokio::time::Duration::from_secs(10), get_price(&token.mint)).await
     {
         Ok(result) => result,
         Err(_) => {
@@ -1960,7 +1954,7 @@ pub async fn close_position_direct(
     }
 
     // Remove token from priority pool service (no longer need fast updates)
-    remove_priority_token(mint).await;
+    // Priority token management removed - no longer needed
 
     if is_debug_positions_enabled() {
         log(
@@ -3556,11 +3550,9 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                                         let positions_snapshot = POSITIONS.read().await;
                                                         if let Some(position) = positions_snapshot.iter().find(|p| p.closed_reason.as_deref() == Some("exit_permanent_failure_retry") && p.exit_transaction_signature.is_none()) {
                                                             if let Some(token_obj) = get_token_from_db(&position.mint).await {
-                                                                if let Some(price_res) = get_price(&position.mint, Some(PriceOptions::default()), false).await {
-                                                                    if let Some(price) = price_res.price_sol {
-                                                                        let reason = format!("Retry after permanent exit failure for {}", position.symbol);
-                                                                        let _ = close_position_direct(&position.mint, &token_obj, price, reason, Utc::now()).await;
-                                                                    }
+                                                                if let Some(price) = get_price(&position.mint).await {
+                                                                    let reason = format!("Retry after permanent exit failure for {}", position.symbol);
+                                                                    let _ = close_position_direct(&position.mint, &token_obj, price, reason, Utc::now()).await;
                                                                 }
                                                             }
                                                         }
@@ -3832,11 +3824,9 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                                                 tokio::spawn(async move {
                                                                     sleep(Duration::from_secs(5)).await; // small delay
                                                                     if let Some(token_obj) = get_token_from_db(&mint_retry).await {
-                                                                        if let Some(price_res) = get_price(&mint_retry, Some(PriceOptions::default()), false).await {
-                                                                            if let Some(price) = price_res.price_sol {
-                                                                                let reason = format!("Retry after failed exit verification for {}", symbol_retry);
-                                                                                let _ = close_position_direct(&mint_retry, &token_obj, price, reason, Utc::now()).await;
-                                                                            }
+                                                                        if let Some(price) = get_price(&mint_retry).await {
+                                                                            let reason = format!("Retry after failed exit verification for {}", symbol_retry);
+                                                                            let _ = close_position_direct(&mint_retry, &token_obj, price, reason, Utc::now()).await;
                                                                         }
                                                                     }
                                                                 });

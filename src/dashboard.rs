@@ -1030,12 +1030,12 @@ impl Dashboard {
         let pool_stats = if
             let Ok(stats) = tokio::time::timeout(Duration::from_millis(100), async {
                 let pool_service = get_pool_service();
-                pool_service.get_enhanced_stats().await
+                pool_service.get_stats().await
             }).await
         {
             stats
         } else {
-            crate::tokens::pool::PoolServiceStats::default()
+            crate::pool_interface::PoolStats::default()
         };
 
         // Multi-row display for comprehensive stats
@@ -1135,11 +1135,12 @@ impl Dashboard {
 
         // Row 4: Pool Performance
         if current_line < (height as usize) {
-            let col1 = format!("Pool Req: {}", pool_stats.total_price_requests);
+            let col1 = format!("Pool Req: {}", pool_stats.successful_price_fetches + pool_stats.failed_price_fetches);
             let col2 = format!("Cache Hits: {}", pool_stats.cache_hits);
-            let pool_success_rate = if pool_stats.total_price_requests > 0 {
-                ((pool_stats.successful_calculations as f64) /
-                    (pool_stats.total_price_requests as f64)) *
+            let total_requests = pool_stats.successful_price_fetches + pool_stats.failed_price_fetches;
+            let pool_success_rate = if total_requests > 0 {
+                ((pool_stats.successful_price_fetches as f64) /
+                    (total_requests as f64)) *
                     100.0
             } else {
                 0.0
@@ -1173,9 +1174,9 @@ impl Dashboard {
 
         // Row 5: Pool Timing Stats
         if current_line < (height as usize) {
-            let col1 = format!("Pool OK: {}", pool_stats.successful_calculations);
-            let col2 = format!("Pool Fail: {}", pool_stats.failed_calculations);
-            let col3 = format!("Blockchain: {}", pool_stats.blockchain_calculations);
+            let col1 = format!("Pool OK: {}", pool_stats.successful_price_fetches);
+            let col2 = format!("Pool Fail: {}", pool_stats.failed_price_fetches);
+            let col3 = format!("Tokens: {}", pool_stats.total_tokens_available);
             let content_width = width.saturating_sub(2) as usize;
             let col_w = content_width / 3;
             let row_content = format!(

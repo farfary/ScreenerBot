@@ -1,24 +1,16 @@
 use crate::{
     arguments::{
-        is_dashboard_enabled,
-        is_debug_system_enabled,
-        is_dry_run_enabled,
-        is_run_enabled,
-        is_summary_enabled,
-        patterns,
-        print_help,
+        is_dashboard_enabled, is_debug_system_enabled, is_dry_run_enabled, is_run_enabled,
+        is_summary_enabled, patterns, print_help,
     },
     ata_cleanup,
-    dashboard::{ self, Dashboard },
+    dashboard::{self, Dashboard},
     global,
-    logger::{ init_file_logging, log, LogTag },
-    positions,
-    rpc,
-    summary,
-    tokens::{ self, monitor, pool, TokenDatabase },
-    trader::{ self, CriticalOperationGuard },
-    transactions,
-    wallet,
+    logger::{init_file_logging, log, LogTag},
+    positions, rpc, summary,
+    tokens::{self, monitor, TokenDatabase},
+    trader::{self, CriticalOperationGuard},
+    transactions, wallet,
 };
 
 use solana_sdk::signer::Signer;
@@ -54,11 +46,15 @@ pub async fn run_bot() -> Result<(), String> {
 
     // Check for dry-run mode and log it prominently
     if is_dry_run_enabled() {
-        log(LogTag::System, "CRITICAL", "🚫 DRY-RUN MODE ENABLED - NO ACTUAL TRADING WILL OCCUR");
         log(
             LogTag::System,
             "CRITICAL",
-            "📊 All trading signals and analysis will be logged but not executed"
+            "🚫 DRY-RUN MODE ENABLED - NO ACTUAL TRADING WILL OCCUR",
+        );
+        log(
+            LogTag::System,
+            "CRITICAL",
+            "📊 All trading signals and analysis will be logged but not executed",
         );
     }
 
@@ -75,7 +71,11 @@ pub async fn run_bot() -> Result<(), String> {
     let mut dashboard_handle_opt: Option<tokio::task::JoinHandle<()>> = None;
 
     if dashboard_mode {
-        log(LogTag::System, "INFO", "🖥️ Dashboard mode enabled - Starting terminal UI");
+        log(
+            LogTag::System,
+            "INFO",
+            "🖥️ Dashboard mode enabled - Starting terminal UI",
+        );
 
         // Create dashboard instance and set it globally for log forwarding
         let dashboard = std::sync::Arc::new(Dashboard::new());
@@ -87,11 +87,8 @@ pub async fn run_bot() -> Result<(), String> {
         let services_completed_dashboard = services_completed.clone();
 
         let dashboard_handle = tokio::spawn(async move {
-            if
-                let Err(e) = dashboard::run_dashboard(
-                    shutdown_dashboard,
-                    services_completed_dashboard
-                ).await
+            if let Err(e) =
+                dashboard::run_dashboard(shutdown_dashboard, services_completed_dashboard).await
             {
                 // Avoid stderr prints in dashboard context; route to file logger
                 debug_log(LogTag::System, "ERROR", &format!("Dashboard error: {}", e));
@@ -128,7 +125,11 @@ pub async fn run_bot() -> Result<(), String> {
         });
 
         // In dashboard mode, we'll run a simplified background version
-        log(LogTag::System, "INFO", "Running in dashboard mode with terminal UI");
+        log(
+            LogTag::System,
+            "INFO",
+            "Running in dashboard mode with terminal UI",
+        );
     } else {
         debug_log(LogTag::System, "INFO", "Running in console mode");
     }
@@ -136,7 +137,11 @@ pub async fn run_bot() -> Result<(), String> {
     // Initialize centralized blacklist system with system/stable tokens
     tokens::initialize_system_stable_blacklist();
 
-    debug_log(LogTag::System, "INFO", "Starting ScreenerBot background tasks");
+    debug_log(
+        LogTag::System,
+        "INFO",
+        "Starting ScreenerBot background tasks",
+    );
 
     // Emergency shutdown flag (used below after first Ctrl+C)
     let emergency_shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -148,19 +153,19 @@ pub async fn run_bot() -> Result<(), String> {
             debug_log(
                 LogTag::System,
                 "ERROR",
-                &format!("Failed to initialize tokens system: {}", e)
+                &format!("Failed to initialize tokens system: {}", e),
             );
             return Err(format!("Failed to initialize tokens system: {}", e));
         }
     };
 
     // Initialize and start pool service for real-time price calculations and history caching
-    let pool_service = pool::init_pool_service();
-    pool_service.start_monitoring().await;
+    let _pool_service = crate::pool_service::init_pool_service();
+    crate::pool_service::start_monitoring().await;
     debug_log(
         LogTag::System,
         "INFO",
-        "Pool price service with disk caching initialized and monitoring started"
+        "Pool price service with disk caching initialized and monitoring started",
     );
 
     let shutdown_tokens = shutdown.clone();
@@ -172,39 +177,49 @@ pub async fn run_bot() -> Result<(), String> {
             debug_log(
                 LogTag::System,
                 "ERROR",
-                &format!("Failed to create database for rugcheck: {}", e)
+                &format!("Failed to create database for rugcheck: {}", e),
             );
             return Err(format!("Failed to create database for rugcheck: {}", e));
         }
     };
 
     let shutdown_rugcheck = shutdown.clone();
-    let rugcheck_handle = match
-        tokens::initialize_global_rugcheck_service(database, shutdown_rugcheck).await
-    {
-        Ok(handle) => handle,
-        Err(e) => {
-            debug_log(
-                LogTag::System,
-                "ERROR",
-                &format!("Failed to initialize global rugcheck service: {}", e)
-            );
-            return Err(format!("Failed to initialize global rugcheck service: {}", e));
-        }
-    };
-    debug_log(LogTag::System, "INFO", "Global rugcheck service initialized successfully");
+    let rugcheck_handle =
+        match tokens::initialize_global_rugcheck_service(database, shutdown_rugcheck).await {
+            Ok(handle) => handle,
+            Err(e) => {
+                debug_log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to initialize global rugcheck service: {}", e),
+                );
+                return Err(format!(
+                    "Failed to initialize global rugcheck service: {}",
+                    e
+                ));
+            }
+        };
+    debug_log(
+        LogTag::System,
+        "INFO",
+        "Global rugcheck service initialized successfully",
+    );
 
     // Start token monitoring service for database updates
     let shutdown_monitor = shutdown.clone();
     let _token_monitor_handle = tokio::spawn(async move {
-        log(LogTag::System, "INFO", "Token monitoring service task started");
+        log(
+            LogTag::System,
+            "INFO",
+            "Token monitoring service task started",
+        );
         match monitor::start_token_monitoring(shutdown_monitor).await {
             Ok(handle) => {
                 if let Err(e) = handle.await {
                     debug_log(
                         LogTag::System,
                         "ERROR",
-                        &format!("Token monitoring task failed: {:?}", e)
+                        &format!("Token monitoring task failed: {:?}", e),
                     );
                 }
             }
@@ -212,11 +227,15 @@ pub async fn run_bot() -> Result<(), String> {
                 debug_log(
                     LogTag::System,
                     "ERROR",
-                    &format!("Failed to start token monitoring: {}", e)
+                    &format!("Failed to start token monitoring: {}", e),
                 );
             }
         }
-        debug_log(LogTag::System, "INFO", "Token monitoring service task ended");
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "Token monitoring service task ended",
+        );
     });
 
     // Start tokens system background tasks (includes rugcheck service)
@@ -226,7 +245,7 @@ pub async fn run_bot() -> Result<(), String> {
             debug_log(
                 LogTag::System,
                 "WARN",
-                &format!("Some tokens system tasks failed to start: {}", e)
+                &format!("Some tokens system tasks failed to start: {}", e),
             );
             Vec::new()
         }
@@ -235,9 +254,17 @@ pub async fn run_bot() -> Result<(), String> {
     // Start RPC stats auto-save background service
     let shutdown_rpc_stats = shutdown.clone();
     let rpc_stats_handle = tokio::spawn(async move {
-        debug_log(LogTag::System, "INFO", "RPC stats auto-save service task started");
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "RPC stats auto-save service task started",
+        );
         rpc::start_rpc_stats_auto_save_service(shutdown_rpc_stats).await;
-        debug_log(LogTag::System, "INFO", "RPC stats auto-save service task ended");
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "RPC stats auto-save service task ended",
+        );
     });
 
     // Start ATA cleanup background service
@@ -261,34 +288,38 @@ pub async fn run_bot() -> Result<(), String> {
             match global::load_wallet_from_config(&configs) {
                 Ok(keypair) => {
                     let wallet_pubkey = keypair.pubkey();
-                    if
-                        let Err(e) =
-                            transactions::initialize_global_transaction_manager(wallet_pubkey).await
+                    if let Err(e) =
+                        transactions::initialize_global_transaction_manager(wallet_pubkey).await
                     {
                         debug_log(
                             LogTag::System,
                             "ERROR",
-                            &format!("Failed to initialize global transaction manager: {}", e)
+                            &format!("Failed to initialize global transaction manager: {}", e),
                         );
-                        return Err(
-                            format!("Failed to initialize global transaction manager: {}", e)
-                        );
+                        return Err(format!(
+                            "Failed to initialize global transaction manager: {}",
+                            e
+                        ));
                     }
                     debug_log(
                         LogTag::System,
                         "INFO",
-                        "Global transaction manager initialized for swap monitoring"
+                        "Global transaction manager initialized for swap monitoring",
                     );
                 }
                 Err(e) => {
                     debug_log(
                         LogTag::System,
                         "ERROR",
-                        &format!("Failed to load wallet keypair for transaction manager: {}", e)
+                        &format!(
+                            "Failed to load wallet keypair for transaction manager: {}",
+                            e
+                        ),
                     );
-                    return Err(
-                        format!("Failed to load wallet keypair for transaction manager: {}", e)
-                    );
+                    return Err(format!(
+                        "Failed to load wallet keypair for transaction manager: {}",
+                        e
+                    ));
                 }
             }
 
@@ -301,7 +332,7 @@ pub async fn run_bot() -> Result<(), String> {
                                 debug_log(
                                     LogTag::System,
                                     "INFO",
-                                    "Solscan API client initialized successfully"
+                                    "Solscan API client initialized successfully",
                                 );
 
                                 // Perform initial health check
@@ -312,7 +343,7 @@ pub async fn run_bot() -> Result<(), String> {
                                                 debug_log(
                                                     LogTag::System,
                                                     "INFO",
-                                                    "✅ Solscan API is healthy and ready"
+                                                    "✅ Solscan API is healthy and ready",
                                                 );
                                             } else {
                                                 debug_log(
@@ -326,7 +357,7 @@ pub async fn run_bot() -> Result<(), String> {
                                             debug_log(
                                                 LogTag::System,
                                                 "WARN",
-                                                &format!("Solscan API health check failed: {}", e)
+                                                &format!("Solscan API health check failed: {}", e),
                                             );
                                         }
                                     }
@@ -336,7 +367,7 @@ pub async fn run_bot() -> Result<(), String> {
                                 debug_log(
                                     LogTag::System,
                                     "WARN",
-                                    &format!("Failed to initialize Solscan client: {}", e)
+                                    &format!("Failed to initialize Solscan client: {}", e),
                                 );
                             }
                         }
@@ -344,14 +375,14 @@ pub async fn run_bot() -> Result<(), String> {
                         debug_log(
                             LogTag::System,
                             "INFO",
-                            "Solscan API token is empty - external API features disabled"
+                            "Solscan API token is empty - external API features disabled",
                         );
                     }
                 } else {
                     debug_log(
                         LogTag::System,
                         "INFO",
-                        "No Solscan API token configured - external API features disabled"
+                        "No Solscan API token configured - external API features disabled",
                     );
                 }
             } else {
@@ -366,18 +397,29 @@ pub async fn run_bot() -> Result<(), String> {
             debug_log(
                 LogTag::System,
                 "ERROR",
-                &format!("Failed to read configs for transaction manager: {}", e)
+                &format!("Failed to read configs for transaction manager: {}", e),
             );
-            return Err(format!("Failed to read configs for transaction manager: {}", e));
+            return Err(format!(
+                "Failed to read configs for transaction manager: {}",
+                e
+            ));
         }
     }
 
     // Start PositionsManager background service
     let shutdown_positions_manager = shutdown.clone();
     let positions_manager_handle = tokio::spawn(async move {
-        debug_log(LogTag::System, "INFO", "PositionsManager service task started");
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "PositionsManager service task started",
+        );
         let _sender = positions::start_positions_manager_service(shutdown_positions_manager).await;
-        debug_log(LogTag::System, "INFO", "PositionsManager service task ended");
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "PositionsManager service task ended",
+        );
     });
 
     let shutdown_entries = shutdown.clone();
@@ -389,7 +431,11 @@ pub async fn run_bot() -> Result<(), String> {
 
     let shutdown_positions = shutdown.clone();
     let positions_handle = tokio::spawn(async move {
-        log(LogTag::Trader, "INFO", "Open positions monitor task started");
+        log(
+            LogTag::Trader,
+            "INFO",
+            "Open positions monitor task started",
+        );
         trader::monitor_open_positions(shutdown_positions).await;
         log(LogTag::Trader, "INFO", "Open positions monitor task ended");
     });
@@ -414,17 +460,33 @@ pub async fn run_bot() -> Result<(), String> {
     // Start transaction manager background service
     let shutdown_transactions = shutdown.clone();
     let transaction_manager_handle = tokio::spawn(async move {
-        debug_log(LogTag::System, "INFO", "Transaction manager service task started");
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "Transaction manager service task started",
+        );
         transactions::start_transactions_service(shutdown_transactions).await;
-        debug_log(LogTag::System, "INFO", "Transaction manager service task ended");
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "Transaction manager service task ended",
+        );
     });
 
     if dashboard_mode {
-        debug_log(LogTag::System, "INFO", "Waiting for exit (q/Esc/Ctrl+C) to shutdown");
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "Waiting for exit (q/Esc/Ctrl+C) to shutdown",
+        );
         // Wait until dashboard requests shutdown or OS Ctrl+C arrives
         shutdown_trigger.notified().await;
         emergency_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
-        debug_log(LogTag::System, "INFO", "Shutdown requested, initiating graceful shutdown...");
+        debug_log(
+            LogTag::System,
+            "INFO",
+            "Shutdown requested, initiating graceful shutdown...",
+        );
     } else {
         debug_log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
         // Set up Ctrl+C signal handler with better error handling
@@ -434,14 +496,14 @@ pub async fn run_bot() -> Result<(), String> {
                 debug_log(
                     LogTag::System,
                     "INFO",
-                    "Shutdown signal received, initiating graceful shutdown..."
+                    "Shutdown signal received, initiating graceful shutdown...",
                 );
             }
             Err(e) => {
                 debug_log(
                     LogTag::System,
                     "ERROR",
-                    &format!("Failed to listen for shutdown signal: {}", e)
+                    &format!("Failed to listen for shutdown signal: {}", e),
                 );
                 return Err(format!("Failed to listen for shutdown signal: {}", e));
             }
@@ -452,10 +514,14 @@ pub async fn run_bot() -> Result<(), String> {
     debug_log(
         LogTag::System,
         "INFO",
-        "📢 Starting shutdown notification to all background tasks..."
+        "📢 Starting shutdown notification to all background tasks...",
     );
     shutdown.notify_waiters();
-    debug_log(LogTag::System, "INFO", "✅ Shutdown notification sent to all background tasks");
+    debug_log(
+        LogTag::System,
+        "INFO",
+        "✅ Shutdown notification sent to all background tasks",
+    );
     let shutdown_start_time = std::time::Instant::now();
 
     // CRITICAL PROTECTION: Check for active trading operations
@@ -464,25 +530,27 @@ pub async fn run_bot() -> Result<(), String> {
         log(
             LogTag::System,
             "CRITICAL",
-            &format!("🚨 WAITING FOR {} CRITICAL TRADING OPERATIONS TO COMPLETE BEFORE SHUTDOWN", critical_ops_count)
+            &format!(
+                "🚨 WAITING FOR {} CRITICAL TRADING OPERATIONS TO COMPLETE BEFORE SHUTDOWN",
+                critical_ops_count
+            ),
         );
         log(
             LogTag::System,
             "CRITICAL",
-            "⚠️  DO NOT FORCE KILL - Financial operations in progress!"
+            "⚠️  DO NOT FORCE KILL - Financial operations in progress!",
         );
 
         // Wait for critical operations to complete (max 60 seconds)
         let critical_ops_timeout = std::time::Instant::now();
         while CriticalOperationGuard::get_active_count() > 0 {
-            if
-                critical_ops_timeout.elapsed() >
-                std::time::Duration::from_secs(CRITICAL_OPS_TIMEOUT_SECS)
+            if critical_ops_timeout.elapsed()
+                > std::time::Duration::from_secs(CRITICAL_OPS_TIMEOUT_SECS)
             {
                 log(
                     LogTag::System,
                     "EMERGENCY",
-                    "⚠️  CRITICAL OPERATIONS TIMEOUT - Some trades may be incomplete!"
+                    "⚠️  CRITICAL OPERATIONS TIMEOUT - Some trades may be incomplete!",
                 );
                 break;
             }
@@ -496,7 +564,7 @@ pub async fn run_bot() -> Result<(), String> {
                         "🔒 Still waiting for {} critical operations... ({}s elapsed)",
                         remaining,
                         critical_ops_timeout.elapsed().as_secs()
-                    )
+                    ),
                 );
             }
 
@@ -507,7 +575,7 @@ pub async fn run_bot() -> Result<(), String> {
             debug_log(
                 LogTag::System,
                 "CRITICAL",
-                "✅ All critical trading operations completed safely"
+                "✅ All critical trading operations completed safely",
             );
         }
     }
@@ -517,21 +585,29 @@ pub async fn run_bot() -> Result<(), String> {
         std::time::Duration::from_secs(CLEANUP_TIMEOUT_SECS),
         async {
             // Stop pool monitoring service
-            let pool_service = pool::get_pool_service();
-            pool_service.stop_monitoring().await;
+            crate::pool_service::stop_monitoring().await;
             debug_log(LogTag::System, "INFO", "Pool monitoring service stopped");
 
             // Decimals are now automatically saved to database
-            debug_log(LogTag::System, "INFO", "Decimals database persists automatically");
+            debug_log(
+                LogTag::System,
+                "INFO",
+                "Decimals database persists automatically",
+            );
 
             // Save RPC statistics to disk
             if let Err(e) = rpc::save_global_rpc_stats() {
-                debug_log(LogTag::System, "WARN", &format!("Failed to save RPC statistics: {}", e));
+                debug_log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Failed to save RPC statistics: {}", e),
+                );
             } else {
                 debug_log(LogTag::System, "INFO", "RPC statistics saved to disk");
             }
-        }
-    ).await;
+        },
+    )
+    .await;
 
     match cleanup_result {
         Ok(_) => {
@@ -565,15 +641,17 @@ pub async fn run_bot() -> Result<(), String> {
     debug_log(
         LogTag::System,
         "INFO",
-        &format!("Waiting for background tasks to shutdown (max {} seconds)...", task_timeout_seconds)
+        &format!(
+            "Waiting for background tasks to shutdown (max {} seconds)...",
+            task_timeout_seconds
+        ),
     );
 
     // Start a progress monitor task that runs in parallel
     let progress_shutdown = shutdown.clone();
     let progress_task = tokio::spawn(async move {
-        let mut progress_interval = tokio::time::interval(
-            Duration::from_secs(PROGRESS_UPDATE_INTERVAL_SECS)
-        );
+        let mut progress_interval =
+            tokio::time::interval(Duration::from_secs(PROGRESS_UPDATE_INTERVAL_SECS));
         let mut elapsed = 0u64;
 
         loop {
@@ -591,105 +669,164 @@ pub async fn run_bot() -> Result<(), String> {
         std::time::Duration::from_secs(task_timeout_seconds),
         async {
             // Wait for trader tasks
-            debug_log(LogTag::System, "INFO", "🔄 Waiting for entries monitor task to shutdown...");
+            debug_log(
+                LogTag::System,
+                "INFO",
+                "🔄 Waiting for entries monitor task to shutdown...",
+            );
             if let Err(e) = entries_handle.await {
                 debug_log(
                     LogTag::System,
                     "WARN",
-                    &format!("New entries monitor task failed to shutdown cleanly: {}", e)
+                    &format!("New entries monitor task failed to shutdown cleanly: {}", e),
                 );
             } else {
-                debug_log(LogTag::System, "INFO", "✅ Entries monitor task shutdown completed");
+                debug_log(
+                    LogTag::System,
+                    "INFO",
+                    "✅ Entries monitor task shutdown completed",
+                );
             }
 
             debug_log(
                 LogTag::System,
                 "INFO",
-                "🔄 Waiting for positions monitor task to shutdown..."
+                "🔄 Waiting for positions monitor task to shutdown...",
             );
             if let Err(e) = positions_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
-                    &format!("Open positions monitor task failed to shutdown cleanly: {}", e)
+                    &format!(
+                        "Open positions monitor task failed to shutdown cleanly: {}",
+                        e
+                    ),
                 );
             } else {
-                log(LogTag::System, "INFO", "✅ Positions monitor task shutdown completed");
+                log(
+                    LogTag::System,
+                    "INFO",
+                    "✅ Positions monitor task shutdown completed",
+                );
             }
 
             debug_log(
                 LogTag::System,
                 "INFO",
-                "🔄 Waiting for positions display task to shutdown..."
+                "🔄 Waiting for positions display task to shutdown...",
             );
             if let Err(e) = display_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
-                    &format!("Positions display task failed to shutdown cleanly: {}", e)
+                    &format!("Positions display task failed to shutdown cleanly: {}", e),
                 );
             } else {
-                log(LogTag::System, "INFO", "✅ Positions display task shutdown completed");
+                log(
+                    LogTag::System,
+                    "INFO",
+                    "✅ Positions display task shutdown completed",
+                );
             }
 
             // Wait for PositionsManager service
-            log(LogTag::System, "INFO", "🔄 Waiting for PositionsManager task to shutdown...");
+            log(
+                LogTag::System,
+                "INFO",
+                "🔄 Waiting for PositionsManager task to shutdown...",
+            );
             if let Err(e) = positions_manager_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
-                    &format!("PositionsManager task failed to shutdown cleanly: {}", e)
+                    &format!("PositionsManager task failed to shutdown cleanly: {}", e),
                 );
             } else {
-                log(LogTag::System, "INFO", "✅ PositionsManager task shutdown completed");
+                log(
+                    LogTag::System,
+                    "INFO",
+                    "✅ PositionsManager task shutdown completed",
+                );
             }
 
             // Wait for RPC stats auto-save service
-            log(LogTag::System, "INFO", "🔄 Waiting for RPC stats auto-save task to shutdown...");
+            log(
+                LogTag::System,
+                "INFO",
+                "🔄 Waiting for RPC stats auto-save task to shutdown...",
+            );
             if let Err(e) = rpc_stats_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
-                    &format!("RPC stats auto-save task failed to shutdown cleanly: {}", e)
+                    &format!("RPC stats auto-save task failed to shutdown cleanly: {}", e),
                 );
             } else {
-                log(LogTag::System, "INFO", "✅ RPC stats auto-save task shutdown completed");
+                log(
+                    LogTag::System,
+                    "INFO",
+                    "✅ RPC stats auto-save task shutdown completed",
+                );
             }
 
             // Wait for ATA cleanup service
-            log(LogTag::System, "INFO", "🔄 Waiting for ATA cleanup task to shutdown...");
+            log(
+                LogTag::System,
+                "INFO",
+                "🔄 Waiting for ATA cleanup task to shutdown...",
+            );
             if let Err(e) = ata_cleanup_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
-                    &format!("ATA cleanup task failed to shutdown cleanly: {}", e)
+                    &format!("ATA cleanup task failed to shutdown cleanly: {}", e),
                 );
             } else {
-                log(LogTag::System, "INFO", "✅ ATA cleanup task shutdown completed");
+                log(
+                    LogTag::System,
+                    "INFO",
+                    "✅ ATA cleanup task shutdown completed",
+                );
             }
 
             // Wait for wallet monitoring service
-            log(LogTag::System, "INFO", "🔄 Waiting for wallet monitoring task to shutdown...");
+            log(
+                LogTag::System,
+                "INFO",
+                "🔄 Waiting for wallet monitoring task to shutdown...",
+            );
             if let Err(e) = wallet_monitor_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
-                    &format!("Wallet monitoring task failed to shutdown cleanly: {}", e)
+                    &format!("Wallet monitoring task failed to shutdown cleanly: {}", e),
                 );
             } else {
-                log(LogTag::System, "INFO", "✅ Wallet monitoring task shutdown completed");
+                log(
+                    LogTag::System,
+                    "INFO",
+                    "✅ Wallet monitoring task shutdown completed",
+                );
             }
 
             // Wait for transaction manager service
-            log(LogTag::System, "INFO", "🔄 Waiting for transaction manager task to shutdown...");
+            log(
+                LogTag::System,
+                "INFO",
+                "🔄 Waiting for transaction manager task to shutdown...",
+            );
             if let Err(e) = transaction_manager_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
-                    &format!("Transaction manager task failed to shutdown cleanly: {}", e)
+                    &format!("Transaction manager task failed to shutdown cleanly: {}", e),
                 );
             } else {
-                log(LogTag::System, "INFO", "✅ Transaction manager task shutdown completed");
+                log(
+                    LogTag::System,
+                    "INFO",
+                    "✅ Transaction manager task shutdown completed",
+                );
             }
 
             // Wait for tokens system tasks (includes rugcheck-related tasks)
@@ -699,41 +836,49 @@ pub async fn run_bot() -> Result<(), String> {
                 &format!(
                     "🔄 Waiting for {} tokens system tasks to shutdown...",
                     tokens_handles.len()
-                )
+                ),
             );
             for (i, handle) in tokens_handles.into_iter().enumerate() {
                 log(
                     LogTag::System,
                     "INFO",
-                    &format!("🔄 Waiting for tokens task {} to shutdown...", i)
+                    &format!("🔄 Waiting for tokens task {} to shutdown...", i),
                 );
                 if let Err(e) = handle.await {
                     log(
                         LogTag::System,
                         "WARN",
-                        &format!("Tokens task {} failed to shutdown cleanly: {}", i, e)
+                        &format!("Tokens task {} failed to shutdown cleanly: {}", i, e),
                     );
                 } else {
                     log(
                         LogTag::System,
                         "INFO",
-                        &format!("✅ Tokens task {} shutdown completed", i)
+                        &format!("✅ Tokens task {} shutdown completed", i),
                     );
                 }
             }
 
             // Wait for Rugcheck service task explicitly
-            log(LogTag::System, "INFO", "🔄 Waiting for Rugcheck service task to shutdown...");
+            log(
+                LogTag::System,
+                "INFO",
+                "🔄 Waiting for Rugcheck service task to shutdown...",
+            );
             if let Err(e) = rugcheck_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
-                    &format!("Rugcheck task failed to shutdown cleanly: {}", e)
+                    &format!("Rugcheck task failed to shutdown cleanly: {}", e),
                 );
             } else {
-                log(LogTag::System, "INFO", "✅ Rugcheck service task shutdown completed");
+                log(
+                    LogTag::System,
+                    "INFO",
+                    "✅ Rugcheck service task shutdown completed",
+                );
             }
-        }
+        },
     );
 
     // Stop the progress monitor
@@ -748,7 +893,7 @@ pub async fn run_bot() -> Result<(), String> {
                 &format!(
                     "All background tasks finished gracefully in {:.2}s.",
                     total_shutdown_time.as_secs_f64()
-                )
+                ),
             );
             // Notify dashboard that all services have completed
             services_completed.notify_waiters();
@@ -774,16 +919,19 @@ pub async fn run_bot() -> Result<(), String> {
 
                 // Last ditch effort - wait another 30 seconds for critical operations
                 let emergency_start = std::time::Instant::now();
-                while
-                    CriticalOperationGuard::get_active_count() > 0 &&
-                    emergency_start.elapsed() < std::time::Duration::from_secs(EMERGENCY_WAIT_SECS)
+                while CriticalOperationGuard::get_active_count() > 0
+                    && emergency_start.elapsed()
+                        < std::time::Duration::from_secs(EMERGENCY_WAIT_SECS)
                 {
                     tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
                     let remaining = CriticalOperationGuard::get_active_count();
                     log(
                         LogTag::System,
                         "EMERGENCY",
-                        &format!("🔒 Emergency wait: {} critical operations remaining...", remaining)
+                        &format!(
+                            "🔒 Emergency wait: {} critical operations remaining...",
+                            remaining
+                        ),
                     );
                 }
 
@@ -791,7 +939,7 @@ pub async fn run_bot() -> Result<(), String> {
                     log(
                         LogTag::System,
                         "EMERGENCY",
-                        "💥 FORCE SHUTDOWN WITH ACTIVE TRADES - POTENTIAL DATA LOSS!"
+                        "💥 FORCE SHUTDOWN WITH ACTIVE TRADES - POTENTIAL DATA LOSS!",
                     );
                     return Err(
                         "Force shutdown with active trades - potential data loss".to_string()
@@ -800,7 +948,7 @@ pub async fn run_bot() -> Result<(), String> {
                     log(
                         LogTag::System,
                         "INFO",
-                        "✅ Emergency wait successful - all critical operations completed"
+                        "✅ Emergency wait successful - all critical operations completed",
                     );
                 }
             }
@@ -822,7 +970,7 @@ pub async fn run_bot() -> Result<(), String> {
                 log(
                     LogTag::System,
                     "WARN",
-                    "Exiting without abort to preserve terminal state (dashboard mode)"
+                    "Exiting without abort to preserve terminal state (dashboard mode)",
                 );
                 return Err("Dashboard mode timeout".to_string());
             } else {

@@ -1570,8 +1570,7 @@ impl TokenDatabase {
         &self,
         token_mint: &str
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let pool_service = crate::tokens::pool::get_pool_service();
-        pool_service.clear_token_from_all_caches(token_mint).await;
+        crate::pool_service::clear_token_from_all_caches(token_mint).await;
         Ok(())
     }
 }

@@ -1,25 +1,26 @@
-//// Pool pricing is enabled - use pool module for direct on-chain price calculations
-pub use pool::{
-    // Pool program display name function
-    get_pool_program_display_name,
+//// Pool pricing is enabled - use pool interface only
+pub use crate::pool_service::{
     get_pool_service,
-    get_price,
     init_pool_service,
-    // Priority update function
-    request_priority_updates_for_open_positions,
-    CachedPoolInfo,
-    PoolInfo,
-    PoolPriceCalculator,
-    PoolPriceInfo,
-    PoolPriceResult,
-    // New pool service exports
-    PoolPriceService,
-    PriceOptions,
-    // Universal price function and types
-    PriceResult,
-    RaydiumCpmmPoolData,
-    TokenAvailability,
-    SOL_MINT,
+    get_price,
+    get_price_full,
+    get_price_history,
+    get_tokens_with_recent_pools_infos,
+    check_token_availability,
+};
+
+pub use crate::pool_interface::{ 
+    PoolInterface, 
+    TokenPriceInfo, 
+    PriceResult, 
+    PriceOptions 
+};
+
+// Pool database functions
+pub use crate::pool_db::{
+    init_pool_db_service,
+    store_price_entry,
+    get_price_history_for_token,
 };
 
 use crate::global::{ is_debug_decimals_enabled, is_debug_monitor_enabled };
@@ -45,8 +46,6 @@ pub mod lp_lock;
 pub mod monitor;
 pub mod ohlcv_db;
 pub mod ohlcvs;
-pub mod pool;
-pub mod pool_db;
 pub mod raydium;
 pub mod rugcheck;
 pub mod types;
@@ -117,7 +116,7 @@ pub use ohlcvs::{
     DataAvailability,
     OhlcvService,
 };
-pub use pool::initialize_price_service;
+// Pool service initialization moved to pool_service module
 pub use rugcheck::{
     get_high_risk_issues,
     get_rugcheck_score,
@@ -293,7 +292,7 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
     }
 
     // Initialize price service
-    initialize_price_service().await?;
+    // Price service initialization moved to pool_service module
 
     // Note: Position-related cleanup is now handled by positions manager
     // No longer need to cleanup stale watch list entries since monitoring is disabled
@@ -468,7 +467,7 @@ pub async fn is_token_safe_for_trading_safe(mint: &str) -> bool {
 
 /// Get current token price using thread-safe price service
 pub async fn get_current_token_price(mint: &str) -> Option<f64> {
-    get_price(mint, Some(PriceOptions::default()), false).await.and_then(|r| r.sol_price())
+    get_price(mint).await
 }
 
 /// Get all tokens by liquidity using database directly (for compatibility)

@@ -391,15 +391,15 @@ pub fn get_raydium_max_batch_size() -> usize {
 /// This moves the processing logic from pool.rs into raydium.rs
 pub fn process_raydium_batch_results(
     raydium_result: &RaydiumBatchResult
-) -> HashMap<String, Vec<crate::tokens::pool::CachedPoolInfo>> {
+) -> HashMap<String, Vec<crate::pool_interface::CachedPoolInfo>> {
     let mut processed_pools = HashMap::new();
 
     for (token_address, raydium_pools) in &raydium_result.pools {
         if !raydium_pools.is_empty() {
-            let cached_pools: Vec<crate::tokens::pool::CachedPoolInfo> = raydium_pools
+            let cached_pools: Vec<crate::pool_interface::CachedPoolInfo> = raydium_pools
                 .iter()
                 .map(|raydium_pool| {
-                    crate::tokens::pool::CachedPoolInfo {
+                    crate::pool_interface::CachedPoolInfo {
                         pair_address: raydium_pool.pool_address.clone(),
                         dex_id: format!("ray_{}", raydium_pool.dex_id),
                         base_token: raydium_pool.base_token.clone(),

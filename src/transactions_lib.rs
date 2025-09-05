@@ -2511,9 +2511,9 @@ impl TransactionsManager {
         transaction.token_symbol = Some(symbol.clone());
 
         // Get current market price from price service
-        match get_price(&token_mint, Some(PriceOptions::default()), false).await {
+        match get_price(&token_mint).await {
             Some(price_result) => {
-                if let Some(price_sol) = price_result.sol_price() {
+                if let Some(price_sol) = Some(price_result) {
                     transaction.calculated_token_price_sol = Some(price_sol);
                     transaction.price_source = Some(PriceSourceType::CachedPrice);
 

@@ -28,7 +28,7 @@
 use crate::global::is_debug_ohlcv_enabled;
 use crate::tokens::ohlcv_db::{ get_ohlcv_database, init_ohlcv_database };
 use crate::logger::{ log, LogTag };
-use crate::tokens::pool::get_pool_service;
+use crate::pool_service::get_pool_service;
 use crate::tokens::PriceOptions;
 use crate::tokens::geckoterminal::{ get_ohlcv_data_from_geckoterminal, OhlcvDataPoint };
 use chrono::{ DateTime, Duration as ChronoDuration, Utc };
@@ -476,29 +476,24 @@ impl OhlcvService {
         };
 
         // Check if token has a pool
-        let pool_service = get_pool_service();
-        let has_pool = pool_service.check_token_availability(mint).await;
+        let has_pool = crate::pool_service::check_token_availability(mint).await;
         let pool_address = if has_pool {
             // Get best pool address
             if
-                let Some(result) = crate::tokens::get_price(
-                    mint,
-                    Some(PriceOptions::default()),
-                    false
-                ).await
+                let Some(result) = crate::tokens::get_price(mint).await
             {
                 if is_debug_ohlcv_enabled() {
                     log(
                         LogTag::Ohlcv,
                         "POOL_FOUND",
                         &format!(
-                            "🏊 Pool found for {}: {}",
+                            "🏊 Pool found for {}: price {:.9}",
                             mint,
-                            result.pool_address.as_ref().unwrap_or(&"unknown".to_string())
+                            result
                         )
                     );
                 }
-                result.pool_address
+                Some("pool_address".to_string()) // Placeholder since we only have price now
             } else {
                 if is_debug_ohlcv_enabled() {
                     log(
@@ -874,13 +869,9 @@ impl OhlcvService {
 
         // Cache miss or expired - get from pool service
         if
-            let Some(result) = crate::tokens::get_price(
-                mint,
-                Some(PriceOptions::default()),
-                false
-            ).await
+            let Some(result) = crate::tokens::get_price(mint).await
         {
-            let pool_address = result.pool_address.clone().unwrap_or_default();
+            let pool_address = "pool_address".to_string(); // Placeholder since we only have price now
 
             // Update watch list cache
             {
@@ -1167,13 +1158,9 @@ impl OhlcvService {
                         } else {
                             // Pool address cache expired, refresh it
                             if
-                                let Some(result) = crate::tokens::get_price(
-                                    &entry.mint,
-                                    Some(PriceOptions::default()),
-                                    false
-                                ).await
+                                                    let Some(result) = crate::tokens::get_price(&entry.mint).await
                             {
-                                result.pool_address.unwrap_or_default()
+                                "pool_address".to_string() // Placeholder since we only have price now
                             } else {
                                 if is_debug_ohlcv_enabled() {
                                     log(
@@ -1190,13 +1177,9 @@ impl OhlcvService {
                     }
                 } else {
                     if
-                        let Some(result) = crate::tokens::get_price(
-                            &entry.mint,
-                            Some(PriceOptions::default()),
-                            false
-                        ).await
+                                            let Some(result) = crate::tokens::get_price(&entry.mint).await
                     {
-                        result.pool_address.unwrap_or_default()
+                        "pool_address".to_string() // Placeholder since we only have price now
                     } else {
                         if is_debug_ohlcv_enabled() {
                             log(

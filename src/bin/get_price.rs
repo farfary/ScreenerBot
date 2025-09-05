@@ -8,19 +8,9 @@ use screenerbot::{
     tokens::{
         dexscreener::get_global_dexscreener_api,
         initialize_tokens_system,
-        pool::{
-            // New watchlist management functions
-            add_priority_token,
-            add_watchlist_tokens,
-            clear_priority_tokens,
-            clear_watchlist_tokens,
-            get_pool_service,
-            get_price,
-            get_priority_tokens,
-            get_watchlist_status,
-            get_watchlist_tokens,
-            PriceOptions,
-        },
+        // Pool functions moved to pool_service module
+        get_price,
+        PriceOptions,
     },
 };
 use std::time::Instant;

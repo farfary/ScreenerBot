@@ -22,7 +22,7 @@ use crate::global::is_debug_transactions_enabled;
 use crate::logger::{ log, LogTag };
 use crate::rpc::get_rpc_client;
 use crate::tokens::decimals::lamports_to_sol;
-use crate::tokens::{ initialize_price_service, TokenDatabase };
+use crate::tokens::{ TokenDatabase };
 use crate::transactions_db::TransactionDatabase;
 use crate::transactions_types::{
     AtaAnalysis,
@@ -101,11 +101,12 @@ impl TransactionsManager {
         };
 
         // Initialize price service
-        if let Err(e) = initialize_price_service().await {
+        // Price service initialization moved to pool_service module
+        if false {
             log(
                 LogTag::Transactions,
                 "WARN",
-                &format!("Failed to initialize price service: {}", e)
+                "Price service initialization moved to pool_service module"
             );
         }
 

@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ws_url = match read_configs() {
         Ok(config) => {
             log(LogTag::System, "INFO", &format!("📡 Using premium WebSocket URL from config"));
-            config.rpc_url_ws_premium
+            config.rpc_urls.get(0).cloned().unwrap_or_default()
         }
         Err(e) => {
             log(

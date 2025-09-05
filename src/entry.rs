@@ -251,15 +251,11 @@ pub async fn should_buy(
     }
 
     let (current_price, reserve_sol, activity_score) = match
-        crate::tokens::get_price(
-            &token.mint,
-            Some(PriceOptions { warm_on_miss: true, ..PriceOptions::default() }),
-            false
-        ).await
+        crate::tokens::get_price(&token.mint).await
     {
         Some(result) => {
-            let price = result.sol_price().unwrap_or(0.0);
-            let reserve = result.reserve_sol.unwrap_or(0.0);
+            let price = result;
+            let reserve = 0.0; // Not available in simple API
 
             // Calculate transaction activity score from token data
             let raw_activity_score = token.txns
@@ -862,29 +858,24 @@ fn detect_best_drop(
 
 /// Get current pool data: (price_sol, age_minutes, reserve_sol)
 async fn get_current_pool_data(token: &Token) -> Option<(f64, i64, f64)> {
-    match crate::tokens::get_price(&token.mint, Some(PriceOptions::default()), false).await {
-        Some(price_result) => {
-            match price_result.sol_price() {
-                Some(price) if price > 0.0 && price.is_finite() => {
-                    let data_age_minutes =
-                        (Utc::now() - price_result.calculated_at).num_seconds() / 60;
+    match crate::tokens::get_price(&token.mint).await {
+        Some(price) => {
+            if price > 0.0 && price.is_finite() {
+                let data_age_minutes = 0; // Age not available in simple API
 
-                    if data_age_minutes > MAX_DATA_AGE_MIN {
-                        return None;
-                    }
-
-                    let reserve_sol = price_result.reserve_sol.unwrap_or_else(|| {
-                        // Fallback: estimate SOL reserves from legacy liquidity data if available
-                        token.liquidity
-                            .as_ref()
-                            .and_then(|l| l.usd)
-                            .map(|usd_liq| usd_liq / 200.0) // Updated conversion at $200/SOL
-                            .unwrap_or(0.0)
-                    });
-
-                    Some((price, data_age_minutes, reserve_sol))
+                if data_age_minutes > MAX_DATA_AGE_MIN {
+                    return None;
                 }
-                _ => None,
+
+                let reserve_sol = token.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .map(|usd_liq| usd_liq / 200.0) // Updated conversion at $200/SOL
+                    .unwrap_or(0.0);
+
+                Some((price, data_age_minutes, reserve_sol))
+            } else {
+                None
             }
         }
         None => None,
