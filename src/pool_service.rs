@@ -910,7 +910,6 @@ impl PoolService {
                             reserve_token: Some(pool_data.reserve_token),
                             liquidity_usd: Some(pool_data.liquidity_usd),
                             volume_24h_usd: Some(pool_data.volume_24h),
-                            confidence: 0.8, // High confidence for fresh on-chain data
                             calculated_at: now,
                             error: None,
                         };
@@ -1147,32 +1146,12 @@ pub fn get_pool_service() -> &'static PoolService {
 /// Legacy compatibility: Get price for a token (returns SOL price only)
 pub async fn get_price(token_address: &str) -> Option<f64> {
     if let Some(price_info) = get_pool_service().get_price(token_address).await {
-        price_info.get_best_sol_price()
+        price_info.pool_price_sol.or(price_info.api_price_sol)
     } else {
         None
     }
 }
 
-/// Legacy compatibility: Get full price result
-pub async fn get_price_full(
-    token_address: &str,
-    _options: Option<PriceOptions>,
-    _warm: bool
-) -> Option<PriceResult> {
-    if let Some(price_info) = get_pool_service().get_price(token_address).await {
-        Some(PriceResult::from(price_info))
-    } else {
-        Some(PriceResult {
-            token_mint: token_address.to_string(),
-            price_sol: None,
-            price_usd: None,
-            pool_address: None,
-            reserve_sol: None,
-            calculated_at: Utc::now(),
-            error: Some("Price not available".to_string()),
-        })
-    }
-}
 
 /// Legacy compatibility: Get price history for a token
 pub async fn get_price_history(token_address: &str) -> Vec<(DateTime<Utc>, f64)> {

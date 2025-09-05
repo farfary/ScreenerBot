@@ -1,8 +1,8 @@
 //// Pool pricing is enabled - use pool interface only
 pub use crate::pool_service::{
     init_pool_service,
+    get_pool_service,
     get_price,
-    get_price_full,
     get_price_history,
     get_tokens_with_recent_pools_infos,
     check_token_availability,
@@ -464,7 +464,11 @@ pub async fn is_token_safe_for_trading_safe(mint: &str) -> bool {
 
 /// Get current token price using thread-safe price service
 pub async fn get_current_token_price(mint: &str) -> Option<f64> {
-    get_price(mint).await
+    if let Some(price_info) = get_pool_service().get_price(mint).await {
+        price_info.pool_price_sol.or(price_info.api_price_sol)
+    } else {
+        None
+    }
 }
 
 /// Get all tokens by liquidity using database directly (for compatibility)

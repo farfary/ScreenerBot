@@ -206,7 +206,7 @@ use crate::positions_lib::calculate_position_pnl;
 use crate::tokens::{
     cache::TokenDatabase, get_all_tokens_by_liquidity, get_price, PriceOptions, Token,
 };
-use crate::utils::check_shutdown_or_delay;
+use crate::utils::{check_shutdown_or_delay, safe_read_lock, safe_write_lock, debug_trader_log};
 
 use crate::entry::get_profit_target;
 use crate::filtering::log_filtering_summary;
@@ -233,41 +233,6 @@ use crate::positions_db;
 // ERROR HANDLING UTILITIES
 // =============================================================================
 
-/// Safe wrapper for RwLock read operations that logs poison errors instead of panicking
-fn safe_read_lock<'a, T>(
-    lock: &'a std::sync::RwLock<T>,
-    operation: &str,
-) -> Option<std::sync::RwLockReadGuard<'a, T>> {
-    match lock.read() {
-        Ok(guard) => Some(guard),
-        Err(e) => {
-            log(
-                LogTag::Trader,
-                "LOCK_POISON_ERROR",
-                &format!("🔒 RwLock read poisoned during {}: {}", operation, e),
-            );
-            None
-        }
-    }
-}
-
-/// Safe wrapper for RwLock write operations that logs poison errors instead of panicking
-fn safe_write_lock<'a, T>(
-    lock: &'a std::sync::RwLock<T>,
-    operation: &str,
-) -> Option<std::sync::RwLockWriteGuard<'a, T>> {
-    match lock.write() {
-        Ok(guard) => Some(guard),
-        Err(e) => {
-            log(
-                LogTag::Trader,
-                "LOCK_POISON_ERROR",
-                &format!("🔒 RwLock write poisoned during {}: {}", operation, e),
-            );
-            None
-        }
-    }
-}
 
 // =============================================================================
 // GLOBAL STATE AND STATIC STORAGE
@@ -301,12 +266,9 @@ pub struct TokenCheckInfo {
     pub reserve_token: Option<f64>,
 }
 
-
 /// Global token tracking state
 pub static TOKEN_CHECK_TRACKER: Lazy<Arc<std::sync::RwLock<HashMap<String, TokenCheckInfo>>>> =
     Lazy::new(|| Arc::new(std::sync::RwLock::new(HashMap::new())));
-
-
 
 // =============================================================================
 // POSITION SELL DECISION CACHE AND RETRY SYSTEM
@@ -729,7 +691,6 @@ pub fn get_sell_decision_cache_status() -> String {
     }
 }
 
-
 // =============================================================================
 // PER-TOKEN RE-ENTRY COOLDOWN CACHE
 // =============================================================================
@@ -804,7 +765,6 @@ async fn get_recently_closed_mints_set() -> HashSet<String> {
     mints
 }
 
-
 // =============================================================================
 // CRITICAL OPERATION PROTECTION
 // =============================================================================
@@ -865,12 +825,6 @@ impl Drop for CriticalOperationGuard {
 // DEBUG LOGGING CONFIGURATION
 // =============================================================================
 
-/// Helper function for conditional debug trader logs
-pub fn debug_trader_log(log_type: &str, message: &str) {
-    if is_debug_trader_enabled() {
-        log(LogTag::Trader, log_type, message);
-    }
-}
 
 /// Debug function: Check if a position should be force-sold due to debug timeout
 pub fn should_debug_force_sell(position: &crate::positions_types::Position) -> bool {
@@ -896,8 +850,6 @@ pub fn should_debug_force_sell(position: &crate::positions_types::Position) -> b
 
     false
 }
-
-
 
 /// Update token tracking after checking a token
 pub fn update_token_check_info(
@@ -930,46 +882,12 @@ pub fn update_token_check_info(
     if entry_checked {
         info.entry_check_count += 1;
     }
-
 }
-
 
 async fn ensure_watchlist_on_price_fail(_mint: &str, _symbol: &str, _reason: &str) {
     // Watchlist functionality removed
 }
 
-/// Check if token had recent price drop (within 30 seconds) using provided history (no extra fetch)
-pub fn check_token_for_recent_drop_with_history(
-    history: &[(chrono::DateTime<chrono::Utc>, f64)],
-) -> bool {
-    if history.len() < 2 {
-        return false;
-    }
-
-    let now = chrono::Utc::now();
-    let thirty_seconds_ago = now - chrono::Duration::seconds(30);
-
-    let mut max_recent = 0.0f64;
-    let mut last_price = None;
-    for (ts, price) in history.iter() {
-        if *ts > thirty_seconds_ago {
-            if *price > max_recent {
-                max_recent = *price;
-            }
-            last_price = Some(*price);
-        }
-    }
-
-    if max_recent > 0.0 {
-        if let Some(current) = last_price {
-            if current > 0.0 {
-                let drop_percent = ((max_recent - current) / max_recent) * 100.0;
-                return drop_percent > 2.0;
-            }
-        }
-    }
-    false
-}
 
 /// Prioritize tokens for checking based on drops, check history, and fairness
 pub fn prioritize_tokens_for_checking(mut tokens: Vec<Token>) -> Vec<Token> {
@@ -1104,7 +1022,6 @@ pub async fn get_cooldown_status(sample: usize) -> String {
     )
 }
 
-
 /// Background task to monitor new tokens for entry opportunities
 pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
     // Clone shutdown once at the start to avoid borrow checker issues
@@ -1176,7 +1093,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Get available tokens directly from pool interface
         let pool_service = get_pool_service();
         let available_mints = pool_service.get_available_tokens().await;
-        
+
         log(
             LogTag::Trader,
             "CYCLE_PREPARED",
@@ -1184,36 +1101,30 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 "✅ Got {} available tokens from pool interface in {:.3}s",
                 available_mints.len(),
                 cycle_start.elapsed().as_secs_f32()
-            )
+            ),
         );
 
-        // Convert mint addresses to Token objects
-        let mut tokens = Vec::new();
+        // Get price info for all available tokens
+        let mut price_infos = Vec::new();
         for mint in available_mints {
-            match crate::tokens::dexscreener::get_token_from_mint_global_api(&mint).await {
-                Ok(Some(token)) => {
-                    tokens.push(token);
-                }
-                Ok(None) | Err(_) => {
-                    // Skip tokens that can't be converted
-                    continue;
-                }
+            if let Some(price_info) = pool_service.get_price(&mint).await {
+                price_infos.push(price_info);
             }
         }
 
-        if is_debug_trader_enabled() && !tokens.is_empty() {
+        if is_debug_trader_enabled() && !price_infos.is_empty() {
             log(
                 LogTag::Trader,
                 "DEBUG_TOKENS_PREPARED",
                 &format!(
                     "🔍 First 5 available tokens: [{}]",
-                    tokens
+                    price_infos
                         .iter()
                         .take(5)
-                        .map(|t| format!(
+                        .map(|p| format!(
                             "{}({:.1}k)",
-                            t.symbol,
-                            t.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0) / 1000.0
+                            p.token_mint,
+                            p.liquidity_usd.unwrap_or(0.0) / 1000.0
                         ))
                         .collect::<Vec<_>>()
                         .join(", ")
@@ -1222,7 +1133,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         }
 
         // Early return if no tokens to process
-        if tokens.is_empty() {
+        if price_infos.is_empty() {
             log(
                 LogTag::Trader,
                 "INFO",
@@ -1267,11 +1178,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         use tokio::sync::Semaphore;
         let semaphore = Arc::new(Semaphore::new(ENTRY_CHECK_CONCURRENCY));
 
-        // Simple token processing - take first batch of tokens
-        let total_tokens = tokens.len();
+        // Simple token processing - take first batch of price infos
+        let total_tokens = price_infos.len();
         let batch_size = std::cmp::min(MAX_TOKENS_PER_CYCLE, total_tokens);
-        let scheduled_tokens = tokens.into_iter().take(batch_size).collect::<Vec<_>>();
-        
+        let scheduled_tokens = price_infos.into_iter().take(batch_size).collect::<Vec<_>>();
+
         log(
             LogTag::Trader,
             "TOKEN_SCHEDULING",
@@ -1281,7 +1192,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 total_tokens
             ),
         );
-
 
         // Process scheduled tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         // Per-cycle aggregation counters (atomic to update from tasks)
@@ -1319,7 +1229,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     scheduled_tokens
                         .iter()
                         .take(10)
-                        .map(|t| t.symbol.as_str())
+                        .map(|p| p.token_mint.as_str())
                         .collect::<Vec<_>>()
                         .join(", ")
                 ),
@@ -1333,8 +1243,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let processing_budget =
             Duration::from_secs_f64((ENTRY_MONITOR_INTERVAL_SECS as f64) * TIME_BUDGET_FRACTION);
 
-
-        for token in scheduled_tokens.iter() {
+        for price_info in scheduled_tokens.iter() {
             processed_count += 1;
 
             // Use processing time (not total cycle time) for budget check
@@ -1363,8 +1272,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         "🎯 Processing token {}/{}: {} ({})",
                         processed_count,
                         scheduled_tokens.len(),
-                        token.symbol,
-                        &token.mint[..8]
+                        price_info.token_mint,
+                        &price_info.token_mint[..8]
                     ),
                 );
             }
@@ -1413,7 +1322,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             };
 
             // Clone necessary variables for the task
-            let token = token.clone();
+            let price_info = price_info.clone();
             let shutdown_clone = shutdown.clone();
             let price_available_count = price_available_count.clone();
             let price_unavailable_count = price_unavailable_count.clone();
@@ -1433,47 +1342,51 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 }
 
                 // Wrap the entire task logic in a timeout to prevent hanging
-                match
-                    tokio::time::timeout(Duration::from_secs(TOKEN_CHECK_TASK_TIMEOUT_SECS), async {
+                match tokio::time::timeout(
+                    Duration::from_secs(TOKEN_CHECK_TASK_TIMEOUT_SECS),
+                    async {
                         let pool_service = get_pool_service();
 
-
-                        // Get current price from pool service
-                        let current_price = match get_price(&token.mint).await {
-                            Some(price) if price > 0.0 && price.is_finite() => price,
-                            _ => {
-                                if is_debug_trader_enabled() {
-                                    log(
-                                        LogTag::Trader,
-                                        "PRICE_UNAVAILABLE",
-                                        &format!(
-                                            "❌ No price available for {} ({})",
-                                            token.symbol,
-                                            token.mint
-                                        )
-                                    );
+                        // Get current price from TokenPriceInfo
+                        let current_price =
+                            match price_info.pool_price_sol.or(price_info.api_price_sol) {
+                                Some(price) if price > 0.0 && price.is_finite() => price,
+                                _ => {
+                                    if is_debug_trader_enabled() {
+                                        log(
+                                            LogTag::Trader,
+                                            "PRICE_UNAVAILABLE",
+                                            &format!(
+                                                "❌ No price available for {}",
+                                                price_info.token_mint
+                                            ),
+                                        );
+                                    }
+                                    price_unavailable_count
+                                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    return;
                                 }
-                                price_unavailable_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                return;
-                            }
-                        };
+                            };
 
                         if is_debug_trader_enabled() {
                             log(
                                 LogTag::Trader,
                                 "PRICE_CHECK",
-                                &format!("💰 {} price: {:.9} SOL", token.symbol, current_price)
+                                &format!(
+                                    "💰 {} price: {:.9} SOL",
+                                    price_info.token_mint, current_price
+                                ),
                             );
                         }
                         price_available_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
                         // Fetch price history ONCE for all subsequent analyses (drop, entry, profit targets, change)
-                        let price_history = pool_service.get_price_history(&token.mint).await;
+                        let price_history =
+                            pool_service.get_price_history(&price_info.token_mint).await;
 
-                        // Simple entry decision - always approve for now
-                        let approved = true;
-                        let confidence = 50.0; // Default confidence
-                        let reason = "pool_interface".to_string();
+                        // Call should_buy with TokenPriceInfo
+                        let (approved, confidence, reason) =
+                            crate::entry::should_buy(&price_info, &price_history).await;
 
                         if is_debug_trader_enabled() {
                             log(
@@ -1481,9 +1394,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 "ENTRY_CHECK",
                                 &format!(
                                     "🔍 Checking entry criteria for {} at {:.9} SOL",
-                                    token.symbol,
-                                    current_price
-                                )
+                                    price_info.token_mint, current_price
+                                ),
                             );
                         }
 
@@ -1497,44 +1409,27 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 LogTag::Trader,
                                 "ENTRY_APPROVED",
                                 &format!(
-                                    "🚀 ENTRY APPROVED: {} at {:.9} SOL (confidence: {:.1}%)",
-                                    &token.symbol,
-                                    current_price,
-                                    confidence
-                                )
+                                    "🚀 ENTRY APPROVED: {} at {:.9} SOL",
+                                    &price_info.token_mint, current_price
+                                ),
                             );
                         }
 
-                        // Simple position opening with default values
-                        let change = 0.0; // No change calculation
-                        let profit_min = 5.0; // Default 5% profit target
-                        let profit_max = 20.0; // Default 20% profit target
-                        let liquidity_tier = Some("UNKNOWN".to_string());
-
-                        // Open position directly
+                        // Open position directly with TokenPriceInfo
                         if is_debug_trader_enabled() {
                             log(
                                 LogTag::Trader,
                                 "POSITION_OPENING",
                                 &format!(
                                     "📈 Opening position for {} at {:.9} SOL (size: {} SOL)",
-                                    token.symbol,
-                                    current_price,
-                                    TRADE_SIZE_SOL
-                                )
+                                    price_info.token_mint, current_price, TRADE_SIZE_SOL
+                                ),
                             );
                         }
 
                         let position_start = std::time::Instant::now();
-                        let position_result = crate::positions::open_position_direct(
-                            &token,
-                            current_price,
-                            change,
-                            TRADE_SIZE_SOL,
-                            liquidity_tier,
-                            profit_min,
-                            profit_max
-                        ).await;
+                        let position_result =
+                            crate::positions::open_position_direct(&price_info.token_mint).await;
 
                         let position_duration = position_start.elapsed();
 
@@ -1546,9 +1441,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     &format!(
                                         "✅ Successfully opened position {} for {} in {:.3}s",
                                         position_id,
-                                        token.symbol,
+                                        price_info.token_mint,
                                         position_duration.as_secs_f32()
-                                    )
+                                    ),
                                 );
                             }
                             Err(e) => {
@@ -1557,24 +1452,27 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     "POSITION_FAILED",
                                     &format!(
                                         "❌ Failed to open position for {} after {:.3}s: {}",
-                                        token.symbol,
+                                        price_info.token_mint,
                                         position_duration.as_secs_f32(),
                                         e
-                                    )
+                                    ),
                                 );
                             }
                         }
 
                         // Add to OHLCV watch list as open position for priority monitoring
                         if position_result.is_ok() {
-                            if
-                                let Ok(ohlcv_service) =
-                                    crate::tokens::get_ohlcv_service_clone().await
+                            if let Ok(ohlcv_service) =
+                                crate::tokens::get_ohlcv_service_clone().await
                             {
-                                ohlcv_service.add_to_watch_list(&token.mint, true).await; // true = open position
+                                ohlcv_service
+                                    .add_to_watch_list(&price_info.token_mint, true)
+                                    .await; // true = open position
                             }
                         }
-                    }).await
+                    },
+                )
+                .await
                 {
                     Ok(_) => {}
                     Err(_) => {}
@@ -1627,7 +1525,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 ),
             );
         }
-
 
         // Add cycle summary logging
         if is_debug_trader_enabled() {
@@ -1723,7 +1620,6 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 );
             }
 
-
             if is_debug_trader_enabled() {
                 debug_trader_log(
                     "PRIORITY_RESULT",
@@ -1773,7 +1669,12 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             .map(|pos| {
                 let mint = pos.mint.clone();
                 async move {
-                    let price_result = get_price(&mint).await;
+                    let price_result =
+                        if let Some(price_info) = get_pool_service().get_price(&mint).await {
+                            price_info.pool_price_sol.or(price_info.api_price_sol)
+                        } else {
+                            None
+                        };
 
                     // Extract price if available
                     if let Some(price) = price_result {
@@ -2161,10 +2062,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         async {
                             crate::positions::close_position_direct(
                                 &position.mint,
-                                &token,
-                                exit_price,
                                 "Trading decision".to_string(),
-                                Utc::now(),
                             )
                             .await
                             .map(|_| ())

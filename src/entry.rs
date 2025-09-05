@@ -9,7 +9,7 @@
 
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
-use crate::tokens::{ Token, PriceOptions };
+use crate::pool_interface::TokenPriceInfo;
 use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock as AsyncRwLock; // switched from StdRwLock
@@ -220,7 +220,7 @@ fn analyze_local_structure(
 ///
 /// PERFORMANCE OPTIMIZED: Takes price_history as parameter to avoid duplicate database calls
 pub async fn should_buy(
-    token: &Token,
+    price_info: &TokenPriceInfo,
     price_history: &[(DateTime<Utc>, f64)]
 ) -> (bool, f64, String) {
     // Immediate debug log to ensure we're getting called
@@ -230,62 +230,42 @@ pub async fn should_buy(
             "SHOULD_BUY_START",
             &format!(
                 "🔍 Starting entry analysis for {} with {} price points",
-                token.symbol,
+                price_info.token_mint,
                 price_history.len()
             )
         );
     }
 
     // Pull recent exit prices via cache helper (minimal DB load)
-    let prior_exit_prices = get_cached_recent_exit_prices_fast(&token.mint).await;
+    let prior_exit_prices = get_cached_recent_exit_prices_fast(&price_info.token_mint).await;
     let prior_count = prior_exit_prices.len();
     let last_exit_price = prior_exit_prices.first().cloned();
 
-    // Get current pool price and liquidity first
+    // Get current pool price and liquidity from TokenPriceInfo
     if is_debug_entry_enabled() {
         log(
             LogTag::Entry,
             "POOL_PRICE_REQUEST",
-            &format!("📊 Getting pool price for {}", token.symbol)
+            &format!("📊 Using pool price for {}", price_info.token_mint)
         );
     }
 
-    let (current_price, reserve_sol, activity_score) = match
-        crate::tokens::get_price(&token.mint).await
-    {
-        Some(result) => {
-            let price = result;
-            let reserve = 0.0; // Not available in simple API
-
-            // Calculate transaction activity score from token data
-            let raw_activity_score = token.txns
-                .as_ref()
-                .and_then(|txns| txns.m5.as_ref())
-                .map(|m5| {
-                    let total_5m = m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0);
-                    calculate_scalp_activity_score(total_5m as f64)
-                })
-                .unwrap_or(0.0);
-
-            if price <= 0.0 || !price.is_finite() {
-                if is_debug_entry_enabled() {
-                    log(
-                        LogTag::Entry,
-                        "INVALID_PRICE",
-                        &format!("❌ {} invalid price: {}", token.symbol, price)
-                    );
-                }
-                return (false, 10.0, "Invalid price data".to_string());
-            }
-            (price, reserve, raw_activity_score)
-        }
-        None => {
+    let current_price = match price_info.pool_price_sol.or(price_info.api_price_sol) {
+        Some(price) if price > 0.0 && price.is_finite() => price,
+        _ => {
             if is_debug_entry_enabled() {
-                log(LogTag::Entry, "NO_POOL_DATA", &format!("❌ {} no pool data", token.symbol));
+                log(
+                    LogTag::Entry,
+                    "INVALID_PRICE",
+                    &format!("❌ {} invalid price: pool={:?} api={:?}", price_info.token_mint, price_info.pool_price_sol, price_info.api_price_sol)
+                );
             }
-            return (false, 5.0, "No valid pool data".to_string());
+            return (false, 10.0, "Invalid price data".to_string());
         }
     };
+
+    let reserve_sol = price_info.reserve_sol.unwrap_or(0.0);
+    let activity_score = 0.5; // Default activity score since we don't have transaction data in TokenPriceInfo
     // Basic liquidity filter using SOL reserves (lightweight)
     if reserve_sol < MIN_RESERVE_SOL || reserve_sol > MAX_RESERVE_SOL {
         if is_debug_entry_enabled() {
@@ -294,7 +274,7 @@ pub async fn should_buy(
                 "LIQUIDITY_FILTER",
                 &format!(
                     "❌ {} SOL reserves {:.2} outside bounds {:.1}-{:.0}",
-                    token.symbol,
+                    price_info.token_mint,
                     reserve_sol,
                     MIN_RESERVE_SOL,
                     MAX_RESERVE_SOL
@@ -318,7 +298,7 @@ pub async fn should_buy(
         log(
             LogTag::Entry,
             "HISTORY_REQUEST",
-            &format!("📈 Getting price history for {}", token.symbol)
+            &format!("📈 Using price history for {}", price_info.token_mint)
         );
     }
 
@@ -335,7 +315,7 @@ pub async fn should_buy(
                 "INSUFFICIENT_HISTORY",
                 &format!(
                     "❌ {} insufficient price history: {} < {} points",
-                    token.symbol,
+                    price_info.token_mint,
                     price_history.len(),
                     MIN_PRICE_POINTS
                 )
@@ -357,7 +337,7 @@ pub async fn should_buy(
                                 "INSTANT_DROP_FALLBACK",
                                 &format!(
                                     "🎯 {} instant drop -{:.1}% → conf {:.0}% → APPROVE",
-                                    token.symbol,
+                                    price_info.token_mint,
                                     instant_drop,
                                     confidence
                                 )
@@ -404,7 +384,7 @@ pub async fn should_buy(
                             "REENTRY_DISCOUNT_INSUFFICIENT",
                             &format!(
                                 "{} reentry discount {:.2}% < {:.2}% last_exit={:.9} cur={:.9} prior_count={}",
-                                token.symbol,
+                                price_info.token_mint,
                                 discount_pct,
                                 REENTRY_MIN_DISCOUNT_TO_LAST_EXIT_PCT,
                                 last_exit,
@@ -435,7 +415,7 @@ pub async fn should_buy(
                 "ADAPT_MIN_DROP_TOO_HIGH",
                 &format!(
                     "{} adaptive_min_drop {:.1}% exceeds MAX {:.1}% prior_exits:{}",
-                    token.symbol,
+                    price_info.token_mint,
                     adaptive_min_drop,
                     MAX_DROP_PERCENT,
                     prior_count
@@ -469,7 +449,7 @@ pub async fn should_buy(
                     "ATH_PREVENTION_SCALP",
                     &format!(
                         "❌ {} ATH prevention: {:.1}% of recent high - blocking entry",
-                        token.symbol,
+                        price_info.token_mint,
                         max_ath_pct
                     )
                 );
@@ -543,7 +523,7 @@ pub async fn should_buy(
                 "ENTRY_ANALYSIS_COMPLETE",
                 &format!(
                     "🎯 {} entry: -{:.1}%/{}s → conf {:.1}% → {} [activity:{:.1} liquidity:{:.0} ath_safe:{} ath_pct:{:.1}% good_entry:{} prior_exits:{} adapt_min_drop:{:.1}% stab:{:.2} intrarange:{:.1}%]",
-                    token.symbol,
+                    price_info.token_mint,
                     sig.drop_percent,
                     sig.window_sec,
                     confidence,
@@ -613,7 +593,7 @@ pub async fn should_buy(
                 "NO_DROP_DETECTED",
                 &format!(
                     "❌ {} no entry drops >= adapt_min_drop {:.1}% (base {:.1}%) detected in windows [{}] prior_exits:{}",
-                    token.symbol,
+                    price_info.token_mint,
                     adaptive_min_drop,
                     MIN_DROP_PERCENT,
                     recent_prices.join(", "),
@@ -856,31 +836,6 @@ fn detect_best_drop(
     best
 }
 
-/// Get current pool data: (price_sol, age_minutes, reserve_sol)
-async fn get_current_pool_data(token: &Token) -> Option<(f64, i64, f64)> {
-    match crate::tokens::get_price(&token.mint).await {
-        Some(price) => {
-            if price > 0.0 && price.is_finite() {
-                let data_age_minutes = 0; // Age not available in simple API
-
-                if data_age_minutes > MAX_DATA_AGE_MIN {
-                    return None;
-                }
-
-                let reserve_sol = token.liquidity
-                    .as_ref()
-                    .and_then(|l| l.usd)
-                    .map(|usd_liq| usd_liq / 200.0) // Updated conversion at $200/SOL
-                    .unwrap_or(0.0);
-
-                Some((price, data_age_minutes, reserve_sol))
-            } else {
-                None
-            }
-        }
-        None => None,
-    }
-}
 
 // =============================================================================
 // PROFIT TARGET CALCULATION
@@ -889,30 +844,15 @@ async fn get_current_pool_data(token: &Token) -> Option<(f64, i64, f64)> {
 /// Calculate profit targets optimized for fast scalping (5-10% minimum focus)
 /// OPTIMIZED: Accept price_history to avoid redundant fetches
 pub async fn get_profit_target(
-    token: &Token,
+    price_info: &TokenPriceInfo,
     price_history_opt: Option<&[(DateTime<Utc>, f64)]>
 ) -> (f64, f64) {
-    // Pull current pool data first (price + SOL reserves)
-    let (current_price_opt, reserve_sol) = match get_current_pool_data(token).await {
-        Some((price, _age_min, reserves)) => (Some(price), reserves),
-        None =>
-            (
-                None,
-                token.liquidity
-                    .as_ref()
-                    .and_then(|l| l.usd)
-                    .map(|usd_liq| usd_liq / 200.0) // Updated conversion at $200/SOL
-                    .unwrap_or(30.0), // Default to 30 SOL reserves for scalping
-            ),
-    };
+    // Get current price and reserves from TokenPriceInfo
+    let current_price_opt = price_info.pool_price_sol.or(price_info.api_price_sol);
+    let reserve_sol = price_info.reserve_sol.unwrap_or(30.0); // Default to 30 SOL reserves for scalping
 
-    // Enhanced activity scoring for profit targets
-    let txns_5min = token.txns
-        .as_ref()
-        .and_then(|txns| txns.m5.clone())
-        .map(|t| t.buys.unwrap_or(0) + t.sells.unwrap_or(0))
-        .unwrap_or(0) as f64;
-    let activity_score = calculate_scalp_activity_score(txns_5min);
+    // Default activity scoring since we don't have transaction data in TokenPriceInfo
+    let activity_score = 0.5;
 
     // Base profit targets with conservative approach for better success rates
     let (mut min_profit, mut max_profit): (f64, f64) = if reserve_sol < 25.0 {

@@ -1,4 +1,4 @@
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
 /// Main interface for the pool service
@@ -19,7 +19,8 @@ pub trait PoolInterface {
 
     /// Get batch prices for multiple tokens
     /// Returns HashMap of token_address -> TokenPriceInfo
-    async fn get_batch_prices(&self, token_addresses: &[String]) -> HashMap<String, TokenPriceInfo>;
+    async fn get_batch_prices(&self, token_addresses: &[String])
+        -> HashMap<String, TokenPriceInfo>;
 }
 
 /// Comprehensive price information including pool and API data
@@ -47,40 +48,10 @@ pub struct TokenPriceInfo {
     pub liquidity_usd: Option<f64>,
     /// 24h volume in USD
     pub volume_24h_usd: Option<f64>,
-    /// Price confidence score (0.0-1.0)
-    pub confidence: f64,
     /// When this price was calculated
     pub calculated_at: DateTime<Utc>,
     /// Any error that occurred during calculation
     pub error: Option<String>,
-}
-
-impl TokenPriceInfo {
-    /// Get the best available SOL price (prefer pool price, fallback to API)
-    pub fn get_best_sol_price(&self) -> Option<f64> {
-        self.pool_price_sol.or(self.api_price_sol)
-    }
-
-    /// Get the best available USD price (prefer pool price, fallback to API)
-    pub fn get_best_usd_price(&self) -> Option<f64> {
-        self.pool_price_usd.or(self.api_price_usd)
-    }
-
-    /// Check if price data is reliable (confidence > 0.5 and no error)
-    pub fn is_reliable(&self) -> bool {
-        self.confidence > 0.5 && self.error.is_none()
-    }
-
-    /// Get price source description
-    pub fn get_price_source(&self) -> String {
-        if self.pool_price_sol.is_some() {
-            "pool".to_string()
-        } else if self.api_price_sol.is_some() {
-            "api".to_string()
-        } else {
-            "none".to_string()
-        }
-    }
 }
 
 /// Price data point for history
@@ -143,8 +114,8 @@ impl From<TokenPriceInfo> for PriceResult {
     fn from(mut info: TokenPriceInfo) -> Self {
         Self {
             token_mint: info.token_mint.clone(),
-            price_sol: info.get_best_sol_price(),
-            price_usd: info.get_best_usd_price(),
+            price_sol: info.pool_price_sol.or(info.api_price_sol),
+            price_usd: info.pool_price_usd.or(info.api_price_usd),
             pool_address: info.pool_address,
             reserve_sol: info.reserve_sol,
             calculated_at: info.calculated_at,

@@ -1,6 +1,6 @@
 # Build configuration for parallel compilation
 [build]
-jobs = 12
+jobs = 8
 
 # Target-specific optimization for better performance
 [target.x86_64-unknown-linux-gnu]

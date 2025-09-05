@@ -6,6 +6,8 @@ use chrono::{DateTime, Utc};
 use std::fs;
 use std::time::Duration;
 use tokio::sync::Notify;
+use std::sync::RwLock;
+use std::time::Instant;
 
 /// Safe string truncation helper to prevent panic on out-of-bounds slicing
 pub fn safe_truncate(s: &str, len: usize) -> &str {
@@ -1231,3 +1233,52 @@ fn build_token_2022_close_instruction(
         data: instruction_data,
     })
 }
+
+// =============================================================================
+// UTILITY FUNCTIONS MOVED FROM TRADER.RS
+// =============================================================================
+
+/// Safe wrapper for RwLock read operations that logs poison errors instead of panicking
+pub fn safe_read_lock<'a, T>(
+    lock: &'a std::sync::RwLock<T>,
+    operation: &str,
+) -> Option<std::sync::RwLockReadGuard<'a, T>> {
+    match lock.read() {
+        Ok(guard) => Some(guard),
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "LOCK_POISON_ERROR",
+                &format!("🔒 RwLock read poisoned during {}: {}", operation, e),
+            );
+            None
+        }
+    }
+}
+
+/// Safe wrapper for RwLock write operations that logs poison errors instead of panicking
+pub fn safe_write_lock<'a, T>(
+    lock: &'a std::sync::RwLock<T>,
+    operation: &str,
+) -> Option<std::sync::RwLockWriteGuard<'a, T>> {
+    match lock.write() {
+        Ok(guard) => Some(guard),
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "LOCK_POISON_ERROR",
+                &format!("🔒 RwLock write poisoned during {}: {}", operation, e),
+            );
+            None
+        }
+    }
+}
+
+/// Helper function for conditional debug trader logs
+pub fn debug_trader_log(log_type: &str, message: &str) {
+    use crate::global::is_debug_trader_enabled;
+    if is_debug_trader_enabled() {
+        log(LogTag::Trader, log_type, message);
+    }
+}
+
