@@ -18,10 +18,15 @@ pub type PoolInfo = pc::PoolInfo;
 pub struct PoolPriceCalculator;
 
 impl PoolPriceCalculator {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     /// Fetch raw pool account data (not implemented in new calculator). Kept for compatibility.
-    pub async fn get_raw_pool_data(&mut self, _pool_address: &str) -> Result<Option<Vec<u8>>, String> {
+    pub async fn get_raw_pool_data(
+        &mut self,
+        _pool_address: &str
+    ) -> Result<Option<Vec<u8>>, String> {
         // Not yet implemented in new architecture. Return None to keep callers functional.
         Ok(None)
     }

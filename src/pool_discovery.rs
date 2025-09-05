@@ -102,7 +102,7 @@ impl PoolDiscoveryStats {
         if self.total_discoveries == 0 {
             0.0
         } else {
-            (self.successful_discoveries as f64 / self.total_discoveries as f64) * 100.0
+            ((self.successful_discoveries as f64) / (self.total_discoveries as f64)) * 100.0
         }
     }
 
@@ -114,11 +114,12 @@ impl PoolDiscoveryStats {
         } else {
             self.failed_discoveries += 1;
         }
-        
+
         // Update average time
-        let total_time = self.average_discovery_time_ms * (self.total_discoveries - 1) as f64 + time_ms;
-        self.average_discovery_time_ms = total_time / self.total_discoveries as f64;
-        
+        let total_time =
+            self.average_discovery_time_ms * ((self.total_discoveries - 1) as f64) + time_ms;
+        self.average_discovery_time_ms = total_time / (self.total_discoveries as f64);
+
         self.last_discovery = Some(Utc::now());
     }
 }
@@ -171,10 +172,7 @@ impl PoolDiscoveryService {
             log(
                 LogTag::Pool,
                 "DISCOVERY_BATCH_START",
-                &format!(
-                    "🚀 Starting pool discovery for {} tokens",
-                    token_addresses.len()
-                )
+                &format!("🚀 Starting pool discovery for {} tokens", token_addresses.len())
             );
         }
 
@@ -211,7 +209,9 @@ impl PoolDiscoveryService {
             let mut token_pools_map: HashMap<String, Vec<CachedPoolInfo>> = HashMap::new();
 
             // Process DexScreener results
-            let processed_dexscreener_pools = process_dexscreener_batch_results(&dexscreener_result);
+            let processed_dexscreener_pools = process_dexscreener_batch_results(
+                &dexscreener_result
+            );
             for (token_address, cached_pools) in processed_dexscreener_pools {
                 if !cached_pools.is_empty() {
                     dx_success += 1;
@@ -254,23 +254,35 @@ impl PoolDiscoveryService {
                 let mut discovered_pools = self.discovered_pools.write().await;
 
                 for (token_address, all_pools) in token_pools_map {
-                    if all_pools.is_empty() { continue; }
+                    if all_pools.is_empty() {
+                        continue;
+                    }
 
                     // Keep only pools where the pair includes SOL on one side
                     let filtered: Vec<CachedPoolInfo> = all_pools
                         .into_iter()
-                        .filter(|p| p.base_token == token_address && p.quote_token == SOL_MINT
-                            || p.quote_token == token_address && p.base_token == SOL_MINT)
+                        .filter(
+                            |p|
+                                (p.base_token == token_address && p.quote_token == SOL_MINT) ||
+                                (p.quote_token == token_address && p.base_token == SOL_MINT)
+                        )
                         .collect();
 
-                    if filtered.is_empty() { continue; }
+                    if filtered.is_empty() {
+                        continue;
+                    }
 
                     // Deduplicate pools (keep highest liquidity per pool address)
                     let deduplicated_pools = self.deduplicate_pools(filtered);
                     total_pools_found += deduplicated_pools.len();
 
                     // Store to database in a batch
-                    if let Err(e) = self.store_pools_to_database(&token_address, &deduplicated_pools).await {
+                    if
+                        let Err(e) = self.store_pools_to_database(
+                            &token_address,
+                            &deduplicated_pools
+                        ).await
+                    {
                         log(
                             LogTag::Pool,
                             "DISCOVERY_DB_ERROR",
@@ -410,8 +422,13 @@ impl PoolDiscoveryService {
             }
 
             // Find the best pool (highest liquidity)
-            let best_pool = cached_pools.iter()
-                .max_by(|a, b| a.liquidity_usd.partial_cmp(&b.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal));
+            let best_pool = cached_pools
+                .iter()
+                .max_by(|a, b|
+                    a.liquidity_usd
+                        .partial_cmp(&b.liquidity_usd)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                );
 
             if let Some(best_pool) = best_pool {
                 // Convert CachedPoolInfo to PoolData
@@ -484,19 +501,31 @@ impl PoolDiscoveryService {
         }
 
         let mut deduped: Vec<CachedPoolInfo> = by_address.into_values().collect();
-        deduped.sort_by(|a, b| b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal));
+        deduped.sort_by(|a, b|
+            b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
+        );
         deduped
     }
 
     /// Store deduplicated pools to database for persistence
-    async fn store_pools_to_database(&self, token_address: &str, cached_pools: &[CachedPoolInfo]) -> Result<(), String> {
-        if cached_pools.is_empty() { return Ok(()); }
+    async fn store_pools_to_database(
+        &self,
+        token_address: &str,
+        cached_pools: &[CachedPoolInfo]
+    ) -> Result<(), String> {
+        if cached_pools.is_empty() {
+            return Ok(());
+        }
 
         // Helper to map dex_id prefix to source string
         fn source_from_dex_id(dex_id: &str) -> &'static str {
-            if dex_id.starts_with("gecko_") { "geckoterminal" }
-            else if dex_id.starts_with("ray_") { "raydium" }
-            else { "dexscreener" }
+            if dex_id.starts_with("gecko_") {
+                "geckoterminal"
+            } else if dex_id.starts_with("ray_") {
+                "raydium"
+            } else {
+                "dexscreener"
+            }
         }
 
         let mut batch: Vec<DbPoolMetadata> = Vec::with_capacity(cached_pools.len());
@@ -507,7 +536,7 @@ impl PoolDiscoveryService {
                 &pool.pair_address,
                 &pool.dex_id,
                 "solana",
-                source,
+                source
             );
 
             // Fill known fields
@@ -555,7 +584,9 @@ pub fn get_pool_discovery() -> &'static PoolDiscoveryService {
 // =============================================================================
 
 /// Discover pools for multiple tokens (convenience function)
-pub async fn discover_pools_batch(token_addresses: &[String]) -> Result<HashMap<String, Vec<CachedPoolInfo>>, String> {
+pub async fn discover_pools_batch(
+    token_addresses: &[String]
+) -> Result<HashMap<String, Vec<CachedPoolInfo>>, String> {
     get_pool_discovery().discover_pools_batch(token_addresses).await
 }
 
@@ -590,6 +621,8 @@ pub async fn get_pool_discovery_cache_size() -> usize {
 }
 
 /// Discover and process pools for pool service integration (convenience function)
-pub async fn discover_and_process_pools(token_addresses: &[String]) -> Result<(HashMap<String, PoolData>, Vec<AccountInfo>), String> {
+pub async fn discover_and_process_pools(
+    token_addresses: &[String]
+) -> Result<(HashMap<String, PoolData>, Vec<AccountInfo>), String> {
     get_pool_discovery().discover_and_process_pools(token_addresses).await
 }

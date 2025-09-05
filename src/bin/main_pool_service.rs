@@ -1,5 +1,5 @@
 use clap::Parser;
-use screenerbot::logger::{log, LogTag};
+use screenerbot::logger::{ log, LogTag };
 use screenerbot::pool_service;
 use screenerbot::pool_discovery;
 
@@ -63,7 +63,7 @@ fn main() {
         log(
             LogTag::System,
             "TOKEN_ADDRESS",
-            &format!("🎯 Processing token address: {}", token_address),
+            &format!("🎯 Processing token address: {}", token_address)
         );
 
         // Initialize discovery and run triple-API discovery for this token
@@ -82,11 +82,15 @@ fn main() {
                                 "✅ Discovered {} TOKEN/SOL pools for {}",
                                 pools.len(),
                                 &token[..8]
-                            ),
+                            )
                         );
                         // Log top 3 by liquidity
                         let mut pools_sorted = pools.clone();
-                        pools_sorted.sort_by(|a, b| b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal));
+                        pools_sorted.sort_by(|a, b|
+                            b.liquidity_usd
+                                .partial_cmp(&a.liquidity_usd)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        );
                         for (i, p) in pools_sorted.iter().take(3).enumerate() {
                             log(
                                 LogTag::System,
@@ -98,14 +102,14 @@ fn main() {
                                     p.liquidity_usd,
                                     p.volume_24h,
                                     p.dex_id
-                                ),
+                                )
                             );
                         }
                     } else {
                         log(
                             LogTag::System,
                             "DISCOVERY_EMPTY",
-                            &format!("⚪ No pools discovered for {}", &token[..8]),
+                            &format!("⚪ No pools discovered for {}", &token[..8])
                         );
                     }
                 }
@@ -113,7 +117,7 @@ fn main() {
                     log(
                         LogTag::System,
                         "DISCOVERY_ERROR",
-                        &format!("❌ Discovery error for {}: {}", &token[..8], e),
+                        &format!("❌ Discovery error for {}: {}", &token[..8], e)
                     );
                 }
             }
@@ -125,15 +129,11 @@ fn main() {
         log(
             LogTag::System,
             "POOL_ADDRESS",
-            &format!("🏊 Processing pool address: {}", pool_address),
+            &format!("🏊 Processing pool address: {}", pool_address)
         );
         // TODO: Add pool address processing logic here
     }
 
-    log(
-        LogTag::System,
-        "SUCCESS",
-        "✅ Pool Service initialized successfully",
-    );
+    log(LogTag::System, "SUCCESS", "✅ Pool Service initialized successfully");
     log(LogTag::System, "INFO", "Pool Service Tool is ready");
 }
