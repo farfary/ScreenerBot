@@ -72,12 +72,11 @@ pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 ///   SLIPPAGE_EXIT_RETRY_STEPS_PCT      -> progressive retry slippage attempts (filtered by shortfall caps)
 ///
 /// ONLY these constants should be referenced by other modules; duplicates elsewhere should be removed.
-pub const SLIPPAGE_QUOTE_DEFAULT_PCT: f64 = 5.0; // matches legacy QUOTE_SLIPPAGE_PERCENT
+pub const SLIPPAGE_QUOTE_DEFAULT_PCT: f64 = 5.0;
 pub const SLIPPAGE_EXIT_PROFIT_SHORTFALL_PCT: f64 = 8.0; // Increased from 3.0% - profit exits need more flexibility
 pub const SLIPPAGE_EXIT_LOSS_SHORTFALL_PCT: f64 = 15.0; // Increased from 12.0% - stop losses need maximum flexibility
 pub const SLIPPAGE_EXIT_RETRY_STEPS_PCT: &[f64] = &[3.0, 5.0, 8.0, 12.0, 15.0]; // Added 15.0% for maximum flexibility
 
-// Backwards-compat temporary aliases (TODO: remove after codebase fully migrated)
 pub const MAX_PROFIT_EXIT_SLIPPAGE_PCT: f64 = SLIPPAGE_EXIT_PROFIT_SHORTFALL_PCT;
 pub const MAX_LOSS_EXIT_SLIPPAGE_PCT: f64 = SLIPPAGE_EXIT_LOSS_SHORTFALL_PCT;
 
@@ -147,7 +146,7 @@ pub const TOKEN_CHECK_HANDLE_TIMEOUT_SECS: u64 = 25;
 /// Sell operations collection timeout (seconds) - must accommodate multiple 3-min operations
 pub const SELL_OPERATIONS_COLLECTION_TIMEOUT_SECS: u64 = 240;
 
-/// Individual sell operation timeout (seconds) - removed for smart timeout handling
+/// Individual sell operation timeout (seconds)
 /// Now using step-based timeout detection instead of total operation timeout
 pub const SELL_OPERATION_SMART_TIMEOUT_SECS: u64 = 600; // 10 minutes total allowance for complex operations
 
@@ -226,10 +225,6 @@ use std::sync::Arc;
 use std::sync::RwLock as StdRwLock;
 use std::time::Duration;
 use std::time::Instant;
-use tabled::{
-    settings::{object::Rows, Alignment, Modify, Style},
-    Table, Tabled,
-};
 use tokio::sync::Notify;
 
 use crate::positions_db;
@@ -283,7 +278,6 @@ pub static CRITICAL_OPERATIONS_IN_PROGRESS: Lazy<Arc<std::sync::atomic::AtomicUs
     Lazy::new(|| Arc::new(std::sync::atomic::AtomicUsize::new(0)));
 
 /// Global tracker: number of buy operations currently in-flight (reserved but not yet reflected in open positions)
-// removed legacy in-flight buy tracking; PositionsManager enforces capacity
 
 /// Rotating scheduler offset for capacity-aware token batching across cycles
 static SCHEDULER_OFFSET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -307,143 +301,12 @@ pub struct TokenCheckInfo {
     pub reserve_token: Option<f64>,
 }
 
-/// Display structure for tokens sorted by total checks
-#[derive(Tabled)]
-pub struct TokenCheckDisplay {
-    #[tabled(rename = "#")]
-    rank: String,
-    #[tabled(rename = "🔑 Mint")]
-    mint: String,
-    #[tabled(rename = "🏷️ Symbol")]
-    symbol: String,
-    #[tabled(rename = "💧 Liq")]
-    liquidity: String,
-    #[tabled(rename = "📊 MCap")]
-    market_cap: String,
-    #[tabled(rename = "💲 Last Price")]
-    last_price: String,
-    #[tabled(rename = "🏊 Pool")]
-    pool_info: String,
-    #[tabled(rename = "🔍 Checks")]
-    check_count: String,
-    #[tabled(rename = "🎯 Entry")]
-    entry_checks: String,
-}
-
-/// Display structure for tokens sorted by entry checks
-#[derive(Tabled)]
-pub struct TokenEntryDisplay {
-    #[tabled(rename = "#")]
-    rank: String,
-    #[tabled(rename = "🔑 Mint")]
-    mint: String,
-    #[tabled(rename = "🏷️ Symbol")]
-    symbol: String,
-    #[tabled(rename = "💧 Liq")]
-    liquidity: String,
-    #[tabled(rename = "📊 MCap")]
-    market_cap: String,
-    #[tabled(rename = "💲 Last Price")]
-    last_price: String,
-    #[tabled(rename = "🏊 Pool")]
-    pool_info: String,
-    #[tabled(rename = "🎯 Entry")]
-    entry_checks: String,
-    #[tabled(rename = "🔍 Checks")]
-    check_count: String,
-}
-
-/// Display structure for price summary statistics
-#[derive(Tabled)]
-pub struct PriceSummaryDisplay {
-    #[tabled(rename = "📊 Metric")]
-    metric: String,
-    #[tabled(rename = "🔢 Value")]
-    value: String,
-}
-
-/// Display structure for blacklist statistics
-#[derive(Tabled)]
-pub struct BlacklistSummaryDisplay {
-    #[tabled(rename = "🚫 Status")]
-    status: String,
-    #[tabled(rename = "🔢 Count")]
-    count: String,
-}
 
 /// Global token tracking state
 pub static TOKEN_CHECK_TRACKER: Lazy<Arc<std::sync::RwLock<HashMap<String, TokenCheckInfo>>>> =
     Lazy::new(|| Arc::new(std::sync::RwLock::new(HashMap::new())));
 
-/// Token confidence tracking for intelligent monitoring
-#[derive(Clone, Debug)]
-pub struct TokenConfidenceInfo {
-    pub mint: String,
-    pub symbol: String,
-    pub confidence: f64,
-    pub last_updated: Instant,
-    pub last_price: Option<f64>,
-    pub trend: String, // "rising", "falling", "stable"
-    pub consecutive_updates: usize,
-}
 
-/// Global confidence-based token ranking system
-pub static TOKEN_CONFIDENCE_TRACKER: Lazy<Arc<std::sync::RwLock<Vec<TokenConfidenceInfo>>>> =
-    Lazy::new(|| Arc::new(std::sync::RwLock::new(Vec::new())));
-
-// =============================================================================
-// INVALID POOL TOKENS BLACKLIST SYSTEM
-// =============================================================================
-
-/// Information about a token that failed pool validation
-#[derive(Clone, Debug)]
-pub struct InvalidPoolTokenInfo {
-    pub mint: String,
-    pub symbol: String,
-    pub failure_reason: String,
-    pub failed_at: Instant,
-    pub retry_after: Instant,
-    pub failure_count: u32,
-    pub last_pool_check_error: Option<String>,
-}
-
-impl InvalidPoolTokenInfo {
-    /// Create new invalid pool token info
-    pub fn new(mint: String, symbol: String, reason: String) -> Self {
-        let now = Instant::now();
-        Self {
-            mint,
-            symbol,
-            failure_reason: reason,
-            failed_at: now,
-            retry_after: now + Duration::from_secs(3600), // Retry after 1 hour initially
-            failure_count: 1,
-            last_pool_check_error: None,
-        }
-    }
-
-    /// Check if this token is ready for retry
-    pub fn can_retry(&self) -> bool {
-        Instant::now() > self.retry_after
-    }
-
-    /// Update retry time based on failure count (exponential backoff)
-    pub fn update_retry_time(&mut self) {
-        self.failure_count += 1;
-        let backoff_hours = std::cmp::min((self.failure_count as u64) * 2, 24); // Max 24 hours
-        self.retry_after = Instant::now() + Duration::from_secs(backoff_hours * 3600);
-    }
-
-    /// Check if this entry is stale (older than 7 days)
-    pub fn is_stale(&self) -> bool {
-        Instant::now().duration_since(self.failed_at).as_secs() > 7 * 24 * 3600 // 7 days
-    }
-}
-
-/// Global blacklist for tokens with invalid/unsupported pools
-pub static INVALID_POOL_TOKENS: Lazy<
-    Arc<std::sync::RwLock<HashMap<String, InvalidPoolTokenInfo>>>,
-> = Lazy::new(|| Arc::new(std::sync::RwLock::new(HashMap::new())));
 
 // =============================================================================
 // POSITION SELL DECISION CACHE AND RETRY SYSTEM
@@ -866,86 +729,6 @@ pub fn get_sell_decision_cache_status() -> String {
     }
 }
 
-// =============================================================================
-// LIGHTWEIGHT TOKEN META CACHE FOR SUMMARIES
-// =============================================================================
-
-#[derive(Clone, Debug)]
-struct TokenMetaBrief {
-    symbol: String,
-    name: String,
-    liquidity_usd: Option<f64>,
-    market_cap: Option<f64>,
-    cached_at: Instant,
-}
-
-static TOKEN_META_CACHE: Lazy<Arc<std::sync::RwLock<HashMap<String, TokenMetaBrief>>>> =
-    Lazy::new(|| Arc::new(std::sync::RwLock::new(HashMap::new())));
-
-const TOKEN_META_TTL_SECS: u64 = 600; // 10 minutes
-
-fn format_usd_short(v: f64) -> String {
-    let abs_v = v.abs();
-    if abs_v >= 1_000_000_000.0 {
-        format!("${:.1}B", v / 1_000_000_000.0)
-    } else if abs_v >= 1_000_000.0 {
-        format!("${:.1}M", v / 1_000_000.0)
-    } else if abs_v >= 1_000.0 {
-        format!("${:.1}k", v / 1_000.0)
-    } else {
-        format!("${:.0}", v)
-    }
-}
-
-fn get_token_meta_brief(mint: &str) -> Option<TokenMetaBrief> {
-    // Try cache first
-    {
-        let cache = TOKEN_META_CACHE.read().ok()?;
-        if let Some(meta) = cache.get(mint) {
-            if meta.cached_at.elapsed().as_secs() < TOKEN_META_TTL_SECS {
-                return Some(meta.clone());
-            }
-        }
-    }
-
-    // Load from DB (sync API) and cache it
-    let db = match crate::tokens::cache::TokenDatabase::new() {
-        Ok(db) => db,
-        Err(_) => {
-            return None;
-        }
-    };
-
-    match db.get_token_by_mint(mint) {
-        Ok(Some(api_token)) => {
-            let meta = TokenMetaBrief {
-                symbol: api_token.symbol.clone(),
-                name: api_token.name.clone(),
-                liquidity_usd: api_token.liquidity.as_ref().and_then(|l| l.usd),
-                market_cap: api_token.market_cap,
-                cached_at: Instant::now(),
-            };
-            if let Ok(mut cache) = TOKEN_META_CACHE.write() {
-                cache.insert(mint.to_string(), meta.clone());
-            }
-            Some(meta)
-        }
-        _ => None,
-    }
-}
-
-fn fmt_opt9(v: Option<f64>) -> String {
-    v.map(|x| format!("{:.9}", x))
-        .unwrap_or_else(|| "-".to_string())
-}
-
-fn short8(s: &str) -> String {
-    if s.len() > 8 {
-        s[..8].to_string()
-    } else {
-        s.to_string()
-    }
-}
 
 // =============================================================================
 // PER-TOKEN RE-ENTRY COOLDOWN CACHE
@@ -1021,78 +804,6 @@ async fn get_recently_closed_mints_set() -> HashSet<String> {
     mints
 }
 
-/// Cached token data structure for 10-minute caching
-#[derive(Clone, Debug)]
-pub struct CachedTokenData {
-    pub tokens: Vec<Token>,
-    pub cached_at: Instant,
-    pub cache_duration_minutes: u64,
-}
-
-impl CachedTokenData {
-    /// Check if cache is still valid
-    pub fn is_valid(&self) -> bool {
-        // Never treat an empty token set as a valid cache
-        if self.tokens.is_empty() {
-            return false;
-        }
-        let age_minutes = self.cached_at.elapsed().as_secs() / 60;
-        age_minutes < self.cache_duration_minutes
-    }
-
-    /// Get age of cache in minutes
-    pub fn age_minutes(&self) -> u64 {
-        self.cached_at.elapsed().as_secs() / 60
-    }
-}
-
-/// Global cache for filtered tokens (10-minute duration)
-/// Reduces database load by caching filtered tokens across multiple monitoring cycles
-pub static FILTERED_TOKENS_CACHE: Lazy<Arc<std::sync::RwLock<Option<CachedTokenData>>>> =
-    Lazy::new(|| Arc::new(std::sync::RwLock::new(None)));
-
-/// Token cache duration in minutes
-pub const TOKEN_CACHE_DURATION_MINUTES: u64 = 10;
-
-/// Clear the token cache (useful for debugging or forced refresh)
-pub fn clear_token_cache() {
-    if let Some(mut cache) = safe_write_lock(&FILTERED_TOKENS_CACHE, "clear_token_cache") {
-        *cache = None;
-        log(
-            LogTag::Trader,
-            "CACHE_CLEARED",
-            "🗑️ Token cache manually cleared",
-        );
-    }
-}
-
-/// Get token cache status for debugging
-pub fn get_token_cache_status() -> String {
-    let cache = FILTERED_TOKENS_CACHE.read().unwrap();
-    match cache.as_ref() {
-        Some(cached_data) => {
-            let age_minutes = cached_data.age_minutes();
-            let is_valid = cached_data.is_valid();
-            format!(
-                "Token Cache Status:\n  \
-                 - Tokens: {}\n  \
-                 - Age: {}min / {}min limit\n  \
-                 - Valid: {}\n  \
-                 - Remaining: {}min",
-                cached_data.tokens.len(),
-                age_minutes,
-                TOKEN_CACHE_DURATION_MINUTES,
-                is_valid,
-                if is_valid {
-                    TOKEN_CACHE_DURATION_MINUTES - age_minutes
-                } else {
-                    0
-                }
-            )
-        }
-        None => "Token Cache Status: No cache present".to_string(),
-    }
-}
 
 // =============================================================================
 // CRITICAL OPERATION PROTECTION
@@ -1186,295 +897,7 @@ pub fn should_debug_force_sell(position: &crate::positions_types::Position) -> b
     false
 }
 
-// =============================================================================
-// CONFIDENCE-BASED TOKEN TRACKING SYSTEM
-// =============================================================================
 
-/// Update token confidence in the global tracking system
-pub fn update_token_confidence(
-    mint: &str,
-    symbol: &str,
-    confidence: f64,
-    current_price: Option<f64>,
-) {
-    let mut tracker = TOKEN_CONFIDENCE_TRACKER.write().unwrap();
-    let now = Instant::now();
-
-    // Find existing entry or create new one
-    let mut found_index = None;
-    for (i, info) in tracker.iter().enumerate() {
-        if info.mint == mint {
-            found_index = Some(i);
-            break;
-        }
-    }
-
-    if let Some(index) = found_index {
-        // Update existing entry
-        let existing = &mut tracker[index];
-        let prev_confidence = existing.confidence;
-
-        // Determine trend
-        let trend = if confidence > prev_confidence + 5.0 {
-            "rising".to_string()
-        } else if confidence < prev_confidence - 5.0 {
-            "falling".to_string()
-        } else {
-            "stable".to_string()
-        };
-
-        existing.confidence = confidence;
-        existing.last_updated = now;
-        existing.last_price = current_price;
-        existing.trend = trend;
-        existing.consecutive_updates += 1;
-    } else {
-        // Create new entry
-        tracker.push(TokenConfidenceInfo {
-            mint: mint.to_string(),
-            symbol: symbol.to_string(),
-            confidence,
-            last_updated: now,
-            last_price: current_price,
-            trend: "stable".to_string(),
-            consecutive_updates: 1,
-        });
-    }
-
-    // Sort by confidence (highest first)
-    tracker.sort_by(|a, b| {
-        b.confidence
-            .partial_cmp(&a.confidence)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    // Keep only top 50 entries to prevent memory bloat
-    tracker.truncate(50);
-}
-
-/// Get top confidence tokens for priority monitoring
-pub fn get_top_confidence_tokens(limit: usize) -> Vec<TokenConfidenceInfo> {
-    let tracker = TOKEN_CONFIDENCE_TRACKER.read().unwrap();
-    let now = Instant::now();
-
-    // Filter out stale entries (older than 5 minutes) and return top entries
-    tracker
-        .iter()
-        .filter(|info| now.duration_since(info.last_updated).as_secs() < 300) // 5 minutes
-        .take(limit)
-        .cloned()
-        .collect()
-}
-
-/// Clean up stale confidence entries
-pub fn cleanup_stale_confidence_entries() {
-    let mut tracker = TOKEN_CONFIDENCE_TRACKER.write().unwrap();
-    let now = Instant::now();
-
-    // Remove entries older than 10 minutes
-    tracker.retain(|info| now.duration_since(info.last_updated).as_secs() < 600);
-}
-
-/// Get detailed confidence tracking status for debugging
-pub fn get_confidence_tracking_status() -> String {
-    let tracker = TOKEN_CONFIDENCE_TRACKER.read().unwrap();
-    let now = Instant::now();
-
-    if tracker.is_empty() {
-        return "No tokens in confidence tracking system".to_string();
-    }
-
-    let mut status = format!("Confidence Tracking Status ({} tokens):\n", tracker.len());
-
-    for (i, info) in tracker.iter().enumerate() {
-        let age_secs = now.duration_since(info.last_updated).as_secs();
-        let price_str = info
-            .last_price
-            .map(|p| format!("{:.9} SOL", p))
-            .unwrap_or_else(|| "No price".to_string());
-
-        status.push_str(&format!(
-            "  {}. {} ({}): {:.1}% confidence, trend: {}, price: {}, age: {}s, updates: {}\n",
-            i + 1,
-            info.symbol,
-            &info.mint[..8],
-            info.confidence,
-            info.trend,
-            price_str,
-            age_secs,
-            info.consecutive_updates
-        ));
-
-        // Limit display to top 20 for readability
-        if i >= 19 {
-            if tracker.len() > 20 {
-                status.push_str(&format!("  ... and {} more tokens\n", tracker.len() - 20));
-            }
-            break;
-        }
-    }
-
-    status
-}
-
-// =============================================================================
-// INVALID POOL TOKENS BLACKLIST MANAGEMENT
-// =============================================================================
-
-/// Add a token to the invalid pool blacklist
-pub fn add_to_invalid_pool_blacklist(mint: &str, symbol: &str, reason: &str) {
-    // Use the pool service blacklist instead
-    let mint = mint.to_string();
-    let symbol = symbol.to_string();
-    let reason = reason.to_string();
-
-    tokio::spawn(async move {
-        // Token added to invalid pool blacklist: {} ({})", symbol, reason
-    });
-}
-
-/// Check if a token is in the invalid pool blacklist and not ready for retry
-/// Note: This function blocks the async runtime - consider using the async version when possible
-pub fn is_token_in_invalid_pool_blacklist(mint: &str) -> bool {
-    // Use block_in_place to avoid blocking the runtime thread
-    tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(async { false }) // Always return false - no blacklist checking
-    })
-}
-
-/// Async version - preferred when calling from async context
-pub async fn is_token_in_invalid_pool_blacklist_async(mint: &str) -> bool {
-    false // Always return false - no blacklist checking
-}
-
-/// Remove a token from the invalid pool blacklist (for manual override)
-pub fn remove_from_invalid_pool_blacklist(mint: &str) -> bool {
-    let mut blacklist = INVALID_POOL_TOKENS.write().unwrap();
-
-    if let Some(info) = blacklist.remove(mint) {
-        log(
-            LogTag::Trader,
-            "BLACKLIST_REMOVE",
-            &format!(
-                "⚪ Manually removed {} ({}) from invalid pool blacklist",
-                info.symbol,
-                &mint[..8]
-            ),
-        );
-        true
-    } else {
-        false
-    }
-}
-
-/// Get tokens ready for retry (not actively blacklisted but tracked)
-pub fn get_tokens_ready_for_pool_retry() -> Vec<String> {
-    let blacklist = INVALID_POOL_TOKENS.read().unwrap();
-    blacklist
-        .values()
-        .filter(|info| info.can_retry())
-        .map(|info| info.mint.clone())
-        .collect()
-}
-
-/// Clean up stale entries from invalid pool blacklist
-pub fn cleanup_invalid_pool_blacklist() -> usize {
-    let mut blacklist = INVALID_POOL_TOKENS.write().unwrap();
-    let before_count = blacklist.len();
-
-    blacklist.retain(|_, info| !info.is_stale());
-
-    let removed_count = before_count - blacklist.len();
-    if removed_count > 0 {
-        log(
-            LogTag::Trader,
-            "BLACKLIST_CLEANUP",
-            &format!(
-                "🧹 Cleaned up {} stale invalid pool blacklist entries ({} remaining)",
-                removed_count,
-                blacklist.len()
-            ),
-        );
-    }
-
-    removed_count
-}
-
-/// Get invalid pool blacklist status for debugging
-pub fn get_invalid_pool_blacklist_status() -> String {
-    let blacklist = INVALID_POOL_TOKENS.read().unwrap();
-    let now = Instant::now();
-
-    if blacklist.is_empty() {
-        return "Invalid pool blacklist is empty".to_string();
-    }
-
-    let mut active_blacklist = Vec::new();
-    let mut ready_for_retry = Vec::new();
-
-    for (mint, info) in blacklist.iter() {
-        if info.can_retry() {
-            ready_for_retry.push((mint, info));
-        } else {
-            active_blacklist.push((mint, info));
-        }
-    }
-
-    let mut status = format!(
-        "Invalid Pool Blacklist Status: {} total ({} active, {} ready for retry)\n",
-        blacklist.len(),
-        active_blacklist.len(),
-        ready_for_retry.len()
-    );
-
-    if !active_blacklist.is_empty() {
-        status.push_str("Active Blacklist (blocked from checks):\n");
-        for (i, (mint, info)) in active_blacklist.iter().enumerate() {
-            let retry_in_hours = info.retry_after.duration_since(now).as_secs() / 3600;
-            status.push_str(&format!(
-                "  {}. {} ({}) - {} | attempts: {} | retry in: {}h\n",
-                i + 1,
-                info.symbol,
-                &mint[..8],
-                info.failure_reason,
-                info.failure_count,
-                retry_in_hours
-            ));
-            if i >= 9 {
-                status.push_str(&format!(
-                    "  ... and {} more active entries\n",
-                    active_blacklist.len() - 10
-                ));
-                break;
-            }
-        }
-    }
-
-    if !ready_for_retry.is_empty() {
-        status.push_str("Ready for Retry (tracking only):\n");
-        for (i, (mint, info)) in ready_for_retry.iter().enumerate() {
-            let hours_since_fail = now.duration_since(info.failed_at).as_secs() / 3600;
-            status.push_str(&format!(
-                "  {}. {} ({}) - {} | attempts: {} | failed {}h ago\n",
-                i + 1,
-                info.symbol,
-                &mint[..8],
-                info.failure_reason,
-                info.failure_count,
-                hours_since_fail
-            ));
-            if i >= 9 {
-                status.push_str(&format!(
-                    "  ... and {} more retry entries\n",
-                    ready_for_retry.len() - 10
-                ));
-                break;
-            }
-        }
-    }
-
-    status
-}
 
 /// Update token tracking after checking a token
 pub fn update_token_check_info(
@@ -1508,268 +931,11 @@ pub fn update_token_check_info(
         info.entry_check_count += 1;
     }
 
-    // Pool information no longer available in simple API
-    // Remove pool fields update logic
 }
 
-/// Print a compact per-cycle summary of price availability and token check stats
-fn log_cycle_price_summary(available: usize, unavailable: usize, _zero_hist_warmed: usize) {
-    let tracker = TOKEN_CHECK_TRACKER.read().unwrap();
 
-    // Top tokens by total checks
-    let mut top_by_checks: Vec<(&String, &TokenCheckInfo)> = tracker.iter().collect();
-    top_by_checks.sort_by(|a, b| b.1.check_count.cmp(&a.1.check_count));
-    let top_by_checks_displays: Vec<TokenCheckDisplay> = top_by_checks
-        .iter()
-        .take(10)
-        .enumerate()
-        .map(|(idx, (mint, info))| {
-            let last_price = info
-                .last_price
-                .map(|p| format!("{:.9}", p))
-                .unwrap_or_else(|| "-".to_string());
-            let meta = get_token_meta_brief(mint);
-            let sym_name = meta
-                .as_ref()
-                .map(|m| format!("{} ({})", m.symbol, m.name))
-                .unwrap_or_else(|| "-".to_string());
-            let liq = meta
-                .as_ref()
-                .and_then(|m| m.liquidity_usd)
-                .map(|v| format_usd_short(v))
-                .unwrap_or_else(|| "-".to_string());
-            let mcap = meta
-                .as_ref()
-                .and_then(|m| m.market_cap)
-                .map(|v| format_usd_short(v))
-                .unwrap_or_else(|| "-".to_string());
-            // Use last stored pool info from tracker
-            let ptype = info.pool_type.clone().unwrap_or_default();
-            let paddr = info.pool_address.clone().unwrap_or_default();
-            let pprice = info.pool_price_sol;
-            let rsol = info.reserve_sol;
-            let rtok = info.reserve_token;
-            let pool_str = if paddr.is_empty() {
-                "pool:-".to_string()
-            } else {
-                format!(
-                    "pool:{}/{} p:{} rs:{} tok:{}",
-                    if ptype.is_empty() {
-                        "-".to_string()
-                    } else {
-                        ptype
-                    },
-                    short8(&paddr),
-                    fmt_opt9(pprice),
-                    fmt_opt9(rsol),
-                    fmt_opt9(rtok)
-                )
-            };
-            TokenCheckDisplay {
-                rank: format!("{}.", idx + 1),
-                mint: format!("{}", &mint[..8]),
-                symbol: sym_name,
-                liquidity: liq,
-                market_cap: mcap,
-                last_price: format!("{} SOL", last_price),
-                pool_info: pool_str,
-                check_count: format!("{}", info.check_count),
-                entry_checks: format!("{}", info.entry_check_count),
-            }
-        })
-        .collect();
-
-    // Top tokens by entry checks
-    let mut top_by_entries: Vec<(&String, &TokenCheckInfo)> = tracker.iter().collect();
-    top_by_entries.sort_by(|a, b| b.1.entry_check_count.cmp(&a.1.entry_check_count));
-    let top_by_entries_displays: Vec<TokenEntryDisplay> = top_by_entries
-        .iter()
-        .take(10)
-        .enumerate()
-        .map(|(idx, (mint, info))| {
-            let last_price = info
-                .last_price
-                .map(|p| format!("{:.9}", p))
-                .unwrap_or_else(|| "-".to_string());
-            let meta = get_token_meta_brief(mint);
-            let sym_name = meta
-                .as_ref()
-                .map(|m| format!("{} ({})", m.symbol, m.name))
-                .unwrap_or_else(|| "-".to_string());
-            let liq = meta
-                .as_ref()
-                .and_then(|m| m.liquidity_usd)
-                .map(|v| format_usd_short(v))
-                .unwrap_or_else(|| "-".to_string());
-            let mcap = meta
-                .as_ref()
-                .and_then(|m| m.market_cap)
-                .map(|v| format_usd_short(v))
-                .unwrap_or_else(|| "-".to_string());
-            // Use last stored pool info from tracker
-            let ptype = info.pool_type.clone().unwrap_or_default();
-            let paddr = info.pool_address.clone().unwrap_or_default();
-            let pprice = info.pool_price_sol;
-            let rsol = info.reserve_sol;
-            let rtok = info.reserve_token;
-            let pool_str = if paddr.is_empty() {
-                "pool:-".to_string()
-            } else {
-                format!(
-                    "pool:{}/{} p:{} rs:{} tok:{}",
-                    if ptype.is_empty() {
-                        "-".to_string()
-                    } else {
-                        ptype
-                    },
-                    short8(&paddr),
-                    fmt_opt9(pprice),
-                    fmt_opt9(rsol),
-                    fmt_opt9(rtok)
-                )
-            };
-            TokenEntryDisplay {
-                rank: format!("{}.", idx + 1),
-                mint: format!("{}", &mint[..8]),
-                symbol: sym_name,
-                liquidity: liq,
-                market_cap: mcap,
-                last_price: format!("{} SOL", last_price),
-                pool_info: pool_str,
-                entry_checks: format!("{}", info.entry_check_count),
-                check_count: format!("{}", info.check_count),
-            }
-        })
-        .collect();
-
-    // Overall tracker stats
-    let tracked_tokens = tracker.len();
-    let tokens_with_price = tracker
-        .iter()
-        .filter(|(_, info)| info.last_price.is_some())
-        .count();
-    let tokens_without_price = tracked_tokens.saturating_sub(tokens_with_price);
-
-    let avg_checks = if tracked_tokens > 0 {
-        (tracker
-            .iter()
-            .map(|(_, i)| i.check_count as u64)
-            .sum::<u64>() as f64)
-            / (tracked_tokens as f64)
-    } else {
-        0.0
-    };
-    let avg_entry_checks = if tracked_tokens > 0 {
-        (tracker
-            .iter()
-            .map(|(_, i)| i.entry_check_count as u64)
-            .sum::<u64>() as f64)
-            / (tracked_tokens as f64)
-    } else {
-        0.0
-    };
-
-    // Blacklist stats
-    let blacklist = INVALID_POOL_TOKENS.read().unwrap();
-    let blacklist_total = blacklist.len();
-    let blacklist_active = blacklist.values().filter(|info| !info.can_retry()).count();
-    let blacklist_ready_for_retry = blacklist_total - blacklist_active;
-    drop(blacklist);
-
-    // Create summary statistics displays
-    let price_summary_displays = vec![
-        PriceSummaryDisplay {
-            metric: "🔍 Available".to_string(),
-            value: format!("{}", available),
-        },
-        PriceSummaryDisplay {
-            metric: "❌ Unavailable".to_string(),
-            value: format!("{}", unavailable),
-        },
-        PriceSummaryDisplay {
-            metric: "📊 Tracked Tokens".to_string(),
-            value: format!("{}", tracked_tokens),
-        },
-        PriceSummaryDisplay {
-            metric: "💲 With Price".to_string(),
-            value: format!("{}", tokens_with_price),
-        },
-        PriceSummaryDisplay {
-            metric: "❓ Without Price".to_string(),
-            value: format!("{}", tokens_without_price),
-        },
-        PriceSummaryDisplay {
-            metric: "📈 Avg Checks".to_string(),
-            value: format!("{:.1}", avg_checks),
-        },
-        PriceSummaryDisplay {
-            metric: "🎯 Avg Entry Checks".to_string(),
-            value: format!("{:.1}", avg_entry_checks),
-        },
-    ];
-
-    let blacklist_summary_displays = vec![
-        BlacklistSummaryDisplay {
-            status: "🚫 Total Blacklisted".to_string(),
-            count: format!("{}", blacklist_total),
-        },
-        BlacklistSummaryDisplay {
-            status: "❌ Active".to_string(),
-            count: format!("{}", blacklist_active),
-        },
-        BlacklistSummaryDisplay {
-            status: "🔄 Retry Ready".to_string(),
-            count: format!("{}", blacklist_ready_for_retry),
-        },
-    ];
-
-    // Build the complete summary using tables
-    let mut summary = String::new();
-    summary.push_str("===== ENTRY PRICE SUMMARY =====\n");
-
-    // Price Statistics
-    summary.push_str("\n📊 Price Statistics\n");
-    let mut price_table = Table::new(price_summary_displays);
-    price_table
-        .with(Style::rounded())
-        .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    summary.push_str(&format!("{}\n", price_table));
-
-    // Blacklist Statistics
-    summary.push_str("\n🚫 Blacklist Statistics\n");
-    let mut blacklist_table = Table::new(blacklist_summary_displays);
-    blacklist_table
-        .with(Style::rounded())
-        .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    summary.push_str(&format!("{}\n", blacklist_table));
-
-    // Top by checks table
-    if !top_by_checks_displays.is_empty() {
-        summary.push_str("\n🔍 Top by Total Checks\n");
-        let mut checks_table = Table::new(top_by_checks_displays);
-        checks_table
-            .with(Style::rounded())
-            .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-        summary.push_str(&format!("{}\n", checks_table));
-    }
-
-    // Top by entry checks table
-    if !top_by_entries_displays.is_empty() {
-        summary.push_str("\n🎯 Top by Entry Checks\n");
-        let mut entries_table = Table::new(top_by_entries_displays);
-        entries_table
-            .with(Style::rounded())
-            .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-        summary.push_str(&format!("{}\n", entries_table));
-    }
-
-    // Print directly to stdout instead of using logger
-    println!("{}", summary);
-}
-
-// No longer managing watchlist - tokens are handled by pool service
 async fn ensure_watchlist_on_price_fail(_mint: &str, _symbol: &str, _reason: &str) {
-    // Watchlist functionality removed - pool service handles token availability
+    // Watchlist functionality removed
 }
 
 /// Check if token had recent price drop (within 30 seconds) using provided history (no extra fetch)
@@ -2116,7 +1282,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             ),
         );
 
-        // No longer warming prices or managing watchlist - pool service handles this
 
         // Process scheduled tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         // Per-cycle aggregation counters (atomic to update from tasks)
@@ -2168,7 +1333,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let processing_budget =
             Duration::from_secs_f64((ENTRY_MONITOR_INTERVAL_SECS as f64) * TIME_BUDGET_FRACTION);
 
-        // No longer doing batch preloading - pool service handles price availability
 
         for token in scheduled_tokens.iter() {
             processed_count += 1;
@@ -2273,7 +1437,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     tokio::time::timeout(Duration::from_secs(TOKEN_CHECK_TASK_TIMEOUT_SECS), async {
                         let pool_service = get_pool_service();
 
-                        // No longer doing warmup - pool service handles price availability
 
                         // Get current price from pool service
                         let current_price = match get_price(&token.mint).await {
@@ -2465,12 +1628,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             );
         }
 
-        // Print per-cycle summary for prices and checks
-        log_cycle_price_summary(
-            price_available_count.load(std::sync::atomic::Ordering::Relaxed),
-            price_unavailable_count.load(std::sync::atomic::Ordering::Relaxed),
-            0, // No longer tracking warmup
-        );
 
         // Add cycle summary logging
         if is_debug_trader_enabled() {
@@ -2566,7 +1723,6 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 );
             }
 
-            // No longer requesting priority updates - pool service handles this automatically
 
             if is_debug_trader_enabled() {
                 debug_trader_log(
@@ -2617,7 +1773,6 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             .map(|pos| {
                 let mint = pos.mint.clone();
                 async move {
-                    // Get price data from pool service
                     let price_result = get_price(&mint).await;
 
                     // Extract price if available
@@ -2688,7 +1843,6 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         }
                     }
                 } else {
-                    // Position no longer exists, remove from cache
                     remove_sell_decision(&decision.position_id);
                     log(
                         LogTag::Trader,
@@ -2984,7 +2138,6 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     let _permit = permit; // Keep permit alive for duration of task
 
                     // CRITICAL OPERATION PROTECTION - Prevent shutdown during sell
-                    // NOTE: This is the PRIMARY critical operation guard for sells (positions.rs guard removed to avoid duplicates)
                     let _guard = CriticalOperationGuard::new(&format!("SELL_{}", token.symbol));
 
                     let position = position;
