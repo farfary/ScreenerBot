@@ -100,7 +100,8 @@ pub use rugcheck::{
 pub use types::*;
 
 // Re-export from pools module for compatibility
-pub use crate::pools::types::PriceResult;
+// Re-export from new pools system for compatibility
+pub use crate::pools::types::{ PriceResult, PriceOptions };
 
 // =============================================================================
 // CONFIGURATION CONSTANTS

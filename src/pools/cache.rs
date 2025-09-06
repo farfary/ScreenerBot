@@ -90,6 +90,9 @@ pub struct PoolCache {
     /// Price cache: token_mint -> CachedPrice
     prices: Arc<RwLock<HashMap<String, CachedPrice>>>,
 
+    /// Price history cache: token_mint -> Vec<(timestamp, price_sol)>
+    price_history: Arc<RwLock<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>,
+
     /// Track which tokens are currently being processed (to avoid duplicates)
     in_progress: Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
 }
@@ -101,6 +104,7 @@ impl PoolCache {
             pools: Arc::new(RwLock::new(HashMap::new())),
             accounts: Arc::new(RwLock::new(HashMap::new())),
             prices: Arc::new(RwLock::new(HashMap::new())),
+            price_history: Arc::new(RwLock::new(HashMap::new())),
             in_progress: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -249,6 +253,61 @@ impl PoolCache {
     }
 
     // =============================================================================
+    // PRICE HISTORY CACHE METHODS
+    // =============================================================================
+
+    /// Add price to history for a token
+    pub async fn add_price_to_history(&self, token_mint: &str, price_sol: f64) {
+        let mut cache = self.price_history.write().await;
+        let history = cache.entry(token_mint.to_string()).or_insert_with(Vec::new);
+
+        // Add new price point
+        history.push((Utc::now(), price_sol));
+
+        // Keep only last 500 points for memory efficiency
+        if history.len() > 500 {
+            history.remove(0);
+        }
+    }
+
+    /// Get price history for a token
+    pub async fn get_price_history(&self, token_mint: &str) -> Vec<(DateTime<Utc>, f64)> {
+        let cache = self.price_history.read().await;
+        cache.get(token_mint).cloned().unwrap_or_default()
+    }
+
+    /// Get price history for a specific time range
+    pub async fn get_price_history_since(
+        &self,
+        token_mint: &str,
+        since: DateTime<Utc>
+    ) -> Vec<(DateTime<Utc>, f64)> {
+        let cache = self.price_history.read().await;
+        if let Some(history) = cache.get(token_mint) {
+            history
+                .iter()
+                .filter(|(timestamp, _)| *timestamp >= since)
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Clear old price history entries (keep last 6 hours)
+    pub async fn cleanup_price_history(&self) {
+        let cutoff = Utc::now() - chrono::Duration::hours(6);
+        let mut cache = self.price_history.write().await;
+
+        for history in cache.values_mut() {
+            history.retain(|(timestamp, _)| *timestamp > cutoff);
+        }
+
+        // Remove empty entries
+        cache.retain(|_, history| !history.is_empty());
+    }
+
+    // =============================================================================
     // IN-PROGRESS TRACKING METHODS
     // =============================================================================
 
@@ -313,6 +372,9 @@ impl PoolCache {
             prices_cache.retain(|_, cached_price| !cached_price.is_expired());
             prices_cleaned = before - prices_cache.len();
         }
+
+        // Clean up old price history
+        self.cleanup_price_history().await;
 
         // Clean up old in-progress entries
         self.cleanup_in_progress().await;

@@ -1,39 +1,24 @@
-/// Pool Price System
-///
-/// This module provides pool-based price calculation system for Solana DeFi pools.
-/// Supports multiple DEX protocols with unified interface.
+/// Pool system - SOL-focused pricing with simplified architecture
 
-use std::sync::Arc;
-
-pub mod constants;
-pub mod discovery;
-pub mod calculator;
-pub mod service;
-pub mod decoders;
-pub mod tokens;
 pub mod cache;
+pub mod calculator;
+pub mod constants;
+pub mod decoders;
+pub mod discovery;
+pub mod service;
+pub mod tokens;
 pub mod types;
 
-// Re-export main components
-pub use constants::*;
-pub use types::{PriceResult, PoolStats};
+// Export main types and services
+pub use cache::PoolCache;
+pub use calculator::PoolCalculator;
+pub use discovery::{ PoolDiscovery, PoolInfo };
 pub use service::{
-    PoolService,
-    init_pool_service,
     get_pool_service,
+    init_pool_service,
     start_pool_service,
     stop_pool_service,
+    PoolService,
 };
-pub use calculator::PoolCalculator;
-pub use discovery::PoolDiscovery;
-pub use tokens::{ PoolTokenManager, PoolToken };
-pub use cache::{ PoolCache, CacheStats };
-
-// Convenience functions for easy access
-pub async fn init_pools() -> &'static Arc<PoolService> {
-    init_pool_service().await
-}
-
-pub async fn get_pools() -> &'static Arc<PoolService> {
-    get_pool_service().await
-}
+pub use tokens::PoolToken;
+pub use types::{ PriceResult, PoolStats, PriceOptions, TokenPriceInfo };

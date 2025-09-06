@@ -9,7 +9,7 @@
 
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
-use crate::pool_interface::{ PoolInterface, TokenPriceInfo };
+use crate::pools::{ get_pool_service, TokenPriceInfo };
 use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock as AsyncRwLock; // switched from StdRwLock
@@ -217,13 +217,9 @@ fn analyze_local_structure(
 
 /// Main entry point for determining if a token should be bought
 /// Returns (approved_for_entry, confidence_score, reason)
-pub async fn should_buy(
-    price_info: &TokenPriceInfo
-) -> (bool, f64, String) {
+pub async fn should_buy(price_info: &TokenPriceInfo) -> (bool, f64, String) {
     // Fetch price history from pool service
-    let price_history = crate::pool_service::get_pool_service()
-        .get_price_history(&price_info.token_mint)
-        .await;
+    let price_history = get_pool_service().await.get_price_history(&price_info.token_mint).await;
 
     // Immediate debug log to ensure we're getting called
     if is_debug_entry_enabled() {
@@ -259,7 +255,12 @@ pub async fn should_buy(
                 log(
                     LogTag::Entry,
                     "INVALID_PRICE",
-                    &format!("❌ {} invalid price: pool={:?} api={:?}", price_info.token_mint, price_info.pool_price_sol, price_info.api_price_sol)
+                    &format!(
+                        "❌ {} invalid price: pool={:?} api={:?}",
+                        price_info.token_mint,
+                        price_info.pool_price_sol,
+                        price_info.api_price_sol
+                    )
                 );
             }
             return (false, 10.0, "Invalid price data".to_string());
@@ -837,7 +838,6 @@ fn detect_best_drop(
     }
     best
 }
-
 
 // =============================================================================
 // PROFIT TARGET CALCULATION

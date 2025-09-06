@@ -44,7 +44,7 @@ use crate::logger::LogTag;
 use crate::positions::{ get_closed_positions, get_open_positions };
 use crate::positions_lib::calculate_position_pnl;
 use crate::rpc::get_global_rpc_stats;
-use crate::pool_service::get_pool_service;
+use crate::pools::get_pool_service;
 use crate::transactions::TransactionsManager;
 use crate::transactions_types::TransactionStats;
 use crate::utils::{ get_sol_balance, get_wallet_address };
@@ -1029,13 +1029,13 @@ impl Dashboard {
         // Get pool service stats (non-blocking with timeout)
         let pool_stats = if
             let Ok(stats) = tokio::time::timeout(Duration::from_millis(100), async {
-                let pool_service = get_pool_service();
+                let pool_service = get_pool_service().await;
                 pool_service.get_stats().await
             }).await
         {
             stats
         } else {
-            crate::pool_interface::PoolStats::default()
+            crate::pools::PoolStats::default()
         };
 
         // Multi-row display for comprehensive stats
@@ -1135,13 +1135,15 @@ impl Dashboard {
 
         // Row 4: Pool Performance
         if current_line < (height as usize) {
-            let col1 = format!("Pool Req: {}", pool_stats.successful_price_fetches + pool_stats.failed_price_fetches);
+            let col1 = format!(
+                "Pool Req: {}",
+                pool_stats.successful_price_fetches + pool_stats.failed_price_fetches
+            );
             let col2 = format!("Cache Hits: {}", pool_stats.cache_hits);
-            let total_requests = pool_stats.successful_price_fetches + pool_stats.failed_price_fetches;
+            let total_requests =
+                pool_stats.successful_price_fetches + pool_stats.failed_price_fetches;
             let pool_success_rate = if total_requests > 0 {
-                ((pool_stats.successful_price_fetches as f64) /
-                    (total_requests as f64)) *
-                    100.0
+                ((pool_stats.successful_price_fetches as f64) / (total_requests as f64)) * 100.0
             } else {
                 0.0
             };

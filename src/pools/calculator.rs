@@ -31,7 +31,7 @@ impl PoolCalculator {
                 pool.sol_reserve,
                 pool.token_reserve,
                 pool.pool_address.clone(),
-                pool.program_id.clone(),
+                pool.program_id.clone()
             );
 
             Ok(Some(result))
