@@ -14,6 +14,7 @@ use std::str::FromStr;
 enum PoolKindArg {
     Pumpfun,
     RaydiumCpmm,
+    RaydiumClmm,
     RaydiumLegacy,
     MeteoraDlmm,
     MeteoraDamm,
@@ -84,6 +85,7 @@ async fn main() {
     let program_kind = match args.program {
         PoolKindArg::Pumpfun => ProgramKind::PumpFun,
         PoolKindArg::RaydiumCpmm => ProgramKind::RaydiumCpmm,
+        PoolKindArg::RaydiumClmm => ProgramKind::RaydiumClmm,
         PoolKindArg::RaydiumLegacy => ProgramKind::RaydiumLegacyAmm,
         PoolKindArg::MeteoraDlmm => ProgramKind::MeteoraDlmm,
         PoolKindArg::MeteoraDamm => ProgramKind::MeteoraDamm,
@@ -92,6 +94,7 @@ async fn main() {
     if
         program_kind == ProgramKind::PumpFun ||
         program_kind == ProgramKind::RaydiumLegacyAmm ||
+        program_kind == ProgramKind::RaydiumClmm ||
         program_kind == ProgramKind::MeteoraDlmm ||
         program_kind == ProgramKind::MeteoraDamm
     {
@@ -155,6 +158,8 @@ async fn main() {
 
         let vault_pair = if program_kind == ProgramKind::RaydiumLegacyAmm {
             extract_legacy_vaults(&pool_account.data)
+        } else if program_kind == ProgramKind::RaydiumClmm {
+            extract_clmm_vaults(&pool_account.data)
         } else if program_kind == ProgramKind::MeteoraDlmm {
             extract_dlmm_vaults(&pool_account.data)
         } else if program_kind == ProgramKind::MeteoraDamm {
@@ -509,6 +514,41 @@ fn extract_damm_vaults(data: &[u8]) -> Option<(String, String)> {
             "ERROR",
             &format!("DAMM: unexpected token_b_mint: {}", token_b_mint)
         );
+        None
+    }
+}
+
+fn extract_clmm_vaults(data: &[u8]) -> Option<(String, String)> {
+    if data.len() < 800 {
+        return None;
+    }
+
+    // Based on Raydium CLMM PoolState struct layout
+    // Skip discriminator (8 bytes), bump (1 byte), amm_config (32 bytes), owner (32 bytes)
+    let base_offset = 8 + 1 + 32 + 32;
+
+    // Skip token_mint_0 (32 bytes) and token_mint_1 (32 bytes)
+    let vault_offset = base_offset + 32 + 32;
+
+    // Extract vault pubkeys at calculated offsets
+    let token_vault_0 = read_pubkey_at(data, vault_offset)?; // token_vault_0
+    let token_vault_1 = read_pubkey_at(data, vault_offset + 32)?; // token_vault_1
+
+    // Extract token mints to determine which vault corresponds to which token
+    let token_mint_0 = read_pubkey_at(data, base_offset)?;
+    let token_mint_1 = read_pubkey_at(data, base_offset + 32)?;
+
+    let sol_mint = "So11111111111111111111111111111111111111112";
+
+    if token_mint_0 == sol_mint {
+        // token_mint_0 is SOL, token_mint_1 is the custom token
+        // return (token_vault, sol_vault)
+        Some((token_vault_1, token_vault_0))
+    } else if token_mint_1 == sol_mint {
+        // token_mint_1 is SOL, token_mint_0 is the custom token
+        // return (token_vault, sol_vault)
+        Some((token_vault_0, token_vault_1))
+    } else {
         None
     }
 }

@@ -123,10 +123,10 @@ impl PriceCalculator {
                                             LogTag::PoolCalculator,
                                             "SUCCESS",
                                             &format!(
-                                                "Calculated price for {}: {} SOL (pool: {})",
+                                                "Calculated price for token {} in pool {}: {} SOL",
                                                 price_result.mint,
-                                                price_result.price_sol,
-                                                pool_id
+                                                pool_id,
+                                                price_result.price_sol
                                             )
                                         );
                                     }
@@ -134,7 +134,10 @@ impl PriceCalculator {
                                     log(
                                         LogTag::PoolCalculator,
                                         "WARN",
-                                        &format!("Failed to calculate price for pool {}: {}", pool_id, error)
+                                        &format!("Failed to calculate price for token {} in pool {}: {}", 
+                                            if pool_descriptor.base_mint.to_string() != SOL_MINT { pool_descriptor.base_mint } else { pool_descriptor.quote_mint },
+                                            pool_id, 
+                                            error)
                                     );
                                 }
                             }
@@ -171,15 +174,21 @@ impl PriceCalculator {
         sol_reference_price: &Arc<RwLock<f64>>
     ) -> PoolCalculationResult {
         if is_debug_pool_calculator_enabled() {
+            let target_token = if pool_descriptor.base_mint.to_string() != SOL_MINT { 
+                pool_descriptor.base_mint 
+            } else { 
+                pool_descriptor.quote_mint 
+            };
             log(
                 LogTag::PoolCalculator,
                 "DEBUG",
                 &format!(
-                    "Calculating price for pool {} ({}) - {}/{}",
+                    "Calculating price for pool {} ({}) - {}/{} (token: {})",
                     pool_id,
                     pool_descriptor.program_kind.display_name(),
                     pool_descriptor.base_mint,
-                    pool_descriptor.quote_mint
+                    pool_descriptor.quote_mint,
+                    target_token
                 )
             );
         }
@@ -207,14 +216,15 @@ impl PriceCalculator {
         };
 
         // Use decoder to calculate price
-        let base_mint_str = pool_descriptor.base_mint.to_string();
-        let quote_mint_str = pool_descriptor.quote_mint.to_string();
+        // Pass the target token as base_mint and SOL as quote_mint for consistent decoding
+        let target_mint_str = target_mint.to_string();
+        let sol_mint_str = SOL_MINT.to_string();
 
         let decoded_result = decoders::decode_pool(
             pool_descriptor.program_kind,
             &accounts_map,
-            &base_mint_str,
-            &quote_mint_str
+            &target_mint_str,
+            &sol_mint_str
         );
 
         match decoded_result {
@@ -310,10 +320,10 @@ impl PriceCalculator {
                 LogTag::PoolCalculator,
                 "DEBUG",
                 &format!(
-                    "Calculating price for {} pool: {}/{}",
-                    program_kind.display_name(),
+                    "Calculating price for token {} in pool {} using {} decoder",
                     base_mint,
-                    quote_mint
+                    pool_id,
+                    program_kind.display_name()
                 )
             );
         }

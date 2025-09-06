@@ -406,12 +406,18 @@ impl AccountFetcher {
                     bundle.add_account(account_data.clone());
 
                     if is_debug_pool_service_enabled() {
+                        let target_token = if pool_descriptor.base_mint.to_string() == "So11111111111111111111111111111111111111112" { 
+                            pool_descriptor.quote_mint 
+                        } else { 
+                            pool_descriptor.base_mint 
+                        };
                         log(
                             LogTag::PoolFetcher,
                             "DEBUG",
                             &format!(
-                                "Added account {} to pool {} bundle",
+                                "Added account {} to bundle for token {} in pool {}",
                                 account_data.pubkey,
+                                target_token,
                                 pool_id
                             )
                         );
@@ -431,16 +437,26 @@ impl AccountFetcher {
                                     LogTag::PoolFetcher,
                                     "WARN",
                                     &format!(
-                                        "Failed to request calculation for pool {}: {}",
+                                        "Failed to request calculation for token {} in pool {}: {}",
+                                        if pool_descriptor.base_mint.to_string() == "So11111111111111111111111111111111111111112" { 
+                                            pool_descriptor.quote_mint 
+                                        } else { 
+                                            pool_descriptor.base_mint 
+                                        },
                                         pool_id,
                                         e
                                     )
                                 );
                             } else if is_debug_pool_service_enabled() {
+                                let target_token = if pool_descriptor.base_mint.to_string() == "So11111111111111111111111111111111111111112" { 
+                                    pool_descriptor.quote_mint 
+                                } else { 
+                                    pool_descriptor.base_mint 
+                                };
                                 log(
                                     LogTag::PoolFetcher,
                                     "INFO",
-                                    &format!("Requested calculation for complete pool bundle {}", pool_id)
+                                    &format!("Requested calculation for complete bundle - token {} in pool {}", target_token, pool_id)
                                 );
                             }
                         }

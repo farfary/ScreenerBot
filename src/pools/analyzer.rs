@@ -133,8 +133,13 @@ impl PoolAnalyzer {
                                             LogTag::PoolService, 
                                             "DEBUG", 
                                             &format!(
-                                                "Analyzed pool: {} ({}) - {}/{}", 
+                                                "Analyzed pool {} for token {} ({}) - {}/{}", 
                                                 pool_id,
+                                                if descriptor.base_mint.to_string() == "So11111111111111111111111111111111111111112" { 
+                                                    &descriptor.quote_mint.to_string() 
+                                                } else { 
+                                                    &descriptor.base_mint.to_string() 
+                                                },
                                                 descriptor.program_kind.display_name(),
                                                 base_mint,
                                                 quote_mint
@@ -145,7 +150,13 @@ impl PoolAnalyzer {
                                     log(
                                         LogTag::PoolService, 
                                         "WARN", 
-                                        &format!("Failed to analyze pool: {}", pool_id)
+                                        &format!("Failed to analyze pool {} for token {}", 
+                                            pool_id,
+                                            if base_mint.to_string() == "So11111111111111111111111111111111111111112" { 
+                                                quote_mint 
+                                            } else { 
+                                                base_mint 
+                                            })
                                     );
                                 }
                             }
@@ -202,7 +213,7 @@ impl PoolAnalyzer {
                         log(
                             LogTag::PoolService,
                             "WARN",
-                            &format!("Failed to fetch pool account {}: {}", pool_id, e)
+                            &format!("Failed to fetch pool account {} for token analysis: {}", pool_id, e)
                         );
                     }
                     return None;
@@ -248,10 +259,15 @@ impl PoolAnalyzer {
                 LogTag::PoolService,
                 "DEBUG",
                 &format!(
-                    "Successfully analyzed {} pool: {} with {} reserve accounts",
+                    "Successfully analyzed {} pool {} with {} reserve accounts for token {}",
                     program_kind.display_name(),
                     pool_id,
-                    reserve_accounts.len()
+                    reserve_accounts.len(),
+                    if base_mint.to_string() == "So11111111111111111111111111111111111111112" { 
+                        quote_mint 
+                    } else { 
+                        base_mint 
+                    }
                 )
             );
         }

@@ -100,13 +100,13 @@ impl PoolDecoder for MeteoraDammDecoder {
             return None;
         };
 
-        // Verify this matches the requested base mint
-        if token_mint != base_mint {
+        // Verify this matches either the requested base or quote mint for bidirectional support
+        if token_mint != base_mint && token_mint != quote_mint {
             if is_debug_pool_calculator_enabled() {
                 log(
                     LogTag::PoolCalculator,
                     "ERROR",
-                    &format!("DAMM pool token {} doesn't match requested {}", token_mint, base_mint)
+                    &format!("DAMM pool token {} doesn't match requested base {} or quote {}", token_mint, base_mint, quote_mint)
                 );
             }
             return None;

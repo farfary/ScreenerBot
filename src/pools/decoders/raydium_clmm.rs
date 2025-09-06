@@ -66,6 +66,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         }
 
         // Determine which token is SOL and which is the base token
+        // Handle both orientations: TOKEN/SOL and SOL/TOKEN
         let (token_mint, sol_vault, token_vault, is_token_0) = if
             clmm_info.token_mint_1 == SOL_MINT
         {
@@ -99,13 +100,19 @@ impl PoolDecoder for RaydiumClmmDecoder {
             return None;
         };
 
-        // Verify this matches the requested base mint
-        if token_mint != base_mint {
+        // Verify the token mint matches one of the requested mints (base or quote)
+        // This handles both TOKEN/SOL and SOL/TOKEN orientations
+        if token_mint != base_mint && token_mint != quote_mint {
             if is_debug_pool_calculator_enabled() {
                 log(
                     LogTag::PoolCalculator,
                     "ERROR",
-                    &format!("CLMM pool token {} doesn't match requested {}", token_mint, base_mint)
+                    &format!(
+                        "CLMM pool token {} doesn't match either requested mint: base={}, quote={}",
+                        token_mint,
+                        base_mint,
+                        quote_mint
+                    )
                 );
             }
             return None;

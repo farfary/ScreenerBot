@@ -90,13 +90,19 @@ impl PoolDecoder for MeteoraDlmmDecoder {
             return None;
         };
 
-        // Verify this matches the requested base mint
-        if token_mint != base_mint {
+        // Verify the token mint matches one of the requested mints (base or quote)
+        // This handles both TOKEN/SOL and SOL/TOKEN orientations
+        if token_mint != base_mint && token_mint != quote_mint {
             if is_debug_pool_calculator_enabled() {
                 log(
                     LogTag::PoolCalculator,
                     "WARN",
-                    &format!("Token mint mismatch: expected {} got {}", base_mint, token_mint)
+                    &format!(
+                        "DLMM token mint {} doesn't match either requested mint: base={}, quote={}",
+                        token_mint,
+                        base_mint,
+                        quote_mint
+                    )
                 );
             }
             return None;
