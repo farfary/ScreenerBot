@@ -585,7 +585,6 @@ impl TransactionsManager {
             ata_analysis: None,
             token_info: None,
             calculated_token_price_sol: None,
-            price_source: None,
             token_symbol: None,
             token_decimals: None,
             last_updated: Utc::now(),
@@ -764,7 +763,6 @@ impl TransactionsManager {
         transaction.ata_analysis = None; // CRITICAL: Reset ATA analysis for recalculation
         transaction.token_info = None;
         transaction.calculated_token_price_sol = None;
-        transaction.price_source = None;
         transaction.token_symbol = None;
         transaction.token_decimals = None;
 
@@ -1471,7 +1469,6 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                 ata_analysis: None,
                                 token_info: None,
                                 calculated_token_price_sol: None,
-                                price_source: None,
                                 token_symbol: None,
                                 token_decimals: None,
                                 last_updated: Utc::now(),

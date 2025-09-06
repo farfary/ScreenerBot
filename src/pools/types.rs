@@ -156,3 +156,66 @@ impl Default for PoolStats {
         }
     }
 }
+
+/// Pool information for internal use in pools module
+#[derive(Debug, Clone)]
+pub struct PoolInfo {
+    pub pool_address: String,
+    pub pool_program_id: String,
+    pub pool_type: String,
+    pub token_0_mint: String,
+    pub token_1_mint: String,
+    pub token_0_reserve: u64,
+    pub token_1_reserve: u64,
+    pub token_0_decimals: u8,
+    pub token_1_decimals: u8,
+    pub liquidity_usd: Option<f64>,
+    // Additional fields for calculator compatibility
+    pub sol_reserve: f64,
+    pub token_reserve: f64,
+    pub program_id: String,
+}
+
+impl PoolInfo {
+    pub fn new(
+        pool_address: String,
+        pool_program_id: String,
+        pool_type: String,
+        token_0_mint: String,
+        token_1_mint: String,
+        token_0_reserve: u64,
+        token_1_reserve: u64,
+        token_0_decimals: u8,
+        token_1_decimals: u8,
+        liquidity_usd: Option<f64>
+    ) -> Self {
+        // Convert reserves to f64 for calculator compatibility
+        let sol_reserve = if token_0_mint == crate::pools::constants::SOL_MINT {
+            (token_0_reserve as f64) / (10_f64).powi(9) // SOL has 9 decimals
+        } else {
+            (token_1_reserve as f64) / (10_f64).powi(9) // Assume quote token is SOL
+        };
+
+        let token_reserve = if token_0_mint == crate::pools::constants::SOL_MINT {
+            (token_1_reserve as f64) / (10_f64).powi(token_1_decimals as i32)
+        } else {
+            (token_0_reserve as f64) / (10_f64).powi(token_0_decimals as i32)
+        };
+
+        Self {
+            pool_address: pool_address.clone(),
+            pool_program_id: pool_program_id.clone(),
+            pool_type,
+            token_0_mint,
+            token_1_mint,
+            token_0_reserve,
+            token_1_reserve,
+            token_0_decimals,
+            token_1_decimals,
+            liquidity_usd,
+            sol_reserve,
+            token_reserve,
+            program_id: pool_program_id,
+        }
+    }
+}

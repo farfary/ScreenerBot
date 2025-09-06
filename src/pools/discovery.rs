@@ -1,11 +1,13 @@
 /// Pool discovery service
 /// Finds pools for tokens from external APIs (DexScreener, GeckoTerminal, Raydium)
 
+use chrono::{ DateTime, Utc };
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::time::{ sleep, Duration };
 use tokio::sync::RwLock;
 use crate::pools::cache::PoolCache;
+use crate::pools::types::PoolInfo;
 use crate::pools::tokens::PoolTokenManager;
 use crate::pools::constants::{
     INITIAL_TOKEN_LOAD_COUNT,
@@ -468,11 +470,14 @@ impl PoolDiscovery {
                     DiscoveryPoolResult::new(
                         pool_address,
                         token_mint.to_string(),
-                        liquidity_usd,
+                        "DexScreener".to_string(),
                         base_token_address,
                         quote_token_address,
+                        1.0, // price_native - will be calculated later
+                        liquidity_usd,
                         base_reserve,
-                        quote_reserve
+                        quote_reserve,
+                        "DexScreener API".to_string()
                     )
                 );
             }
@@ -519,11 +524,14 @@ impl PoolDiscovery {
                 DiscoveryPoolResult::new(
                     gecko_pool.pool_address,
                     token_mint.to_string(),
-                    total_liquidity,
+                    "GeckoTerminal".to_string(),
                     base_token_address,
                     quote_token_address,
+                    1.0, // price_native - will be calculated later
+                    total_liquidity,
                     base_reserve,
-                    quote_reserve
+                    quote_reserve,
+                    "GeckoTerminal API".to_string()
                 )
             );
         }
@@ -565,11 +573,14 @@ impl PoolDiscovery {
                 DiscoveryPoolResult::new(
                     raydium_pool.pool_address,
                     token_mint.to_string(),
-                    total_liquidity,
+                    "Raydium".to_string(),
                     base_token_address,
                     quote_token_address,
+                    1.0, // price_native - will be calculated later
+                    total_liquidity,
                     base_reserve,
-                    quote_reserve
+                    quote_reserve,
+                    "Raydium API".to_string()
                 )
             );
         }
@@ -607,12 +618,33 @@ impl PoolDiscovery {
         }
 
         // Convert from new discovery to legacy format for backward compatibility
-        let discovery_pools = self.discover_pools_new(token_address).await?;
-        let legacy_pools = self.convert_discovery_to_legacy(discovery_pools);
+        let discovery_pools = Self::discover_pools_for_token(token_address).await?;
+        let legacy_pools = Self::convert_discovery_to_legacy(discovery_pools);
 
         // Cache in legacy format too
         self.cache.cache_pools(token_address, legacy_pools.clone()).await;
 
         Ok(legacy_pools)
+    }
+
+    /// Convert DiscoveryPoolResult to PoolInfo for legacy compatibility
+    fn convert_discovery_to_legacy(discovery_pools: Vec<DiscoveryPoolResult>) -> Vec<PoolInfo> {
+        discovery_pools
+            .into_iter()
+            .map(|pool| {
+                PoolInfo::new(
+                    pool.pool_address,
+                    "".to_string(), // program_id not available in discovery
+                    pool.dex_name,
+                    pool.base_token_mint,
+                    pool.quote_token_mint,
+                    pool.base_reserve as u64,
+                    pool.quote_reserve as u64,
+                    9, // default decimals
+                    9, // default decimals
+                    Some(pool.liquidity_usd)
+                )
+            })
+            .collect()
     }
 }

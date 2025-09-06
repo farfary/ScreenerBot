@@ -2,7 +2,7 @@
 /// Handles Dynamic AMM v2 pools
 
 use crate::pools::constants::METEORA_DAMM_V2_PROGRAM_ID;
-use crate::pools::types::PoolDecodedResult;
+use crate::pools::decoders::PoolDecodedResult;
 
 /// Meteora DAMM v2 pool decoder
 #[derive(Debug)]

@@ -179,7 +179,7 @@ impl PoolService {
     pub async fn refresh_pools(
         &self,
         token_address: &str
-    ) -> Result<Vec<crate::pools::discovery::PoolInfo>, String> {
+    ) -> Result<Vec<crate::pools::types::PoolInfo>, String> {
         let pools = self.discovery.discover_pools(token_address).await?;
         self.cache.cache_pools(token_address, pools.clone()).await;
         Ok(pools)

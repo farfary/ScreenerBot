@@ -2,7 +2,7 @@
 /// Handles Constant Product Market Maker pools
 
 use crate::pools::constants::RAYDIUM_CPMM_PROGRAM_ID;
-use crate::pools::types::PoolDecodedResult;
+use crate::pools::decoders::PoolDecodedResult;
 
 /// Raydium CPMM pool decoder
 #[derive(Debug)]

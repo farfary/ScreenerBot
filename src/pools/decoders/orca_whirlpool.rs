@@ -2,7 +2,7 @@
 /// Handles Orca Whirlpool concentrated liquidity pools
 
 use crate::pools::constants::ORCA_WHIRLPOOL_PROGRAM_ID;
-use crate::pools::types::PoolDecodedResult;
+use crate::pools::decoders::PoolDecodedResult;
 
 /// Orca Whirlpool pool decoder
 #[derive(Debug)]

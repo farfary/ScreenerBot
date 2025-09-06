@@ -70,7 +70,6 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     ata_analysis TEXT, -- JSON blob of AtaAnalysis
     token_info TEXT, -- JSON blob of TokenSwapInfo
     calculated_token_price_sol REAL,
-    price_source TEXT,
     token_symbol TEXT,
     token_decimals INTEGER,
     cached_analysis TEXT, -- JSON blob of CachedAnalysis
@@ -476,9 +475,9 @@ impl TransactionDatabase {
                (signature, transaction_type, direction, fee_sol, sol_balance_change, 
                 token_transfers, sol_balance_changes, token_balance_changes, log_messages,
                 instructions, position_impact, profit_calculation,
-                ata_analysis, token_info, calculated_token_price_sol, price_source, token_symbol,
+                ata_analysis, token_info, calculated_token_price_sol, token_symbol,
                 token_decimals, cached_analysis, analysis_version, processed_at, updated_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, 
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, 
                        COALESCE((SELECT processed_at FROM processed_transactions WHERE signature = ?1), datetime('now')),
                        datetime('now'))"#,
                 params![
@@ -497,7 +496,6 @@ impl TransactionDatabase {
                     None::<String>, // ata_analysis JSON
                     None::<String>, // token_info JSON
                     transaction.price_sol,
-                    None::<String>, // price_source
                     transaction.token_mint.as_deref(), // Using token_mint as symbol for now
                     None::<i32>, // token_decimals
                     None::<String>, // cached_analysis JSON
@@ -598,12 +596,6 @@ impl TransactionDatabase {
             None
         };
 
-        let price_source_str = if let Some(ref price_source) = transaction.price_source {
-            Some(format!("{:?}", price_source)) // Convert enum to string
-        } else {
-            None
-        };
-
         let cached_analysis_json = if let Some(ref cached_analysis) = transaction.cached_analysis {
             Some(
                 serde_json
@@ -620,9 +612,9 @@ impl TransactionDatabase {
                (signature, transaction_type, direction, fee_sol, sol_balance_change, 
                 token_transfers, sol_balance_changes, token_balance_changes, log_messages,
                 instructions, position_impact, profit_calculation,
-                ata_analysis, token_info, calculated_token_price_sol, price_source, token_symbol,
+                ata_analysis, token_info, calculated_token_price_sol, token_symbol,
                 token_decimals, cached_analysis, analysis_version, processed_at, updated_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, 
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, 
                        COALESCE((SELECT processed_at FROM processed_transactions WHERE signature = ?1), datetime('now')),
                        datetime('now'))"#,
                 params![
@@ -641,7 +633,6 @@ impl TransactionDatabase {
                     ata_analysis_json,
                     token_info_json,
                     transaction.calculated_token_price_sol,
-                    price_source_str,
                     transaction.token_symbol.as_deref(),
                     transaction.token_decimals.map(|d| d as i32),
                     cached_analysis_json,
@@ -692,7 +683,7 @@ impl TransactionDatabase {
         let result = conn
             .query_row(
                 r#"SELECT signature, transaction_type, calculated_token_price_sol, token_symbol, processed_at,
-                          direction, fee_sol, sol_balance_change, price_source, token_decimals, updated_at
+                          direction, fee_sol, sol_balance_change, token_decimals, updated_at
                FROM processed_transactions WHERE signature = ?1"#,
                 params![signature],
                 |row| {
@@ -783,7 +774,7 @@ impl TransactionDatabase {
             let processed_result = conn
                 .query_row(
                     r#"SELECT transaction_type, direction, fee_sol, sol_balance_change,
-                              calculated_token_price_sol, price_source, token_symbol, token_decimals,
+                              calculated_token_price_sol, token_symbol, token_decimals,
                               cached_analysis
                        FROM processed_transactions WHERE signature = ?1"#,
                     params![signature],
@@ -836,9 +827,8 @@ impl TransactionDatabase {
                             row.get::<_, f64>(2)?, // fee_sol
                             row.get::<_, f64>(3)?, // sol_balance_change
                             row.get::<_, Option<f64>>(4)?, // calculated_token_price_sol
-                            row.get::<_, Option<String>>(5)?, // price_source
-                            row.get::<_, Option<String>>(6)?, // token_symbol
-                            row.get::<_, Option<i32>>(7)?.map(|d| d as u8), // token_decimals
+                            row.get::<_, Option<String>>(5)?, // token_symbol
+                            row.get::<_, Option<i32>>(6)?.map(|d| d as u8), // token_decimals
                             cached_analysis, // cached_analysis
                         ))
                     }
@@ -873,7 +863,6 @@ impl TransactionDatabase {
                 ata_analysis: None,
                 token_info: None,
                 calculated_token_price_sol: None,
-                price_source: None,
                 token_symbol: None,
                 token_decimals: None,
                 cached_analysis: None,
@@ -888,7 +877,6 @@ impl TransactionDatabase {
                         fee_sol,
                         sol_balance_change,
                         price_sol,
-                        price_source_str,
                         token_symbol,
                         token_decimals,
                         cached_analysis,
@@ -913,13 +901,6 @@ impl TransactionDatabase {
                 transaction.token_symbol = token_symbol;
                 transaction.token_decimals = token_decimals;
                 transaction.cached_analysis = cached_analysis;
-
-                if let Some(ps_str) = price_source_str {
-                    // Parse price_source if needed
-                    transaction.price_source = Some(
-                        crate::tokens::types::PriceSourceType::DexScreenerApi
-                    );
-                }
             }
 
             Ok(Some(transaction))
@@ -1082,7 +1063,7 @@ impl TransactionDatabase {
                 r#"SELECT 
                     r.signature, r.slot, r.block_time, r.timestamp, r.status, r.success, r.error_message, r.raw_transaction_data,
                     p.transaction_type, p.direction, p.fee_sol, p.sol_balance_change,
-                    p.calculated_token_price_sol, p.price_source, p.token_symbol, p.token_decimals, p.cached_analysis
+                    p.calculated_token_price_sol, p.token_symbol, p.token_decimals, p.cached_analysis
                    FROM raw_transactions r
                    LEFT JOIN processed_transactions p ON r.signature = p.signature
                    ORDER BY r.slot DESC, r.timestamp DESC
@@ -1135,7 +1116,7 @@ impl TransactionDatabase {
                         _ => TransactionDirection::Internal,
                     };
 
-                    let cached_analysis_str: Option<String> = row.get(16).unwrap_or(None);
+                    let cached_analysis_str: Option<String> = row.get(15).unwrap_or(None);
                     let cached_analysis = if let Some(json_str) = cached_analysis_str {
                         serde_json::from_str(&json_str).ok()
                     } else {
@@ -1148,9 +1129,9 @@ impl TransactionDatabase {
                         row.get(10).unwrap_or(0.0),
                         row.get(11).unwrap_or(0.0),
                         row.get(12).unwrap_or(None),
-                        row.get(14).unwrap_or(None),
+                        row.get(13).unwrap_or(None),
                         row
-                            .get::<_, Option<i32>>(15)
+                            .get::<_, Option<i32>>(14)
                             .unwrap_or(None)
                             .map(|d| d as u8),
                         cached_analysis,
@@ -1200,7 +1181,6 @@ impl TransactionDatabase {
                     profit_calculation: None,
                     ata_analysis: None,
                     token_info: None,
-                    price_source: None,
                 })
             })
             .map_err(|e| format!("Failed to execute batch query: {}", e))?;

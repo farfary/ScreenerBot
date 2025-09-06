@@ -1,8 +1,7 @@
 /// Pool price calculator
 /// Calculates token prices from pool data
 
-use crate::pools::discovery::PoolInfo;
-use crate::pools::types::PriceResult;
+use crate::pools::types::{ PriceResult, PoolInfo };
 
 /// Pool price calculator
 pub struct PoolCalculator {

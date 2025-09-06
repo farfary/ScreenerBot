@@ -202,7 +202,7 @@ use crate::global::is_debug_trader_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::{ get_pool_service, PriceResult };
 use crate::positions_lib::calculate_position_pnl;
-use crate::tokens::{ cache::TokenDatabase, get_all_tokens_by_liquidity, PriceOptions, Token };
+use crate::tokens::{ cache::TokenDatabase, get_all_tokens_by_liquidity, Token };
 use crate::utils::{ check_shutdown_or_delay, safe_read_lock, safe_write_lock, debug_trader_log };
 
 use crate::entry::get_profit_target;

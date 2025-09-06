@@ -2,7 +2,6 @@
 // CORE DATA STRUCTURES
 // =============================================================================
 
-use crate::tokens::types::PriceSourceType;
 use chrono::{ DateTime, Duration, Utc };
 use serde::{ Deserialize, Serialize };
 use tabled::Tabled;
@@ -86,8 +85,6 @@ pub struct Transaction {
     pub token_info: Option<TokenSwapInfo>,
     #[serde(skip_serializing, default)]
     pub calculated_token_price_sol: Option<f64>,
-    #[serde(skip_serializing, default)]
-    pub price_source: Option<PriceSourceType>,
     #[serde(skip_serializing, default)]
     pub token_symbol: Option<String>,
     #[serde(skip_serializing, default)]
@@ -263,7 +260,6 @@ pub struct TokenSwapInfo {
     pub symbol: String,
     pub decimals: u8,
     pub current_price_sol: Option<f64>,
-    pub price_source: Option<PriceSourceType>,
     pub is_verified: bool,
 }
 
@@ -316,7 +312,6 @@ pub struct CachedAnalysis {
     pub ata_analysis: Option<AtaAnalysis>,
     pub token_info: Option<TokenSwapInfo>,
     pub calculated_token_price_sol: Option<f64>,
-    pub price_source: Option<PriceSourceType>,
     pub token_symbol: Option<String>,
     pub token_decimals: Option<u8>,
     // Add missing critical fields for complete caching
@@ -340,7 +335,6 @@ impl CachedAnalysis {
             ata_analysis: tx.ata_analysis.clone(),
             token_info: tx.token_info.clone(),
             calculated_token_price_sol: tx.calculated_token_price_sol,
-            price_source: tx.price_source.clone(),
             token_symbol: tx.token_symbol.clone(),
             token_decimals: tx.token_decimals,
             // Include the missing critical fields

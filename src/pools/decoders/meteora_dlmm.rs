@@ -2,7 +2,7 @@
 /// Handles Dynamic Liquidity Market Maker pools
 
 use crate::pools::constants::METEORA_DLMM_PROGRAM_ID;
-use crate::pools::types::PoolDecodedResult;
+use crate::pools::decoders::PoolDecodedResult;
 
 /// Meteora DLMM pool decoder
 #[derive(Debug)]

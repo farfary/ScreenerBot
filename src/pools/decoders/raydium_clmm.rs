@@ -2,7 +2,7 @@
 /// Handles Concentrated Liquidity Market Maker pools
 
 use crate::pools::constants::RAYDIUM_CLMM_PROGRAM_ID;
-use crate::pools::types::PoolDecodedResult;
+use crate::pools::decoders::PoolDecodedResult;
 
 /// Raydium CLMM pool decoder
 #[derive(Debug)]

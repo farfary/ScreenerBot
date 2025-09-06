@@ -2,7 +2,7 @@
 /// Handles Legacy Automated Market Maker pools
 
 use crate::pools::constants::RAYDIUM_LEGACY_AMM_PROGRAM_ID;
-use crate::pools::types::PoolDecodedResult;
+use crate::pools::decoders::PoolDecodedResult;
 
 /// Raydium Legacy AMM pool decoder
 #[derive(Debug)]
