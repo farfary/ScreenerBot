@@ -174,6 +174,24 @@ pub struct PoolInfo {
     pub sol_reserve: f64,
     pub token_reserve: f64,
     pub program_id: String,
+    // Additional fields from discovery
+    pub token_mint: String,
+    pub dex_name: String,
+    pub pool_name: Option<String>,
+    pub base_token_mint: String,
+    pub quote_token_mint: String,
+    pub price_native: f64,
+    pub price_usd: Option<f64>,
+    pub base_reserve: f64,
+    pub quote_reserve: f64,
+    pub sol_reserves: f64,
+    pub token_reserves: f64,
+    pub volume_24h: f64,
+    pub price_change_24h: Option<f64>,
+    pub transactions_24h: Option<u64>,
+    pub created_at: Option<u64>,
+    pub discovered_at: DateTime<Utc>,
+    pub source: String,
 }
 
 impl PoolInfo {
@@ -205,9 +223,9 @@ impl PoolInfo {
         Self {
             pool_address: pool_address.clone(),
             pool_program_id: pool_program_id.clone(),
-            pool_type,
-            token_0_mint,
-            token_1_mint,
+            pool_type: pool_type.clone(),
+            token_0_mint: token_0_mint.clone(),
+            token_1_mint: token_1_mint.clone(),
             token_0_reserve,
             token_1_reserve,
             token_0_decimals,
@@ -216,6 +234,122 @@ impl PoolInfo {
             sol_reserve,
             token_reserve,
             program_id: pool_program_id,
+            // Set discovery fields with defaults
+            token_mint: token_0_mint.clone(),
+            dex_name: pool_type,
+            pool_name: None,
+            base_token_mint: token_0_mint,
+            quote_token_mint: token_1_mint,
+            price_native: if sol_reserve > 0.0 && token_reserve > 0.0 {
+                sol_reserve / token_reserve
+            } else {
+                0.0
+            },
+            price_usd: None,
+            base_reserve: sol_reserve,
+            quote_reserve: token_reserve,
+            sol_reserves: sol_reserve,
+            token_reserves: token_reserve,
+            volume_24h: 0.0,
+            price_change_24h: None,
+            transactions_24h: None,
+            created_at: None,
+            discovered_at: Utc::now(),
+            source: "Internal".to_string(),
+        }
+    }
+
+    /// Create a new PoolInfo for discovery results
+    pub fn new_discovery(
+        pool_address: String,
+        token_mint: String,
+        dex_name: String,
+        base_token_mint: String,
+        quote_token_mint: String,
+        price_native: f64,
+        liquidity_usd: f64,
+        base_reserve: f64,
+        quote_reserve: f64,
+        source: String
+    ) -> Self {
+        // Determine SOL and token reserves
+        let sol_mint = crate::pools::constants::SOL_MINT;
+        let (sol_reserves, token_reserves) = if base_token_mint == sol_mint {
+            (base_reserve, quote_reserve)
+        } else if quote_token_mint == sol_mint {
+            (quote_reserve, base_reserve)
+        } else {
+            // If neither is SOL, set both to 0
+            (0.0, 0.0)
+        };
+
+        Self {
+            pool_address: pool_address.clone(),
+            pool_program_id: "".to_string(),
+            pool_type: dex_name.clone(),
+            token_0_mint: base_token_mint.clone(),
+            token_1_mint: quote_token_mint.clone(),
+            token_0_reserve: base_reserve as u64,
+            token_1_reserve: quote_reserve as u64,
+            token_0_decimals: 9,
+            token_1_decimals: 9,
+            liquidity_usd: Some(liquidity_usd),
+            sol_reserve: sol_reserves,
+            token_reserve: token_reserves,
+            program_id: "".to_string(),
+            token_mint,
+            dex_name,
+            pool_name: None,
+            base_token_mint,
+            quote_token_mint,
+            price_native,
+            price_usd: None,
+            base_reserve,
+            quote_reserve,
+            sol_reserves,
+            token_reserves,
+            volume_24h: 0.0,
+            price_change_24h: None,
+            transactions_24h: None,
+            created_at: None,
+            discovered_at: Utc::now(),
+            source,
+        }
+    }
+
+    /// Check if this pool contains SOL
+    pub fn has_sol_pair(&self) -> bool {
+        let sol_mint = crate::pools::constants::SOL_MINT;
+        self.base_token_mint == sol_mint || self.quote_token_mint == sol_mint
+    }
+
+    /// Get the other token mint (paired with the target token)
+    pub fn get_other_token_mint(&self, target_token: &str) -> Option<&str> {
+        if self.base_token_mint == target_token {
+            Some(&self.quote_token_mint)
+        } else if self.quote_token_mint == target_token {
+            Some(&self.base_token_mint)
+        } else {
+            None
+        }
+    }
+
+    /// Calculate price in SOL if possible
+    pub fn get_price_in_sol(&self) -> Option<f64> {
+        let sol_mint = crate::pools::constants::SOL_MINT;
+
+        if self.base_token_mint == self.token_mint && self.quote_token_mint == sol_mint {
+            // Token/SOL pair, price is in SOL
+            Some(self.price_native)
+        } else if self.quote_token_mint == self.token_mint && self.base_token_mint == sol_mint {
+            // SOL/Token pair, need to invert
+            if self.price_native > 0.0 {
+                Some(1.0 / self.price_native)
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 }

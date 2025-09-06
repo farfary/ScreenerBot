@@ -6,36 +6,11 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use chrono::{ DateTime, Utc };
 use crate::pools::types::{ PriceResult, PoolInfo };
-use crate::pools::discovery::DiscoveryPoolResult;
 use crate::pools::tokens::PoolToken;
 use crate::pools::constants::MAX_PRICE_HISTORY_POINTS;
 use crate::pools::constants::*;
 
-/// Cached discovery pool data with metadata
-#[derive(Debug, Clone)]
-pub struct CachedDiscoveryPool {
-    pub pool_info: DiscoveryPoolResult,
-    pub cached_at: DateTime<Utc>,
-    pub last_updated: DateTime<Utc>,
-}
-
-impl CachedDiscoveryPool {
-    pub fn new(pool_info: DiscoveryPoolResult) -> Self {
-        let now = Utc::now();
-        Self {
-            pool_info,
-            cached_at: now,
-            last_updated: now,
-        }
-    }
-
-    pub fn is_expired(&self) -> bool {
-        let age = Utc::now() - self.cached_at;
-        age.num_seconds() > POOL_CACHE_TTL_SECONDS
-    }
-}
-
-/// Cached pool data with metadata (legacy)
+/// Cached pool data with metadata
 #[derive(Debug, Clone)]
 pub struct CachedPool {
     pub pool_info: PoolInfo,
@@ -106,11 +81,8 @@ pub struct PoolCache {
     /// Token cache: token_mint -> PoolToken
     tokens: Arc<RwLock<HashMap<String, PoolToken>>>,
 
-    /// Pool cache: token_mint -> Vec<CachedPool> (legacy)
+    /// Pool cache: token_mint -> Vec<CachedPool>
     pools: Arc<RwLock<HashMap<String, Vec<CachedPool>>>>,
-
-    /// Discovery pool cache: token_mint -> Vec<CachedDiscoveryPool>
-    discovery_pools: Arc<RwLock<HashMap<String, Vec<CachedDiscoveryPool>>>>,
 
     /// Account data cache: pool_address -> CachedAccount
     accounts: Arc<RwLock<HashMap<String, CachedAccount>>>,
@@ -130,7 +102,6 @@ impl PoolCache {
         Self {
             tokens: Arc::new(RwLock::new(HashMap::new())),
             pools: Arc::new(RwLock::new(HashMap::new())),
-            discovery_pools: Arc::new(RwLock::new(HashMap::new())),
             accounts: Arc::new(RwLock::new(HashMap::new())),
             prices: Arc::new(RwLock::new(HashMap::new())),
             price_history: Arc::new(RwLock::new(HashMap::new())),
@@ -166,13 +137,6 @@ impl PoolCache {
     // POOL CACHE METHODS
     // =============================================================================
 
-    /// Cache pools for a token
-    pub async fn cache_pools(&self, token_mint: &str, pools: Vec<PoolInfo>) {
-        let mut cache = self.pools.write().await;
-        let cached_pools: Vec<CachedPool> = pools.into_iter().map(CachedPool::new).collect();
-        cache.insert(token_mint.to_string(), cached_pools);
-    }
-
     /// Get cached pools for a token
     pub async fn get_cached_pools(&self, token_mint: &str) -> Option<Vec<PoolInfo>> {
         let cache = self.pools.read().await;
@@ -196,67 +160,22 @@ impl PoolCache {
         self.get_cached_pools(token_mint).await.is_some()
     }
 
-    /// Cache discovery pools for a token
-    pub async fn cache_discovery_pools(&self, token_mint: &str, pools: Vec<DiscoveryPoolResult>) {
-        let mut cache = self.discovery_pools.write().await;
-        let cached_pools: Vec<CachedDiscoveryPool> = pools
-            .into_iter()
-            .map(CachedDiscoveryPool::new)
-            .collect();
-        cache.insert(token_mint.to_string(), cached_pools);
-    }
-
-    /// Get cached discovery pools for a token
-    pub async fn get_cached_discovery_pools(
-        &self,
-        token_mint: &str
-    ) -> Option<Vec<DiscoveryPoolResult>> {
-        let cache = self.discovery_pools.read().await;
-        if let Some(cached_pools) = cache.get(token_mint) {
-            // Check if any pools are still valid
-            let valid_pools: Vec<DiscoveryPoolResult> = cached_pools
-                .iter()
-                .filter(|cp| !cp.is_expired())
-                .map(|cp| cp.pool_info.clone())
-                .collect();
-
-            if !valid_pools.is_empty() {
-                return Some(valid_pools);
-            }
-        }
-        None
-    }
-
-    /// Check if token has cached discovery pools (not expired)
-    pub async fn has_cached_discovery_pools(&self, token_mint: &str) -> bool {
-        self.get_cached_discovery_pools(token_mint).await.is_some()
-    }
-
-    /// Get tokens that don't have cached pools (checks both legacy and discovery pools)
+    /// Get tokens that don't have cached pools
     pub async fn get_tokens_without_pools(&self) -> Vec<String> {
         let tokens_cache = self.tokens.read().await;
         let pools_cache = self.pools.read().await;
-        let discovery_pools_cache = self.discovery_pools.read().await;
 
         let mut tokens_without_pools = Vec::new();
 
         for token_mint in tokens_cache.keys() {
-            let has_valid_legacy_pools = if let Some(cached_pools) = pools_cache.get(token_mint) {
+            let has_valid_pools = if let Some(cached_pools) = pools_cache.get(token_mint) {
                 cached_pools.iter().any(|cp| !cp.is_expired())
             } else {
                 false
             };
 
-            let has_valid_discovery_pools = if
-                let Some(cached_pools) = discovery_pools_cache.get(token_mint)
-            {
-                cached_pools.iter().any(|cp| !cp.is_expired())
-            } else {
-                false
-            };
-
-            // If no valid pools in either cache, add to tokens without pools
-            if !has_valid_legacy_pools && !has_valid_discovery_pools {
+            // If no valid pools, add to tokens without pools
+            if !has_valid_pools {
                 tokens_without_pools.push(token_mint.clone());
             }
         }
@@ -282,6 +201,13 @@ impl PoolCache {
         }
 
         tokens_with_pools
+    }
+
+    /// Cache pools for a token
+    pub async fn cache_pools(&self, token_mint: &str, pools: Vec<PoolInfo>) {
+        let mut cache = self.pools.write().await;
+        let cached_pools: Vec<CachedPool> = pools.into_iter().map(CachedPool::new).collect();
+        cache.insert(token_mint.to_string(), cached_pools);
     }
 
     // =============================================================================
@@ -431,16 +357,7 @@ impl PoolCache {
             });
         }
 
-        // Clean expired discovery pools
-        {
-            let mut discovery_pools_cache = self.discovery_pools.write().await;
-            discovery_pools_cache.retain(|_, cached_pools| {
-                let before = cached_pools.len();
-                cached_pools.retain(|cp| !cp.is_expired());
-                pools_cleaned += before - cached_pools.len();
-                !cached_pools.is_empty() // Remove token entry if no valid pools remain
-            });
-        }
+        // Only one pool cache now, no separate discovery cache
 
         // Clean expired accounts
         {
@@ -471,14 +388,13 @@ impl PoolCache {
     pub async fn get_stats(&self) -> CacheStats {
         let tokens_count = self.tokens.read().await.len();
         let pools_count = self.pools.read().await.len();
-        let discovery_pools_count = self.discovery_pools.read().await.len();
         let accounts_count = self.accounts.read().await.len();
         let prices_count = self.prices.read().await.len();
         let in_progress_count = self.in_progress.read().await.len();
 
         CacheStats {
             tokens_count,
-            pools_count: pools_count + discovery_pools_count, // Combine both for total
+            pools_count, // Single unified pool cache
             accounts_count,
             prices_count,
             in_progress_count,
