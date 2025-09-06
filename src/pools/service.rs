@@ -31,6 +31,14 @@ static mut POOL_ANALYZER: Option<Arc<PoolAnalyzer>> = None;
 static mut ACCOUNT_FETCHER: Option<Arc<AccountFetcher>> = None;
 static mut PRICE_CALCULATOR: Option<Arc<PriceCalculator>> = None;
 
+// Internal accessors (used within module graph to avoid exposing statics directly)
+pub(super) fn get_account_fetcher() -> Option<Arc<AccountFetcher>> {
+    unsafe { ACCOUNT_FETCHER.clone() }
+}
+pub(super) fn get_price_calculator() -> Option<Arc<PriceCalculator>> {
+    unsafe { PRICE_CALCULATOR.clone() }
+}
+
 /// Start the pool service with all background tasks
 ///
 /// This function initializes and starts all the necessary background tasks for
@@ -164,7 +172,9 @@ async fn initialize_service_components() -> Result<(), String> {
 
     // Initialize components in dependency order
     let pool_discovery = Arc::new(PoolDiscovery::new());
-    let pool_analyzer = Arc::new(PoolAnalyzer::new(owned_rpc_client.clone()));
+    let pool_analyzer = Arc::new(
+        PoolAnalyzer::new(owned_rpc_client.clone(), pool_directory.clone())
+    );
     let account_fetcher = Arc::new(
         AccountFetcher::new(owned_rpc_client.clone(), pool_directory.clone())
     );

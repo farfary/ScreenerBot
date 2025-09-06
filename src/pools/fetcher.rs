@@ -7,6 +7,7 @@ use crate::global::is_debug_pool_service_enabled;
 use crate::logger::{ log, LogTag };
 use crate::rpc::{ get_rpc_client, RpcClient };
 use super::types::PoolDescriptor;
+use crate::pools::service; // access global calculator
 use solana_sdk::{ account::Account, pubkey::Pubkey };
 use std::collections::{ HashMap, HashSet };
 use std::sync::{ Arc, RwLock };
@@ -399,7 +400,6 @@ impl AccountFetcher {
         for account_data in account_data_list {
             for (pool_id, pool_descriptor) in &pools {
                 if pool_descriptor.reserve_accounts.contains(&account_data.pubkey) {
-                    // Get or create bundle for this pool
                     let bundle = bundles
                         .entry(*pool_id)
                         .or_insert_with(|| PoolAccountBundle::new(*pool_id));
@@ -415,6 +415,35 @@ impl AccountFetcher {
                                 pool_id
                             )
                         );
+                    }
+
+                    // If bundle now complete, trigger price calculation
+                    if bundle.is_complete(&pool_descriptor.reserve_accounts) {
+                        if let Some(calculator) = service::get_price_calculator() {
+                            if
+                                let Err(e) = calculator.request_calculation(
+                                    *pool_id,
+                                    pool_descriptor.clone(),
+                                    bundle.clone()
+                                )
+                            {
+                                log(
+                                    LogTag::PoolFetcher,
+                                    "WARN",
+                                    &format!(
+                                        "Failed to request calculation for pool {}: {}",
+                                        pool_id,
+                                        e
+                                    )
+                                );
+                            } else if is_debug_pool_service_enabled() {
+                                log(
+                                    LogTag::PoolFetcher,
+                                    "INFO",
+                                    &format!("Requested calculation for complete pool bundle {}", pool_id)
+                                );
+                            }
+                        }
                     }
                 }
             }

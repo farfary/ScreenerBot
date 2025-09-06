@@ -10,6 +10,7 @@ use crate::global::is_debug_pool_service_enabled;
 use crate::logger::{ log, LogTag };
 use crate::rpc::RpcClient;
 use super::types::{ PoolDescriptor, ProgramKind };
+use crate::pools::service; // access global fetcher
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -46,11 +47,14 @@ pub struct PoolAnalyzer {
 
 impl PoolAnalyzer {
     /// Create new pool analyzer
-    pub fn new(rpc_client: Arc<RpcClient>) -> Self {
+    pub fn new(
+        rpc_client: Arc<RpcClient>,
+        pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>
+    ) -> Self {
         let (analyzer_tx, analyzer_rx) = mpsc::unbounded_channel();
 
         Self {
-            pool_directory: Arc::new(RwLock::new(HashMap::new())),
+            pool_directory,
             rpc_client,
             analyzer_rx: Arc::new(RwLock::new(Some(analyzer_rx))),
             analyzer_tx,
@@ -116,6 +120,13 @@ impl PoolAnalyzer {
                                     // Store analyzed pool in directory
                                     let mut directory = pool_directory.write().unwrap();
                                     directory.insert(pool_id, descriptor.clone());
+                                    // Trigger account fetch for this pool's reserve accounts
+                                    if let Some(fetcher) = service::get_account_fetcher() {
+                                        let reserve_accounts = descriptor.reserve_accounts.clone();
+                                        if let Err(e) = fetcher.request_pool_fetch(pool_id, reserve_accounts) {
+                                            log(LogTag::PoolService, "WARN", &format!("Failed to request fetch for analyzed pool {}: {}", pool_id, e));
+                                        }
+                                    }
                                     
                                     if is_debug_pool_service_enabled() {
                                         log(

@@ -62,7 +62,7 @@ impl PriceCalculator {
             pool_directory,
             calculator_rx: Arc::new(RwLock::new(Some(calculator_rx))),
             calculator_tx,
-            sol_reference_price: Arc::new(RwLock::new(100.0)), // Default SOL price placeholder
+            sol_reference_price: Arc::new(RwLock::new(100.0)),
         }
     }
 
