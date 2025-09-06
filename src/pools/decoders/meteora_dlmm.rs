@@ -8,7 +8,7 @@ use super::{ PoolDecoder, AccountData };
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
 use crate::tokens::decimals::get_cached_decimals;
-use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
+use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, METEORA_DLMM_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -36,7 +36,7 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         // Find the pool account
         let pool_account = accounts.values().find(|acc| {
             // Look for account with Meteora DLMM program as owner
-            acc.owner.to_string() == "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
+            acc.owner.to_string() == METEORA_DLMM_PROGRAM_ID
         })?;
 
         if is_debug_pool_calculator_enabled() {

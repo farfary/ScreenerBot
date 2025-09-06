@@ -613,15 +613,18 @@ impl PoolAnalyzer {
             return None;
         }
 
-        // Extract vault pubkeys at known offsets
-        let reserve_x = Self::read_pubkey_at_fixed_offset(data, 152)?;
-        let reserve_y = Self::read_pubkey_at_fixed_offset(data, 184)?;
+        // Extract mints and vault pubkeys at known offsets
+        let token_x_mint = Self::extract_pubkey_at_offset(data, 88)?;
+        let token_y_mint = Self::extract_pubkey_at_offset(data, 120)?;
+        let reserve_x = Self::extract_pubkey_at_offset(data, 152)?;
+        let reserve_y = Self::extract_pubkey_at_offset(data, 184)?;
 
+        // Return all vault addresses (analyzer needs both regardless of order)
         Some(vec![reserve_x, reserve_y])
     }
 
-    /// Helper function to read pubkey at fixed offset (for analyzer use)
-    fn read_pubkey_at_fixed_offset(data: &[u8], offset: usize) -> Option<String> {
+    /// Helper function to extract pubkey at fixed offset (for analyzer use)
+    fn extract_pubkey_at_offset(data: &[u8], offset: usize) -> Option<String> {
         if offset + 32 > data.len() {
             return None;
         }
