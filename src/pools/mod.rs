@@ -6,6 +6,7 @@ pub mod calculator;
 pub mod constants;
 pub mod decoders;
 pub mod discovery;
+pub mod fetcher;
 pub mod service;
 pub mod tokens;
 pub mod types;
@@ -16,6 +17,7 @@ pub use cache::PoolCache;
 pub use calculator::PoolCalculator;
 pub use constants::*; // Export all constants for use by other modules
 pub use discovery::{ PoolDiscovery };
+pub use fetcher::{ PoolFetcher, CachedAccountData, FetcherStats };
 pub use service::{
     get_pool_service,
     init_pool_service,

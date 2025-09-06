@@ -1,11 +1,12 @@
 /// Main pool service
-/// Orchestrates pool discovery, calculation, caching, token management, and analysis
+/// Orchestrates pool discovery, calculation, caching, token management, analysis, and account fetching
 
-use crate::pools::{ PoolDiscovery, PoolCalculator, PoolAnalyzer };
+use crate::pools::{ PoolDiscovery, PoolCalculator, PoolAnalyzer, PoolFetcher };
 use crate::pools::types::{ PriceResult, PoolStats };
 use crate::pools::cache::PoolCache;
 use crate::pools::tokens::{ PoolTokenManager, PoolToken };
 use crate::pools::analyzer::{ TokenAvailability, AnalysisStats };
+use crate::pools::fetcher::{ CachedAccountData, FetcherStats };
 use crate::pools::constants::TOKEN_REFRESH_INTERVAL_SECS;
 use tokio::sync::{ OnceCell, RwLock };
 use tokio::time::{ sleep, Duration };
@@ -17,6 +18,7 @@ pub struct PoolService {
     discovery: PoolDiscovery,
     calculator: PoolCalculator,
     analyzer: PoolAnalyzer,
+    fetcher: PoolFetcher,
     cache: Arc<PoolCache>,
     token_manager: PoolTokenManager,
     tokens: Arc<RwLock<Vec<PoolToken>>>,
@@ -28,11 +30,13 @@ impl PoolService {
         let cache = Arc::new(PoolCache::new());
         let discovery = PoolDiscovery::new(cache.clone());
         let analyzer = PoolAnalyzer::new(cache.clone());
+        let fetcher = PoolFetcher::new(cache.clone());
 
         Self {
             discovery,
             calculator: PoolCalculator::new(),
             analyzer,
+            fetcher,
             cache,
             token_manager: PoolTokenManager::new(),
             tokens: Arc::new(RwLock::new(Vec::new())),
@@ -315,6 +319,25 @@ impl PoolService {
                             stats.trading_ready_tokens
                         )
                     );
+
+                    // Trigger account fetching after successful analysis
+                    if let Err(e) = self.fetch_all_required_accounts().await {
+                        log(
+                            LogTag::Pool,
+                            "TOKENS_FETCH_ERROR",
+                            &format!("❌ Failed to fetch accounts after analysis: {}", e)
+                        );
+                    } else {
+                        let fetcher_stats = self.get_fetcher_stats().await;
+                        log(
+                            LogTag::Pool,
+                            "TOKENS_FETCH_SUCCESS",
+                            &format!(
+                                "✅ Account fetch complete: {} cached accounts",
+                                fetcher_stats.existing_accounts
+                            )
+                        );
+                    }
                 }
             }
             Err(e) => {
@@ -399,6 +422,92 @@ impl PoolService {
                 stats.total_tokens,
                 stats.trading_ready_tokens,
                 stats.required_accounts
+            )
+        );
+
+        Ok(())
+    }
+
+    // =============================================================================
+    // FETCHER METHODS
+    // =============================================================================
+
+    /// Fetch account data for all required addresses from analyzer
+    pub async fn fetch_all_required_accounts(&self) -> Result<(), String> {
+        let required_accounts = self.analyzer.get_required_accounts().await;
+        if required_accounts.is_empty() {
+            log(LogTag::Pool, "FETCHER_NO_ACCOUNTS", "No accounts to fetch");
+            return Ok(());
+        }
+
+        log(
+            LogTag::Pool,
+            "FETCHER_TRIGGER",
+            &format!("🔄 Triggering fetch for {} accounts", required_accounts.len())
+        );
+
+        self.fetcher.fetch_all_required_accounts(&required_accounts).await
+    }
+
+    /// Fetch account data for specific addresses
+    pub async fn fetch_accounts(&self, addresses: &[String]) -> Result<(), String> {
+        self.fetcher.fetch_all_required_accounts(addresses).await
+    }
+
+    /// Get cached account data for an address
+    pub async fn get_cached_account_data(&self, address: &str) -> Option<CachedAccountData> {
+        self.fetcher.get_cached_account_data(address).await
+    }
+
+    /// Get all cached account data
+    pub async fn get_all_cached_accounts(
+        &self
+    ) -> std::collections::HashMap<String, CachedAccountData> {
+        self.fetcher.get_all_cached_accounts().await
+    }
+
+    /// Clean expired account cache entries
+    pub async fn clean_expired_account_cache(&self) -> usize {
+        self.fetcher.clean_expired_cache().await
+    }
+
+    /// Get fetcher statistics
+    pub async fn get_fetcher_stats(&self) -> FetcherStats {
+        self.fetcher.get_fetcher_stats().await
+    }
+
+    /// Force refresh specific account addresses (bypass cache)
+    pub async fn force_refresh_accounts(&self, addresses: &[String]) -> Result<(), String> {
+        self.fetcher.force_refresh_addresses(addresses).await
+    }
+
+    /// Check if fetcher is currently running
+    pub async fn is_fetching_accounts(&self) -> bool {
+        self.fetcher.is_fetching().await
+    }
+
+    /// Trigger full analysis and account fetching pipeline
+    pub async fn trigger_full_pipeline(&self) -> Result<(), String> {
+        log(LogTag::Pool, "PIPELINE_START", "🚀 Starting full pipeline: analysis + fetching");
+
+        // Step 1: Analyze all tokens
+        self.trigger_analysis().await?;
+
+        // Step 2: Fetch all required accounts
+        self.fetch_all_required_accounts().await?;
+
+        // Step 3: Log final statistics
+        let analysis_stats = self.get_analysis_stats().await;
+        let fetcher_stats = self.get_fetcher_stats().await;
+
+        log(
+            LogTag::Pool,
+            "PIPELINE_COMPLETE",
+            &format!(
+                "✅ Pipeline complete: {}/{} tokens calculable, {} accounts cached",
+                analysis_stats.calculable_tokens,
+                analysis_stats.total_tokens,
+                fetcher_stats.existing_accounts
             )
         );
 
