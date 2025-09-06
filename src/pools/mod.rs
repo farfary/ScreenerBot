@@ -14,7 +14,7 @@ pub mod types;
 // Export main types and services
 pub use analyzer::{ PoolAnalyzer, TokenAvailability, AnalysisStats };
 pub use cache::PoolCache;
-pub use calculator::PoolCalculator;
+pub use calculator::{ PoolCalculatorTask, CalculatorStats };
 pub use constants::*; // Export all constants for use by other modules
 pub use discovery::{ PoolDiscovery };
 pub use fetcher::{ PoolFetcher, CachedAccountData, FetcherStats };

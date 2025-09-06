@@ -1,53 +1,266 @@
-/// Pool price calculator
-/// Calculates token prices from pool data
+/// Pool price calculator task
+/// Runs as background task monitoring pool data and automatically calculating prices
 
 use crate::pools::types::{ PriceResult, PoolInfo };
 use crate::pools::decoders::{ DecoderFactory, PoolDecodedResult };
-use crate::pools::service::{ PoolService, PreparedPoolData };
+use crate::pools::service::{ PreparedPoolData, SharedAccountData };
+use crate::pools::cache::PoolCache;
+use crate::pools::tokens::PoolToken;
+use crate::pools::analyzer::TokenAvailability;
+use tokio::sync::RwLock;
+use tokio::time::{ sleep, Duration };
+use std::sync::Arc;
+use std::collections::HashMap;
+use chrono::{ DateTime, Utc };
+use crate::logger::{ log, LogTag };
 
-/// Pool price calculator
-pub struct PoolCalculator {
+/// Pool price calculator task service
+pub struct PoolCalculatorTask {
     decoder_factory: DecoderFactory,
+    cache: Arc<PoolCache>,
+    /// Task running status
+    is_running: Arc<RwLock<bool>>,
+    /// Last calculation times per token
+    last_calculated: Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
 }
 
-impl PoolCalculator {
-    pub fn new() -> Self {
+impl PoolCalculatorTask {
+    pub fn new(cache: Arc<PoolCache>) -> Self {
         Self {
             decoder_factory: DecoderFactory::new(),
+            cache,
+            is_running: Arc::new(RwLock::new(false)),
+            last_calculated: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
-    /// Calculate price for a token from decoded pool data
-    pub async fn calculate_price_from_decoded_pool(
+    /// Start the calculator background task
+    pub async fn start_task(
         &self,
-        service: &PoolService,
+        shared_accounts: Arc<RwLock<HashMap<String, SharedAccountData>>>,
+        calculable_tokens: Arc<RwLock<HashMap<String, TokenAvailability>>>
+    ) {
+        let mut is_running = self.is_running.write().await;
+        if *is_running {
+            log(LogTag::Pool, "CALCULATOR_TASK_RUNNING", "Calculator task already running");
+            return;
+        }
+        *is_running = true;
+        drop(is_running);
+
+        log(LogTag::Pool, "CALCULATOR_TASK_START", "🧮 Starting price calculator task");
+
+        // Clone necessary data for the background task
+        let decoder_factory = self.decoder_factory.clone();
+        let cache = self.cache.clone();
+        let is_running = self.is_running.clone();
+        let last_calculated = self.last_calculated.clone();
+
+        tokio::spawn(async move {
+            while *is_running.read().await {
+                match
+                    Self::calculate_prices_for_available_tokens(
+                        &decoder_factory,
+                        &cache,
+                        &shared_accounts,
+                        &calculable_tokens,
+                        &last_calculated
+                    ).await
+                {
+                    Ok(calculated_count) => {
+                        if calculated_count > 0 {
+                            log(
+                                LogTag::Pool,
+                                "CALCULATOR_TASK_CYCLE",
+                                &format!("✅ Calculated {} prices", calculated_count)
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Pool,
+                            "CALCULATOR_TASK_ERROR",
+                            &format!("❌ Calculator task error: {}", e)
+                        );
+                    }
+                }
+
+                // Sleep between calculation cycles
+                sleep(Duration::from_secs(5)).await;
+            }
+
+            log(LogTag::Pool, "CALCULATOR_TASK_STOP", "🛑 Calculator task stopped");
+        });
+    }
+
+    /// Stop the calculator task
+    pub async fn stop_task(&self) {
+        let mut is_running = self.is_running.write().await;
+        *is_running = false;
+    }
+
+    /// Calculate prices for all available tokens with ready pool data
+    async fn calculate_prices_for_available_tokens(
+        decoder_factory: &DecoderFactory,
+        cache: &Arc<PoolCache>,
+        shared_accounts: &Arc<RwLock<HashMap<String, SharedAccountData>>>,
+        calculable_tokens: &Arc<RwLock<HashMap<String, TokenAvailability>>>,
+        last_calculated: &Arc<RwLock<HashMap<String, DateTime<Utc>>>>
+    ) -> Result<usize, String> {
+        let calculable_map = calculable_tokens.read().await;
+        let mut calculated_count = 0;
+
+        for (token_mint, availability) in calculable_map.iter() {
+            if !availability.calculable || availability.best_pool.is_none() {
+                continue;
+            }
+
+            // Check if we need to calculate (every 30 seconds)
+            if !Self::should_calculate_price(token_mint, last_calculated).await {
+                continue;
+            }
+
+            let best_pool = availability.best_pool.as_ref().unwrap();
+
+            // Prepare pool data from shared accounts
+            let prepared_data = match
+                Self::prepare_pool_data_from_shared(
+                    &best_pool.pool_address,
+                    &best_pool.pool_program_id,
+                    &availability.reserve_accounts,
+                    shared_accounts
+                ).await
+            {
+                Ok(data) => data,
+                Err(e) => {
+                    log(
+                        LogTag::Pool,
+                        "CALCULATOR_PREPARE_ERROR",
+                        &format!("Failed to prepare data for {}: {}", &token_mint[..8], e)
+                    );
+                    continue;
+                }
+            };
+
+            // Get decoder and calculate price
+            if let Some(decoder) = decoder_factory.get_decoder(&best_pool.pool_program_id) {
+                match decoder.decode_pool_data(&prepared_data) {
+                    Ok(decoded_result) => {
+                        match
+                            Self::calculate_price_from_decoded_result(&decoded_result, token_mint)
+                        {
+                            Ok(Some(price_result)) => {
+                                // Store price in cache
+                                cache.cache_price(token_mint, price_result).await;
+                                calculated_count += 1;
+
+                                // Update last calculated time
+                                {
+                                    let mut last_calc = last_calculated.write().await;
+                                    last_calc.insert(token_mint.clone(), Utc::now());
+                                }
+
+                                log(
+                                    LogTag::Pool,
+                                    "CALCULATOR_PRICE_SUCCESS",
+                                    &format!("💰 Calculated price for token {}", &token_mint[..8])
+                                );
+                            }
+                            Ok(None) => {
+                                log(
+                                    LogTag::Pool,
+                                    "CALCULATOR_NO_PRICE",
+                                    &format!("No valid price for token {}", &token_mint[..8])
+                                );
+                            }
+                            Err(e) => {
+                                log(
+                                    LogTag::Pool,
+                                    "CALCULATOR_CALC_ERROR",
+                                    &format!(
+                                        "Price calculation error for {}: {}",
+                                        &token_mint[..8],
+                                        e
+                                    )
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Pool,
+                            "CALCULATOR_DECODE_ERROR",
+                            &format!("Pool decode error for {}: {}", &token_mint[..8], e)
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(calculated_count)
+    }
+
+    /// Check if we should calculate price for a token (time-based)
+    async fn should_calculate_price(
+        token_mint: &str,
+        last_calculated: &Arc<RwLock<HashMap<String, DateTime<Utc>>>>
+    ) -> bool {
+        let last_calc_map = last_calculated.read().await;
+        match last_calc_map.get(token_mint) {
+            Some(last_time) => {
+                let now = Utc::now();
+                let duration = now.signed_duration_since(*last_time);
+                duration.num_seconds() > 30 // Calculate every 30 seconds
+            }
+            None => true, // Never calculated
+        }
+    }
+
+    /// Prepare pool data from shared account store
+    async fn prepare_pool_data_from_shared(
         pool_address: &str,
         program_id: &str,
         reserve_addresses: &[String],
-        token_mint: &str
-    ) -> Result<Option<PriceResult>, String> {
-        // Get prepared pool data from service
-        let prepared_data = service.prepare_pool_data(
-            pool_address,
-            program_id,
-            reserve_addresses
-        ).await?;
+        shared_accounts: &Arc<RwLock<HashMap<String, SharedAccountData>>>
+    ) -> Result<PreparedPoolData, String> {
+        let accounts = shared_accounts.read().await;
 
-        // Get appropriate decoder
-        let decoder = self.decoder_factory
-            .get_decoder(program_id)
-            .ok_or_else(|| format!("No decoder found for program ID: {}", program_id))?;
+        // Get pool account data
+        let pool_account = accounts
+            .get(pool_address)
+            .ok_or_else(|| format!("Pool account data not available: {}", pool_address))?;
 
-        // Decode pool data
-        let decoded_result = decoder.decode_pool_data(&prepared_data)?;
+        if !pool_account.exists {
+            return Err(format!("Pool account does not exist: {}", pool_address));
+        }
 
-        // Calculate price from decoded result
-        self.calculate_price_from_decoded_result(&decoded_result, token_mint)
+        if pool_account.is_expired() {
+            return Err(format!("Pool account data expired: {}", pool_address));
+        }
+
+        let mut prepared_data = PreparedPoolData::new(
+            pool_address.to_string(),
+            program_id.to_string(),
+            pool_account.data.clone()
+        );
+
+        // Add reserve account data
+        for reserve_address in reserve_addresses {
+            if let Some(reserve_account) = accounts.get(reserve_address) {
+                if reserve_account.exists && !reserve_account.is_expired() {
+                    prepared_data.add_reserve_account(
+                        reserve_address.clone(),
+                        reserve_account.data.clone()
+                    );
+                }
+            }
+        }
+
+        Ok(prepared_data)
     }
 
-    /// Calculate price from PoolDecodedResult
+    /// Calculate price from decoded pool result
     fn calculate_price_from_decoded_result(
-        &self,
         decoded: &PoolDecodedResult,
         token_mint: &str
     ) -> Result<Option<PriceResult>, String> {
@@ -108,42 +321,29 @@ impl PoolCalculator {
         }
     }
 
-    /// Calculate price for a token from pool data
-    pub async fn calculate_price(
-        &self,
-        pool: &PoolInfo,
-        token: &str
-    ) -> Result<Option<PriceResult>, String> {
-        // Basic price calculation from pool reserves
-        if pool.token_reserve > 0.0 && pool.sol_reserve > 0.0 {
-            let price_sol = pool.sol_reserve / pool.token_reserve;
-
-            let result = PriceResult::new(
-                token.to_string(),
-                price_sol,
-                pool.sol_reserve,
-                pool.token_reserve,
-                pool.pool_address.clone(),
-                pool.program_id.clone()
-            );
-
-            Ok(Some(result))
-        } else {
-            Ok(None)
-        }
+    /// Check if calculator task is running
+    pub async fn is_running(&self) -> bool {
+        *self.is_running.read().await
     }
 
-    /// Calculate prices for multiple tokens
-    pub async fn batch_calculate(&self, pools: &[(PoolInfo, String)]) -> Vec<Option<PriceResult>> {
-        let mut results = Vec::new();
+    /// Get calculator statistics
+    pub async fn get_calculator_stats(&self) -> CalculatorStats {
+        let last_calc_map = self.last_calculated.read().await;
+        let total_calculated = last_calc_map.len();
+        let is_running = *self.is_running.read().await;
 
-        for (pool, token) in pools {
-            match self.calculate_price(pool, token).await {
-                Ok(result) => results.push(result),
-                Err(_) => results.push(None),
-            }
+        CalculatorStats {
+            total_calculated,
+            is_running,
+            updated_at: Utc::now(),
         }
-
-        results
     }
+}
+
+/// Calculator statistics
+#[derive(Debug, Clone)]
+pub struct CalculatorStats {
+    pub total_calculated: usize,
+    pub is_running: bool,
+    pub updated_at: DateTime<Utc>,
 }

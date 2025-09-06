@@ -5,7 +5,7 @@ use crate::pools::constants::RAYDIUM_CPMM_PROGRAM_ID;
 use crate::pools::decoders::PoolDecodedResult;
 
 /// Raydium CPMM pool decoder
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RaydiumCpmmDecoder {
     // No state needed for decoder
 }

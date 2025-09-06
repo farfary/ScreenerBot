@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use crate::logger::{ log, LogTag };
 
 /// Meteora DAMM v2 pool decoder
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MeteoraDammV2Decoder {
     // No state needed for decoder
 }

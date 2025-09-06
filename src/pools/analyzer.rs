@@ -3,7 +3,7 @@
 
 use crate::pools::types::{ PoolInfo, PriceResult };
 use crate::pools::tokens::PoolToken;
-use crate::pools::calculator::PoolCalculator;
+use crate::pools::decoders::DecoderFactory;
 use crate::pools::cache::PoolCache;
 use crate::pools::constants::{ MIN_POOL_LIQUIDITY_USD, SOL_MINT };
 use tokio::sync::RwLock;
@@ -80,7 +80,7 @@ impl TokenAvailability {
 
 /// Pool analyzer service
 pub struct PoolAnalyzer {
-    calculator: PoolCalculator,
+    decoder_factory: DecoderFactory,
     cache: Arc<PoolCache>,
     /// Token availability map: token_mint -> TokenAvailability
     availability: Arc<RwLock<HashMap<String, TokenAvailability>>>,
@@ -91,7 +91,7 @@ pub struct PoolAnalyzer {
 impl PoolAnalyzer {
     pub fn new(cache: Arc<PoolCache>) -> Self {
         Self {
-            calculator: PoolCalculator::new(),
+            decoder_factory: DecoderFactory::new(),
             cache,
             availability: Arc::new(RwLock::new(HashMap::new())),
             required_accounts: Arc::new(RwLock::new(Vec::new())),
@@ -204,29 +204,29 @@ impl PoolAnalyzer {
         // Find best pool (highest liquidity)
         let best_pool = self.select_best_pool(&calculable_pools)?;
 
-        // Extract reserve accounts
+        // Extract reserve accounts using decoders
         let reserve_accounts = self.extract_reserve_accounts(&best_pool).await?;
         availability.reserve_accounts = reserve_accounts;
 
-        // Test price calculation
-        match self.calculator.calculate_price(&best_pool, token_mint).await {
-            Ok(Some(_)) => {
-                log(
-                    LogTag::Pool,
-                    "ANALYZER_SUCCESS",
-                    &format!(
-                        "✅ Token {} analyzable via pool {}",
-                        &token_mint[..8],
-                        &best_pool.pool_address[..8]
-                    )
-                );
-                Ok(availability.with_best_pool(best_pool))
-            }
-            Ok(None) => {
-                Ok(availability.with_error("Price calculation returned None".to_string()))
-            }
-            Err(e) => { Ok(availability.with_error(format!("Price calculation failed: {}", e))) }
+        // Mark as calculable (price calculation will be done by calculator task)
+        log(
+            LogTag::Pool,
+            "ANALYZER_SUCCESS",
+            &format!(
+                "✅ Token {} analyzable via pool {}",
+                &token_mint[..8],
+                &best_pool.pool_address[..8]
+            )
+        );
+
+        // Store availability for this token
+        {
+            let mut avail_map = self.availability.write().await;
+            let final_availability = availability.clone().with_best_pool(best_pool.clone());
+            avail_map.insert(token_mint.to_string(), final_availability.clone());
         }
+
+        Ok(availability.with_best_pool(best_pool))
     }
 
     /// Validate if a pool can be used for price calculation
@@ -273,78 +273,125 @@ impl PoolAnalyzer {
         Ok(best_pool.clone())
     }
 
-    /// Extract reserve account addresses from pool
+    /// Extract reserve account addresses from pool using decoders
     async fn extract_reserve_accounts(&self, pool: &PoolInfo) -> Result<Vec<String>, String> {
         let mut accounts = Vec::new();
 
         // Add pool address itself
         accounts.push(pool.pool_address.clone());
 
-        // Extract vault addresses based on pool type/program
-        match pool.pool_program_id.as_str() {
-            crate::pools::constants::METEORA_DAMM_V2_PROGRAM_ID => {
-                // For Meteora DAMM v2, we need to decode the pool to get vault addresses
-                if
-                    let Some(vault_addresses) = self.extract_meteora_damm_v2_vaults(
-                        &pool.pool_address
-                    ).await?
-                {
-                    accounts.extend(vault_addresses);
-                }
+        // Use decoders to extract vault addresses based on pool type/program
+        if let Some(decoder) = self.decoder_factory.get_decoder(&pool.pool_program_id) {
+            if
+                let Some(vault_addresses) = self.extract_vault_addresses_using_decoder(
+                    &pool.pool_address,
+                    &pool.pool_program_id,
+                    decoder
+                ).await?
+            {
+                accounts.extend(vault_addresses);
             }
-            crate::pools::constants::RAYDIUM_CPMM_PROGRAM_ID => {
-                // TODO: Add Raydium CPMM vault extraction
-                log(LogTag::Pool, "ANALYZER_TODO", "TODO: Raydium CPMM vault extraction");
-            }
-            crate::pools::constants::RAYDIUM_LEGACY_AMM_PROGRAM_ID => {
-                // TODO: Add Raydium Legacy AMM vault extraction
-                log(LogTag::Pool, "ANALYZER_TODO", "TODO: Raydium Legacy AMM vault extraction");
-            }
-            _ => {
-                log(
-                    LogTag::Pool,
-                    "ANALYZER_UNSUPPORTED",
-                    &format!("Unsupported pool program: {}", pool.pool_program_id)
-                );
-            }
+        } else {
+            log(
+                LogTag::Pool,
+                "ANALYZER_NO_DECODER",
+                &format!("No decoder available for pool program: {}", pool.pool_program_id)
+            );
         }
 
         Ok(accounts)
     }
 
-    /// Extract Meteora DAMM v2 vault addresses from pool data
-    async fn extract_meteora_damm_v2_vaults(
+    /// Extract vault addresses using appropriate decoder
+    async fn extract_vault_addresses_using_decoder(
         &self,
-        pool_address: &str
+        pool_address: &str,
+        program_id: &str,
+        decoder: &crate::pools::decoders::PoolDecoder
     ) -> Result<Option<Vec<String>>, String> {
         // Get pool account data from cache if available
         if let Some(account_data) = self.cache.get_cached_account_data(pool_address).await {
-            if account_data.len() >= 200 {
-                // Light decode to extract vault addresses
-                let mut offset = 136;
+            // Create minimal prepared data for vault extraction
+            let prepared_data = crate::pools::service::PreparedPoolData::new(
+                pool_address.to_string(),
+                program_id.to_string(),
+                account_data.clone()
+            );
 
-                // Skip token mints (64 bytes)
-                offset += 64;
+            // Try to decode the pool to extract vault addresses
+            match decoder.decode_pool_data(&prepared_data) {
+                Ok(decoded_result) => {
+                    // Extract vault addresses from decoded result
+                    let mut vault_addresses = Vec::new();
 
-                // Read vault addresses
-                if
-                    let (Ok(vault_a), Ok(vault_b)) = (
-                        Self::read_pubkey_at_offset(&account_data, &mut offset),
-                        Self::read_pubkey_at_offset(&account_data, &mut offset),
-                    )
-                {
-                    return Ok(Some(vec![vault_a, vault_b]));
+                    // For most pool types, we need the token mint accounts and their associated vaults
+                    // The specific vault addresses depend on the pool type
+                    match program_id {
+                        crate::pools::constants::METEORA_DAMM_V2_PROGRAM_ID => {
+                            // For Meteora DAMM v2, extract vault addresses from the pool structure
+                            if
+                                let Ok(vaults) = self.extract_meteora_damm_v2_vaults_from_data(
+                                    &account_data
+                                )
+                            {
+                                vault_addresses.extend(vaults);
+                            }
+                        }
+                        _ => {
+                            // For other pool types, we can add specific extraction logic
+                            log(
+                                LogTag::Pool,
+                                "ANALYZER_VAULT_GENERIC",
+                                &format!("Using generic vault extraction for {}", program_id)
+                            );
+                        }
+                    }
+
+                    Ok(Some(vault_addresses))
                 }
+                Err(e) => {
+                    log(
+                        LogTag::Pool,
+                        "ANALYZER_DECODE_ERROR",
+                        &format!("Failed to decode pool for vault extraction: {}", e)
+                    );
+                    Ok(None)
+                }
+            }
+        } else {
+            log(
+                LogTag::Pool,
+                "ANALYZER_NO_DATA",
+                &format!("No pool account data available for {}", &pool_address[..8])
+            );
+            Ok(None)
+        }
+    }
+
+    /// Extract Meteora DAMM v2 vault addresses from pool data (direct parsing)
+    fn extract_meteora_damm_v2_vaults_from_data(
+        &self,
+        account_data: &[u8]
+    ) -> Result<Vec<String>, String> {
+        if account_data.len() >= 200 {
+            // Light decode to extract vault addresses
+            let mut offset = 136;
+
+            // Skip token mints (64 bytes)
+            offset += 64;
+
+            // Read vault addresses
+            if
+                let (Ok(vault_a), Ok(vault_b)) = (
+                    Self::read_pubkey_at_offset(account_data, &mut offset),
+                    Self::read_pubkey_at_offset(account_data, &mut offset),
+                )
+            {
+                return Ok(vec![vault_a, vault_b]);
             }
         }
 
-        // If we can't extract vault addresses, that's ok - the fetcher will fetch just the pool address
-        log(
-            LogTag::Pool,
-            "ANALYZER_VAULT_SKIP",
-            &format!("Could not extract vault addresses for pool {}", &pool_address[..8])
-        );
-        Ok(None)
+        Err("Could not extract vault addresses from pool data".to_string())
     }
 
     /// Helper function to read pubkey at offset (lightweight version)

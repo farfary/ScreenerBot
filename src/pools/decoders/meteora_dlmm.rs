@@ -5,7 +5,7 @@ use crate::pools::constants::METEORA_DLMM_PROGRAM_ID;
 use crate::pools::decoders::PoolDecodedResult;
 
 /// Meteora DLMM pool decoder
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MeteoraDlmmDecoder {
     // No state needed for decoder
 }

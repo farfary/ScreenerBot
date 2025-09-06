@@ -138,7 +138,7 @@ impl PoolDecodedResult {
 }
 
 /// Pool decoder enum for different pool types
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PoolDecoder {
     RaydiumCpmm(raydium_cpmm::RaydiumCpmmDecoder),
     RaydiumLegacyAmm(raydium_legacy_amm::RaydiumLegacyAmmDecoder),
@@ -181,6 +181,7 @@ impl PoolDecoder {
 }
 
 /// Pool decoder factory
+#[derive(Clone)]
 pub struct DecoderFactory {
     decoders: Vec<PoolDecoder>,
 }

@@ -5,7 +5,7 @@ use crate::pools::constants::RAYDIUM_LEGACY_AMM_PROGRAM_ID;
 use crate::pools::decoders::PoolDecodedResult;
 
 /// Raydium Legacy AMM pool decoder
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RaydiumLegacyAmmDecoder {
     // No state needed for decoder
 }

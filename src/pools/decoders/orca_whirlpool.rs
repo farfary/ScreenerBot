@@ -5,7 +5,7 @@ use crate::pools::constants::ORCA_WHIRLPOOL_PROGRAM_ID;
 use crate::pools::decoders::PoolDecodedResult;
 
 /// Orca Whirlpool pool decoder
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OrcaWhirlpoolDecoder {
     // No state needed for decoder
 }

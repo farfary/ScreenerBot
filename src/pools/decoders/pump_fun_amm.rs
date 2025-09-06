@@ -5,7 +5,7 @@ use crate::pools::constants::PUMP_FUN_AMM_PROGRAM_ID;
 use crate::pools::decoders::PoolDecodedResult;
 
 /// Pump.fun AMM pool decoder
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PumpFunAmmDecoder {
     // No state needed for decoder
 }

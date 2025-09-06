@@ -1,7 +1,8 @@
 /// Main pool service
 /// Orchestrates pool discovery, calculation, caching, token management, analysis, and account fetching
 
-use crate::pools::{ PoolDiscovery, PoolCalculator, PoolAnalyzer, PoolFetcher };
+use crate::pools::{ PoolDiscovery, PoolAnalyzer, PoolFetcher };
+use crate::pools::calculator::{ PoolCalculatorTask, CalculatorStats };
 use crate::pools::types::{ PriceResult, PoolStats };
 use crate::pools::cache::PoolCache;
 use crate::pools::tokens::{ PoolTokenManager, PoolToken };
@@ -86,7 +87,7 @@ impl PreparedPoolData {
 /// Main pool service
 pub struct PoolService {
     discovery: PoolDiscovery,
-    calculator: PoolCalculator,
+    calculator_task: PoolCalculatorTask,
     analyzer: PoolAnalyzer,
     fetcher: PoolFetcher,
     cache: Arc<PoolCache>,
@@ -96,6 +97,8 @@ pub struct PoolService {
     /// Shared account data store (thread-safe, read-write access)
     /// Only written by fetcher, read by calculator and others
     shared_accounts: Arc<RwLock<HashMap<String, SharedAccountData>>>,
+    /// Calculable tokens store for calculator task
+    calculable_tokens: Arc<RwLock<HashMap<String, TokenAvailability>>>,
 }
 
 impl PoolService {
@@ -104,10 +107,11 @@ impl PoolService {
         let discovery = PoolDiscovery::new(cache.clone());
         let analyzer = PoolAnalyzer::new(cache.clone());
         let fetcher = PoolFetcher::new(cache.clone());
+        let calculator_task = PoolCalculatorTask::new(cache.clone());
 
         Self {
             discovery,
-            calculator: PoolCalculator::new(),
+            calculator_task,
             analyzer,
             fetcher,
             cache,
@@ -115,6 +119,7 @@ impl PoolService {
             tokens: Arc::new(RwLock::new(Vec::new())),
             token_task_running: Arc::new(RwLock::new(false)),
             shared_accounts: Arc::new(RwLock::new(HashMap::new())),
+            calculable_tokens: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -128,6 +133,12 @@ impl PoolService {
         // Start continuous discovery task
         self.discovery.start_discovery_task().await;
 
+        // Start calculator task
+        self.calculator_task.start_task(
+            self.shared_accounts.clone(),
+            self.calculable_tokens.clone()
+        ).await;
+
         log(LogTag::Pool, "SERVICE_READY", "✅ Pool Service ready");
     }
 
@@ -140,11 +151,14 @@ impl PoolService {
 
         // Stop discovery task
         self.discovery.stop_discovery_task().await;
+
+        // Stop calculator task
+        self.calculator_task.stop_task().await;
     }
 
     /// Get price for a token
     pub async fn get_price(&self, token_address: &str) -> Option<PriceResult> {
-        // 1. Check price cache first
+        // Check price cache (calculator task automatically updates prices)
         if let Some(cached_price) = self.cache.get_cached_price(token_address).await {
             log(
                 LogTag::Pool,
@@ -154,65 +168,11 @@ impl PoolService {
             return Some(cached_price);
         }
 
-        // 2. Check if we have pools cached
-        if let Some(pools) = self.cache.get_cached_pools(token_address).await {
-            if !pools.is_empty() {
-                // 3. Calculate price from best pool
-                let best_pool = pools
-                    .into_iter()
-                    .max_by(|a, b|
-                        a.liquidity_usd
-                            .partial_cmp(&b.liquidity_usd)
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    );
-
-                if let Some(pool) = best_pool {
-                    match self.calculator.calculate_price(&pool, token_address).await {
-                        Ok(Some(price_result)) => {
-                            // 4. Cache the result
-                            self.cache.cache_price(token_address, price_result.clone()).await;
-
-                            // 5. Add to price history
-                            self.cache.add_price_to_history(
-                                token_address,
-                                price_result.price_sol
-                            ).await;
-
-                            log(
-                                LogTag::Pool,
-                                "PRICE_CALCULATED",
-                                &format!("💰 Calculated price for {}", &token_address[..8])
-                            );
-                            return Some(price_result);
-                        }
-                        Ok(None) => {
-                            log(
-                                LogTag::Pool,
-                                "PRICE_CALC_NONE",
-                                &format!("❌ No price calculated for {}", &token_address[..8])
-                            );
-                        }
-                        Err(e) => {
-                            log(
-                                LogTag::Pool,
-                                "PRICE_CALC_ERROR",
-                                &format!(
-                                    "❌ Price calculation error for {}: {}",
-                                    &token_address[..8],
-                                    e
-                                )
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        // 5. If no pools cached, discovery task will handle it in background
+        // If no cached price, the calculator task will handle calculation when pool data is ready
         log(
             LogTag::Pool,
             "PRICE_NOT_AVAILABLE",
-            &format!("❌ No price available for {} (discovery in progress)", &token_address[..8])
+            &format!("❌ No price available for {} (calculation in progress)", &token_address[..8])
         );
         None
     }
@@ -442,12 +402,46 @@ impl PoolService {
     /// Analyze all tokens for calculability and pool availability
     pub async fn analyze_all_tokens(&self) -> Result<(), String> {
         let tokens = self.get_tokens().await;
-        self.analyzer.analyze_all_tokens(&tokens).await
+        self.analyzer.analyze_all_tokens(&tokens).await?;
+
+        // Update calculable tokens store for calculator task
+        self.update_calculable_tokens_store().await?;
+
+        Ok(())
     }
 
     /// Analyze a specific token
     pub async fn analyze_token(&self, token_mint: &str) -> Result<(), String> {
-        self.analyzer.re_analyze_token(token_mint).await
+        self.analyzer.re_analyze_token(token_mint).await?;
+
+        // Update calculable tokens store for calculator task
+        self.update_calculable_tokens_store().await?;
+
+        Ok(())
+    }
+
+    /// Update calculable tokens store from analyzer results
+    async fn update_calculable_tokens_store(&self) -> Result<(), String> {
+        let calculable_token_mints = self.analyzer.get_calculable_tokens().await;
+        let mut calculable_map = self.calculable_tokens.write().await;
+
+        // Clear existing data
+        calculable_map.clear();
+
+        // Add all calculable tokens
+        for token_mint in calculable_token_mints {
+            if let Some(availability) = self.analyzer.get_token_availability(&token_mint).await {
+                calculable_map.insert(token_mint, availability);
+            }
+        }
+
+        log(
+            LogTag::Pool,
+            "CALCULABLE_TOKENS_UPDATED",
+            &format!("📊 Updated calculable tokens store: {} tokens", calculable_map.len())
+        );
+
+        Ok(())
     }
 
     /// Get token availability information
@@ -486,6 +480,9 @@ impl PoolService {
 
         self.analyzer.analyze_all_tokens(&tokens).await?;
 
+        // Update calculable tokens store for calculator task
+        self.update_calculable_tokens_store().await?;
+
         let stats = self.get_analysis_stats().await;
         log(
             LogTag::Pool,
@@ -500,6 +497,20 @@ impl PoolService {
         );
 
         Ok(())
+    }
+
+    // =============================================================================
+    // CALCULATOR METHODS
+    // =============================================================================
+
+    /// Get calculator statistics
+    pub async fn get_calculator_stats(&self) -> CalculatorStats {
+        self.calculator_task.get_calculator_stats().await
+    }
+
+    /// Check if calculator task is running
+    pub async fn is_calculator_running(&self) -> bool {
+        self.calculator_task.is_running().await
     }
 
     // =============================================================================
