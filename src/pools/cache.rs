@@ -8,6 +8,7 @@ use chrono::{ DateTime, Utc };
 use crate::pools::discovery::PoolInfo;
 use crate::pools::types::PriceResult;
 use crate::pools::tokens::PoolToken;
+use crate::pools::constants::MAX_PRICE_HISTORY_POINTS;
 use crate::pools::constants::*;
 
 /// Cached pool data with metadata
@@ -264,8 +265,8 @@ impl PoolCache {
         // Add new price point
         history.push((Utc::now(), price_sol));
 
-        // Keep only last 500 points for memory efficiency
-        if history.len() > 500 {
+        // Keep only last MAX_PRICE_HISTORY_POINTS for memory efficiency
+        if history.len() > MAX_PRICE_HISTORY_POINTS {
             history.remove(0);
         }
     }

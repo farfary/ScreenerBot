@@ -2,6 +2,7 @@
 /// Simple, SOL-focused structures without complexity
 
 use chrono::{ DateTime, Utc };
+use crate::pools::constants::{ DEFAULT_CONFIDENCE, MIN_CONFIDENCE_THRESHOLD, LIQUIDITY_MULTIPLIER };
 
 /// Price result with SOL focus and pool information
 #[derive(Debug, Clone)]
@@ -47,7 +48,7 @@ impl PriceResult {
             pool_address,
             program_id,
             available: true,
-            confidence: 1.0,
+            confidence: DEFAULT_CONFIDENCE,
             updated_at: Utc::now(),
         }
     }
@@ -70,12 +71,12 @@ impl PriceResult {
 
     /// Check if price is valid and available
     pub fn is_valid(&self) -> bool {
-        self.available && self.price_sol > 0.0 && self.confidence > 0.5
+        self.available && self.price_sol > 0.0 && self.confidence > MIN_CONFIDENCE_THRESHOLD
     }
 
     /// Get liquidity in SOL (total SOL reserves * 2 for estimation)
     pub fn liquidity_sol(&self) -> f64 {
-        self.sol_reserves * 2.0
+        self.sol_reserves * LIQUIDITY_MULTIPLIER
     }
 
     /// Set USD price (for display/sorting purposes only, not trading)

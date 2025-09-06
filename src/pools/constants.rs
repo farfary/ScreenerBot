@@ -5,9 +5,24 @@
 pub const POOL_CACHE_TTL_SECONDS: i64 = 600; // 10 minutes
 pub const PRICE_CACHE_TTL_SECONDS: i64 = 240; // 4 minutes
 
+// Price history settings
+pub const MAX_PRICE_HISTORY_POINTS: usize = 500; // Memory efficiency limit
+
 // Batch processing configuration
 pub const MAX_TOKENS_PER_BATCH: usize = 30;
 pub const WATCHLIST_BATCH_SIZE: usize = 150;
+pub const DISCOVERY_BATCH_SIZE: usize = 10;
+pub const INITIAL_TOKEN_LOAD_COUNT: usize = 100;
+
+// Discovery timing
+pub const DISCOVERY_CYCLE_DELAY_SECS: u64 = 5;
+pub const DISCOVERY_BATCH_DELAY_MS: u64 = 200;
+pub const DEXSCREENER_REQUEST_DELAY_MS: u64 = 500;
+
+// Price validation thresholds
+pub const MIN_CONFIDENCE_THRESHOLD: f64 = 0.5;
+pub const DEFAULT_CONFIDENCE: f64 = 1.0;
+pub const LIQUIDITY_MULTIPLIER: f64 = 2.0; // SOL reserves * 2 for total liquidity estimation
 
 // SOL mint address
 pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";

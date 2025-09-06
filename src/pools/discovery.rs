@@ -7,6 +7,13 @@ use tokio::time::{ sleep, Duration };
 use tokio::sync::RwLock;
 use crate::pools::cache::PoolCache;
 use crate::pools::tokens::PoolTokenManager;
+use crate::pools::constants::{
+    INITIAL_TOKEN_LOAD_COUNT,
+    DISCOVERY_BATCH_SIZE,
+    DISCOVERY_BATCH_DELAY_MS,
+    DISCOVERY_CYCLE_DELAY_SECS,
+    DEXSCREENER_REQUEST_DELAY_MS,
+};
 use crate::logger::{ log, LogTag };
 
 /// Pool discovery result
@@ -103,8 +110,7 @@ impl PoolDiscovery {
                     );
 
                     // Process tokens in batches to avoid overwhelming APIs
-                    let batch_size = 10;
-                    for chunk in tokens_without_pools.chunks(batch_size) {
+                    for chunk in tokens_without_pools.chunks(DISCOVERY_BATCH_SIZE) {
                         for token_mint in chunk {
                             // Check if already being processed
                             if cache.mark_in_progress(token_mint).await {
@@ -157,7 +163,7 @@ impl PoolDiscovery {
                         }
 
                         // Small delay between tokens to respect rate limits
-                        sleep(Duration::from_millis(200)).await;
+                        sleep(Duration::from_millis(DISCOVERY_BATCH_DELAY_MS)).await;
                     }
                 }
 
@@ -177,8 +183,8 @@ impl PoolDiscovery {
                     );
                 }
 
-                // Wait before next cycle (5 seconds)
-                sleep(Duration::from_secs(5)).await;
+                // Wait before next cycle
+                sleep(Duration::from_secs(DISCOVERY_CYCLE_DELAY_SECS)).await;
             }
         });
     }
@@ -218,7 +224,7 @@ impl PoolDiscovery {
         }
 
         // Small delay between API calls
-        sleep(Duration::from_millis(500)).await;
+        sleep(Duration::from_millis(DEXSCREENER_REQUEST_DELAY_MS)).await;
 
         // 2. Try GeckoTerminal API
         match Self::discover_pools_geckoterminal(token_mint).await {
