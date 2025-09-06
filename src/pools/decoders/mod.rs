@@ -1,47 +1,70 @@
 /// Pool decoders for different DEX protocols
 
-pub mod raydium;
-pub mod meteora;
-pub mod orca;
-pub mod pumpfun;
+// Raydium decoders
 
-use crate::pools::discovery::PoolInfo;
+pub mod raydium_cpmm;
+pub mod raydium_legacy_amm;
+pub mod raydium_clmm;
+
+// Meteora decoders
+pub mod meteora_damm_v2;
+pub mod meteora_dlmm;
+
+// Orca decoders
+pub mod orca_whirlpool;
+
+// Pump.fun decoders
+pub mod pump_fun_amm;
+
+use crate::pools::types::PoolDecodedResult;
 
 /// Pool decoder enum for different pool types
 #[derive(Debug)]
 pub enum PoolDecoder {
-    Raydium(raydium::RaydiumDecoder),
-    Meteora(meteora::MeteoraDecoder),
-    Orca(orca::OrcaDecoder),
-    Pumpfun(pumpfun::PumpfunDecoder),
+    RaydiumCpmm(raydium_cpmm::RaydiumCpmmDecoder),
+    RaydiumLegacyAmm(raydium_legacy_amm::RaydiumLegacyAmmDecoder),
+    RaydiumClmm(raydium_clmm::RaydiumClmmDecoder),
+    MeteoraDammV2(meteora_damm_v2::MeteoraDammV2Decoder),
+    MeteoraDlmm(meteora_dlmm::MeteoraDlmmDecoder),
+    OrcaWhirlpool(orca_whirlpool::OrcaWhirlpoolDecoder),
+    PumpFunAmm(pump_fun_amm::PumpFunAmmDecoder),
 }
 
 impl PoolDecoder {
     /// Check if this decoder can handle the given program ID
     pub fn can_decode(&self, program_id: &str) -> bool {
         match self {
-            PoolDecoder::Raydium(decoder) => decoder.can_decode(program_id),
-            PoolDecoder::Meteora(decoder) => decoder.can_decode(program_id),
-            PoolDecoder::Orca(decoder) => decoder.can_decode(program_id),
-            PoolDecoder::Pumpfun(decoder) => decoder.can_decode(program_id),
+            PoolDecoder::RaydiumCpmm(decoder) => decoder.can_decode(program_id),
+            PoolDecoder::RaydiumLegacyAmm(decoder) => decoder.can_decode(program_id),
+            PoolDecoder::RaydiumClmm(decoder) => decoder.can_decode(program_id),
+            PoolDecoder::MeteoraDammV2(decoder) => decoder.can_decode(program_id),
+            PoolDecoder::MeteoraDlmm(decoder) => decoder.can_decode(program_id),
+            PoolDecoder::OrcaWhirlpool(decoder) => decoder.can_decode(program_id),
+            PoolDecoder::PumpFunAmm(decoder) => decoder.can_decode(program_id),
         }
     }
 
-    /// Decode pool data and calculate price
-    pub async fn decode_and_calculate(
+    /// Decode pool data from account data
+    pub fn decode_pool_data(
         &self,
         pool_address: &str,
-        token_mint: &str
-    ) -> Result<Option<f64>, String> {
+        account_data: &[u8]
+    ) -> Result<PoolDecodedResult, String> {
         match self {
-            PoolDecoder::Raydium(decoder) =>
-                decoder.decode_and_calculate(pool_address, token_mint).await,
-            PoolDecoder::Meteora(decoder) =>
-                decoder.decode_and_calculate(pool_address, token_mint).await,
-            PoolDecoder::Orca(decoder) =>
-                decoder.decode_and_calculate(pool_address, token_mint).await,
-            PoolDecoder::Pumpfun(decoder) =>
-                decoder.decode_and_calculate(pool_address, token_mint).await,
+            PoolDecoder::RaydiumCpmm(decoder) =>
+                decoder.decode_pool_data(pool_address, account_data),
+            PoolDecoder::RaydiumLegacyAmm(decoder) =>
+                decoder.decode_pool_data(pool_address, account_data),
+            PoolDecoder::RaydiumClmm(decoder) =>
+                decoder.decode_pool_data(pool_address, account_data),
+            PoolDecoder::MeteoraDammV2(decoder) =>
+                decoder.decode_pool_data(pool_address, account_data),
+            PoolDecoder::MeteoraDlmm(decoder) =>
+                decoder.decode_pool_data(pool_address, account_data),
+            PoolDecoder::OrcaWhirlpool(decoder) =>
+                decoder.decode_pool_data(pool_address, account_data),
+            PoolDecoder::PumpFunAmm(decoder) =>
+                decoder.decode_pool_data(pool_address, account_data),
         }
     }
 }
@@ -55,10 +78,13 @@ impl DecoderFactory {
     pub fn new() -> Self {
         Self {
             decoders: vec![
-                PoolDecoder::Raydium(raydium::RaydiumDecoder::new()),
-                PoolDecoder::Meteora(meteora::MeteoraDecoder::new()),
-                PoolDecoder::Orca(orca::OrcaDecoder::new()),
-                PoolDecoder::Pumpfun(pumpfun::PumpfunDecoder::new())
+                PoolDecoder::RaydiumCpmm(raydium_cpmm::RaydiumCpmmDecoder::new()),
+                PoolDecoder::RaydiumLegacyAmm(raydium_legacy_amm::RaydiumLegacyAmmDecoder::new()),
+                PoolDecoder::RaydiumClmm(raydium_clmm::RaydiumClmmDecoder::new()),
+                PoolDecoder::MeteoraDammV2(meteora_damm_v2::MeteoraDammV2Decoder::new()),
+                PoolDecoder::MeteoraDlmm(meteora_dlmm::MeteoraDlmmDecoder::new()),
+                PoolDecoder::OrcaWhirlpool(orca_whirlpool::OrcaWhirlpoolDecoder::new()),
+                PoolDecoder::PumpFunAmm(pump_fun_amm::PumpFunAmmDecoder::new())
             ],
         }
     }

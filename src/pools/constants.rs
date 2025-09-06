@@ -19,6 +19,26 @@ pub const DISCOVERY_CYCLE_DELAY_SECS: u64 = 5;
 pub const DISCOVERY_BATCH_DELAY_MS: u64 = 200;
 pub const DEXSCREENER_REQUEST_DELAY_MS: u64 = 500;
 
+// Watchlist and priority management
+pub const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 3;
+pub const WATCHLIST_UPDATE_INTERVAL_SECS: u64 = 1;
+pub const MAX_WATCHLIST_SIZE: usize = 100;
+pub const WATCHLIST_EXPIRY_HOURS: i64 = 24;
+pub const MAX_CONSECUTIVE_FAILURES: u32 = 5;
+pub const WATCHLIST_CLEANUP_INTERVAL_SECS: u64 = 300; // 5 minutes
+
+// Ad-hoc warming configuration
+pub const ADHOC_BATCH_SIZE: usize = 300;
+pub const ADHOC_UPDATE_INTERVAL_SECS: u64 = 1;
+
+// RPC configuration
+pub const RPC_MULTIPLE_ACCOUNTS_BATCH_SIZE: usize = 20;
+
+// Pool price history settings
+pub const POOL_PRICE_HISTORY_MAX_AGE_HOURS: i64 = 24; // Keep 24 hours of history
+pub const POOL_PRICE_HISTORY_MAX_ENTRIES: usize = 1000; // Max entries per pool cache
+pub const POOL_PRICE_HISTORY_SAVE_INTERVAL_SECONDS: u64 = 30;
+
 // Price validation thresholds
 pub const MIN_CONFIDENCE_THRESHOLD: f64 = 0.5;
 pub const DEFAULT_CONFIDENCE: f64 = 1.0;
@@ -38,3 +58,17 @@ pub const PUMP_FUN_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52
 
 // Minimum liquidity requirement
 pub const MIN_POOL_LIQUIDITY_USD: f64 = 10.0;
+
+/// Get display name for pool program ID
+pub fn get_pool_program_display_name(program_id: &str) -> &'static str {
+    match program_id {
+        RAYDIUM_CPMM_PROGRAM_ID => "Raydium CPMM",
+        RAYDIUM_LEGACY_AMM_PROGRAM_ID => "Raydium Legacy AMM",
+        RAYDIUM_CLMM_PROGRAM_ID => "Raydium CLMM",
+        METEORA_DAMM_V2_PROGRAM_ID => "Meteora DAMM v2",
+        METEORA_DLMM_PROGRAM_ID => "Meteora DLMM",
+        ORCA_WHIRLPOOL_PROGRAM_ID => "Orca Whirlpool",
+        PUMP_FUN_AMM_PROGRAM_ID => "Pump.fun AMM",
+        _ => "Unknown Pool",
+    }
+}
