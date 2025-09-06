@@ -4,6 +4,7 @@
 /// Each decoder knows how to parse the account data for its specific pool format.
 
 pub mod raydium_cpmm;
+pub mod raydium_clmm;
 pub mod pumpfun_amm;
 pub mod raydium_legacy_amm;
 pub mod meteora_dlmm;
@@ -37,6 +38,8 @@ pub fn decode_pool(
         ProgramKind::RaydiumCpmm => {
             raydium_cpmm::RaydiumCpmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint)
         }
+        ProgramKind::RaydiumClmm =>
+            raydium_clmm::RaydiumClmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
         ProgramKind::PumpFun =>
             pumpfun_amm::PumpFunAmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
         ProgramKind::RaydiumLegacyAmm =>

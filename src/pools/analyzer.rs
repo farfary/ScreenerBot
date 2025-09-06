@@ -403,11 +403,46 @@ impl PoolAnalyzer {
         pool_id: &Pubkey,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        _rpc_client: &RpcClient
+        rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
+        // For CLMM pools, we need:
+        // - Pool account itself
+        // - Token vaults (extracted from pool data)
+
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                &format!("Extracting CLMM accounts for pool {}", pool_id)
+            );
+        }
+
         let mut accounts = vec![*pool_id];
+
+        // Fetch pool account to extract vault addresses
+        if let Ok(pool_account) = rpc_client.get_account(pool_id).await {
+            if let Some(vault_addresses) = Self::extract_clmm_vault_addresses(&pool_account.data) {
+                let vault_count = vault_addresses.len();
+                for vault_str in vault_addresses {
+                    if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
+                        accounts.push(vault_pubkey);
+                    }
+                }
+
+                if is_debug_pool_service_enabled() {
+                    log(
+                        LogTag::PoolService,
+                        "INFO",
+                        &format!("CLMM pool {} extracted {} vault accounts", pool_id, vault_count)
+                    );
+                }
+            }
+        }
+
+        // Always include the mints
         accounts.push(*base_mint);
         accounts.push(*quote_mint);
+
         Some(accounts)
     }
 
@@ -669,6 +704,26 @@ impl PoolAnalyzer {
         let token_b_vault = Self::extract_pubkey_at_offset(data, 264)?; // token_b_vault at offset 264 (corrected)
 
         Some(vec![token_a_vault, token_b_vault])
+    }
+
+    /// Extract vault addresses from CLMM pool account data
+    fn extract_clmm_vault_addresses(data: &[u8]) -> Option<Vec<String>> {
+        if data.len() < 800 {
+            return None;
+        }
+
+        // Based on Raydium CLMM PoolState struct layout
+        // Skip discriminator (8 bytes), bump (1 byte), amm_config (32 bytes), owner (32 bytes)
+        let base_offset = 8 + 1 + 32 + 32;
+
+        // Skip token_mint_0 (32 bytes) and token_mint_1 (32 bytes)
+        let vault_offset = base_offset + 32 + 32;
+
+        // Extract vault pubkeys at calculated offsets
+        let token_vault_0 = Self::extract_pubkey_at_offset(data, vault_offset)?; // token_vault_0
+        let token_vault_1 = Self::extract_pubkey_at_offset(data, vault_offset + 32)?; // token_vault_1
+
+        Some(vec![token_vault_0, token_vault_1])
     }
 
     /// Helper function to extract pubkey at fixed offset (for analyzer use)
