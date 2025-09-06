@@ -1,49 +1,73 @@
-/// Raydium CPMM (Constant Product Market Maker) pool decoder
-/// Handles Raydium CPMM pools
-
-use crate::pools::constants::RAYDIUM_CPMM_PROGRAM_ID;
-use crate::pools::decoders::PoolDecodedResult;
-use crate::tokens::decimals::get_cached_decimals;
-use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
-use std::collections::HashMap;
-use crate::logger::{ log, LogTag };
-
 /// Raydium CPMM pool decoder
-#[derive(Debug, Clone)]
-pub struct RaydiumCpmmDecoder {
-    // No state needed for decoder
-}
+///
+/// This module handles decoding Raydium Constant Product Market Maker pools.
+/// It extracts reserve data and calculates token prices.
 
-impl RaydiumCpmmDecoder {
-    pub fn new() -> Self {
-        Self {}
+use super::{ PoolDecoder, AccountData };
+use crate::global::is_debug_pool_calculator_enabled;
+use crate::logger::{ log, LogTag };
+use crate::pools::types::{ ProgramKind, PriceResult };
+use std::collections::HashMap;
+
+/// Raydium CPMM decoder implementation
+pub struct RaydiumCpmmDecoder;
+
+impl PoolDecoder for RaydiumCpmmDecoder {
+    fn supported_programs() -> Vec<ProgramKind> {
+        vec![ProgramKind::RaydiumCpmm]
     }
 
-    pub fn can_decode(&self, program_id: &str) -> bool {
-        program_id == RAYDIUM_CPMM_PROGRAM_ID
-    }
-
-    /// Extract vault addresses from pool account data
-    pub fn extract_vault_addresses(&self, pool_data: &[u8]) -> Result<Vec<String>, String> {
-        if pool_data.len() < 200 {
-            return Err("Insufficient pool data length".to_string());
+    fn decode_and_calculate(
+        accounts: &HashMap<String, AccountData>,
+        base_mint: &str,
+        quote_mint: &str
+    ) -> Option<PriceResult> {
+        if is_debug_pool_calculator_enabled() {
+            log(
+                LogTag::PoolCalculator,
+                "DEBUG",
+                &format!("Decoding Raydium CPMM pool for {}/{}", base_mint, quote_mint)
+            );
         }
 
-        // TODO: Implement Raydium CPMM vault extraction
-        // This is a placeholder - need to implement based on Raydium CPMM structure
-        Ok(Vec::new())
+        // TODO: Implement actual Raydium CPMM decoding logic
+        // This would involve:
+        // 1. Finding the correct pool account in the accounts map
+        // 2. Parsing the pool state structure
+        // 3. Extracting reserve amounts for base and quote tokens
+        // 4. Calculating price based on reserves
+        // 5. Getting token decimals for proper scaling
+        // 6. Creating PriceResult with calculated values
+
+        // For now, return None as placeholder
+        None
+    }
+}
+
+/// Raydium CPMM pool state structure (simplified)
+#[repr(C)]
+#[derive(Debug)]
+pub struct RaydiumCpmmPoolState {
+    // TODO: Define the actual pool state structure
+    // This would be based on the Raydium CPMM program's account layout
+    pub discriminator: [u8; 8],
+    pub base_reserve: u64,
+    pub quote_reserve: u64,
+    // ... other fields as needed
+}
+
+impl RaydiumCpmmPoolState {
+    /// Parse pool state from raw account data
+    pub fn from_bytes(data: &[u8]) -> Option<Self> {
+        // TODO: Implement safe parsing of pool state from bytes
+        // This would use borsh or similar for deserialization
+        None
     }
 
-    pub async fn decode_pool_data(
-        &self,
-        pool_data: &[u8],
-        reserve_accounts_data: &HashMap<String, Vec<u8>>
-    ) -> Result<PoolDecodedResult, String> {
-        log(LogTag::Pool, "RAYDIUM_CPMM_DECODE", "🔍 Decoding Raydium CPMM pool");
-
-        // TODO: Implement Raydium CPMM decoding
-        // This is a placeholder implementation
-        Err("Raydium CPMM decoding not yet implemented".to_string())
+    /// Calculate price based on reserves
+    pub fn calculate_price(&self, base_decimals: u8, quote_decimals: u8) -> Option<f64> {
+        // TODO: Implement price calculation logic
+        // price = (quote_reserve / 10^quote_decimals) / (base_reserve / 10^base_decimals)
+        None
     }
 }

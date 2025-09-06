@@ -4868,6 +4868,7 @@ dependencies = [
  "crossterm 0.29.0",
  "csv",
  "ctrlc",
+ "dashmap",
  "dirs",
  "dotenv",
  "ed25519-dalek 2.2.0",

@@ -144,6 +144,7 @@ parking_lot = "0.12"
 regex = "1.10"
 rayon = "1.7"
 lazy_static = "1.4"
+dashmap = "5.5"
 
 # File and data processing
 csv = "1.3.1"

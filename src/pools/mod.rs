@@ -1,29 +1,52 @@
-/// Pool system - SOL-focused pricing with simplified architecture
+/// New modular pool system for real-time price calculations
+///
+/// This module provides a centralized pool service that watches up to 100+ tokens
+/// and provides real-time prices derived from various DEX pools (Raydium, Orca, etc.).
+///
+/// PUBLIC API (only these functions are exposed):
+/// - start_pool_service() -> Initialize the pool service
+/// - get_pool_price(mint) -> Get current price for a token
+/// - get_available_tokens() -> Get list of tokens with available prices
+/// - get_price_history(mint) -> Get price history for a token
 
-pub mod analyzer;
-pub mod cache;
-pub mod calculator;
-pub mod constants;
-pub mod decoders;
-pub mod discovery;
-pub mod fetcher;
-pub mod service;
-pub mod tokens;
-pub mod types;
+use std::sync::Arc;
+use tokio::sync::Notify;
 
-// Export main types and services
-pub use analyzer::{ PoolAnalyzer, TokenAvailability, AnalysisStats };
-pub use cache::PoolCache;
-pub use calculator::{ PoolCalculatorTask, CalculatorStats };
-pub use constants::*; // Export all constants for use by other modules
-pub use discovery::{ PoolDiscovery };
-pub use fetcher::{ PoolFetcher, FetcherStats };
-pub use service::{
-    get_pool_service,
-    init_pool_service,
-    start_pool_service,
-    stop_pool_service,
-    PoolService,
-};
-pub use tokens::PoolToken;
-pub use types::{ PriceResult, PoolStats };
+mod service;
+pub mod types; // Make types public
+mod cache;
+mod api;
+
+// Re-export only the public API
+pub use api::{ get_pool_price, get_available_tokens, get_price_history };
+pub use service::{ start_pool_service, stop_pool_service, is_pool_service_running };
+pub use types::{ PriceResult, PoolError };
+
+// For backwards compatibility
+pub use api::get_pool_price as get_pool_service;
+
+// Internal modules (not exposed)
+mod discovery;
+mod analyzer;
+mod fetcher;
+mod calculator;
+mod decoders;
+
+/// Initialize the pool service - this is the main entry point
+///
+/// This function starts all background tasks for pool monitoring and price calculation.
+/// It's idempotent and can be called multiple times safely.
+///
+/// Returns a handle that can be used to monitor the service lifecycle.
+pub async fn init_pool_service(
+    shutdown: Arc<Notify>
+) -> Result<tokio::task::JoinHandle<()>, PoolError> {
+    start_pool_service().await?;
+
+    // Return a dummy handle for now - this will be improved later
+    let handle = tokio::spawn(async move {
+        shutdown.notified().await;
+    });
+
+    Ok(handle)
+}

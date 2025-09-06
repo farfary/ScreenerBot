@@ -313,6 +313,10 @@ pub enum LogTag {
     Wallet,
     System,
     Pool,
+    PoolService,
+    PoolCalculator,
+    PoolDiscovery,
+    PoolFetcher,
     Blacklist,
     Discovery,
     Filtering,
@@ -342,6 +346,10 @@ impl std::fmt::Display for LogTag {
             LogTag::Wallet => format!("{:<8}", "WALLET").bright_magenta().bold(), // 💜 Rich purple for wealth
             LogTag::System => format!("{:<8}", "SYSTEM").bright_yellow().bold(), // ⚙️ Mechanical yellow
             LogTag::Pool => format!("{:<8}", "POOL").bright_blue().bold(), // 🏊 Pool blue
+            LogTag::PoolService => format!("{:<8}", "POOLSVC").bright_cyan().bold(), // 🏊‍♂️ Pool service
+            LogTag::PoolCalculator => format!("{:<8}", "POOLCALC").bright_green().bold(), // 🧮 Pool calculator
+            LogTag::PoolDiscovery => format!("{:<8}", "POOLDISC").bright_white().bold(), // 🔍 Pool discovery
+            LogTag::PoolFetcher => format!("{:<8}", "POOLFETCH").bright_yellow().bold(), // 📡 Pool fetcher
             LogTag::Blacklist => format!("{:<8}", "BLACKLIST").bright_red().bold(), // 🚫 Warning red
             LogTag::Discovery => format!("{:<8}", "DISCOVER").bright_white().bold(), // 🔍 Search white
             LogTag::Filtering => format!("{:<8}", "FILTER").bright_yellow().bold(), // 🔄 Filter yellow
@@ -402,6 +410,22 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Pool =>
             format!("{:<width$}", "POOL", width = TAG_WIDTH)
                 .bright_blue()
+                .bold(),
+        LogTag::PoolService =>
+            format!("{:<width$}", "POOLSVC", width = TAG_WIDTH)
+                .bright_cyan()
+                .bold(),
+        LogTag::PoolCalculator =>
+            format!("{:<width$}", "POOLCALC", width = TAG_WIDTH)
+                .bright_green()
+                .bold(),
+        LogTag::PoolDiscovery =>
+            format!("{:<width$}", "POOLDISC", width = TAG_WIDTH)
+                .bright_white()
+                .bold(),
+        LogTag::PoolFetcher =>
+            format!("{:<width$}", "POOLFETCH", width = TAG_WIDTH)
+                .bright_yellow()
                 .bold(),
         LogTag::Blacklist =>
             format!("{:<width$}", "BLACKLIST", width = TAG_WIDTH)
@@ -573,6 +597,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Wallet => "WALLET",
         LogTag::System => "SYSTEM",
         LogTag::Pool => "POOL",
+        LogTag::PoolService => "POOLSVC",
+        LogTag::PoolCalculator => "POOLCALC",
+        LogTag::PoolDiscovery => "POOLDISC",
+        LogTag::PoolFetcher => "POOLFETCH",
         LogTag::Blacklist => "BLACKLIST",
         LogTag::Discovery => "DISCOVER",
         LogTag::Filtering => "FILTER",
