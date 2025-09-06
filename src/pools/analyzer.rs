@@ -310,23 +310,79 @@ impl PoolAnalyzer {
         pool_id: &Pubkey,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        _rpc_client: &RpcClient
+        rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
-        // For CPMM pools, we typically need:
+        // For CPMM pools, we need:
         // - Pool account itself
-        // - Base token vault
-        // - Quote token vault
-        // We can derive some accounts deterministically
+        // - Base token vault (extracted from pool data)
+        // - Quote token vault (extracted from pool data)
+
+        // Fetch the pool account to extract vault addresses
+        let pool_account = match rpc_client.get_account(pool_id).await {
+            Ok(account) => account,
+            Err(e) => {
+                if is_debug_pool_service_enabled() {
+                    log(
+                        LogTag::PoolService,
+                        "ERROR",
+                        &format!("Failed to fetch pool account {}: {}", pool_id, e)
+                    );
+                }
+                return None;
+            }
+        };
+
+        // Parse the pool data to extract vault addresses (using same logic as decoder)
+        let vault_addresses = Self::extract_cpmm_vault_addresses(&pool_account.data)?;
 
         let mut accounts = vec![*pool_id];
 
-        // Add the mints as they're needed for calculations
+        // Add vault addresses to accounts list
+        for vault_str in vault_addresses {
+            if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
+                accounts.push(vault_pubkey);
+            }
+        }
+
+        // Add the mints for reference
         accounts.push(*base_mint);
         accounts.push(*quote_mint);
 
-        // For now, return the basic accounts
-        // In a full implementation, we would derive or fetch the actual vault addresses
         Some(accounts)
+    }
+
+    /// Extract vault addresses from CPMM pool account data
+    fn extract_cpmm_vault_addresses(data: &[u8]) -> Option<Vec<String>> {
+        if data.len() < 8 + 32 * 10 {
+            return None;
+        }
+
+        let mut offset = 8; // Skip discriminator
+
+        // Skip amm_config and pool_creator
+        offset += 32 + 32;
+
+        // Extract token vaults (offsets from old working system)
+        let token_0_vault = Self::read_pubkey_at_offset_static(data, &mut offset).ok()?;
+        let token_1_vault = Self::read_pubkey_at_offset_static(data, &mut offset).ok()?;
+
+        Some(vec![token_0_vault, token_1_vault])
+    }
+
+    /// Helper function to read pubkey at offset (static version for analyzer)
+    fn read_pubkey_at_offset_static(data: &[u8], offset: &mut usize) -> Result<String, String> {
+        if *offset + 32 > data.len() {
+            return Err("Insufficient data for pubkey".to_string());
+        }
+
+        let pubkey_bytes = &data[*offset..*offset + 32];
+        *offset += 32;
+
+        let pubkey = Pubkey::new_from_array(
+            pubkey_bytes.try_into().map_err(|_| "Failed to parse pubkey".to_string())?
+        );
+
+        Ok(pubkey.to_string())
     }
 
     /// Extract Raydium Legacy AMM pool accounts
