@@ -126,10 +126,10 @@ async fn main() {
         if program_kind == ProgramKind::MeteoraDamm && args.verbose {
             // Show the basic structure
             for (name, off) in [
-                ("token_a_mint", 136usize),
-                ("token_b_mint", 168),
-                ("token_a_vault", 200),
-                ("token_b_vault", 232),
+                ("token_a_mint", 168usize),
+                ("token_b_mint", 200),
+                ("token_a_vault", 232),
+                ("token_b_vault", 264),
             ] {
                 if let Some(pk) = read_pubkey_at(&pool_account.data, off) {
                     log(
@@ -469,7 +469,7 @@ fn extract_damm_vaults(data: &[u8]) -> Option<(String, String)> {
         return None;
     }
 
-    // Extract pubkeys at correct fixed offsets (discovered via hex analysis)
+    // Extract pubkeys at correct fixed offsets (corrected based on debug scan analysis)
     // offset 168: token_a_mint (our target token)
     // offset 200: token_b_mint (SOL)
     // offset 232: token_a_vault (target token vault)
@@ -478,7 +478,7 @@ fn extract_damm_vaults(data: &[u8]) -> Option<(String, String)> {
     let token_a_mint = read_pubkey_at(data, 168)?;
     let token_b_mint = read_pubkey_at(data, 200)?;
     let token_a_vault = read_pubkey_at(data, 232)?;
-    let token_b_vault = read_pubkey_at(data, 264)?;
+    let token_b_vault = read_pubkey_at(data, 264)?; // token_b_vault at offset 264
 
     log(
         LogTag::PoolCalculator,

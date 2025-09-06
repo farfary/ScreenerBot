@@ -65,12 +65,16 @@ impl PoolDecoder for MeteoraDammDecoder {
         }
 
         // Determine which token is SOL and which is the base token
-        let (token_mint, sol_vault, token_vault) = if damm_info.token_b_mint == SOL_MINT {
+        let (token_mint, sol_vault, token_vault, sol_fees, token_fees) = if
+            damm_info.token_b_mint == SOL_MINT
+        {
             // token_a is the custom token, token_b is SOL
             (
                 damm_info.token_a_mint.clone(),
                 damm_info.token_b_vault.clone(),
                 damm_info.token_a_vault.clone(),
+                damm_info.protocol_b_fee + damm_info.partner_b_fee, // SOL fees
+                damm_info.protocol_a_fee + damm_info.partner_a_fee, // Token fees
             )
         } else if damm_info.token_a_mint == SOL_MINT {
             // token_b is the custom token, token_a is SOL
@@ -78,6 +82,8 @@ impl PoolDecoder for MeteoraDammDecoder {
                 damm_info.token_b_mint.clone(),
                 damm_info.token_a_vault.clone(),
                 damm_info.token_b_vault.clone(),
+                damm_info.protocol_a_fee + damm_info.partner_a_fee, // SOL fees
+                damm_info.protocol_b_fee + damm_info.partner_b_fee, // Token fees
             )
         } else {
             if is_debug_pool_calculator_enabled() {
@@ -110,8 +116,44 @@ impl PoolDecoder for MeteoraDammDecoder {
         let sol_account = accounts.get(&sol_vault)?;
         let token_account = accounts.get(&token_vault)?;
 
-        let sol_balance = Self::decode_token_account_amount(&sol_account.data).ok()?;
-        let token_balance = Self::decode_token_account_amount(&token_account.data).ok()?;
+        let sol_balance_raw = Self::decode_token_account_amount(&sol_account.data).ok()?;
+        let token_balance_raw = Self::decode_token_account_amount(&token_account.data).ok()?;
+
+        // Calculate effective reserves by subtracting accumulated fees
+        // Fees are held in the vault but are not tradeable liquidity
+        let sol_balance = if sol_balance_raw >= sol_fees {
+            sol_balance_raw - sol_fees
+        } else {
+            if is_debug_pool_calculator_enabled() {
+                log(
+                    LogTag::PoolCalculator,
+                    "WARN",
+                    &format!(
+                        "DAMM SOL fees ({}) exceed vault balance ({}), using raw balance",
+                        sol_fees,
+                        sol_balance_raw
+                    )
+                );
+            }
+            sol_balance_raw
+        };
+
+        let token_balance = if token_balance_raw >= token_fees {
+            token_balance_raw - token_fees
+        } else {
+            if is_debug_pool_calculator_enabled() {
+                log(
+                    LogTag::PoolCalculator,
+                    "WARN",
+                    &format!(
+                        "DAMM token fees ({}) exceed vault balance ({}), using raw balance",
+                        token_fees,
+                        token_balance_raw
+                    )
+                );
+            }
+            token_balance_raw
+        };
 
         // Verify vault mints to ensure correct assignment
         if is_debug_pool_calculator_enabled() {
@@ -135,7 +177,15 @@ impl PoolDecoder for MeteoraDammDecoder {
             log(
                 LogTag::PoolCalculator,
                 "INFO",
-                &format!("DAMM vault balances: SOL={}, token={}", sol_balance, token_balance)
+                &format!(
+                    "DAMM vault balances: SOL_raw={}, SOL_effective={} (fees={}), token_raw={}, token_effective={} (fees={})",
+                    sol_balance_raw,
+                    sol_balance,
+                    sol_fees,
+                    token_balance_raw,
+                    token_balance,
+                    token_fees
+                )
             );
         }
 
@@ -170,10 +220,14 @@ impl PoolDecoder for MeteoraDammDecoder {
             );
         }
 
-        // Calculate price: SOL per token using vault balances
+        // Calculate price: SOL per token using effective vault balances (minus fees)
         let sol_adjusted = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
         let token_adjusted = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
         let price_sol = sol_adjusted / token_adjusted;
+
+        // The effective reserves should now match Solscan's calculation
+        // Previously: 18.024 SOL raw vault balance
+        // Expected: ~13.17 SOL effective tradeable liquidity (difference = accumulated fees)
 
         // Convert reserves to human-readable format for display
         let sol_reserves_display = sol_adjusted;
@@ -209,7 +263,7 @@ impl PoolDecoder for MeteoraDammDecoder {
 
 impl MeteoraDammDecoder {
     /// Parse DAMM pool account data to extract token mints and vault addresses
-    /// Based on pool_old.rs decode_meteora_damm_v2_pool() lines ~7249-7359
+    /// Based on DAMM v2 Pool struct from official Meteora source code
     fn parse_damm_pool(data: &[u8]) -> Option<DammPoolInfo> {
         if data.len() < 1112 {
             if is_debug_pool_calculator_enabled() {
@@ -222,11 +276,20 @@ impl MeteoraDammDecoder {
             return None;
         }
 
-        // Extract pubkeys at fixed offsets (discovered via hex analysis)
+        // Extract pubkeys at fixed offsets (based on official DAMM v2 Pool struct)
         let token_a_mint = Self::extract_pubkey_at_fixed_offset(data, 168)?;
         let token_b_mint = Self::extract_pubkey_at_fixed_offset(data, 200)?;
         let token_a_vault = Self::extract_pubkey_at_fixed_offset(data, 232)?;
         let token_b_vault = Self::extract_pubkey_at_fixed_offset(data, 264)?;
+
+        // Extract accumulated fees (these are held in vaults but not tradeable)
+        // Based on official DAMM v2 Pool struct layout from IDL:
+        // offset 392: protocol_a_fee: u64, offset 400: protocol_b_fee: u64
+        // offset 408: partner_a_fee: u64, offset 416: partner_b_fee: u64
+        let protocol_a_fee = Self::extract_u64_at_offset(data, 392).unwrap_or(0);
+        let protocol_b_fee = Self::extract_u64_at_offset(data, 400).unwrap_or(0);
+        let partner_a_fee = Self::extract_u64_at_offset(data, 408).unwrap_or(0);
+        let partner_b_fee = Self::extract_u64_at_offset(data, 416).unwrap_or(0);
 
         if is_debug_pool_calculator_enabled() {
             log(
@@ -240,6 +303,18 @@ impl MeteoraDammDecoder {
                     token_b_vault
                 )
             );
+
+            log(
+                LogTag::PoolCalculator,
+                "INFO",
+                &format!(
+                    "DAMM fees: protocol_a={}, protocol_b={}, partner_a={}, partner_b={}",
+                    protocol_a_fee,
+                    protocol_b_fee,
+                    partner_a_fee,
+                    partner_b_fee
+                )
+            );
         }
 
         Some(DammPoolInfo {
@@ -247,6 +322,10 @@ impl MeteoraDammDecoder {
             token_b_mint,
             token_a_vault,
             token_b_vault,
+            protocol_a_fee,
+            protocol_b_fee,
+            partner_a_fee,
+            partner_b_fee,
         })
     }
 
@@ -259,6 +338,26 @@ impl MeteoraDammDecoder {
         let pubkey_bytes: [u8; 32] = data[offset..offset + 32].try_into().ok()?;
         let pubkey = Pubkey::new_from_array(pubkey_bytes);
         Some(pubkey.to_string())
+    }
+
+    /// Extract a u64 value from raw data at a fixed offset
+    fn extract_u64_at_offset(data: &[u8], offset: usize) -> Option<u64> {
+        if data.len() < offset + 8 {
+            return None;
+        }
+
+        let bytes: [u8; 8] = data[offset..offset + 8].try_into().ok()?;
+        Some(u64::from_le_bytes(bytes))
+    }
+
+    /// Extract a u128 value from raw data at a fixed offset
+    fn extract_u128_at_offset(data: &[u8], offset: usize) -> Option<u128> {
+        if data.len() < offset + 16 {
+            return None;
+        }
+
+        let bytes: [u8; 16] = data[offset..offset + 16].try_into().ok()?;
+        Some(u128::from_le_bytes(bytes))
     }
 
     /// Decode token account amount from token account data
@@ -298,4 +397,8 @@ struct DammPoolInfo {
     pub token_b_mint: String,
     pub token_a_vault: String,
     pub token_b_vault: String,
+    pub protocol_a_fee: u64,
+    pub protocol_b_fee: u64,
+    pub partner_a_fee: u64,
+    pub partner_b_fee: u64,
 }

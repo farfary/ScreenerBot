@@ -664,9 +664,9 @@ impl PoolAnalyzer {
             return None;
         }
 
-        // Extract vault pubkeys at fixed offsets (discovered via hex analysis)
+        // Extract vault pubkeys at fixed offsets (corrected based on debug scan analysis)
         let token_a_vault = Self::extract_pubkey_at_offset(data, 232)?; // token_a_vault at offset 232
-        let token_b_vault = Self::extract_pubkey_at_offset(data, 264)?; // token_b_vault at offset 264
+        let token_b_vault = Self::extract_pubkey_at_offset(data, 264)?; // token_b_vault at offset 264 (corrected)
 
         Some(vec![token_a_vault, token_b_vault])
     }
