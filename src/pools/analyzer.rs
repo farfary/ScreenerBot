@@ -61,14 +61,6 @@ impl PoolAnalyzer {
     /// Classify pool program type
     pub fn classify_program(&self, program_id: &Pubkey) -> ProgramKind {
         let program_str = program_id.to_string();
-        match program_str.as_str() {
-            "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => ProgramKind::RaydiumCpmm,
-            "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => ProgramKind::RaydiumClmm,
-            "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" => ProgramKind::OrcaWhirlpool,
-            "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB" => ProgramKind::MeteoraDamm,
-            "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => ProgramKind::MeteoraDlmm,
-            "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" => ProgramKind::PumpFun,
-            _ => ProgramKind::Unknown,
-        }
+        ProgramKind::from_program_id(&program_str)
     }
 }

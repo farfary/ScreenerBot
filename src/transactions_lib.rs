@@ -2,7 +2,8 @@
 use crate::errors::blockchain::{ is_permanent_failure, parse_structured_solana_error };
 use crate::global::is_debug_transactions_enabled;
 use crate::logger::{ log, LogTag };
-use crate::pools::get_pool_price;
+use crate::pools::{ get_pool_price };
+use crate::pools::types::{ PUMP_FUN_PROGRAM_ID, PUMP_FUN_LEGACY_PROGRAM_ID };
 use crate::rpc::get_rpc_client;
 use crate::tokens::decimals::{ lamports_to_sol, raw_to_ui_amount, sol_to_lamports };
 use crate::tokens::{ get_token_decimals, get_token_decimals_safe, TokenDatabase };
@@ -2130,12 +2131,22 @@ impl TransactionsManager {
         &self,
         transaction: &Transaction
     ) -> Result<Option<TransactionType>, String> {
-        let pump_program_id = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
-
-        // Check if transaction involves Pump.fun
+        // Check if transaction involves Pump.fun (both current and legacy program IDs)
         if
-            !transaction.instructions.iter().any(|i| i.program_id == pump_program_id) &&
-            !transaction.log_messages.iter().any(|log| log.contains(pump_program_id))
+            !transaction.instructions
+                .iter()
+                .any(
+                    |i|
+                        i.program_id == PUMP_FUN_PROGRAM_ID ||
+                        i.program_id == PUMP_FUN_LEGACY_PROGRAM_ID
+                ) &&
+            !transaction.log_messages
+                .iter()
+                .any(
+                    |log|
+                        log.contains(PUMP_FUN_PROGRAM_ID) ||
+                        log.contains(PUMP_FUN_LEGACY_PROGRAM_ID)
+                )
         {
             return Ok(None);
         }

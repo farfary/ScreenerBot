@@ -128,6 +128,7 @@ pub enum PoolError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProgramKind {
     RaydiumCpmm,
+    RaydiumLegacyAmm,
     RaydiumClmm,
     OrcaWhirlpool,
     MeteoraDamm,
@@ -140,13 +141,43 @@ impl ProgramKind {
     /// Get the program ID for this pool type
     pub fn program_id(&self) -> &'static str {
         match self {
-            ProgramKind::RaydiumCpmm => "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
-            ProgramKind::RaydiumClmm => "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
-            ProgramKind::OrcaWhirlpool => "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
-            ProgramKind::MeteoraDamm => "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB",
-            ProgramKind::MeteoraDlmm => "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
-            ProgramKind::PumpFun => "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+            ProgramKind::RaydiumCpmm => RAYDIUM_CPMM_PROGRAM_ID,
+            ProgramKind::RaydiumLegacyAmm => RAYDIUM_LEGACY_AMM_PROGRAM_ID,
+            ProgramKind::RaydiumClmm => RAYDIUM_CLMM_PROGRAM_ID,
+            ProgramKind::OrcaWhirlpool => ORCA_WHIRLPOOL_PROGRAM_ID,
+            ProgramKind::MeteoraDamm => METEORA_DAMM_PROGRAM_ID,
+            ProgramKind::MeteoraDlmm => METEORA_DLMM_PROGRAM_ID,
+            ProgramKind::PumpFun => PUMP_FUN_PROGRAM_ID,
             ProgramKind::Unknown => "",
+        }
+    }
+
+    /// Get display name for this program kind
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ProgramKind::RaydiumCpmm => "RAYDIUM CPMM",
+            ProgramKind::RaydiumLegacyAmm => "RAYDIUM LEGACY AMM",
+            ProgramKind::RaydiumClmm => "RAYDIUM CLMM",
+            ProgramKind::OrcaWhirlpool => "ORCA WHIRLPOOL",
+            ProgramKind::MeteoraDamm => "METEORA DAMM v2",
+            ProgramKind::MeteoraDlmm => "METEORA DLMM",
+            ProgramKind::PumpFun => "PUMP.FUN AMM",
+            ProgramKind::Unknown => "UNKNOWN",
+        }
+    }
+
+    /// Create ProgramKind from program ID string
+    pub fn from_program_id(program_id: &str) -> Self {
+        match program_id {
+            RAYDIUM_CPMM_PROGRAM_ID => ProgramKind::RaydiumCpmm,
+            RAYDIUM_LEGACY_AMM_PROGRAM_ID => ProgramKind::RaydiumLegacyAmm,
+            RAYDIUM_CLMM_PROGRAM_ID => ProgramKind::RaydiumClmm,
+            ORCA_WHIRLPOOL_PROGRAM_ID => ProgramKind::OrcaWhirlpool,
+            METEORA_DAMM_PROGRAM_ID => ProgramKind::MeteoraDamm,
+            METEORA_DLMM_PROGRAM_ID => ProgramKind::MeteoraDlmm,
+            PUMP_FUN_PROGRAM_ID => ProgramKind::PumpFun,
+            PUMP_FUN_LEGACY_PROGRAM_ID => ProgramKind::PumpFun, // Legacy ID also maps to PumpFun
+            _ => ProgramKind::Unknown,
         }
     }
 }
@@ -201,3 +232,18 @@ pub const PRICE_CACHE_TTL_SECONDS: u64 = 30;
 pub const PRICE_HISTORY_MAX_ENTRIES: usize = 1000;
 pub const MAX_WATCHED_TOKENS: usize = 100;
 pub const POOL_REFRESH_INTERVAL_SECONDS: u64 = 3;
+
+/// SOL mint address (primary trading currency)
+pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+
+/// Program ID constants for centralized reference
+pub const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
+pub const RAYDIUM_LEGACY_AMM_PROGRAM_ID: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
+pub const RAYDIUM_CLMM_PROGRAM_ID: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK";
+pub const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
+pub const METEORA_DAMM_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
+pub const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
+pub const PUMP_FUN_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
+
+/// Legacy/deprecated program IDs (still used for transaction analysis)
+pub const PUMP_FUN_LEGACY_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
