@@ -46,7 +46,7 @@ use crate::{
         get_token_rugcheck_data_safe,
         rugcheck::RugcheckResponse,
     },
-    tokens::{ get_token_decimals, get_token_from_db, PriceOptions, PriceResult, Token },
+    tokens::{ get_token_decimals, get_token_from_db, PriceResult, Token },
     trader::{ CriticalOperationGuard, MAX_OPEN_POSITIONS, PROFIT_EXTRA_NEEDED_SOL },
     transactions::{ get_global_transaction_manager, get_transaction },
     transactions_types::{ SwapPnLInfo, Transaction, TransactionStatus },

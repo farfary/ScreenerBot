@@ -101,7 +101,7 @@ pub use types::*;
 
 // Re-export from pools module for compatibility
 // Re-export from new pools system for compatibility
-pub use crate::pools::types::{ PriceResult, PriceOptions };
+pub use crate::pools::types::{ PriceResult };
 
 // =============================================================================
 // CONFIGURATION CONSTANTS

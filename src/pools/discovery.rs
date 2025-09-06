@@ -13,18 +13,136 @@ use crate::pools::constants::{
     DISCOVERY_BATCH_DELAY_MS,
     DISCOVERY_CYCLE_DELAY_SECS,
     DEXSCREENER_REQUEST_DELAY_MS,
+    SOL_MINT,
 };
 use crate::logger::{ log, LogTag };
 
-/// Pool discovery result
+/// Universal pool discovery result from all APIs (DexScreener, GeckoTerminal, Raydium)
 #[derive(Debug, Clone)]
-pub struct PoolInfo {
+pub struct DiscoveryPoolResult {
+    /// Pool address
     pub pool_address: String,
-    pub program_id: String,
+    /// Token mint address
     pub token_mint: String,
-    pub sol_reserve: f64,
-    pub token_reserve: f64,
+    /// DEX name (raydium, meteora, orca, pump.fun, etc.)
+    pub dex_name: String,
+    /// Pool name or identifier
+    pub pool_name: Option<String>,
+    /// Base token mint address
+    pub base_token_mint: String,
+    /// Quote token mint address
+    pub quote_token_mint: String,
+    /// Price in native quote token
+    pub price_native: f64,
+    /// Price in USD (if available)
+    pub price_usd: Option<f64>,
+    /// Liquidity in USD
     pub liquidity_usd: f64,
+    /// Base token reserves (raw amount)
+    pub base_reserve: f64,
+    /// Quote token reserves (raw amount)
+    pub quote_reserve: f64,
+    /// SOL reserves in the pool
+    pub sol_reserves: f64,
+    /// Token reserves in the pool
+    pub token_reserves: f64,
+    /// 24h volume in USD
+    pub volume_24h: f64,
+    /// Price change percentage (24h)
+    pub price_change_24h: Option<f64>,
+    /// Number of transactions (24h)
+    pub transactions_24h: Option<u64>,
+    /// Pool creation timestamp
+    pub created_at: Option<u64>,
+    /// When this data was discovered
+    pub discovered_at: DateTime<Utc>,
+    /// API source (dexscreener, geckoterminal, raydium)
+    pub source: String,
+}
+
+impl DiscoveryPoolResult {
+    /// Create a new discovery pool result
+    pub fn new(
+        pool_address: String,
+        token_mint: String,
+        dex_name: String,
+        base_token_mint: String,
+        quote_token_mint: String,
+        price_native: f64,
+        liquidity_usd: f64,
+        base_reserve: f64,
+        quote_reserve: f64,
+        source: String
+    ) -> Self {
+        // Determine SOL and token reserves
+        let sol_mint = crate::pools::constants::SOL_MINT;
+        let (sol_reserves, token_reserves) = if base_token_mint == sol_mint {
+            (base_reserve, quote_reserve)
+        } else if quote_token_mint == sol_mint {
+            (quote_reserve, base_reserve)
+        } else {
+            // If neither is SOL, set both to 0
+            (0.0, 0.0)
+        };
+
+        Self {
+            pool_address,
+            token_mint,
+            dex_name,
+            pool_name: None,
+            base_token_mint,
+            quote_token_mint,
+            price_native,
+            price_usd: None,
+            liquidity_usd,
+            base_reserve,
+            quote_reserve,
+            sol_reserves,
+            token_reserves,
+            volume_24h: 0.0,
+            price_change_24h: None,
+            transactions_24h: None,
+            created_at: None,
+            discovered_at: Utc::now(),
+            source,
+        }
+    }
+
+    /// Check if this pool contains SOL
+    pub fn has_sol_pair(&self) -> bool {
+        let sol_mint = crate::pools::constants::SOL_MINT;
+        self.base_token_mint == sol_mint || self.quote_token_mint == sol_mint
+    }
+
+    /// Get the other token mint (paired with the target token)
+    pub fn get_other_token_mint(&self, target_token: &str) -> Option<&str> {
+        if self.base_token_mint == target_token {
+            Some(&self.quote_token_mint)
+        } else if self.quote_token_mint == target_token {
+            Some(&self.base_token_mint)
+        } else {
+            None
+        }
+    }
+
+    /// Calculate price in SOL if possible
+    pub fn get_price_in_sol(&self) -> Option<f64> {
+        let sol_mint = crate::pools::constants::SOL_MINT;
+
+        if self.base_token_mint == self.token_mint && self.quote_token_mint == sol_mint {
+            // Token/SOL pair, price is in SOL
+            Some(self.price_native)
+        } else if self.quote_token_mint == self.token_mint && self.base_token_mint == sol_mint {
+            // SOL/Token pair, need to invert
+            if self.price_native > 0.0 {
+                Some(1.0 / self.price_native)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
 
 /// Pool discovery service
@@ -124,7 +242,10 @@ impl PoolDiscovery {
                                 match Self::discover_pools_for_token(token_mint).await {
                                     Ok(pools) => {
                                         if !pools.is_empty() {
-                                            cache.cache_pools(token_mint, pools.clone()).await;
+                                            cache.cache_discovery_pools(
+                                                token_mint,
+                                                pools.clone()
+                                            ).await;
                                             log(
                                                 LogTag::Pool,
                                                 "DISCOVERY_SUCCESS",
@@ -197,7 +318,9 @@ impl PoolDiscovery {
     }
 
     /// Discover pools for a single token using all APIs
-    async fn discover_pools_for_token(token_mint: &str) -> Result<Vec<PoolInfo>, String> {
+    async fn discover_pools_for_token(
+        token_mint: &str
+    ) -> Result<Vec<DiscoveryPoolResult>, String> {
         let mut all_pools = Vec::new();
 
         // 1. Try DexScreener API
@@ -272,11 +395,13 @@ impl PoolDiscovery {
         }
 
         // Deduplicate pools by pool_address
-        Self::deduplicate_pools(all_pools)
+        Self::deduplicate_discovery_pools(all_pools)
     }
 
     /// Discover pools from DexScreener API
-    async fn discover_pools_dexscreener(token_mint: &str) -> Result<Vec<PoolInfo>, String> {
+    async fn discover_pools_dexscreener(
+        token_mint: &str
+    ) -> Result<Vec<DiscoveryPoolResult>, String> {
         // Make direct HTTP request to DexScreener API
         let url = format!("https://api.dexscreener.com/token-pairs/v1/solana/{}", token_mint);
 
@@ -307,58 +432,49 @@ impl PoolDiscovery {
                 // Extract required fields directly from JSON
                 let pool_address = pair["pairAddress"].as_str().unwrap_or("").to_string();
 
-                let dex_id = pair["dexId"].as_str().unwrap_or("").to_string();
-
-                // Map DEX ID to program ID
-                let program_id = match dex_id.as_str() {
-                    "raydium" => crate::pools::constants::RAYDIUM_LEGACY_AMM_PROGRAM_ID.to_string(),
-                    "raydium-cp" => crate::pools::constants::RAYDIUM_CPMM_PROGRAM_ID.to_string(),
-                    "raydium-clmm" => crate::pools::constants::RAYDIUM_CLMM_PROGRAM_ID.to_string(),
-                    "meteora" => crate::pools::constants::METEORA_DLMM_PROGRAM_ID.to_string(),
-                    "orca" => crate::pools::constants::ORCA_WHIRLPOOL_PROGRAM_ID.to_string(),
-                    "pump" => crate::pools::constants::PUMP_FUN_AMM_PROGRAM_ID.to_string(),
-                    _ => {
-                        continue;
-                    } // Skip unknown DEXs
-                };
-
                 // Get liquidity in USD
                 let liquidity_usd = pair["liquidity"]["usd"].as_f64().unwrap_or(0.0);
 
                 // Get base and quote reserves
                 let base_reserve = pair["liquidity"]["base"].as_f64().unwrap_or(0.0);
-
                 let quote_reserve = pair["liquidity"]["quote"].as_f64().unwrap_or(0.0);
 
-                // Determine which is SOL and which is token
-                let base_token_address = pair["baseToken"]["address"].as_str().unwrap_or("");
+                // Get base and quote token addresses
+                let base_token_address = pair["baseToken"]["address"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string();
+                let quote_token_address = pair["quoteToken"]["address"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string();
 
-                let quote_token_address = pair["quoteToken"]["address"].as_str().unwrap_or("");
-
-                let (sol_reserve, token_reserve) = if
-                    base_token_address == crate::pools::constants::SOL_MINT
+                // Only include pools with meaningful liquidity and valid addresses
+                if
+                    liquidity_usd < 1000.0 ||
+                    pool_address.is_empty() ||
+                    base_token_address.is_empty() ||
+                    quote_token_address.is_empty()
                 {
-                    (base_reserve, quote_reserve)
-                } else if quote_token_address == crate::pools::constants::SOL_MINT {
-                    (quote_reserve, base_reserve)
-                } else {
-                    // Skip pools that don't have SOL
-                    continue;
-                };
-
-                // Only include pools with meaningful liquidity
-                if liquidity_usd < 1000.0 || pool_address.is_empty() {
                     continue;
                 }
 
-                pools.push(PoolInfo {
-                    pool_address,
-                    program_id,
-                    token_mint: token_mint.to_string(),
-                    sol_reserve,
-                    token_reserve,
-                    liquidity_usd,
-                });
+                // Only include pools that contain the target token
+                if base_token_address != token_mint && quote_token_address != token_mint {
+                    continue;
+                }
+
+                pools.push(
+                    DiscoveryPoolResult::new(
+                        pool_address,
+                        token_mint.to_string(),
+                        liquidity_usd,
+                        base_token_address,
+                        quote_token_address,
+                        base_reserve,
+                        quote_reserve
+                    )
+                );
             }
         }
 
@@ -366,22 +482,106 @@ impl PoolDiscovery {
     }
 
     /// Discover pools from GeckoTerminal API
-    async fn discover_pools_geckoterminal(_token_mint: &str) -> Result<Vec<PoolInfo>, String> {
-        // TODO: Implement GeckoTerminal API call
-        // Use existing tokens::geckoterminal functions
-        Ok(Vec::new())
+    async fn discover_pools_geckoterminal(
+        token_mint: &str
+    ) -> Result<Vec<DiscoveryPoolResult>, String> {
+        // Use the existing GeckoTerminal API function
+        let gecko_pools =
+            crate::tokens::geckoterminal::get_token_pools_from_geckoterminal(token_mint).await?;
+
+        let mut pools = Vec::new();
+
+        for gecko_pool in gecko_pools {
+            // Convert GeckoTerminal pool to DiscoveryPoolResult
+            // Determine base and quote tokens from the pool structure
+            let (base_token_address, quote_token_address) = if gecko_pool.base_token == token_mint {
+                (gecko_pool.base_token.clone(), gecko_pool.quote_token.clone())
+            } else {
+                (gecko_pool.quote_token.clone(), gecko_pool.base_token.clone())
+            };
+
+            // GeckoTerminal doesn't always provide exact reserves, so we'll use price and liquidity to estimate
+            let total_liquidity = gecko_pool.liquidity_usd;
+
+            // Estimate reserves based on 50/50 split assumption
+            let base_reserve =
+                total_liquidity /
+                2.0 /
+                (if gecko_pool.price_usd > 0.0 { gecko_pool.price_usd } else { 1.0 });
+            let quote_reserve = total_liquidity / 2.0;
+
+            // Only include pools with meaningful liquidity
+            if total_liquidity < 1000.0 || gecko_pool.pool_address.is_empty() {
+                continue;
+            }
+
+            pools.push(
+                DiscoveryPoolResult::new(
+                    gecko_pool.pool_address,
+                    token_mint.to_string(),
+                    total_liquidity,
+                    base_token_address,
+                    quote_token_address,
+                    base_reserve,
+                    quote_reserve
+                )
+            );
+        }
+
+        Ok(pools)
     }
 
     /// Discover pools from Raydium API
-    async fn discover_pools_raydium(_token_mint: &str) -> Result<Vec<PoolInfo>, String> {
-        // TODO: Implement Raydium API call
-        // Use existing tokens::raydium functions
-        Ok(Vec::new())
+    async fn discover_pools_raydium(token_mint: &str) -> Result<Vec<DiscoveryPoolResult>, String> {
+        // Use the existing Raydium API function
+        let raydium_pools = crate::tokens::raydium::get_token_pools_from_raydium(token_mint).await?;
+
+        let mut pools = Vec::new();
+
+        for raydium_pool in raydium_pools {
+            // Convert Raydium pool to DiscoveryPoolResult
+            // Raydium pools have base_token and quote_token fields
+            let base_token_address = raydium_pool.base_token;
+            let quote_token_address = raydium_pool.quote_token;
+
+            // Estimate reserves from liquidity and price
+            // Raydium provides price_usd and liquidity_usd
+            let total_liquidity = raydium_pool.liquidity_usd;
+
+            // Estimate reserves based on 50/50 split assumption
+            let base_reserve = if raydium_pool.price_usd > 0.0 {
+                total_liquidity / 2.0 / raydium_pool.price_usd
+            } else {
+                total_liquidity / 2.0
+            };
+            let quote_reserve = total_liquidity / 2.0;
+
+            // Only include pools with meaningful liquidity
+            if total_liquidity < 1000.0 || raydium_pool.pool_address.is_empty() {
+                continue;
+            }
+
+            pools.push(
+                DiscoveryPoolResult::new(
+                    raydium_pool.pool_address,
+                    token_mint.to_string(),
+                    total_liquidity,
+                    base_token_address,
+                    quote_token_address,
+                    base_reserve,
+                    quote_reserve
+                )
+            );
+        }
+
+        Ok(pools)
     }
 
     /// Deduplicate pools by pool_address and keep the one with highest liquidity
-    fn deduplicate_pools(pools: Vec<PoolInfo>) -> Result<Vec<PoolInfo>, String> {
-        let mut pool_map: HashMap<String, PoolInfo> = HashMap::new();
+    fn deduplicate_discovery_pools(
+        pools: Vec<DiscoveryPoolResult>
+    ) -> Result<Vec<DiscoveryPoolResult>, String> {
+        let mut pool_map: HashMap<String, DiscoveryPoolResult> = HashMap::new();
 
         for pool in pools {
             let pool_address = pool.pool_address.clone();
@@ -406,33 +606,13 @@ impl PoolDiscovery {
             return Ok(cached_pools);
         }
 
-        // If not in cache, discover and cache
-        let pools = Self::discover_pools_for_token(token_address).await?;
-        self.cache.cache_pools(token_address, pools.clone()).await;
+        // Convert from new discovery to legacy format for backward compatibility
+        let discovery_pools = self.discover_pools_new(token_address).await?;
+        let legacy_pools = self.convert_discovery_to_legacy(discovery_pools);
 
-        Ok(pools)
-    }
+        // Cache in legacy format too
+        self.cache.cache_pools(token_address, legacy_pools.clone()).await;
 
-    /// Batch discover pools for multiple tokens (legacy method for compatibility)
-    pub async fn batch_discover(&self, tokens: &[String]) -> HashMap<String, Vec<PoolInfo>> {
-        let mut result = HashMap::new();
-
-        for token in tokens {
-            match self.discover_pools(token).await {
-                Ok(pools) => {
-                    result.insert(token.clone(), pools);
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Pool,
-                        "BATCH_DISCOVER_ERROR",
-                        &format!("Error discovering pools for {}: {}", token, e)
-                    );
-                    result.insert(token.clone(), Vec::new());
-                }
-            }
-        }
-
-        result
+        Ok(legacy_pools)
     }
 }

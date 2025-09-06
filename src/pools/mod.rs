@@ -13,7 +13,7 @@ pub mod types;
 pub use cache::PoolCache;
 pub use calculator::PoolCalculator;
 pub use constants::*; // Export all constants for use by other modules
-pub use discovery::{ PoolDiscovery, PoolInfo };
+pub use discovery::{ PoolDiscovery };
 pub use service::{
     get_pool_service,
     init_pool_service,
@@ -22,4 +22,4 @@ pub use service::{
     PoolService,
 };
 pub use tokens::PoolToken;
-pub use types::{ PriceResult, PoolStats, PriceOptions };
+pub use types::{ PriceResult, PoolStats };
