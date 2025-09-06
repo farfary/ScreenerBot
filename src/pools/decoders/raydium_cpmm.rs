@@ -79,28 +79,40 @@ impl RaydiumCpmmDecoder {
         let pool_mint_0_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
         let pool_mint_1_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
 
-        // Get token decimals - use cached if available, otherwise pool data as fallback
-        // (Raydium CPMM pools store decimals in the pool data, so this is safe)
-        let mint_0_decimals = get_cached_decimals(&token_0_mint).unwrap_or(pool_mint_0_decimals);
-        let mint_1_decimals = get_cached_decimals(&token_1_mint).unwrap_or(pool_mint_1_decimals);
-
-        // However, for strict validation, we should prefer cached decimals when available
-        if
-            get_cached_decimals(&token_0_mint).is_none() ||
-            get_cached_decimals(&token_1_mint).is_none()
-        {
-            if is_debug_pool_calculator_enabled() {
-                log(
-                    LogTag::PoolCalculator,
-                    "WARN",
-                    &format!(
-                        "Using pool-stored decimals for CPMM tokens {} and {} - consider pre-caching",
-                        token_0_mint.chars().take(8).collect::<String>(),
-                        token_1_mint.chars().take(8).collect::<String>()
-                    )
-                );
+        // Get token decimals - CRITICAL: must be cached, no fallback to pool defaults
+        let mint_0_decimals = match get_cached_decimals(&token_0_mint) {
+            Some(decimals) => decimals,
+            None => {
+                if is_debug_pool_calculator_enabled() {
+                    log(
+                        LogTag::PoolCalculator,
+                        "ERROR",
+                        &format!(
+                            "No cached decimals for CPMM token_0: {}, skipping pool calculation",
+                            token_0_mint.chars().take(8).collect::<String>()
+                        )
+                    );
+                }
+                return None;
             }
-        }
+        };
+
+        let mint_1_decimals = match get_cached_decimals(&token_1_mint) {
+            Some(decimals) => decimals,
+            None => {
+                if is_debug_pool_calculator_enabled() {
+                    log(
+                        LogTag::PoolCalculator,
+                        "ERROR",
+                        &format!(
+                            "No cached decimals for CPMM token_1: {}, skipping pool calculation",
+                            token_1_mint.chars().take(8).collect::<String>()
+                        )
+                    );
+                }
+                return None;
+            }
+        };
 
         if is_debug_pool_calculator_enabled() {
             log(
