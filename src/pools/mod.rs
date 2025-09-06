@@ -17,7 +17,7 @@ pub use cache::PoolCache;
 pub use calculator::{ PoolCalculatorTask, CalculatorStats };
 pub use constants::*; // Export all constants for use by other modules
 pub use discovery::{ PoolDiscovery };
-pub use fetcher::{ PoolFetcher, CachedAccountData, FetcherStats };
+pub use fetcher::{ PoolFetcher, FetcherStats };
 pub use service::{
     get_pool_service,
     init_pool_service,

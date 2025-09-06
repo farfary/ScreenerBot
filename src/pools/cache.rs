@@ -1,413 +1,681 @@
-/// Pool caching system
-/// Manages all caching for the pool service including tokens, pools, accounts, and prices
+/// Comprehensive pool cache system
+/// Central data storage for all pool-related data: accounts, pools, prices, tokens, analysis
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use chrono::{ DateTime, Utc };
 use crate::pools::types::{ PriceResult, PoolInfo };
 use crate::pools::tokens::PoolToken;
-use crate::pools::constants::MAX_PRICE_HISTORY_POINTS;
-use crate::pools::constants::*;
+use crate::pools::analyzer::{ TokenAvailability, AnalysisStats };
+use tokio::sync::RwLock;
+use std::sync::Arc;
+use std::collections::HashMap;
+use chrono::{ DateTime, Utc };
+use crate::logger::{ log, LogTag };
 
-/// Cached pool data with metadata
+/// Unified account data structure
+/// Used everywhere in pools module instead of SharedAccountData/CachedAccountData
 #[derive(Debug, Clone)]
-pub struct CachedPool {
-    pub pool_info: PoolInfo,
-    pub cached_at: DateTime<Utc>,
-    pub last_updated: DateTime<Utc>,
+pub struct AccountData {
+    /// Account address
+    pub address: String,
+    /// Raw account data
+    pub data: Vec<u8>,
+    /// Account lamports
+    pub lamports: u64,
+    /// Account owner program
+    pub owner: String,
+    /// When this data was fetched
+    pub fetched_at: DateTime<Utc>,
+    /// Whether the account exists
+    pub exists: bool,
 }
 
-impl CachedPool {
-    pub fn new(pool_info: PoolInfo) -> Self {
+impl AccountData {
+    /// Create new account data
+    pub fn new(address: String, data: Vec<u8>, lamports: u64, owner: String) -> Self {
+        Self {
+            address,
+            data,
+            lamports,
+            owner,
+            fetched_at: Utc::now(),
+            exists: true,
+        }
+    }
+
+    /// Create account data for non-existent account
+    pub fn non_existent(address: String) -> Self {
+        Self {
+            address,
+            data: Vec::new(),
+            lamports: 0,
+            owner: String::new(),
+            fetched_at: Utc::now(),
+            exists: false,
+        }
+    }
+
+    /// Check if account data is expired (10 minutes TTL)
+    pub fn is_expired(&self) -> bool {
         let now = Utc::now();
-        Self {
-            pool_info,
-            cached_at: now,
-            last_updated: now,
-        }
+        let age = now.signed_duration_since(self.fetched_at);
+        age.num_seconds() > 600 // 10 minutes
     }
 
-    pub fn is_expired(&self) -> bool {
-        let age = Utc::now() - self.cached_at;
-        age.num_seconds() > POOL_CACHE_TTL_SECONDS
+    /// Check if account data is fresh (not expired)
+    pub fn is_fresh(&self) -> bool {
+        !self.is_expired()
     }
 }
 
-/// Cached account data from RPC
+/// Price history entry
 #[derive(Debug, Clone)]
-pub struct CachedAccount {
-    pub account_data: Vec<u8>,
-    pub cached_at: DateTime<Utc>,
-}
-
-impl CachedAccount {
-    pub fn new(account_data: Vec<u8>) -> Self {
-        Self {
-            account_data,
-            cached_at: Utc::now(),
-        }
-    }
-
-    pub fn is_expired(&self) -> bool {
-        let age = Utc::now() - self.cached_at;
-        age.num_seconds() > 60 // Account data expires in 1 minute
-    }
-}
-
-/// Cached price data
-#[derive(Debug, Clone)]
-pub struct CachedPrice {
-    pub price_result: PriceResult,
-    pub cached_at: DateTime<Utc>,
-}
-
-impl CachedPrice {
-    pub fn new(price_result: PriceResult) -> Self {
-        Self {
-            price_result,
-            cached_at: Utc::now(),
-        }
-    }
-
-    pub fn is_expired(&self) -> bool {
-        let age = Utc::now() - self.cached_at;
-        age.num_seconds() > PRICE_CACHE_TTL_SECONDS
-    }
-}
-
-/// Main cache manager for the pool service
-pub struct PoolCache {
-    /// Token cache: token_mint -> PoolToken
-    tokens: Arc<RwLock<HashMap<String, PoolToken>>>,
-
-    /// Pool cache: token_mint -> Vec<CachedPool>
-    pools: Arc<RwLock<HashMap<String, Vec<CachedPool>>>>,
-
-    /// Account data cache: pool_address -> CachedAccount
-    accounts: Arc<RwLock<HashMap<String, CachedAccount>>>,
-
-    /// Price cache: token_mint -> CachedPrice
-    prices: Arc<RwLock<HashMap<String, CachedPrice>>>,
-
-    /// Price history cache: token_mint -> Vec<(timestamp, price_sol)>
-    price_history: Arc<RwLock<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>,
-
-    /// Track which tokens are currently being processed (to avoid duplicates)
-    in_progress: Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
-}
-
-impl PoolCache {
-    pub fn new() -> Self {
-        Self {
-            tokens: Arc::new(RwLock::new(HashMap::new())),
-            pools: Arc::new(RwLock::new(HashMap::new())),
-            accounts: Arc::new(RwLock::new(HashMap::new())),
-            prices: Arc::new(RwLock::new(HashMap::new())),
-            price_history: Arc::new(RwLock::new(HashMap::new())),
-            in_progress: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
-
-    // =============================================================================
-    // TOKEN CACHE METHODS
-    // =============================================================================
-
-    /// Cache tokens
-    pub async fn cache_tokens(&self, tokens: Vec<PoolToken>) {
-        let mut cache = self.tokens.write().await;
-        for token in tokens {
-            cache.insert(token.mint.clone(), token);
-        }
-    }
-
-    /// Get cached tokens
-    pub async fn get_cached_tokens(&self) -> Vec<PoolToken> {
-        let cache = self.tokens.read().await;
-        cache.values().cloned().collect()
-    }
-
-    /// Check if token exists in cache
-    pub async fn has_token(&self, token_mint: &str) -> bool {
-        let cache = self.tokens.read().await;
-        cache.contains_key(token_mint)
-    }
-
-    // =============================================================================
-    // POOL CACHE METHODS
-    // =============================================================================
-
-    /// Get cached pools for a token
-    pub async fn get_cached_pools(&self, token_mint: &str) -> Option<Vec<PoolInfo>> {
-        let cache = self.pools.read().await;
-        if let Some(cached_pools) = cache.get(token_mint) {
-            // Check if any pools are still valid
-            let valid_pools: Vec<PoolInfo> = cached_pools
-                .iter()
-                .filter(|cp| !cp.is_expired())
-                .map(|cp| cp.pool_info.clone())
-                .collect();
-
-            if !valid_pools.is_empty() {
-                return Some(valid_pools);
-            }
-        }
-        None
-    }
-
-    /// Check if token has cached pools (not expired)
-    pub async fn has_cached_pools(&self, token_mint: &str) -> bool {
-        self.get_cached_pools(token_mint).await.is_some()
-    }
-
-    /// Get tokens that don't have cached pools
-    pub async fn get_tokens_without_pools(&self) -> Vec<String> {
-        let tokens_cache = self.tokens.read().await;
-        let pools_cache = self.pools.read().await;
-
-        let mut tokens_without_pools = Vec::new();
-
-        for token_mint in tokens_cache.keys() {
-            let has_valid_pools = if let Some(cached_pools) = pools_cache.get(token_mint) {
-                cached_pools.iter().any(|cp| !cp.is_expired())
-            } else {
-                false
-            };
-
-            // If no valid pools, add to tokens without pools
-            if !has_valid_pools {
-                tokens_without_pools.push(token_mint.clone());
-            }
-        }
-
-        tokens_without_pools
-    }
-
-    /// Get tokens that have cached pools available
-    pub async fn get_tokens_with_pools(&self) -> Vec<String> {
-        let tokens_cache = self.tokens.read().await;
-        let pools_cache = self.pools.read().await;
-
-        let mut tokens_with_pools = Vec::new();
-
-        for token_mint in tokens_cache.keys() {
-            if let Some(cached_pools) = pools_cache.get(token_mint) {
-                // Check if there are valid pools
-                let has_valid_pools = cached_pools.iter().any(|cp| !cp.is_expired());
-                if has_valid_pools {
-                    tokens_with_pools.push(token_mint.clone());
-                }
-            }
-        }
-
-        tokens_with_pools
-    }
-
-    /// Cache pools for a token
-    pub async fn cache_pools(&self, token_mint: &str, pools: Vec<PoolInfo>) {
-        let mut cache = self.pools.write().await;
-        let cached_pools: Vec<CachedPool> = pools.into_iter().map(CachedPool::new).collect();
-        cache.insert(token_mint.to_string(), cached_pools);
-    }
-
-    // =============================================================================
-    // ACCOUNT DATA CACHE METHODS
-    // =============================================================================
-
-    /// Cache account data for a pool
-    pub async fn cache_account_data(&self, pool_address: &str, account_data: Vec<u8>) {
-        let mut cache = self.accounts.write().await;
-        cache.insert(pool_address.to_string(), CachedAccount::new(account_data));
-    }
-
-    /// Get cached account data for a pool
-    pub async fn get_cached_account_data(&self, pool_address: &str) -> Option<Vec<u8>> {
-        let cache = self.accounts.read().await;
-        if let Some(cached_account) = cache.get(pool_address) {
-            if !cached_account.is_expired() {
-                return Some(cached_account.account_data.clone());
-            }
-        }
-        None
-    }
-
-    // =============================================================================
-    // PRICE CACHE METHODS
-    // =============================================================================
-
-    /// Cache price result for a token
-    pub async fn cache_price(&self, token_mint: &str, price_result: PriceResult) {
-        let mut cache = self.prices.write().await;
-        cache.insert(token_mint.to_string(), CachedPrice::new(price_result));
-    }
-
-    /// Get cached price for a token
-    pub async fn get_cached_price(&self, token_mint: &str) -> Option<PriceResult> {
-        let cache = self.prices.read().await;
-        if let Some(cached_price) = cache.get(token_mint) {
-            if !cached_price.is_expired() {
-                return Some(cached_price.price_result.clone());
-            }
-        }
-        None
-    }
-
-    // =============================================================================
-    // PRICE HISTORY CACHE METHODS
-    // =============================================================================
-
-    /// Add price to history for a token
-    pub async fn add_price_to_history(&self, token_mint: &str, price_sol: f64) {
-        let mut cache = self.price_history.write().await;
-        let history = cache.entry(token_mint.to_string()).or_insert_with(Vec::new);
-
-        // Add new price point
-        history.push((Utc::now(), price_sol));
-
-        // Keep only last MAX_PRICE_HISTORY_POINTS for memory efficiency
-        if history.len() > MAX_PRICE_HISTORY_POINTS {
-            history.remove(0);
-        }
-    }
-
-    /// Get price history for a token
-    pub async fn get_price_history(&self, token_mint: &str) -> Vec<(DateTime<Utc>, f64)> {
-        let cache = self.price_history.read().await;
-        cache.get(token_mint).cloned().unwrap_or_default()
-    }
-
-    /// Get price history for a specific time range
-    pub async fn get_price_history_since(
-        &self,
-        token_mint: &str,
-        since: DateTime<Utc>
-    ) -> Vec<(DateTime<Utc>, f64)> {
-        let cache = self.price_history.read().await;
-        if let Some(history) = cache.get(token_mint) {
-            history
-                .iter()
-                .filter(|(timestamp, _)| *timestamp >= since)
-                .cloned()
-                .collect()
-        } else {
-            Vec::new()
-        }
-    }
-
-    /// Clear old price history entries (keep last 6 hours)
-    pub async fn cleanup_price_history(&self) {
-        let cutoff = Utc::now() - chrono::Duration::hours(6);
-        let mut cache = self.price_history.write().await;
-
-        for history in cache.values_mut() {
-            history.retain(|(timestamp, _)| *timestamp > cutoff);
-        }
-
-        // Remove empty entries
-        cache.retain(|_, history| !history.is_empty());
-    }
-
-    // =============================================================================
-    // IN-PROGRESS TRACKING METHODS
-    // =============================================================================
-
-    /// Mark token as being processed
-    pub async fn mark_in_progress(&self, token_mint: &str) -> bool {
-        let mut cache = self.in_progress.write().await;
-        if cache.contains_key(token_mint) {
-            // Already being processed
-            false
-        } else {
-            cache.insert(token_mint.to_string(), Utc::now());
-            true
-        }
-    }
-
-    /// Mark token as completed processing
-    pub async fn mark_completed(&self, token_mint: &str) {
-        let mut cache = self.in_progress.write().await;
-        cache.remove(token_mint);
-    }
-
-    /// Clean up old in-progress entries (older than 5 minutes)
-    pub async fn cleanup_in_progress(&self) {
-        let mut cache = self.in_progress.write().await;
-        let cutoff = Utc::now() - chrono::Duration::minutes(5);
-        cache.retain(|_, start_time| *start_time > cutoff);
-    }
-
-    // =============================================================================
-    // CLEANUP METHODS
-    // =============================================================================
-
-    /// Clean up expired cache entries
-    pub async fn cleanup_expired(&self) -> (usize, usize, usize) {
-        let mut pools_cleaned = 0;
-        let mut accounts_cleaned = 0;
-        let mut prices_cleaned = 0;
-
-        // Clean expired pools (legacy)
-        {
-            let mut pools_cache = self.pools.write().await;
-            pools_cache.retain(|_, cached_pools| {
-                let before = cached_pools.len();
-                cached_pools.retain(|cp| !cp.is_expired());
-                pools_cleaned += before - cached_pools.len();
-                !cached_pools.is_empty() // Remove token entry if no valid pools remain
-            });
-        }
-
-        // Only one pool cache now, no separate discovery cache
-
-        // Clean expired accounts
-        {
-            let mut accounts_cache = self.accounts.write().await;
-            let before = accounts_cache.len();
-            accounts_cache.retain(|_, cached_account| !cached_account.is_expired());
-            accounts_cleaned = before - accounts_cache.len();
-        }
-
-        // Clean expired prices
-        {
-            let mut prices_cache = self.prices.write().await;
-            let before = prices_cache.len();
-            prices_cache.retain(|_, cached_price| !cached_price.is_expired());
-            prices_cleaned = before - prices_cache.len();
-        }
-
-        // Clean up old price history
-        self.cleanup_price_history().await;
-
-        // Clean up old in-progress entries
-        self.cleanup_in_progress().await;
-
-        (pools_cleaned, accounts_cleaned, prices_cleaned)
-    }
-
-    /// Get cache statistics
-    pub async fn get_stats(&self) -> CacheStats {
-        let tokens_count = self.tokens.read().await.len();
-        let pools_count = self.pools.read().await.len();
-        let accounts_count = self.accounts.read().await.len();
-        let prices_count = self.prices.read().await.len();
-        let in_progress_count = self.in_progress.read().await.len();
-
-        CacheStats {
-            tokens_count,
-            pools_count, // Single unified pool cache
-            accounts_count,
-            prices_count,
-            in_progress_count,
-        }
-    }
+pub struct PriceHistoryEntry {
+    pub timestamp: DateTime<Utc>,
+    pub price_sol: f64,
 }
 
 /// Cache statistics
 #[derive(Debug, Clone)]
 pub struct CacheStats {
-    pub tokens_count: usize,
-    pub pools_count: usize,
     pub accounts_count: usize,
+    pub pools_count: usize,
     pub prices_count: usize,
-    pub in_progress_count: usize,
+    pub tokens_count: usize,
+    pub availability_count: usize,
+    pub price_history_entries: usize,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Comprehensive pool cache
+/// Central storage for all pool-related data
+pub struct PoolCache {
+    /// Account data storage (address -> AccountData)
+    accounts: Arc<RwLock<HashMap<String, AccountData>>>,
+
+    /// Pool data storage (token_mint -> Vec<PoolInfo>)
+    pools: Arc<RwLock<HashMap<String, Vec<PoolInfo>>>>,
+
+    /// Price data storage (token_mint -> PriceResult)
+    prices: Arc<RwLock<HashMap<String, PriceResult>>>,
+
+    /// Price history storage (token_mint -> Vec<PriceHistoryEntry>)
+    price_history: Arc<RwLock<HashMap<String, Vec<PriceHistoryEntry>>>>,
+
+    /// Token storage (tokens list)
+    tokens: Arc<RwLock<Vec<PoolToken>>>,
+
+    /// Token availability storage (token_mint -> TokenAvailability)
+    token_availability: Arc<RwLock<HashMap<String, TokenAvailability>>>,
+
+    /// Required accounts for RPC fetching
+    required_accounts: Arc<RwLock<Vec<String>>>,
+}
+
+impl PoolCache {
+    pub fn new() -> Self {
+        Self {
+            accounts: Arc::new(RwLock::new(HashMap::new())),
+            pools: Arc::new(RwLock::new(HashMap::new())),
+            prices: Arc::new(RwLock::new(HashMap::new())),
+            price_history: Arc::new(RwLock::new(HashMap::new())),
+            tokens: Arc::new(RwLock::new(Vec::new())),
+            token_availability: Arc::new(RwLock::new(HashMap::new())),
+            required_accounts: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    // =============================================================================
+    // ACCOUNT DATA METHODS
+    // =============================================================================
+
+    /// Store account data
+    pub async fn store_account(
+        &self,
+        address: String,
+        data: Vec<u8>,
+        lamports: u64,
+        owner: String
+    ) {
+        let account_data = AccountData::new(address.clone(), data, lamports, owner);
+        let mut accounts = self.accounts.write().await;
+        accounts.insert(address, account_data);
+    }
+
+    /// Store non-existent account
+    pub async fn store_non_existent_account(&self, address: String) {
+        let account_data = AccountData::non_existent(address.clone());
+        let mut accounts = self.accounts.write().await;
+        accounts.insert(address, account_data);
+    }
+
+    /// Get account data
+    pub async fn get_account(&self, address: &str) -> Option<AccountData> {
+        let accounts = self.accounts.read().await;
+        accounts
+            .get(address)
+            .filter(|acc| acc.is_fresh())
+            .cloned()
+    }
+
+    /// Get multiple account data
+    pub async fn get_multiple_accounts(
+        &self,
+        addresses: &[String]
+    ) -> HashMap<String, AccountData> {
+        let accounts = self.accounts.read().await;
+        addresses
+            .iter()
+            .filter_map(|addr| {
+                accounts
+                    .get(addr)
+                    .filter(|acc| acc.is_fresh())
+                    .map(|acc| (addr.clone(), acc.clone()))
+            })
+            .collect()
+    }
+
+    /// Get all fresh account data
+    pub async fn get_all_accounts(&self) -> HashMap<String, AccountData> {
+        let accounts = self.accounts.read().await;
+        accounts
+            .iter()
+            .filter(|(_, acc)| acc.is_fresh())
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
+
+    /// Check if account exists and is fresh
+    pub async fn has_fresh_account(&self, address: &str) -> bool {
+        let accounts = self.accounts.read().await;
+        accounts
+            .get(address)
+            .map(|acc| acc.is_fresh())
+            .unwrap_or(false)
+    }
+
+    /// Remove expired accounts
+    pub async fn clean_expired_accounts(&self) -> usize {
+        let mut accounts = self.accounts.write().await;
+        let initial_count = accounts.len();
+        accounts.retain(|_, acc| acc.is_fresh());
+        let cleaned = initial_count - accounts.len();
+
+        if cleaned > 0 {
+            log(
+                LogTag::Pool,
+                "CACHE_CLEANUP_ACCOUNTS",
+                &format!("🧹 Cleaned {} expired accounts", cleaned)
+            );
+        }
+
+        cleaned
+    }
+
+    // =============================================================================
+    // POOL DATA METHODS
+    // =============================================================================
+
+    /// Store pools for a token
+    pub async fn store_pools(&self, token_mint: &str, pools: Vec<PoolInfo>) {
+        let mut pools_map = self.pools.write().await;
+        pools_map.insert(token_mint.to_string(), pools);
+
+        log(
+            LogTag::Pool,
+            "CACHE_STORE_POOLS",
+            &format!("📦 Stored pools for token {}", &token_mint[..8])
+        );
+    }
+
+    /// Get pools for a token
+    pub async fn get_pools(&self, token_mint: &str) -> Option<Vec<PoolInfo>> {
+        let pools_map = self.pools.read().await;
+        pools_map.get(token_mint).cloned()
+    }
+
+    /// Get all tokens with pools
+    pub async fn get_tokens_with_pools(&self) -> Vec<String> {
+        let pools_map = self.pools.read().await;
+        pools_map.keys().cloned().collect()
+    }
+
+    /// Remove pools for a token
+    pub async fn remove_pools(&self, token_mint: &str) {
+        let mut pools_map = self.pools.write().await;
+        pools_map.remove(token_mint);
+    }
+
+    // =============================================================================
+    // PRICE DATA METHODS
+    // =============================================================================
+
+    /// Store price result
+    pub async fn store_price(&self, token_mint: &str, price_result: PriceResult) {
+        // Store current price
+        {
+            let mut prices = self.prices.write().await;
+            prices.insert(token_mint.to_string(), price_result.clone());
+        }
+
+        // Add to price history
+        self.add_price_to_history(token_mint, price_result.price_sol).await;
+
+        log(
+            LogTag::Pool,
+            "CACHE_STORE_PRICE",
+            &format!(
+                "💰 Stored price for token {}: {} SOL",
+                &token_mint[..8],
+                price_result.price_sol
+            )
+        );
+    }
+
+    /// Get cached price
+    pub async fn get_price(&self, token_mint: &str) -> Option<PriceResult> {
+        let prices = self.prices.read().await;
+        prices.get(token_mint).cloned()
+    }
+
+    /// Add price to history
+    pub async fn add_price_to_history(&self, token_mint: &str, price_sol: f64) {
+        let mut history = self.price_history.write().await;
+        let entry = PriceHistoryEntry {
+            timestamp: Utc::now(),
+            price_sol,
+        };
+
+        history.entry(token_mint.to_string()).or_insert_with(Vec::new).push(entry);
+
+        // Keep only last 1000 entries per token
+        if let Some(token_history) = history.get_mut(token_mint) {
+            if token_history.len() > 1000 {
+                token_history.remove(0);
+            }
+        }
+    }
+
+    /// Get price history for a token
+    pub async fn get_price_history(&self, token_mint: &str) -> Vec<(DateTime<Utc>, f64)> {
+        let history = self.price_history.read().await;
+        history
+            .get(token_mint)
+            .map(|entries|
+                entries
+                    .iter()
+                    .map(|e| (e.timestamp, e.price_sol))
+                    .collect()
+            )
+            .unwrap_or_default()
+    }
+
+    /// Get price history since a specific time
+    pub async fn get_price_history_since(
+        &self,
+        token_mint: &str,
+        since: DateTime<Utc>
+    ) -> Vec<(DateTime<Utc>, f64)> {
+        let history = self.price_history.read().await;
+        history
+            .get(token_mint)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter(|e| e.timestamp >= since)
+                    .map(|e| (e.timestamp, e.price_sol))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    // =============================================================================
+    // TOKEN DATA METHODS
+    // =============================================================================
+
+    /// Store tokens list
+    pub async fn store_tokens(&self, tokens: Vec<PoolToken>) {
+        let mut tokens_storage = self.tokens.write().await;
+        *tokens_storage = tokens.clone();
+
+        log(LogTag::Pool, "CACHE_STORE_TOKENS", &format!("🪙 Stored {} tokens", tokens.len()));
+    }
+
+    /// Get all tokens
+    pub async fn get_tokens(&self) -> Vec<PoolToken> {
+        let tokens = self.tokens.read().await;
+        tokens.clone()
+    }
+
+    /// Get token mints
+    pub async fn get_token_mints(&self) -> Vec<String> {
+        let tokens = self.tokens.read().await;
+        tokens
+            .iter()
+            .map(|t| t.mint.clone())
+            .collect()
+    }
+
+    // =============================================================================
+    // TOKEN AVAILABILITY METHODS
+    // =============================================================================
+
+    /// Store token availability
+    pub async fn store_token_availability(
+        &self,
+        token_mint: &str,
+        availability: TokenAvailability
+    ) {
+        let mut avail_map = self.token_availability.write().await;
+        avail_map.insert(token_mint.to_string(), availability);
+    }
+
+    /// Get token availability
+    pub async fn get_token_availability(&self, token_mint: &str) -> Option<TokenAvailability> {
+        let avail_map = self.token_availability.read().await;
+        avail_map.get(token_mint).cloned()
+    }
+
+    /// Get all calculable tokens
+    pub async fn get_calculable_tokens(&self) -> Vec<String> {
+        let avail_map = self.token_availability.read().await;
+        avail_map
+            .values()
+            .filter(|a| a.calculable)
+            .map(|a| a.token_mint.clone())
+            .collect()
+    }
+
+    /// Get calculable token availabilities
+    pub async fn get_calculable_token_availabilities(&self) -> HashMap<String, TokenAvailability> {
+        let avail_map = self.token_availability.read().await;
+        avail_map
+            .iter()
+            .filter(|(_, a)| a.calculable)
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
+
+    /// Get trading ready tokens
+    pub async fn get_trading_ready_tokens(&self) -> Vec<String> {
+        let avail_map = self.token_availability.read().await;
+        avail_map
+            .values()
+            .filter(|a| a.is_ready_for_trading())
+            .map(|a| a.token_mint.clone())
+            .collect()
+    }
+
+    // =============================================================================
+    // REQUIRED ACCOUNTS METHODS
+    // =============================================================================
+
+    /// Store required accounts for RPC fetching
+    pub async fn store_required_accounts(&self, accounts: Vec<String>) {
+        let mut req_accounts = self.required_accounts.write().await;
+        *req_accounts = accounts.clone();
+
+        log(
+            LogTag::Pool,
+            "CACHE_STORE_REQUIRED",
+            &format!("📋 Stored {} required accounts", accounts.len())
+        );
+    }
+
+    /// Get required accounts
+    pub async fn get_required_accounts(&self) -> Vec<String> {
+        let req_accounts = self.required_accounts.read().await;
+        req_accounts.clone()
+    }
+
+    /// Add required account
+    pub async fn add_required_account(&self, address: String) {
+        let mut req_accounts = self.required_accounts.write().await;
+        if !req_accounts.contains(&address) {
+            req_accounts.push(address);
+        }
+    }
+
+    // =============================================================================
+    // STATISTICS AND MAINTENANCE
+    // =============================================================================
+
+    /// Get cache statistics
+    pub async fn get_stats(&self) -> CacheStats {
+        let accounts = self.accounts.read().await;
+        let pools = self.pools.read().await;
+        let prices = self.prices.read().await;
+        let tokens = self.tokens.read().await;
+        let availability = self.token_availability.read().await;
+        let history = self.price_history.read().await;
+
+        let price_history_entries = history
+            .values()
+            .map(|h| h.len())
+            .sum();
+
+        CacheStats {
+            accounts_count: accounts.len(),
+            pools_count: pools.len(),
+            prices_count: prices.len(),
+            tokens_count: tokens.len(),
+            availability_count: availability.len(),
+            price_history_entries,
+            updated_at: Utc::now(),
+        }
+    }
+
+    /// Clean all expired data
+    pub async fn cleanup_expired(&self) -> (usize, usize) {
+        let cleaned_accounts = self.clean_expired_accounts().await;
+
+        // Clean old price history (keep only last 24 hours per token)
+        let mut history = self.price_history.write().await;
+        let cutoff = Utc::now() - chrono::Duration::hours(24);
+        let mut cleaned_history = 0;
+
+        for token_history in history.values_mut() {
+            let initial_len = token_history.len();
+            token_history.retain(|entry| entry.timestamp >= cutoff);
+            cleaned_history += initial_len - token_history.len();
+        }
+
+        if cleaned_history > 0 {
+            log(
+                LogTag::Pool,
+                "CACHE_CLEANUP_HISTORY",
+                &format!("🧹 Cleaned {} old price history entries", cleaned_history)
+            );
+        }
+
+        (cleaned_accounts, cleaned_history)
+    }
+
+    /// Clear all data (for testing/reset)
+    pub async fn clear_all(&self) {
+        let mut accounts = self.accounts.write().await;
+        let mut pools = self.pools.write().await;
+        let mut prices = self.prices.write().await;
+        let mut history = self.price_history.write().await;
+        let mut tokens = self.tokens.write().await;
+        let mut availability = self.token_availability.write().await;
+        let mut required = self.required_accounts.write().await;
+
+        accounts.clear();
+        pools.clear();
+        prices.clear();
+        history.clear();
+        tokens.clear();
+        availability.clear();
+        required.clear();
+
+        log(LogTag::Pool, "CACHE_CLEARED", "🗑️ Cleared all cache data");
+    }
+
+    /// Get memory usage estimate (rough)
+    pub async fn get_memory_usage_mb(&self) -> f64 {
+        let stats = self.get_stats().await;
+
+        // Rough estimates
+        let accounts_mb = (stats.accounts_count as f64) * 0.001; // ~1KB per account
+        let pools_mb = (stats.pools_count as f64) * 0.002; // ~2KB per pool
+        let prices_mb = (stats.prices_count as f64) * 0.0005; // ~0.5KB per price
+        let history_mb = (stats.price_history_entries as f64) * 0.0001; // ~0.1KB per entry
+
+        accounts_mb + pools_mb + prices_mb + history_mb
+    }
+
+    /// Set token as calculable (mark token as ready for price calculation)
+    pub async fn set_token_calculable(
+        &self,
+        token_mint: &str,
+        calculable: bool,
+        best_pool: Option<PoolInfo>
+    ) {
+        let availability = if calculable {
+            if let Some(pool) = best_pool {
+                TokenAvailability {
+                    token_mint: token_mint.to_string(),
+                    calculable: true,
+                    best_pool: Some(pool),
+                    pools: Vec::new(),
+                    reserve_accounts: Vec::new(),
+                    liquidity_usd: 0.0,
+                    sol_reserves: 0.0,
+                    analyzed_at: Utc::now(),
+                    errors: Vec::new(),
+                }
+            } else {
+                TokenAvailability {
+                    token_mint: token_mint.to_string(),
+                    calculable: false,
+                    best_pool: None,
+                    pools: Vec::new(),
+                    reserve_accounts: Vec::new(),
+                    liquidity_usd: 0.0,
+                    sol_reserves: 0.0,
+                    analyzed_at: Utc::now(),
+                    errors: vec!["No best pool available".to_string()],
+                }
+            }
+        } else {
+            TokenAvailability {
+                token_mint: token_mint.to_string(),
+                calculable: false,
+                best_pool: None,
+                pools: Vec::new(),
+                reserve_accounts: Vec::new(),
+                liquidity_usd: 0.0,
+                sol_reserves: 0.0,
+                analyzed_at: Utc::now(),
+                errors: Vec::new(),
+            }
+        };
+
+        self.store_token_availability(token_mint, availability).await;
+    }
+
+    /// Add multiple required accounts
+    pub async fn add_required_accounts(&self, addresses: &[String]) {
+        let mut req_accounts = self.required_accounts.write().await;
+        for address in addresses {
+            if !req_accounts.contains(address) {
+                req_accounts.push(address.clone());
+            }
+        }
+    }
+
+    /// Get all token availabilities
+    pub async fn get_all_token_availability(&self) -> HashMap<String, TokenAvailability> {
+        let availability_map = self.token_availability.read().await;
+        availability_map.clone()
+    }
+
+    /// Get tokens without pools (tokens that need discovery)
+    pub async fn get_tokens_without_pools(&self) -> Vec<String> {
+        let tokens = self.get_tokens().await;
+        let pools_map = self.pools.read().await;
+
+        tokens
+            .into_iter()
+            .filter(|token| !pools_map.contains_key(&token.mint))
+            .map(|token| token.mint)
+            .collect()
+    }
+
+    /// Mark token discovery as in progress
+    pub async fn mark_in_progress(&self, _token_mint: &str) -> bool {
+        // For now, always allow processing (can add actual state tracking later)
+        true
+    }
+
+    /// Mark token discovery as completed
+    pub async fn mark_completed(&self, _token_mint: &str) {
+        // For now, no-op (can add actual state tracking later)
+    }
+
+    /// Cache pools for a token (alias for store_pools)
+    pub async fn cache_pools(&self, token_mint: &str, pools: Vec<PoolInfo>) {
+        self.store_pools(token_mint, pools).await;
+    }
+
+    /// Get cached pools for a token (alias for get_pools)
+    pub async fn get_cached_pools(&self, token_mint: &str) -> Option<Vec<PoolInfo>> {
+        self.get_pools(token_mint).await
+    }
+
+    /// Cache price for a token (alias for store_price)
+    pub async fn cache_price(&self, token_mint: &str, price_result: PriceResult) {
+        self.store_price(token_mint, price_result).await;
+    }
+
+    /// Get cached price for a token (alias for get_price)
+    pub async fn get_cached_price(&self, token_mint: &str) -> Option<PriceResult> {
+        self.get_price(token_mint).await
+    }
+
+    /// Cache account data (alias for store_account)
+    pub async fn cache_account_data(&self, address: &str, data: Vec<u8>) {
+        self.store_account(address.to_string(), data, 0, String::new()).await;
+    }
+
+    /// Get cached account data (alias for get_account that returns Vec<u8>)
+    pub async fn get_cached_account_data(&self, address: &str) -> Option<Vec<u8>> {
+        if let Some(account) = self.get_account(address).await { Some(account.data) } else { None }
+    }
+
+    /// Remove account from cache
+    pub async fn remove_account(&self, address: &str) {
+        let mut accounts = self.accounts.write().await;
+        accounts.remove(address);
+    }
+
+    /// Get analysis statistics
+    pub async fn get_analysis_stats(&self) -> AnalysisStats {
+        let availability_map = self.token_availability.read().await;
+        let total_tokens = availability_map.len();
+        let calculable_tokens = availability_map
+            .values()
+            .filter(|a| a.calculable)
+            .count();
+        let trading_ready_tokens = calculable_tokens; // Simplified
+        let error_tokens = availability_map
+            .values()
+            .filter(|a| !a.errors.is_empty())
+            .count();
+        let required_accounts = self.get_required_accounts().await.len();
+
+        AnalysisStats {
+            total_tokens,
+            calculable_tokens,
+            trading_ready_tokens,
+            error_tokens,
+            required_accounts,
+            updated_at: Utc::now(),
+        }
+    }
+}
+
+impl Default for PoolCache {
+    fn default() -> Self {
+        Self::new()
+    }
 }

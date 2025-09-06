@@ -160,26 +160,26 @@ impl PoolDecoder {
     }
 
     /// Decode pool data from account data
-    pub async fn decode_pool_data(
+    pub fn decode_pool_data(
         &self,
         pool_data: &[u8],
         reserve_accounts_data: &HashMap<String, Vec<u8>>
     ) -> Result<PoolDecodedResult, String> {
         match self {
             PoolDecoder::RaydiumCpmm(decoder) =>
-                decoder.decode_pool_data(pool_data, reserve_accounts_data).await,
+                decoder.decode_pool_data(pool_data, reserve_accounts_data),
             PoolDecoder::RaydiumLegacyAmm(decoder) =>
-                decoder.decode_pool_data(pool_data, reserve_accounts_data).await,
+                decoder.decode_pool_data(pool_data, reserve_accounts_data),
             PoolDecoder::RaydiumClmm(decoder) =>
-                decoder.decode_pool_data(pool_data, reserve_accounts_data).await,
+                decoder.decode_pool_data(pool_data, reserve_accounts_data),
             PoolDecoder::MeteoraDammV2(decoder) =>
-                decoder.decode_pool_data(pool_data, reserve_accounts_data).await,
+                decoder.decode_pool_data(pool_data, reserve_accounts_data),
             PoolDecoder::MeteoraDlmm(decoder) =>
-                decoder.decode_pool_data(pool_data, reserve_accounts_data).await,
+                decoder.decode_pool_data(pool_data, reserve_accounts_data),
             PoolDecoder::OrcaWhirlpool(decoder) =>
-                decoder.decode_pool_data(pool_data, reserve_accounts_data).await,
+                decoder.decode_pool_data(pool_data, reserve_accounts_data),
             PoolDecoder::PumpFunAmm(decoder) =>
-                decoder.decode_pool_data(pool_data, reserve_accounts_data).await,
+                decoder.decode_pool_data(pool_data, reserve_accounts_data),
         }
     }
 }

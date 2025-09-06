@@ -3,8 +3,7 @@
 
 use crate::pools::types::{ PriceResult, PoolInfo };
 use crate::pools::decoders::{ DecoderFactory, PoolDecodedResult };
-use crate::pools::service::{ PreparedPoolData, SharedAccountData };
-use crate::pools::cache::PoolCache;
+use crate::pools::cache::{ PoolCache, AccountData };
 use crate::pools::tokens::PoolToken;
 use crate::pools::analyzer::TokenAvailability;
 use tokio::sync::RwLock;
@@ -35,11 +34,7 @@ impl PoolCalculatorTask {
     }
 
     /// Start the calculator background task
-    pub async fn start_task(
-        &self,
-        shared_accounts: Arc<RwLock<HashMap<String, SharedAccountData>>>,
-        calculable_tokens: Arc<RwLock<HashMap<String, TokenAvailability>>>
-    ) {
+    pub async fn start_task(&self, cache: Arc<PoolCache>) {
         let mut is_running = self.is_running.write().await;
         if *is_running {
             log(LogTag::Pool, "CALCULATOR_TASK_RUNNING", "Calculator task already running");
@@ -52,7 +47,6 @@ impl PoolCalculatorTask {
 
         // Clone necessary data for the background task
         let decoder_factory = self.decoder_factory.clone();
-        let cache = self.cache.clone();
         let is_running = self.is_running.clone();
         let last_calculated = self.last_calculated.clone();
 
@@ -62,8 +56,6 @@ impl PoolCalculatorTask {
                     Self::calculate_prices_for_available_tokens(
                         &decoder_factory,
                         &cache,
-                        &shared_accounts,
-                        &calculable_tokens,
                         &last_calculated
                     ).await
                 {
@@ -103,32 +95,30 @@ impl PoolCalculatorTask {
     async fn calculate_prices_for_available_tokens(
         decoder_factory: &DecoderFactory,
         cache: &Arc<PoolCache>,
-        shared_accounts: &Arc<RwLock<HashMap<String, SharedAccountData>>>,
-        calculable_tokens: &Arc<RwLock<HashMap<String, TokenAvailability>>>,
         last_calculated: &Arc<RwLock<HashMap<String, DateTime<Utc>>>>
     ) -> Result<usize, String> {
-        let calculable_map = calculable_tokens.read().await;
+        let calculable_tokens = cache.get_all_token_availability().await;
         let mut calculated_count = 0;
 
-        for (token_mint, availability) in calculable_map.iter() {
+        for (token_mint, availability) in calculable_tokens {
             if !availability.calculable || availability.best_pool.is_none() {
                 continue;
             }
 
             // Check if we need to calculate (every 30 seconds)
-            if !Self::should_calculate_price(token_mint, last_calculated).await {
+            if !Self::should_calculate_price(&token_mint, last_calculated).await {
                 continue;
             }
 
             let best_pool = availability.best_pool.as_ref().unwrap();
 
-            // Prepare pool data from shared accounts
+            // Prepare pool data from cache
             let prepared_data = match
-                Self::prepare_pool_data_from_shared(
+                Self::prepare_pool_data_from_cache(
                     &best_pool.pool_address,
                     &best_pool.pool_program_id,
                     &availability.reserve_accounts,
-                    shared_accounts
+                    cache
                 ).await
             {
                 Ok(data) => data,
@@ -147,11 +137,11 @@ impl PoolCalculatorTask {
                 match decoder.decode_pool_data(&prepared_data) {
                     Ok(decoded_result) => {
                         match
-                            Self::calculate_price_from_decoded_result(&decoded_result, token_mint)
+                            Self::calculate_price_from_decoded_result(&decoded_result, &token_mint)
                         {
                             Ok(Some(price_result)) => {
                                 // Store price in cache
-                                cache.cache_price(token_mint, price_result).await;
+                                cache.store_price(&token_mint, price_result).await;
                                 calculated_count += 1;
 
                                 // Update last calculated time
@@ -216,18 +206,16 @@ impl PoolCalculatorTask {
         }
     }
 
-    /// Prepare pool data from shared account store
-    async fn prepare_pool_data_from_shared(
+    /// Prepare pool data from cache
+    async fn prepare_pool_data_from_cache(
         pool_address: &str,
         program_id: &str,
         reserve_addresses: &[String],
-        shared_accounts: &Arc<RwLock<HashMap<String, SharedAccountData>>>
+        cache: &Arc<PoolCache>
     ) -> Result<PreparedPoolData, String> {
-        let accounts = shared_accounts.read().await;
-
         // Get pool account data
-        let pool_account = accounts
-            .get(pool_address)
+        let pool_account = cache
+            .get_account(pool_address).await
             .ok_or_else(|| format!("Pool account data not available: {}", pool_address))?;
 
         if !pool_account.exists {
@@ -246,7 +234,7 @@ impl PoolCalculatorTask {
 
         // Add reserve account data
         for reserve_address in reserve_addresses {
-            if let Some(reserve_account) = accounts.get(reserve_address) {
+            if let Some(reserve_account) = cache.get_account(reserve_address).await {
                 if reserve_account.exists && !reserve_account.is_expired() {
                     prepared_data.add_reserve_account(
                         reserve_address.clone(),
@@ -337,6 +325,36 @@ impl PoolCalculatorTask {
             is_running,
             updated_at: Utc::now(),
         }
+    }
+}
+
+/// Prepared pool data for decoders
+/// Contains all necessary account data for pool decoding
+#[derive(Debug, Clone)]
+pub struct PreparedPoolData {
+    /// Pool address
+    pub pool_address: String,
+    /// Pool program ID
+    pub program_id: String,
+    /// Pool account data
+    pub pool_account_data: Vec<u8>,
+    /// Reserve account data (vault accounts)
+    pub reserve_accounts_data: HashMap<String, Vec<u8>>,
+}
+
+impl PreparedPoolData {
+    pub fn new(pool_address: String, program_id: String, pool_account_data: Vec<u8>) -> Self {
+        Self {
+            pool_address,
+            program_id,
+            pool_account_data,
+            reserve_accounts_data: HashMap::new(),
+        }
+    }
+
+    /// Add reserve account data
+    pub fn add_reserve_account(&mut self, address: String, data: Vec<u8>) {
+        self.reserve_accounts_data.insert(address, data);
     }
 }
 

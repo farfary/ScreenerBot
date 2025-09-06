@@ -3,7 +3,6 @@
 
 use crate::pools::constants::METEORA_DAMM_V2_PROGRAM_ID;
 use crate::pools::decoders::PoolDecodedResult;
-use crate::pools::service::PreparedPoolData;
 use crate::tokens::decimals::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
@@ -25,249 +24,219 @@ impl MeteoraDammV2Decoder {
         program_id == METEORA_DAMM_V2_PROGRAM_ID
     }
 
-    pub fn decode_pool_data(
-        &self,
-        prepared_data: &PreparedPoolData
-    ) -> Result<PoolDecodedResult, String> {
-        if prepared_data.program_id != METEORA_DAMM_V2_PROGRAM_ID {
-            return Err(
-                format!("Invalid program ID for Meteora DAMM v2: {}", prepared_data.program_id)
-            );
+    /// Extract vault addresses from pool account data
+    pub fn extract_vault_addresses(&self, pool_data: &[u8]) -> Result<Vec<String>, String> {
+        if pool_data.len() < 200 {
+            return Err("Insufficient pool data length".to_string());
         }
 
-        let data = &prepared_data.pool_account_data;
+        let mut vault_addresses = Vec::new();
+        let mut offset = 136; // Start after discriminator and other fields
 
-        if data.len() < 1112 {
-            return Err(
-                format!(
-                    "Invalid Meteora DAMM v2 pool account data length: {} (expected >= 1112)",
-                    data.len()
-                )
-            );
-        }
-
-        log(
-            LogTag::Pool,
-            "METEORA_DECODE",
-            &format!(
-                "🔍 Decoding Meteora DAMM v2 pool {}, data length: {}",
-                &prepared_data.pool_address[..8],
-                data.len()
-            )
-        );
-
-        // Decode Meteora DAMM v2 pool structure based on the provided layout
-        // Skip the complex pool_fees structure (starts at offset 8, quite large)
-        // Jump to token mints which start around offset 136 based on the old implementation
-        let mut offset = 136;
-
-        let token_a_mint = Self::read_pubkey_at_offset(data, &mut offset)?;
-        let token_b_mint = Self::read_pubkey_at_offset(data, &mut offset)?;
-        let token_a_vault = Self::read_pubkey_at_offset(data, &mut offset)?;
-        let token_b_vault = Self::read_pubkey_at_offset(data, &mut offset)?;
-
-        // Skip whitelisted_vault and partner
+        // Skip token mints (64 bytes)
         offset += 64;
 
-        // Read liquidity (u128)
-        let liquidity = Self::read_u128_at_offset(data, &mut offset)?;
+        // Read vault A address (32 bytes)
+        if let Ok(vault_a) = read_pubkey_at_offset(pool_data, &mut offset) {
+            vault_addresses.push(vault_a);
+        }
 
-        // Skip _padding (u128)
-        offset += 16;
+        // Read vault B address (32 bytes)
+        if let Ok(vault_b) = read_pubkey_at_offset(pool_data, &mut offset) {
+            vault_addresses.push(vault_b);
+        }
 
-        // Read protocol fees
-        let _protocol_a_fee = Self::read_u64_at_offset(data, &mut offset)?;
-        let _protocol_b_fee = Self::read_u64_at_offset(data, &mut offset)?;
+        Ok(vault_addresses)
+    }
 
-        // Skip partner fees
-        offset += 16;
+    pub async fn decode_pool_data(
+        &self,
+        pool_data: &[u8],
+        reserve_accounts_data: &HashMap<String, Vec<u8>>
+    ) -> Result<PoolDecodedResult, String> {
+        if pool_data.len() < 200 {
+            return Err("Insufficient pool data length for Meteora DAMM v2".to_string());
+        }
 
-        // Read sqrt prices
-        let _sqrt_min_price = Self::read_u128_at_offset(data, &mut offset)?;
-        let _sqrt_max_price = Self::read_u128_at_offset(data, &mut offset)?;
-        let _sqrt_price = Self::read_u128_at_offset(data, &mut offset)?;
+        log(LogTag::Pool, "METEORA_DECODE_START", "🔍 Decoding Meteora DAMM v2 pool");
 
-        // Read activation point
-        let _activation_point = Self::read_u64_at_offset(data, &mut offset)?;
+        let mut offset = 8; // Skip discriminator
 
-        // Read status flags
-        let _activation_type = Self::read_u8_at_offset(data, &mut offset)?;
-        let pool_status = Self::read_u8_at_offset(data, &mut offset)?;
-        let _token_a_flag = Self::read_u8_at_offset(data, &mut offset)?;
-        let _token_b_flag = Self::read_u8_at_offset(data, &mut offset)?;
-        let _collect_fee_mode = Self::read_u8_at_offset(data, &mut offset)?;
-        let _pool_type = Self::read_u8_at_offset(data, &mut offset)?;
+        // Read pool state
+        let pool_state = match read_u8_at_offset(pool_data, &mut offset) {
+            Ok(state) => state,
+            Err(e) => {
+                return Err(format!("Failed to read pool state: {}", e));
+            }
+        };
 
-        log(
-            LogTag::Pool,
-            "METEORA_EXTRACTED",
-            &format!(
-                "🔍 Extracted: Token A: {}, Token B: {}, Vaults: {} / {}",
-                &token_a_mint[..8],
-                &token_b_mint[..8],
-                &token_a_vault[..8],
-                &token_b_vault[..8]
-            )
-        );
+        if pool_state != 0 {
+            return Err("Pool is not in active state".to_string());
+        }
+
+        // Skip padding (7 bytes)
+        offset += 7;
+
+        // Read bump (1 byte)
+        let _bump = read_u8_at_offset(pool_data, &mut offset).map_err(|e|
+            format!("Failed to read bump: {}", e)
+        )?;
+
+        // Skip padding (7 bytes)
+        offset += 7;
+
+        // Read AMM config (32 bytes)
+        let _amm_config = read_pubkey_at_offset(pool_data, &mut offset).map_err(|e|
+            format!("Failed to read AMM config: {}", e)
+        )?;
+
+        // Read pool creator (32 bytes)
+        let _pool_creator = read_pubkey_at_offset(pool_data, &mut offset).map_err(|e|
+            format!("Failed to read pool creator: {}", e)
+        )?;
+
+        // Read token A mint (32 bytes)
+        let token_a_mint = read_pubkey_at_offset(pool_data, &mut offset).map_err(|e|
+            format!("Failed to read token A mint: {}", e)
+        )?;
+
+        // Read token B mint (32 bytes)
+        let token_b_mint = read_pubkey_at_offset(pool_data, &mut offset).map_err(|e|
+            format!("Failed to read token B mint: {}", e)
+        )?;
+
+        // Read vault A (32 bytes)
+        let vault_a = read_pubkey_at_offset(pool_data, &mut offset).map_err(|e|
+            format!("Failed to read vault A: {}", e)
+        )?;
+
+        // Read vault B (32 bytes)
+        let vault_b = read_pubkey_at_offset(pool_data, &mut offset).map_err(|e|
+            format!("Failed to read vault B: {}", e)
+        )?;
+
+        // Get vault balances
+        let (vault_a_balance, vault_b_balance) = get_vault_balances_from_data(
+            &vault_a,
+            &vault_b,
+            reserve_accounts_data
+        )?;
 
         // Get token decimals
-        let token_a_decimals = get_cached_decimals(&token_a_mint).ok_or_else(||
-            format!("Cannot determine decimals for token A: {}", token_a_mint)
-        )?;
-
-        let token_b_decimals = get_cached_decimals(&token_b_mint).ok_or_else(||
-            format!("Cannot determine decimals for token B: {}", token_b_mint)
-        )?;
-
-        // Get vault balances from prepared reserve data
-        let (token_a_reserve, token_b_reserve) = self.get_vault_balances_from_prepared_data(
-            &token_a_vault,
-            &token_b_vault,
-            &prepared_data.reserve_accounts_data
-        )?;
+        let token_a_decimals = get_cached_decimals(&token_a_mint).await.unwrap_or(9);
+        let token_b_decimals = get_cached_decimals(&token_b_mint).await.unwrap_or(9);
 
         log(
             LogTag::Pool,
-            "METEORA_RESERVES",
+            "METEORA_DECODE_SUCCESS",
             &format!(
-                "💰 Reserves: Token A: {} (decimals: {}), Token B: {} (decimals: {})",
-                token_a_reserve,
-                token_a_decimals,
-                token_b_reserve,
-                token_b_decimals
+                "✅ Meteora pool decoded: {} {} / {} {}",
+                vault_a_balance,
+                &token_a_mint[..6],
+                vault_b_balance,
+                &token_b_mint[..6]
             )
         );
 
-        // Create and return the decoded result
-        let mut result = PoolDecodedResult::new(
-            prepared_data.pool_address.clone(),
-            METEORA_DAMM_V2_PROGRAM_ID.to_string(),
-            "Meteora DAMM v2".to_string(),
+        Ok(PoolDecodedResult {
+            pool_address: "unknown".to_string(), // Will be set by caller
+            program_id: METEORA_DAMM_V2_PROGRAM_ID.to_string(),
+            pool_type: "DAMM v2".to_string(),
             token_a_mint,
             token_b_mint,
-            token_a_reserve,
-            token_b_reserve,
+            token_a_reserve: vault_a_balance,
+            token_b_reserve: vault_b_balance,
             token_a_decimals,
-            token_b_decimals
-        );
-
-        // Set optional fields
-        result.token_a_vault = Some(token_a_vault);
-        result.token_b_vault = Some(token_b_vault);
-        result.lp_supply = Some(liquidity as u64);
-        result.status = Some(pool_status as u32);
-
-        Ok(result)
+            token_b_decimals,
+            fee_rate: 0.0, // TODO: Extract fee rate
+            liquidity: 0.0, // TODO: Calculate liquidity
+            volume_24h: None,
+            fees_24h: None,
+            apy: None,
+            last_updated: chrono::Utc::now(),
+        })
     }
+}
 
-    /// Get vault balances from prepared reserve data
-    fn get_vault_balances_from_prepared_data(
-        &self,
-        vault_a: &str,
-        vault_b: &str,
-        reserve_data: &HashMap<String, Vec<u8>>
-    ) -> Result<(u64, u64), String> {
-        // Get vault A account data
-        let vault_a_data = reserve_data
-            .get(vault_a)
-            .ok_or_else(|| format!("Vault A account data not found for {}", vault_a))?;
-
-        let vault_b_data = reserve_data
-            .get(vault_b)
-            .ok_or_else(|| format!("Vault B account data not found for {}", vault_b))?;
-
-        // Decode token account amounts
-        let balance_a = Self::decode_token_account_amount(vault_a_data).map_err(|e|
-            format!("Failed to decode vault A balance: {}", e)
-        )?;
-
-        let balance_b = Self::decode_token_account_amount(vault_b_data).map_err(|e|
-            format!("Failed to decode vault B balance: {}", e)
-        )?;
-
-        log(
-            LogTag::Pool,
-            "METEORA_VAULT_BALANCES",
-            &format!(
-                "🏦 Vault balances - A ({}): {}, B ({}): {}",
-                &vault_a[..8],
-                balance_a,
-                &vault_b[..8],
-                balance_b
-            )
-        );
-
-        Ok((balance_a, balance_b))
-    }
-
-    /// Decode token account amount from account data
-    fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
-        if data.len() < 72 {
-            return Err("Invalid token account data length".to_string());
+/// Get vault balances from reserve account data
+fn get_vault_balances_from_data(
+    vault_a_address: &str,
+    vault_b_address: &str,
+    reserve_accounts_data: &HashMap<String, Vec<u8>>
+) -> Result<(u64, u64), String> {
+    let vault_a_balance = match reserve_accounts_data.get(vault_a_address) {
+        Some(vault_data) => {
+            if vault_data.len() >= 72 {
+                read_u64_at_offset(vault_data, &mut 64).map_err(|e|
+                    format!("Failed to read vault A balance: {}", e)
+                )?
+            } else {
+                return Err("Vault A data too short".to_string());
+            }
         }
-
-        // Token account amount is at offset 64 (8 bytes)
-        let amount_bytes = &data[64..72];
-        let amount = u64::from_le_bytes(
-            amount_bytes.try_into().map_err(|_| "Failed to parse token account amount".to_string())?
-        );
-
-        Ok(amount)
-    }
-
-    /// Helper functions for reading pool data
-    fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, String> {
-        if *offset + 32 > data.len() {
-            return Err("Insufficient data for pubkey".to_string());
+        None => {
+            return Err("Vault A data not found".to_string());
         }
+    };
 
-        let pubkey_bytes = &data[*offset..*offset + 32];
-        *offset += 32;
-
-        let pubkey = Pubkey::new_from_array(
-            pubkey_bytes.try_into().map_err(|_| "Failed to parse pubkey".to_string())?
-        );
-
-        Ok(pubkey.to_string())
-    }
-
-    fn read_u8_at_offset(data: &[u8], offset: &mut usize) -> Result<u8, String> {
-        if *offset >= data.len() {
-            return Err("Insufficient data for u8".to_string());
+    let vault_b_balance = match reserve_accounts_data.get(vault_b_address) {
+        Some(vault_data) => {
+            if vault_data.len() >= 72 {
+                read_u64_at_offset(vault_data, &mut 64).map_err(|e|
+                    format!("Failed to read vault B balance: {}", e)
+                )?
+            } else {
+                return Err("Vault B data too short".to_string());
+            }
         }
-
-        let value = data[*offset];
-        *offset += 1;
-        Ok(value)
-    }
-
-    fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, String> {
-        if *offset + 8 > data.len() {
-            return Err("Insufficient data for u64".to_string());
+        None => {
+            return Err("Vault B data not found".to_string());
         }
+    };
 
-        let bytes = &data[*offset..*offset + 8];
-        *offset += 8;
+    Ok((vault_a_balance, vault_b_balance))
+}
 
-        let value = u64::from_le_bytes(
-            bytes.try_into().map_err(|_| "Failed to parse u64".to_string())?
-        );
-
-        Ok(value)
+/// Helper function to read u8 at offset
+fn read_u8_at_offset(data: &[u8], offset: &mut usize) -> Result<u8, String> {
+    if *offset >= data.len() {
+        return Err("Offset out of bounds for u8".to_string());
     }
 
-    fn read_u128_at_offset(data: &[u8], offset: &mut usize) -> Result<u128, String> {
-        if *offset + 16 > data.len() {
-            return Err("Insufficient data for u128".to_string());
-        }
+    let value = data[*offset];
+    *offset += 1;
 
-        let bytes = &data[*offset..*offset + 16];
-        *offset += 16;
+    Ok(value)
+}
 
-        let value = u128::from_le_bytes(
-            bytes.try_into().map_err(|_| "Failed to parse u128".to_string())?
-        );
-
-        Ok(value)
+/// Helper function to read u64 at offset (little endian)
+fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, String> {
+    if *offset + 8 > data.len() {
+        return Err("Insufficient data for u64".to_string());
     }
+
+    let bytes = &data[*offset..*offset + 8];
+    *offset += 8;
+
+    Ok(
+        u64::from_le_bytes(
+            bytes.try_into().map_err(|_| "Failed to convert bytes to u64".to_string())?
+        )
+    )
+}
+
+/// Helper function to read pubkey at offset
+fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, String> {
+    if *offset + 32 > data.len() {
+        return Err("Insufficient data for pubkey".to_string());
+    }
+
+    let pubkey_bytes = &data[*offset..*offset + 32];
+    *offset += 32;
+
+    let pubkey = Pubkey::new_from_array(
+        pubkey_bytes.try_into().map_err(|_| "Failed to parse pubkey".to_string())?
+    );
+
+    Ok(pubkey.to_string())
 }
