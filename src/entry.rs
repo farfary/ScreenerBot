@@ -9,7 +9,7 @@
 
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
-use crate::pools::{ get_pool_service, PriceResult };
+use crate::pools::{ get_pool_price, get_price_history, PriceResult };
 use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock as AsyncRwLock; // switched from StdRwLock
@@ -218,35 +218,15 @@ fn analyze_local_structure(
 /// Main entry point for determining if a token should be bought
 /// Returns (approved_for_entry, confidence_score, reason)
 pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
-    // Fetch price history from pool service
-    let price_history = get_pool_service().await.get_price_history(&price_info.token_mint).await;
+    let price_history = get_price_history(&price_info.mint);
 
-    // Immediate debug log to ensure we're getting called
     if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "SHOULD_BUY_START",
-            &format!(
-                "🔍 Starting entry analysis for {} with {} price points",
-                price_info.token_mint,
-                price_history.len()
-            )
-        );
+        log(LogTag::Entry, "DEBUG", &format!("� Using pool price for {}", price_info.mint));
     }
 
-    // Pull recent exit prices via cache helper (minimal DB load)
-    let prior_exit_prices = get_cached_recent_exit_prices_fast(&price_info.token_mint).await;
+    let prior_exit_prices = get_cached_recent_exit_prices_fast(&price_info.mint).await;
     let prior_count = prior_exit_prices.len();
     let last_exit_price = prior_exit_prices.first().cloned();
-
-    // Get current pool price and liquidity from PriceResult
-    if is_debug_entry_enabled() {
-        log(
-            LogTag::Entry,
-            "POOL_PRICE_REQUEST",
-            &format!("📊 Using pool price for {}", price_info.token_mint)
-        );
-    }
 
     let current_price = if price_info.price_sol > 0.0 && price_info.price_sol.is_finite() {
         price_info.price_sol
@@ -254,15 +234,15 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Entry,
-                "INVALID_PRICE",
-                &format!("❌ {} invalid price: {:.9}", price_info.token_mint, price_info.price_sol)
+                "WARN",
+                &format!("❌ {} invalid price: {:.9}", price_info.mint, price_info.price_sol)
             );
         }
-        return (false, 10.0, "Invalid price data".to_string());
+        return (false, 0.0, "Invalid price".to_string());
     };
 
     let reserve_sol = price_info.sol_reserves;
-    let activity_score = 0.5; // Default activity score since we don't have transaction data in PriceResult
+    let activity_score = 0.5;
     // Basic liquidity filter using SOL reserves (lightweight)
     if reserve_sol < MIN_RESERVE_SOL || reserve_sol > MAX_RESERVE_SOL {
         if is_debug_entry_enabled() {
@@ -271,7 +251,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 "LIQUIDITY_FILTER",
                 &format!(
                     "❌ {} SOL reserves {:.2} outside bounds {:.1}-{:.0}",
-                    price_info.token_mint,
+                    price_info.mint,
                     reserve_sol,
                     MIN_RESERVE_SOL,
                     MAX_RESERVE_SOL
@@ -295,33 +275,36 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         log(
             LogTag::Entry,
             "HISTORY_REQUEST",
-            &format!("📈 Using price history for {}", price_info.token_mint)
+            &format!("📈 Using price history for {}", price_info.mint)
         );
     }
 
-    // Use the passed price history parameter
-    let mut price_history = price_history.to_vec();
-    // Filter out invalid prices (0 or non-finite)
-    price_history.retain(|(_, p)| *p > 0.0 && p.is_finite());
+    let mut converted_history: Vec<(DateTime<Utc>, f64)> = price_history
+        .iter()
+        .map(|p| (
+            Utc::now() - chrono::Duration::seconds(p.timestamp.elapsed().as_secs() as i64),
+            p.price_sol,
+        ))
+        .collect();
+    converted_history.retain(|(_, p)| *p > 0.0 && p.is_finite());
 
     // Quick insufficient history check - avoid expensive refresh for performance
-    if price_history.len() < MIN_PRICE_POINTS {
+    if converted_history.len() < MIN_PRICE_POINTS {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Entry,
                 "INSUFFICIENT_HISTORY",
                 &format!(
                     "❌ {} insufficient price history: {} < {} points",
-                    price_info.token_mint,
-                    price_history.len(),
+                    price_info.mint,
+                    converted_history.len(),
                     MIN_PRICE_POINTS
                 )
             );
         }
 
-        // Fallback: If we have at least 1 price point, still attempt basic evaluation with higher threshold
-        if price_history.len() >= 1 && current_price > 0.0 {
-            let recent_price = price_history[0].1;
+        if converted_history.len() >= 1 && current_price > 0.0 {
+            let recent_price = converted_history[0].1;
             if recent_price > 0.0 && recent_price.is_finite() {
                 let instant_drop = ((recent_price - current_price) / recent_price) * 100.0;
                 if instant_drop >= 15.0 && instant_drop <= 75.0 {
@@ -334,7 +317,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                                 "INSTANT_DROP_FALLBACK",
                                 &format!(
                                     "🎯 {} instant drop -{:.1}% → conf {:.0}% → APPROVE",
-                                    price_info.token_mint,
+                                    price_info.mint,
                                     instant_drop,
                                     confidence
                                 )
@@ -353,13 +336,17 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         return (
             false,
             12.0,
-            format!("Insufficient price history: {} < {}", price_history.len(), MIN_PRICE_POINTS),
+            format!(
+                "Insufficient price history: {} < {}",
+                converted_history.len(),
+                MIN_PRICE_POINTS
+            ),
         );
     }
 
     // Local structure before selecting best drop (short horizon for stabilization)
     let (_ll, _lh, stabilization_score, intrarange_pct) = analyze_local_structure(
-        &price_history,
+        &converted_history,
         REENTRY_LOCAL_STABILITY_SECS
     );
 
@@ -381,7 +368,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                             "REENTRY_DISCOUNT_INSUFFICIENT",
                             &format!(
                                 "{} reentry discount {:.2}% < {:.2}% last_exit={:.9} cur={:.9} prior_count={}",
-                                price_info.token_mint,
+                                price_info.mint,
                                 discount_pct,
                                 REENTRY_MIN_DISCOUNT_TO_LAST_EXIT_PCT,
                                 last_exit,
@@ -412,7 +399,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 "ADAPT_MIN_DROP_TOO_HIGH",
                 &format!(
                     "{} adaptive_min_drop {:.1}% exceeds MAX {:.1}% prior_exits:{}",
-                    price_info.token_mint,
+                    price_info.mint,
                     adaptive_min_drop,
                     MAX_DROP_PERCENT,
                     prior_count
@@ -423,7 +410,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
 
     // Detect best drop across windows with adaptive minimum
     let best = {
-        let raw = detect_best_drop(&price_history, current_price);
+        let raw = detect_best_drop(&converted_history, current_price);
         match raw {
             Some(sig) if sig.drop_percent >= adaptive_min_drop => Some(sig),
             _ => None,
@@ -438,7 +425,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         confidence += activity_score * 15.0; // single application
 
         // ATH Prevention Analysis
-        let (ath_safe, max_ath_pct) = check_ath_risk(&price_history, current_price).await;
+        let (ath_safe, max_ath_pct) = check_ath_risk(&converted_history, current_price).await;
         if !ath_safe {
             if is_debug_entry_enabled() {
                 log(
@@ -446,7 +433,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     "ATH_PREVENTION_SCALP",
                     &format!(
                         "❌ {} ATH prevention: {:.1}% of recent high - blocking entry",
-                        price_info.token_mint,
+                        price_info.mint,
                         max_ath_pct
                     )
                 );
@@ -520,7 +507,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 "ENTRY_ANALYSIS_COMPLETE",
                 &format!(
                     "🎯 {} entry: -{:.1}%/{}s → conf {:.1}% → {} [activity:{:.1} liquidity:{:.0} ath_safe:{} ath_pct:{:.1}% good_entry:{} prior_exits:{} adapt_min_drop:{:.1}% stab:{:.2} intrarange:{:.1}%]",
-                    price_info.token_mint,
+                    price_info.mint,
                     sig.drop_percent,
                     sig.window_sec,
                     confidence,
@@ -580,7 +567,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
     } else {
         if is_debug_entry_enabled() {
             // Log last few prices to understand zeros
-            let recent_prices: Vec<String> = price_history
+            let recent_prices: Vec<String> = converted_history
                 .iter()
                 .take(5)
                 .map(|(ts, price)| format!("{:.9}@{}", price, ts.format("%H:%M:%S")))
@@ -590,7 +577,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 "NO_DROP_DETECTED",
                 &format!(
                     "❌ {} no entry drops >= adapt_min_drop {:.1}% (base {:.1}%) detected in windows [{}] prior_exits:{}",
-                    price_info.token_mint,
+                    price_info.mint,
                     adaptive_min_drop,
                     MIN_DROP_PERCENT,
                     recent_prices.join(", "),
@@ -843,11 +830,9 @@ pub async fn get_profit_target(
     price_info: &PriceResult,
     price_history_opt: Option<&[(DateTime<Utc>, f64)]>
 ) -> (f64, f64) {
-    // Get current price and reserves from PriceResult
     let current_price_opt = Some(price_info.price_sol);
-    let reserve_sol = price_info.sol_reserves.max(30.0); // Ensure minimum 30 SOL reserves for scalping
+    let reserve_sol = price_info.sol_reserves.max(30.0);
 
-    // Default activity scoring since we don't have transaction data in PriceResult
     let activity_score = 0.5;
 
     // Base profit targets with conservative approach for better success rates

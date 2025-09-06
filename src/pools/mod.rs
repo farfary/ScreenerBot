@@ -18,12 +18,9 @@ mod cache;
 mod api;
 
 // Re-export only the public API
-pub use api::{ get_pool_price, get_available_tokens, get_price_history };
+pub use api::{ get_pool_price, get_available_tokens, get_price_history, get_cache_stats };
 pub use service::{ start_pool_service, stop_pool_service, is_pool_service_running };
 pub use types::{ PriceResult, PoolError };
-
-// For backwards compatibility
-pub use api::get_pool_price as get_pool_service;
 
 // Internal modules (not exposed)
 mod discovery;

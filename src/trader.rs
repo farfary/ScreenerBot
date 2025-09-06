@@ -200,7 +200,7 @@ pub const TIME_BUDGET_FRACTION: f64 = 1.8;
 
 use crate::global::is_debug_trader_enabled;
 use crate::logger::{ log, LogTag };
-use crate::pools::{ get_pool_service, PriceResult };
+use crate::pools::{ get_pool_price, PriceResult };
 use crate::positions_lib::calculate_position_pnl;
 use crate::tokens::{ cache::TokenDatabase, get_all_tokens_by_liquidity, Token };
 use crate::utils::{ check_shutdown_or_delay, safe_read_lock, safe_write_lock, debug_trader_log };
@@ -1061,8 +1061,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         }
 
         // Get available tokens directly from pool interface
-        let pool_service = get_pool_service().await;
-        let available_mints = pool_service.get_available_tokens().await;
+        let available_mints = crate::pools::get_available_tokens();
 
         log(
             LogTag::Trader,
@@ -1078,7 +1077,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let mut price_infos = Vec::new();
         let mut mint_price_pairs = Vec::new();
         for mint in available_mints {
-            if let Some(price_info) = pool_service.get_price(&mint).await {
+            if let Some(price_info) = get_pool_price(&mint) {
                 price_infos.push(price_info.clone());
                 mint_price_pairs.push((mint, price_info));
             }
@@ -1193,7 +1192,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     scheduled_tokens
                         .iter()
                         .take(10)
-                        .map(|p| p.token_mint.as_str())
+                        .map(|p| p.mint.as_str())
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
@@ -1237,8 +1236,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         "🎯 Processing token {}/{}: {} ({})",
                         processed_count,
                         scheduled_tokens.len(),
-                        price_info.token_mint,
-                        &price_info.token_mint[..8]
+                        price_info.mint,
+                        &price_info.mint[..8]
                     )
                 );
             }
@@ -1302,8 +1301,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 // Wrap the entire task logic in a timeout to prevent hanging
                 match
                     tokio::time::timeout(Duration::from_secs(TOKEN_CHECK_TASK_TIMEOUT_SECS), async {
-                        let pool_service = get_pool_service().await;
-
                         // Get current price from PriceResult
                         let current_price = if
                             price_info.price_sol > 0.0 &&
@@ -1315,7 +1312,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 log(
                                     LogTag::Trader,
                                     "PRICE_UNAVAILABLE",
-                                    &format!("❌ No price available for {}", price_info.token_mint)
+                                    &format!("❌ No price available for {}", price_info.mint)
                                 );
                             }
                             price_unavailable_count.fetch_add(
@@ -1329,11 +1326,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             log(
                                 LogTag::Trader,
                                 "PRICE_CHECK",
-                                &format!(
-                                    "💰 {} price: {:.9} SOL",
-                                    price_info.token_mint,
-                                    current_price
-                                )
+                                &format!("💰 {} price: {:.9} SOL", price_info.mint, current_price)
                             );
                         }
                         price_available_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1349,7 +1342,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 "ENTRY_CHECK",
                                 &format!(
                                     "🔍 Checking entry criteria for {} at {:.9} SOL",
-                                    price_info.token_mint,
+                                    price_info.mint,
                                     current_price
                                 )
                             );
@@ -1366,7 +1359,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 "ENTRY_APPROVED",
                                 &format!(
                                     "🚀 ENTRY APPROVED: {} at {:.9} SOL",
-                                    &price_info.token_mint,
+                                    &price_info.mint,
                                     current_price
                                 )
                             );
@@ -1379,7 +1372,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 "POSITION_OPENING",
                                 &format!(
                                     "📈 Opening position for {} at {:.9} SOL (size: {} SOL)",
-                                    price_info.token_mint,
+                                    price_info.mint,
                                     current_price,
                                     TRADE_SIZE_SOL
                                 )
@@ -1388,7 +1381,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                         let position_start = std::time::Instant::now();
                         let position_result = crate::positions::open_position_direct(
-                            &price_info.token_mint
+                            &price_info.mint
                         ).await;
 
                         let position_duration = position_start.elapsed();
@@ -1401,7 +1394,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     &format!(
                                         "✅ Successfully opened position {} for {} in {:.3}s",
                                         position_id,
-                                        price_info.token_mint,
+                                        price_info.mint,
                                         position_duration.as_secs_f32()
                                     )
                                 );
@@ -1412,7 +1405,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     "POSITION_FAILED",
                                     &format!(
                                         "❌ Failed to open position for {} after {:.3}s: {}",
-                                        price_info.token_mint,
+                                        price_info.mint,
                                         position_duration.as_secs_f32(),
                                         e
                                     )
@@ -1426,7 +1419,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 let Ok(ohlcv_service) =
                                     crate::tokens::get_ohlcv_service_clone().await
                             {
-                                ohlcv_service.add_to_watch_list(&price_info.token_mint, true).await; // true = open position
+                                ohlcv_service.add_to_watch_list(&price_info.mint, true).await; // true = open position
                             }
                         }
                     }).await
@@ -1620,9 +1613,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             .map(|pos| {
                 let mint = pos.mint.clone();
                 async move {
-                    let price_result = if
-                        let Some(price_info) = get_pool_service().await.get_price(&mint).await
-                    {
+                    let price_result = if let Some(price_info) = get_pool_price(&mint) {
                         Some(price_info.price_sol)
                     } else {
                         None
@@ -1848,10 +1839,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             pnl_percent >= 50.0; // High profit situations
 
                         // CRITICAL: Check pool availability before caching sell decision
-                        let pool_service = get_pool_service().await;
-                        let has_pool_availability = pool_service
-                            .get_price(&position.mint).await
-                            .is_some();
+                        let has_pool_availability = get_pool_price(&position.mint).is_some();
 
                         if !has_pool_availability {
                             if is_debug_trader_enabled() {

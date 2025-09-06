@@ -24,11 +24,17 @@ pub struct PriceResult {
     pub confidence: f32,
     /// Source pool ID that provided this price
     pub source_pool: Option<String>,
+    /// Pool address for this price data
+    pub pool_address: String,
     /// Blockchain slot when this price was calculated
     pub slot: u64,
     /// Timestamp when this price was calculated (as Unix timestamp)
     #[serde(with = "instant_serde")]
     pub timestamp: Instant,
+    /// SOL reserves in the pool
+    pub sol_reserves: f64,
+    /// Token reserves in the pool
+    pub token_reserves: f64,
 }
 
 impl Default for PriceResult {
@@ -39,23 +45,36 @@ impl Default for PriceResult {
             price_sol: 0.0,
             confidence: 0.0,
             source_pool: None,
+            pool_address: String::new(),
             slot: 0,
             timestamp: Instant::now(),
+            sol_reserves: 0.0,
+            token_reserves: 0.0,
         }
     }
 }
 
 impl PriceResult {
     /// Create a new price result
-    pub fn new(mint: String, price_usd: f64, price_sol: f64) -> Self {
+    pub fn new(
+        mint: String,
+        price_usd: f64,
+        price_sol: f64,
+        sol_reserves: f64,
+        token_reserves: f64,
+        pool_address: String
+    ) -> Self {
         Self {
             mint,
             price_usd,
             price_sol,
             confidence: 1.0,
             source_pool: None,
+            pool_address,
             slot: 0,
             timestamp: Instant::now(),
+            sol_reserves,
+            token_reserves,
         }
     }
 

@@ -9,7 +9,7 @@ use crate::{
     errors::blockchain::{ is_permanent_failure, parse_structured_solana_error },
     errors::{ BlockchainError, DataError, NetworkError, PositionError, ScreenerBotError },
     logger::{ log, log_price_change, LogTag },
-    pools::get_pool_service,
+    pools::get_pool_price,
     positions_db::{
         delete_position_by_id,
         force_database_sync,
@@ -274,7 +274,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     };
 
     // Get price info from pool service
-    let price_info = match get_pool_service().await.get_price(token_mint).await {
+    let price_info = match get_pool_price(token_mint) {
         Some(price_info) => price_info,
         None => {
             return Err(format!("No price data available for token: {}", token_mint));
@@ -461,7 +461,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     // Add token to watch list before opening position
     let _price_service_result = match
         tokio::time::timeout(tokio::time::Duration::from_secs(10), async {
-            if let Some(price_info) = get_pool_service().await.get_price(&token.mint).await {
+            if let Some(price_info) = get_pool_price(&token.mint) {
                 Some(price_info.price_sol)
             } else {
                 None
@@ -832,7 +832,7 @@ pub async fn close_position_direct(
     };
 
     // Get price info from pool service
-    let price_info = match get_pool_service().await.get_price(token_mint).await {
+    let price_info = match get_pool_price(token_mint) {
         Some(price_info) => price_info,
         None => {
             return Err(format!("No price data available for token: {}", token_mint));
@@ -999,7 +999,7 @@ pub async fn close_position_direct(
     // ✅ ENSURE token remains in watch list during sell process
     let _price_service_result = match
         tokio::time::timeout(tokio::time::Duration::from_secs(10), async {
-            if let Some(price_info) = get_pool_service().await.get_price(&token.mint).await {
+            if let Some(price_info) = get_pool_price(&token.mint) {
                 Some(price_info.price_sol)
             } else {
                 None
@@ -3600,7 +3600,7 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                                         let positions_snapshot = POSITIONS.read().await;
                                                         if let Some(position) = positions_snapshot.iter().find(|p| p.closed_reason.as_deref() == Some("exit_permanent_failure_retry") && p.exit_transaction_signature.is_none()) {
                                                             if let Some(token_obj) = get_token_from_db(&position.mint).await {
-                                                                if let Some(current_price_info) = get_pool_service().await.get_price(&position.mint).await {
+                                                                if let Some(current_price_info) = get_pool_price(&position.mint) {
                                                                     let price = current_price_info.price_sol;
                                                                     if price > 0.0 && price.is_finite() {
                                                                     let reason = format!("Retry after permanent exit failure for {}", position.symbol);
@@ -3877,7 +3877,7 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                                                 tokio::spawn(async move {
                                                                     sleep(Duration::from_secs(5)).await; // small delay
                                                                     if let Some(token_obj) = get_token_from_db(&mint_retry).await {
-                                                                        if let Some(current_price_info) = get_pool_service().await.get_price(&mint_retry).await {
+                                                                        if let Some(current_price_info) = get_pool_price(&mint_retry) {
                                                                             let price = current_price_info.price_sol;
                                                                             if price > 0.0 && price.is_finite() {
                                                                             let reason = format!("Retry after failed exit verification for {}", symbol_retry);

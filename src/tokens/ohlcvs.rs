@@ -473,42 +473,24 @@ impl OhlcvService {
             }
         };
 
-        // Check if token has a pool
-        let has_pool = crate::pools::service
-            ::get_pool_service().await
-            .get_price(mint).await
-            .is_some();
-        let pool_address = if has_pool {
-            // Get best pool address
-            if
-                let Some(result) = crate::pools::service
-                    ::get_pool_service().await
-                    .get_price(mint).await
-            {
-                if is_debug_ohlcv_enabled() {
-                    log(
-                        LogTag::Ohlcv,
-                        "POOL_FOUND",
-                        &format!("🏊 Pool found for {}: price {:.9}", mint, result.price_sol)
-                    );
-                }
-                Some("pool_address".to_string()) // Placeholder since we only have price now
-            } else {
-                if is_debug_ohlcv_enabled() {
-                    log(
-                        LogTag::Ohlcv,
-                        "POOL_UNAVAILABLE",
-                        &format!("⚠️ Price service returned no price for {}", mint)
-                    );
-                }
-                None
+        // Check if token has a pool and get pool address
+        let pool_address = if let Some(price_result) = crate::pools::get_pool_price(mint) {
+            if is_debug_ohlcv_enabled() {
+                log(
+                    LogTag::Ohlcv,
+                    "POOL_FOUND",
+                    &format!("🏊 Pool found for {}: price {:.9}", mint, price_result.price_sol)
+                );
             }
+            Some(price_result.pool_address)
         } else {
             if is_debug_ohlcv_enabled() {
                 log(LogTag::Ohlcv, "NO_POOL", &format!("❌ No pool available for {}", mint));
             }
             None
         };
+
+        let has_pool = pool_address.is_some();
 
         // Log final availability status in debug mode
         if is_debug_ohlcv_enabled() {
@@ -867,8 +849,8 @@ impl OhlcvService {
         }
 
         // Cache miss or expired - get from pool service
-        if let Some(result) = crate::pools::service::get_pool_service().await.get_price(mint).await {
-            let pool_address = "pool_address".to_string(); // Placeholder since we only have price now
+        if let Some(result) = crate::pools::get_pool_price(mint) {
+            let pool_address = result.pool_address;
 
             // Update watch list cache
             {
@@ -1154,12 +1136,8 @@ impl OhlcvService {
                             addr.clone()
                         } else {
                             // Pool address cache expired, refresh it
-                            if
-                                let Some(result) = crate::pools::service
-                                    ::get_pool_service().await
-                                    .get_price(&entry.mint).await
-                            {
-                                "pool_address".to_string() // Placeholder since we only have price now
+                            if let Some(result) = crate::pools::get_pool_price(&entry.mint) {
+                                result.pool_address
                             } else {
                                 if is_debug_ohlcv_enabled() {
                                     log(
@@ -1175,12 +1153,8 @@ impl OhlcvService {
                         addr.clone()
                     }
                 } else {
-                    if
-                        let Some(result) = crate::pools::service
-                            ::get_pool_service().await
-                            .get_price(&entry.mint).await
-                    {
-                        "pool_address".to_string() // Placeholder since we only have price now
+                    if let Some(result) = crate::pools::get_pool_price(&entry.mint) {
+                        result.pool_address
                     } else {
                         if is_debug_ohlcv_enabled() {
                             log(

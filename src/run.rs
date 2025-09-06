@@ -155,7 +155,7 @@ pub async fn run_bot() -> Result<(), String> {
     };
 
     // Initialize pool service for real-time price calculations and history caching
-    let _pool_service = crate::pools::init_pool_service().await;
+    let _pool_service = crate::pools::init_pool_service(shutdown.clone()).await;
     debug_log(LogTag::System, "INFO", "Pool price service with disk caching initialized");
 
     let shutdown_tokens = shutdown.clone();

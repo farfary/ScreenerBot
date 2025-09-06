@@ -44,7 +44,7 @@ use crate::logger::LogTag;
 use crate::positions::{ get_closed_positions, get_open_positions };
 use crate::positions_lib::calculate_position_pnl;
 use crate::rpc::get_global_rpc_stats;
-use crate::pools::get_pool_service;
+use crate::pools::{ get_pool_price, get_cache_stats };
 use crate::transactions::TransactionsManager;
 use crate::transactions_types::TransactionStats;
 use crate::utils::{ get_sol_balance, get_wallet_address };
@@ -1027,16 +1027,9 @@ impl Dashboard {
         };
 
         // Get pool service stats (non-blocking with timeout)
-        let pool_stats = if
-            let Ok(stats) = tokio::time::timeout(Duration::from_millis(100), async {
-                let pool_service = get_pool_service().await;
-                pool_service.get_stats().await
-            }).await
-        {
-            stats
-        } else {
-            crate::pools::PoolStats::default()
-        };
+        let pool_stats = tokio::time
+            ::timeout(Duration::from_millis(100), async { get_cache_stats() }).await
+            .unwrap_or_else(|_| get_cache_stats());
 
         // Multi-row display for comprehensive stats
         let mut current_line = 3usize; // Account for header + top border
@@ -1135,22 +1128,17 @@ impl Dashboard {
 
         // Row 4: Pool Performance
         if current_line < (height as usize) {
-            let col1 = format!(
-                "Pool Req: {}",
-                pool_stats.successful_price_fetches + pool_stats.failed_price_fetches
-            );
-            let col2 = format!("Cache Hits: {}", pool_stats.cache_hits);
-            let total_requests =
-                pool_stats.successful_price_fetches + pool_stats.failed_price_fetches;
-            let pool_success_rate = if total_requests > 0 {
-                ((pool_stats.successful_price_fetches as f64) / (total_requests as f64)) * 100.0
+            let col1 = format!("Total Cached: {}", pool_stats.total_prices);
+            let col2 = format!("Fresh Prices: {}", pool_stats.fresh_prices);
+            let fresh_rate = if pool_stats.total_prices > 0 {
+                ((pool_stats.fresh_prices as f64) / (pool_stats.total_prices as f64)) * 100.0
             } else {
                 0.0
             };
-            let col3 = format!("Pool Rate: {:.1}%", pool_success_rate);
-            let pool_color = if pool_success_rate >= 90.0 {
+            let col3 = format!("Fresh Rate: {:.1}%", fresh_rate);
+            let pool_color = if fresh_rate >= 80.0 {
                 Color::Green
-            } else if pool_success_rate >= 70.0 {
+            } else if fresh_rate >= 50.0 {
                 Color::Yellow
             } else {
                 Color::Red
@@ -1174,11 +1162,15 @@ impl Dashboard {
             current_line += 1;
         }
 
-        // Row 5: Pool Timing Stats
+        // Row 5: Pool History Stats
         if current_line < (height as usize) {
-            let col1 = format!("Pool OK: {}", pool_stats.successful_price_fetches);
-            let col2 = format!("Pool Fail: {}", pool_stats.failed_price_fetches);
-            let col3 = format!("Tokens: {}", pool_stats.total_tokens_available);
+            let col1 = format!("History Entries: {}", pool_stats.history_entries);
+            let col2 = format!("Active Tokens: {}", pool_stats.fresh_prices);
+            let col3 = format!("Cache Health: {}%", if pool_stats.fresh_prices > 0 {
+                100
+            } else {
+                0
+            });
             let content_width = width.saturating_sub(2) as usize;
             let col_w = content_width / 3;
             let row_content = format!(
