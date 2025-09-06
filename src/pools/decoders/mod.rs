@@ -4,6 +4,7 @@
 /// Each decoder knows how to parse the account data for its specific pool format.
 
 pub mod raydium_cpmm;
+pub mod pumpfun_amm;
 
 use super::fetcher::AccountData;
 use super::types::{ ProgramKind, PriceResult };
@@ -32,6 +33,9 @@ pub fn decode_pool(
     match program_kind {
         ProgramKind::RaydiumCpmm => {
             raydium_cpmm::RaydiumCpmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint)
+        }
+        ProgramKind::PumpFun => {
+            pumpfun_amm::PumpFunAmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint)
         }
         _ => {
             // TODO: Add other decoders as needed

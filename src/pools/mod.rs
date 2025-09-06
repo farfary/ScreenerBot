@@ -27,7 +27,10 @@ mod discovery;
 mod analyzer;
 mod fetcher;
 mod calculator;
-mod decoders;
+pub mod decoders; // Temporarily public for debug tooling (consider gating with feature flag)
+
+// Temporary re-exports for debug tooling (consider gating with a feature flag)
+pub use fetcher::AccountData;
 
 /// Initialize the pool service - this is the main entry point
 ///

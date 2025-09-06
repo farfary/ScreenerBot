@@ -1,0 +1,227 @@
+//! Debug tool for Pool Service: fetch a single pool + vaults and run decoder.
+
+use clap::{ Parser, ValueEnum };
+use screenerbot::arguments::set_cmd_args;
+use screenerbot::pools::{ decoders, AccountData, PriceResult };
+use screenerbot::pools::types::{ ProgramKind, SOL_MINT };
+use screenerbot::rpc::get_rpc_client;
+use screenerbot::logger::{ log, LogTag };
+use solana_sdk::pubkey::Pubkey;
+use std::collections::HashMap;
+use std::str::FromStr;
+
+#[derive(Debug, Clone, ValueEnum)]
+enum PoolKindArg {
+    Pumpfun,
+    RaydiumCpmm,
+}
+
+#[derive(Parser, Debug)]
+#[command(name = "debug_pool_service", about = "Decode a pool and compute price")]
+struct Args {
+    #[arg(long)] token_mint: String,
+    #[arg(long)] pool: String,
+    #[arg(long, value_enum)] program: PoolKindArg,
+    #[arg(long, default_value = SOL_MINT)] quote_mint: String,
+    #[arg(long, default_value_t = false)] verbose: bool,
+    /// Inject internal '--debug-pool-calculator' flag for detailed decoder logs
+    #[arg(long, default_value_t = false)]
+    internal_calculator_debug: bool,
+}
+
+#[tokio::main]
+async fn main() {
+    let args = Args::parse();
+
+    if args.internal_calculator_debug {
+        // Reconstruct minimal arg list with internal flag so is_debug_pool_calculator_enabled() returns true
+        set_cmd_args(vec!["debug_pool_service".to_string(), "--debug-pool-calculator".to_string()]);
+    }
+
+    if args.verbose {
+        log(
+            LogTag::PoolCalculator,
+            "START",
+            &format!("token={} pool={} program={:?}", args.token_mint, args.pool, args.program)
+        );
+    }
+
+    if args.token_mint == SOL_MINT {
+        eprintln!("Token mint must not be SOL");
+        return;
+    }
+
+    let rpc = get_rpc_client();
+    let pool_pubkey = Pubkey::from_str(&args.pool).expect("Invalid pool pubkey");
+
+    let pool_account = rpc.get_account(&pool_pubkey).await.expect("Failed to fetch pool account");
+    if args.verbose {
+        log(
+            LogTag::PoolCalculator,
+            "INFO",
+            &format!(
+                "Pool acct len={} owner={} lamports={}",
+                pool_account.data.len(),
+                pool_account.owner,
+                pool_account.lamports
+            )
+        );
+    }
+
+    let mut accounts: HashMap<String, AccountData> = HashMap::new();
+    accounts.insert(pool_pubkey.to_string(), AccountData {
+        pubkey: pool_pubkey,
+        data: pool_account.data.clone(),
+        slot: 0,
+        fetched_at: std::time::Instant::now(),
+        lamports: pool_account.lamports,
+        owner: pool_account.owner,
+    });
+
+    let program_kind = match args.program {
+        PoolKindArg::Pumpfun => ProgramKind::PumpFun,
+        PoolKindArg::RaydiumCpmm => ProgramKind::RaydiumCpmm,
+    };
+
+    if program_kind == ProgramKind::PumpFun {
+        if let Some((token_vault, sol_vault)) = extract_pumpfun_vaults(&pool_account.data) {
+            let vault_keys: Vec<Pubkey> = [token_vault.clone(), sol_vault.clone()]
+                .into_iter()
+                .filter_map(|s| Pubkey::from_str(&s).ok())
+                .collect();
+            if args.verbose {
+                log(
+                    LogTag::PoolCalculator,
+                    "INFO",
+                    &format!("Fetching {} vault accounts", vault_keys.len())
+                );
+            }
+            if !vault_keys.is_empty() {
+                if let Ok(vault_accounts) = rpc.get_multiple_accounts(&vault_keys).await {
+                    for (i, acct_opt) in vault_accounts.into_iter().enumerate() {
+                        if let Some(acct) = acct_opt {
+                            accounts.insert(vault_keys[i].to_string(), AccountData {
+                                pubkey: vault_keys[i],
+                                data: acct.data.clone(),
+                                slot: 0,
+                                fetched_at: std::time::Instant::now(),
+                                lamports: acct.lamports,
+                                owner: acct.owner,
+                            });
+                        }
+                    }
+                }
+                // Fallback: individually fetch any missing vaults (retry a few times)
+                let mut attempts = 0;
+                while
+                    attempts < 5 &&
+                    (!accounts.contains_key(&token_vault) || !accounts.contains_key(&sol_vault))
+                {
+                    attempts += 1;
+                    if args.verbose {
+                        log(
+                            LogTag::PoolCalculator,
+                            "WARN",
+                            &format!("Retry attempt {} for missing vaults", attempts)
+                        );
+                    }
+                    for (addr_str, pk) in [
+                        (token_vault.as_str(), &vault_keys[0]),
+                        (sol_vault.as_str(), &vault_keys[1]),
+                    ] {
+                        if !accounts.contains_key(addr_str) {
+                            if let Ok(acct) = rpc.get_account(pk).await {
+                                accounts.insert(addr_str.to_string(), AccountData {
+                                    pubkey: *pk,
+                                    data: acct.data.clone(),
+                                    slot: 0,
+                                    fetched_at: std::time::Instant::now(),
+                                    lamports: acct.lamports,
+                                    owner: acct.owner,
+                                });
+                                if args.verbose {
+                                    log(
+                                        LogTag::PoolCalculator,
+                                        "INFO",
+                                        &format!(
+                                            "Fetched missing vault {} len={}",
+                                            addr_str,
+                                            acct.data.len()
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    if !accounts.contains_key(&token_vault) || !accounts.contains_key(&sol_vault) {
+                        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                    }
+                }
+            }
+            if args.verbose {
+                for (k, v) in &accounts {
+                    log(
+                        LogTag::PoolCalculator,
+                        "DEBUG",
+                        &format!("Account key={} len={}", k, v.data.len())
+                    );
+                }
+            }
+        } else {
+            eprintln!("Failed to parse PumpFun vault addresses");
+        }
+    }
+
+    let mut price = decoders::decode_pool(
+        program_kind,
+        &accounts,
+        &args.token_mint,
+        &args.quote_mint
+    );
+    if let Some(ref mut p) = price {
+        if p.pool_address.is_empty() {
+            p.pool_address = pool_pubkey.to_string();
+        }
+    }
+    report(price);
+}
+
+fn report(price: Option<PriceResult>) {
+    match price {
+        Some(p) =>
+            println!(
+                "PriceResult mint={} price_sol={} sol_reserves={} token_reserves={} confidence={} pool={}",
+                p.mint,
+                p.price_sol,
+                p.sol_reserves,
+                p.token_reserves,
+                p.confidence,
+                p.pool_address
+            ),
+        None => println!("No price calculated"),
+    }
+}
+
+fn extract_pumpfun_vaults(data: &[u8]) -> Option<(String, String)> {
+    if data.len() < 200 {
+        return None;
+    }
+    let mut o = 8; // discriminator
+    o += 1 + 2; // bump + index
+    o += 32; // creator
+    o += 32 + 32; // base + quote mints
+    o += 32; // lp mint
+    let base_vault = read_pubkey(data, &mut o)?;
+    let quote_vault = read_pubkey(data, &mut o)?;
+    Some((base_vault, quote_vault))
+}
+
+fn read_pubkey(data: &[u8], offset: &mut usize) -> Option<String> {
+    if *offset + 32 > data.len() {
+        return None;
+    }
+    let pk = Pubkey::new_from_array(data[*offset..*offset + 32].try_into().ok()?);
+    *offset += 32;
+    Some(pk.to_string())
+}
+// End of file

@@ -69,6 +69,10 @@ path = "src/bin/main_debug_decimals.rs"
 name = "main_debug_decimals_direct"
 path = "src/bin/main_debug_decimals_direct.rs"
 
+[[bin]]
+name = "debug_pool_service"
+path = "src/bin/debug_pool_service.rs"
+
 
 
 [dependencies]
