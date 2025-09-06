@@ -1,7 +1,8 @@
 /// Pool system constants and configuration
 
 // Cache TTL settings
-pub const POOL_CACHE_TTL_SECONDS: i64 = 600;  // 10 minutes
+
+pub const POOL_CACHE_TTL_SECONDS: i64 = 600; // 10 minutes
 pub const PRICE_CACHE_TTL_SECONDS: i64 = 240; // 4 minutes
 
 // Batch processing configuration

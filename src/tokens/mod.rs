@@ -1,10 +1,4 @@
 //// Pool pricing is enabled - use pool interface only
-pub use crate::pool_service::{
-    init_pool_service,
-    get_pool_service,
-};
-pub use crate::pool_interface::{ PoolInterface, TokenPriceInfo, PriceResult, PriceOptions };
-pub use crate::pool_db::{ init_pool_db_service, store_price_entry, get_price_history_for_token };
 use crate::global::{ is_debug_decimals_enabled, is_debug_monitor_enabled };
 use crate::logger::{ log, LogTag };
 use std::sync::Arc;
@@ -104,6 +98,9 @@ pub use rugcheck::{
     RugcheckService,
 };
 pub use types::*;
+
+// Re-export from pools module for compatibility
+pub use crate::pools::types::PriceResult;
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
@@ -441,15 +438,6 @@ pub async fn is_token_safe_for_trading_safe(mint: &str) -> bool {
 // =============================================================================
 // TOKEN DISCOVERY INTEGRATION
 // =============================================================================
-
-/// Get current token price using thread-safe price service
-pub async fn get_current_token_price(mint: &str) -> Option<f64> {
-    if let Some(price_info) = get_pool_service().get_price(mint).await {
-        price_info.pool_price_sol.or(price_info.api_price_sol)
-    } else {
-        None
-    }
-}
 
 /// Get all tokens by liquidity using database directly (for compatibility)
 pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, String> {

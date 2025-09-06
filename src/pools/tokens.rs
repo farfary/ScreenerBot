@@ -1,7 +1,7 @@
-/// Token management for pool system
+/// Token management for pools module
 /// Gets top tokens by liquidity from the tokens database
 
-use crate::tokens::{get_all_tokens_by_liquidity, ApiToken};
+use crate::tokens::{ get_all_tokens_by_liquidity, ApiToken };
 
 /// Token information for pool operations
 #[derive(Debug, Clone)]
@@ -16,7 +16,7 @@ pub struct PoolToken {
 
 impl From<ApiToken> for PoolToken {
     fn from(token: ApiToken) -> Self {
-        Self {
+        PoolToken {
             mint: token.mint,
             symbol: token.symbol,
             name: token.name,
@@ -24,14 +24,8 @@ impl From<ApiToken> for PoolToken {
                 .as_ref()
                 .and_then(|l| l.usd)
                 .unwrap_or(0.0),
-            price_sol: token.price
-                .as_ref()
-                .map(|p| p.sol)
-                .unwrap_or(None),
-            price_usd: token.price
-                .as_ref()
-                .and_then(|p| p.usd)
-                .map(|u| u as f64),
+            price_sol: token.price_sol,
+            price_usd: Some(token.price_usd),
         }
     }
 }
@@ -58,10 +52,10 @@ impl PoolTokenManager {
                     .take(100)
                     .map(PoolToken::from)
                     .collect();
-                
+
                 Ok(pool_tokens)
             }
-            Err(e) => Err(format!("Failed to get tokens by liquidity: {}", e))
+            Err(e) => Err(format!("Failed to get tokens by liquidity: {}", e)),
         }
     }
 
@@ -74,15 +68,18 @@ impl PoolTokenManager {
                     .take(limit)
                     .map(PoolToken::from)
                     .collect();
-                
+
                 Ok(pool_tokens)
             }
-            Err(e) => Err(format!("Failed to get tokens by liquidity: {}", e))
+            Err(e) => Err(format!("Failed to get tokens by liquidity: {}", e)),
         }
     }
 
     /// Get tokens above a specific liquidity threshold
-    pub async fn get_tokens_above_liquidity(&self, min_liquidity: f64) -> Result<Vec<PoolToken>, String> {
+    pub async fn get_tokens_above_liquidity(
+        &self,
+        min_liquidity: f64
+    ) -> Result<Vec<PoolToken>, String> {
         match get_all_tokens_by_liquidity().await {
             Ok(tokens) => {
                 let pool_tokens: Vec<PoolToken> = tokens
@@ -95,16 +92,21 @@ impl PoolTokenManager {
                     })
                     .map(PoolToken::from)
                     .collect();
-                
+
                 Ok(pool_tokens)
             }
-            Err(e) => Err(format!("Failed to get tokens by liquidity: {}", e))
+            Err(e) => Err(format!("Failed to get tokens by liquidity: {}", e)),
         }
     }
 
     /// Get token mint addresses for the top liquidity tokens (for pool operations)
     pub async fn get_top_token_mints(&self, limit: usize) -> Result<Vec<String>, String> {
         let tokens = self.get_top_n_liquidity_tokens(limit).await?;
-        Ok(tokens.into_iter().map(|t| t.mint).collect())
+        Ok(
+            tokens
+                .into_iter()
+                .map(|t| t.mint)
+                .collect()
+        )
     }
 }

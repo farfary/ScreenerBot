@@ -1,50 +1,189 @@
 /// Main pool service
 /// Orchestrates pool discovery, calculation, and caching
 
-use crate::pools::{PoolDiscovery, PoolCalculator};
-use crate::pools::calculator::PriceResult;
-use std::sync::OnceLock;
+use crate::pools::{ PoolDiscovery, PoolCalculator };
+use crate::pools::types::{PriceResult, PoolStats};
+use crate::pools::cache::PoolCache;
+use tokio::sync::{ OnceCell, RwLock };
+use std::sync::Arc;
+use crate::logger::{ log, LogTag };
 
 /// Main pool service
 pub struct PoolService {
     discovery: PoolDiscovery,
     calculator: PoolCalculator,
+    cache: Arc<PoolCache>,
 }
 
 impl PoolService {
     pub fn new() -> Self {
+        let cache = Arc::new(PoolCache::new());
+        let discovery = PoolDiscovery::new(cache.clone());
+
         Self {
-            discovery: PoolDiscovery::new(),
+            discovery,
             calculator: PoolCalculator::new(),
+            cache,
         }
     }
 
+    /// Start the pool service (starts discovery task)
+    pub async fn start(&self) {
+        log(LogTag::Pool, "SERVICE_START", "🚀 Starting Pool Service");
+
+        // Start continuous discovery task
+        self.discovery.start_discovery_task().await;
+
+        log(LogTag::Pool, "SERVICE_READY", "✅ Pool Service ready");
+    }
+
+    /// Stop the pool service
+    pub async fn stop(&self) {
+        log(LogTag::Pool, "SERVICE_STOP", "🛑 Stopping Pool Service");
+        self.discovery.stop_discovery_task().await;
+    }
+
     /// Get price for a token
-    pub async fn get_price(&self, _token_address: &str) -> Option<PriceResult> {
-        // TODO: Implement price fetching
-        // 1. Check cache
-        // 2. Discover pools
-        // 3. Calculate price
-        // 4. Cache result
+    pub async fn get_price(&self, token_address: &str) -> Option<PriceResult> {
+        // 1. Check price cache first
+        if let Some(cached_price) = self.cache.get_cached_price(token_address).await {
+            log(
+                LogTag::Pool,
+                "PRICE_CACHE_HIT",
+                &format!("💾 Cache hit for {}", &token_address[..8])
+            );
+            return Some(cached_price);
+        }
+
+        // 2. Check if we have pools cached
+        if let Some(pools) = self.cache.get_cached_pools(token_address).await {
+            if !pools.is_empty() {
+                // 3. Calculate price from best pool
+                let best_pool = pools
+                    .into_iter()
+                    .max_by(|a, b|
+                        a.liquidity_usd
+                            .partial_cmp(&b.liquidity_usd)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    );
+
+                if let Some(pool) = best_pool {
+                    match self.calculator.calculate_price(&pool, token_address).await {
+                        Ok(Some(price_result)) => {
+                            // 4. Cache the result
+                            self.cache.cache_price(token_address, price_result.clone()).await;
+                            log(
+                                LogTag::Pool,
+                                "PRICE_CALCULATED",
+                                &format!("💰 Calculated price for {}", &token_address[..8])
+                            );
+                            return Some(price_result);
+                        }
+                        Ok(None) => {
+                            log(
+                                LogTag::Pool,
+                                "PRICE_CALC_NONE",
+                                &format!("❌ No price calculated for {}", &token_address[..8])
+                            );
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Pool,
+                                "PRICE_CALC_ERROR",
+                                &format!(
+                                    "❌ Price calculation error for {}: {}",
+                                    &token_address[..8],
+                                    e
+                                )
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. If no pools cached, discovery task will handle it in background
+        log(
+            LogTag::Pool,
+            "PRICE_NOT_AVAILABLE",
+            &format!("❌ No price available for {} (discovery in progress)", &token_address[..8])
+        );
         None
     }
 
     /// Get prices for multiple tokens
-    pub async fn get_batch_prices(&self, _tokens: &[String]) -> Vec<Option<PriceResult>> {
-        // TODO: Implement batch price fetching
-        Vec::new()
+    pub async fn get_batch_prices(&self, tokens: &[String]) -> Vec<Option<PriceResult>> {
+        let mut results = Vec::new();
+
+        for token in tokens {
+            results.push(self.get_price(token).await);
+        }
+
+        results
+    }
+
+    /// Get cache statistics
+    pub async fn get_cache_stats(&self) -> crate::pools::cache::CacheStats {
+        self.cache.get_stats().await
+    }
+
+    /// Get pool statistics for dashboard
+    pub async fn get_stats(&self) -> PoolStats {
+        let cache_stats = self.cache.get_stats().await;
+        
+        // Calculate a simple hit rate based on ratio of cached prices to tokens
+        let hit_rate = if cache_stats.tokens_count > 0 {
+            cache_stats.prices_count as f64 / cache_stats.tokens_count as f64
+        } else {
+            0.0
+        };
+        
+        PoolStats::new(
+            cache_stats.pools_count,
+            cache_stats.tokens_count,
+            cache_stats.in_progress_count,
+            hit_rate.min(1.0), // Cap at 1.0
+        )
+    }
+
+    /// Get available tokens (tokens with cached pools)
+    pub async fn get_available_tokens(&self) -> Vec<String> {
+        self.cache.get_tokens_with_pools().await
+    }
+
+    /// Force refresh pools for a token (bypass cache)
+    pub async fn refresh_pools(
+        &self,
+        token_address: &str
+    ) -> Result<Vec<crate::pools::discovery::PoolInfo>, String> {
+        let pools = self.discovery.discover_pools(token_address).await?;
+        self.cache.cache_pools(token_address, pools.clone()).await;
+        Ok(pools)
     }
 }
 
 // Global singleton
-static POOL_SERVICE: OnceLock<PoolService> = OnceLock::new();
+static POOL_SERVICE: OnceCell<Arc<PoolService>> = OnceCell::const_new();
 
 /// Initialize the global pool service
-pub fn init_pool_service() -> &'static PoolService {
-    POOL_SERVICE.get_or_init(|| PoolService::new())
+pub async fn init_pool_service() -> &'static Arc<PoolService> {
+    POOL_SERVICE.get_or_init(|| async { Arc::new(PoolService::new()) }).await
 }
 
 /// Get the global pool service
-pub fn get_pool_service() -> &'static PoolService {
+pub async fn get_pool_service() -> &'static Arc<PoolService> {
     POOL_SERVICE.get().expect("Pool service not initialized")
+}
+
+/// Start the global pool service
+pub async fn start_pool_service() {
+    let service = init_pool_service().await;
+    service.start().await;
+}
+
+/// Stop the global pool service
+pub async fn stop_pool_service() {
+    if let Some(service) = POOL_SERVICE.get() {
+        service.stop().await;
+    }
 }

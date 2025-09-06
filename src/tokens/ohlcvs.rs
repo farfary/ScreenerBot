@@ -28,9 +28,6 @@
 use crate::global::is_debug_ohlcv_enabled;
 use crate::tokens::ohlcv_db::{ get_ohlcv_database, init_ohlcv_database };
 use crate::logger::{ log, LogTag };
-use crate::pool_interface::PoolInterface;
-use crate::pool_service::get_pool_service;
-use crate::tokens::PriceOptions;
 use crate::tokens::geckoterminal::{ get_ohlcv_data_from_geckoterminal, OhlcvDataPoint };
 use chrono::{ DateTime, Duration as ChronoDuration, Utc };
 use reqwest::Client;

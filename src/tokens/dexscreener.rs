@@ -1227,30 +1227,6 @@ pub async fn get_batch_token_pools_from_dexscreener(
     }
 }
 
-/// Helper function to process DexScreener batch results into cache format
-/// This moves the processing logic from pool.rs into dexscreener.rs
-pub fn process_dexscreener_batch_results(
-    dexscreener_result: &DexScreenerBatchResult
-) -> HashMap<String, Vec<crate::pool_interface::CachedPoolInfo>> {
-    let mut processed_pools = HashMap::new();
-
-    for (token_address, dex_pools) in &dexscreener_result.pools {
-        let mut cached_pools = Vec::new();
-
-        for pool in dex_pools {
-            if let Ok(cached_pool) = crate::pool_interface::CachedPoolInfo::from_token_pair(&pool.pair_address) {
-                cached_pools.push(cached_pool);
-            }
-        }
-
-        if !cached_pools.is_empty() {
-            processed_pools.insert(token_address.clone(), cached_pools);
-        }
-    }
-
-    processed_pools
-}
-
 // =============================================================================
 // GLOBAL DEXSCREENER API SINGLETON (TRUE SINGLETON)
 // =============================================================================

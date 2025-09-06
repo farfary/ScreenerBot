@@ -9,18 +9,7 @@ pub mod errors; // New structured error handling
 pub mod filtering;
 pub mod global;
 pub mod logger;
-pub mod pool_calculator; // Pool price calculator service
-pub mod pool_cleanup; // Pool cleanup service for data maintenance
-pub mod pool_constants; // Pool constants and program IDs
-pub mod pool_monitor; // Pool monitor service for task health monitoring
-pub mod pool_tokens; // Pool tokens service for loading tokens from database
-pub mod pool_db; // Pool database module
-pub mod pool_decoders; // Pool data decoders
-pub mod pool_discovery; // Pool discovery service for finding pools via APIs
-pub mod pool_extraction; // Pool data extraction functions
-pub mod pool_fetcher; // Pool token account fetcher service
-pub mod pool_interface; // Pool service interface
-pub mod pool_service; // New modular pool service
+pub mod pools; // New modular pool system
 pub mod positions;
 pub mod positions_db; // Positions database module
 pub mod positions_lib; // Position management library
