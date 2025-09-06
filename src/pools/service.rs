@@ -175,35 +175,6 @@ impl PoolService {
         self.cache.get_price_history_since(token_address, since).await
     }
 
-    /// Get token price information for entry analysis
-    pub async fn get_token_price_info(
-        &self,
-        token_address: &str
-    ) -> Option<crate::pools::types::TokenPriceInfo> {
-        match self.get_price(token_address).await {
-            Some(price_result) =>
-                Some(
-                    crate::pools::types::TokenPriceInfo::from_price_result(
-                        token_address.to_string(),
-                        price_result
-                    )
-                ),
-            None => Some(crate::pools::types::TokenPriceInfo::new(token_address.to_string())), // Return empty info rather than None
-        }
-    }
-
-    /// Get multiple token price information
-    pub async fn get_batch_token_price_info(
-        &self,
-        token_addresses: &[String]
-    ) -> Vec<Option<crate::pools::types::TokenPriceInfo>> {
-        let mut results = Vec::new();
-        for token_address in token_addresses {
-            results.push(self.get_token_price_info(token_address).await);
-        }
-        results
-    }
-
     /// Force refresh pools for a token (bypass cache)
     pub async fn refresh_pools(
         &self,

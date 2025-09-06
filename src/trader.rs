@@ -200,7 +200,7 @@ pub const TIME_BUDGET_FRACTION: f64 = 1.8;
 
 use crate::global::is_debug_trader_enabled;
 use crate::logger::{ log, LogTag };
-use crate::pools::{ get_pool_service, TokenPriceInfo };
+use crate::pools::{ get_pool_service, PriceResult };
 use crate::positions_lib::calculate_position_pnl;
 use crate::tokens::{ cache::TokenDatabase, get_all_tokens_by_liquidity, PriceOptions, Token };
 use crate::utils::{ check_shutdown_or_delay, safe_read_lock, safe_write_lock, debug_trader_log };
@@ -1304,28 +1304,25 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     tokio::time::timeout(Duration::from_secs(TOKEN_CHECK_TASK_TIMEOUT_SECS), async {
                         let pool_service = get_pool_service().await;
 
-                        // Get current price from TokenPriceInfo
-                        let current_price = match
-                            price_info.pool_price_sol.or(price_info.api_price_sol)
+                        // Get current price from PriceResult
+                        let current_price = if
+                            price_info.price_sol > 0.0 &&
+                            price_info.price_sol.is_finite()
                         {
-                            Some(price) if price > 0.0 && price.is_finite() => price,
-                            _ => {
-                                if is_debug_trader_enabled() {
-                                    log(
-                                        LogTag::Trader,
-                                        "PRICE_UNAVAILABLE",
-                                        &format!(
-                                            "❌ No price available for {}",
-                                            price_info.token_mint
-                                        )
-                                    );
-                                }
-                                price_unavailable_count.fetch_add(
-                                    1,
-                                    std::sync::atomic::Ordering::Relaxed
+                            price_info.price_sol
+                        } else {
+                            if is_debug_trader_enabled() {
+                                log(
+                                    LogTag::Trader,
+                                    "PRICE_UNAVAILABLE",
+                                    &format!("❌ No price available for {}", price_info.token_mint)
                                 );
-                                return;
                             }
+                            price_unavailable_count.fetch_add(
+                                1,
+                                std::sync::atomic::Ordering::Relaxed
+                            );
+                            return;
                         };
 
                         if is_debug_trader_enabled() {
@@ -1341,7 +1338,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
                         price_available_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-                        // Call should_buy with TokenPriceInfo (price history fetched internally)
+                        // Call should_buy with PriceResult (price history fetched internally)
                         let (approved, confidence, reason) = crate::entry::should_buy(
                             &price_info
                         ).await;
@@ -1375,7 +1372,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             );
                         }
 
-                        // Open position directly with TokenPriceInfo
+                        // Open position directly with PriceResult
                         if is_debug_trader_enabled() {
                             log(
                                 LogTag::Trader,
@@ -1626,7 +1623,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     let price_result = if
                         let Some(price_info) = get_pool_service().await.get_price(&mint).await
                     {
-                        price_info.pool_price_sol.or(price_info.api_price_sol)
+                        Some(price_info.price_sol)
                     } else {
                         None
                     };

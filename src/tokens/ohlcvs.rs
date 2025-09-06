@@ -489,11 +489,7 @@ impl OhlcvService {
                     log(
                         LogTag::Ohlcv,
                         "POOL_FOUND",
-                        &format!(
-                            "🏊 Pool found for {}: price {:.9}",
-                            mint,
-                            result.pool_price_sol.or(result.api_price_sol).unwrap_or(0.0)
-                        )
+                        &format!("🏊 Pool found for {}: price {:.9}", mint, result.price_sol)
                     );
                 }
                 Some("pool_address".to_string()) // Placeholder since we only have price now

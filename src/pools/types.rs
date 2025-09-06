@@ -10,6 +10,8 @@ pub struct PriceResult {
     pub token_mint: String,
     /// Price in SOL
     pub price_sol: f64,
+    /// Price in USD (not used for trading, only for display/sorting)
+    pub price_usd: Option<f64>,
     /// SOL reserves in the pool
     pub sol_reserves: f64,
     /// Token reserves in the pool
@@ -39,6 +41,7 @@ impl PriceResult {
         Self {
             token_mint,
             price_sol,
+            price_usd: None, // USD price not used for trading
             sol_reserves,
             token_reserves,
             pool_address,
@@ -54,6 +57,7 @@ impl PriceResult {
         Self {
             token_mint: String::new(),
             price_sol: 0.0,
+            price_usd: None,
             sol_reserves: 0.0,
             token_reserves: 0.0,
             pool_address: String::new(),
@@ -72,6 +76,12 @@ impl PriceResult {
     /// Get liquidity in SOL (total SOL reserves * 2 for estimation)
     pub fn liquidity_sol(&self) -> f64 {
         self.sol_reserves * 2.0
+    }
+
+    /// Set USD price (for display/sorting purposes only, not trading)
+    pub fn with_usd_price(mut self, price_usd: Option<f64>) -> Self {
+        self.price_usd = price_usd;
+        self
     }
 }
 
@@ -199,57 +209,5 @@ impl PriceOptions {
             allow_cache: false,
             ..Default::default()
         }
-    }
-}
-
-/// Token price information structure for entry analysis
-#[derive(Debug, Clone)]
-pub struct TokenPriceInfo {
-    /// Token mint address
-    pub token_mint: String,
-    /// Price in SOL from pool calculation
-    pub pool_price_sol: Option<f64>,
-    /// Price in SOL from API sources
-    pub api_price_sol: Option<f64>,
-    /// SOL reserves in the pool
-    pub reserve_sol: Option<f64>,
-    /// Token reserves in the pool
-    pub reserve_token: Option<f64>,
-    /// Pool address
-    pub pool_address: Option<String>,
-    /// When this info was created
-    pub updated_at: DateTime<Utc>,
-}
-
-impl TokenPriceInfo {
-    /// Create new token price info
-    pub fn new(token_mint: String) -> Self {
-        Self {
-            token_mint,
-            pool_price_sol: None,
-            api_price_sol: None,
-            reserve_sol: None,
-            reserve_token: None,
-            pool_address: None,
-            updated_at: Utc::now(),
-        }
-    }
-
-    /// Create from pool service price result
-    pub fn from_price_result(token_mint: String, price_result: PriceResult) -> Self {
-        Self {
-            token_mint,
-            pool_price_sol: Some(price_result.price_sol),
-            api_price_sol: None,
-            reserve_sol: Some(price_result.sol_reserves),
-            reserve_token: Some(price_result.token_reserves),
-            pool_address: Some(price_result.pool_address),
-            updated_at: price_result.updated_at,
-        }
-    }
-
-    /// Get the best available price (pool first, then API)
-    pub fn get_best_price(&self) -> Option<f64> {
-        self.pool_price_sol.or(self.api_price_sol)
     }
 }

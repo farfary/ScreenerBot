@@ -2513,15 +2513,19 @@ impl TransactionsManager {
         // Get current market price from price service
         match get_pool_service().await.get_price(&token_mint).await {
             Some(price_info) => {
-                if let Some(price_sol) = price_info.pool_price_sol.or(price_info.api_price_sol) {
-                    transaction.calculated_token_price_sol = Some(price_sol);
+                if price_info.price_sol > 0.0 && price_info.price_sol.is_finite() {
+                    transaction.calculated_token_price_sol = Some(price_info.price_sol);
                     transaction.price_source = Some(PriceSourceType::CachedPrice);
 
                     if self.debug_enabled {
                         log(
                             LogTag::Transactions,
                             "PRICE",
-                            &format!("Market price for {}: {:.12} SOL", symbol, price_sol)
+                            &format!(
+                                "Market price for {}: {:.12} SOL",
+                                symbol,
+                                price_info.price_sol
+                            )
                         );
                     }
                 }

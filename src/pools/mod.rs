@@ -21,4 +21,4 @@ pub use service::{
     PoolService,
 };
 pub use tokens::PoolToken;
-pub use types::{ PriceResult, PoolStats, PriceOptions, TokenPriceInfo };
+pub use types::{ PriceResult, PoolStats, PriceOptions };

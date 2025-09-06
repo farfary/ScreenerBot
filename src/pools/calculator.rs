@@ -27,6 +27,7 @@ impl PoolCalculator {
             let price_sol = pool.sol_reserve / pool.token_reserve;
 
             let result = PriceResult::new(
+                token.to_string(),
                 price_sol,
                 pool.sol_reserve,
                 pool.token_reserve,

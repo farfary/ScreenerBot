@@ -839,7 +839,7 @@ pub async fn close_position_direct(
         }
     };
 
-    // Calculate exit price from TokenPriceInfo
+    // Calculate exit price from PriceResult
     let exit_price = match price_info.price_sol {
         price if price > 0.0 && price.is_finite() => price,
         _ => {

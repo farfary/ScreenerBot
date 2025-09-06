@@ -9,7 +9,7 @@
 
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
-use crate::pools::{ get_pool_service, TokenPriceInfo };
+use crate::pools::{ get_pool_service, PriceResult };
 use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock as AsyncRwLock; // switched from StdRwLock
@@ -217,7 +217,7 @@ fn analyze_local_structure(
 
 /// Main entry point for determining if a token should be bought
 /// Returns (approved_for_entry, confidence_score, reason)
-pub async fn should_buy(price_info: &TokenPriceInfo) -> (bool, f64, String) {
+pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
     // Fetch price history from pool service
     let price_history = get_pool_service().await.get_price_history(&price_info.token_mint).await;
 
@@ -239,7 +239,7 @@ pub async fn should_buy(price_info: &TokenPriceInfo) -> (bool, f64, String) {
     let prior_count = prior_exit_prices.len();
     let last_exit_price = prior_exit_prices.first().cloned();
 
-    // Get current pool price and liquidity from TokenPriceInfo
+    // Get current pool price and liquidity from PriceResult
     if is_debug_entry_enabled() {
         log(
             LogTag::Entry,
@@ -248,27 +248,21 @@ pub async fn should_buy(price_info: &TokenPriceInfo) -> (bool, f64, String) {
         );
     }
 
-    let current_price = match price_info.pool_price_sol.or(price_info.api_price_sol) {
-        Some(price) if price > 0.0 && price.is_finite() => price,
-        _ => {
-            if is_debug_entry_enabled() {
-                log(
-                    LogTag::Entry,
-                    "INVALID_PRICE",
-                    &format!(
-                        "❌ {} invalid price: pool={:?} api={:?}",
-                        price_info.token_mint,
-                        price_info.pool_price_sol,
-                        price_info.api_price_sol
-                    )
-                );
-            }
-            return (false, 10.0, "Invalid price data".to_string());
+    let current_price = if price_info.price_sol > 0.0 && price_info.price_sol.is_finite() {
+        price_info.price_sol
+    } else {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "INVALID_PRICE",
+                &format!("❌ {} invalid price: {:.9}", price_info.token_mint, price_info.price_sol)
+            );
         }
+        return (false, 10.0, "Invalid price data".to_string());
     };
 
-    let reserve_sol = price_info.reserve_sol.unwrap_or(0.0);
-    let activity_score = 0.5; // Default activity score since we don't have transaction data in TokenPriceInfo
+    let reserve_sol = price_info.sol_reserves;
+    let activity_score = 0.5; // Default activity score since we don't have transaction data in PriceResult
     // Basic liquidity filter using SOL reserves (lightweight)
     if reserve_sol < MIN_RESERVE_SOL || reserve_sol > MAX_RESERVE_SOL {
         if is_debug_entry_enabled() {
@@ -846,14 +840,14 @@ fn detect_best_drop(
 /// Calculate profit targets optimized for fast scalping (5-10% minimum focus)
 /// OPTIMIZED: Accept price_history to avoid redundant fetches
 pub async fn get_profit_target(
-    price_info: &TokenPriceInfo,
+    price_info: &PriceResult,
     price_history_opt: Option<&[(DateTime<Utc>, f64)]>
 ) -> (f64, f64) {
-    // Get current price and reserves from TokenPriceInfo
-    let current_price_opt = price_info.pool_price_sol.or(price_info.api_price_sol);
-    let reserve_sol = price_info.reserve_sol.unwrap_or(30.0); // Default to 30 SOL reserves for scalping
+    // Get current price and reserves from PriceResult
+    let current_price_opt = Some(price_info.price_sol);
+    let reserve_sol = price_info.sol_reserves.max(30.0); // Ensure minimum 30 SOL reserves for scalping
 
-    // Default activity scoring since we don't have transaction data in TokenPriceInfo
+    // Default activity scoring since we don't have transaction data in PriceResult
     let activity_score = 0.5;
 
     // Base profit targets with conservative approach for better success rates
