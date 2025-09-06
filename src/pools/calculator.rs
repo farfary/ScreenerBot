@@ -8,7 +8,7 @@
 
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
-use crate::tokens::decimals::get_cached_decimals;
+use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
 use super::cache;
 use super::decoders;
 use super::fetcher::{ AccountData, PoolAccountBundle };
@@ -168,7 +168,7 @@ impl PriceCalculator {
         pool_id: Pubkey,
         pool_descriptor: &PoolDescriptor,
         account_bundle: &PoolAccountBundle,
-        sol_reference_price: &Arc<RwLock<f64>>,
+        sol_reference_price: &Arc<RwLock<f64>>
     ) -> PoolCalculationResult {
         if is_debug_pool_calculator_enabled() {
             log(
@@ -219,7 +219,7 @@ impl PriceCalculator {
             pool_descriptor.program_kind,
             &accounts_map,
             &base_mint_str,
-            &quote_mint_str,
+            &quote_mint_str
         );
 
         match decoded_result {
@@ -286,7 +286,7 @@ impl PriceCalculator {
         &self,
         pool_id: Pubkey,
         pool_descriptor: PoolDescriptor,
-        account_bundle: PoolAccountBundle,
+        account_bundle: PoolAccountBundle
     ) -> Result<(), String> {
         let message = CalculatorMessage::CalculatePool {
             pool_id,
@@ -294,7 +294,8 @@ impl PriceCalculator {
             account_bundle,
         };
 
-        self.calculator_tx.send(message)
+        self.calculator_tx
+            .send(message)
             .map_err(|e| format!("Failed to send calculation request: {}", e))?;
 
         Ok(())
@@ -307,13 +308,18 @@ impl PriceCalculator {
         program_kind: ProgramKind,
         base_mint: &str,
         quote_mint: &str,
-        pool_id: &str,
+        pool_id: &str
     ) -> Option<PriceResult> {
         if is_debug_pool_calculator_enabled() {
             log(
                 LogTag::PoolCalculator,
                 "DEBUG",
-                &format!("Calculating price for {} pool: {}/{}", program_kind.display_name(), base_mint, quote_mint)
+                &format!(
+                    "Calculating price for {} pool: {}/{}",
+                    program_kind.display_name(),
+                    base_mint,
+                    quote_mint
+                )
             );
         }
 
@@ -322,7 +328,7 @@ impl PriceCalculator {
             program_kind,
             pool_accounts,
             base_mint,
-            quote_mint,
+            quote_mint
         )?;
 
         // Set pool address
@@ -363,7 +369,7 @@ impl PriceCalculator {
     pub fn update_sol_reference_price(&self, sol_price_usd: f64) {
         let mut reference = self.sol_reference_price.write().unwrap();
         *reference = sol_price_usd;
-        
+
         if is_debug_pool_calculator_enabled() {
             log(
                 LogTag::PoolCalculator,

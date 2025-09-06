@@ -21,6 +21,9 @@ use std::sync::{ Arc, Mutex };
 /// SOL token decimals constant - ALWAYS use this instead of hardcoding 9
 pub const SOL_DECIMALS: u8 = 9;
 
+/// Default decimals for unknown tokens - most Solana tokens use 9 decimals
+pub const DEFAULT_TOKEN_DECIMALS: u8 = 9;
+
 /// SOL token lamports per SOL constant - ALWAYS use this instead of hardcoding 1_000_000_000
 pub const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 

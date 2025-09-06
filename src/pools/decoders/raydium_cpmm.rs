@@ -7,7 +7,12 @@ use super::{ PoolDecoder, AccountData };
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
-use crate::tokens::decimals::get_cached_decimals;
+use crate::tokens::decimals::{
+    get_cached_decimals,
+    SOL_DECIMALS,
+    DEFAULT_TOKEN_DECIMALS,
+    raw_to_ui_amount,
+};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -35,35 +40,59 @@ impl PoolDecoder for RaydiumCpmmDecoder {
 
         // Find the pool account (typically the first/main account)
         let pool_account = accounts.values().next()?;
-        
+
         // Parse pool state from account data
         let pool_state = RaydiumCpmmPoolState::from_bytes(&pool_account.data)?;
 
         // Get token decimals
-        let base_decimals = get_cached_decimals(base_mint).unwrap_or(9);
-        let quote_decimals = get_cached_decimals(quote_mint).unwrap_or(9);
+        let base_decimals = if base_mint == SOL_MINT {
+            SOL_DECIMALS
+        } else {
+            get_cached_decimals(base_mint).unwrap_or(DEFAULT_TOKEN_DECIMALS)
+        };
+        let quote_decimals = if quote_mint == SOL_MINT {
+            SOL_DECIMALS
+        } else {
+            get_cached_decimals(quote_mint).unwrap_or(DEFAULT_TOKEN_DECIMALS)
+        };
 
         // Calculate normalized reserves
-        let base_reserve_normalized = pool_state.base_reserve as f64 / 10_f64.powi(base_decimals as i32);
-        let quote_reserve_normalized = pool_state.quote_reserve as f64 / 10_f64.powi(quote_decimals as i32);
+        let base_reserve_normalized =
+            (pool_state.base_reserve as f64) / (10_f64).powi(base_decimals as i32);
+        let quote_reserve_normalized =
+            (pool_state.quote_reserve as f64) / (10_f64).powi(quote_decimals as i32);
 
         // Determine which token is SOL and calculate SOL price
         let sol_mint_str = SOL_MINT;
         let (target_mint, price_sol, sol_reserves, token_reserves) = if base_mint == sol_mint_str {
             // Base is SOL, quote is the token we're pricing
             let token_price_in_sol = base_reserve_normalized / quote_reserve_normalized;
-            (quote_mint.to_string(), token_price_in_sol, base_reserve_normalized, quote_reserve_normalized)
+            (
+                quote_mint.to_string(),
+                token_price_in_sol,
+                base_reserve_normalized,
+                quote_reserve_normalized,
+            )
         } else if quote_mint == sol_mint_str {
             // Quote is SOL, base is the token we're pricing
             let token_price_in_sol = quote_reserve_normalized / base_reserve_normalized;
-            (base_mint.to_string(), token_price_in_sol, quote_reserve_normalized, base_reserve_normalized)
+            (
+                base_mint.to_string(),
+                token_price_in_sol,
+                quote_reserve_normalized,
+                base_reserve_normalized,
+            )
         } else {
             // Neither is SOL - cannot calculate SOL price directly
             if is_debug_pool_calculator_enabled() {
                 log(
                     LogTag::PoolCalculator,
                     "WARN",
-                    &format!("Pool {}/{} does not contain SOL - cannot calculate SOL price", base_mint, quote_mint)
+                    &format!(
+                        "Pool {}/{} does not contain SOL - cannot calculate SOL price",
+                        base_mint,
+                        quote_mint
+                    )
                 );
             }
             return None;
@@ -75,7 +104,13 @@ impl PoolDecoder for RaydiumCpmmDecoder {
                 log(
                     LogTag::PoolCalculator,
                     "WARN",
-                    &format!("Invalid reserves for pool {}/{}: SOL={}, Token={}", base_mint, quote_mint, sol_reserves, token_reserves)
+                    &format!(
+                        "Invalid reserves for pool {}/{}: SOL={}, Token={}",
+                        base_mint,
+                        quote_mint,
+                        sol_reserves,
+                        token_reserves
+                    )
                 );
             }
             return None;
@@ -99,19 +134,24 @@ impl PoolDecoder for RaydiumCpmmDecoder {
                 "SUCCESS",
                 &format!(
                     "Decoded CPMM pool: {} = {} SOL (reserves: {} SOL, {} tokens)",
-                    target_mint, price_sol, sol_reserves, token_reserves
+                    target_mint,
+                    price_sol,
+                    sol_reserves,
+                    token_reserves
                 )
             );
         }
 
-        Some(PriceResult::new(
-            target_mint,
-            0.0, // No USD calculation
-            price_sol,
-            sol_reserves,
-            token_reserves,
-            pool_account.pubkey.to_string(),
-        ))
+        Some(
+            PriceResult::new(
+                target_mint,
+                0.0, // No USD calculation
+                price_sol,
+                sol_reserves,
+                token_reserves,
+                pool_account.pubkey.to_string()
+            )
+        )
     }
 }
 
@@ -137,13 +177,13 @@ impl RaydiumCpmmPoolState {
 
         // This is a simplified parsing - real implementation would use proper deserialization
         // For now, we'll try to extract reserves from common positions in the account data
-        
+
         // Try to parse as little-endian u64 values at different offsets
         // This is a heuristic approach until we have the exact layout
-        
+
         let base_reserve = Self::try_parse_u64_at_offset(data, 8)?;
         let quote_reserve = Self::try_parse_u64_at_offset(data, 16)?;
-        
+
         // Basic validation
         if base_reserve == 0 || quote_reserve == 0 {
             return None;
@@ -153,8 +193,8 @@ impl RaydiumCpmmPoolState {
             discriminator: [0u8; 8],
             base_reserve,
             quote_reserve,
-            base_decimals: 9, // Default SOL decimals
-            quote_decimals: 9, // Default assumption
+            base_decimals: DEFAULT_TOKEN_DECIMALS, // Default token decimals
+            quote_decimals: DEFAULT_TOKEN_DECIMALS, // Default token decimals
         })
     }
 
@@ -163,7 +203,7 @@ impl RaydiumCpmmPoolState {
         if data.len() < offset + 8 {
             return None;
         }
-        
+
         let bytes: [u8; 8] = data[offset..offset + 8].try_into().ok()?;
         Some(u64::from_le_bytes(bytes))
     }
@@ -174,8 +214,8 @@ impl RaydiumCpmmPoolState {
             return None;
         }
 
-        let base_normalized = self.base_reserve as f64 / 10_f64.powi(base_decimals as i32);
-        let quote_normalized = self.quote_reserve as f64 / 10_f64.powi(quote_decimals as i32);
+        let base_normalized = (self.base_reserve as f64) / (10_f64).powi(base_decimals as i32);
+        let quote_normalized = (self.quote_reserve as f64) / (10_f64).powi(quote_decimals as i32);
 
         if base_normalized <= 0.0 {
             return None;
