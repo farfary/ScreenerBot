@@ -1,10 +1,11 @@
 /// Main pool service
-/// Orchestrates pool discovery, calculation, caching, and token management
+/// Orchestrates pool discovery, calculation, caching, token management, and analysis
 
-use crate::pools::{ PoolDiscovery, PoolCalculator };
+use crate::pools::{ PoolDiscovery, PoolCalculator, PoolAnalyzer };
 use crate::pools::types::{ PriceResult, PoolStats };
 use crate::pools::cache::PoolCache;
 use crate::pools::tokens::{ PoolTokenManager, PoolToken };
+use crate::pools::analyzer::{ TokenAvailability, AnalysisStats };
 use crate::pools::constants::TOKEN_REFRESH_INTERVAL_SECS;
 use tokio::sync::{ OnceCell, RwLock };
 use tokio::time::{ sleep, Duration };
@@ -15,6 +16,7 @@ use crate::logger::{ log, LogTag };
 pub struct PoolService {
     discovery: PoolDiscovery,
     calculator: PoolCalculator,
+    analyzer: PoolAnalyzer,
     cache: Arc<PoolCache>,
     token_manager: PoolTokenManager,
     tokens: Arc<RwLock<Vec<PoolToken>>>,
@@ -25,10 +27,12 @@ impl PoolService {
     pub fn new() -> Self {
         let cache = Arc::new(PoolCache::new());
         let discovery = PoolDiscovery::new(cache.clone());
+        let analyzer = PoolAnalyzer::new(cache.clone());
 
         Self {
             discovery,
             calculator: PoolCalculator::new(),
+            analyzer,
             cache,
             token_manager: PoolTokenManager::new(),
             tokens: Arc::new(RwLock::new(Vec::new())),
@@ -290,7 +294,28 @@ impl PoolService {
                 }
 
                 // Update cache
-                self.cache.cache_tokens(tokens).await;
+                self.cache.cache_tokens(tokens.clone()).await;
+
+                // Trigger analysis after loading tokens
+                if let Err(e) = self.analyzer.analyze_all_tokens(&tokens).await {
+                    log(
+                        LogTag::Pool,
+                        "TOKENS_ANALYSIS_ERROR",
+                        &format!("❌ Failed to analyze tokens after loading: {}", e)
+                    );
+                } else {
+                    let stats = self.analyzer.get_analysis_stats().await;
+                    log(
+                        LogTag::Pool,
+                        "TOKENS_ANALYSIS_SUCCESS",
+                        &format!(
+                            "✅ Analysis complete: {}/{} calculable, {} trading ready",
+                            stats.calculable_tokens,
+                            stats.total_tokens,
+                            stats.trading_ready_tokens
+                        )
+                    );
+                }
             }
             Err(e) => {
                 log(LogTag::Pool, "TOKENS_LOAD_ERROR", &format!("❌ Failed to load tokens: {}", e));
@@ -311,6 +336,73 @@ impl PoolService {
             .iter()
             .map(|t| t.mint.clone())
             .collect()
+    }
+
+    // =============================================================================
+    // ANALYZER METHODS
+    // =============================================================================
+
+    /// Analyze all tokens for calculability and pool availability
+    pub async fn analyze_all_tokens(&self) -> Result<(), String> {
+        let tokens = self.get_tokens().await;
+        self.analyzer.analyze_all_tokens(&tokens).await
+    }
+
+    /// Analyze a specific token
+    pub async fn analyze_token(&self, token_mint: &str) -> Result<(), String> {
+        self.analyzer.re_analyze_token(token_mint).await
+    }
+
+    /// Get token availability information
+    pub async fn get_token_availability(&self, token_mint: &str) -> Option<TokenAvailability> {
+        self.analyzer.get_token_availability(token_mint).await
+    }
+
+    /// Get all calculable tokens
+    pub async fn get_calculable_tokens(&self) -> Vec<String> {
+        self.analyzer.get_calculable_tokens().await
+    }
+
+    /// Get tokens ready for trading
+    pub async fn get_trading_ready_tokens(&self) -> Vec<String> {
+        self.analyzer.get_trading_ready_tokens().await
+    }
+
+    /// Get required account addresses for RPC fetching
+    pub async fn get_required_accounts(&self) -> Vec<String> {
+        self.analyzer.get_required_accounts().await
+    }
+
+    /// Get analysis statistics
+    pub async fn get_analysis_stats(&self) -> AnalysisStats {
+        self.analyzer.get_analysis_stats().await
+    }
+
+    /// Trigger analysis after tokens or pools are updated
+    pub async fn trigger_analysis(&self) -> Result<(), String> {
+        log(LogTag::Pool, "TRIGGER_ANALYSIS", "🔬 Triggering token analysis");
+
+        let tokens = self.get_tokens().await;
+        if tokens.is_empty() {
+            return Err("No tokens available for analysis".to_string());
+        }
+
+        self.analyzer.analyze_all_tokens(&tokens).await?;
+
+        let stats = self.get_analysis_stats().await;
+        log(
+            LogTag::Pool,
+            "ANALYSIS_STATS",
+            &format!(
+                "📊 Analysis complete: {}/{} calculable, {} trading ready, {} accounts needed",
+                stats.calculable_tokens,
+                stats.total_tokens,
+                stats.trading_ready_tokens,
+                stats.required_accounts
+            )
+        );
+
+        Ok(())
     }
 }
 

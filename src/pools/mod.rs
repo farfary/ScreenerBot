@@ -1,5 +1,6 @@
 /// Pool system - SOL-focused pricing with simplified architecture
 
+pub mod analyzer;
 pub mod cache;
 pub mod calculator;
 pub mod constants;
@@ -10,6 +11,7 @@ pub mod tokens;
 pub mod types;
 
 // Export main types and services
+pub use analyzer::{ PoolAnalyzer, TokenAvailability, AnalysisStats };
 pub use cache::PoolCache;
 pub use calculator::PoolCalculator;
 pub use constants::*; // Export all constants for use by other modules
