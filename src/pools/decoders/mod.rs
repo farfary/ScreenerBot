@@ -6,6 +6,7 @@
 pub mod raydium_cpmm;
 pub mod pumpfun_amm;
 pub mod raydium_legacy_amm;
+pub mod meteora_dlmm;
 
 use super::fetcher::AccountData;
 use super::types::{ ProgramKind, PriceResult };
@@ -43,6 +44,8 @@ pub fn decode_pool(
                 base_mint,
                 quote_mint
             ),
+        ProgramKind::MeteoraDlmm =>
+            meteora_dlmm::MeteoraDlmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
         _ => {
             // TODO: Add other decoders as needed
             None

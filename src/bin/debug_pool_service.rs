@@ -15,6 +15,7 @@ enum PoolKindArg {
     Pumpfun,
     RaydiumCpmm,
     RaydiumLegacy,
+    MeteoraDlmm,
 }
 
 #[derive(Parser, Debug)]
@@ -83,9 +84,14 @@ async fn main() {
         PoolKindArg::Pumpfun => ProgramKind::PumpFun,
         PoolKindArg::RaydiumCpmm => ProgramKind::RaydiumCpmm,
         PoolKindArg::RaydiumLegacy => ProgramKind::RaydiumLegacyAmm,
+        PoolKindArg::MeteoraDlmm => ProgramKind::MeteoraDlmm,
     };
 
-    if program_kind == ProgramKind::PumpFun || program_kind == ProgramKind::RaydiumLegacyAmm {
+    if
+        program_kind == ProgramKind::PumpFun ||
+        program_kind == ProgramKind::RaydiumLegacyAmm ||
+        program_kind == ProgramKind::MeteoraDlmm
+    {
         // Legacy scan: show candidate pubkeys at common offsets for investigation
         if program_kind == ProgramKind::RaydiumLegacyAmm && args.verbose {
             for off in [0x150usize, 0x160, 0x170, 0x180, 0x190, 0x1a0, 0x1b0, 0x1c0, 0x1d0, 0x1e0] {
@@ -94,8 +100,29 @@ async fn main() {
                 }
             }
         }
+
+        // DLMM scan: show pubkeys at DLMM offsets
+        if program_kind == ProgramKind::MeteoraDlmm && args.verbose {
+            for (name, off) in [
+                ("token_x_mint", 88usize),
+                ("token_y_mint", 120),
+                ("reserve_x", 152),
+                ("reserve_y", 184),
+            ] {
+                if let Some(pk) = read_pubkey_at(&pool_account.data, off) {
+                    log(
+                        LogTag::PoolCalculator,
+                        "DEBUG",
+                        &format!("DLMM {} @ offset {} -> {}", name, off, pk)
+                    );
+                }
+            }
+        }
+
         let vault_pair = if program_kind == ProgramKind::RaydiumLegacyAmm {
             extract_legacy_vaults(&pool_account.data)
+        } else if program_kind == ProgramKind::MeteoraDlmm {
+            extract_dlmm_vaults(&pool_account.data)
         } else {
             extract_pumpfun_vaults(&pool_account.data)
         };
@@ -371,5 +398,32 @@ fn read_pubkey(data: &[u8], offset: &mut usize) -> Option<String> {
     let pk = Pubkey::new_from_array(data[*offset..*offset + 32].try_into().ok()?);
     *offset += 32;
     Some(pk.to_string())
+}
+
+fn extract_dlmm_vaults(data: &[u8]) -> Option<(String, String)> {
+    if data.len() < 216 {
+        return None;
+    }
+
+    // Extract pubkeys at DLMM offsets
+    let token_x_mint = read_pubkey_at(data, 88)?;
+    let token_y_mint = read_pubkey_at(data, 120)?;
+    let reserve_x = read_pubkey_at(data, 152)?;
+    let reserve_y = read_pubkey_at(data, 184)?;
+
+    // Check which token is SOL to determine vault order
+    let sol_mint = "So11111111111111111111111111111111111111112";
+
+    if token_y_mint == sol_mint {
+        // token_x is the custom token, token_y is SOL
+        // return (token_vault, sol_vault)
+        Some((reserve_x, reserve_y))
+    } else if token_x_mint == sol_mint {
+        // token_x is SOL, token_y is the custom token
+        // return (token_vault, sol_vault)
+        Some((reserve_y, reserve_x))
+    } else {
+        None
+    }
 }
 // End of file

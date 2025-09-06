@@ -442,11 +442,43 @@ impl PoolAnalyzer {
         pool_id: &Pubkey,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        _rpc_client: &RpcClient
+        rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
+        // For DLMM pools, we need:
+        // - Pool account itself
+        // - Token vaults (extracted from pool data)
+
+        // Fetch the pool account to extract vault addresses
+        let pool_account = match rpc_client.get_account(pool_id).await {
+            Ok(account) => account,
+            Err(e) => {
+                if is_debug_pool_service_enabled() {
+                    log(
+                        LogTag::PoolService,
+                        "ERROR",
+                        &format!("Failed to fetch DLMM pool account {}: {}", pool_id, e)
+                    );
+                }
+                return None;
+            }
+        };
+
+        // Parse the pool data to extract vault addresses
+        let vault_addresses = Self::extract_dlmm_vault_addresses(&pool_account.data)?;
+
         let mut accounts = vec![*pool_id];
+
+        // Add vault addresses to accounts list
+        for vault_str in vault_addresses {
+            if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
+                accounts.push(vault_pubkey);
+            }
+        }
+
+        // Add the mints for reference
         accounts.push(*base_mint);
         accounts.push(*quote_mint);
+
         Some(accounts)
     }
 
@@ -573,5 +605,30 @@ impl PoolAnalyzer {
     pub fn clear_pools(&self) {
         let mut directory = self.pool_directory.write().unwrap();
         directory.clear();
+    }
+
+    /// Extract vault addresses from DLMM pool account data
+    fn extract_dlmm_vault_addresses(data: &[u8]) -> Option<Vec<String>> {
+        if data.len() < 216 {
+            return None;
+        }
+
+        // Extract vault pubkeys at known offsets
+        let reserve_x = Self::read_pubkey_at_fixed_offset(data, 152)?;
+        let reserve_y = Self::read_pubkey_at_fixed_offset(data, 184)?;
+
+        Some(vec![reserve_x, reserve_y])
+    }
+
+    /// Helper function to read pubkey at fixed offset (for analyzer use)
+    fn read_pubkey_at_fixed_offset(data: &[u8], offset: usize) -> Option<String> {
+        if offset + 32 > data.len() {
+            return None;
+        }
+
+        let pubkey_bytes = &data[offset..offset + 32];
+        let pubkey = Pubkey::new_from_array(pubkey_bytes.try_into().ok()?);
+
+        Some(pubkey.to_string())
     }
 }
