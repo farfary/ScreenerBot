@@ -5,6 +5,7 @@
 
 pub mod raydium_cpmm;
 pub mod pumpfun_amm;
+pub mod raydium_legacy_amm;
 
 use super::fetcher::AccountData;
 use super::types::{ ProgramKind, PriceResult };
@@ -34,9 +35,14 @@ pub fn decode_pool(
         ProgramKind::RaydiumCpmm => {
             raydium_cpmm::RaydiumCpmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint)
         }
-        ProgramKind::PumpFun => {
-            pumpfun_amm::PumpFunAmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint)
-        }
+        ProgramKind::PumpFun =>
+            pumpfun_amm::PumpFunAmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
+        ProgramKind::RaydiumLegacyAmm =>
+            raydium_legacy_amm::RaydiumLegacyAmmDecoder::decode_and_calculate(
+                accounts,
+                base_mint,
+                quote_mint
+            ),
         _ => {
             // TODO: Add other decoders as needed
             None

@@ -14,6 +14,7 @@ use std::str::FromStr;
 enum PoolKindArg {
     Pumpfun,
     RaydiumCpmm,
+    RaydiumLegacy,
 }
 
 #[derive(Parser, Debug)]
@@ -81,10 +82,31 @@ async fn main() {
     let program_kind = match args.program {
         PoolKindArg::Pumpfun => ProgramKind::PumpFun,
         PoolKindArg::RaydiumCpmm => ProgramKind::RaydiumCpmm,
+        PoolKindArg::RaydiumLegacy => ProgramKind::RaydiumLegacyAmm,
     };
 
-    if program_kind == ProgramKind::PumpFun {
-        if let Some((token_vault, sol_vault)) = extract_pumpfun_vaults(&pool_account.data) {
+    if program_kind == ProgramKind::PumpFun || program_kind == ProgramKind::RaydiumLegacyAmm {
+        // Legacy scan: show candidate pubkeys at common offsets for investigation
+        if program_kind == ProgramKind::RaydiumLegacyAmm && args.verbose {
+            for off in [0x150usize, 0x160, 0x170, 0x180, 0x190, 0x1a0, 0x1b0, 0x1c0, 0x1d0, 0x1e0] {
+                if let Some(pk) = read_pubkey_at(&pool_account.data, off) {
+                    log(LogTag::PoolCalculator, "DEBUG", &format!("OFFSET 0x{:x} -> {}", off, pk));
+                }
+            }
+        }
+        let vault_pair = if program_kind == ProgramKind::RaydiumLegacyAmm {
+            extract_legacy_vaults(&pool_account.data)
+        } else {
+            extract_pumpfun_vaults(&pool_account.data)
+        };
+        if let Some((token_vault, sol_vault)) = vault_pair {
+            if args.verbose {
+                log(
+                    LogTag::PoolCalculator,
+                    "INFO",
+                    &format!("Derived vaults token_vault={} sol_vault={}", token_vault, sol_vault)
+                );
+            }
             let vault_keys: Vec<Pubkey> = [token_vault.clone(), sol_vault.clone()]
                 .into_iter()
                 .filter_map(|s| Pubkey::from_str(&s).ok())
@@ -167,6 +189,41 @@ async fn main() {
                     );
                 }
             }
+            // Legacy fallback: if legacy and token vault missing, scan candidate offsets for token mint match
+            if
+                program_kind == ProgramKind::RaydiumLegacyAmm &&
+                !accounts.contains_key(&token_vault)
+            {
+                if args.verbose {
+                    log(
+                        LogTag::PoolCalculator,
+                        "WARN",
+                        "Legacy token vault missing, scanning candidate offsets"
+                    );
+                }
+                legacy_bulk_scan(
+                    &rpc,
+                    &mut accounts,
+                    &pool_account.data,
+                    &args.token_mint,
+                    args.verbose
+                ).await;
+            }
+            // Debug mint of fetched sol_vault
+            if program_kind == ProgramKind::RaydiumLegacyAmm && args.verbose {
+                if let Some(vault_acc) = accounts.get(&sol_vault) {
+                    if vault_acc.data.len() >= 32 {
+                        let mint = Pubkey::new_from_array(
+                            vault_acc.data[0..32].try_into().unwrap_or([0u8; 32])
+                        );
+                        log(
+                            LogTag::PoolCalculator,
+                            "DEBUG",
+                            &format!("Sol vault {} has mint {}", sol_vault, mint)
+                        );
+                    }
+                }
+            }
         } else {
             eprintln!("Failed to parse PumpFun vault addresses");
         }
@@ -203,17 +260,108 @@ fn report(price: Option<PriceResult>) {
 }
 
 fn extract_pumpfun_vaults(data: &[u8]) -> Option<(String, String)> {
-    if data.len() < 200 {
+    // Try PumpFun layout first
+    if data.len() >= 200 {
+        let mut o = 8; // discriminator
+        o += 1 + 2; // bump + index
+        o += 32; // creator
+        o += 32 + 32; // base + quote mints
+        o += 32; // lp mint
+        if let Some(base) = read_pubkey(data, &mut o) {
+            if let Some(quote) = read_pubkey(data, &mut o) {
+                return Some((base, quote));
+            }
+        }
+    }
+    // Legacy Raydium heuristic (vaults at 0x160 token, 0x150 SOL). Order returns (token_vault, sol_vault)
+    if data.len() > 0x1c0 {
+        let token_vault = read_pubkey_at(data, 0x160)?;
+        let sol_vault = read_pubkey_at(data, 0x150)?;
+        return Some((token_vault, sol_vault));
+    }
+    None
+}
+
+fn extract_legacy_vaults(data: &[u8]) -> Option<(String, String)> {
+    if data.len() <= 0x1c0 {
         return None;
     }
-    let mut o = 8; // discriminator
-    o += 1 + 2; // bump + index
-    o += 32; // creator
-    o += 32 + 32; // base + quote mints
-    o += 32; // lp mint
-    let base_vault = read_pubkey(data, &mut o)?;
-    let quote_vault = read_pubkey(data, &mut o)?;
-    Some((base_vault, quote_vault))
+    let sol_vault = read_pubkey_at(data, 0x150)?; // SOL vault
+    let token_vault = read_pubkey_at(data, 0x160)?; // token vault
+    Some((token_vault, sol_vault))
+}
+
+async fn legacy_bulk_scan(
+    rpc: &screenerbot::rpc::RpcClient,
+    accounts: &mut HashMap<String, AccountData>,
+    data: &[u8],
+    token_mint: &str,
+    verbose: bool
+) {
+    let mut candidates: Vec<Pubkey> = Vec::new();
+    // Extend scan range to find token vault
+    for off in [
+        0x150usize, 0x160, 0x170, 0x180, 0x1c0, 0x1d0, 0x1e0, 0x200, 0x210, 0x220, 0x230, 0x240,
+        0x250, 0x260, 0x270, 0x280, 0x290, 0x2a0, 0x2b0, 0x2c0,
+    ] {
+        if let Some(pk_str) = read_pubkey_at(data, off) {
+            if let Ok(pk) = Pubkey::from_str(&pk_str) {
+                candidates.push(pk);
+            }
+        }
+    }
+    for pk in candidates {
+        if accounts.contains_key(&pk.to_string()) {
+            continue;
+        }
+        if let Ok(acct) = rpc.get_account(&pk).await {
+            let mint = if acct.data.len() >= 32 {
+                Pubkey::new_from_array(acct.data[0..32].try_into().unwrap_or([0u8; 32]))
+            } else {
+                Pubkey::default()
+            };
+            let is_token_vault = mint.to_string() == token_mint;
+            let is_sol_vault = mint.to_string() == "So11111111111111111111111111111111111111112";
+            accounts.insert(pk.to_string(), AccountData {
+                pubkey: pk,
+                data: acct.data.clone(),
+                slot: 0,
+                fetched_at: std::time::Instant::now(),
+                lamports: acct.lamports,
+                owner: acct.owner,
+            });
+            if verbose {
+                log(
+                    LogTag::PoolCalculator,
+                    "INFO",
+                    &format!(
+                        "Scanned vault candidate {} len={} mint={} {}{}",
+                        pk,
+                        acct.data.len(),
+                        mint,
+                        if is_token_vault {
+                            "[TOKEN_VAULT]"
+                        } else {
+                            ""
+                        },
+                        if is_sol_vault {
+                            "[SOL_VAULT]"
+                        } else {
+                            ""
+                        }
+                    )
+                );
+            }
+        }
+    }
+}
+
+fn read_pubkey_at(data: &[u8], offset: usize) -> Option<String> {
+    if offset + 32 > data.len() {
+        return None;
+    }
+    let pk = Pubkey::new_from_array(data[offset..offset + 32].try_into().ok()?);
+    Some(pk.to_string())
 }
 
 fn read_pubkey(data: &[u8], offset: &mut usize) -> Option<String> {
