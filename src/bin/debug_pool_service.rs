@@ -16,6 +16,7 @@ enum PoolKindArg {
     RaydiumCpmm,
     RaydiumLegacy,
     MeteoraDlmm,
+    MeteoraDamm,
 }
 
 #[derive(Parser, Debug)]
@@ -85,12 +86,14 @@ async fn main() {
         PoolKindArg::RaydiumCpmm => ProgramKind::RaydiumCpmm,
         PoolKindArg::RaydiumLegacy => ProgramKind::RaydiumLegacyAmm,
         PoolKindArg::MeteoraDlmm => ProgramKind::MeteoraDlmm,
+        PoolKindArg::MeteoraDamm => ProgramKind::MeteoraDamm,
     };
 
     if
         program_kind == ProgramKind::PumpFun ||
         program_kind == ProgramKind::RaydiumLegacyAmm ||
-        program_kind == ProgramKind::MeteoraDlmm
+        program_kind == ProgramKind::MeteoraDlmm ||
+        program_kind == ProgramKind::MeteoraDamm
     {
         // Legacy scan: show candidate pubkeys at common offsets for investigation
         if program_kind == ProgramKind::RaydiumLegacyAmm && args.verbose {
@@ -119,10 +122,43 @@ async fn main() {
             }
         }
 
+        // DAMM scan: show pubkeys at DAMM offsets
+        if program_kind == ProgramKind::MeteoraDamm && args.verbose {
+            // Show the basic structure
+            for (name, off) in [
+                ("token_a_mint", 136usize),
+                ("token_b_mint", 168),
+                ("token_a_vault", 200),
+                ("token_b_vault", 232),
+            ] {
+                if let Some(pk) = read_pubkey_at(&pool_account.data, off) {
+                    log(
+                        LogTag::PoolCalculator,
+                        "DEBUG",
+                        &format!("DAMM {} @ offset {} -> {}", name, off, pk)
+                    );
+                }
+            }
+
+            // Scan for more vault addresses in the range 250-350
+            log(LogTag::PoolCalculator, "DEBUG", "Scanning for vault addresses in range 250-350:");
+            for off in (250..350).step_by(32) {
+                if let Some(pk) = read_pubkey_at(&pool_account.data, off) {
+                    log(
+                        LogTag::PoolCalculator,
+                        "DEBUG",
+                        &format!("DAMM scan @ offset {} -> {}", off, pk)
+                    );
+                }
+            }
+        }
+
         let vault_pair = if program_kind == ProgramKind::RaydiumLegacyAmm {
             extract_legacy_vaults(&pool_account.data)
         } else if program_kind == ProgramKind::MeteoraDlmm {
             extract_dlmm_vaults(&pool_account.data)
+        } else if program_kind == ProgramKind::MeteoraDamm {
+            extract_damm_vaults(&pool_account.data)
         } else {
             extract_pumpfun_vaults(&pool_account.data)
         };
@@ -423,6 +459,56 @@ fn extract_dlmm_vaults(data: &[u8]) -> Option<(String, String)> {
         // return (token_vault, sol_vault)
         Some((reserve_y, reserve_x))
     } else {
+        None
+    }
+}
+
+fn extract_damm_vaults(data: &[u8]) -> Option<(String, String)> {
+    if data.len() < 1112 {
+        log(LogTag::PoolCalculator, "ERROR", &format!("DAMM data too short: {} bytes", data.len()));
+        return None;
+    }
+
+    // Extract pubkeys at correct fixed offsets (discovered via hex analysis)
+    // offset 168: token_a_mint (our target token)
+    // offset 200: token_b_mint (SOL)
+    // offset 232: token_a_vault (target token vault)
+    // offset 264: token_b_vault (SOL vault)
+
+    let token_a_mint = read_pubkey_at(data, 168)?;
+    let token_b_mint = read_pubkey_at(data, 200)?;
+    let token_a_vault = read_pubkey_at(data, 232)?;
+    let token_b_vault = read_pubkey_at(data, 264)?;
+
+    log(
+        LogTag::PoolCalculator,
+        "DEBUG",
+        &format!(
+            "DAMM structure: token_a_mint={}, token_b_mint={}, token_a_vault={}, token_b_vault={}",
+            token_a_mint,
+            token_b_mint,
+            token_a_vault,
+            token_b_vault
+        )
+    );
+
+    // Check if token_b is SOL (structure: token_a = target token, token_b = SOL)
+    let sol_mint = "So11111111111111111111111111111111111111112";
+
+    if token_b_mint == sol_mint {
+        // Return (token_vault, sol_vault)
+        log(
+            LogTag::PoolCalculator,
+            "DEBUG",
+            "DAMM: token_a_vault=token_vault, token_b_vault=sol_vault"
+        );
+        Some((token_a_vault, token_b_vault))
+    } else {
+        log(
+            LogTag::PoolCalculator,
+            "ERROR",
+            &format!("DAMM: unexpected token_b_mint: {}", token_b_mint)
+        );
         None
     }
 }

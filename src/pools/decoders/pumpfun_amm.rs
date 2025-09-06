@@ -8,7 +8,7 @@ use super::{ PoolDecoder, AccountData };
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
-use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS, DEFAULT_TOKEN_DECIMALS };
+use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -222,10 +222,20 @@ impl PumpFunAmmDecoder {
             );
         }
 
-        // Get token decimals - use cached decimals for target token
-        let target_token_decimals = get_cached_decimals(&target_mint).unwrap_or(
-            DEFAULT_TOKEN_DECIMALS
-        );
+        // Get token decimals - CRITICAL: must be cached, no fallback to defaults
+        let target_token_decimals = match get_cached_decimals(&target_mint) {
+            Some(decimals) => decimals,
+            None => {
+                if is_debug_pool_calculator_enabled() {
+                    log(
+                        LogTag::PoolCalculator,
+                        "ERROR",
+                        &format!("PumpFun: Token decimals not cached for {}, skipping price calculation", target_mint)
+                    );
+                }
+                return None;
+            }
+        };
         let sol_decimals = SOL_DECIMALS;
 
         // Validate reserves - for pump.fun, we might have placeholder values

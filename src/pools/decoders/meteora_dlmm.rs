@@ -176,9 +176,21 @@ impl PoolDecoder for MeteoraDlmmDecoder {
             return None;
         }
 
-        // Get token decimals
-        let token_decimals = get_cached_decimals(&token_mint).unwrap_or(9);
-        let sol_decimals = 9u8;
+        // Get token decimals - CRITICAL: must be cached, no fallback to defaults
+        let token_decimals = match get_cached_decimals(&token_mint) {
+            Some(decimals) => decimals,
+            None => {
+                if is_debug_pool_calculator_enabled() {
+                    log(
+                        LogTag::PoolCalculator,
+                        "ERROR",
+                        &format!("DLMM: Token decimals not cached for {}, skipping price calculation", token_mint)
+                    );
+                }
+                return None;
+            }
+        };
+        let sol_decimals = 9u8; // SOL always has 9 decimals
 
         if is_debug_pool_calculator_enabled() {
             log(

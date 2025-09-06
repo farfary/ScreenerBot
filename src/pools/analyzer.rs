@@ -429,11 +429,46 @@ impl PoolAnalyzer {
         pool_id: &Pubkey,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        _rpc_client: &RpcClient
+        rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
+        // For DAMM pools, we need:
+        // - Pool account itself
+        // - Token vaults (extracted from pool data)
+
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                &format!("Extracting DAMM accounts for pool {}", pool_id)
+            );
+        }
+
         let mut accounts = vec![*pool_id];
+
+        // Fetch pool account to extract vault addresses
+        if let Ok(pool_account) = rpc_client.get_account(pool_id).await {
+            if let Some(vault_addresses) = Self::extract_damm_vault_addresses(&pool_account.data) {
+                let vault_count = vault_addresses.len();
+                for vault_str in vault_addresses {
+                    if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
+                        accounts.push(vault_pubkey);
+                    }
+                }
+
+                if is_debug_pool_service_enabled() {
+                    log(
+                        LogTag::PoolService,
+                        "INFO",
+                        &format!("DAMM pool {} extracted {} vault accounts", pool_id, vault_count)
+                    );
+                }
+            }
+        }
+
+        // Always include the mints
         accounts.push(*base_mint);
         accounts.push(*quote_mint);
+
         Some(accounts)
     }
 
@@ -621,6 +656,19 @@ impl PoolAnalyzer {
 
         // Return all vault addresses (analyzer needs both regardless of order)
         Some(vec![reserve_x, reserve_y])
+    }
+
+    /// Extract vault addresses from DAMM pool account data
+    fn extract_damm_vault_addresses(data: &[u8]) -> Option<Vec<String>> {
+        if data.len() < 1112 {
+            return None;
+        }
+
+        // Extract vault pubkeys at fixed offsets (discovered via hex analysis)
+        let token_a_vault = Self::extract_pubkey_at_offset(data, 232)?; // token_a_vault at offset 232
+        let token_b_vault = Self::extract_pubkey_at_offset(data, 264)?; // token_b_vault at offset 264
+
+        Some(vec![token_a_vault, token_b_vault])
     }
 
     /// Helper function to extract pubkey at fixed offset (for analyzer use)

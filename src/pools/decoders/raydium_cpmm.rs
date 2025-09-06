@@ -8,12 +8,7 @@ use super::{ PoolDecoder, AccountData };
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
-use crate::tokens::decimals::{
-    get_cached_decimals,
-    SOL_DECIMALS,
-    DEFAULT_TOKEN_DECIMALS,
-    raw_to_ui_amount,
-};
+use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS, raw_to_ui_amount };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -84,9 +79,28 @@ impl RaydiumCpmmDecoder {
         let pool_mint_0_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
         let pool_mint_1_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
 
-        // Use decimal cache system with pool data as fallback (from old working system)
+        // Get token decimals - use cached if available, otherwise pool data as fallback
+        // (Raydium CPMM pools store decimals in the pool data, so this is safe)
         let mint_0_decimals = get_cached_decimals(&token_0_mint).unwrap_or(pool_mint_0_decimals);
         let mint_1_decimals = get_cached_decimals(&token_1_mint).unwrap_or(pool_mint_1_decimals);
+
+        // However, for strict validation, we should prefer cached decimals when available
+        if
+            get_cached_decimals(&token_0_mint).is_none() ||
+            get_cached_decimals(&token_1_mint).is_none()
+        {
+            if is_debug_pool_calculator_enabled() {
+                log(
+                    LogTag::PoolCalculator,
+                    "WARN",
+                    &format!(
+                        "Using pool-stored decimals for CPMM tokens {} and {} - consider pre-caching",
+                        token_0_mint.chars().take(8).collect::<String>(),
+                        token_1_mint.chars().take(8).collect::<String>()
+                    )
+                );
+            }
+        }
 
         if is_debug_pool_calculator_enabled() {
             log(

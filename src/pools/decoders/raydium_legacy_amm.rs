@@ -11,7 +11,7 @@ use super::{ PoolDecoder, AccountData };
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
-use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS, DEFAULT_TOKEN_DECIMALS };
+use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
@@ -82,20 +82,44 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             }
         };
 
-        // Map SOL vs token
+        // Map SOL vs token - CRITICAL: decimals must be cached, no fallback
         let (sol_reserve_raw, token_reserve_raw, token_decimals) = if info.pc_mint == SOL_MINT {
             // pc=SOL vault at pc_vault, coin=token vault at coin_vault
-            (
-                pc_reserve,
-                coin_reserve,
-                get_cached_decimals(&info.coin_mint).unwrap_or(DEFAULT_TOKEN_DECIMALS),
-            )
+            let decimals = match get_cached_decimals(&info.coin_mint) {
+                Some(decimals) => decimals,
+                None => {
+                    if is_debug_pool_calculator_enabled() {
+                        log(
+                            LogTag::PoolCalculator,
+                            "ERROR",
+                            &format!(
+                                "Legacy AMM: Token decimals not cached for {}, skipping price calculation",
+                                info.coin_mint
+                            )
+                        );
+                    }
+                    return None;
+                }
+            };
+            (pc_reserve, coin_reserve, decimals)
         } else if info.coin_mint == SOL_MINT {
-            (
-                coin_reserve,
-                pc_reserve,
-                get_cached_decimals(&info.pc_mint).unwrap_or(DEFAULT_TOKEN_DECIMALS),
-            )
+            let decimals = match get_cached_decimals(&info.pc_mint) {
+                Some(decimals) => decimals,
+                None => {
+                    if is_debug_pool_calculator_enabled() {
+                        log(
+                            LogTag::PoolCalculator,
+                            "ERROR",
+                            &format!(
+                                "Legacy AMM: Token decimals not cached for {}, skipping price calculation",
+                                info.pc_mint
+                            )
+                        );
+                    }
+                    return None;
+                }
+            };
+            (coin_reserve, pc_reserve, decimals)
         } else {
             if is_debug_pool_calculator_enabled() {
                 log(LogTag::PoolCalculator, "ERROR", "Legacy AMM pool missing SOL mint");
