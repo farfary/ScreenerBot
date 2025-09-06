@@ -3,7 +3,6 @@
 
 use crate::pools::constants::PUMP_FUN_AMM_PROGRAM_ID;
 use crate::pools::decoders::PoolDecodedResult;
-use crate::pools::fetcher::PoolFetcher;
 
 /// Pump.fun AMM pool decoder
 #[derive(Debug)]
@@ -20,12 +19,11 @@ impl PumpFunAmmDecoder {
         program_id == PUMP_FUN_AMM_PROGRAM_ID
     }
 
-    pub async fn decode_pool_data(
+    pub fn decode_pool_data(
         &self,
-        pool_address: &str,
-        _fetcher: &PoolFetcher
+        _prepared_data: &crate::pools::service::PreparedPoolData
     ) -> Result<PoolDecodedResult, String> {
-        // TODO: Implement Pump.fun AMM pool data decoding using fetcher
-        Err(format!("Pump.fun AMM decoder not yet implemented for pool {}", pool_address))
+        // TODO: Implement Pump.fun AMM pool data decoding using prepared data
+        Err("Pump.fun AMM decoder not yet implemented".to_string())
     }
 }

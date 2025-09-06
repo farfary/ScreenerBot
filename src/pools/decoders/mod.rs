@@ -163,27 +163,19 @@ impl PoolDecoder {
         }
     }
 
-    /// Decode pool data from account data
-    pub async fn decode_pool_data(
+    /// Decode pool data from prepared account data
+    pub fn decode_pool_data(
         &self,
-        pool_address: &str,
-        fetcher: &crate::pools::fetcher::PoolFetcher
+        prepared_data: &crate::pools::service::PreparedPoolData
     ) -> Result<PoolDecodedResult, String> {
         match self {
-            PoolDecoder::RaydiumCpmm(decoder) =>
-                decoder.decode_pool_data(pool_address, fetcher).await,
-            PoolDecoder::RaydiumLegacyAmm(decoder) =>
-                decoder.decode_pool_data(pool_address, fetcher).await,
-            PoolDecoder::RaydiumClmm(decoder) =>
-                decoder.decode_pool_data(pool_address, fetcher).await,
-            PoolDecoder::MeteoraDammV2(decoder) =>
-                decoder.decode_pool_data(pool_address, fetcher).await,
-            PoolDecoder::MeteoraDlmm(decoder) =>
-                decoder.decode_pool_data(pool_address, fetcher).await,
-            PoolDecoder::OrcaWhirlpool(decoder) =>
-                decoder.decode_pool_data(pool_address, fetcher).await,
-            PoolDecoder::PumpFunAmm(decoder) =>
-                decoder.decode_pool_data(pool_address, fetcher).await,
+            PoolDecoder::RaydiumCpmm(decoder) => decoder.decode_pool_data(prepared_data),
+            PoolDecoder::RaydiumLegacyAmm(decoder) => decoder.decode_pool_data(prepared_data),
+            PoolDecoder::RaydiumClmm(decoder) => decoder.decode_pool_data(prepared_data),
+            PoolDecoder::MeteoraDammV2(decoder) => decoder.decode_pool_data(prepared_data),
+            PoolDecoder::MeteoraDlmm(decoder) => decoder.decode_pool_data(prepared_data),
+            PoolDecoder::OrcaWhirlpool(decoder) => decoder.decode_pool_data(prepared_data),
+            PoolDecoder::PumpFunAmm(decoder) => decoder.decode_pool_data(prepared_data),
         }
     }
 }

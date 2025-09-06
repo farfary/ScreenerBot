@@ -3,10 +3,11 @@
 
 use crate::pools::constants::METEORA_DAMM_V2_PROGRAM_ID;
 use crate::pools::decoders::PoolDecodedResult;
-use crate::pools::fetcher::PoolFetcher;
+use crate::pools::service::PreparedPoolData;
 use crate::tokens::decimals::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
+use std::collections::HashMap;
 use crate::logger::{ log, LogTag };
 
 /// Meteora DAMM v2 pool decoder
@@ -24,21 +25,17 @@ impl MeteoraDammV2Decoder {
         program_id == METEORA_DAMM_V2_PROGRAM_ID
     }
 
-    pub async fn decode_pool_data(
+    pub fn decode_pool_data(
         &self,
-        pool_address: &str,
-        fetcher: &PoolFetcher
+        prepared_data: &PreparedPoolData
     ) -> Result<PoolDecodedResult, String> {
-        // Get pool account data from fetcher
-        let pool_account = fetcher
-            .get_cached_account_data(pool_address).await
-            .ok_or_else(|| format!("Pool account data not found for {}", pool_address))?;
-
-        if !pool_account.exists {
-            return Err(format!("Pool account {} does not exist", pool_address));
+        if prepared_data.program_id != METEORA_DAMM_V2_PROGRAM_ID {
+            return Err(
+                format!("Invalid program ID for Meteora DAMM v2: {}", prepared_data.program_id)
+            );
         }
 
-        let data = &pool_account.data;
+        let data = &prepared_data.pool_account_data;
 
         if data.len() < 1112 {
             return Err(
@@ -54,7 +51,7 @@ impl MeteoraDammV2Decoder {
             "METEORA_DECODE",
             &format!(
                 "🔍 Decoding Meteora DAMM v2 pool {}, data length: {}",
-                &pool_address[..8],
+                &prepared_data.pool_address[..8],
                 data.len()
             )
         );
@@ -122,12 +119,12 @@ impl MeteoraDammV2Decoder {
             format!("Cannot determine decimals for token B: {}", token_b_mint)
         )?;
 
-        // Get vault balances from fetcher (should already be cached)
-        let (token_a_reserve, token_b_reserve) = self.get_vault_balances(
+        // Get vault balances from prepared reserve data
+        let (token_a_reserve, token_b_reserve) = self.get_vault_balances_from_prepared_data(
             &token_a_vault,
             &token_b_vault,
-            fetcher
-        ).await?;
+            &prepared_data.reserve_accounts_data
+        )?;
 
         log(
             LogTag::Pool,
@@ -143,7 +140,7 @@ impl MeteoraDammV2Decoder {
 
         // Create and return the decoded result
         let mut result = PoolDecodedResult::new(
-            pool_address.to_string(),
+            prepared_data.pool_address.clone(),
             METEORA_DAMM_V2_PROGRAM_ID.to_string(),
             "Meteora DAMM v2".to_string(),
             token_a_mint,
@@ -163,36 +160,28 @@ impl MeteoraDammV2Decoder {
         Ok(result)
     }
 
-    /// Get vault balances from cached account data
-    async fn get_vault_balances(
+    /// Get vault balances from prepared reserve data
+    fn get_vault_balances_from_prepared_data(
         &self,
         vault_a: &str,
         vault_b: &str,
-        fetcher: &PoolFetcher
+        reserve_data: &HashMap<String, Vec<u8>>
     ) -> Result<(u64, u64), String> {
         // Get vault A account data
-        let vault_a_account = fetcher
-            .get_cached_account_data(vault_a).await
+        let vault_a_data = reserve_data
+            .get(vault_a)
             .ok_or_else(|| format!("Vault A account data not found for {}", vault_a))?;
 
-        let vault_b_account = fetcher
-            .get_cached_account_data(vault_b).await
+        let vault_b_data = reserve_data
+            .get(vault_b)
             .ok_or_else(|| format!("Vault B account data not found for {}", vault_b))?;
 
-        if !vault_a_account.exists {
-            return Err(format!("Vault A account {} does not exist", vault_a));
-        }
-
-        if !vault_b_account.exists {
-            return Err(format!("Vault B account {} does not exist", vault_b));
-        }
-
         // Decode token account amounts
-        let balance_a = Self::decode_token_account_amount(&vault_a_account.data).map_err(|e|
+        let balance_a = Self::decode_token_account_amount(vault_a_data).map_err(|e|
             format!("Failed to decode vault A balance: {}", e)
         )?;
 
-        let balance_b = Self::decode_token_account_amount(&vault_b_account.data).map_err(|e|
+        let balance_b = Self::decode_token_account_amount(vault_b_data).map_err(|e|
             format!("Failed to decode vault B balance: {}", e)
         )?;
 

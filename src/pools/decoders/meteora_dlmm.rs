@@ -3,7 +3,6 @@
 
 use crate::pools::constants::METEORA_DLMM_PROGRAM_ID;
 use crate::pools::decoders::PoolDecodedResult;
-use crate::pools::fetcher::PoolFetcher;
 
 /// Meteora DLMM pool decoder
 #[derive(Debug)]
@@ -20,12 +19,11 @@ impl MeteoraDlmmDecoder {
         program_id == METEORA_DLMM_PROGRAM_ID
     }
 
-    pub async fn decode_pool_data(
+    pub fn decode_pool_data(
         &self,
-        pool_address: &str,
-        _fetcher: &PoolFetcher
+        _prepared_data: &crate::pools::service::PreparedPoolData
     ) -> Result<PoolDecodedResult, String> {
-        // TODO: Implement Meteora DLMM pool data decoding using fetcher
-        Err(format!("Meteora DLMM decoder not yet implemented for pool {}", pool_address))
+        // TODO: Implement Meteora DLMM pool data decoding using prepared data
+        Err("Meteora DLMM decoder not yet implemented".to_string())
     }
 }

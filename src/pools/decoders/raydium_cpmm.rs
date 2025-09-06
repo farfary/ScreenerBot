@@ -3,7 +3,6 @@
 
 use crate::pools::constants::RAYDIUM_CPMM_PROGRAM_ID;
 use crate::pools::decoders::PoolDecodedResult;
-use crate::pools::fetcher::PoolFetcher;
 
 /// Raydium CPMM pool decoder
 #[derive(Debug)]
@@ -20,15 +19,11 @@ impl RaydiumCpmmDecoder {
         program_id == RAYDIUM_CPMM_PROGRAM_ID
     }
 
-    pub async fn decode_pool_data(
+    pub fn decode_pool_data(
         &self,
-        pool_address: &str,
-        _fetcher: &PoolFetcher
+        _prepared_data: &crate::pools::service::PreparedPoolData
     ) -> Result<PoolDecodedResult, String> {
-        // TODO: Implement Raydium CPMM pool data decoding using fetcher
-        // This should get pool account data from fetcher, decode it according to Raydium CPMM layout,
-        // then get vault account data to calculate actual reserves
-
-        Err(format!("Raydium CPMM decoder not yet implemented for pool {}", pool_address))
+        // TODO: Implement Raydium CPMM pool data decoding using prepared data
+        Err("Raydium CPMM decoder not yet implemented".to_string())
     }
 }

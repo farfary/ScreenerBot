@@ -3,7 +3,6 @@
 
 use crate::pools::constants::RAYDIUM_CLMM_PROGRAM_ID;
 use crate::pools::decoders::PoolDecodedResult;
-use crate::pools::fetcher::PoolFetcher;
 
 /// Raydium CLMM pool decoder
 #[derive(Debug)]
@@ -20,12 +19,11 @@ impl RaydiumClmmDecoder {
         program_id == RAYDIUM_CLMM_PROGRAM_ID
     }
 
-    pub async fn decode_pool_data(
+    pub fn decode_pool_data(
         &self,
-        pool_address: &str,
-        _fetcher: &PoolFetcher
+        _prepared_data: &crate::pools::service::PreparedPoolData
     ) -> Result<PoolDecodedResult, String> {
-        // TODO: Implement Raydium CLMM pool data decoding using fetcher
-        Err(format!("Raydium CLMM decoder not yet implemented for pool {}", pool_address))
+        // TODO: Implement Raydium CLMM pool data decoding using prepared data
+        Err("Raydium CLMM decoder not yet implemented".to_string())
     }
 }

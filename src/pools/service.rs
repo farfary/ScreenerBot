@@ -11,7 +11,77 @@ use crate::pools::constants::TOKEN_REFRESH_INTERVAL_SECS;
 use tokio::sync::{ OnceCell, RwLock };
 use tokio::time::{ sleep, Duration };
 use std::sync::Arc;
+use std::collections::HashMap;
 use crate::logger::{ log, LogTag };
+
+/// Shared account data for thread-safe access
+/// This is the central store for all fetched account data
+#[derive(Debug, Clone)]
+pub struct SharedAccountData {
+    /// Account address
+    pub address: String,
+    /// Raw account data
+    pub data: Vec<u8>,
+    /// Account lamports
+    pub lamports: u64,
+    /// Account owner program
+    pub owner: String,
+    /// When this data was fetched
+    pub fetched_at: chrono::DateTime<chrono::Utc>,
+    /// Whether the account exists
+    pub exists: bool,
+}
+
+impl SharedAccountData {
+    /// Create from CachedAccountData
+    pub fn from_cached(cached: CachedAccountData) -> Self {
+        Self {
+            address: cached.address,
+            data: cached.data,
+            lamports: cached.lamports,
+            owner: cached.owner,
+            fetched_at: cached.fetched_at,
+            exists: cached.exists,
+        }
+    }
+
+    /// Check if data is expired (10 minutes TTL)
+    pub fn is_expired(&self) -> bool {
+        let now = chrono::Utc::now();
+        let age = now.signed_duration_since(self.fetched_at);
+        age.num_seconds() > 600 // 10 minutes
+    }
+}
+
+/// Pre-prepared pool data for decoders
+/// Contains all necessary account data for pool decoding
+#[derive(Debug, Clone)]
+pub struct PreparedPoolData {
+    /// Pool address
+    pub pool_address: String,
+    /// Pool program ID
+    pub program_id: String,
+    /// Pool account data
+    pub pool_account_data: Vec<u8>,
+    /// Reserve account data (vault accounts)
+    pub reserve_accounts_data: HashMap<String, Vec<u8>>,
+}
+
+impl PreparedPoolData {
+    pub fn new(pool_address: String, program_id: String, pool_account_data: Vec<u8>) -> Self {
+        Self {
+            pool_address,
+            program_id,
+            pool_account_data,
+            reserve_accounts_data: HashMap::new(),
+        }
+    }
+
+    /// Add reserve account data
+    pub fn add_reserve_account(&mut self, address: String, data: Vec<u8>) {
+        self.reserve_accounts_data.insert(address, data);
+    }
+}
 
 /// Main pool service
 pub struct PoolService {
@@ -23,6 +93,9 @@ pub struct PoolService {
     token_manager: PoolTokenManager,
     tokens: Arc<RwLock<Vec<PoolToken>>>,
     token_task_running: Arc<RwLock<bool>>,
+    /// Shared account data store (thread-safe, read-write access)
+    /// Only written by fetcher, read by calculator and others
+    shared_accounts: Arc<RwLock<HashMap<String, SharedAccountData>>>,
 }
 
 impl PoolService {
@@ -41,6 +114,7 @@ impl PoolService {
             token_manager: PoolTokenManager::new(),
             tokens: Arc::new(RwLock::new(Vec::new())),
             token_task_running: Arc::new(RwLock::new(false)),
+            shared_accounts: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -321,7 +395,7 @@ impl PoolService {
                     );
 
                     // Trigger account fetching after successful analysis
-                    if let Err(e) = self.fetch_all_required_accounts().await {
+                    if let Err(e) = self.internal_fetch_accounts().await {
                         log(
                             LogTag::Pool,
                             "TOKENS_FETCH_ERROR",
@@ -432,8 +506,9 @@ impl PoolService {
     // FETCHER METHODS
     // =============================================================================
 
-    /// Fetch all required account data using the fetcher
-    pub async fn fetch_all_required_accounts(&self) -> Result<(), String> {
+    /// Fetch all required account data using the fetcher (internal task only)
+    /// This method should only be called internally as a background task
+    async fn internal_fetch_accounts(&self) -> Result<(), String> {
         // Get required accounts from analyzer
         let required_accounts = self.analyzer.get_required_accounts().await;
 
@@ -451,9 +526,100 @@ impl PoolService {
         // Use fetcher to fetch all required accounts
         self.fetcher.fetch_all_required_accounts(&required_accounts).await?;
 
+        // Update shared account data from fetcher cache
+        self.update_shared_accounts_from_fetcher().await?;
+
         log(LogTag::Pool, "SERVICE_FETCH_COMPLETE", "✅ Account fetching completed");
 
         Ok(())
+    }
+
+    /// Update shared accounts from fetcher cache (private method)
+    async fn update_shared_accounts_from_fetcher(&self) -> Result<(), String> {
+        let fetcher_accounts = self.fetcher.get_all_cached_accounts().await;
+        let mut shared = self.shared_accounts.write().await;
+
+        let mut updated_count = 0;
+        for (address, cached_data) in fetcher_accounts {
+            if !cached_data.is_expired() {
+                shared.insert(address, SharedAccountData::from_cached(cached_data));
+                updated_count += 1;
+            }
+        }
+
+        log(
+            LogTag::Pool,
+            "SERVICE_SHARED_UPDATE",
+            &format!("📋 Updated {} shared account entries", updated_count)
+        );
+
+        Ok(())
+    }
+
+    /// Get account data from shared store (thread-safe read access)
+    pub async fn get_shared_account_data(&self, address: &str) -> Option<SharedAccountData> {
+        let shared = self.shared_accounts.read().await;
+        shared
+            .get(address)
+            .filter(|data| !data.is_expired())
+            .cloned()
+    }
+
+    /// Get multiple account data from shared store
+    pub async fn get_multiple_shared_account_data(
+        &self,
+        addresses: &[String]
+    ) -> HashMap<String, SharedAccountData> {
+        let shared = self.shared_accounts.read().await;
+        let mut result = HashMap::new();
+
+        for address in addresses {
+            if let Some(data) = shared.get(address) {
+                if !data.is_expired() {
+                    result.insert(address.clone(), data.clone());
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Prepare pool data for decoder (used by calculator)
+    pub async fn prepare_pool_data(
+        &self,
+        pool_address: &str,
+        program_id: &str,
+        reserve_addresses: &[String]
+    ) -> Result<PreparedPoolData, String> {
+        // Get pool account data
+        let pool_data = self
+            .get_shared_account_data(pool_address).await
+            .ok_or_else(|| format!("Pool account data not found for {}", pool_address))?;
+
+        if !pool_data.exists {
+            return Err(format!("Pool account {} does not exist", pool_address));
+        }
+
+        // Get reserve account data
+        let reserve_data = self.get_multiple_shared_account_data(reserve_addresses).await;
+
+        // Create prepared pool data
+        let mut prepared = PreparedPoolData::new(
+            pool_address.to_string(),
+            program_id.to_string(),
+            pool_data.data
+        );
+
+        // Add reserve account data
+        for address in reserve_addresses {
+            if let Some(reserve_account) = reserve_data.get(address) {
+                if reserve_account.exists {
+                    prepared.add_reserve_account(address.clone(), reserve_account.data.clone());
+                }
+            }
+        }
+
+        Ok(prepared)
     }
 
     /// Test decoding a specific pool using the fetcher-based decoder
@@ -482,8 +648,11 @@ impl PoolService {
             .get_decoder(program_id)
             .ok_or_else(|| format!("No decoder found for program ID: {}", program_id))?;
 
+        // Prepare data for decoding (assumes vault addresses are already extracted and cached)
+        let prepared_data = self.prepare_pool_data(pool_address, program_id, &[]).await?;
+
         // Test decoding
-        match decoder.decode_pool_data(pool_address, &self.fetcher).await {
+        match decoder.decode_pool_data(&prepared_data) {
             Ok(decoded_result) => {
                 log(
                     LogTag::Pool,
@@ -553,8 +722,8 @@ impl PoolService {
         // Step 1: Analyze all tokens
         self.trigger_analysis().await?;
 
-        // Step 2: Fetch all required accounts
-        self.fetch_all_required_accounts().await?;
+        // Step 2: Fetch all required accounts (internal method)
+        self.internal_fetch_accounts().await?;
 
         // Step 3: Log final statistics
         let analysis_stats = self.get_analysis_stats().await;
