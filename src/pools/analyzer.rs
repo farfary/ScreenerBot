@@ -1,274 +1,17 @@
-/// Pool analyzer module
-/// Analyzes pools to determine calculability and extracts basic pool info using decoders
+/// Pool analyzer task
+/// Runs as background task analyzing pools for calculability and extracting basic pool info
 
 use crate::pools::types::PoolInfo;
 use crate::pools::tokens::PoolToken;
 use crate::pools::decoders::DecoderFactory;
-use crate::pools::cache::{ PoolC    pub async fn get_token_availability(&self, token_mint: &str) -> Option<TokenAvailability> {
-        self.cache.get_token_availability(token_mint).await
-    }
-}ta };
+use crate::pools::cache::{ PoolCache, AccountData };
 use crate::pools::constants::{ MIN_POOL_LIQUIDITY_USD, SOL_MINT };
+use tokio::sync::RwLock;
+use tokio::time::{ sleep, Duration };
 use std::sync::Arc;
+use std::collections::HashMap;
+use chrono::{ DateTime, Utc };
 use crate::logger::{ log, LogTag };
-
-/// Pool analyzer service
-pub struct PoolAnalyzer {
-    decoder_factory: DecoderFactory,
-    cache: Arc<PoolCache>,
-}
-
-impl PoolAnalyzer {
-    pub fn new(cache: Arc<PoolCache>) -> Self {
-        Self {
-            decoder_factory: DecoderFactory::new(),
-            cache,
-        }
-    }
-
-    /// Analyze all tokens and their pools
-    pub async fn analyze_all_tokens(&self, tokens: &[PoolToken]) -> Result<(), String> {
-        log(
-            LogTag::Pool,
-            "ANALYZER_START",
-            &format!("🔬 Starting analysis of {} tokens", tokens.len())
-        );
-
-        let mut analyzed_count = 0;
-        let mut calculable_count = 0;
-        let mut error_count = 0;
-
-        for token in tokens {
-            match self.analyze_token(&token.mint).await {
-                Ok(is_calculable) => {
-                    analyzed_count += 1;
-                    if is_calculable {
-                        calculable_count += 1;
-                    }
-                }
-                Err(e) => {
-                    error_count += 1;
-                    log(
-                        LogTag::Pool,
-                        "ANALYZER_TOKEN_ERROR",
-                        &format!("❌ Error analyzing {}: {}", &token.mint[..8], e)
-                    );
-                }
-            }
-        }
-
-        log(
-            LogTag::Pool,
-            "ANALYZER_COMPLETE",
-            &format!(
-                "✅ Analysis complete: {}/{} analyzed, {} calculable, {} errors",
-                analyzed_count,
-                tokens.len(),
-                calculable_count,
-                error_count
-            )
-        );
-
-        Ok(())
-    }
-
-    /// Analyze a single token and its pools
-    pub async fn analyze_token(&self, token_mint: &str) -> Result<bool, String> {
-        // Get all pools for this token
-        let pools = match self.cache.get_pools(token_mint).await {
-            Some(pools) => pools,
-            None => {
-                log(
-                    LogTag::Pool,
-                    "ANALYZER_NO_POOLS",
-                    &format!("No pools found for token {}", &token_mint[..8])
-                );
-                return Ok(false);
-            }
-        };
-
-        let mut best_pool: Option<PoolInfo> = None;
-        let mut best_liquidity = 0.0;
-        let mut all_vault_addresses = Vec::new();
-
-        // Analyze each pool
-        for pool in &pools {
-            match self.analyze_pool(pool, token_mint).await {
-                Ok(Some((vault_addresses, liquidity))) => {
-                    // Add vault addresses to collection
-                    all_vault_addresses.extend(vault_addresses);
-                    
-                    // Track best pool
-                    if liquidity > best_liquidity {
-                        best_liquidity = liquidity;
-                        best_pool = Some(pool.clone());
-                    }
-                }
-                Ok(None) => {
-                    log(
-                        LogTag::Pool,
-                        "ANALYZER_POOL_NOT_CALCULABLE",
-                        &format!("Pool {} not calculable for token {}", &pool.pool_address[..8], &token_mint[..8])
-                    );
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Pool,
-                        "ANALYZER_POOL_ERROR",
-                        &format!("Error analyzing pool {}: {}", &pool.pool_address[..8], e)
-                    );
-                }
-            }
-        }
-
-        if let Some(best_pool) = best_pool {
-            // Remove duplicates from vault addresses
-            all_vault_addresses.sort();
-            all_vault_addresses.dedup();
-
-            // Store token availability in cache
-            self.cache.set_token_calculable(
-                token_mint,
-                true,
-                Some(best_pool)
-            ).await;
-
-            // Store required account addresses for fetcher
-            self.cache.add_required_accounts(&all_vault_addresses).await;
-
-            log(
-                LogTag::Pool,
-                "ANALYZER_TOKEN_CALCULABLE",
-                &format!(
-                    "✅ Token {} calculable via {} pools, {} vault addresses",
-                    &token_mint[..8],
-                    pools.len(),
-                    all_vault_addresses.len()
-                )
-            );
-
-            Ok(true)
-        } else {
-            // Mark as not calculable
-            self.cache.set_token_calculable(
-                token_mint,
-                false,
-                None
-            ).await;
-
-            log(
-                LogTag::Pool,
-                "ANALYZER_TOKEN_NOT_CALCULABLE",
-                &format!("❌ Token {} not calculable from {} pools", &token_mint[..8], pools.len())
-            );
-
-            Ok(false)
-        }
-    }
-
-    /// Analyze a single pool for calculability
-    async fn analyze_pool(
-        &self,
-        pool: &PoolInfo,
-        token_mint: &str
-    ) -> Result<Option<(Vec<String>, f64)>, String> {
-        // Check if pool has SOL pair
-        let has_sol = pool.base_token_mint == SOL_MINT || pool.quote_token_mint == SOL_MINT;
-        if !has_sol {
-            return Ok(None);
-        }
-
-        // Check if reserves are available
-        if pool.sol_reserves <= 0.0 || pool.token_reserves <= 0.0 {
-            return Ok(None);
-        }
-
-        // Check minimum liquidity
-        let liquidity = pool.liquidity_usd.unwrap_or(0.0);
-        if liquidity < MIN_POOL_LIQUIDITY_USD {
-            return Ok(None);
-        }
-
-        // Extract vault addresses using decoder
-        let vault_addresses = self.extract_vault_addresses(pool).await?;
-
-        Ok(Some((vault_addresses, liquidity)))
-    }
-
-    /// Extract vault addresses from pool using appropriate decoder
-    async fn extract_vault_addresses(&self, pool: &PoolInfo) -> Result<Vec<String>, String> {
-        let mut vault_addresses = Vec::new();
-
-        // Always add pool address itself
-        vault_addresses.push(pool.pool_address.clone());
-
-        // Get decoder for this pool type
-        if let Some(decoder) = self.decoder_factory.get_decoder(&pool.pool_program_id) {
-            // Get pool account data
-            if let Some(pool_account) = self.cache.get_account(&pool.pool_address).await {
-                // Use decoder to extract vault addresses
-                if let Ok(vaults) = decoder.extract_vault_addresses(&pool_account.data) {
-                    vault_addresses.extend(vaults);
-                }
-            } else {
-                log(
-                    LogTag::Pool,
-                    "ANALYZER_NO_POOL_DATA",
-                    &format!("No account data for pool {}", &pool.pool_address[..8])
-                );
-            }
-        } else {
-            log(
-                LogTag::Pool,
-                "ANALYZER_NO_DECODER",
-                &format!("No decoder for program {}", pool.pool_program_id)
-            );
-        }
-
-        Ok(vault_addresses)
-    }
-
-    /// Re-analyze a specific token (when pools are updated)
-    pub async fn re_analyze_token(&self, token_mint: &str) -> Result<(), String> {
-        self.analyze_token(token_mint).await?;
-        Ok(())
-    }
-
-    /// Get analysis statistics from cache
-    pub async fn get_analysis_stats(&self) -> AnalysisStats {
-        let calculable_tokens = self.cache.get_calculable_tokens().await;
-        let required_accounts = self.cache.get_required_accounts().await;
-
-        AnalysisStats {
-            total_tokens: calculable_tokens.len(), // This is approximate
-            calculable_tokens: calculable_tokens.len(),
-            trading_ready_tokens: calculable_tokens.len(), // This is approximate
-            error_tokens: 0, // Not tracked separately
-            required_accounts: required_accounts.len(),
-            updated_at: chrono::Utc::now(),
-        }
-    }
-
-    /// Get calculable tokens from cache
-    pub async fn get_calculable_tokens(&self) -> Vec<String> {
-        self.cache.get_calculable_tokens().await
-    }
-
-    /// Get trading ready tokens from cache
-    pub async fn get_trading_ready_tokens(&self) -> Vec<String> {
-        self.cache.get_trading_ready_tokens().await
-    }
-
-    /// Get required accounts from cache
-    pub async fn get_required_accounts(&self) -> Vec<String> {
-        self.cache.get_required_accounts().await
-    }
-
-    /// Get token availability from cache
-    pub async fn get_token_availability(&self, token_mint: &str) -> Option<TokenAvailability> {
-        self.cache.get_token_availability(token_mint).await
-    }
-}
 
 /// Analysis statistics
 #[derive(Debug, Clone)]
@@ -278,10 +21,10 @@ pub struct AnalysisStats {
     pub trading_ready_tokens: usize,
     pub error_tokens: usize,
     pub required_accounts: usize,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
-/// Token availability status (kept for compatibility)
+/// Token availability status
 #[derive(Debug, Clone)]
 pub struct TokenAvailability {
     /// Token mint address
@@ -299,7 +42,7 @@ pub struct TokenAvailability {
     /// SOL reserves from best pool
     pub sol_reserves: f64,
     /// Last analysis time
-    pub analyzed_at: chrono::DateTime<chrono::Utc>,
+    pub analyzed_at: DateTime<Utc>,
     /// Analysis errors (if any)
     pub errors: Vec<String>,
 }
@@ -315,26 +58,9 @@ impl TokenAvailability {
             reserve_accounts: Vec::new(),
             liquidity_usd: 0.0,
             sol_reserves: 0.0,
-            analyzed_at: chrono::Utc::now(),
+            analyzed_at: Utc::now(),
             errors: Vec::new(),
         }
-    }
-
-    /// Mark as calculable with best pool
-    pub fn with_best_pool(mut self, pool: PoolInfo) -> Self {
-        self.liquidity_usd = pool.liquidity_usd.unwrap_or(0.0);
-        self.sol_reserves = pool.sol_reserves;
-        self.best_pool = Some(pool);
-        self.calculable = true;
-        self.analyzed_at = chrono::Utc::now();
-        self
-    }
-
-    /// Add error
-    pub fn with_error(mut self, error: String) -> Self {
-        self.errors.push(error);
-        self.analyzed_at = chrono::Utc::now();
-        self
     }
 
     /// Check if token is ready for trading
@@ -346,13 +72,338 @@ impl TokenAvailability {
     }
 }
 
-/// Analysis statistics
-#[derive(Debug, Clone)]
-pub struct AnalysisStats {
-    pub total_tokens: usize,
-    pub calculable_tokens: usize,
-    pub trading_ready_tokens: usize,
-    pub error_tokens: usize,
-    pub required_accounts: usize,
-    pub updated_at: DateTime<Utc>,
+/// Pool analyzer task service
+pub struct PoolAnalyzerTask {
+    decoder_factory: DecoderFactory,
+    cache: Arc<PoolCache>,
+    /// Task running status
+    is_running: Arc<RwLock<bool>>,
+    /// Last analysis times per token
+    last_analyzed: Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
+}
+
+impl PoolAnalyzerTask {
+    pub fn new(cache: Arc<PoolCache>) -> Self {
+        Self {
+            decoder_factory: DecoderFactory::new(),
+            cache,
+            is_running: Arc::new(RwLock::new(false)),
+            last_analyzed: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Start the analyzer background task
+    pub async fn start_task(&self) {
+        let mut is_running = self.is_running.write().await;
+        if *is_running {
+            log(LogTag::Pool, "ANALYZER_TASK_RUNNING", "Analyzer task already running");
+            return;
+        }
+        *is_running = true;
+        drop(is_running);
+
+        log(LogTag::Pool, "ANALYZER_TASK_START", "🔬 Starting pool analyzer task");
+
+        // Clone necessary data for the background task
+        let decoder_factory = self.decoder_factory.clone();
+        let cache = self.cache.clone();
+        let is_running = self.is_running.clone();
+        let last_analyzed = self.last_analyzed.clone();
+
+        tokio::spawn(async move {
+            while *is_running.read().await {
+                match Self::analyze_tokens_with_pools(
+                    &decoder_factory,
+                    &cache,
+                    &last_analyzed,
+                ).await {
+                    Ok(analyzed_count) => {
+                        if analyzed_count > 0 {
+                            log(
+                                LogTag::Pool,
+                                "ANALYZER_TASK_CYCLE",
+                                &format!("✅ Analyzed {} tokens", analyzed_count)
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Pool,
+                            "ANALYZER_TASK_ERROR",
+                            &format!("❌ Analyzer task error: {}", e)
+                        );
+                    }
+                }
+
+                // Sleep between analysis cycles
+                sleep(Duration::from_secs(10)).await;
+            }
+
+            log(LogTag::Pool, "ANALYZER_TASK_STOP", "🛑 Analyzer task stopped");
+        });
+    }
+
+    /// Stop the analyzer task
+    pub async fn stop_task(&self) {
+        let mut is_running = self.is_running.write().await;
+        *is_running = false;
+    }
+
+    /// Analyze tokens that have pools and determine calculability
+    async fn analyze_tokens_with_pools(
+        decoder_factory: &DecoderFactory,
+        cache: &Arc<PoolCache>,
+        last_analyzed: &Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
+    ) -> Result<usize, String> {
+        let tokens_with_pools = cache.get_tokens_with_pools().await;
+        let mut analyzed_count = 0;
+
+        for token_mint in tokens_with_pools {
+            // Check if we need to analyze (every 60 seconds)
+            if !Self::should_analyze_token(&token_mint, last_analyzed).await {
+                continue;
+            }
+
+            // Get pools for this token
+            if let Some(pools) = cache.get_pools(&token_mint).await {
+                match Self::analyze_token_pools(
+                    &token_mint,
+                    &pools,
+                    decoder_factory,
+                    cache,
+                ).await {
+                    Ok(_) => {
+                        analyzed_count += 1;
+                        
+                        // Update last analyzed time
+                        {
+                            let mut last_anal = last_analyzed.write().await;
+                            last_anal.insert(token_mint.clone(), Utc::now());
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Pool,
+                            "ANALYZER_TOKEN_ERROR",
+                            &format!("Failed to analyze token {}: {}", &token_mint[..8], e)
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(analyzed_count)
+    }
+
+    /// Check if we should analyze a token (time-based)
+    async fn should_analyze_token(
+        token_mint: &str,
+        last_analyzed: &Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
+    ) -> bool {
+        let last_anal_map = last_analyzed.read().await;
+        match last_anal_map.get(token_mint) {
+            Some(last_time) => {
+                let now = Utc::now();
+                let duration = now.signed_duration_since(*last_time);
+                duration.num_seconds() > 60 // Analyze every 60 seconds
+            }
+            None => true, // Never analyzed
+        }
+    }
+
+    /// Analyze pools for a specific token
+    async fn analyze_token_pools(
+        token_mint: &str,
+        pools: &[PoolInfo],
+        decoder_factory: &DecoderFactory,
+        cache: &Arc<PoolCache>,
+    ) -> Result<(), String> {
+        let mut calculable_pools = Vec::new();
+        let mut all_vault_addresses = Vec::new();
+
+        // Analyze each pool
+        for pool in pools {
+            // Check if pool has SOL pair
+            let has_sol = pool.base_token_mint == SOL_MINT || pool.quote_token_mint == SOL_MINT;
+            if !has_sol {
+                continue;
+            }
+
+            // Check minimum liquidity
+            if let Some(liquidity) = pool.liquidity_usd {
+                if liquidity < MIN_POOL_LIQUIDITY_USD {
+                    continue;
+                }
+            }
+
+            // Extract vault addresses using decoder
+            if let Some(vault_addresses) = Self::extract_vault_addresses(
+                &pool.pool_address,
+                &pool.pool_program_id,
+                decoder_factory,
+                cache,
+            ).await? {
+                all_vault_addresses.extend(vault_addresses);
+                calculable_pools.push(pool.clone());
+            }
+        }
+
+        // Determine if token is calculable
+        if !calculable_pools.is_empty() {
+            // Find best pool (highest liquidity)
+            let best_pool = calculable_pools
+                .iter()
+                .max_by(|a, b| {
+                    let a_liquidity = a.liquidity_usd.unwrap_or(0.0);
+                    let b_liquidity = b.liquidity_usd.unwrap_or(0.0);
+                    a_liquidity.partial_cmp(&b_liquidity).unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .unwrap();
+
+            // Create availability data
+            let availability = TokenAvailability {
+                token_mint: token_mint.to_string(),
+                calculable: true,
+                best_pool: Some(best_pool.clone()),
+                pools: calculable_pools,
+                reserve_accounts: all_vault_addresses.clone(),
+                liquidity_usd: best_pool.liquidity_usd.unwrap_or(0.0),
+                sol_reserves: best_pool.sol_reserves,
+                analyzed_at: Utc::now(),
+                errors: Vec::new(),
+            };
+
+            // Store in cache
+            cache.store_token_availability(token_mint, availability).await;
+            cache.add_required_accounts(&all_vault_addresses).await;
+
+            log(
+                LogTag::Pool,
+                "ANALYZER_TOKEN_CALCULABLE",
+                &format!("✅ Token {} is calculable via {} pools", &token_mint[..8], calculable_pools.len())
+            );
+        } else {
+            // Not calculable
+            let availability = TokenAvailability {
+                token_mint: token_mint.to_string(),
+                calculable: false,
+                best_pool: None,
+                pools: pools.to_vec(),
+                reserve_accounts: Vec::new(),
+                liquidity_usd: 0.0,
+                sol_reserves: 0.0,
+                analyzed_at: Utc::now(),
+                errors: vec!["No calculable pools found".to_string()],
+            };
+
+            cache.store_token_availability(token_mint, availability).await;
+
+            log(
+                LogTag::Pool,
+                "ANALYZER_TOKEN_NOT_CALCULABLE",
+                &format!("❌ Token {} has no calculable pools", &token_mint[..8])
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Extract vault addresses using decoders
+    async fn extract_vault_addresses(
+        pool_address: &str,
+        program_id: &str,
+        decoder_factory: &DecoderFactory,
+        cache: &Arc<PoolCache>,
+    ) -> Result<Option<Vec<String>>, String> {
+        // Get pool account data
+        if let Some(account_data) = cache.get_account(pool_address).await {
+            if !account_data.exists || account_data.is_expired() {
+                return Ok(None);
+            }
+
+            // Get appropriate decoder
+            if let Some(decoder) = decoder_factory.get_decoder(program_id) {
+                match decoder.extract_vault_addresses(&account_data.data).await {
+                    Ok(mut vault_addresses) => {
+                        // Always include the pool address itself
+                        vault_addresses.insert(0, pool_address.to_string());
+                        Ok(Some(vault_addresses))
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Pool,
+                            "ANALYZER_VAULT_ERROR",
+                            &format!("Failed to extract vaults for {}: {}", &pool_address[..8], e)
+                        );
+                        // Even if vault extraction fails, include the pool address
+                        Ok(Some(vec![pool_address.to_string()]))
+                    }
+                }
+            } else {
+                log(
+                    LogTag::Pool,
+                    "ANALYZER_NO_DECODER",
+                    &format!("No decoder for program: {}", program_id)
+                );
+                // Include just the pool address
+                Ok(Some(vec![pool_address.to_string()]))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Check if analyzer task is running
+    pub async fn is_running(&self) -> bool {
+        *self.is_running.read().await
+    }
+
+    /// Get analyzer statistics
+    pub async fn get_analyzer_stats(&self) -> AnalysisStats {
+        let all_availability = self.cache.get_all_token_availability().await;
+        let total_tokens = all_availability.len();
+        let calculable_tokens = all_availability.values().filter(|a| a.calculable).count();
+        let trading_ready_tokens = all_availability.values().filter(|a| a.is_ready_for_trading()).count();
+        let error_tokens = all_availability.values().filter(|a| !a.errors.is_empty()).count();
+        let required_accounts = self.cache.get_required_accounts().await.len();
+
+        AnalysisStats {
+            total_tokens,
+            calculable_tokens,
+            trading_ready_tokens,
+            error_tokens,
+            required_accounts,
+            updated_at: Utc::now(),
+        }
+    }
+
+    /// Get token availability information
+    pub async fn get_token_availability(&self, token_mint: &str) -> Option<TokenAvailability> {
+        self.cache.get_token_availability(token_mint).await
+    }
+
+    /// Get all calculable tokens
+    pub async fn get_calculable_tokens(&self) -> Vec<String> {
+        let all_availability = self.cache.get_all_token_availability().await;
+        all_availability
+            .values()
+            .filter(|a| a.calculable)
+            .map(|a| a.token_mint.clone())
+            .collect()
+    }
+
+    /// Get tokens ready for trading
+    pub async fn get_trading_ready_tokens(&self) -> Vec<String> {
+        let all_availability = self.cache.get_all_token_availability().await;
+        all_availability
+            .values()
+            .filter(|a| a.is_ready_for_trading())
+            .map(|a| a.token_mint.clone())
+            .collect()
+    }
+
+    /// Get required account addresses for RPC fetching
+    pub async fn get_required_accounts(&self) -> Vec<String> {
+        self.cache.get_required_accounts().await
+    }
 }

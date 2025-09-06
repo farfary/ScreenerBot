@@ -1,12 +1,12 @@
 /// Main pool service - centralized cache-based architecture
 /// Uses PoolCache as single source of truth for all data storage
 
-use crate::pools::{ PoolDiscovery, PoolAnalyzer, PoolFetcher };
+use crate::pools::{ PoolDiscovery, PoolFetcher };
 use crate::pools::calculator::{ PoolCalculatorTask, CalculatorStats };
+use crate::pools::analyzer::{ PoolAnalyzerTask, TokenAvailability, AnalysisStats };
 use crate::pools::types::{ PriceResult, PoolStats };
 use crate::pools::cache::{ PoolCache, CacheStats };
 use crate::pools::tokens::{ PoolTokenManager, PoolToken };
-use crate::pools::analyzer::{ TokenAvailability, AnalysisStats };
 use crate::pools::fetcher::FetcherStats;
 use crate::pools::constants::TOKEN_REFRESH_INTERVAL_SECS;
 use tokio::sync::{ OnceCell, RwLock };
@@ -25,8 +25,8 @@ pub struct PoolService {
     /// Pool calculator background task
     calculator_task: PoolCalculatorTask,
 
-    /// Pool analyzer service
-    analyzer: PoolAnalyzer,
+    /// Pool analyzer background task
+    analyzer_task: PoolAnalyzerTask,
 
     /// Pool account data fetcher
     fetcher: PoolFetcher,
@@ -42,7 +42,7 @@ impl PoolService {
     pub fn new() -> Self {
         let cache = Arc::new(PoolCache::new());
         let discovery = PoolDiscovery::new(cache.clone());
-        let analyzer = PoolAnalyzer::new(cache.clone());
+        let analyzer_task = PoolAnalyzerTask::new(cache.clone());
         let fetcher = PoolFetcher::new(cache.clone());
         let calculator_task = PoolCalculatorTask::new(cache.clone());
 
@@ -50,7 +50,7 @@ impl PoolService {
             cache,
             discovery,
             calculator_task,
-            analyzer,
+            analyzer_task,
             fetcher,
             token_manager: PoolTokenManager::new(),
             token_task_running: Arc::new(RwLock::new(false)),
@@ -67,6 +67,9 @@ impl PoolService {
         // Start discovery task
         self.discovery.start_discovery_task().await;
 
+        // Start analyzer task
+        self.analyzer_task.start_task().await;
+
         // Start calculator task
         self.calculator_task.start_task(self.cache.clone()).await;
 
@@ -82,6 +85,9 @@ impl PoolService {
 
         // Stop discovery task
         self.discovery.stop_discovery_task().await;
+
+        // Stop analyzer task
+        self.analyzer_task.stop_task().await;
 
         // Stop calculator task
         self.calculator_task.stop_task().await;
@@ -118,11 +124,10 @@ impl PoolService {
         };
 
         PoolStats::new(
-            cache_stats.tokens_count,
-            cache_stats.pools_count,
-            cache_stats.prices_count,
-            hit_rate,
-            cache_stats.updated_at
+            cache_stats.total_pools,
+            cache_stats.total_cached_tokens,
+            cache_stats.active_discoveries,
+            cache_stats.cache_hit_rate
         )
     }
 
@@ -203,14 +208,19 @@ impl PoolService {
                 if *is_running.read().await {
                     log(LogTag::Pool, "TOKEN_TASK_REFRESH", "🔄 Refreshing tokens");
 
-                    match token_manager.get_tokens().await {
-                        Ok(tokens) => {
+                    match token_manager.database.get_all_tokens().await {
+                        Ok(api_tokens) => {
+                            let pool_tokens: Vec<PoolToken> = api_tokens
+                                .into_iter()
+                                .map(|token| PoolToken::from_api_token(token))
+                                .collect();
+
                             log(
                                 LogTag::Pool,
                                 "TOKEN_TASK_LOADED",
-                                &format!("📦 Loaded {} tokens", tokens.len())
+                                &format!("📦 Loaded {} tokens", pool_tokens.len())
                             );
-                            cache.store_tokens(tokens).await;
+                            cache.store_tokens(pool_tokens).await;
                         }
                         Err(e) => {
                             log(
