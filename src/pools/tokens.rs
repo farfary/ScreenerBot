@@ -31,6 +31,7 @@ impl From<ApiToken> for PoolToken {
 }
 
 /// Pool token manager
+#[derive(Clone)]
 pub struct PoolTokenManager {
     // TODO: Add fields as needed
 }

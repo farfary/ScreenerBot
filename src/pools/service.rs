@@ -1,10 +1,13 @@
 /// Main pool service
-/// Orchestrates pool discovery, calculation, and caching
+/// Orchestrates pool discovery, calculation, caching, and token management
 
 use crate::pools::{ PoolDiscovery, PoolCalculator };
 use crate::pools::types::{ PriceResult, PoolStats };
 use crate::pools::cache::PoolCache;
+use crate::pools::tokens::{ PoolTokenManager, PoolToken };
+use crate::pools::constants::TOKEN_REFRESH_INTERVAL_SECS;
 use tokio::sync::{ OnceCell, RwLock };
+use tokio::time::{ sleep, Duration };
 use std::sync::Arc;
 use crate::logger::{ log, LogTag };
 
@@ -13,6 +16,9 @@ pub struct PoolService {
     discovery: PoolDiscovery,
     calculator: PoolCalculator,
     cache: Arc<PoolCache>,
+    token_manager: PoolTokenManager,
+    tokens: Arc<RwLock<Vec<PoolToken>>>,
+    token_task_running: Arc<RwLock<bool>>,
 }
 
 impl PoolService {
@@ -24,12 +30,18 @@ impl PoolService {
             discovery,
             calculator: PoolCalculator::new(),
             cache,
+            token_manager: PoolTokenManager::new(),
+            tokens: Arc::new(RwLock::new(Vec::new())),
+            token_task_running: Arc::new(RwLock::new(false)),
         }
     }
 
-    /// Start the pool service (starts discovery task)
+    /// Start the pool service (starts discovery and token loading tasks)
     pub async fn start(&self) {
         log(LogTag::Pool, "SERVICE_START", "🚀 Starting Pool Service");
+
+        // Start token loading task first
+        self.start_token_loading_task().await;
 
         // Start continuous discovery task
         self.discovery.start_discovery_task().await;
@@ -40,6 +52,11 @@ impl PoolService {
     /// Stop the pool service
     pub async fn stop(&self) {
         log(LogTag::Pool, "SERVICE_STOP", "🛑 Stopping Pool Service");
+
+        // Stop token loading task
+        self.stop_token_loading_task().await;
+
+        // Stop discovery task
         self.discovery.stop_discovery_task().await;
     }
 
@@ -183,6 +200,117 @@ impl PoolService {
         let pools = self.discovery.discover_pools(token_address).await?;
         self.cache.cache_pools(token_address, pools.clone()).await;
         Ok(pools)
+    }
+
+    /// Start periodic token loading task
+    async fn start_token_loading_task(&self) {
+        let mut is_running = self.token_task_running.write().await;
+        if *is_running {
+            log(LogTag::Pool, "TOKEN_TASK", "Token loading task already running");
+            return;
+        }
+        *is_running = true;
+        drop(is_running);
+
+        log(LogTag::Pool, "TOKEN_TASK_START", "🚀 Starting periodic token loading task");
+
+        // Load tokens immediately
+        self.load_tokens().await;
+
+        // Clone necessary data for the background task
+        let token_manager = self.token_manager.clone();
+        let tokens = self.tokens.clone();
+        let cache = self.cache.clone();
+        let is_running = self.token_task_running.clone();
+
+        tokio::spawn(async move {
+            loop {
+                // Wait for the refresh interval
+                sleep(Duration::from_secs(TOKEN_REFRESH_INTERVAL_SECS)).await;
+
+                // Check if we should stop
+                {
+                    let running = is_running.read().await;
+                    if !*running {
+                        log(LogTag::Pool, "TOKEN_TASK_STOP", "🛑 Token loading task stopped");
+                        break;
+                    }
+                }
+
+                // Load top tokens by liquidity
+                match token_manager.get_top_liquidity_tokens().await {
+                    Ok(new_tokens) => {
+                        log(
+                            LogTag::Pool,
+                            "TOKENS_REFRESHED",
+                            &format!("🔄 Refreshed {} top liquidity tokens", new_tokens.len())
+                        );
+
+                        // Update in-memory list
+                        {
+                            let mut tokens_guard = tokens.write().await;
+                            *tokens_guard = new_tokens.clone();
+                        }
+
+                        // Update cache
+                        cache.cache_tokens(new_tokens).await;
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Pool,
+                            "TOKENS_REFRESH_ERROR",
+                            &format!("❌ Failed to refresh tokens: {}", e)
+                        );
+                    }
+                }
+            }
+        });
+    }
+
+    /// Stop token loading task
+    async fn stop_token_loading_task(&self) {
+        let mut is_running = self.token_task_running.write().await;
+        *is_running = false;
+    }
+
+    /// Load tokens immediately
+    async fn load_tokens(&self) {
+        match self.token_manager.get_top_liquidity_tokens().await {
+            Ok(tokens) => {
+                log(
+                    LogTag::Pool,
+                    "TOKENS_LOADED",
+                    &format!("📊 Loaded {} top liquidity tokens", tokens.len())
+                );
+
+                // Update in-memory list
+                {
+                    let mut tokens_guard = self.tokens.write().await;
+                    *tokens_guard = tokens.clone();
+                }
+
+                // Update cache
+                self.cache.cache_tokens(tokens).await;
+            }
+            Err(e) => {
+                log(LogTag::Pool, "TOKENS_LOAD_ERROR", &format!("❌ Failed to load tokens: {}", e));
+            }
+        }
+    }
+
+    /// Get current tokens in memory
+    pub async fn get_tokens(&self) -> Vec<PoolToken> {
+        let tokens_guard = self.tokens.read().await;
+        tokens_guard.clone()
+    }
+
+    /// Get token mints for pool operations
+    pub async fn get_token_mints(&self) -> Vec<String> {
+        let tokens_guard = self.tokens.read().await;
+        tokens_guard
+            .iter()
+            .map(|t| t.mint.clone())
+            .collect()
     }
 }
 

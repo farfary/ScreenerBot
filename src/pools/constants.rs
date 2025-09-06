@@ -19,6 +19,9 @@ pub const DISCOVERY_CYCLE_DELAY_SECS: u64 = 5;
 pub const DISCOVERY_BATCH_DELAY_MS: u64 = 200;
 pub const DEXSCREENER_REQUEST_DELAY_MS: u64 = 500;
 
+// Token loading timing
+pub const TOKEN_REFRESH_INTERVAL_SECS: u64 = 3600; // 1 hour
+
 // Watchlist and priority management
 pub const PRIORITY_UPDATE_INTERVAL_SECS: u64 = 3;
 pub const WATCHLIST_UPDATE_INTERVAL_SECS: u64 = 1;

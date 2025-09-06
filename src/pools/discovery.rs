@@ -8,7 +8,6 @@ use tokio::time::{ sleep, Duration };
 use tokio::sync::RwLock;
 use crate::pools::cache::PoolCache;
 use crate::pools::types::PoolInfo;
-use crate::pools::tokens::PoolTokenManager;
 use crate::pools::constants::{
     INITIAL_TOKEN_LOAD_COUNT,
     DISCOVERY_BATCH_SIZE,
@@ -22,7 +21,6 @@ use crate::logger::{ log, LogTag };
 /// Pool discovery service
 pub struct PoolDiscovery {
     cache: Arc<PoolCache>,
-    token_manager: PoolTokenManager,
     is_running: Arc<RwLock<bool>>,
 }
 
@@ -30,7 +28,6 @@ impl PoolDiscovery {
     pub fn new(cache: Arc<PoolCache>) -> Self {
         Self {
             cache,
-            token_manager: PoolTokenManager::new(),
             is_running: Arc::new(RwLock::new(false)),
         }
     }
@@ -46,21 +43,6 @@ impl PoolDiscovery {
         drop(is_running);
 
         log(LogTag::Pool, "DISCOVERY_START", "🚀 Starting continuous pool discovery task");
-
-        // Load top 100 tokens initially
-        match self.token_manager.get_top_liquidity_tokens().await {
-            Ok(tokens) => {
-                log(
-                    LogTag::Pool,
-                    "TOKENS_LOADED",
-                    &format!("📊 Loaded {} top liquidity tokens", tokens.len())
-                );
-                self.cache.cache_tokens(tokens).await;
-            }
-            Err(e) => {
-                log(LogTag::Pool, "TOKENS_ERROR", &format!("Failed to load tokens: {}", e));
-            }
-        }
 
         // Clone necessary data for the background task
         let cache = self.cache.clone();
