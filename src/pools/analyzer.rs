@@ -172,18 +172,55 @@ impl PoolAnalyzer {
         liquidity_usd: f64,
         rpc_client: &RpcClient
     ) -> Option<PoolDescriptor> {
-        // Classify the program type
-        let program_kind = Self::classify_program_static(&program_id);
+        // First, try to determine the actual program type by fetching the pool account
+        let actual_program_id = if program_id == Pubkey::default() {
+            // This is an Unknown pool from discovery - fetch the account to get the real program ID
+            match rpc_client.get_account(&pool_id).await {
+                Ok(account) => {
+                    if is_debug_pool_service_enabled() {
+                        log(
+                            LogTag::PoolService,
+                            "DEBUG",
+                            &format!("Pool {} owner: {}", pool_id, account.owner)
+                        );
+                    }
+                    account.owner
+                }
+                Err(e) => {
+                    if is_debug_pool_service_enabled() {
+                        log(
+                            LogTag::PoolService,
+                            "WARN",
+                            &format!("Failed to fetch pool account {}: {}", pool_id, e)
+                        );
+                    }
+                    return None;
+                }
+            }
+        } else {
+            program_id
+        };
+
+        // Classify the program type using the actual program ID
+        let program_kind = Self::classify_program_static(&actual_program_id);
 
         if program_kind == ProgramKind::Unknown {
             if is_debug_pool_service_enabled() {
                 log(
                     LogTag::PoolService,
                     "WARN",
-                    &format!("Unknown program type for pool {}: {}", pool_id, program_id)
+                    &format!("Unsupported program type for pool {}: {}", pool_id, actual_program_id)
                 );
             }
             return None;
+        }
+
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "DEBUG",
+                &format!("Classified pool {} as {}", pool_id, program_kind.display_name())
+            );
         }
 
         // Extract reserve accounts based on program type

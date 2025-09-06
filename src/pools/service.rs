@@ -12,7 +12,7 @@ use super::discovery::PoolDiscovery;
 use super::analyzer::PoolAnalyzer;
 use super::fetcher::AccountFetcher;
 use super::calculator::PriceCalculator;
-use super::types::{ MAX_WATCHED_TOKENS, POOL_REFRESH_INTERVAL_SECONDS };
+use super::types::{ MAX_WATCHED_TOKENS, POOL_REFRESH_INTERVAL_SECONDS, ProgramKind };
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 use std::sync::atomic::{ AtomicBool, Ordering };
@@ -299,15 +299,22 @@ async fn run_monitoring_cycle() -> Result<(), String> {
         // Send pools to analyzer for processing
         if let Some(analyzer) = (unsafe { POOL_ANALYZER.as_ref() }) {
             for pool in pools {
-                let program_id = match Pubkey::from_str(pool.program_kind.program_id()) {
-                    Ok(id) => id,
-                    Err(_) => {
-                        log(
-                            LogTag::PoolService,
-                            "WARN",
-                            &format!("Invalid program ID for pool: {}", pool.pool_id)
-                        );
-                        continue;
+                // For Unknown pools, we'll let the analyzer determine the program ID
+                // by fetching the pool account and checking its owner
+                let program_id = if pool.program_kind == ProgramKind::Unknown {
+                    // Use a dummy pubkey - analyzer will determine the real program ID
+                    Pubkey::default()
+                } else {
+                    match Pubkey::from_str(pool.program_kind.program_id()) {
+                        Ok(id) => id,
+                        Err(_) => {
+                            log(
+                                LogTag::PoolService,
+                                "WARN",
+                                &format!("Invalid program ID for pool: {}", pool.pool_id)
+                            );
+                            continue;
+                        }
                     }
                 };
 
