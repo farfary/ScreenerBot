@@ -174,10 +174,10 @@ impl PriceCalculator {
         sol_reference_price: &Arc<RwLock<f64>>
     ) -> PoolCalculationResult {
         if is_debug_pool_calculator_enabled() {
-            let target_token = if pool_descriptor.base_mint.to_string() != SOL_MINT { 
-                pool_descriptor.base_mint 
-            } else { 
-                pool_descriptor.quote_mint 
+            let target_token = if pool_descriptor.base_mint.to_string() != SOL_MINT {
+                pool_descriptor.base_mint
+            } else {
+                pool_descriptor.quote_mint
             };
             log(
                 LogTag::PoolCalculator,

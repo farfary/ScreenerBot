@@ -213,7 +213,11 @@ impl PoolAnalyzer {
                         log(
                             LogTag::PoolService,
                             "WARN",
-                            &format!("Failed to fetch pool account {} for token analysis: {}", pool_id, e)
+                            &format!(
+                                "Failed to fetch pool account {} for token analysis: {}",
+                                pool_id,
+                                e
+                            )
                         );
                     }
                     return None;
@@ -263,10 +267,10 @@ impl PoolAnalyzer {
                     program_kind.display_name(),
                     pool_id,
                     reserve_accounts.len(),
-                    if base_mint.to_string() == "So11111111111111111111111111111111111111112" { 
-                        quote_mint 
-                    } else { 
-                        base_mint 
+                    if base_mint.to_string() == "So11111111111111111111111111111111111111112" {
+                        quote_mint
+                    } else {
+                        base_mint
                     }
                 )
             );

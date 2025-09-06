@@ -384,6 +384,9 @@ impl AccountFetcher {
     }
 
     /// Organize fetched accounts into pool bundles
+    ///
+    /// Creates isolated account data instances for each pool to prevent race conditions
+    /// when multiple pools share the same vault accounts (common in Raydium Legacy AMM)
     async fn organize_accounts_into_bundles(
         account_data_list: &[AccountData],
         pool_directory: &Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
@@ -403,13 +406,27 @@ impl AccountFetcher {
                     let bundle = bundles
                         .entry(*pool_id)
                         .or_insert_with(|| PoolAccountBundle::new(*pool_id));
-                    bundle.add_account(account_data.clone());
+
+                    // Create isolated account data for each pool to prevent race conditions
+                    // when multiple pools share the same vault accounts
+                    let isolated_account_data = AccountData {
+                        pubkey: account_data.pubkey,
+                        data: account_data.data.clone(),
+                        slot: account_data.slot,
+                        fetched_at: Instant::now(), // Fresh timestamp for this pool context
+                        lamports: account_data.lamports,
+                        owner: account_data.owner,
+                    };
+                    bundle.add_account(isolated_account_data);
 
                     if is_debug_pool_service_enabled() {
-                        let target_token = if pool_descriptor.base_mint.to_string() == "So11111111111111111111111111111111111111112" { 
-                            pool_descriptor.quote_mint 
-                        } else { 
-                            pool_descriptor.base_mint 
+                        let target_token = if
+                            pool_descriptor.base_mint.to_string() ==
+                            "So11111111111111111111111111111111111111112"
+                        {
+                            pool_descriptor.quote_mint
+                        } else {
+                            pool_descriptor.base_mint
                         };
                         log(
                             LogTag::PoolFetcher,
@@ -438,25 +455,35 @@ impl AccountFetcher {
                                     "WARN",
                                     &format!(
                                         "Failed to request calculation for token {} in pool {}: {}",
-                                        if pool_descriptor.base_mint.to_string() == "So11111111111111111111111111111111111111112" { 
-                                            pool_descriptor.quote_mint 
-                                        } else { 
-                                            pool_descriptor.base_mint 
+                                        if
+                                            pool_descriptor.base_mint.to_string() ==
+                                            "So11111111111111111111111111111111111111112"
+                                        {
+                                            pool_descriptor.quote_mint
+                                        } else {
+                                            pool_descriptor.base_mint
                                         },
                                         pool_id,
                                         e
                                     )
                                 );
                             } else if is_debug_pool_service_enabled() {
-                                let target_token = if pool_descriptor.base_mint.to_string() == "So11111111111111111111111111111111111111112" { 
-                                    pool_descriptor.quote_mint 
-                                } else { 
-                                    pool_descriptor.base_mint 
+                                let target_token = if
+                                    pool_descriptor.base_mint.to_string() ==
+                                    "So11111111111111111111111111111111111111112"
+                                {
+                                    pool_descriptor.quote_mint
+                                } else {
+                                    pool_descriptor.base_mint
                                 };
                                 log(
                                     LogTag::PoolFetcher,
                                     "INFO",
-                                    &format!("Requested calculation for complete bundle - token {} in pool {}", target_token, pool_id)
+                                    &format!(
+                                        "Requested calculation for complete bundle - token {} in pool {}",
+                                        target_token,
+                                        pool_id
+                                    )
                                 );
                             }
                         }

@@ -106,7 +106,12 @@ impl PoolDecoder for MeteoraDammDecoder {
                 log(
                     LogTag::PoolCalculator,
                     "ERROR",
-                    &format!("DAMM pool token {} doesn't match requested base {} or quote {}", token_mint, base_mint, quote_mint)
+                    &format!(
+                        "DAMM pool token {} doesn't match requested base {} or quote {}",
+                        token_mint,
+                        base_mint,
+                        quote_mint
+                    )
                 );
             }
             return None;
