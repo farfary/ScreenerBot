@@ -5,8 +5,7 @@ use screenerbot::entry::get_profit_target;
 use screenerbot::errors::ScreenerBotError;
 use screenerbot::global::set_cmd_args;
 use screenerbot::logger::{init_file_logging, log, LogTag};
-use screenerbot::pool_service::get_pool_service;
-use screenerbot::pool_interface::PoolInterface;
+use screenerbot::pools::get_pool_service;
 use screenerbot::positions;
 use screenerbot::positions_types::Position;
 use screenerbot::rpc::{get_rpc_client, sol_to_lamports, TokenBalance};
@@ -5544,15 +5543,13 @@ async fn test_real_position_management(
         }
     };
 
-    // Initialize price service
-    if let Err(e) = screenerbot::tokens::initialize_price_service().await {
-        log(
-            LogTag::Transactions,
-            "ERROR",
-            &format!("Failed to initialize price service: {}", e),
-        );
-        return;
-    }
+    // Initialize pool service
+    let _pool_service = get_pool_service().await;
+    log(
+        LogTag::Transactions,
+        "INFO",
+        "Pool service initialized",
+    );
     log(
         LogTag::Transactions,
         "POSITION_TEST",
@@ -5658,7 +5655,7 @@ async fn test_real_position_management(
     );
 
     // Get price info for profit target calculation
-    let price_info = match get_pool_service().get_price(&test_token.mint).await {
+    let price_info = match get_pool_service().await.get_price(&test_token.mint).await {
         Some(price_info) => price_info,
         None => {
             log(
@@ -5872,13 +5869,13 @@ async fn load_token_with_updated_info(
         );
 
         // Update with current price if available
-        if let Some(current_price) = screenerbot::tokens::get_current_token_price(token_mint).await
+        if let Some(price_result) = get_pool_service().await.get_price(token_mint).await
         {
-            token.price_dexscreener_sol = Some(current_price);
+            token.price_dexscreener_sol = Some(price_result.price_sol);
             log(
                 LogTag::Transactions,
                 "TOKEN_LOAD",
-                &format!("✅ Updated current price: {:.12} SOL", current_price),
+                &format!("✅ Updated current price: {:.12} SOL", price_result.price_sol),
             );
         }
 
@@ -5938,12 +5935,12 @@ async fn load_token_with_updated_info(
     let mut basic_token = create_basic_token(token_mint, token_symbol);
 
     // Try to get current price
-    if let Some(current_price) = screenerbot::tokens::get_current_token_price(token_mint).await {
-        basic_token.price_dexscreener_sol = Some(current_price);
+    if let Some(price_result) = get_pool_service().await.get_price(token_mint).await {
+        basic_token.price_dexscreener_sol = Some(price_result.price_sol);
         log(
             LogTag::Transactions,
             "TOKEN_LOAD",
-            &format!("✅ Got current price: {:.12} SOL", current_price),
+            &format!("✅ Got current price: {:.12} SOL", price_result.price_sol),
         );
     }
 
