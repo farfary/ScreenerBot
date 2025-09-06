@@ -197,18 +197,13 @@ impl PriceCalculator {
         let accounts_map = Self::convert_bundle_to_accounts_map(account_bundle);
 
         // Determine which token we're calculating price for (the non-SOL token)
+        // Note: Discovery stage already ensures one side is SOL, so this should always succeed
         let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).unwrap();
-        let (target_mint, sol_is_base) = if pool_descriptor.base_mint == sol_mint_pubkey {
+        let (target_mint, _sol_is_base) = if pool_descriptor.base_mint == sol_mint_pubkey {
             (pool_descriptor.quote_mint, true)
-        } else if pool_descriptor.quote_mint == sol_mint_pubkey {
-            (pool_descriptor.base_mint, false)
         } else {
-            // Neither is SOL - we can't calculate direct SOL price
-            return PoolCalculationResult {
-                pool_id,
-                price_result: None,
-                error: Some("Pool does not contain SOL - cannot calculate SOL price".to_string()),
-            };
+            // quote_mint must be SOL since discovery filters non-SOL pairs
+            (pool_descriptor.base_mint, false)
         };
 
         // Use decoder to calculate price

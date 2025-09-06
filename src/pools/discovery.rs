@@ -13,7 +13,7 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::dexscreener::{ get_token_pools_from_dexscreener, TokenPair };
 use crate::tokens::geckoterminal::{ get_token_pools_from_geckoterminal, GeckoTerminalPool };
 use crate::tokens::raydium::{ get_token_pools_from_raydium, RaydiumPool };
-use super::types::{ PoolDescriptor, ProgramKind };
+use super::types::{ PoolDescriptor, ProgramKind, SOL_MINT };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -154,10 +154,32 @@ impl PoolDiscovery {
         let token_pairs = get_token_pools_from_dexscreener(mint).await?;
 
         let mut pools = Vec::new();
+        let mut filtered_count = 0;
+
         for pair in token_pairs {
-            if let Ok(pool_descriptor) = self.convert_dexscreener_pair_to_descriptor(&pair, mint) {
-                pools.push(pool_descriptor);
+            match self.convert_dexscreener_pair_to_descriptor(&pair, mint) {
+                Ok(pool_descriptor) => {
+                    pools.push(pool_descriptor);
+                }
+                Err(e) => {
+                    if e.contains("does not contain SOL") {
+                        filtered_count += 1;
+                    }
+                    // Skip logging individual errors to avoid spam
+                }
             }
+        }
+
+        if is_debug_pool_discovery_enabled() && filtered_count > 0 {
+            log(
+                LogTag::PoolDiscovery,
+                "DEBUG",
+                &format!(
+                    "DexScreener: Filtered out {} non-SOL pools for {}",
+                    filtered_count,
+                    &mint[..8]
+                )
+            );
         }
 
         Ok(pools)
@@ -168,10 +190,32 @@ impl PoolDiscovery {
         let gecko_pools = get_token_pools_from_geckoterminal(mint).await?;
 
         let mut pools = Vec::new();
+        let mut filtered_count = 0;
+
         for pool in gecko_pools {
-            if let Ok(pool_descriptor) = self.convert_geckoterminal_pool_to_descriptor(&pool, mint) {
-                pools.push(pool_descriptor);
+            match self.convert_geckoterminal_pool_to_descriptor(&pool, mint) {
+                Ok(pool_descriptor) => {
+                    pools.push(pool_descriptor);
+                }
+                Err(e) => {
+                    if e.contains("does not contain SOL") {
+                        filtered_count += 1;
+                    }
+                    // Skip logging individual errors to avoid spam
+                }
             }
+        }
+
+        if is_debug_pool_discovery_enabled() && filtered_count > 0 {
+            log(
+                LogTag::PoolDiscovery,
+                "DEBUG",
+                &format!(
+                    "GeckoTerminal: Filtered out {} non-SOL pools for {}",
+                    filtered_count,
+                    &mint[..8]
+                )
+            );
         }
 
         Ok(pools)
@@ -182,10 +226,32 @@ impl PoolDiscovery {
         let raydium_pools = get_token_pools_from_raydium(mint).await?;
 
         let mut pools = Vec::new();
+        let mut filtered_count = 0;
+
         for pool in raydium_pools {
-            if let Ok(pool_descriptor) = self.convert_raydium_pool_to_descriptor(&pool, mint) {
-                pools.push(pool_descriptor);
+            match self.convert_raydium_pool_to_descriptor(&pool, mint) {
+                Ok(pool_descriptor) => {
+                    pools.push(pool_descriptor);
+                }
+                Err(e) => {
+                    if e.contains("does not contain SOL") {
+                        filtered_count += 1;
+                    }
+                    // Skip logging individual errors to avoid spam
+                }
             }
+        }
+
+        if is_debug_pool_discovery_enabled() && filtered_count > 0 {
+            log(
+                LogTag::PoolDiscovery,
+                "DEBUG",
+                &format!(
+                    "Raydium: Filtered out {} non-SOL pools for {}",
+                    filtered_count,
+                    &mint[..8]
+                )
+            );
         }
 
         Ok(pools)
@@ -206,6 +272,12 @@ impl PoolDiscovery {
         let quote_mint = Pubkey::from_str(&pair.quote_token.address).map_err(
             |_| "Invalid quote token address"
         )?;
+
+        // Check if pool contains SOL - reject if neither side is SOL
+        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
+        if base_mint != sol_mint_pubkey && quote_mint != sol_mint_pubkey {
+            return Err("Pool does not contain SOL - skipping".to_string());
+        }
 
         let liquidity_usd = pair.liquidity
             .as_ref()
@@ -239,6 +311,12 @@ impl PoolDiscovery {
             |_| "Invalid quote token address"
         )?;
 
+        // Check if pool contains SOL - reject if neither side is SOL
+        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
+        if base_mint != sol_mint_pubkey && quote_mint != sol_mint_pubkey {
+            return Err("Pool does not contain SOL - skipping".to_string());
+        }
+
         Ok(PoolDescriptor {
             pool_id,
             program_kind: ProgramKind::Unknown,
@@ -265,6 +343,12 @@ impl PoolDiscovery {
         let quote_mint = Pubkey::from_str(&pool.quote_token).map_err(
             |_| "Invalid quote token address"
         )?;
+
+        // Check if pool contains SOL - reject if neither side is SOL
+        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
+        if base_mint != sol_mint_pubkey && quote_mint != sol_mint_pubkey {
+            return Err("Pool does not contain SOL - skipping".to_string());
+        }
 
         Ok(PoolDescriptor {
             pool_id,
