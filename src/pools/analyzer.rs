@@ -48,7 +48,7 @@ impl PoolAnalyzer {
     /// Create new pool analyzer
     pub fn new(rpc_client: Arc<RpcClient>) -> Self {
         let (analyzer_tx, analyzer_rx) = mpsc::unbounded_channel();
-        
+
         Self {
             pool_directory: Arc::new(RwLock::new(HashMap::new())),
             rpc_client,
@@ -75,7 +75,7 @@ impl PoolAnalyzer {
 
         let pool_directory = self.pool_directory.clone();
         let rpc_client = self.rpc_client.clone();
-        
+
         // Take the receiver from the Arc<RwLock>
         let mut analyzer_rx = {
             let mut rx_lock = self.analyzer_rx.write().unwrap();
@@ -156,7 +156,7 @@ impl PoolAnalyzer {
                     }
                 }
             }
-            
+
             if is_debug_pool_service_enabled() {
                 log(LogTag::PoolService, "INFO", "Pool analyzer task completed");
             }
@@ -170,16 +170,16 @@ impl PoolAnalyzer {
         base_mint: Pubkey,
         quote_mint: Pubkey,
         liquidity_usd: f64,
-        rpc_client: &RpcClient,
+        rpc_client: &RpcClient
     ) -> Option<PoolDescriptor> {
         // Classify the program type
         let program_kind = Self::classify_program_static(&program_id);
-        
+
         if program_kind == ProgramKind::Unknown {
             if is_debug_pool_service_enabled() {
                 log(
-                    LogTag::PoolService, 
-                    "WARN", 
+                    LogTag::PoolService,
+                    "WARN",
                     &format!("Unknown program type for pool {}: {}", pool_id, program_id)
                 );
             }
@@ -192,13 +192,13 @@ impl PoolAnalyzer {
             &program_kind,
             &base_mint,
             &quote_mint,
-            rpc_client,
+            rpc_client
         ).await?;
 
         if is_debug_pool_service_enabled() {
             log(
-                LogTag::PoolService, 
-                "DEBUG", 
+                LogTag::PoolService,
+                "DEBUG",
                 &format!(
                     "Successfully analyzed {} pool: {} with {} reserve accounts",
                     program_kind.display_name(),
@@ -231,40 +231,74 @@ impl PoolAnalyzer {
         program_kind: &ProgramKind,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        rpc_client: &RpcClient,
+        rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
         match program_kind {
             ProgramKind::RaydiumCpmm => {
-                Self::extract_raydium_cpmm_accounts(pool_id, base_mint, quote_mint, rpc_client).await
+                Self::extract_raydium_cpmm_accounts(
+                    pool_id,
+                    base_mint,
+                    quote_mint,
+                    rpc_client
+                ).await
             }
-            
+
             ProgramKind::RaydiumLegacyAmm => {
-                Self::extract_raydium_legacy_accounts(pool_id, base_mint, quote_mint, rpc_client).await
+                Self::extract_raydium_legacy_accounts(
+                    pool_id,
+                    base_mint,
+                    quote_mint,
+                    rpc_client
+                ).await
             }
-            
+
             ProgramKind::RaydiumClmm => {
-                Self::extract_raydium_clmm_accounts(pool_id, base_mint, quote_mint, rpc_client).await
+                Self::extract_raydium_clmm_accounts(
+                    pool_id,
+                    base_mint,
+                    quote_mint,
+                    rpc_client
+                ).await
             }
-            
+
             ProgramKind::OrcaWhirlpool => {
-                Self::extract_orca_whirlpool_accounts(pool_id, base_mint, quote_mint, rpc_client).await
+                Self::extract_orca_whirlpool_accounts(
+                    pool_id,
+                    base_mint,
+                    quote_mint,
+                    rpc_client
+                ).await
             }
-            
+
             ProgramKind::MeteoraDamm => {
-                Self::extract_meteora_damm_accounts(pool_id, base_mint, quote_mint, rpc_client).await
+                Self::extract_meteora_damm_accounts(
+                    pool_id,
+                    base_mint,
+                    quote_mint,
+                    rpc_client
+                ).await
             }
-            
+
             ProgramKind::MeteoraDlmm => {
-                Self::extract_meteora_dlmm_accounts(pool_id, base_mint, quote_mint, rpc_client).await
+                Self::extract_meteora_dlmm_accounts(
+                    pool_id,
+                    base_mint,
+                    quote_mint,
+                    rpc_client
+                ).await
             }
-            
+
             ProgramKind::PumpFun => {
                 Self::extract_pump_fun_accounts(pool_id, base_mint, quote_mint, rpc_client).await
             }
-            
+
             ProgramKind::Unknown => {
                 if is_debug_pool_service_enabled() {
-                    log(LogTag::PoolService, "WARN", &format!("Cannot extract accounts for unknown program type: {}", pool_id));
+                    log(
+                        LogTag::PoolService,
+                        "WARN",
+                        &format!("Cannot extract accounts for unknown program type: {}", pool_id)
+                    );
                 }
                 None
             }
@@ -276,20 +310,20 @@ impl PoolAnalyzer {
         pool_id: &Pubkey,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        _rpc_client: &RpcClient,
+        _rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
         // For CPMM pools, we typically need:
         // - Pool account itself
         // - Base token vault
         // - Quote token vault
         // We can derive some accounts deterministically
-        
+
         let mut accounts = vec![*pool_id];
-        
+
         // Add the mints as they're needed for calculations
         accounts.push(*base_mint);
         accounts.push(*quote_mint);
-        
+
         // For now, return the basic accounts
         // In a full implementation, we would derive or fetch the actual vault addresses
         Some(accounts)
@@ -300,7 +334,7 @@ impl PoolAnalyzer {
         pool_id: &Pubkey,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        _rpc_client: &RpcClient,
+        _rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
         let mut accounts = vec![*pool_id];
         accounts.push(*base_mint);
@@ -313,7 +347,7 @@ impl PoolAnalyzer {
         pool_id: &Pubkey,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        _rpc_client: &RpcClient,
+        _rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
         let mut accounts = vec![*pool_id];
         accounts.push(*base_mint);
@@ -326,7 +360,7 @@ impl PoolAnalyzer {
         pool_id: &Pubkey,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        _rpc_client: &RpcClient,
+        _rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
         let mut accounts = vec![*pool_id];
         accounts.push(*base_mint);
@@ -339,7 +373,7 @@ impl PoolAnalyzer {
         pool_id: &Pubkey,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        _rpc_client: &RpcClient,
+        _rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
         let mut accounts = vec![*pool_id];
         accounts.push(*base_mint);
@@ -352,7 +386,7 @@ impl PoolAnalyzer {
         pool_id: &Pubkey,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        _rpc_client: &RpcClient,
+        _rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
         let mut accounts = vec![*pool_id];
         accounts.push(*base_mint);
@@ -365,7 +399,7 @@ impl PoolAnalyzer {
         pool_id: &Pubkey,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        _rpc_client: &RpcClient,
+        _rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
         let mut accounts = vec![*pool_id];
         accounts.push(*base_mint);
@@ -380,7 +414,7 @@ impl PoolAnalyzer {
         program_id: Pubkey,
         base_mint: Pubkey,
         quote_mint: Pubkey,
-        liquidity_usd: f64,
+        liquidity_usd: f64
     ) -> Result<(), String> {
         let message = AnalyzerMessage::AnalyzePool {
             pool_id,
@@ -390,7 +424,8 @@ impl PoolAnalyzer {
             liquidity_usd,
         };
 
-        self.analyzer_tx.send(message)
+        self.analyzer_tx
+            .send(message)
             .map_err(|e| format!("Failed to send analysis request: {}", e))?;
 
         Ok(())
@@ -411,8 +446,9 @@ impl PoolAnalyzer {
     /// Get pools for a specific token mint
     pub fn get_pools_for_token(&self, mint: &Pubkey) -> Vec<PoolDescriptor> {
         let directory = self.pool_directory.read().unwrap();
-        directory.values()
-            .filter(|pool| &pool.base_mint == mint || &pool.quote_mint == mint)
+        directory
+            .values()
+            .filter(|pool| (&pool.base_mint == mint || &pool.quote_mint == mint))
             .cloned()
             .collect()
     }

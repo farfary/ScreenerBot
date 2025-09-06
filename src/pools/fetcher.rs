@@ -5,11 +5,34 @@
 
 use crate::global::is_debug_pool_service_enabled;
 use crate::logger::{ log, LogTag };
-use crate::rpc::get_rpc_client;
-use solana_sdk::pubkey::Pubkey;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::Notify;
+use crate::rpc::{ get_rpc_client, RpcClient };
+use super::types::PoolDescriptor;
+use solana_sdk::{ account::Account, pubkey::Pubkey };
+use std::collections::{ HashMap, HashSet };
+use std::sync::{ Arc, RwLock };
+use std::time::Instant;
+use tokio::sync::{ mpsc, Notify };
+
+/// Constants for batch processing
+const ACCOUNT_BATCH_SIZE: usize = 50; // Optimal batch size for RPC calls
+const FETCH_INTERVAL_MS: u64 = 1000; // Fetch every 1 second
+const ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 30; // Consider accounts stale after 30 seconds
+
+/// Message types for fetcher communication
+#[derive(Debug, Clone)]
+pub enum FetcherMessage {
+    /// Request to fetch accounts for a pool
+    FetchPool {
+        pool_id: Pubkey,
+        accounts: Vec<Pubkey>,
+    },
+    /// Request to fetch specific accounts
+    FetchAccounts {
+        accounts: Vec<Pubkey>,
+    },
+    /// Signal shutdown
+    Shutdown,
+}
 
 /// Account data with metadata
 #[derive(Debug, Clone)]
@@ -17,20 +40,110 @@ pub struct AccountData {
     pub pubkey: Pubkey,
     pub data: Vec<u8>,
     pub slot: u64,
-    pub fetched_at: std::time::Instant,
+    pub fetched_at: Instant,
+    pub lamports: u64,
+    pub owner: Pubkey,
+}
+
+impl AccountData {
+    /// Create from Solana Account
+    pub fn from_account(pubkey: Pubkey, account: Account, slot: u64) -> Self {
+        Self {
+            pubkey,
+            data: account.data,
+            slot,
+            fetched_at: Instant::now(),
+            lamports: account.lamports,
+            owner: account.owner,
+        }
+    }
+
+    /// Check if account data is stale
+    pub fn is_stale(&self, max_age_seconds: u64) -> bool {
+        self.fetched_at.elapsed().as_secs() > max_age_seconds
+    }
+}
+
+/// Pool account bundle - all accounts for a specific pool
+#[derive(Debug, Clone)]
+pub struct PoolAccountBundle {
+    pub pool_id: Pubkey,
+    pub accounts: HashMap<Pubkey, AccountData>,
+    pub last_updated: Instant,
+    pub slot: u64,
+}
+
+impl PoolAccountBundle {
+    /// Create new bundle
+    pub fn new(pool_id: Pubkey) -> Self {
+        Self {
+            pool_id,
+            accounts: HashMap::new(),
+            last_updated: Instant::now(),
+            slot: 0,
+        }
+    }
+
+    /// Add account to bundle
+    pub fn add_account(&mut self, account_data: AccountData) {
+        self.slot = self.slot.max(account_data.slot);
+        self.last_updated = Instant::now();
+        self.accounts.insert(account_data.pubkey, account_data);
+    }
+
+    /// Check if bundle is complete (has all required accounts)
+    pub fn is_complete(&self, required_accounts: &[Pubkey]) -> bool {
+        required_accounts.iter().all(|key| self.accounts.contains_key(key))
+    }
+
+    /// Check if bundle is stale
+    pub fn is_stale(&self, max_age_seconds: u64) -> bool {
+        self.last_updated.elapsed().as_secs() > max_age_seconds
+    }
 }
 
 /// Account fetcher service
 pub struct AccountFetcher {
-    pending_accounts: HashMap<Pubkey, std::time::Instant>,
+    /// RPC client for fetching data
+    rpc_client: Arc<RpcClient>,
+    /// Pool directory for getting account requirements
+    pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
+    /// Fetched account bundles by pool ID
+    account_bundles: Arc<RwLock<HashMap<Pubkey, PoolAccountBundle>>>,
+    /// Last fetch time for each account
+    account_last_fetch: Arc<RwLock<HashMap<Pubkey, Instant>>>,
+    /// Channel for receiving fetch requests
+    fetcher_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<FetcherMessage>>>>,
+    /// Channel sender for sending fetch requests
+    fetcher_tx: mpsc::UnboundedSender<FetcherMessage>,
 }
 
 impl AccountFetcher {
     /// Create new account fetcher
-    pub fn new() -> Self {
+    pub fn new(
+        rpc_client: Arc<RpcClient>,
+        pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>
+    ) -> Self {
+        let (fetcher_tx, fetcher_rx) = mpsc::unbounded_channel();
+
         Self {
-            pending_accounts: HashMap::new(),
+            rpc_client,
+            pool_directory,
+            account_bundles: Arc::new(RwLock::new(HashMap::new())),
+            account_last_fetch: Arc::new(RwLock::new(HashMap::new())),
+            fetcher_rx: Arc::new(RwLock::new(Some(fetcher_rx))),
+            fetcher_tx,
         }
+    }
+
+    /// Get sender for sending fetch requests
+    pub fn get_sender(&self) -> mpsc::UnboundedSender<FetcherMessage> {
+        self.fetcher_tx.clone()
+    }
+
+    /// Get account bundles (read-only access)
+    pub fn get_account_bundles(&self) -> Arc<RwLock<HashMap<Pubkey, PoolAccountBundle>>> {
+        self.account_bundles.clone()
     }
 
     /// Start fetcher background task
@@ -39,8 +152,26 @@ impl AccountFetcher {
             log(LogTag::PoolFetcher, "INFO", "Starting account fetcher task");
         }
 
+        let rpc_client = self.rpc_client.clone();
+        let pool_directory = self.pool_directory.clone();
+        let account_bundles = self.account_bundles.clone();
+        let account_last_fetch = self.account_last_fetch.clone();
+
+        // Take the receiver from the Arc<RwLock>
+        let mut fetcher_rx = {
+            let mut rx_lock = self.fetcher_rx.write().unwrap();
+            rx_lock.take().expect("Fetcher receiver already taken")
+        };
+
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
+            let mut interval = tokio::time::interval(
+                tokio::time::Duration::from_millis(FETCH_INTERVAL_MS)
+            );
+            let mut pending_accounts: HashSet<Pubkey> = HashSet::new();
+
+            if is_debug_pool_service_enabled() {
+                log(LogTag::PoolFetcher, "INFO", "Account fetcher task started");
+            }
 
             loop {
                 tokio::select! {
@@ -50,31 +181,319 @@ impl AccountFetcher {
                         }
                         break;
                     }
+
+                    message = fetcher_rx.recv() => {
+                        match message {
+                            Some(FetcherMessage::FetchPool { pool_id, accounts }) => {
+                                if is_debug_pool_service_enabled() {
+                                    log(
+                                        LogTag::PoolFetcher,
+                                        "DEBUG",
+                                        &format!("Received fetch request for pool {} with {} accounts", pool_id, accounts.len())
+                                    );
+                                }
+                                pending_accounts.extend(accounts);
+                            }
+
+                            Some(FetcherMessage::FetchAccounts { accounts }) => {
+                                if is_debug_pool_service_enabled() {
+                                    log(
+                                        LogTag::PoolFetcher,
+                                        "DEBUG",
+                                        &format!("Received fetch request for {} accounts", accounts.len())
+                                    );
+                                }
+                                pending_accounts.extend(accounts);
+                            }
+
+                            Some(FetcherMessage::Shutdown) => {
+                                if is_debug_pool_service_enabled() {
+                                    log(LogTag::PoolFetcher, "INFO", "Fetcher received shutdown signal");
+                                }
+                                break;
+                            }
+
+                            None => {
+                                if is_debug_pool_service_enabled() {
+                                    log(LogTag::PoolFetcher, "INFO", "Fetcher channel closed");
+                                }
+                                break;
+                            }
+                        }
+                    }
+
                     _ = interval.tick() => {
-                        // TODO: Implement batched account fetching
-                        if is_debug_pool_service_enabled() {
-                            log(LogTag::PoolFetcher, "DEBUG", "Account fetcher tick");
+                        // Add accounts that need refresh from pool directory
+                        Self::add_stale_accounts_to_pending(
+                            &pool_directory,
+                            &account_last_fetch,
+                            &mut pending_accounts
+                        ).await;
+
+                        // Process pending accounts if any
+                        if !pending_accounts.is_empty() {
+                            Self::process_pending_accounts(
+                                &rpc_client,
+                                &pool_directory,
+                                &account_bundles,
+                                &account_last_fetch,
+                                &mut pending_accounts
+                            ).await;
                         }
                     }
                 }
             }
+
+            if is_debug_pool_service_enabled() {
+                log(LogTag::PoolFetcher, "INFO", "Account fetcher task completed");
+            }
         });
     }
 
-    /// Fetch multiple accounts in batches
-    pub async fn fetch_accounts(&self, accounts: Vec<Pubkey>) -> Result<Vec<AccountData>, String> {
+    /// Add stale accounts from pools to pending fetch list
+    async fn add_stale_accounts_to_pending(
+        pool_directory: &Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
+        account_last_fetch: &Arc<RwLock<HashMap<Pubkey, Instant>>>,
+        pending_accounts: &mut HashSet<Pubkey>
+    ) {
+        let pools = {
+            let directory = pool_directory.read().unwrap();
+            directory.values().cloned().collect::<Vec<_>>()
+        };
+
+        let last_fetch = account_last_fetch.read().unwrap();
+
+        for pool in pools {
+            for account in &pool.reserve_accounts {
+                let needs_fetch = match last_fetch.get(account) {
+                    Some(last_time) =>
+                        last_time.elapsed().as_secs() > ACCOUNT_STALE_THRESHOLD_SECONDS,
+                    None => true, // Never fetched
+                };
+
+                if needs_fetch {
+                    pending_accounts.insert(*account);
+                }
+            }
+        }
+    }
+
+    /// Process pending accounts by fetching them in batches
+    async fn process_pending_accounts(
+        rpc_client: &Arc<RpcClient>,
+        pool_directory: &Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
+        account_bundles: &Arc<RwLock<HashMap<Pubkey, PoolAccountBundle>>>,
+        account_last_fetch: &Arc<RwLock<HashMap<Pubkey, Instant>>>,
+        pending_accounts: &mut HashSet<Pubkey>
+    ) {
+        if pending_accounts.is_empty() {
+            return;
+        }
+
+        // Convert to vector and batch
+        let accounts_to_fetch: Vec<Pubkey> = pending_accounts.drain().collect();
+
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolFetcher,
+                "INFO",
+                &format!("Processing {} pending accounts", accounts_to_fetch.len())
+            );
+        }
+
+        // Process in batches
+        for batch in accounts_to_fetch.chunks(ACCOUNT_BATCH_SIZE) {
+            match Self::fetch_account_batch(rpc_client, batch).await {
+                Ok(account_data_list) => {
+                    // Update last fetch times
+                    {
+                        let mut last_fetch = account_last_fetch.write().unwrap();
+                        for account in batch {
+                            last_fetch.insert(*account, Instant::now());
+                        }
+                    }
+
+                    // Organize accounts into pool bundles
+                    Self::organize_accounts_into_bundles(
+                        &account_data_list,
+                        pool_directory,
+                        account_bundles
+                    ).await;
+
+                    if is_debug_pool_service_enabled() {
+                        log(
+                            LogTag::PoolFetcher,
+                            "SUCCESS",
+                            &format!("Successfully fetched {} accounts", account_data_list.len())
+                        );
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::PoolFetcher,
+                        "ERROR",
+                        &format!("Failed to fetch account batch: {}", e)
+                    );
+                }
+            }
+
+            // Small delay between batches to respect rate limits
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        }
+    }
+
+    /// Fetch a batch of accounts
+    async fn fetch_account_batch(
+        rpc_client: &Arc<RpcClient>,
+        accounts: &[Pubkey]
+    ) -> Result<Vec<AccountData>, String> {
         if accounts.is_empty() {
             return Ok(Vec::new());
         }
 
-        let rpc_client = get_rpc_client();
-
-        // TODO: Implement actual batched fetching using RPC client
-        // For now, return empty result
         if is_debug_pool_service_enabled() {
-            log(LogTag::PoolFetcher, "DEBUG", &format!("Fetching {} accounts", accounts.len()));
+            log(
+                LogTag::PoolFetcher,
+                "DEBUG",
+                &format!("Fetching batch of {} accounts", accounts.len())
+            );
         }
 
-        Ok(Vec::new())
+        // Fetch accounts using RPC client
+        let account_results = rpc_client.get_multiple_accounts(accounts).await?;
+
+        let mut account_data_list = Vec::new();
+
+        for (i, account_opt) in account_results.iter().enumerate() {
+            if let Some(account) = account_opt {
+                let account_data = AccountData::from_account(accounts[i], account.clone(), 0);
+                account_data_list.push(account_data);
+            } else {
+                if is_debug_pool_service_enabled() {
+                    log(
+                        LogTag::PoolFetcher,
+                        "WARN",
+                        &format!("Account not found: {}", accounts[i])
+                    );
+                }
+            }
+        }
+
+        Ok(account_data_list)
     }
+
+    /// Organize fetched accounts into pool bundles
+    async fn organize_accounts_into_bundles(
+        account_data_list: &[AccountData],
+        pool_directory: &Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
+        account_bundles: &Arc<RwLock<HashMap<Pubkey, PoolAccountBundle>>>
+    ) {
+        let pools = {
+            let directory = pool_directory.read().unwrap();
+            directory.clone()
+        };
+
+        let mut bundles = account_bundles.write().unwrap();
+
+        // For each account, find which pools it belongs to
+        for account_data in account_data_list {
+            for (pool_id, pool_descriptor) in &pools {
+                if pool_descriptor.reserve_accounts.contains(&account_data.pubkey) {
+                    // Get or create bundle for this pool
+                    let bundle = bundles
+                        .entry(*pool_id)
+                        .or_insert_with(|| PoolAccountBundle::new(*pool_id));
+                    bundle.add_account(account_data.clone());
+
+                    if is_debug_pool_service_enabled() {
+                        log(
+                            LogTag::PoolFetcher,
+                            "DEBUG",
+                            &format!(
+                                "Added account {} to pool {} bundle",
+                                account_data.pubkey,
+                                pool_id
+                            )
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Public interface: Request fetching of accounts for a pool
+    pub fn request_pool_fetch(&self, pool_id: Pubkey, accounts: Vec<Pubkey>) -> Result<(), String> {
+        let message = FetcherMessage::FetchPool { pool_id, accounts };
+        self.fetcher_tx.send(message).map_err(|e| format!("Failed to send fetch request: {}", e))?;
+        Ok(())
+    }
+
+    /// Public interface: Request fetching of specific accounts
+    pub fn request_accounts_fetch(&self, accounts: Vec<Pubkey>) -> Result<(), String> {
+        let message = FetcherMessage::FetchAccounts { accounts };
+        self.fetcher_tx.send(message).map_err(|e| format!("Failed to send fetch request: {}", e))?;
+        Ok(())
+    }
+
+    /// Get account bundle for a specific pool
+    pub fn get_pool_bundle(&self, pool_id: &Pubkey) -> Option<PoolAccountBundle> {
+        let bundles = self.account_bundles.read().unwrap();
+        bundles.get(pool_id).cloned()
+    }
+
+    /// Get all account bundles
+    pub fn get_all_bundles(&self) -> Vec<PoolAccountBundle> {
+        let bundles = self.account_bundles.read().unwrap();
+        bundles.values().cloned().collect()
+    }
+
+    /// Get specific account data
+    pub fn get_account_data(&self, account: &Pubkey) -> Option<AccountData> {
+        let bundles = self.account_bundles.read().unwrap();
+        for bundle in bundles.values() {
+            if let Some(account_data) = bundle.accounts.get(account) {
+                return Some(account_data.clone());
+            }
+        }
+        None
+    }
+
+    /// Clean up stale bundles
+    pub fn cleanup_stale_bundles(&self, max_age_seconds: u64) {
+        let mut bundles = self.account_bundles.write().unwrap();
+        bundles.retain(|pool_id, bundle| {
+            let should_keep = !bundle.is_stale(max_age_seconds);
+            if !should_keep && is_debug_pool_service_enabled() {
+                log(
+                    LogTag::PoolFetcher,
+                    "DEBUG",
+                    &format!("Removing stale bundle for pool: {}", pool_id)
+                );
+            }
+            should_keep
+        });
+    }
+
+    /// Get fetch statistics
+    pub fn get_fetch_stats(&self) -> FetchStats {
+        let bundles = self.account_bundles.read().unwrap();
+        let last_fetch = self.account_last_fetch.read().unwrap();
+
+        FetchStats {
+            total_bundles: bundles.len(),
+            total_accounts_tracked: last_fetch.len(),
+            bundles_with_data: bundles
+                .values()
+                .filter(|b| !b.accounts.is_empty())
+                .count(),
+        }
+    }
+}
+
+/// Fetch statistics
+#[derive(Debug, Clone)]
+pub struct FetchStats {
+    pub total_bundles: usize,
+    pub total_accounts_tracked: usize,
+    pub bundles_with_data: usize,
 }
