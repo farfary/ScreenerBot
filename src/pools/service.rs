@@ -432,21 +432,81 @@ impl PoolService {
     // FETCHER METHODS
     // =============================================================================
 
-    /// Fetch account data for all required addresses from analyzer
+    /// Fetch all required account data using the fetcher
     pub async fn fetch_all_required_accounts(&self) -> Result<(), String> {
+        // Get required accounts from analyzer
         let required_accounts = self.analyzer.get_required_accounts().await;
+
         if required_accounts.is_empty() {
-            log(LogTag::Pool, "FETCHER_NO_ACCOUNTS", "No accounts to fetch");
+            log(LogTag::Pool, "SERVICE_FETCH_SKIP", "No required accounts to fetch");
             return Ok(());
         }
 
         log(
             LogTag::Pool,
-            "FETCHER_TRIGGER",
-            &format!("🔄 Triggering fetch for {} accounts", required_accounts.len())
+            "SERVICE_FETCH_START",
+            &format!("📦 Fetching {} required accounts", required_accounts.len())
         );
 
-        self.fetcher.fetch_all_required_accounts(&required_accounts).await
+        // Use fetcher to fetch all required accounts
+        self.fetcher.fetch_all_required_accounts(&required_accounts).await?;
+
+        log(LogTag::Pool, "SERVICE_FETCH_COMPLETE", "✅ Account fetching completed");
+
+        Ok(())
+    }
+
+    /// Test decoding a specific pool using the fetcher-based decoder
+    pub async fn test_decode_pool(
+        &self,
+        pool_address: &str,
+        program_id: &str
+    ) -> Result<(), String> {
+        use crate::pools::decoders::{ DecoderFactory };
+
+        log(
+            LogTag::Pool,
+            "SERVICE_DECODE_TEST",
+            &format!(
+                "🧪 Testing decode for pool {} with program {}",
+                &pool_address[..8],
+                &program_id[..8]
+            )
+        );
+
+        // Create decoder factory
+        let factory = DecoderFactory::new();
+
+        // Get appropriate decoder
+        let decoder = factory
+            .get_decoder(program_id)
+            .ok_or_else(|| format!("No decoder found for program ID: {}", program_id))?;
+
+        // Test decoding
+        match decoder.decode_pool_data(pool_address, &self.fetcher).await {
+            Ok(decoded_result) => {
+                log(
+                    LogTag::Pool,
+                    "SERVICE_DECODE_SUCCESS",
+                    &format!(
+                        "✅ Successfully decoded pool: {} -> {} reserves: {}/{}",
+                        &decoded_result.pool_address[..8],
+                        decoded_result.pool_type,
+                        decoded_result.token_a_reserve,
+                        decoded_result.token_b_reserve
+                    )
+                );
+                Ok(())
+            }
+            Err(e) => {
+                log(
+                    LogTag::Pool,
+                    "SERVICE_DECODE_FAILED",
+                    &format!("❌ Failed to decode pool {}: {}", &pool_address[..8], e)
+                );
+                Err(e)
+            }
+        }
     }
 
     /// Fetch account data for specific addresses

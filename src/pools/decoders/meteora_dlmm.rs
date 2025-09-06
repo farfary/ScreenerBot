@@ -3,46 +3,29 @@
 
 use crate::pools::constants::METEORA_DLMM_PROGRAM_ID;
 use crate::pools::decoders::PoolDecodedResult;
+use crate::pools::fetcher::PoolFetcher;
 
 /// Meteora DLMM pool decoder
 #[derive(Debug)]
 pub struct MeteoraDlmmDecoder {
-    // TODO: Add fields as needed
+    // No state needed for decoder
 }
 
 impl MeteoraDlmmDecoder {
     pub fn new() -> Self {
-        Self {
-            // TODO: Initialize
-        }
+        Self {}
     }
 
     pub fn can_decode(&self, program_id: &str) -> bool {
         program_id == METEORA_DLMM_PROGRAM_ID
     }
 
-    pub fn decode_pool_data(
+    pub async fn decode_pool_data(
         &self,
         pool_address: &str,
-        account_data: &[u8]
+        _fetcher: &PoolFetcher
     ) -> Result<PoolDecodedResult, String> {
-        if account_data.is_empty() {
-            return Err("Empty account data".to_string());
-        }
-
-        // TODO: Implement Meteora DLMM pool data decoding
-        let result = PoolDecodedResult::new(
-            pool_address.to_string(),
-            METEORA_DLMM_PROGRAM_ID.to_string(),
-            "Meteora DLMM".to_string(),
-            "".to_string(), // token_a_mint - to be decoded from account_data
-            "".to_string(), // token_b_mint - to be decoded from account_data
-            0, // token_a_reserve - to be decoded from account_data
-            0, // token_b_reserve - to be decoded from account_data
-            0, // token_a_decimals - to be fetched separately or from account_data
-            0 // token_b_decimals - to be fetched separately or from account_data
-        );
-
-        Ok(result)
+        // TODO: Implement Meteora DLMM pool data decoding using fetcher
+        Err(format!("Meteora DLMM decoder not yet implemented for pool {}", pool_address))
     }
 }

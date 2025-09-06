@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use chrono::{ DateTime, Utc };
 use crate::logger::{ log, LogTag };
+use solana_sdk::pubkey::Pubkey;
 
 /// Token availability status
 #[derive(Debug, Clone)]
@@ -279,11 +280,87 @@ impl PoolAnalyzer {
         // Add pool address itself
         accounts.push(pool.pool_address.clone());
 
-        // TODO: Add specific reserve account extraction based on pool type/program
-        // This would depend on the specific pool program structure
-        // For now, we'll include the pool address as it contains reserve data
+        // Extract vault addresses based on pool type/program
+        match pool.pool_program_id.as_str() {
+            crate::pools::constants::METEORA_DAMM_V2_PROGRAM_ID => {
+                // For Meteora DAMM v2, we need to decode the pool to get vault addresses
+                if
+                    let Some(vault_addresses) = self.extract_meteora_damm_v2_vaults(
+                        &pool.pool_address
+                    ).await?
+                {
+                    accounts.extend(vault_addresses);
+                }
+            }
+            crate::pools::constants::RAYDIUM_CPMM_PROGRAM_ID => {
+                // TODO: Add Raydium CPMM vault extraction
+                log(LogTag::Pool, "ANALYZER_TODO", "TODO: Raydium CPMM vault extraction");
+            }
+            crate::pools::constants::RAYDIUM_LEGACY_AMM_PROGRAM_ID => {
+                // TODO: Add Raydium Legacy AMM vault extraction
+                log(LogTag::Pool, "ANALYZER_TODO", "TODO: Raydium Legacy AMM vault extraction");
+            }
+            _ => {
+                log(
+                    LogTag::Pool,
+                    "ANALYZER_UNSUPPORTED",
+                    &format!("Unsupported pool program: {}", pool.pool_program_id)
+                );
+            }
+        }
 
         Ok(accounts)
+    }
+
+    /// Extract Meteora DAMM v2 vault addresses from pool data
+    async fn extract_meteora_damm_v2_vaults(
+        &self,
+        pool_address: &str
+    ) -> Result<Option<Vec<String>>, String> {
+        // Get pool account data from cache if available
+        if let Some(account_data) = self.cache.get_cached_account_data(pool_address).await {
+            if account_data.len() >= 200 {
+                // Light decode to extract vault addresses
+                let mut offset = 136;
+
+                // Skip token mints (64 bytes)
+                offset += 64;
+
+                // Read vault addresses
+                if
+                    let (Ok(vault_a), Ok(vault_b)) = (
+                        Self::read_pubkey_at_offset(&account_data, &mut offset),
+                        Self::read_pubkey_at_offset(&account_data, &mut offset),
+                    )
+                {
+                    return Ok(Some(vec![vault_a, vault_b]));
+                }
+            }
+        }
+
+        // If we can't extract vault addresses, that's ok - the fetcher will fetch just the pool address
+        log(
+            LogTag::Pool,
+            "ANALYZER_VAULT_SKIP",
+            &format!("Could not extract vault addresses for pool {}", &pool_address[..8])
+        );
+        Ok(None)
+    }
+
+    /// Helper function to read pubkey at offset (lightweight version)
+    fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, String> {
+        if *offset + 32 > data.len() {
+            return Err("Insufficient data for pubkey".to_string());
+        }
+
+        let pubkey_bytes = &data[*offset..*offset + 32];
+        *offset += 32;
+
+        let pubkey = solana_sdk::pubkey::Pubkey::new_from_array(
+            pubkey_bytes.try_into().map_err(|_| "Failed to parse pubkey".to_string())?
+        );
+
+        Ok(pubkey.to_string())
     }
 
     /// Update the required accounts list for RPC fetching

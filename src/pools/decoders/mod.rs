@@ -164,26 +164,26 @@ impl PoolDecoder {
     }
 
     /// Decode pool data from account data
-    pub fn decode_pool_data(
+    pub async fn decode_pool_data(
         &self,
         pool_address: &str,
-        account_data: &[u8]
+        fetcher: &crate::pools::fetcher::PoolFetcher
     ) -> Result<PoolDecodedResult, String> {
         match self {
             PoolDecoder::RaydiumCpmm(decoder) =>
-                decoder.decode_pool_data(pool_address, account_data),
+                decoder.decode_pool_data(pool_address, fetcher).await,
             PoolDecoder::RaydiumLegacyAmm(decoder) =>
-                decoder.decode_pool_data(pool_address, account_data),
+                decoder.decode_pool_data(pool_address, fetcher).await,
             PoolDecoder::RaydiumClmm(decoder) =>
-                decoder.decode_pool_data(pool_address, account_data),
+                decoder.decode_pool_data(pool_address, fetcher).await,
             PoolDecoder::MeteoraDammV2(decoder) =>
-                decoder.decode_pool_data(pool_address, account_data),
+                decoder.decode_pool_data(pool_address, fetcher).await,
             PoolDecoder::MeteoraDlmm(decoder) =>
-                decoder.decode_pool_data(pool_address, account_data),
+                decoder.decode_pool_data(pool_address, fetcher).await,
             PoolDecoder::OrcaWhirlpool(decoder) =>
-                decoder.decode_pool_data(pool_address, account_data),
+                decoder.decode_pool_data(pool_address, fetcher).await,
             PoolDecoder::PumpFunAmm(decoder) =>
-                decoder.decode_pool_data(pool_address, account_data),
+                decoder.decode_pool_data(pool_address, fetcher).await,
         }
     }
 }
