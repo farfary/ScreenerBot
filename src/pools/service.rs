@@ -194,21 +194,47 @@ async fn get_tokens_to_monitor() -> Result<Vec<String>, String> {
         .get_all_tokens_with_update_time().await
         .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
 
+    // Get open position mints (always monitor these regardless of liquidity)
+    // This ensures position tokens are always monitored for price updates
+    let open_position_mints = crate::positions::get_open_mints().await;
+
     // Take up to MAX_WATCHED_TOKENS with minimum liquidity threshold
     const MIN_LIQUIDITY_USD: f64 = 100.0; // Only monitor tokens with > $100 liquidity
 
-    let monitored_tokens: Vec<String> = all_tokens
+    let mut monitored_tokens: Vec<String> = Vec::new();
+    let mut open_positions_added = 0;
+
+    // First, add all open position tokens (priority monitoring)
+    for mint in &open_position_mints {
+        if !monitored_tokens.contains(mint) {
+            monitored_tokens.push(mint.clone());
+            open_positions_added += 1;
+        }
+    }
+
+    // Then add high-liquidity tokens from database up to the limit
+    let remaining_slots = MAX_WATCHED_TOKENS.saturating_sub(monitored_tokens.len());
+    let database_tokens: Vec<String> = all_tokens
         .into_iter()
         .filter(|(_, _, _, liquidity)| *liquidity >= MIN_LIQUIDITY_USD)
-        .take(MAX_WATCHED_TOKENS)
+        .take(remaining_slots)
         .map(|(mint, _, _, _)| mint)
+        .filter(|mint| !monitored_tokens.contains(mint)) // Avoid duplicates
         .collect();
+
+    monitored_tokens.extend(database_tokens.clone());
 
     if is_debug_pool_service_enabled() {
         log(
             LogTag::PoolService,
             "DEBUG",
-            &format!("Selected {} tokens for monitoring from database", monitored_tokens.len())
+            &format!(
+                "Selected {} tokens for monitoring: {} open positions + {} from database (total: {})",
+                monitored_tokens.len(),
+                open_positions_added,
+                database_tokens.len(),
+                monitored_tokens.len()
+            )
         );
     }
 
