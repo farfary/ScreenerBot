@@ -5,8 +5,8 @@
 
 use clap::Parser;
 use screenerbot::arguments::set_cmd_args;
-use screenerbot::logger::{ log, LogTag };
 use screenerbot::pools::{ start_pool_service, stop_pool_service, set_debug_token_override, get_pool_price };
+use screenerbot::tokens::dexscreener::{ get_token_price_from_global_api, init_dexscreener_api };
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::time::{ interval, Duration };
@@ -51,6 +51,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("🚀 Starting pool service for single token: {}", args.token);
     
+    // Initialize DexScreener API
+    println!("🔌 Initializing DexScreener API...");
+    if let Err(e) = init_dexscreener_api().await {
+        eprintln!("❌ Failed to initialize DexScreener API: {}", e);
+        return Err(e.into());
+    }
+    
     // Set debug override to monitor only our target token
     set_debug_token_override(Some(vec![args.token.clone()]));
     
@@ -89,13 +96,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         tokio::select! {
             _ = price_interval.tick() => {
-                match get_pool_price(&args.token) {
+                // Get calculated price from pool service
+                let pool_price = get_pool_price(&args.token);
+                
+                // Get DexScreener API price for comparison
+                let api_price = get_token_price_from_global_api(&args.token).await;
+                
+                match pool_price {
                     Some(price) => {
                         price_count += 1;
+                        
+                        let price_comparison = match api_price {
+                            Some(api_val) => format!("| API: {:.12} SOL", api_val),
+                            None => "| API: unavailable".to_string(),
+                        };
+                        
                         println!(
-                            "[{}] 💰 Price: {:.12} SOL | Confidence: {:.2} | Pool: {} | Reserves: {:.6} SOL / {:.6} tokens",
+                            "[{}] 💰 Pool: {:.12} SOL {} | Confidence: {:.2} | Pool: {} | Reserves: {:.6} SOL / {:.6} tokens",
                             price_count,
                             price.price_sol,
+                            price_comparison,
                             price.confidence,
                             price.pool_address.chars().take(8).collect::<String>() + "...",
                             price.sol_reserves,
@@ -103,7 +123,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         );
                     }
                     None => {
-                        println!("[{}] ❌ No price available yet...", price_count + 1);
+                        price_count += 1;
+                        let api_only = match api_price {
+                            Some(api_val) => format!("API only: {:.12} SOL", api_val),
+                            None => "No price available".to_string(),
+                        };
+                        println!("[{}] ❌ Pool: unavailable | {}", price_count, api_only);
                     }
                 }
             }
