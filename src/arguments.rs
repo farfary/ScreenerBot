@@ -240,11 +240,6 @@ pub fn is_positions_sell_all_enabled() -> bool {
     has_arg("--positions-sell-all")
 }
 
-/// Get list tools mode - displays available MCP tools
-pub fn is_get_list_tools_enabled() -> bool {
-    has_arg("--get-list-tools")
-}
-
 // =============================================================================
 // HELP SYSTEM
 // =============================================================================
@@ -260,7 +255,6 @@ pub fn print_help() {
     println!("    --run                     Enable bot execution (required to start trading)");
     println!("    --clear-all               Clear all data and reset the system");
     println!("    --positions-sell-all      Sell all open positions");
-    println!("    --get-list-tools          Display available MCP tools");
     println!("    --help, -h                Show this help message");
     println!("    --dry-run                 Simulate trading without executing transactions");
     println!("    --dashboard               Enable terminal UI mode");
@@ -298,7 +292,6 @@ pub fn print_help() {
     println!("    screenerbot --run --debug-trader --dry-run  # Debug trader with simulation");
     println!("    screenerbot --clear-all                     # Clear all data and reset");
     println!("    screenerbot --positions-sell-all            # Sell all open positions");
-    println!("    screenerbot --get-list-tools                # Display available MCP tools");
     println!("    screenerbot --help                          # Show this help");
     println!();
     println!("For more information, visit: https://github.com/farfary/ScreenerBot");
@@ -435,9 +428,6 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     }
     if is_positions_sell_all_enabled() {
         modes.push("positions-sell-all");
-    }
-    if is_get_list_tools_enabled() {
-        modes.push("get-list-tools");
     }
 
     modes
