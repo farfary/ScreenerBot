@@ -16,7 +16,7 @@ pub struct PumpFunAmmDecoder;
 impl PoolDecoder for PumpFunAmmDecoder {
     /// Get the program kinds this decoder supports
     fn supported_programs() -> Vec<ProgramKind> {
-        vec![ProgramKind::PumpFun]
+        vec![ProgramKind::PumpFunAmm]
     }
 
     /// Decode pool data and calculate price using centralized utilities
@@ -41,9 +41,9 @@ impl PoolDecoder for PumpFunAmmDecoder {
                 continue; // Too small to be a pool account
             }
 
-            // Check if this is the actual pool account by looking for PumpFun program ownership
+            // Check if this is the actual pool account by looking for PumpFun AMM program ownership
             if pool_data.owner.to_string() != "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" {
-                continue; // Not owned by PumpFun program
+                continue; // Not owned by PumpFun AMM program
             }
 
             if let Some(pool_info) = Self::decode_pump_fun_amm_pool(&pool_data.data) {

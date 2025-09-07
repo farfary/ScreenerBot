@@ -6,6 +6,7 @@
 pub mod raydium_cpmm;
 pub mod raydium_clmm;
 pub mod pumpfun_amm;
+pub mod pumpfun_legacy;
 pub mod raydium_legacy_amm;
 pub mod meteora_dlmm;
 pub mod meteora_damm;
@@ -42,8 +43,10 @@ pub fn decode_pool(
         }
         ProgramKind::RaydiumClmm =>
             raydium_clmm::RaydiumClmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
-        ProgramKind::PumpFun =>
+        ProgramKind::PumpFunAmm =>
             pumpfun_amm::PumpFunAmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
+        ProgramKind::PumpFunLegacy =>
+            pumpfun_legacy::PumpFunLegacyDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
         ProgramKind::RaydiumLegacyAmm =>
             raydium_legacy_amm::RaydiumLegacyAmmDecoder::decode_and_calculate(
                 accounts,

@@ -361,7 +361,11 @@ impl PoolAnalyzer {
                 ).await
             }
 
-            ProgramKind::PumpFun => {
+            ProgramKind::PumpFunAmm => {
+                Self::extract_pump_fun_accounts(pool_id, base_mint, quote_mint, rpc_client).await
+            }
+
+            ProgramKind::PumpFunLegacy => {
                 Self::extract_pump_fun_accounts(pool_id, base_mint, quote_mint, rpc_client).await
             }
 
