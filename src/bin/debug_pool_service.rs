@@ -12,6 +12,7 @@ use std::str::FromStr;
 
 #[derive(Debug, Clone, ValueEnum)]
 enum PoolKindArg {
+    Auto,
     Pumpfun,
     RaydiumCpmm,
     RaydiumClmm,
@@ -31,6 +32,143 @@ struct Args {
     /// Inject internal '--debug-pool-calculator' flag for detailed decoder logs
     #[arg(long, default_value_t = false)]
     internal_calculator_debug: bool,
+}
+
+/// Detect program type based on pool account owner
+fn detect_program_type(owner: &Pubkey, data_len: usize) -> ProgramKind {
+    println!("🔍 Analyzing pool account...");
+    println!("📊 Program ID: {}", owner);
+    println!("📏 Data length: {} bytes", data_len);
+    
+    let program_str = owner.to_string();
+    let program_kind = match program_str.as_str() {
+        "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" => {
+            println!("✅ Identified as Orca Whirlpool");
+            ProgramKind::OrcaWhirlpool
+        },
+        "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => {
+            println!("✅ Identified as Raydium Legacy AMM");
+            ProgramKind::RaydiumLegacyAmm
+        },
+        "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => {
+            println!("✅ Identified as Raydium CPMM");
+            ProgramKind::RaydiumCpmm
+        },
+        "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" => {
+            println!("✅ Identified as Pump.fun");
+            ProgramKind::PumpFun
+        },
+        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => {
+            println!("✅ Identified as Meteora DLMM");
+            ProgramKind::MeteoraDlmm
+        },
+        "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB" => {
+            println!("✅ Identified as Meteora DAMM");
+            ProgramKind::MeteoraDamm
+        },
+        "CLMMLQNz3yAFJmJW9pdJDZu6wBdhGxb6BKC8pu9hKxmJ" => {
+            println!("✅ Identified as Raydium CLMM");
+            ProgramKind::RaydiumClmm
+        },
+        _ => {
+            println!("❓ Unknown program ID, using heuristics based on data length:");
+            match data_len {
+                752 => {
+                    println!("  📏 752 bytes suggests Raydium Legacy AMM");
+                    ProgramKind::RaydiumLegacyAmm
+                },
+                1544 => {
+                    println!("  📏 1544 bytes suggests Raydium CPMM");
+                    ProgramKind::RaydiumCpmm
+                },
+                132 => {
+                    println!("  📏 132 bytes suggests Pump.fun");
+                    ProgramKind::PumpFun
+                },
+                653 => {
+                    println!("  📏 653 bytes suggests Orca Whirlpool");
+                    ProgramKind::OrcaWhirlpool
+                },
+                _ => {
+                    println!("  ❌ Unknown data length, defaulting to Raydium Legacy AMM");
+                    ProgramKind::RaydiumLegacyAmm
+                }
+            }
+        }
+    };
+    
+    println!("🎯 Final detection: {:?}", program_kind);
+    program_kind
+}
+
+fn extract_orca_whirlpool_vaults(pool_data: &[u8]) -> Result<(Pubkey, Pubkey), Box<dyn std::error::Error>> {
+    if pool_data.len() < 653 {
+        return Err("Insufficient data for Orca Whirlpool pool".into());
+    }
+    
+    // Orca Whirlpool structure offsets
+    let vault_a_offset = 101;  // Token vault A
+    let vault_b_offset = 133;  // Token vault B
+    
+    let vault_a = Pubkey::try_from(&pool_data[vault_a_offset..vault_a_offset + 32])?;
+    let vault_b = Pubkey::try_from(&pool_data[vault_b_offset..vault_b_offset + 32])?;
+    
+    println!("🏦 Extracted Orca Whirlpool vaults:");
+    println!("  Vault A: {}", vault_a);
+    println!("  Vault B: {}", vault_b);
+    
+    Ok((vault_a, vault_b))
+}
+
+fn extract_orca_vaults(data: &[u8]) -> Option<(String, String)> {
+    if data.len() < 653 {
+        return None;
+    }
+    
+    // Debug: Let's see what's at different offsets
+    println!("🔍 Orca Whirlpool raw data analysis:");
+    for offset in [90, 95, 99, 131, 135, 179, 211, 240, 280].iter() {
+        if *offset + 32 <= data.len() {
+            if let Some(pk) = read_pubkey_at(data, *offset) {
+                println!("  Offset {}: {}", offset, pk);
+            }
+        }
+    }
+    
+    // Based on the raw analysis, the valid-looking pubkeys are at different offsets
+    // Let's try offsets 90 and 95 which look more realistic
+    let candidate_mint_a = read_pubkey_at(data, 90)?;
+    let candidate_vault_a = read_pubkey_at(data, 95)?;
+    
+    // And also try other valid-looking candidates
+    let candidate_mint_b = read_pubkey_at(data, 135)?;
+    let candidate_vault_b = read_pubkey_at(data, 240)?;
+    
+    println!("� Testing candidate offsets:");
+    println!("  Candidate Mint A (90): {}", candidate_mint_a);
+    println!("  Candidate Vault A (95): {}", candidate_vault_a);
+    println!("  Candidate Mint B (135): {}", candidate_mint_b);
+    println!("  Candidate Vault B (240): {}", candidate_vault_b);
+    
+    // Check if any of these candidates match our expected patterns
+    let sol_mint_str = "So11111111111111111111111111111111111111112";
+    let target_token = "HzHwfQwXyQ77E5yPFU1sLVeDuc7Zg4PeyXXVF7qtGxch";
+    
+    // Check all candidates for SOL or target token
+    for (desc, mint) in [
+        ("Candidate Mint A", &candidate_mint_a),
+        ("Candidate Mint B", &candidate_mint_b),
+    ] {
+        if mint == sol_mint_str {
+            println!("✅ Found SOL at {}: {}", desc, mint);
+        }
+        if mint == target_token {
+            println!("✅ Found target token at {}: {}", desc, mint);
+        }
+    }
+    
+    // For now, let's try the candidates that looked most valid
+    Some((candidate_vault_a.to_string(), candidate_vault_b.to_string()))
 }
 
 #[tokio::main]
@@ -83,6 +221,11 @@ async fn main() {
     });
 
     let program_kind = match args.program {
+        PoolKindArg::Auto => {
+            let detected = detect_program_type(&pool_account.owner, pool_account.data.len());
+            println!("Using auto-detected program type: {:?}", detected);
+            detected
+        },
         PoolKindArg::Pumpfun => ProgramKind::PumpFun,
         PoolKindArg::RaydiumCpmm => ProgramKind::RaydiumCpmm,
         PoolKindArg::RaydiumClmm => ProgramKind::RaydiumClmm,
@@ -96,7 +239,8 @@ async fn main() {
         program_kind == ProgramKind::RaydiumLegacyAmm ||
         program_kind == ProgramKind::RaydiumClmm ||
         program_kind == ProgramKind::MeteoraDlmm ||
-        program_kind == ProgramKind::MeteoraDamm
+        program_kind == ProgramKind::MeteoraDamm ||
+        program_kind == ProgramKind::OrcaWhirlpool
     {
         // Legacy scan: show candidate pubkeys at common offsets for investigation
         if program_kind == ProgramKind::RaydiumLegacyAmm && args.verbose {
@@ -164,6 +308,8 @@ async fn main() {
             extract_dlmm_vaults(&pool_account.data)
         } else if program_kind == ProgramKind::MeteoraDamm {
             extract_damm_vaults(&pool_account.data)
+        } else if program_kind == ProgramKind::OrcaWhirlpool {
+            extract_orca_vaults(&pool_account.data)
         } else {
             extract_pumpfun_vaults(&pool_account.data)
         };
