@@ -134,6 +134,7 @@ pub enum ProgramKind {
     MeteoraDamm,
     MeteoraDlmm,
     PumpFun,
+    Moonit,
     Unknown,
 }
 
@@ -148,6 +149,7 @@ impl ProgramKind {
             ProgramKind::MeteoraDamm => METEORA_DAMM_PROGRAM_ID,
             ProgramKind::MeteoraDlmm => METEORA_DLMM_PROGRAM_ID,
             ProgramKind::PumpFun => PUMP_FUN_PROGRAM_ID,
+            ProgramKind::Moonit => MOONIT_AMM_PROGRAM_ID,
             ProgramKind::Unknown => "",
         }
     }
@@ -162,6 +164,7 @@ impl ProgramKind {
             ProgramKind::MeteoraDamm => "METEORA DAMM v2",
             ProgramKind::MeteoraDlmm => "METEORA DLMM",
             ProgramKind::PumpFun => "PUMP.FUN AMM",
+            ProgramKind::Moonit => "MOONIT AMM",
             ProgramKind::Unknown => "UNKNOWN",
         }
     }
@@ -177,6 +180,7 @@ impl ProgramKind {
             METEORA_DLMM_PROGRAM_ID => ProgramKind::MeteoraDlmm,
             PUMP_FUN_PROGRAM_ID => ProgramKind::PumpFun,
             PUMP_FUN_LEGACY_PROGRAM_ID => ProgramKind::PumpFun, // Legacy ID also maps to PumpFun
+            MOONIT_AMM_PROGRAM_ID => ProgramKind::Moonit,
             _ => ProgramKind::Unknown,
         }
     }
@@ -244,6 +248,7 @@ pub const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGf
 pub const METEORA_DAMM_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
 pub const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
 pub const PUMP_FUN_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
+pub const MOONIT_AMM_PROGRAM_ID: &str = "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG";
 
 /// Legacy/deprecated program IDs (still used for transaction analysis)
 pub const PUMP_FUN_LEGACY_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";

@@ -235,7 +235,11 @@ impl PoolAnalyzer {
                 log(
                     LogTag::PoolService,
                     "WARN",
-                    &format!("Unsupported program type for pool {}: {}", pool_id, actual_program_id)
+                    &format!(
+                        "Unsupported DEX program for pool {}: {} (consider adding support for this DEX)", 
+                        pool_id, 
+                        actual_program_id
+                    )
                 );
             }
             return None;
@@ -358,6 +362,10 @@ impl PoolAnalyzer {
 
             ProgramKind::PumpFun => {
                 Self::extract_pump_fun_accounts(pool_id, base_mint, quote_mint, rpc_client).await
+            }
+
+            ProgramKind::Moonit => {
+                Self::extract_moonit_accounts(pool_id, base_mint, quote_mint, rpc_client).await
             }
 
             ProgramKind::Unknown => {
@@ -784,6 +792,38 @@ impl PoolAnalyzer {
         let quote_vault = Self::read_pubkey_at_offset_static(data, &mut offset).ok()?;
 
         Some(vec![base_vault, quote_vault])
+    }
+
+    /// Extract Moonit AMM accounts
+    async fn extract_moonit_accounts(
+        pool_id: &Pubkey,
+        base_mint: &Pubkey,
+        quote_mint: &Pubkey,
+        rpc_client: &RpcClient
+    ) -> Option<Vec<Pubkey>> {
+        // For Moonit pools, we only need:
+        // - Curve account (pool_id) - contains all pool data including SOL balance in account lamports
+        // - Mint accounts for reference
+
+        let mut accounts = vec![*pool_id];
+
+        // Add the mints for reference
+        accounts.push(*base_mint);
+        accounts.push(*quote_mint);
+
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "DEBUG",
+                &format!(
+                    "Extracted Moonit accounts: curve={}, total_accounts={}",
+                    pool_id,
+                    accounts.len()
+                )
+            );
+        }
+
+        Some(accounts)
     }
 
     /// Public interface: Request analysis of a discovered pool

@@ -85,9 +85,9 @@ async fn discover_and_identify_biggest_pool(
                 &format!("Found {} pools for token {}", pairs.len(), token_address)
             );
 
-            // Find the biggest pool by liquidity
+            // Find the biggest pool by liquidity (or first pool if no liquidity data)
             let mut biggest_pool = None;
-            let mut highest_liquidity = 0.0;
+            let mut highest_liquidity = -1.0; // Start with negative to include 0 liquidity pools
 
             for pair in &pairs {
                 let liquidity = if let Some(liq) = &pair.liquidity { liq.usd } else { 0.0 };
@@ -96,6 +96,12 @@ async fn discover_and_identify_biggest_pool(
                     highest_liquidity = liquidity;
                     biggest_pool = Some(pair);
                 }
+            }
+
+            // If no pool was selected (all have negative liquidity somehow), take the first one
+            if biggest_pool.is_none() && !pairs.is_empty() {
+                biggest_pool = Some(&pairs[0]);
+                highest_liquidity = 0.0;
             }
 
             if let Some(pool) = biggest_pool {
@@ -141,7 +147,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set up command line arguments with debug flags enabled
     let cmd_args = vec![
         "debug_pool_service_single_token".to_string(),
-        "--debug-pool-calculator".to_string()
+        "--debug-pool-calculator".to_string(),
+        "--debug-pool-discovery".to_string(),
+        "--debug-pool-service".to_string()
     ];
     set_cmd_args(cmd_args);
 

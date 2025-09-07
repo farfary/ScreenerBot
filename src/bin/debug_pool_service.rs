@@ -70,6 +70,10 @@ fn detect_program_type(owner: &Pubkey, data_len: usize) -> ProgramKind {
             println!("✅ Identified as Raydium CLMM");
             ProgramKind::RaydiumClmm
         }
+        "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG" => {
+            println!("✅ Identified as Moonit AMM");
+            ProgramKind::Moonit
+        }
         _ => {
             println!("❓ Unknown program ID, using heuristics based on data length:");
             match data_len {
@@ -88,6 +92,10 @@ fn detect_program_type(owner: &Pubkey, data_len: usize) -> ProgramKind {
                 653 => {
                     println!("  📏 653 bytes suggests Orca Whirlpool");
                     ProgramKind::OrcaWhirlpool
+                }
+                409 => {
+                    println!("  📏 409 bytes suggests Moonit AMM");
+                    ProgramKind::Moonit
                 }
                 _ => {
                     println!("  ❌ Unknown data length, defaulting to Raydium Legacy AMM");

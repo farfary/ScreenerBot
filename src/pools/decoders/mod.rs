@@ -10,6 +10,7 @@ pub mod raydium_legacy_amm;
 pub mod meteora_dlmm;
 pub mod meteora_damm;
 pub mod orca_whirlpool;
+pub mod moonit_amm;
 
 use super::fetcher::AccountData;
 use super::types::{ ProgramKind, PriceResult };
@@ -59,6 +60,8 @@ pub fn decode_pool(
                 base_mint,
                 quote_mint
             ),
+        ProgramKind::Moonit =>
+            moonit_amm::MoonitAmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
         _ => {
             // TODO: Add other decoders as needed
             None
