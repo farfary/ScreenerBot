@@ -5,7 +5,7 @@ use screenerbot::entry::get_profit_target;
 use screenerbot::errors::ScreenerBotError;
 use screenerbot::global::set_cmd_args;
 use screenerbot::logger::{ init_file_logging, log, LogTag };
-use screenerbot::pools::get_pool_service;
+use screenerbot::pools::init_pool_service;
 use screenerbot::positions;
 use screenerbot::positions_types::Position;
 use screenerbot::rpc::{ get_rpc_client, sol_to_lamports, TokenBalance };

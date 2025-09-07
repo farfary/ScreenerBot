@@ -193,33 +193,37 @@ fn extract_orca_vaults(data: &[u8]) -> Option<(String, String)> {
 }
 
 fn extract_raydium_vaults(data: &[u8]) -> Result<(Pubkey, Pubkey), Box<dyn std::error::Error>> {
-    // Correct offsets based on pool data analysis:
-    // 0x150 = baseVault (SOL vault) - verified correct  
-    // 0x170 = quoteVault (token vault) - verified correct
-    const BASE_VAULT_OFFSET: usize = 0x150;  // 336 bytes
-    const QUOTE_VAULT_OFFSET: usize = 0x170; // 368 bytes  
-    const PUBKEY_SIZE: usize = 32;
-    
-    if data.len() < QUOTE_VAULT_OFFSET + PUBKEY_SIZE {
-        return Err(format!("Pool data too short: {} bytes", data.len()).into());
+    // Use same offsets as the CLMM decoder for consistency
+    // Based on Raydium CLMM PoolState struct
+    if data.len() < 200 {
+        return Err(format!("CLMM pool data too short: {} bytes", data.len()).into());
     }
+
+    // Skip discriminator (8 bytes) and bump (1 byte)
+    let mut offset = 8 + 1;
+    // Skip amm_config (32 bytes) and owner (32 bytes)
+    offset += 32 + 32;
+    // Skip token mints (32 + 32 bytes)
+    offset += 32 + 32;
     
-    let base_vault_bytes = &data[BASE_VAULT_OFFSET..BASE_VAULT_OFFSET + PUBKEY_SIZE];
-    let quote_vault_bytes = &data[QUOTE_VAULT_OFFSET..QUOTE_VAULT_OFFSET + PUBKEY_SIZE];
-    
-    let base_vault = Pubkey::new_from_array(
-        base_vault_bytes.try_into()
-            .map_err(|_| "Failed to convert base_vault bytes")?
+    // Extract token vaults
+    let vault_0_bytes = &data[offset..offset + 32];
+    let vault_0 = Pubkey::new_from_array(
+        vault_0_bytes.try_into()
+            .map_err(|_| "Failed to convert vault_0 bytes")?
     );
-    let quote_vault = Pubkey::new_from_array(
-        quote_vault_bytes.try_into()
-            .map_err(|_| "Failed to convert quote_vault bytes")?
+    offset += 32;
+    
+    let vault_1_bytes = &data[offset..offset + 32];
+    let vault_1 = Pubkey::new_from_array(
+        vault_1_bytes.try_into()
+            .map_err(|_| "Failed to convert vault_1 bytes")?
     );
     
-    println!("Base Vault (SOL): {}", base_vault);
-    println!("Quote Vault (Token): {}", quote_vault);
+    println!("Base Vault (vault_0): {}", vault_0);
+    println!("Quote Vault (vault_1): {}", vault_1);
     
-    Ok((base_vault, quote_vault))
+    Ok((vault_0, vault_1))
 }
 
 fn extract_meteora_vaults(pool_data: &[u8]) -> Result<(Pubkey, Pubkey), Box<dyn std::error::Error>> {

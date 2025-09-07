@@ -138,11 +138,16 @@ impl PoolDecoder for RaydiumClmmDecoder {
             );
         }
 
-        if token_balance == 0 {
+        // Note: In CLMM pools, zero vault balances are normal when liquidity is concentrated
+        // outside the current price range. We can still calculate price using sqrt_price_x64.
+        if token_balance == 0 && sol_balance == 0 {
             if is_debug_pool_calculator_enabled() {
-                log(LogTag::PoolCalculator, "ERROR", "CLMM pool has zero token balance");
+                log(
+                    LogTag::PoolCalculator, 
+                    "INFO", 
+                    "CLMM pool has zero vault balances, using sqrt_price for calculation"
+                );
             }
-            return None;
         }
 
         // Get token decimals - CRITICAL: must be cached, no fallback to defaults
