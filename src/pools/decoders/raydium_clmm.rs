@@ -143,8 +143,8 @@ impl PoolDecoder for RaydiumClmmDecoder {
         if token_balance == 0 && sol_balance == 0 {
             if is_debug_pool_calculator_enabled() {
                 log(
-                    LogTag::PoolCalculator, 
-                    "INFO", 
+                    LogTag::PoolCalculator,
+                    "INFO",
                     "CLMM pool has zero vault balances, using sqrt_price for calculation"
                 );
             }

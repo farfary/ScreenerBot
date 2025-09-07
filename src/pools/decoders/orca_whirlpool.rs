@@ -34,9 +34,9 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         }
 
         // Find the pool account
-        let pool_account = accounts.values().find(|acc| {
-            acc.owner.to_string() == ORCA_WHIRLPOOL_PROGRAM_ID
-        })?;
+        let pool_account = accounts
+            .values()
+            .find(|acc| { acc.owner.to_string() == ORCA_WHIRLPOOL_PROGRAM_ID })?;
 
         if is_debug_pool_calculator_enabled() {
             log(
@@ -70,13 +70,15 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         }
 
         // Determine which token is SOL and which is the target
-        let (sol_vault, token_vault, sol_reserve, token_reserve, is_token_a_sol) = if pool_info.token_mint_a == SOL_MINT {
+        let (sol_vault, token_vault, sol_reserve, token_reserve, is_token_a_sol) = if
+            pool_info.token_mint_a == SOL_MINT
+        {
             // A is SOL, B is token
             let sol_vault_account = accounts.get(&pool_info.token_vault_a)?;
             let token_vault_account = accounts.get(&pool_info.token_vault_b)?;
             let sol_reserve = Self::extract_token_account_balance(&sol_vault_account.data)?;
             let token_reserve = Self::extract_token_account_balance(&token_vault_account.data)?;
-            
+
             (pool_info.token_vault_a, pool_info.token_vault_b, sol_reserve, token_reserve, true)
         } else if pool_info.token_mint_b == SOL_MINT {
             // B is SOL, A is token
@@ -84,14 +86,18 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
             let token_vault_account = accounts.get(&pool_info.token_vault_a)?;
             let sol_reserve = Self::extract_token_account_balance(&sol_vault_account.data)?;
             let token_reserve = Self::extract_token_account_balance(&token_vault_account.data)?;
-            
+
             (pool_info.token_vault_b, pool_info.token_vault_a, sol_reserve, token_reserve, false)
         } else {
             if is_debug_pool_calculator_enabled() {
                 log(
                     LogTag::PoolCalculator,
                     "WARN",
-                    &format!("Orca Whirlpool pool does not contain SOL. Mints: {} and {}", pool_info.token_mint_a, pool_info.token_mint_b)
+                    &format!(
+                        "Orca Whirlpool pool does not contain SOL. Mints: {} and {}",
+                        pool_info.token_mint_a,
+                        pool_info.token_mint_b
+                    )
                 );
             }
             return None;
@@ -99,17 +105,17 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
 
         if sol_reserve == 0 || token_reserve == 0 {
             if is_debug_pool_calculator_enabled() {
-                log(
-                    LogTag::PoolCalculator,
-                    "WARN",
-                    "Orca Whirlpool pool has zero reserves"
-                );
+                log(LogTag::PoolCalculator, "WARN", "Orca Whirlpool pool has zero reserves");
             }
             return None;
         }
 
         // Get token decimals
-        let token_mint = if is_token_a_sol { &pool_info.token_mint_b } else { &pool_info.token_mint_a };
+        let token_mint = if is_token_a_sol {
+            &pool_info.token_mint_b
+        } else {
+            &pool_info.token_mint_a
+        };
         let token_decimals = get_cached_decimals(token_mint).unwrap_or(9);
         let sol_decimals = 9;
 
@@ -131,7 +137,8 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
             };
 
             // Adjust for decimal differences
-            let decimal_adjustment = (10_f64).powi(sol_decimals as i32) / (10_f64).powi(token_decimals as i32);
+            let decimal_adjustment =
+                (10_f64).powi(sol_decimals as i32) / (10_f64).powi(token_decimals as i32);
             final_price * decimal_adjustment
         } else {
             // Fallback to reserve ratio calculation
@@ -197,15 +204,11 @@ impl OrcaWhirlpoolDecoder {
         offset += 2;
 
         // Read liquidity (16 bytes)
-        let liquidity = u128::from_le_bytes(
-            data[offset..offset + 16].try_into().ok()?
-        );
+        let liquidity = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
         offset += 16;
 
         // Read sqrt_price (16 bytes)
-        let sqrt_price = u128::from_le_bytes(
-            data[offset..offset + 16].try_into().ok()?
-        );
+        let sqrt_price = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
         offset += 16;
 
         // Skip tick_current_index (4 bytes)
@@ -218,22 +221,30 @@ impl OrcaWhirlpoolDecoder {
         offset += 8;
 
         // Read token_mint_a (32 bytes)
-        let token_mint_a = Pubkey::try_from(&data[offset..offset + 32]).ok()?.to_string();
+        let token_mint_a = Pubkey::try_from(&data[offset..offset + 32])
+            .ok()?
+            .to_string();
         offset += 32;
 
         // Read token_vault_a (32 bytes)
-        let token_vault_a = Pubkey::try_from(&data[offset..offset + 32]).ok()?.to_string();
+        let token_vault_a = Pubkey::try_from(&data[offset..offset + 32])
+            .ok()?
+            .to_string();
         offset += 32;
 
         // Skip fee_growth_global_a (16 bytes)
         offset += 16;
 
         // Read token_mint_b (32 bytes)
-        let token_mint_b = Pubkey::try_from(&data[offset..offset + 32]).ok()?.to_string();
+        let token_mint_b = Pubkey::try_from(&data[offset..offset + 32])
+            .ok()?
+            .to_string();
         offset += 32;
 
         // Read token_vault_b (32 bytes)
-        let token_vault_b = Pubkey::try_from(&data[offset..offset + 32]).ok()?.to_string();
+        let token_vault_b = Pubkey::try_from(&data[offset..offset + 32])
+            .ok()?
+            .to_string();
 
         Some(WhirlpoolInfo {
             token_mint_a,
@@ -250,7 +261,7 @@ impl OrcaWhirlpoolDecoder {
         if data.len() < 72 {
             return None;
         }
-        
+
         // Token account balance is at offset 64 (8 bytes)
         Some(u64::from_le_bytes(data[64..72].try_into().ok()?))
     }

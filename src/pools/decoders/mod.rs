@@ -54,7 +54,11 @@ pub fn decode_pool(
         ProgramKind::MeteoraDamm =>
             meteora_damm::MeteoraDammDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
         ProgramKind::OrcaWhirlpool =>
-            orca_whirlpool::OrcaWhirlpoolDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
+            orca_whirlpool::OrcaWhirlpoolDecoder::decode_and_calculate(
+                accounts,
+                base_mint,
+                quote_mint
+            ),
         _ => {
             // TODO: Add other decoders as needed
             None

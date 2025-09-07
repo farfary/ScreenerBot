@@ -471,7 +471,11 @@ impl PoolAnalyzer {
 
         // Fetch pool account to extract vault addresses
         if let Ok(pool_account) = rpc_client.get_account(pool_id).await {
-            if let Some(vault_addresses) = Self::extract_raydium_legacy_vault_addresses(&pool_account.data) {
+            if
+                let Some(vault_addresses) = Self::extract_raydium_legacy_vault_addresses(
+                    &pool_account.data
+                )
+            {
                 let vault_count = vault_addresses.len();
                 for vault_str in vault_addresses {
                     if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
@@ -483,7 +487,11 @@ impl PoolAnalyzer {
                     log(
                         LogTag::PoolService,
                         "INFO",
-                        &format!("Raydium Legacy AMM pool {} extracted {} vault accounts", pool_id, vault_count)
+                        &format!(
+                            "Raydium Legacy AMM pool {} extracted {} vault accounts",
+                            pool_id,
+                            vault_count
+                        )
                     );
                 }
             } else {
@@ -571,7 +579,11 @@ impl PoolAnalyzer {
 
         // Fetch pool account to extract vault addresses
         if let Ok(pool_account) = rpc_client.get_account(pool_id).await {
-            if let Some(vault_addresses) = Self::extract_orca_whirlpool_vault_addresses(&pool_account.data) {
+            if
+                let Some(vault_addresses) = Self::extract_orca_whirlpool_vault_addresses(
+                    &pool_account.data
+                )
+            {
                 let vault_count = vault_addresses.len();
                 for vault_str in vault_addresses {
                     if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
@@ -583,7 +595,11 @@ impl PoolAnalyzer {
                     log(
                         LogTag::PoolService,
                         "INFO",
-                        &format!("Orca Whirlpool pool {} extracted {} vault accounts", pool_id, vault_count)
+                        &format!(
+                            "Orca Whirlpool pool {} extracted {} vault accounts",
+                            pool_id,
+                            vault_count
+                        )
                     );
                 }
             } else {
@@ -878,15 +894,15 @@ impl PoolAnalyzer {
         }
 
         // Use the exact Orca Whirlpool structure offsets based on official source
-        // Skip discriminator (8), whirlpools_config (32), whirlpool_bump (1), 
+        // Skip discriminator (8), whirlpools_config (32), whirlpool_bump (1),
         // tick_spacing (2), fee_tier_index_seed (2), fee_rate (2), protocol_fee_rate (2),
-        // liquidity (16), sqrt_price (16), tick_current_index (4), 
+        // liquidity (16), sqrt_price (16), tick_current_index (4),
         // protocol_fee_owed_a (8), protocol_fee_owed_b (8)
         // This brings us to token_mint_a at offset 99
-        
+
         // token_vault_a at offset 131 (99 + 32)
         let token_vault_a = Self::extract_pubkey_at_offset(data, 131)?;
-        
+
         // token_vault_b at offset 211 (131 + 32 + 16 + 32)
         // (vault_a + fee_growth_global_a + token_mint_b)
         let token_vault_b = Self::extract_pubkey_at_offset(data, 211)?;
