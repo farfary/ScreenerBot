@@ -383,16 +383,19 @@ impl std::fmt::Display for LogTag {
 /// Check if console debug mode should force console output for pool modules
 fn should_force_console_debug(tag: &LogTag, log_type: &str) -> bool {
     use crate::arguments::{
-        is_debug_pool_service_enabled, is_debug_pool_calculator_enabled,
-        is_debug_pool_discovery_enabled, is_debug_pool_analyzer_enabled,
-        is_debug_pool_cache_enabled, is_debug_pool_fetcher_enabled,
-        is_debug_pool_decoders_enabled
+        is_debug_pool_service_enabled,
+        is_debug_pool_calculator_enabled,
+        is_debug_pool_discovery_enabled,
+        is_debug_pool_analyzer_enabled,
+        is_debug_pool_cache_enabled,
+        is_debug_pool_fetcher_enabled,
+        is_debug_pool_decoders_enabled,
     };
-    
+
     if log_type.to_uppercase() != "DEBUG" {
         return false;
     }
-    
+
     match tag {
         LogTag::PoolService => is_debug_pool_service_enabled(),
         LogTag::PoolCalculator => is_debug_pool_calculator_enabled(),

@@ -155,10 +155,6 @@ fn cleanup_stale_entries() {
     });
 
     if removed_count > 0 && is_debug_pool_cache_enabled() {
-        log(
-            LogTag::PoolCache,
-            "DEBUG",
-            &format!("Cleaned {} stale price entries", removed_count)
-        );
+        log(LogTag::PoolCache, "DEBUG", &format!("Cleaned {} stale price entries", removed_count));
     }
 }
