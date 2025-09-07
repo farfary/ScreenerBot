@@ -662,15 +662,17 @@ impl RpcRateLimiter {
             let elapsed = last_call.elapsed();
             if elapsed < url_interval {
                 let wait_duration = url_interval - elapsed;
-                log(
-                    LogTag::Rpc,
-                    "RATE_LIMIT",
-                    &format!(
-                        "Rate limiting URL {}: waiting {:.2}ms",
-                        url,
-                        wait_duration.as_millis()
-                    )
-                );
+                if is_debug_rpc_enabled {
+                    log(
+                        LogTag::Rpc,
+                        "RATE_LIMIT",
+                        &format!(
+                            "Rate limiting URL {}: waiting {:.2}ms",
+                            url,
+                            wait_duration.as_millis()
+                        )
+                    );
+                }
                 tokio::time::sleep(wait_duration).await;
             }
         }
