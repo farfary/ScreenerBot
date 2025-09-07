@@ -458,11 +458,50 @@ impl PoolAnalyzer {
         pool_id: &Pubkey,
         base_mint: &Pubkey,
         quote_mint: &Pubkey,
-        _rpc_client: &RpcClient
+        rpc_client: &RpcClient
     ) -> Option<Vec<Pubkey>> {
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                &format!("Extracting Raydium Legacy AMM accounts for pool {}", pool_id)
+            );
+        }
+
         let mut accounts = vec![*pool_id];
+
+        // Fetch pool account to extract vault addresses
+        if let Ok(pool_account) = rpc_client.get_account(pool_id).await {
+            if let Some(vault_addresses) = Self::extract_raydium_legacy_vault_addresses(&pool_account.data) {
+                let vault_count = vault_addresses.len();
+                for vault_str in vault_addresses {
+                    if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
+                        accounts.push(vault_pubkey);
+                    }
+                }
+
+                if is_debug_pool_service_enabled() {
+                    log(
+                        LogTag::PoolService,
+                        "INFO",
+                        &format!("Raydium Legacy AMM pool {} extracted {} vault accounts", pool_id, vault_count)
+                    );
+                }
+            } else {
+                if is_debug_pool_service_enabled() {
+                    log(
+                        LogTag::PoolService,
+                        "WARN",
+                        &format!("Failed to extract vault addresses from Raydium Legacy AMM pool {}", pool_id)
+                    );
+                }
+            }
+        }
+
+        // Always include the mints
         accounts.push(*base_mint);
         accounts.push(*quote_mint);
+
         Some(accounts)
     }
 
@@ -854,6 +893,21 @@ impl PoolAnalyzer {
         let token_vault_b = Self::extract_pubkey_at_offset(data, 211)?;
 
         Some(vec![token_vault_a, token_vault_b])
+    }
+
+    /// Extract vault addresses from Raydium Legacy AMM pool account data
+    fn extract_raydium_legacy_vault_addresses(data: &[u8]) -> Option<Vec<String>> {
+        if data.len() < 0x190 {
+            return None;
+        }
+
+        // Correct offsets based on pool data analysis:
+        // 0x150 = baseVault (SOL vault) - verified correct
+        // 0x170 = quoteVault (token vault) - verified correct
+        let base_vault = Self::extract_pubkey_at_offset(data, 0x150)?; // baseVault at offset 336
+        let quote_vault = Self::extract_pubkey_at_offset(data, 0x170)?; // quoteVault at offset 368
+
+        Some(vec![base_vault, quote_vault])
     }
 
     /// Helper function to extract pubkey at fixed offset (for analyzer use)

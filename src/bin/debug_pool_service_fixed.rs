@@ -192,22 +192,34 @@ fn extract_orca_vaults(data: &[u8]) -> Option<(String, String)> {
     }
 }
 
-fn extract_raydium_vaults(pool_data: &[u8]) -> Result<(Pubkey, Pubkey), Box<dyn std::error::Error>> {
-    if pool_data.len() < 752 {
-        return Err("Insufficient data for Raydium pool".into());
+fn extract_raydium_vaults(data: &[u8]) -> Result<(Pubkey, Pubkey), Box<dyn std::error::Error>> {
+    // Correct offsets based on pool data analysis:
+    // 0x150 = baseVault (SOL vault) - verified correct  
+    // 0x170 = quoteVault (token vault) - verified correct
+    const BASE_VAULT_OFFSET: usize = 0x150;  // 336 bytes
+    const QUOTE_VAULT_OFFSET: usize = 0x170; // 368 bytes  
+    const PUBKEY_SIZE: usize = 32;
+    
+    if data.len() < QUOTE_VAULT_OFFSET + PUBKEY_SIZE {
+        return Err(format!("Pool data too short: {} bytes", data.len()).into());
     }
     
-    let vault_a_offset = 200;
-    let vault_b_offset = 232;
+    let base_vault_bytes = &data[BASE_VAULT_OFFSET..BASE_VAULT_OFFSET + PUBKEY_SIZE];
+    let quote_vault_bytes = &data[QUOTE_VAULT_OFFSET..QUOTE_VAULT_OFFSET + PUBKEY_SIZE];
     
-    let vault_a = Pubkey::try_from(&pool_data[vault_a_offset..vault_a_offset + 32])?;
-    let vault_b = Pubkey::try_from(&pool_data[vault_b_offset..vault_b_offset + 32])?;
+    let base_vault = Pubkey::new_from_array(
+        base_vault_bytes.try_into()
+            .map_err(|_| "Failed to convert base_vault bytes")?
+    );
+    let quote_vault = Pubkey::new_from_array(
+        quote_vault_bytes.try_into()
+            .map_err(|_| "Failed to convert quote_vault bytes")?
+    );
     
-    println!("🏦 Extracted Raydium vaults:");
-    println!("  Vault A: {}", vault_a);
-    println!("  Vault B: {}", vault_b);
+    println!("Base Vault (SOL): {}", base_vault);
+    println!("Quote Vault (Token): {}", quote_vault);
     
-    Ok((vault_a, vault_b))
+    Ok((base_vault, quote_vault))
 }
 
 fn extract_meteora_vaults(pool_data: &[u8]) -> Result<(Pubkey, Pubkey), Box<dyn std::error::Error>> {
