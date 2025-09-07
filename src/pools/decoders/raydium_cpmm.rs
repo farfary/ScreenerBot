@@ -7,7 +7,7 @@
 use super::{ PoolDecoder, AccountData };
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
-use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
+use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, RAYDIUM_CPMM_PROGRAM_ID };
 use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS, raw_to_ui_amount };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -34,8 +34,23 @@ impl PoolDecoder for RaydiumCpmmDecoder {
             );
         }
 
-        // Find the pool account (typically the first/main account)
-        let pool_account = accounts.values().next()?;
+        // Find the pool account by checking owner program ID (like CLMM decoder)
+        let pool_account = accounts.values().find(|acc| {
+            // Look for account with Raydium CPMM program as owner
+            acc.owner.to_string() == RAYDIUM_CPMM_PROGRAM_ID
+        })?;
+
+        if is_debug_pool_calculator_enabled() {
+            log(
+                LogTag::PoolCalculator,
+                "DEBUG",
+                &format!(
+                    "Found CPMM pool account {} with {} bytes",
+                    pool_account.pubkey,
+                    pool_account.data.len()
+                )
+            );
+        }
 
         // Parse pool state from account data using the proven method
         let pool_info = Self::decode_raydium_cpmm_pool(&pool_account.data)?;

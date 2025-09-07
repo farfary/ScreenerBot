@@ -427,10 +427,9 @@ impl PoolAnalyzer {
 
         let mut offset = 8; // Skip discriminator
 
-        // Skip amm_config and pool_creator
-        offset += 32 + 32;
-
-        // Extract token vaults (offsets from old working system)
+        // Based on Raydium CPMM structure from decoder
+        let _amm_config = Self::read_pubkey_at_offset_static(data, &mut offset).ok()?;
+        let _pool_creator = Self::read_pubkey_at_offset_static(data, &mut offset).ok()?;
         let token_0_vault = Self::read_pubkey_at_offset_static(data, &mut offset).ok()?;
         let token_1_vault = Self::read_pubkey_at_offset_static(data, &mut offset).ok()?;
 

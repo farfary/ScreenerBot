@@ -51,9 +51,13 @@ fn detect_program_type(owner: &Pubkey, data_len: usize) -> ProgramKind {
             println!("✅ Identified as Raydium Legacy AMM");
             ProgramKind::RaydiumLegacyAmm
         },
-        "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => {
+        "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => {
             println!("✅ Identified as Raydium CPMM");
             ProgramKind::RaydiumCpmm
+        },
+        "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => {
+            println!("✅ Identified as Raydium CLMM");
+            ProgramKind::RaydiumClmm
         },
         "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" => {
             println!("✅ Identified as Pump.fun");
@@ -66,10 +70,6 @@ fn detect_program_type(owner: &Pubkey, data_len: usize) -> ProgramKind {
         "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB" => {
             println!("✅ Identified as Meteora DAMM");
             ProgramKind::MeteoraDamm
-        },
-        "CLMMLQNz3yAFJmJW9pdJDZu6wBdhGxb6BKC8pu9hKxmJ" => {
-            println!("✅ Identified as Raydium CLMM");
-            ProgramKind::RaydiumClmm
         },
         _ => {
             println!("❓ Unknown program ID, using heuristics based on data length:");
@@ -240,9 +240,40 @@ fn extract_meteora_vaults(pool_data: &[u8]) -> Result<(Pubkey, Pubkey), Box<dyn 
     Ok((vault_a, vault_b))
 }
 
-fn extract_pumpfun_vaults(pool_data: &[u8]) -> Result<(Pubkey, Pubkey), Box<dyn std::error::Error>> {
-    // Pump.fun stores bonding curve data but no traditional vaults
-    Err("Pump.fun does not use traditional vault structure".into())
+fn extract_raydium_cpmm_vaults(data: &[u8]) -> Result<(Pubkey, Pubkey), Box<dyn std::error::Error>> {
+    if data.len() < 8 + 32 * 10 {
+        return Err("Pool data too short for CPMM".into());
+    }
+
+    let mut offset = 8; // Skip discriminator
+
+    // Skip amm_config and pool_creator  
+    let _amm_config = read_pubkey_at_offset(data, &mut offset)?;
+    let _pool_creator = read_pubkey_at_offset(data, &mut offset)?;
+    
+    // Extract vault addresses
+    let token_0_vault = read_pubkey_at_offset(data, &mut offset)?;
+    let token_1_vault = read_pubkey_at_offset(data, &mut offset)?;
+
+    println!("Token 0 Vault: {}", token_0_vault);
+    println!("Token 1 Vault: {}", token_1_vault);
+
+    Ok((token_0_vault, token_1_vault))
+}
+
+fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<Pubkey, Box<dyn std::error::Error>> {
+    if *offset + 32 > data.len() {
+        return Err("Insufficient data for pubkey".into());
+    }
+
+    let pubkey_bytes = &data[*offset..*offset + 32];
+    *offset += 32;
+
+    let pubkey = Pubkey::new_from_array(
+        pubkey_bytes.try_into().map_err(|_| "Failed to parse pubkey")?
+    );
+
+    Ok(pubkey)
 }
 
 async fn get_vault_balances(
@@ -256,6 +287,9 @@ async fn get_vault_balances(
     println!("  Vault B: {}", vault_b);
     
     let accounts = rpc.get_multiple_accounts(&[*vault_a, *vault_b]).await?;
+    if accounts.len() < 2 {
+        return Err("Not enough vault accounts fetched".into());
+    }
     
     let vault_a_account = accounts[0]
         .as_ref()
@@ -263,6 +297,14 @@ async fn get_vault_balances(
     let vault_b_account = accounts[1]
         .as_ref()
         .ok_or("Vault B account not found")?;
+
+    // Check minimum data length for token accounts
+    if vault_a_account.data.len() < 72 {
+        return Err(format!("Vault A data too short: {} bytes", vault_a_account.data.len()).into());
+    }
+    if vault_b_account.data.len() < 72 {
+        return Err(format!("Vault B data too short: {} bytes", vault_b_account.data.len()).into());
+    }
     
     // Token accounts store balance at offset 64 (8 bytes, little endian)
     let balance_a = u64::from_le_bytes(
@@ -344,11 +386,29 @@ async fn main() {
                 return;
             }
         },
-        ProgramKind::RaydiumLegacyAmm | ProgramKind::RaydiumCpmm | ProgramKind::RaydiumClmm => {
+        ProgramKind::RaydiumLegacyAmm => {
             match extract_raydium_vaults(&pool_account.data) {
                 Ok(vaults) => vaults,
                 Err(e) => {
-                    eprintln!("❌ Failed to extract Raydium vaults: {}", e);
+                    eprintln!("❌ Failed to extract Raydium Legacy vaults: {}", e);
+                    return;
+                }
+            }
+        },
+        ProgramKind::RaydiumCpmm => {
+            match extract_raydium_cpmm_vaults(&pool_account.data) {
+                Ok(vaults) => vaults,
+                Err(e) => {
+                    eprintln!("❌ Failed to extract Raydium CPMM vaults: {}", e);
+                    return;
+                }
+            }
+        },
+        ProgramKind::RaydiumClmm => {
+            match extract_raydium_vaults(&pool_account.data) {
+                Ok(vaults) => vaults,
+                Err(e) => {
+                    eprintln!("❌ Failed to extract Raydium CLMM vaults: {}", e);
                     return;
                 }
             }
