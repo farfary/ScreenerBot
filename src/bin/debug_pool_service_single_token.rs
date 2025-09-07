@@ -8,6 +8,7 @@ use screenerbot::arguments::set_cmd_args;
 use screenerbot::pools::{ start_pool_service, stop_pool_service, set_debug_token_override, get_pool_price };
 use screenerbot::pools::types::ProgramKind;
 use screenerbot::tokens::dexscreener::{ get_token_price_from_global_api, init_dexscreener_api };
+use screenerbot::tokens::dexscreener::get_token_pairs_from_api;
 use screenerbot::rpc::get_rpc_client;
 use screenerbot::logger::{ log, LogTag };
 use solana_sdk::pubkey::Pubkey;
@@ -50,6 +51,75 @@ async fn get_pool_program_info(pool_address: &str) -> (String, String) {
     }
 }
 
+/// Discover and log all pools for the token at startup
+async fn discover_and_log_pools(token_address: &str) -> Result<(), String> {
+    log(
+        LogTag::PoolService,
+        "DISCOVER_START",
+        &format!("Discovering all pools for token: {}", token_address)
+    );
+
+    match get_token_pairs_from_api(token_address).await {
+        Ok(pairs) => {
+            log(
+                LogTag::PoolService,
+                "DISCOVER_SUCCESS",
+                &format!("Found {} pools for token {}", pairs.len(), token_address)
+            );
+
+            for (i, pair) in pairs.iter().enumerate() {
+                // Get program info for this pool
+                let (program_id, program_name) = get_pool_program_info(&pair.pair_address).await;
+                let program_display = format!("{} ({})", program_name, &program_id[..8]);
+
+                // Format liquidity info
+                let liquidity_info = if let Some(liq) = &pair.liquidity {
+                    format!("${:.2}", liq.usd)
+                } else {
+                    "N/A".to_string()
+                };
+
+                // Format volume info (using 24h volume from VolumeStats)
+                let volume_info = if let Some(vol_24h) = pair.volume.h24 {
+                    format!("${:.2}", vol_24h)
+                } else {
+                    "N/A".to_string()
+                };
+
+                // Format price (price_native is String)
+                let price_info = if let Ok(price) = pair.price_native.parse::<f64>() {
+                    format!("{:.12} SOL", price)
+                } else {
+                    "N/A".to_string()
+                };
+
+                log(
+                    LogTag::PoolService,
+                    "POOL_DETAIL",
+                    &format!(
+                        "Pool #{}: {} | {} | Liquidity: {} | Volume 24h: {} | Price: {}",
+                        i + 1,
+                        &pair.pair_address[..8],
+                        program_display,
+                        liquidity_info,
+                        volume_info,
+                        price_info
+                    )
+                );
+            }
+        }
+        Err(e) => {
+            log(
+                LogTag::PoolService,
+                "DISCOVER_ERROR",
+                &format!("Failed to discover pools: {}", e)
+            );
+        }
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
@@ -76,6 +146,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::PoolService, "SUCCESS", "Pool service started");
     log(LogTag::PoolService, "INFO", &format!("Monitoring token: {}", args.token));
     log(LogTag::PoolService, "INFO", &format!("Will run for {} seconds, checking every {} seconds", args.duration, args.interval));
+    
+    // Discover and log all pools for the token
+    if let Err(e) = discover_and_log_pools(&args.token).await {
+        log(
+            LogTag::PoolService,
+            "DISCOVER_FAILED",
+            &format!("Pool discovery failed: {}", e)
+        );
+    }
+    
     log(LogTag::PoolService, "INFO", "Starting price monitoring...");
     
     // Create shutdown notification for clean exit
