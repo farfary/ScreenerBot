@@ -25,6 +25,15 @@ use std::time::Duration;
 static SERVICE_RUNNING: AtomicBool = AtomicBool::new(false);
 static mut GLOBAL_SHUTDOWN_HANDLE: Option<Arc<Notify>> = None;
 
+// =============================================================================
+// POOL MONITORING CONFIGURATION
+// =============================================================================
+
+/// Enable single pool mode - only monitor the highest liquidity pool per token
+/// When true: Only the biggest pool by liquidity is monitored (optimized performance)
+/// When false: All pools are monitored (comprehensive coverage - current behavior)
+pub const ENABLE_SINGLE_POOL_MODE: bool = true;
+
 // Debug override for token monitoring (used by debug tools)
 static mut DEBUG_TOKEN_OVERRIDE: Option<Vec<String>> = None;
 
@@ -82,6 +91,21 @@ pub async fn start_pool_service() -> Result<(), PoolError> {
                 PoolError::InitializationFailed(format!("Component initialization failed: {}", e))
             );
         }
+    }
+
+    // Log pool monitoring mode configuration
+    if ENABLE_SINGLE_POOL_MODE {
+        log(
+            LogTag::PoolService,
+            "INFO",
+            "Pool monitoring mode: SINGLE POOL (highest liquidity only)"
+        );
+    } else {
+        log(
+            LogTag::PoolService,
+            "INFO",
+            "Pool monitoring mode: ALL POOLS (comprehensive coverage)"
+        );
     }
 
     // Start background tasks
@@ -149,6 +173,11 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
 /// Check if the pool service is currently running
 pub fn is_pool_service_running() -> bool {
     SERVICE_RUNNING.load(Ordering::SeqCst)
+}
+
+/// Check if single pool mode is enabled
+pub fn is_single_pool_mode_enabled() -> bool {
+    ENABLE_SINGLE_POOL_MODE
 }
 
 /// Set debug token override for monitoring only specific tokens (debug use only)
@@ -357,10 +386,33 @@ async fn run_monitoring_cycle() -> Result<(), String> {
     )?;
 
     let mut total_pools_discovered = 0;
+    let mut total_pools_processed = 0;
 
     for token_mint in tokens_to_monitor.iter() {
-        let pools = pool_discovery.discover_pools_for_token(token_mint).await;
+        let mut pools = pool_discovery.discover_pools_for_token(token_mint).await;
         total_pools_discovered += pools.len();
+
+        // Apply single pool mode filtering if enabled
+        if ENABLE_SINGLE_POOL_MODE && !pools.is_empty() {
+            // Sort pools by liquidity (highest first) and take only the first one
+            pools.sort_by(|a, b| b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal));
+            let highest_liquidity_pool = pools.into_iter().next().unwrap();
+            pools = vec![highest_liquidity_pool];
+            
+            if is_debug_pool_service_enabled() {
+                log(
+                    LogTag::PoolService,
+                    "DEBUG",
+                    &format!(
+                        "Single pool mode: Selected highest liquidity pool for {} (${:.2})",
+                        &token_mint[..8],
+                        pools[0].liquidity_usd
+                    )
+                );
+            }
+        }
+
+        total_pools_processed += pools.len();
 
         // Send pools to analyzer for processing
         if let Some(analyzer) = (unsafe { POOL_ANALYZER.as_ref() }) {
@@ -406,15 +458,28 @@ async fn run_monitoring_cycle() -> Result<(), String> {
     }
 
     if is_debug_pool_service_enabled() {
-        log(
-            LogTag::PoolService,
-            "DEBUG",
-            &format!(
-                "Monitoring cycle completed: {} tokens, {} pools discovered",
-                tokens_to_monitor.len(),
-                total_pools_discovered
-            )
-        );
+        if ENABLE_SINGLE_POOL_MODE {
+            log(
+                LogTag::PoolService,
+                "DEBUG",
+                &format!(
+                    "Monitoring cycle completed: {} tokens, {} pools discovered, {} pools processed (single pool mode)",
+                    tokens_to_monitor.len(),
+                    total_pools_discovered,
+                    total_pools_processed
+                )
+            );
+        } else {
+            log(
+                LogTag::PoolService,
+                "DEBUG",
+                &format!(
+                    "Monitoring cycle completed: {} tokens, {} pools discovered and processed (all pools mode)",
+                    tokens_to_monitor.len(),
+                    total_pools_discovered
+                )
+            );
+        }
     }
 
     Ok(())
