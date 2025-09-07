@@ -67,7 +67,7 @@ use chrono::Local;
 use colored::*;
 use once_cell::sync::Lazy;
 use std::fs::{ self, File, OpenOptions };
-use std::io::{ BufWriter, Write, stdout };
+use std::io::{ BufWriter, Write, stdout, ErrorKind };
 use std::path::PathBuf;
 use std::sync::{ Arc, Mutex };
 
@@ -405,6 +405,24 @@ fn should_force_console_debug(tag: &LogTag, log_type: &str) -> bool {
     }
 }
 
+/// Print to stdout but ignore broken pipe errors (when head, grep, etc. close the pipe)
+fn print_stdout_safe(message: &str) {
+    if let Err(e) = writeln!(stdout(), "{}", message) {
+        if e.kind() == ErrorKind::BrokenPipe {
+            // Silently exit when pipe is broken (normal when using head, grep, etc.)
+            std::process::exit(0);
+        }
+        // For other errors, we might want to log to stderr, but avoid infinite recursion
+        let _ = writeln!(std::io::stderr(), "Logger stdout error: {}", e);
+    }
+    // Try to flush, but ignore broken pipe errors
+    if let Err(e) = stdout().flush() {
+        if e.kind() == ErrorKind::BrokenPipe {
+            std::process::exit(0);
+        }
+    }
+}
+
 /// Logs a message with date, time, tag, log type, and message.
 pub fn log(tag: LogTag, log_type: &str, message: &str) {
     let now = Local::now();
@@ -629,8 +647,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
     // Print first line with full prefix (console output)
     let console_line = format!("{}{}", base_line, message_color);
     if !is_dashboard_enabled() || should_force_console_debug(&tag, log_type) {
-        println!("{}", console_line);
-        let _ = stdout().flush(); // Force immediate output when piped
+        print_stdout_safe(&console_line);
     }
 
     // Write to file (clean version without color codes)
@@ -689,8 +706,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
 
             let console_continuation = format!("{}{}", continuation_prefix, chunk_color);
             if !is_dashboard_enabled() || should_force_console_debug(&tag, log_type) {
-                println!("{}", console_continuation);
-                let _ = stdout().flush(); // Force immediate output when piped
+                print_stdout_safe(&console_continuation);
             }
 
             // Write continuation lines to file as well
