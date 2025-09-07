@@ -6,7 +6,12 @@
 use clap::Parser;
 use screenerbot::arguments::set_cmd_args;
 use screenerbot::pools::{ start_pool_service, stop_pool_service, set_debug_token_override, get_pool_price };
+use screenerbot::pools::types::ProgramKind;
 use screenerbot::tokens::dexscreener::{ get_token_price_from_global_api, init_dexscreener_api };
+use screenerbot::rpc::get_rpc_client;
+use screenerbot::logger::{ log, LogTag };
+use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::time::{ interval, Duration };
@@ -14,47 +19,51 @@ use tokio::time::{ interval, Duration };
 #[derive(Parser, Debug)]
 #[command(name = "debug_pool_service_single_token", about = "Monitor a single token with pool service")]
 struct Args {
-    /// Token mint to monitor
-    #[arg(long)]
+    /// Token mint address to monitor
+    #[arg(short, long)]
     token: String,
-    
-    /// Enable debug logging for pool service
-    #[arg(long, default_value_t = false)]
-    debug_pool_service: bool,
-    
-    /// Enable debug logging for pool calculator
-    #[arg(long, default_value_t = false)]
-    debug_pool_calculator: bool,
-    
-    /// Run duration in seconds (default: 60)
-    #[arg(long, default_value_t = 60)]
-    duration: u64,
-    
-    /// Price check interval in seconds (default: 5)
-    #[arg(long, default_value_t = 5)]
+
+    /// Monitoring interval in seconds
+    #[arg(short, long, default_value = "5")]
     interval: u64,
+
+    /// Duration to run in seconds
+    #[arg(short, long, default_value = "60")]
+    duration: u64,
+}
+
+/// Get program type from pool address by fetching the account owner
+async fn get_pool_program_info(pool_address: &str) -> (String, String) {
+    let pool_pubkey = match Pubkey::from_str(pool_address) {
+        Ok(pubkey) => pubkey,
+        Err(_) => return ("INVALID_ADDRESS".to_string(), "unknown".to_string()),
+    };
+
+    let rpc_client = get_rpc_client();
+    match rpc_client.get_account(&pool_pubkey).await {
+        Ok(account) => {
+            let program_id = account.owner.to_string();
+            let program_kind = ProgramKind::from_program_id(&program_id);
+            (program_id, program_kind.display_name().to_string())
+        }
+        Err(_) => ("FETCH_ERROR".to_string(), "unknown".to_string()),
+    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     
-    // Set up command line arguments for debug flags
-    let mut cmd_args = vec!["debug_pool_service_single_token".to_string()];
-    if args.debug_pool_service {
-        cmd_args.push("--debug-pool-service".to_string());
-    }
-    if args.debug_pool_calculator {
-        cmd_args.push("--debug-pool-calculator".to_string());
-    }
+    // Set up command line arguments
+    let cmd_args = vec!["debug_pool_service_single_token".to_string()];
     set_cmd_args(cmd_args);
     
-    println!("🚀 Starting pool service for single token: {}", args.token);
+    log(LogTag::PoolService, "START", &format!("Starting pool service for single token: {}", args.token));
     
     // Initialize DexScreener API
-    println!("🔌 Initializing DexScreener API...");
+    log(LogTag::PoolService, "INIT", "Initializing DexScreener API...");
     if let Err(e) = init_dexscreener_api().await {
-        eprintln!("❌ Failed to initialize DexScreener API: {}", e);
+        log(LogTag::PoolService, "ERROR", &format!("Failed to initialize DexScreener API: {}", e));
         return Err(e.into());
     }
     
@@ -64,10 +73,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start the pool service
     start_pool_service().await?;
     
-    println!("✅ Pool service started");
-    println!("🔍 Monitoring token: {}", args.token);
-    println!("⏱️  Will run for {} seconds, checking every {} seconds", args.duration, args.interval);
-    println!("📊 Price updates:");
+    log(LogTag::PoolService, "SUCCESS", "Pool service started");
+    log(LogTag::PoolService, "INFO", &format!("Monitoring token: {}", args.token));
+    log(LogTag::PoolService, "INFO", &format!("Will run for {} seconds, checking every {} seconds", args.duration, args.interval));
+    log(LogTag::PoolService, "INFO", "Starting price monitoring...");
     
     // Create shutdown notification for clean exit
     let shutdown = Arc::new(Notify::new());
@@ -76,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set up signal handling for graceful shutdown
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
-        println!("\n🛑 Received Ctrl+C, shutting down...");
+        log(LogTag::PoolService, "SHUTDOWN", "Received Ctrl+C, shutting down...");
         shutdown_clone.notify_one();
     });
     
@@ -85,7 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let run_duration = args.duration;
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(run_duration)).await;
-        println!("\n⏰ Time limit reached, shutting down...");
+        log(LogTag::PoolService, "SHUTDOWN", "Time limit reached, shutting down...");
         shutdown_timer.notify_one();
     });
     
@@ -111,15 +120,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             None => "| API: unavailable".to_string(),
                         };
                         
-                        println!(
-                            "[{}] 💰 Pool: {:.12} SOL {} | Confidence: {:.2} | Pool: {} | Reserves: {:.6} SOL / {:.6} tokens",
-                            price_count,
-                            price.price_sol,
-                            price_comparison,
-                            price.confidence,
-                            price.pool_address,
-                            price.sol_reserves,
-                            price.token_reserves
+                        // Get program information for this pool
+                        let (program_id, program_name) = get_pool_program_info(&price.pool_address).await;
+                        let program_display = if program_id.len() > 8 && !program_id.starts_with("INVALID") && !program_id.starts_with("FETCH") {
+                            format!("{} ({}...{})", program_name, &program_id[..8], &program_id[program_id.len()-8..])
+                        } else {
+                            program_name
+                        };
+                        
+                        log(
+                            LogTag::PoolService, 
+                            "PRICE", 
+                            &format!("[{}] Pool: {:.12} SOL {} | Confidence: {:.2}", 
+                                price_count, price.price_sol, price_comparison, price.confidence)
+                        );
+                        log(
+                            LogTag::PoolService, 
+                            "POOL_INFO", 
+                            &format!("    Pool: {} | Program: {}", price.pool_address, program_display)
+                        );
+                        log(
+                            LogTag::PoolService, 
+                            "RESERVES", 
+                            &format!("    Reserves: {:.6} SOL / {:.6} tokens", price.sol_reserves, price.token_reserves)
                         );
                     }
                     None => {
@@ -128,7 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             Some(api_val) => format!("API only: {:.12} SOL", api_val),
                             None => "No price available".to_string(),
                         };
-                        println!("[{}] ❌ Pool: unavailable | {}", price_count, api_only);
+                        log(LogTag::PoolService, "NO_PRICE", &format!("[{}] Pool: unavailable | {}", price_count, api_only));
                     }
                 }
             }
@@ -138,7 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     
-    println!("\n🔄 Stopping pool service...");
+    log(LogTag::PoolService, "STOP", "Stopping pool service...");
     
     // Stop the pool service
     stop_pool_service(10).await?;
@@ -146,8 +169,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Clear debug override
     set_debug_token_override(None);
     
-    println!("✅ Pool service stopped");
-    println!("📈 Total price updates received: {}", price_count);
+    log(LogTag::PoolService, "SUCCESS", "Pool service stopped");
+    log(LogTag::PoolService, "STATS", &format!("Total price updates received: {}", price_count));
     
     Ok(())
 }
