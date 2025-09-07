@@ -187,6 +187,13 @@ impl ProgramKind {
             _ => ProgramKind::Unknown,
         }
     }
+
+    /// Classify a program id (Pubkey) quickly without allocations
+    /// This is a lightweight helper intended for debug / analysis tools to avoid
+    /// duplicating the mapping logic scattered across modules.
+    pub fn classify(program_pubkey: &solana_sdk::pubkey::Pubkey) -> Self {
+        Self::from_program_id(&program_pubkey.to_string())
+    }
 }
 
 /// Pool descriptor containing metadata about a discovered pool
