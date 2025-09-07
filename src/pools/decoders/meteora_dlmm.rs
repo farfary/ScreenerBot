@@ -6,8 +6,7 @@
 
 use super::{ PoolDecoder, AccountData };
 use super::super::utils::{ is_sol_mint, WRAPPED_SOL_MINT };
-use crate::global::is_debug_pool_calculator_enabled;
-use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
 use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
 use crate::pools::types::{ ProgramKind, PriceResult, METEORA_DLMM_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;
@@ -26,9 +25,9 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         base_mint: &str,
         quote_mint: &str
     ) -> Option<PriceResult> {
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "START",
                 &format!("Meteora DLMM decoder: base={} quote={}", base_mint, quote_mint)
             );
@@ -40,9 +39,9 @@ impl PoolDecoder for MeteoraDlmmDecoder {
             acc.owner.to_string() == METEORA_DLMM_PROGRAM_ID
         })?;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "INFO",
                 &format!(
                     "Found DLMM pool account {} with {} bytes",
@@ -55,9 +54,9 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         // Parse DLMM pool structure
         let dlmm_info = Self::parse_dlmm_pool(&pool_account.data)?;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!(
                     "DLMM parsed: token_x={} token_y={} reserve_x={} reserve_y={}",
@@ -85,8 +84,8 @@ impl PoolDecoder for MeteoraDlmmDecoder {
                 dlmm_info.reserve_y.clone(),
             )
         } else {
-            if is_debug_pool_calculator_enabled() {
-                log(LogTag::PoolCalculator, "ERROR", "Pool doesn't contain SOL");
+            if is_debug_pool_decoders_enabled() {
+                log(LogTag::PoolDecoder, "ERROR", "Pool doesn't contain SOL");
             }
             return None;
         };
@@ -94,9 +93,9 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         // Verify the token mint matches one of the requested mints (base or quote)
         // This handles both TOKEN/SOL and SOL/TOKEN orientations
         if token_mint != base_mint && token_mint != quote_mint {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "WARN",
                     &format!(
                         "DLMM token mint {} doesn't match either requested mint: base={}, quote={}",
@@ -117,17 +116,17 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         let token_balance = Self::decode_token_account_amount(&token_account.data).ok()?;
 
         // Verify vault mints to ensure correct assignment
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             let sol_vault_mint = Self::decode_token_account_mint(&sol_account.data);
             let token_vault_mint = Self::decode_token_account_mint(&token_account.data);
 
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("Sol vault {} mint: {:?}", sol_vault, sol_vault_mint)
             );
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("Token vault {} mint: {:?}", token_vault, token_vault_mint)
             );
@@ -138,7 +137,7 @@ impl PoolDecoder for MeteoraDlmmDecoder {
                 let token_mint_correct = token_mint_check == token_mint;
 
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     if sol_mint_correct && token_mint_correct {
                         "INFO"
                     } else {
@@ -153,7 +152,7 @@ impl PoolDecoder for MeteoraDlmmDecoder {
 
                 if !sol_mint_correct || !token_mint_correct {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "ERROR",
                         "VAULT ASSIGNMENT ERROR - swapping vaults"
                     );
@@ -163,22 +162,22 @@ impl PoolDecoder for MeteoraDlmmDecoder {
             }
         }
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("SOL vault {} balance: {}", sol_vault, sol_balance)
             );
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("Token vault {} balance: {}", token_vault, token_balance)
             );
         }
 
         if token_balance == 0 {
-            if is_debug_pool_calculator_enabled() {
-                log(LogTag::PoolCalculator, "ERROR", "Token reserve is zero");
+            if is_debug_pool_decoders_enabled() {
+                log(LogTag::PoolDecoder, "ERROR", "Token reserve is zero");
             }
             return None;
         }
@@ -187,9 +186,9 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         let token_decimals = match get_cached_decimals(&token_mint) {
             Some(decimals) => decimals,
             None => {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "ERROR",
                         &format!("DLMM: Token decimals not cached for {}, skipping price calculation", token_mint)
                     );
@@ -199,9 +198,9 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         };
         let sol_decimals = SOL_DECIMALS;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("Token {} has {} decimals (cached/fallback)", token_mint, token_decimals)
             );
@@ -217,9 +216,9 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         let sol_reserves_display = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
         let token_reserves_display = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "CALC",
                 &format!(
                     "DLMM price from vault balances: {:.12} SOL per token (sol_bal={} token_bal={} decimals={})",
@@ -233,7 +232,7 @@ impl PoolDecoder for MeteoraDlmmDecoder {
                 0.0
             );
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!(
                     "DLMM theoretical price from active_id: {:.12} (active_id={} bin_step={})",
@@ -263,9 +262,9 @@ impl MeteoraDlmmDecoder {
     /// Parse DLMM pool account data to extract token mints and reserve addresses
     fn parse_dlmm_pool(data: &[u8]) -> Option<DlmmPoolInfo> {
         if data.len() < 216 {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!("DLMM pool data too short: {} bytes", data.len())
                 );
@@ -281,7 +280,7 @@ impl MeteoraDlmmDecoder {
 
         // Extract DLMM-specific fields
         // Let me scan for the expected values first
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             Self::debug_scan_for_dlmm_values(data);
         }
 
@@ -289,19 +288,19 @@ impl MeteoraDlmmDecoder {
         let active_id = Self::extract_i32_at_offset(data, 76)?; // Found at offset 76: -485
         let bin_step = Self::extract_u16_at_offset(data, 80)?; // Found at offset 80: 30
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("DLMM offsets: token_x@88={} token_y@120={}", token_x_mint, token_y_mint)
             );
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("DLMM offsets: reserve_x@152={} reserve_y@184={}", reserve_x, reserve_y)
             );
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("DLMM pricing: active_id@76={} bin_step@80={}", active_id, bin_step)
             );
@@ -355,9 +354,9 @@ impl MeteoraDlmmDecoder {
         let bin_step_factor = 1.0 + (dlmm_info.bin_step as f64) / 10000.0;
         let raw_price = bin_step_factor.powf(dlmm_info.active_id as f64);
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!(
                     "DLMM calc: bin_step_factor={:.8}, active_id={}, raw_price={:.12}",
@@ -386,9 +385,9 @@ impl MeteoraDlmmDecoder {
             return None;
         };
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!(
                     "DLMM price direction: token_x={} token_y={} target={}, final_price={:.12}",
@@ -410,7 +409,7 @@ impl MeteoraDlmmDecoder {
             if let Some(value) = Self::extract_i32_at_offset(data, offset) {
                 if value == -485 {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "DEBUG",
                         &format!("Found active_id=-485 at offset {}", offset)
                     );
@@ -423,7 +422,7 @@ impl MeteoraDlmmDecoder {
             if let Some(value) = Self::extract_u16_at_offset(data, offset) {
                 if value == 30 {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "DEBUG",
                         &format!("Found bin_step=30 at offset {}", offset)
                     );

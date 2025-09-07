@@ -8,8 +8,7 @@
 /// - Fetch vault token account balances from provided accounts map
 /// - Compute SOL price for target token
 use super::{ PoolDecoder, AccountData };
-use crate::global::is_debug_pool_calculator_enabled;
-use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
 use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
 use solana_sdk::pubkey::Pubkey;
@@ -31,9 +30,9 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
         let pool_account = accounts.values().max_by_key(|a| a.data.len())?;
         let pool_data = &pool_account.data;
         if pool_data.len() < 600 {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!("Legacy AMM pool data too small: {}", pool_data.len())
                 );
@@ -61,9 +60,9 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
         // If vault fetch failed, try extracting reserves directly from pool data
         let (coin_reserve, pc_reserve) = match (coin_reserve, pc_reserve) {
             (Some(c), Some(p)) => {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "INFO",
                         &format!("Using vault reserves: coin={} pc={}", c, p)
                     );
@@ -71,9 +70,9 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
                 (c, p)
             }
             _ => {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "WARN",
                         "Vault fetch failed, extracting reserves from pool data"
                     );
@@ -88,9 +87,9 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             let decimals = match get_cached_decimals(&info.coin_mint) {
                 Some(decimals) => decimals,
                 None => {
-                    if is_debug_pool_calculator_enabled() {
+                    if is_debug_pool_decoders_enabled() {
                         log(
-                            LogTag::PoolCalculator,
+                            LogTag::PoolDecoder,
                             "ERROR",
                             &format!(
                                 "Legacy AMM: Token decimals not cached for {}, skipping price calculation",
@@ -106,9 +105,9 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             let decimals = match get_cached_decimals(&info.pc_mint) {
                 Some(decimals) => decimals,
                 None => {
-                    if is_debug_pool_calculator_enabled() {
+                    if is_debug_pool_decoders_enabled() {
                         log(
-                            LogTag::PoolCalculator,
+                            LogTag::PoolDecoder,
                             "ERROR",
                             &format!(
                                 "Legacy AMM: Token decimals not cached for {}, skipping price calculation",
@@ -121,8 +120,8 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             };
             (coin_reserve, pc_reserve, decimals)
         } else {
-            if is_debug_pool_calculator_enabled() {
-                log(LogTag::PoolCalculator, "ERROR", "Legacy AMM pool missing SOL mint");
+            if is_debug_pool_decoders_enabled() {
+                log(LogTag::PoolDecoder, "ERROR", "Legacy AMM pool missing SOL mint");
             }
             return None;
         };
@@ -140,9 +139,9 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             return None;
         }
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "SUCCESS",
                 &format!(
                     "Legacy AMM price: {:.12} SOL (sol_reserve={} token_reserve={} token_dec={} coin_mint={} pc_mint={})",
@@ -229,9 +228,9 @@ fn adjust_vaults(
                     let mint = Pubkey::new_from_array(mint_bytes).to_string();
                     if mint != info.coin_mint {
                         coin_vault_wrong_mint = true;
-                        if is_debug_pool_calculator_enabled() {
+                        if is_debug_pool_decoders_enabled() {
                             log(
-                                LogTag::PoolCalculator,
+                                LogTag::PoolDecoder,
                                 "WARN",
                                 &format!(
                                     "coin_vault {} has wrong mint {} expected {}",
@@ -254,9 +253,9 @@ fn adjust_vaults(
                     let mint = Pubkey::new_from_array(mint_bytes).to_string();
                     if mint != info.pc_mint {
                         pc_vault_wrong_mint = true;
-                        if is_debug_pool_calculator_enabled() {
+                        if is_debug_pool_decoders_enabled() {
                             log(
-                                LogTag::PoolCalculator,
+                                LogTag::PoolDecoder,
                                 "WARN",
                                 &format!(
                                     "pc_vault {} has wrong mint {} expected {}",
@@ -277,9 +276,9 @@ fn adjust_vaults(
         return None;
     }
 
-    if is_debug_pool_calculator_enabled() {
+    if is_debug_pool_decoders_enabled() {
         log(
-            LogTag::PoolCalculator,
+            LogTag::PoolDecoder,
             "DEBUG",
             &format!(
                 "adjust_vaults: need_coin={} need_pc={} wrong_coin_mint={} wrong_pc_mint={}",
@@ -299,9 +298,9 @@ fn adjust_vaults(
                 let mint = Pubkey::new_from_array(mint_bytes).to_string();
                 if mint == info.coin_mint && (need_coin || coin_vault_wrong_mint) {
                     coin_vault = k.clone();
-                    if is_debug_pool_calculator_enabled() {
+                    if is_debug_pool_decoders_enabled() {
                         log(
-                            LogTag::PoolCalculator,
+                            LogTag::PoolDecoder,
                             "DEBUG",
                             &format!("Found coin_vault: {}", coin_vault)
                         );
@@ -309,9 +308,9 @@ fn adjust_vaults(
                 }
                 if mint == info.pc_mint && (need_pc || pc_vault_wrong_mint) {
                     pc_vault = k.clone();
-                    if is_debug_pool_calculator_enabled() {
+                    if is_debug_pool_decoders_enabled() {
                         log(
-                            LogTag::PoolCalculator,
+                            LogTag::PoolDecoder,
                             "DEBUG",
                             &format!("Found pc_vault: {}", pc_vault)
                         );
@@ -323,9 +322,9 @@ fn adjust_vaults(
 
     // Ensure we don't use the same vault for both (emergency fallback)
     if coin_vault == pc_vault {
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "ERROR",
                 "Same vault found for both coin and pc - this will cause incorrect pricing"
             );
@@ -333,9 +332,9 @@ fn adjust_vaults(
         return None;
     }
 
-    if is_debug_pool_calculator_enabled() {
+    if is_debug_pool_decoders_enabled() {
         log(
-            LogTag::PoolCalculator,
+            LogTag::PoolDecoder,
             "INFO",
             &format!("Adjusted vaults: coin_vault={} pc_vault={}", coin_vault, pc_vault)
         );
@@ -377,9 +376,9 @@ fn extract_reserves_from_pool_data(data: &[u8]) -> Option<(u64, u64)> {
                     reserve2 > 10_000_000 &&
                     reserve2 < 1_000_000_000_000_000
                 {
-                    if is_debug_pool_calculator_enabled() {
+                    if is_debug_pool_decoders_enabled() {
                         log(
-                            LogTag::PoolCalculator,
+                            LogTag::PoolDecoder,
                             "INFO",
                             &format!(
                                 "Found pool data reserves at offsets {} and {}: {} and {}",

@@ -5,6 +5,7 @@
 /// to minimize lock contention on the hot path.
 
 use crate::global::is_debug_pool_service_enabled;
+use crate::arguments::is_debug_pool_cache_enabled;
 use crate::logger::{ log, LogTag };
 use super::types::{ PriceResult, PriceHistory, PRICE_CACHE_TTL_SECONDS, PRICE_HISTORY_MAX_ENTRIES };
 use dashmap::DashMap;
@@ -26,15 +27,15 @@ static PRICE_HISTORY: once_cell::sync::Lazy<
 
 /// Initialize the cache system
 pub async fn initialize_cache() {
-    if is_debug_pool_service_enabled() {
-        log(LogTag::PoolService, "DEBUG", "Initializing price cache system");
+    if is_debug_pool_cache_enabled() {
+        log(LogTag::PoolCache, "DEBUG", "Initializing price cache system");
     }
 
     // Start cleanup task
     start_cache_cleanup_task().await;
 
-    if is_debug_pool_service_enabled() {
-        log(LogTag::PoolService, "DEBUG", "Price cache system initialized");
+    if is_debug_pool_cache_enabled() {
+        log(LogTag::PoolCache, "DEBUG", "Price cache system initialized");
     }
 }
 
@@ -54,8 +55,8 @@ pub fn update_price(price: PriceResult) {
     if let Ok(history_map) = PRICE_HISTORY.read() {
         if let Some(mut history) = history_map.get_mut(&mint) {
             history.add_price(price);
-            if is_debug_pool_service_enabled() {
-                log(LogTag::PoolService, "DEBUG", &format!("Updated price for token: {}", mint));
+            if is_debug_pool_cache_enabled() {
+                log(LogTag::PoolCache, "DEBUG", &format!("Updated price for token: {}", mint));
             }
             return;
         }
@@ -67,9 +68,9 @@ pub fn update_price(price: PriceResult) {
         new_history.add_price(price);
         history_map.insert(mint.clone(), new_history);
 
-        if is_debug_pool_service_enabled() {
+        if is_debug_pool_cache_enabled() {
             log(
-                LogTag::PoolService,
+                LogTag::PoolCache,
                 "DEBUG",
                 &format!("Created new price history for token: {}", mint)
             );
@@ -153,9 +154,9 @@ fn cleanup_stale_entries() {
         is_fresh
     });
 
-    if removed_count > 0 && is_debug_pool_service_enabled() {
+    if removed_count > 0 && is_debug_pool_cache_enabled() {
         log(
-            LogTag::PoolService,
+            LogTag::PoolCache,
             "DEBUG",
             &format!("Cleaned {} stale price entries", removed_count)
         );

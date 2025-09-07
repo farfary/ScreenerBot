@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 use solana_sdk::pubkey::Pubkey;
 use super::{ PoolDecoder, AccountData };
-use crate::global::is_debug_pool_calculator_enabled;
+use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
 use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
@@ -25,9 +25,9 @@ impl PoolDecoder for PumpFunAmmDecoder {
         base_mint: &str,
         quote_mint: &str
     ) -> Option<PriceResult> {
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("PumpFun AMM: Processing for {} vs {}", base_mint, quote_mint)
             );
@@ -47,9 +47,9 @@ impl PoolDecoder for PumpFunAmmDecoder {
             }
 
             if let Some(pool_info) = Self::decode_pump_fun_amm_pool(&pool_data.data) {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "DEBUG",
                         &format!(
                             "Successfully decoded PumpFun pool: {} -> {}",
@@ -81,9 +81,9 @@ impl PoolDecoder for PumpFunAmmDecoder {
 impl PumpFunAmmDecoder {
     /// Decode PumpFun AMM pool data from account bytes using centralized utilities
     fn decode_pump_fun_amm_pool(data: &[u8]) -> Option<PumpFunAmmPoolInfo> {
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("Decoding PumpFun pool data ({} bytes)", data.len())
             );
@@ -96,9 +96,9 @@ impl PumpFunAmmDecoder {
         let pair_info = match validate_sol_pool(pool_info) {
             Ok(info) => info,
             Err(e) => {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "WARN",
                         &format!("PumpFun pool validation failed: {}", e)
                     );
@@ -107,9 +107,9 @@ impl PumpFunAmmDecoder {
             }
         };
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "SUCCESS",
                 &format!(
                     "Valid PumpFun SOL pool: token={}, sol_is_first={}, token_vault={}, sol_vault={}",
@@ -141,9 +141,9 @@ impl PumpFunAmmDecoder {
         quote_mint: &str,
         pool_account: &str
     ) -> Option<PriceResult> {
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!(
                     "Calculating PumpFun price for token {} with quote {}",
@@ -156,9 +156,9 @@ impl PumpFunAmmDecoder {
         // For PUMP.FUN, SOL should be the quote token (we've already ensured this in decode_pump_fun_amm_pool)
         let sol_mint_str = SOL_MINT;
         if pool_info.quote_mint != sol_mint_str {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!(
                         "PumpFun pool does not contain SOL as quote. Quote: {}",
@@ -172,8 +172,8 @@ impl PumpFunAmmDecoder {
         // Use the base mint (token) from the pool - this is the token we'll calculate price for
         let target_mint = pool_info.base_mint.clone();
 
-        if is_debug_pool_calculator_enabled() {
-            log(LogTag::PoolCalculator, "DEBUG", &format!("Using target mint: {}", target_mint));
+        if is_debug_pool_decoders_enabled() {
+            log(LogTag::PoolDecoder, "DEBUG", &format!("Using target mint: {}", target_mint));
         }
 
         // Get token reserves from vault accounts
@@ -186,9 +186,9 @@ impl PumpFunAmmDecoder {
             &pool_info.pool_quote_token_account
         )?;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("Raw reserves - Token: {}, SOL: {}", token_reserve, sol_reserve)
             );
@@ -196,9 +196,9 @@ impl PumpFunAmmDecoder {
 
         // Reserve validation
         if token_reserve == 0 || sol_reserve == 0 {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!(
                         "Zero reserves detected - Token: {}, SOL: {}",
@@ -214,9 +214,9 @@ impl PumpFunAmmDecoder {
         let token_decimals = match get_cached_decimals(&target_mint) {
             Some(decimals) => decimals,
             None => {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "ERROR",
                         &format!("No cached decimals for PumpFun token: {}, skipping pool calculation", target_mint)
                     );
@@ -231,8 +231,8 @@ impl PumpFunAmmDecoder {
         let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
 
         if token_adjusted <= 0.0 {
-            if is_debug_pool_calculator_enabled() {
-                log(LogTag::PoolCalculator, "ERROR", "Token adjusted amount is zero or negative");
+            if is_debug_pool_decoders_enabled() {
+                log(LogTag::PoolDecoder, "ERROR", "Token adjusted amount is zero or negative");
             }
             return None;
         }
@@ -241,9 +241,9 @@ impl PumpFunAmmDecoder {
 
         // Validate price is reasonable
         if price_sol <= 0.0 || price_sol > 1_000_000.0 {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!("Invalid price calculated: {:.12} SOL", price_sol)
                 );
@@ -251,9 +251,9 @@ impl PumpFunAmmDecoder {
             return None;
         }
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "SUCCESS",
                 &format!(
                     "PumpFun price calculation:\n\
@@ -295,9 +295,9 @@ impl PumpFunAmmDecoder {
         let vault_data = accounts.get(vault_account)?;
 
         if vault_data.data.len() < 72 {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!(
                         "Vault account {} has insufficient data: {} bytes",
@@ -311,9 +311,9 @@ impl PumpFunAmmDecoder {
 
         match Self::decode_token_account_amount(&vault_data.data) {
             Some(amount) => {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "DEBUG",
                         &format!("Vault {} balance: {}", &vault_account[..8], amount)
                     );
@@ -321,9 +321,9 @@ impl PumpFunAmmDecoder {
                 Some(amount)
             }
             None => {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "ERROR",
                         &format!("Failed to decode vault balance for {}", &vault_account[..8])
                     );

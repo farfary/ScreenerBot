@@ -5,8 +5,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 use solana_sdk::pubkey::Pubkey;
 use super::{ PoolDecoder, AccountData };
-use crate::global::is_debug_pool_calculator_enabled;
-use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
 use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
 
@@ -30,9 +29,9 @@ impl PoolDecoder for PumpFunLegacyDecoder {
         base_mint: &str,
         quote_mint: &str
     ) -> Option<PriceResult> {
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("PumpFun Legacy: Processing for {} vs {}", base_mint, quote_mint)
             );
@@ -51,9 +50,9 @@ impl PoolDecoder for PumpFunLegacyDecoder {
             }
 
             if let Some(pool_info) = Self::decode_pump_fun_legacy_pool(&pool_data.data) {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "DEBUG",
                         &format!(
                             "Successfully decoded PumpFun Legacy pool: {} -> {}",
@@ -85,9 +84,9 @@ impl PoolDecoder for PumpFunLegacyDecoder {
 impl PumpFunLegacyDecoder {
     /// Decode PumpFun Legacy pool data from account bytes
     fn decode_pump_fun_legacy_pool(data: &[u8]) -> Option<PumpFunLegacyPoolInfo> {
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("Decoding PumpFun Legacy pool data ({} bytes)", data.len())
             );
@@ -125,9 +124,9 @@ impl PumpFunLegacyDecoder {
 
         let pair_info = analyze_token_pair(pool_info);
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "SUCCESS",
                 &format!(
                     "Valid PumpFun Legacy SOL pool: token={}, sol_is_first={}, token_vault={}, sol_vault={}",
@@ -155,9 +154,9 @@ impl PumpFunLegacyDecoder {
         quote_mint: &str,
         pool_account: &str
     ) -> Option<PriceResult> {
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!(
                     "Calculating PumpFun Legacy price for token {} with quote {}",
@@ -170,8 +169,8 @@ impl PumpFunLegacyDecoder {
         // Determine which mint is our target
         let target_mint = if is_sol_mint(base_mint) { quote_mint } else { base_mint };
 
-        if is_debug_pool_calculator_enabled() {
-            log(LogTag::PoolCalculator, "DEBUG", &format!("Using target mint: {}", target_mint));
+        if is_debug_pool_decoders_enabled() {
+            log(LogTag::PoolDecoder, "DEBUG", &format!("Using target mint: {}", target_mint));
         }
 
         // Get vault balances
@@ -193,9 +192,9 @@ impl PumpFunLegacyDecoder {
             }
         })?;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!(
                     "Vault {} balance: {}",
@@ -204,7 +203,7 @@ impl PumpFunLegacyDecoder {
                 )
             );
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!(
                     "Vault {} balance: {}",
@@ -217,9 +216,9 @@ impl PumpFunLegacyDecoder {
         // Get decimals for the target token
         let target_decimals = get_cached_decimals(target_mint)? as u32;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!(
                     "Raw reserves - Token: {}, SOL: {}",
@@ -240,9 +239,9 @@ impl PumpFunLegacyDecoder {
 
         let price_sol = sol_reserve_f64 / token_reserve_f64;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "SUCCESS",
                 &format!(
                     "PumpFun Legacy price calculation:\n                                              - SOL Reserve: {} (decimals: {}, adjusted: {:.8})\n                                              - Token Reserve: {} (decimals: {}, adjusted: {:.8})\n                                              - Price SOL: {:.12}\n                                              - Target Token: {}",

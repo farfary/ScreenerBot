@@ -5,8 +5,7 @@
 /// https://github.com/orca-so/whirlpools/blob/main/programs/whirlpool/src/state/whirlpool.rs
 
 use super::{ PoolDecoder, AccountData };
-use crate::global::is_debug_pool_calculator_enabled;
-use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
 use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, ORCA_WHIRLPOOL_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;
@@ -25,9 +24,9 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         base_mint: &str,
         quote_mint: &str
     ) -> Option<PriceResult> {
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "START",
                 &format!("Orca Whirlpool decoder: base={} quote={}", base_mint, quote_mint)
             );
@@ -38,9 +37,9 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
             .values()
             .find(|acc| { acc.owner.to_string() == ORCA_WHIRLPOOL_PROGRAM_ID })?;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "INFO",
                 &format!(
                     "Found Orca Whirlpool pool account {} with {} bytes",
@@ -53,9 +52,9 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         // Parse Orca Whirlpool structure
         let pool_info = Self::parse_whirlpool_data(&pool_account.data)?;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "INFO",
                 &format!(
                     "Parsed Orca Whirlpool:\n  token_mint_a: {}\n  token_mint_b: {}\n  token_vault_a: {}\n  token_vault_b: {}\n  sqrt_price: {}\n  liquidity: {}",
@@ -89,9 +88,9 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
 
             (pool_info.token_vault_b, pool_info.token_vault_a, sol_reserve, token_reserve, false)
         } else {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "WARN",
                     &format!(
                         "Orca Whirlpool pool does not contain SOL. Mints: {} and {}",
@@ -104,8 +103,8 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         };
 
         if sol_reserve == 0 || token_reserve == 0 {
-            if is_debug_pool_calculator_enabled() {
-                log(LogTag::PoolCalculator, "WARN", "Orca Whirlpool pool has zero reserves");
+            if is_debug_pool_decoders_enabled() {
+                log(LogTag::PoolDecoder, "WARN", "Orca Whirlpool pool has zero reserves");
             }
             return None;
         }
@@ -119,9 +118,9 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         let token_decimals = match get_cached_decimals(token_mint) {
             Some(decimals) => decimals,
             None => {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "ERROR",
                         &format!("No cached decimals for Orca token: {}, skipping pool calculation", token_mint)
                     );
@@ -159,9 +158,9 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
             sol_adjusted / token_adjusted
         };
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "SUCCESS",
                 &format!(
                     "Orca Whirlpool price calculated: {:.12} SOL\n  SOL reserves: {} ({})\n  Token reserves: {} ({})\n  sqrt_price: {}",

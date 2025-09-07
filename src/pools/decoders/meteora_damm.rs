@@ -6,8 +6,7 @@
 
 use super::{ PoolDecoder, AccountData };
 use super::super::utils::{ is_sol_mint, WRAPPED_SOL_MINT };
-use crate::global::is_debug_pool_calculator_enabled;
-use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
 use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
 use crate::pools::types::{ ProgramKind, PriceResult, METEORA_DAMM_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;
@@ -26,8 +25,8 @@ impl PoolDecoder for MeteoraDammDecoder {
         base_mint: &str,
         quote_mint: &str
     ) -> Option<PriceResult> {
-        if is_debug_pool_calculator_enabled() {
-            log(LogTag::PoolCalculator, "INFO", "Starting Meteora DAMM pool decoding");
+        if is_debug_pool_decoders_enabled() {
+            log(LogTag::PoolDecoder, "INFO", "Starting Meteora DAMM pool decoding");
         }
 
         // Find the pool account
@@ -36,9 +35,9 @@ impl PoolDecoder for MeteoraDammDecoder {
             acc.owner.to_string() == METEORA_DAMM_PROGRAM_ID
         })?;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "INFO",
                 &format!(
                     "Found DAMM pool account {} with {} bytes",
@@ -51,9 +50,9 @@ impl PoolDecoder for MeteoraDammDecoder {
         // Parse DAMM pool structure
         let damm_info = Self::parse_damm_pool(&pool_account.data)?;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "INFO",
                 &format!(
                     "DAMM pool parsed: token_a={}, token_b={}, vault_a={}, vault_b={}",
@@ -87,9 +86,9 @@ impl PoolDecoder for MeteoraDammDecoder {
                 damm_info.protocol_b_fee + damm_info.partner_b_fee, // Token fees
             )
         } else {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!(
                         "DAMM pool has no SOL token: {} / {}",
@@ -103,9 +102,9 @@ impl PoolDecoder for MeteoraDammDecoder {
 
         // Verify this matches either the requested base or quote mint for bidirectional support
         if token_mint != base_mint && token_mint != quote_mint {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!(
                         "DAMM pool token {} doesn't match requested base {} or quote {}",
@@ -130,9 +129,9 @@ impl PoolDecoder for MeteoraDammDecoder {
         let sol_balance = if sol_balance_raw >= sol_fees {
             sol_balance_raw - sol_fees
         } else {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "WARN",
                     &format!(
                         "DAMM SOL fees ({}) exceed vault balance ({}), using raw balance",
@@ -147,9 +146,9 @@ impl PoolDecoder for MeteoraDammDecoder {
         let token_balance = if token_balance_raw >= token_fees {
             token_balance_raw - token_fees
         } else {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "WARN",
                     &format!(
                         "DAMM token fees ({}) exceed vault balance ({}), using raw balance",
@@ -162,12 +161,12 @@ impl PoolDecoder for MeteoraDammDecoder {
         };
 
         // Verify vault mints to ensure correct assignment
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             let sol_vault_mint = Self::decode_token_account_mint(&sol_account.data).ok()?;
             let token_vault_mint = Self::decode_token_account_mint(&token_account.data).ok()?;
 
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "INFO",
                 &format!(
                     "DAMM vault verification: sol_vault {} mint={}, token_vault {} mint={}",
@@ -179,9 +178,9 @@ impl PoolDecoder for MeteoraDammDecoder {
             );
         }
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "INFO",
                 &format!(
                     "DAMM vault balances: SOL_raw={}, SOL_effective={} (fees={}), token_raw={}, token_effective={} (fees={})",
@@ -196,8 +195,8 @@ impl PoolDecoder for MeteoraDammDecoder {
         }
 
         if token_balance == 0 {
-            if is_debug_pool_calculator_enabled() {
-                log(LogTag::PoolCalculator, "ERROR", "DAMM pool has zero token balance");
+            if is_debug_pool_decoders_enabled() {
+                log(LogTag::PoolDecoder, "ERROR", "DAMM pool has zero token balance");
             }
             return None;
         }
@@ -206,9 +205,9 @@ impl PoolDecoder for MeteoraDammDecoder {
         let token_decimals = match get_cached_decimals(&token_mint) {
             Some(decimals) => decimals,
             None => {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "ERROR",
                         &format!("DAMM: Token decimals not cached for {}, skipping price calculation", token_mint)
                     );
@@ -218,9 +217,9 @@ impl PoolDecoder for MeteoraDammDecoder {
         };
         let sol_decimals = SOL_DECIMALS;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "INFO",
                 &format!("DAMM decimals: token={}, sol={}", token_decimals, sol_decimals)
             );
@@ -231,9 +230,9 @@ impl PoolDecoder for MeteoraDammDecoder {
         // Based on real pool account analysis - offset 456 confirmed with functioning XVM/SOL pool
         let sqrt_price_offset = 456; // Verified offset for sqrt_price field
         if pool_account.data.len() < sqrt_price_offset + 16 {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     "Account data too short for sqrt_price extraction"
                 );
@@ -246,23 +245,23 @@ impl PoolDecoder for MeteoraDammDecoder {
         let sqrt_price = match sqrt_price_bytes.try_into() {
             Ok(bytes) => u128::from_le_bytes(bytes),
             Err(_) => {
-                if is_debug_pool_calculator_enabled() {
-                    log(LogTag::PoolCalculator, "ERROR", "Failed to extract sqrt_price bytes");
+                if is_debug_pool_decoders_enabled() {
+                    log(LogTag::PoolDecoder, "ERROR", "Failed to extract sqrt_price bytes");
                 }
                 return None;
             }
         };
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("Raw sqrt_price at offset {}: {}", sqrt_price_offset, sqrt_price)
             );
         }
         if sqrt_price == 0 {
-            if is_debug_pool_calculator_enabled() {
-                log(LogTag::PoolCalculator, "ERROR", "DAMM pool has zero sqrt_price");
+            if is_debug_pool_decoders_enabled() {
+                log(LogTag::PoolDecoder, "ERROR", "DAMM pool has zero sqrt_price");
             }
             return None;
         }
@@ -291,8 +290,8 @@ impl PoolDecoder for MeteoraDammDecoder {
             if token_per_sol > 0.0 {
                 1.0 / token_per_sol
             } else {
-                if is_debug_pool_calculator_enabled() {
-                    log(LogTag::PoolCalculator, "ERROR", "DAMM: Invalid token_per_sol ratio");
+                if is_debug_pool_decoders_enabled() {
+                    log(LogTag::PoolDecoder, "ERROR", "DAMM: Invalid token_per_sol ratio");
                 }
                 return None;
             }
@@ -300,9 +299,9 @@ impl PoolDecoder for MeteoraDammDecoder {
 
         // Validate price result
         if price_sol <= 0.0 || !price_sol.is_finite() {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!("DAMM: Invalid sqrt_price calculation result: {}", price_sol)
                 );
@@ -319,9 +318,9 @@ impl PoolDecoder for MeteoraDammDecoder {
             (token_balance as f64) / (10_f64).powi(token_decimals as i32)
         ).max(0.0);
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "INFO",
                 &format!(
                     "DAMM sqrt_price calculation: sqrt_price_raw={}, sqrt_price_f64={:.12}, price_ratio={:.12}, price_sol={:.12} (reserves: sol={:.6}, token={:.6})",
@@ -366,9 +365,9 @@ impl MeteoraDammDecoder {
     /// - sqrt_price: ~712 (16 bytes) [CRITICAL: concentrated liquidity pricing]
     fn parse_damm_pool(data: &[u8]) -> Option<DammPoolInfo> {
         if data.len() < 1112 {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!("DAMM pool data too short: {} bytes (expected >= 1112)", data.len())
                 );
@@ -391,9 +390,9 @@ impl MeteoraDammDecoder {
         let partner_a_fee = Self::extract_u64_at_offset(data, 408).unwrap_or(0);
         let partner_b_fee = Self::extract_u64_at_offset(data, 416).unwrap_or(0);
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "INFO",
                 &format!(
                     "DAMM offsets: token_a@168={}, token_b@200={}, vault_a@232={}, vault_b@264={}",
@@ -405,7 +404,7 @@ impl MeteoraDammDecoder {
             );
 
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "INFO",
                 &format!(
                     "DAMM fees: protocol_a={}, protocol_b={}, partner_a={}, partner_b={}",
@@ -419,13 +418,13 @@ impl MeteoraDammDecoder {
             // Extract and log sqrt_price for debugging
             if let Some(sqrt_price_raw) = Self::extract_u128_at_offset(data, 448) {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "INFO",
                     &format!("DAMM sqrt_price@448: {}", sqrt_price_raw)
                 );
             } else {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "WARN",
                     "DAMM: Could not extract sqrt_price at offset 448"
                 );

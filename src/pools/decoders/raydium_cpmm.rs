@@ -5,8 +5,7 @@
 /// from the old pool system.
 
 use super::{ PoolDecoder, AccountData };
-use crate::global::is_debug_pool_calculator_enabled;
-use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, RAYDIUM_CPMM_PROGRAM_ID };
 use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS, raw_to_ui_amount };
 use solana_sdk::pubkey::Pubkey;
@@ -26,9 +25,9 @@ impl PoolDecoder for RaydiumCpmmDecoder {
         base_mint: &str,
         quote_mint: &str
     ) -> Option<PriceResult> {
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!("Decoding Raydium CPMM pool for {}/{}", base_mint, quote_mint)
             );
@@ -40,9 +39,9 @@ impl PoolDecoder for RaydiumCpmmDecoder {
             acc.owner.to_string() == RAYDIUM_CPMM_PROGRAM_ID
         })?;
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DEBUG",
                 &format!(
                     "Found CPMM pool account {} with {} bytes",
@@ -64,9 +63,9 @@ impl RaydiumCpmmDecoder {
     /// Decode Raydium CPMM pool data from account bytes (from old working system)
     fn decode_raydium_cpmm_pool(data: &[u8]) -> Option<RaydiumCpmmPoolInfo> {
         if data.len() < 8 + 32 * 10 + 8 * 10 {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!("Invalid Raydium CPMM pool account data length: {}", data.len())
                 );
@@ -98,9 +97,9 @@ impl RaydiumCpmmDecoder {
         let mint_0_decimals = match get_cached_decimals(&token_0_mint) {
             Some(decimals) => decimals,
             None => {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "ERROR",
                         &format!(
                             "No cached decimals for CPMM token_0: {}, skipping pool calculation",
@@ -115,9 +114,9 @@ impl RaydiumCpmmDecoder {
         let mint_1_decimals = match get_cached_decimals(&token_1_mint) {
             Some(decimals) => decimals,
             None => {
-                if is_debug_pool_calculator_enabled() {
+                if is_debug_pool_decoders_enabled() {
                     log(
-                        LogTag::PoolCalculator,
+                        LogTag::PoolDecoder,
                         "ERROR",
                         &format!(
                             "No cached decimals for CPMM token_1: {}, skipping pool calculation",
@@ -129,9 +128,9 @@ impl RaydiumCpmmDecoder {
             }
         };
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "DECIMALS",
                 &format!(
                     "Decimal Analysis:
@@ -151,7 +150,7 @@ impl RaydiumCpmmDecoder {
             // Warning if cached and pool decimals don't match
             if mint_0_decimals != pool_mint_0_decimals {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "DECIMAL_MISMATCH",
                     &format!(
                         "DECIMAL MISMATCH Token0 {}: cache={}, pool={}",
@@ -163,7 +162,7 @@ impl RaydiumCpmmDecoder {
             }
             if mint_1_decimals != pool_mint_1_decimals {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "DECIMAL_MISMATCH",
                     &format!(
                         "DECIMAL MISMATCH Token1 {}: cache={}, pool={}",
@@ -266,9 +265,9 @@ impl RaydiumCpmmDecoder {
                 pool_info.token_0_decimals,
             )
         } else {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!(
                         "Pool does not contain SOL or target tokens {}/{}",
@@ -282,8 +281,8 @@ impl RaydiumCpmmDecoder {
 
         // Validate reserves
         if sol_reserve == 0 || token_reserve == 0 {
-            if is_debug_pool_calculator_enabled() {
-                log(LogTag::PoolCalculator, "ERROR", "Pool has zero reserves");
+            if is_debug_pool_decoders_enabled() {
+                log(LogTag::PoolDecoder, "ERROR", "Pool has zero reserves");
             }
             return None;
         }
@@ -296,9 +295,9 @@ impl RaydiumCpmmDecoder {
 
         // Validate price is reasonable
         if price_sol <= 0.0 || price_sol > 1_000_000.0 {
-            if is_debug_pool_calculator_enabled() {
+            if is_debug_pool_decoders_enabled() {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "ERROR",
                     &format!("Invalid price calculated: {:.12} SOL", price_sol)
                 );
@@ -306,9 +305,9 @@ impl RaydiumCpmmDecoder {
             return None;
         }
 
-        if is_debug_pool_calculator_enabled() {
+        if is_debug_pool_decoders_enabled() {
             log(
-                LogTag::PoolCalculator,
+                LogTag::PoolDecoder,
                 "SUCCESS",
                 &format!(
                     "Raydium CPMM Price Calculation for {}:
@@ -332,7 +331,7 @@ impl RaydiumCpmmDecoder {
             // Additional validation checks
             if sol_adjusted <= 0.0 || token_adjusted <= 0.0 {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "WARN",
                     &format!(
                         "WARNING: Zero or negative adjusted values detected! 
@@ -346,7 +345,7 @@ impl RaydiumCpmmDecoder {
             // Check for extremely small or large prices that might indicate decimal issues
             if price_sol < 0.000000001 || price_sol > 1000.0 {
                 log(
-                    LogTag::PoolCalculator,
+                    LogTag::PoolDecoder,
                     "WARN",
                     &format!(
                         "WARNING: Unusual price detected: {:.12} SOL. 

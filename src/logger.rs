@@ -67,7 +67,7 @@ use chrono::Local;
 use colored::*;
 use once_cell::sync::Lazy;
 use std::fs::{ self, File, OpenOptions };
-use std::io::{ BufWriter, Write };
+use std::io::{ BufWriter, Write, stdout };
 use std::path::PathBuf;
 use std::sync::{ Arc, Mutex };
 
@@ -317,6 +317,9 @@ pub enum LogTag {
     PoolCalculator,
     PoolDiscovery,
     PoolFetcher,
+    PoolAnalyzer,
+    PoolCache,
+    PoolDecoder,
     Blacklist,
     Discovery,
     Filtering,
@@ -350,6 +353,9 @@ impl std::fmt::Display for LogTag {
             LogTag::PoolCalculator => format!("{:<8}", "POOLCALC").bright_green().bold(), // 🧮 Pool calculator
             LogTag::PoolDiscovery => format!("{:<8}", "POOLDISC").bright_white().bold(), // 🔍 Pool discovery
             LogTag::PoolFetcher => format!("{:<8}", "POOLFETCH").bright_yellow().bold(), // 📡 Pool fetcher
+            LogTag::PoolAnalyzer => format!("{:<8}", "POOLANLZ").bright_magenta().bold(), // 🔬 Pool analyzer
+            LogTag::PoolCache => format!("{:<8}", "POOLCACH").bright_cyan().bold(), // 💾 Pool cache
+            LogTag::PoolDecoder => format!("{:<8}", "POOLDEC").bright_blue().bold(), // 🔓 Pool decoder
             LogTag::Blacklist => format!("{:<8}", "BLACKLIST").bright_red().bold(), // 🚫 Warning red
             LogTag::Discovery => format!("{:<8}", "DISCOVER").bright_white().bold(), // 🔍 Search white
             LogTag::Filtering => format!("{:<8}", "FILTER").bright_yellow().bold(), // 🔄 Filter yellow
@@ -371,6 +377,31 @@ impl std::fmt::Display for LogTag {
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
         write!(f, "{}", tag_str)
+    }
+}
+
+/// Check if console debug mode should force console output for pool modules
+fn should_force_console_debug(tag: &LogTag, log_type: &str) -> bool {
+    use crate::arguments::{
+        is_debug_pool_service_enabled, is_debug_pool_calculator_enabled,
+        is_debug_pool_discovery_enabled, is_debug_pool_analyzer_enabled,
+        is_debug_pool_cache_enabled, is_debug_pool_fetcher_enabled,
+        is_debug_pool_decoders_enabled
+    };
+    
+    if log_type.to_uppercase() != "DEBUG" {
+        return false;
+    }
+    
+    match tag {
+        LogTag::PoolService => is_debug_pool_service_enabled(),
+        LogTag::PoolCalculator => is_debug_pool_calculator_enabled(),
+        LogTag::PoolDiscovery => is_debug_pool_discovery_enabled(),
+        LogTag::PoolAnalyzer => is_debug_pool_analyzer_enabled(),
+        LogTag::PoolCache => is_debug_pool_cache_enabled(),
+        LogTag::PoolFetcher => is_debug_pool_fetcher_enabled(),
+        LogTag::PoolDecoder => is_debug_pool_decoders_enabled(),
+        _ => false,
     }
 }
 
@@ -426,6 +457,18 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::PoolFetcher =>
             format!("{:<width$}", "POOLFETCH", width = TAG_WIDTH)
                 .bright_yellow()
+                .bold(),
+        LogTag::PoolAnalyzer =>
+            format!("{:<width$}", "POOLANLZ", width = TAG_WIDTH)
+                .bright_magenta()
+                .bold(),
+        LogTag::PoolCache =>
+            format!("{:<width$}", "POOLCACH", width = TAG_WIDTH)
+                .bright_cyan()
+                .bold(),
+        LogTag::PoolDecoder =>
+            format!("{:<width$}", "POOLDEC", width = TAG_WIDTH)
+                .bright_blue()
                 .bold(),
         LogTag::Blacklist =>
             format!("{:<width$}", "BLACKLIST", width = TAG_WIDTH)
@@ -585,8 +628,9 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
 
     // Print first line with full prefix (console output)
     let console_line = format!("{}{}", base_line, message_color);
-    if !is_dashboard_enabled() {
+    if !is_dashboard_enabled() || should_force_console_debug(&tag, log_type) {
         println!("{}", console_line);
+        let _ = stdout().flush(); // Force immediate output when piped
     }
 
     // Write to file (clean version without color codes)
@@ -601,6 +645,9 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::PoolCalculator => "POOLCALC",
         LogTag::PoolDiscovery => "POOLDISC",
         LogTag::PoolFetcher => "POOLFETCH",
+        LogTag::PoolAnalyzer => "POOLANLZ",
+        LogTag::PoolCache => "POOLCACH",
+        LogTag::PoolDecoder => "POOLDEC",
         LogTag::Blacklist => "BLACKLIST",
         LogTag::Discovery => "DISCOVER",
         LogTag::Filtering => "FILTER",
@@ -641,8 +688,9 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             let chunk_color = chunk.to_string();
 
             let console_continuation = format!("{}{}", continuation_prefix, chunk_color);
-            if !is_dashboard_enabled() {
+            if !is_dashboard_enabled() || should_force_console_debug(&tag, log_type) {
                 println!("{}", console_continuation);
+                let _ = stdout().flush(); // Force immediate output when piped
             }
 
             // Write continuation lines to file as well

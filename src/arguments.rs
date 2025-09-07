@@ -103,6 +103,26 @@ pub fn is_debug_pool_tokens_enabled() -> bool {
     has_arg("--debug-pool-tokens")
 }
 
+/// Pool analyzer debug mode
+pub fn is_debug_pool_analyzer_enabled() -> bool {
+    has_arg("--debug-pool-analyzer")
+}
+
+/// Pool cache debug mode
+pub fn is_debug_pool_cache_enabled() -> bool {
+    has_arg("--debug-pool-cache")
+}
+
+/// Pool fetcher debug mode
+pub fn is_debug_pool_fetcher_enabled() -> bool {
+    has_arg("--debug-pool-fetcher")
+}
+
+/// Pool decoders debug mode
+pub fn is_debug_pool_decoders_enabled() -> bool {
+    has_arg("--debug-pool-decoders")
+}
+
 /// Trader module debug mode
 pub fn is_debug_trader_enabled() -> bool {
     has_arg("--debug-trader")
@@ -271,6 +291,10 @@ pub fn print_help() {
     println!("    --debug-ohlcv             OHLCV analysis debug mode");
     println!("    --debug-pool-calculator   Pool calculator debug mode");
     println!("    --debug-pool-discovery    Pool discovery debug mode");
+    println!("    --debug-pool-analyzer     Pool analyzer debug mode");
+    println!("    --debug-pool-cache        Pool cache debug mode");
+    println!("    --debug-pool-fetcher      Pool fetcher debug mode");
+    println!("    --debug-pool-decoders     Pool decoders debug mode");
     println!("    --debug-pool-prices       Pool prices debug mode");
     println!("    --debug-positions         Positions module debug mode");
     println!("    --debug-profit            Profit calculation debug mode");
@@ -309,6 +333,10 @@ pub fn is_any_debug_enabled() -> bool {
         || is_debug_pool_prices_enabled()
         || is_debug_pool_calculator_enabled()
         || is_debug_pool_discovery_enabled()
+        || is_debug_pool_analyzer_enabled()
+        || is_debug_pool_cache_enabled()
+        || is_debug_pool_fetcher_enabled()
+        || is_debug_pool_decoders_enabled()
         || is_debug_pool_cleanup_enabled()
         || is_debug_pool_monitor_enabled()
         || is_debug_pool_service_enabled()
