@@ -9,6 +9,7 @@ pub mod pumpfun_amm;
 pub mod raydium_legacy_amm;
 pub mod meteora_dlmm;
 pub mod meteora_damm;
+pub mod orca_whirlpool;
 
 use super::fetcher::AccountData;
 use super::types::{ ProgramKind, PriceResult };
@@ -52,6 +53,8 @@ pub fn decode_pool(
             meteora_dlmm::MeteoraDlmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
         ProgramKind::MeteoraDamm =>
             meteora_damm::MeteoraDammDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
+        ProgramKind::OrcaWhirlpool =>
+            orca_whirlpool::OrcaWhirlpoolDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
         _ => {
             // TODO: Add other decoders as needed
             None
