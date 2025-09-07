@@ -171,35 +171,27 @@ impl PumpFunLegacyDecoder {
         let target_mint = if is_sol_mint(base_mint) { quote_mint } else { base_mint };
 
         if is_debug_pool_calculator_enabled() {
-            log(
-                LogTag::PoolCalculator,
-                "DEBUG",
-                &format!("Using target mint: {}", target_mint)
-            );
+            log(LogTag::PoolCalculator, "DEBUG", &format!("Using target mint: {}", target_mint));
         }
 
         // Get vault balances
-        let token_vault_balance = accounts
-            .get(&pool_info.pool_base_token_account)
-            .and_then(|acc| {
-                if acc.data.len() >= 72 {
-                    let balance_bytes = &acc.data[64..72];
-                    Some(u64::from_le_bytes(balance_bytes.try_into().ok()?))
-                } else {
-                    None
-                }
-            })?;
+        let token_vault_balance = accounts.get(&pool_info.pool_base_token_account).and_then(|acc| {
+            if acc.data.len() >= 72 {
+                let balance_bytes = &acc.data[64..72];
+                Some(u64::from_le_bytes(balance_bytes.try_into().ok()?))
+            } else {
+                None
+            }
+        })?;
 
-        let sol_vault_balance = accounts
-            .get(&pool_info.pool_quote_token_account)
-            .and_then(|acc| {
-                if acc.data.len() >= 72 {
-                    let balance_bytes = &acc.data[64..72];
-                    Some(u64::from_le_bytes(balance_bytes.try_into().ok()?))
-                } else {
-                    None
-                }
-            })?;
+        let sol_vault_balance = accounts.get(&pool_info.pool_quote_token_account).and_then(|acc| {
+            if acc.data.len() >= 72 {
+                let balance_bytes = &acc.data[64..72];
+                Some(u64::from_le_bytes(balance_bytes.try_into().ok()?))
+            } else {
+                None
+            }
+        })?;
 
         if is_debug_pool_calculator_enabled() {
             log(
@@ -229,13 +221,18 @@ impl PumpFunLegacyDecoder {
             log(
                 LogTag::PoolCalculator,
                 "DEBUG",
-                &format!("Raw reserves - Token: {}, SOL: {}", token_vault_balance, sol_vault_balance)
+                &format!(
+                    "Raw reserves - Token: {}, SOL: {}",
+                    token_vault_balance,
+                    sol_vault_balance
+                )
             );
         }
 
         // Calculate price in SOL
-        let sol_reserve_f64 = (sol_vault_balance as f64) / 10_f64.powi(SOL_DECIMALS as i32);
-        let token_reserve_f64 = (token_vault_balance as f64) / 10_f64.powi(target_decimals as i32);
+        let sol_reserve_f64 = (sol_vault_balance as f64) / (10_f64).powi(SOL_DECIMALS as i32);
+        let token_reserve_f64 =
+            (token_vault_balance as f64) / (10_f64).powi(target_decimals as i32);
 
         if token_reserve_f64 <= 0.0 || sol_reserve_f64 <= 0.0 {
             return None;

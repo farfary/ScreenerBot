@@ -46,7 +46,11 @@ pub fn decode_pool(
         ProgramKind::PumpFunAmm =>
             pumpfun_amm::PumpFunAmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
         ProgramKind::PumpFunLegacy =>
-            pumpfun_legacy::PumpFunLegacyDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
+            pumpfun_legacy::PumpFunLegacyDecoder::decode_and_calculate(
+                accounts,
+                base_mint,
+                quote_mint
+            ),
         ProgramKind::RaydiumLegacyAmm =>
             raydium_legacy_amm::RaydiumLegacyAmmDecoder::decode_and_calculate(
                 accounts,
