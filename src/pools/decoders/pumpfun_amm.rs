@@ -197,11 +197,12 @@ impl PumpFunAmmDecoder {
         };
 
         // Get vault balances from fetched account data
-        let token_reserve = Self::get_vault_balance_from_accounts(
+        // IMPORTANT: Swap the vault assignments - base vault contains SOL, quote vault contains tokens
+        let sol_reserve = Self::get_vault_balance_from_accounts(
             accounts,
             &pool_info.pool_base_token_account
         )?;
-        let sol_reserve = Self::get_vault_balance_from_accounts(
+        let token_reserve = Self::get_vault_balance_from_accounts(
             accounts,
             &pool_info.pool_quote_token_account
         )?;
@@ -212,12 +213,12 @@ impl PumpFunAmmDecoder {
                 "DEBUG",
                 &format!(
                     "Successfully fetched PumpFun vault balances:\n\
-                    - Token vault {} balance: {}\n\
-                    - SOL vault {} balance: {}",
+                    - SOL vault {} balance: {}\n\
+                    - Token vault {} balance: {}",
                     pool_info.pool_base_token_account,
-                    token_reserve,
+                    sol_reserve,
                     pool_info.pool_quote_token_account,
-                    sol_reserve
+                    token_reserve
                 )
             );
         }
