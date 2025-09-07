@@ -11,7 +11,12 @@ use crate::arguments::is_debug_pool_analyzer_enabled;
 use crate::logger::{ log, LogTag };
 use crate::rpc::RpcClient;
 use super::types::{ PoolDescriptor, ProgramKind };
-use super::utils::{ extract_pumpfun_mints_and_vaults, get_analyzer_vault_order, PoolMintVaultInfo };
+use super::utils::{
+    extract_pumpfun_mints_and_vaults,
+    get_analyzer_vault_order,
+    PoolMintVaultInfo,
+    is_sol_mint,
+};
 use crate::pools::service; // access global fetcher
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -137,7 +142,7 @@ impl PoolAnalyzer {
                                             &format!(
                                                 "Analyzed pool {} for token {} ({}) - {}/{}", 
                                                 pool_id,
-                                                if descriptor.base_mint.to_string() == "So11111111111111111111111111111111111111112" { 
+                                                if is_sol_mint(&descriptor.base_mint.to_string()) { 
                                                     &descriptor.quote_mint.to_string() 
                                                 } else { 
                                                     &descriptor.base_mint.to_string() 
@@ -154,7 +159,7 @@ impl PoolAnalyzer {
                                         "WARN", 
                                         &format!("Failed to analyze pool {} for token {}", 
                                             pool_id,
-                                            if base_mint.to_string() == "So11111111111111111111111111111111111111112" { 
+                                            if is_sol_mint(&base_mint.to_string()) { 
                                                 quote_mint 
                                             } else { 
                                                 base_mint 
@@ -273,7 +278,7 @@ impl PoolAnalyzer {
                     program_kind.display_name(),
                     pool_id,
                     reserve_accounts.len(),
-                    if base_mint.to_string() == "So11111111111111111111111111111111111111112" {
+                    if is_sol_mint(&base_mint.to_string()) {
                         quote_mint
                     } else {
                         base_mint

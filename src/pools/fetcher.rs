@@ -9,6 +9,7 @@ use crate::logger::{ log, LogTag };
 use crate::rpc::{ get_rpc_client, RpcClient };
 use super::types::PoolDescriptor;
 use crate::pools::service; // access global calculator
+use super::utils::is_sol_mint;
 use solana_sdk::{ account::Account, pubkey::Pubkey };
 use std::collections::{ HashMap, HashSet };
 use std::sync::{ Arc, RwLock };
@@ -433,10 +434,7 @@ impl AccountFetcher {
                     bundle.add_account(isolated_account_data);
 
                     if is_debug_pool_fetcher_enabled() {
-                        let target_token = if
-                            pool_descriptor.base_mint.to_string() ==
-                            "So11111111111111111111111111111111111111112"
-                        {
+                        let target_token = if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
                             pool_descriptor.quote_mint
                         } else {
                             pool_descriptor.base_mint
@@ -470,10 +468,7 @@ impl AccountFetcher {
                                     "WARN",
                                     &format!(
                                         "Failed to request calculation for token {} in pool {}: {}",
-                                        if
-                                            pool_descriptor.base_mint.to_string() ==
-                                            "So11111111111111111111111111111111111111112"
-                                        {
+                                        if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
                                             pool_descriptor.quote_mint
                                         } else {
                                             pool_descriptor.base_mint
@@ -484,8 +479,7 @@ impl AccountFetcher {
                                 );
                             } else if is_debug_pool_fetcher_enabled() {
                                 let target_token = if
-                                    pool_descriptor.base_mint.to_string() ==
-                                    "So11111111111111111111111111111111111111112"
+                                    is_sol_mint(&pool_descriptor.base_mint.to_string())
                                 {
                                     pool_descriptor.quote_mint
                                 } else {
