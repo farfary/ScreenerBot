@@ -25,6 +25,9 @@ use std::time::Duration;
 static SERVICE_RUNNING: AtomicBool = AtomicBool::new(false);
 static mut GLOBAL_SHUTDOWN_HANDLE: Option<Arc<Notify>> = None;
 
+// Debug override for token monitoring (used by debug tools)
+static mut DEBUG_TOKEN_OVERRIDE: Option<Vec<String>> = None;
+
 // Service components (will be initialized when service starts)
 static mut POOL_DISCOVERY: Option<Arc<PoolDiscovery>> = None;
 static mut POOL_ANALYZER: Option<Arc<PoolAnalyzer>> = None;
@@ -148,6 +151,21 @@ pub fn is_pool_service_running() -> bool {
     SERVICE_RUNNING.load(Ordering::SeqCst)
 }
 
+/// Set debug token override for monitoring only specific tokens (debug use only)
+///
+/// When set, the pool service will monitor only these tokens instead of
+/// discovering tokens from the database. Use None to disable override.
+pub fn set_debug_token_override(tokens: Option<Vec<String>>) {
+    unsafe {
+        DEBUG_TOKEN_OVERRIDE = tokens;
+    }
+}
+
+/// Get current debug token override
+pub fn get_debug_token_override() -> Option<Vec<String>> {
+    unsafe { DEBUG_TOKEN_OVERRIDE.clone() }
+}
+
 /// Initialize all service components
 async fn initialize_service_components() -> Result<(), String> {
     if is_debug_pool_service_enabled() {
@@ -195,6 +213,18 @@ async fn initialize_service_components() -> Result<(), String> {
 
 /// Get the list of tokens to monitor from the database
 async fn get_tokens_to_monitor() -> Result<Vec<String>, String> {
+    // Check for debug override first
+    if let Some(override_tokens) = get_debug_token_override() {
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "DEBUG",
+                &format!("Using debug token override: {} tokens", override_tokens.len())
+            );
+        }
+        return Ok(override_tokens);
+    }
+
     let database = TokenDatabase::new().map_err(|e|
         format!("Failed to create token database: {}", e)
     )?;

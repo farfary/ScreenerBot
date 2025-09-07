@@ -230,7 +230,7 @@ impl PriceHistory {
 /// Configuration constants
 pub const PRICE_CACHE_TTL_SECONDS: u64 = 30;
 pub const PRICE_HISTORY_MAX_ENTRIES: usize = 1000;
-pub const MAX_WATCHED_TOKENS: usize = 100;
+pub const MAX_WATCHED_TOKENS: usize = 20;
 pub const POOL_REFRESH_INTERVAL_SECONDS: u64 = 3;
 
 /// SOL mint address (primary trading currency)

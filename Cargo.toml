@@ -73,6 +73,10 @@ path = "src/bin/main_debug_decimals_direct.rs"
 name = "debug_pool_service"
 path = "src/bin/debug_pool_service.rs"
 
+[[bin]]
+name = "debug_pool_service_single_token"
+path = "src/bin/debug_pool_service_single_token.rs"
+
 
 
 [dependencies]
