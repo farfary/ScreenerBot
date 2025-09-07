@@ -53,6 +53,10 @@ path = "src/bin/debug_pool_service_single_token.rs"
 name = "main_sell_all_and_reset"
 path = "src/bin/main_sell_all_and_reset.rs"
 
+[[bin]]
+name = "find_biggest_pools_by_program"
+path = "src/bin/find_biggest_pools_by_program.rs"
+
 
 
 [dependencies]
