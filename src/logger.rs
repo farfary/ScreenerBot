@@ -60,7 +60,7 @@ const BRACKET_SPACE_WIDTH: usize = 3; // " [" + "] " = 3 chars between each comp
 const TOTAL_PREFIX_WIDTH: usize = TAG_WIDTH + LOG_TYPE_WIDTH + BRACKET_SPACE_WIDTH * 2; // +1 for final space
 
 /// Maximum line length before wrapping
-const MAX_LINE_LENGTH: usize = 175;
+const MAX_LINE_LENGTH: usize = 135;
 
 use crate::arguments::is_dashboard_enabled;
 use chrono::Local;

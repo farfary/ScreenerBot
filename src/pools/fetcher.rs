@@ -72,6 +72,7 @@ pub struct PoolAccountBundle {
     pub accounts: HashMap<Pubkey, AccountData>,
     pub last_updated: Instant,
     pub slot: u64,
+    pub calculation_requested: bool,
 }
 
 impl PoolAccountBundle {
@@ -82,6 +83,7 @@ impl PoolAccountBundle {
             accounts: HashMap::new(),
             last_updated: Instant::now(),
             slot: 0,
+            calculation_requested: false,
         }
     }
 
@@ -95,6 +97,16 @@ impl PoolAccountBundle {
     /// Check if bundle is complete (has all required accounts)
     pub fn is_complete(&self, required_accounts: &[Pubkey]) -> bool {
         required_accounts.iter().all(|key| self.accounts.contains_key(key))
+    }
+
+    /// Check if bundle is complete and calculation not yet requested
+    pub fn is_complete_and_needs_calculation(&self, required_accounts: &[Pubkey]) -> bool {
+        self.is_complete(required_accounts) && !self.calculation_requested
+    }
+
+    /// Mark that calculation has been requested for this bundle
+    pub fn mark_calculation_requested(&mut self) {
+        self.calculation_requested = true;
     }
 
     /// Check if bundle is stale
@@ -440,8 +452,10 @@ impl AccountFetcher {
                         );
                     }
 
-                    // If bundle now complete, trigger price calculation
-                    if bundle.is_complete(&pool_descriptor.reserve_accounts) {
+                    // If bundle now complete and calculation not yet requested, trigger price calculation
+                    if bundle.is_complete_and_needs_calculation(&pool_descriptor.reserve_accounts) {
+                        bundle.mark_calculation_requested();
+
                         if let Some(calculator) = service::get_price_calculator() {
                             if
                                 let Err(e) = calculator.request_calculation(
