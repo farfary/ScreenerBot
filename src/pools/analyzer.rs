@@ -765,9 +765,7 @@ impl PoolAnalyzer {
             }
         }
 
-        // Add the mints for reference
-        accounts.push(*base_mint);
-        accounts.push(*quote_mint);
+        // NOTE: Mint accounts removed - decimals now fetched from cache, not mint accounts
 
         Some(accounts)
     }
@@ -815,13 +813,11 @@ impl PoolAnalyzer {
     ) -> Option<Vec<Pubkey>> {
         // For Moonit pools, we only need:
         // - Curve account (pool_id) - contains all pool data including SOL balance in account lamports
-        // - Mint accounts for reference
+        // NOTE: Mint accounts removed - decimals now fetched from cache, not mint accounts
 
         let mut accounts = vec![*pool_id];
 
-        // Add the mints for reference
-        accounts.push(*base_mint);
-        accounts.push(*quote_mint);
+        // NOTE: Mint accounts removed - decimals now fetched from cache, not mint account data
 
         if is_debug_pool_service_enabled() {
             log(

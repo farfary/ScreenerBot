@@ -7,7 +7,7 @@
 use super::{ PoolDecoder, AccountData };
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
-use crate::tokens::decimals::get_cached_decimals;
+use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, RAYDIUM_CLMM_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -164,7 +164,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
                 return None;
             }
         };
-        let sol_decimals = 9u8; // SOL always has 9 decimals
+        let sol_decimals = SOL_DECIMALS;
 
         if is_debug_pool_calculator_enabled() {
             log(

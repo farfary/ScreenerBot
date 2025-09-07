@@ -210,13 +210,25 @@ impl PumpFunAmmDecoder {
             return None;
         }
 
-        // Get token decimals (standard assumption for PumpFun tokens)
-        let token_decimals = 6; // Most PumpFun tokens use 6 decimals
-        let sol_decimals = 9; // SOL always uses 9 decimals
+        // Get token decimals from cache - CRITICAL: must be cached, no assumptions
+        let token_decimals = match get_cached_decimals(&target_mint) {
+            Some(decimals) => decimals,
+            None => {
+                if is_debug_pool_calculator_enabled() {
+                    log(
+                        LogTag::PoolCalculator,
+                        "ERROR",
+                        &format!("No cached decimals for PumpFun token: {}, skipping pool calculation", target_mint)
+                    );
+                }
+                return None;
+            }
+        };
+        let sol_decimals = SOL_DECIMALS;
 
         // Adjust for decimals
-        let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals);
-        let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals);
+        let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals as i32);
+        let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
 
         if token_adjusted <= 0.0 {
             if is_debug_pool_calculator_enabled() {

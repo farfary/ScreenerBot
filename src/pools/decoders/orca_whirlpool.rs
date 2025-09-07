@@ -7,7 +7,7 @@
 use super::{ PoolDecoder, AccountData };
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
-use crate::tokens::decimals::get_cached_decimals;
+use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, ORCA_WHIRLPOOL_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -110,14 +110,26 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
             return None;
         }
 
-        // Get token decimals
+        // Get token decimals from cache - CRITICAL: must be cached, no fallback
         let token_mint = if is_token_a_sol {
             &pool_info.token_mint_b
         } else {
             &pool_info.token_mint_a
         };
-        let token_decimals = get_cached_decimals(token_mint).unwrap_or(9);
-        let sol_decimals = 9;
+        let token_decimals = match get_cached_decimals(token_mint) {
+            Some(decimals) => decimals,
+            None => {
+                if is_debug_pool_calculator_enabled() {
+                    log(
+                        LogTag::PoolCalculator,
+                        "ERROR",
+                        &format!("No cached decimals for Orca token: {}, skipping pool calculation", token_mint)
+                    );
+                }
+                return None;
+            }
+        };
+        let sol_decimals = SOL_DECIMALS;
 
         // Calculate price using sqrt_price (more accurate for concentrated liquidity)
         let price_sol = if pool_info.sqrt_price > 0 {

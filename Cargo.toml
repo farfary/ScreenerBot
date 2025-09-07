@@ -46,36 +46,12 @@ name = "screenerbot"
 path = "src/main.rs"
 
 [[bin]]
-name = "main_positions_analyze"
-path = "src/bin/main_positions_analyze.rs"
-
-[[bin]]
-name = "main_token_holders"
-path = "src/bin/main_token_holders.rs"
-
-[[bin]]
-name = "test_websocket"
-path = "src/bin/test_websocket.rs"
-
-[[bin]]
-name = "main_debug_find_program_pools"
-path = "src/bin/main_debug_find_program_pools.rs"
-
-[[bin]]
-name = "main_debug_decimals"
-path = "src/bin/main_debug_decimals.rs"
-
-[[bin]]
-name = "main_debug_decimals_direct"
-path = "src/bin/main_debug_decimals_direct.rs"
-
-[[bin]]
-name = "debug_pool_service"
-path = "src/bin/debug_pool_service.rs"
-
-[[bin]]
 name = "debug_pool_service_single_token"
 path = "src/bin/debug_pool_service_single_token.rs"
+
+[[bin]]
+name = "main_sell_all_and_reset"
+path = "src/bin/main_sell_all_and_reset.rs"
 
 
 
