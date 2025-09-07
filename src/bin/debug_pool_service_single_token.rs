@@ -117,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             price.price_sol,
                             price_comparison,
                             price.confidence,
-                            price.pool_address.chars().take(8).collect::<String>() + "...",
+                            price.pool_address,
                             price.sol_reserves,
                             price.token_reserves
                         );

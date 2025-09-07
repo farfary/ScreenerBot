@@ -662,7 +662,7 @@ impl RpcRateLimiter {
             let elapsed = last_call.elapsed();
             if elapsed < url_interval {
                 let wait_duration = url_interval - elapsed;
-                if is_debug_rpc_enabled {
+                if is_debug_rpc_enabled() {
                     log(
                         LogTag::Rpc,
                         "RATE_LIMIT",
