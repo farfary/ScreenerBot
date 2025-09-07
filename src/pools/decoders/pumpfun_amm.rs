@@ -96,8 +96,8 @@ impl PumpFunAmmDecoder {
         offset += 2;
 
         let _creator = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // creator pubkey
-        let base_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // base_mint (our token)
-        let quote_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // quote_mint (SOL)
+        let quote_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // quote_mint (SOL) - first pubkey after creator
+        let base_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // base_mint (our token) - second pubkey after creator
         let _lp_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // lp_mint
         let pool_base_token_account = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // base token vault
         let pool_quote_token_account = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // quote token vault (SOL)
