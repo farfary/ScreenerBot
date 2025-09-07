@@ -395,10 +395,12 @@ async fn run_monitoring_cycle() -> Result<(), String> {
         // Apply single pool mode filtering if enabled
         if ENABLE_SINGLE_POOL_MODE && !pools.is_empty() {
             // Sort pools by liquidity (highest first) and take only the first one
-            pools.sort_by(|a, b| b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal));
+            pools.sort_by(|a, b|
+                b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
+            );
             let highest_liquidity_pool = pools.into_iter().next().unwrap();
             pools = vec![highest_liquidity_pool];
-            
+
             if is_debug_pool_service_enabled() {
                 log(
                     LogTag::PoolService,

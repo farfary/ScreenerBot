@@ -19,7 +19,13 @@ mod api;
 
 // Re-export only the public API
 pub use api::{ get_pool_price, get_available_tokens, get_price_history, get_cache_stats };
-pub use service::{ start_pool_service, stop_pool_service, is_pool_service_running, set_debug_token_override, get_debug_token_override };
+pub use service::{
+    start_pool_service,
+    stop_pool_service,
+    is_pool_service_running,
+    set_debug_token_override,
+    get_debug_token_override,
+};
 pub use types::{ PriceResult, PoolError };
 
 // Internal modules (not exposed)

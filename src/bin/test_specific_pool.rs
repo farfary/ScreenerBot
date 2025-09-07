@@ -7,7 +7,9 @@ use std::str::FromStr;
 async fn get_pool_program_info(pool_address: &str) -> (String, String) {
     let pool_pubkey = match Pubkey::from_str(pool_address) {
         Ok(pubkey) => pubkey,
-        Err(_) => return ("INVALID_ADDRESS".to_string(), "unknown".to_string()),
+        Err(_) => {
+            return ("INVALID_ADDRESS".to_string(), "unknown".to_string());
+        }
     };
 
     let rpc_client = get_rpc_client();
@@ -25,17 +27,21 @@ async fn get_pool_program_info(pool_address: &str) -> (String, String) {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool_address = "A6u8tWDtSNuEyZSZufoP9TGQvuEREKnpGcNP7xUsYMKq";
     println!("🔍 Testing pool: {}", pool_address);
-    
+
     let (program_id, program_name) = get_pool_program_info(pool_address).await;
-    
-    let program_display = if program_id.len() > 8 && !program_id.starts_with("INVALID") && !program_id.starts_with("FETCH") {
-        format!("{} ({}...{})", program_name, &program_id[..8], &program_id[program_id.len()-8..])
+
+    let program_display = if
+        program_id.len() > 8 &&
+        !program_id.starts_with("INVALID") &&
+        !program_id.starts_with("FETCH")
+    {
+        format!("{} ({}...{})", program_name, &program_id[..8], &program_id[program_id.len() - 8..])
     } else {
         program_name
     };
-    
+
     println!("📊 Program ID: {}", program_id);
     println!("🏷️ Program Type: {}", program_display);
-    
+
     Ok(())
 }

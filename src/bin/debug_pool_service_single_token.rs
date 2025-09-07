@@ -6,7 +6,12 @@
 
 use clap::Parser;
 use screenerbot::arguments::set_cmd_args;
-use screenerbot::pools::{ start_pool_service, stop_pool_service, set_debug_token_override, get_pool_price };
+use screenerbot::pools::{
+    start_pool_service,
+    stop_pool_service,
+    set_debug_token_override,
+    get_pool_price,
+};
 use screenerbot::pools::types::ProgramKind;
 use screenerbot::tokens::dexscreener::{ get_token_price_from_global_api, init_dexscreener_api };
 use screenerbot::tokens::dexscreener::get_token_pairs_from_api;
@@ -19,7 +24,10 @@ use tokio::sync::Notify;
 use tokio::time::{ interval, Duration };
 
 #[derive(Parser, Debug)]
-#[command(name = "debug_pool_service_single_token", about = "Monitor a single token with pool service")]
+#[command(
+    name = "debug_pool_service_single_token",
+    about = "Monitor a single token with pool service"
+)]
 struct Args {
     /// Token mint address to monitor
     #[arg(short, long)]
@@ -38,7 +46,9 @@ struct Args {
 async fn get_pool_program_info(pool_address: &str) -> (String, String) {
     let pool_pubkey = match Pubkey::from_str(pool_address) {
         Ok(pubkey) => pubkey,
-        Err(_) => return ("INVALID_ADDRESS".to_string(), "unknown".to_string()),
+        Err(_) => {
+            return ("INVALID_ADDRESS".to_string(), "unknown".to_string());
+        }
     };
 
     let rpc_client = get_rpc_client();
@@ -53,7 +63,9 @@ async fn get_pool_program_info(pool_address: &str) -> (String, String) {
 }
 
 /// Discover pools and identify the biggest pool by liquidity
-async fn discover_and_identify_biggest_pool(token_address: &str) -> Result<Option<(String, f64, String)>, String> {
+async fn discover_and_identify_biggest_pool(
+    token_address: &str
+) -> Result<Option<(String, f64, String)>, String> {
     log(
         LogTag::PoolService,
         "DISCOVER_START",
@@ -78,11 +90,7 @@ async fn discover_and_identify_biggest_pool(token_address: &str) -> Result<Optio
             let mut highest_liquidity = 0.0;
 
             for pair in &pairs {
-                let liquidity = if let Some(liq) = &pair.liquidity {
-                    liq.usd
-                } else {
-                    0.0
-                };
+                let liquidity = if let Some(liq) = &pair.liquidity { liq.usd } else { 0.0 };
 
                 if liquidity > highest_liquidity {
                     highest_liquidity = liquidity;
@@ -120,11 +128,7 @@ async fn discover_and_identify_biggest_pool(token_address: &str) -> Result<Optio
             }
         }
         Err(e) => {
-            log(
-                LogTag::PoolService,
-                "DISCOVER_ERROR",
-                &format!("Failed to discover pools: {}", e)
-            );
+            log(LogTag::PoolService, "DISCOVER_ERROR", &format!("Failed to discover pools: {}", e));
             Err(e)
         }
     }
@@ -133,44 +137,56 @@ async fn discover_and_identify_biggest_pool(token_address: &str) -> Result<Optio
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    
+
     // Set up command line arguments with debug flags enabled
     let cmd_args = vec![
         "debug_pool_service_single_token".to_string(),
         "--debug-pool-calculator".to_string()
     ];
     set_cmd_args(cmd_args);
-    
-    log(LogTag::PoolService, "START", &format!("Starting pool service for single token: {}", args.token));
-    
+
+    log(
+        LogTag::PoolService,
+        "START",
+        &format!("Starting pool service for single token: {}", args.token)
+    );
+
     // Initialize DexScreener API
     log(LogTag::PoolService, "INIT", "Initializing DexScreener API...");
     if let Err(e) = init_dexscreener_api().await {
         log(LogTag::PoolService, "ERROR", &format!("Failed to initialize DexScreener API: {}", e));
         return Err(e.into());
     }
-    
+
     // Pre-fetch token decimals to ensure they're cached
     log(LogTag::PoolService, "INIT", "Pre-fetching token decimals...");
     match screenerbot::tokens::decimals::get_token_decimals_from_chain(&args.token).await {
         Ok(decimals) => {
-            log(LogTag::PoolService, "SUCCESS", &format!("Token decimals fetched: {} decimals", decimals));
+            log(
+                LogTag::PoolService,
+                "SUCCESS",
+                &format!("Token decimals fetched: {} decimals", decimals)
+            );
         }
         Err(e) => {
             log(LogTag::PoolService, "WARN", &format!("Failed to fetch token decimals: {}", e));
         }
     }
-    
+
     // Set debug override to monitor only our target token
     set_debug_token_override(Some(vec![args.token.clone()]));
-    
+
     // Start the pool service
     start_pool_service().await?;
-    
+
     log(LogTag::PoolService, "SUCCESS", "Pool service started");
     log(LogTag::PoolService, "INFO", &format!("Monitoring token: {}", args.token));
-    log(LogTag::PoolService, "INFO", &format!("Will run for {} seconds, checking every {} seconds", args.duration, args.interval));
-    
+    log(
+        LogTag::PoolService,
+        "INFO",
+        &format!("Will run for {} seconds, checking every {} seconds", args.duration, args.interval)
+    );
+
     // Discover pools and identify the biggest one
     let biggest_pool_info = match discover_and_identify_biggest_pool(&args.token).await {
         Ok(Some(info)) => {
@@ -182,28 +198,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             None
         }
         Err(e) => {
-            log(
-                LogTag::PoolService,
-                "DISCOVER_FAILED",
-                &format!("Pool discovery failed: {}", e)
-            );
+            log(LogTag::PoolService, "DISCOVER_FAILED", &format!("Pool discovery failed: {}", e));
             None
         }
     };
-    
+
     log(LogTag::PoolService, "INFO", "Starting price change monitoring (biggest pool only)...");
-    
+
     // Create shutdown notification for clean exit
     let shutdown = Arc::new(Notify::new());
     let shutdown_clone = shutdown.clone();
-    
+
     // Set up signal handling for graceful shutdown
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
         log(LogTag::PoolService, "SHUTDOWN", "Received Ctrl+C, shutting down...");
         shutdown_clone.notify_one();
     });
-    
+
     // Set up timer for automatic shutdown
     let shutdown_timer = shutdown.clone();
     let run_duration = args.duration;
@@ -212,13 +224,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log(LogTag::PoolService, "SHUTDOWN", "Time limit reached, shutting down...");
         shutdown_timer.notify_one();
     });
-    
+
     // Price monitoring loop with change detection
     let mut price_interval = interval(Duration::from_secs(args.interval));
     let mut last_price: Option<f64> = None;
     let mut last_api_price: Option<f64> = None;
     let mut check_count = 0;
-    
+
     loop {
         tokio::select! {
             _ = price_interval.tick() => {
@@ -369,17 +381,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    
+
     log(LogTag::PoolService, "STOP", "Stopping pool service...");
-    
+
     // Stop the pool service
     stop_pool_service(10).await?;
-    
+
     // Clear debug override
     set_debug_token_override(None);
-    
+
     log(LogTag::PoolService, "SUCCESS", "Pool service stopped");
     log(LogTag::PoolService, "STATS", &format!("Total price checks performed: {}", check_count));
-    
+
     Ok(())
 }
