@@ -236,8 +236,8 @@ impl PoolAnalyzer {
                     LogTag::PoolService,
                     "WARN",
                     &format!(
-                        "Unsupported DEX program for pool {}: {} (consider adding support for this DEX)", 
-                        pool_id, 
+                        "Unsupported DEX program for pool {}: {} (consider adding support for this DEX)",
+                        pool_id,
                         actual_program_id
                     )
                 );

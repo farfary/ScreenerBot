@@ -96,11 +96,67 @@ impl PumpFunAmmDecoder {
         offset += 2;
 
         let _creator = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // creator pubkey
-        let base_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // base_mint (our token) - first pubkey after creator
-        let quote_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // quote_mint (SOL) - second pubkey after creator
+
+        // Read all the pubkeys from the pool structure
+        let _creator = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // creator pubkey
+        let mint1 = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
+        let mint2 = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
         let _lp_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // lp_mint
-        let pool_base_token_account = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // base token vault
-        let pool_quote_token_account = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // quote token vault (SOL)
+        let vault1 = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
+        let vault2 = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
+
+        // Define all possible SOL mint addresses
+        let wrapped_sol_mint = "So11111111111111111111111111111111111111112";
+        let native_sol_mint = "11111111111111111111111111111111"; // System Program ID
+        let usdc_mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // Sometimes USDC is used
+
+        // Determine which mint is which by examining the actual values
+        let (base_mint, quote_mint, base_vault, quote_vault) = if
+            mint1 == wrapped_sol_mint ||
+            mint1 == native_sol_mint
+        {
+            // mint1 is SOL, mint2 is token
+            (mint2, wrapped_sol_mint.to_string(), vault2, vault1)
+        } else if mint2 == wrapped_sol_mint || mint2 == native_sol_mint {
+            // mint2 is SOL, mint1 is token
+            (mint1, wrapped_sol_mint.to_string(), vault1, vault2)
+        } else if mint1 == usdc_mint {
+            // Special case: mint1 is USDC, treat as quote currency
+            if is_debug_pool_calculator_enabled() {
+                log(
+                    LogTag::PoolCalculator,
+                    "INFO",
+                    &format!("PumpFun pool uses USDC as quote currency: {} vs {}", mint1, mint2)
+                );
+            }
+            // For now, skip USDC pools as we want SOL-based pricing
+            return None;
+        } else if mint2 == usdc_mint {
+            // Special case: mint2 is USDC, treat as quote currency
+            if is_debug_pool_calculator_enabled() {
+                log(
+                    LogTag::PoolCalculator,
+                    "INFO",
+                    &format!("PumpFun pool uses USDC as quote currency: {} vs {}", mint1, mint2)
+                );
+            }
+            // For now, skip USDC pools as we want SOL-based pricing
+            return None;
+        } else {
+            // Neither mint is SOL or USDC - unexpected for PumpFun
+            if is_debug_pool_calculator_enabled() {
+                log(
+                    LogTag::PoolCalculator,
+                    "WARN",
+                    &format!(
+                        "PumpFun pool contains neither SOL nor USDC. Mint1: {}, Mint2: {}",
+                        mint1,
+                        mint2
+                    )
+                );
+            }
+            return None;
+        };
 
         let lp_supply = if data.len() >= offset + 8 {
             u64::from_le_bytes(data[offset..offset + 8].try_into().ok()?)
@@ -116,7 +172,7 @@ impl PumpFunAmmDecoder {
                 LogTag::PoolCalculator,
                 "DEBUG",
                 &format!(
-                    "Extracted PumpFun pool structure:\n\
+                    "Extracted PumpFun pool structure (auto-detected SOL position):\n\
                     - Base mint (token): {}\n\
                     - Quote mint (SOL): {}\n\
                     - Base token vault: {}\n\
@@ -124,8 +180,8 @@ impl PumpFunAmmDecoder {
                     - LP supply: {}",
                     base_mint,
                     quote_mint,
-                    pool_base_token_account,
-                    pool_quote_token_account,
+                    base_vault,
+                    quote_vault,
                     lp_supply
                 )
             );
@@ -134,8 +190,8 @@ impl PumpFunAmmDecoder {
         Some(PumpFunAmmPoolInfo {
             base_mint,
             quote_mint,
-            pool_base_token_account,
-            pool_quote_token_account,
+            pool_base_token_account: base_vault,
+            pool_quote_token_account: quote_vault,
             lp_supply,
         })
     }
@@ -159,7 +215,7 @@ impl PumpFunAmmDecoder {
             );
         }
 
-        // For PUMP.FUN, SOL is always the quote token
+        // For PUMP.FUN, SOL should be the quote token (we've already ensured this in decode_pump_fun_amm_pool)
         let sol_mint_str = SOL_MINT;
         if pool_info.quote_mint != sol_mint_str {
             if is_debug_pool_calculator_enabled() {
@@ -175,26 +231,21 @@ impl PumpFunAmmDecoder {
             return None;
         }
 
-        // Determine target token - should be the base mint in PumpFun
-        let target_mint = if pool_info.base_mint == base_mint {
-            base_mint.to_string()
-        } else if pool_info.base_mint == quote_mint {
-            quote_mint.to_string()
-        } else {
-            if is_debug_pool_calculator_enabled() {
-                log(
-                    LogTag::PoolCalculator,
-                    "ERROR",
-                    &format!(
-                        "PumpFun pool base mint {} does not match requested tokens {}/{}",
-                        pool_info.base_mint,
-                        base_mint,
-                        quote_mint
-                    )
-                );
-            }
-            return None;
-        };
+        // Use the base mint (token) from the pool - this is the token we'll calculate price for
+        // No need to match against specific requested tokens since pool discovery already filtered correctly
+        let target_mint = pool_info.base_mint.clone();
+
+        if is_debug_pool_calculator_enabled() {
+            log(
+                LogTag::PoolCalculator,
+                "DEBUG",
+                &format!(
+                    "Calculating PumpFun price for token {} with quote {}",
+                    target_mint,
+                    pool_info.quote_mint
+                )
+            );
+        }
 
         // Get vault balances from fetched account data
         // Base vault contains the token, quote vault contains SOL

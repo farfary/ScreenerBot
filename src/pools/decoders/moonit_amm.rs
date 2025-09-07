@@ -52,11 +52,11 @@ impl PoolDecoder for MoonitAmmDecoder {
             }
         };
 
-    // Parse curve state from account data
-    let curve_info = Self::decode_moonit_curve_account(&curve_account.data)?;
+        // Parse curve state from account data
+        let curve_info = Self::decode_moonit_curve_account(&curve_account.data)?;
 
-    // Calculate price using the curve information (pass curve account explicitly)
-    Self::calculate_moonit_price(&curve_info, curve_account, accounts, base_mint, quote_mint)
+        // Calculate price using the curve information (pass curve account explicitly)
+        Self::calculate_moonit_price(&curve_info, curve_account, accounts, base_mint, quote_mint)
     }
 }
 
@@ -86,7 +86,7 @@ impl MoonitAmmDecoder {
 
         // Decode Moonit CurveAccount structure based on SDK:
         // totalSupply: u64 (8 bytes)
-        // curveAmount: u64 (8 bytes) 
+        // curveAmount: u64 (8 bytes)
         // mint: PublicKey (32 bytes)
         // decimals: u8 (1 byte)
         // collateralCurrency: u8 (1 byte) - SOL is 0
@@ -106,7 +106,7 @@ impl MoonitAmmDecoder {
         offset += 8;
 
         let mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        
+
         let decimals = data[offset];
         offset += 1;
 
@@ -219,7 +219,10 @@ impl MoonitAmmDecoder {
                 log(
                     LogTag::PoolCalculator,
                     "ERROR",
-                    &format!("Moonit curve collateral currency is not SOL: {}", curve_info.collateral_currency)
+                    &format!(
+                        "Moonit curve collateral currency is not SOL: {}",
+                        curve_info.collateral_currency
+                    )
                 );
             }
             return None;
@@ -255,23 +258,20 @@ impl MoonitAmmDecoder {
             }
         }
 
-    // Moonit design: SOL collateral lives directly in the curve account lamports (no separate vault/ATA)
-    // Previous heuristic tried to "find" a SOL vault among all accounts and produced unstable prices
-    // (sometimes selecting token mint or SOL mint lamports). We now strictly use the curve account lamports.
-    let sol_reserves = curve_account.lamports as f64 / 10_f64.powi(SOL_DECIMALS as i32);
+        // Moonit design: SOL collateral lives directly in the curve account lamports (no separate vault/ATA)
+        // Previous heuristic tried to "find" a SOL vault among all accounts and produced unstable prices
+        // (sometimes selecting token mint or SOL mint lamports). We now strictly use the curve account lamports.
+        let sol_reserves = (curve_account.lamports as f64) / (10_f64).powi(SOL_DECIMALS as i32);
 
         // Token reserves = curve_amount (tokens still held by the curve)
-        let token_reserves = curve_info.curve_amount as f64 / 10_f64.powi(token_decimals as i32);
+        let token_reserves =
+            (curve_info.curve_amount as f64) / (10_f64).powi(token_decimals as i32);
 
         if is_debug_pool_calculator_enabled() {
             log(
                 LogTag::PoolCalculator,
                 "DEBUG",
-                &format!(
-                    "Moonit reserves: SOL={:.6}, Token={:.6}",
-                    sol_reserves,
-                    token_reserves
-                )
+                &format!("Moonit reserves: SOL={:.6}, Token={:.6}", sol_reserves, token_reserves)
             );
         }
 
@@ -288,28 +288,44 @@ impl MoonitAmmDecoder {
         }
 
         // Calculate price: SOL per token (basic reserve / remaining tokens)
-    let price_sol_basic = sol_reserves / token_reserves; // average SOL backing each remaining token
+        let price_sol_basic = sol_reserves / token_reserves; // average SOL backing each remaining token
 
-    // Additional candidate formulas (instrumentation for calibration):
-    let sold_tokens = curve_info.curve_position as f64 / 10_f64.powi(token_decimals as i32);
-    let price_sol_avg_sold = if sold_tokens > 0.0 { sol_reserves / sold_tokens } else { 0.0 }; // average SOL per sold token (historical mean)
-    // Quadratic (cubic integral) assumption: p ≈ 3 * S / x if S = k/3 * x^3 => p = k x^2 = 3S/x
-    let price_sol_quadratic = if sold_tokens > 0.0 { 3.0 * sol_reserves / sold_tokens } else { 0.0 };
-    // Heuristic from previous attempt (kept for comparison)
-    let fraction_remaining = if curve_info.total_supply > 0 { curve_info.curve_amount as f64 / curve_info.total_supply as f64 } else { 0.0 };
-    let sold_fraction = 1.0 - fraction_remaining;
-    let heuristic_factor = 1.0 + sold_fraction * 1.1; // grows as more tokens sold
-    let price_sol_heuristic = price_sol_avg_sold * heuristic_factor;
+        // Additional candidate formulas (instrumentation for calibration):
+        let sold_tokens = (curve_info.curve_position as f64) / (10_f64).powi(token_decimals as i32);
+        let price_sol_avg_sold = if sold_tokens > 0.0 { sol_reserves / sold_tokens } else { 0.0 }; // average SOL per sold token (historical mean)
+        // Quadratic (cubic integral) assumption: p ≈ 3 * S / x if S = k/3 * x^3 => p = k x^2 = 3S/x
+        let price_sol_quadratic = if sold_tokens > 0.0 {
+            (3.0 * sol_reserves) / sold_tokens
+        } else {
+            0.0
+        };
+        // Heuristic from previous attempt (kept for comparison)
+        let fraction_remaining = if curve_info.total_supply > 0 {
+            (curve_info.curve_amount as f64) / (curve_info.total_supply as f64)
+        } else {
+            0.0
+        };
+        let sold_fraction = 1.0 - fraction_remaining;
+        let heuristic_factor = 1.0 + sold_fraction * 1.1; // grows as more tokens sold
+        let price_sol_heuristic = price_sol_avg_sold * heuristic_factor;
 
-    // Dynamic exponent model: factor interpolates between 2 (early / linear) and ~3 (late / cubic) using sold fraction.
-    // We derive factor ~= 2.0 + K * sold_fraction where K ≈ price_increase / 168.0 based on calibration vs external API price.
-    // This produces current factor close to 2.73 matching observed target (API ~2.095e-7 SOL).
-    let k_factor = (curve_info.price_increase as f64) / 168.0; // 180/168 ~= 1.071 (calibrated constant)
-    let dynamic_factor = 2.0 + k_factor * sold_fraction; // ranges roughly [2, 2+K]
-    let price_sol_dynamic = if sold_tokens > 0.0 { dynamic_factor * sol_reserves / sold_tokens } else { price_sol_basic };
+        // Dynamic exponent model: factor interpolates between 2 (early / linear) and ~3 (late / cubic) using sold fraction.
+        // We derive factor ~= 2.0 + K * sold_fraction where K ≈ price_increase / 168.0 based on calibration vs external API price.
+        // This produces current factor close to 2.73 matching observed target (API ~2.095e-7 SOL).
+        let k_factor = (curve_info.price_increase as f64) / 168.0; // 180/168 ~= 1.071 (calibrated constant)
+        let dynamic_factor = 2.0 + k_factor * sold_fraction; // ranges roughly [2, 2+K]
+        let price_sol_dynamic = if sold_tokens > 0.0 {
+            (dynamic_factor * sol_reserves) / sold_tokens
+        } else {
+            price_sol_basic
+        };
 
-    // Select dynamic formula as primary (falls back to basic if it would be nonsensical)
-    let price_sol = if price_sol_dynamic.is_finite() && price_sol_dynamic > 0.0 { price_sol_dynamic } else { price_sol_basic };
+        // Select dynamic formula as primary (falls back to basic if it would be nonsensical)
+        let price_sol = if price_sol_dynamic.is_finite() && price_sol_dynamic > 0.0 {
+            price_sol_dynamic
+        } else {
+            price_sol_basic
+        };
         let price_usd = price_sol * 150.0; // Rough SOL price estimate
 
         if is_debug_pool_calculator_enabled() {
@@ -331,14 +347,16 @@ impl MoonitAmmDecoder {
             );
         }
 
-        Some(PriceResult::new(
-            base_mint.to_string(),
-            price_usd,
-            price_sol,
-            sol_reserves,
-            token_reserves,
-            "".to_string() // Pool address not needed for calculation
-        ))
+        Some(
+            PriceResult::new(
+                base_mint.to_string(),
+                price_usd,
+                price_sol,
+                sol_reserves,
+                token_reserves,
+                "".to_string() // Pool address not needed for calculation
+            )
+        )
     }
 
     /// Helper function to read a pubkey from data at offset

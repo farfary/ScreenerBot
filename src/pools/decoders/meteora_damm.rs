@@ -225,25 +225,108 @@ impl PoolDecoder for MeteoraDammDecoder {
             );
         }
 
-        // Calculate price: SOL per token using effective vault balances (minus fees)
-        let sol_adjusted = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
-        let token_adjusted = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
-        let price_sol = sol_adjusted / token_adjusted;
+        // DAMM v2 uses concentrated liquidity with sqrt_price, NOT vault balance ratios!
+        // Extract sqrt_price from the account data
+        // Based on real pool account analysis - offset 456 confirmed with functioning XVM/SOL pool
+        let sqrt_price_offset = 456; // Verified offset for sqrt_price field
+        if pool_account.data.len() < sqrt_price_offset + 16 {
+            if is_debug_pool_calculator_enabled() {
+                log(
+                    LogTag::PoolCalculator,
+                    "ERROR",
+                    "Account data too short for sqrt_price extraction"
+                );
+            }
+            return None;
+        }
 
-        // The effective reserves should now match Solscan's calculation
-        // Previously: 18.024 SOL raw vault balance
-        // Expected: ~13.17 SOL effective tradeable liquidity (difference = accumulated fees)
+        // Read sqrt_price as u128 little endian
+        let sqrt_price_bytes = &pool_account.data[sqrt_price_offset..sqrt_price_offset + 16];
+        let sqrt_price = match sqrt_price_bytes.try_into() {
+            Ok(bytes) => u128::from_le_bytes(bytes),
+            Err(_) => {
+                if is_debug_pool_calculator_enabled() {
+                    log(LogTag::PoolCalculator, "ERROR", "Failed to extract sqrt_price bytes");
+                }
+                return None;
+            }
+        };
 
-        // Convert reserves to human-readable format for display
-        let sol_reserves_display = sol_adjusted;
-        let token_reserves_display = token_adjusted;
+        if is_debug_pool_calculator_enabled() {
+            log(
+                LogTag::PoolCalculator,
+                "DEBUG",
+                &format!("Raw sqrt_price at offset {}: {}", sqrt_price_offset, sqrt_price)
+            );
+        }
+        if sqrt_price == 0 {
+            if is_debug_pool_calculator_enabled() {
+                log(LogTag::PoolCalculator, "ERROR", "DAMM pool has zero sqrt_price");
+            }
+            return None;
+        }
+
+        // Calculate price using official Meteora formula:
+        // price = (sqrt_price^2 / 2^128) * 10^(tokenA_decimals - tokenB_decimals)
+        //
+        // First convert sqrt_price from Q64.64 to floating point
+        let sqrt_price_f64 = (sqrt_price as f64) / (2_f64).powi(64);
+
+        // Square it to get the actual price ratio
+        let price_ratio = sqrt_price_f64 * sqrt_price_f64;
+
+        // Apply decimal adjustment based on token order
+        // DAMM v2 stores sqrt_price as sqrt(token_b/token_a)
+        let price_sol = if damm_info.token_b_mint == SOL_MINT {
+            // token_a is custom token, token_b is SOL
+            // sqrt_price = sqrt(SOL/token) -> price = SOL per token (what we want)
+            price_ratio * (10_f64).powi((sol_decimals as i32) - (token_decimals as i32))
+        } else {
+            // token_a is SOL, token_b is custom token
+            // sqrt_price = sqrt(token/SOL) -> price = token per SOL
+            // Invert to get SOL per token
+            let token_per_sol =
+                price_ratio * (10_f64).powi((token_decimals as i32) - (sol_decimals as i32));
+            if token_per_sol > 0.0 {
+                1.0 / token_per_sol
+            } else {
+                if is_debug_pool_calculator_enabled() {
+                    log(LogTag::PoolCalculator, "ERROR", "DAMM: Invalid token_per_sol ratio");
+                }
+                return None;
+            }
+        };
+
+        // Validate price result
+        if price_sol <= 0.0 || !price_sol.is_finite() {
+            if is_debug_pool_calculator_enabled() {
+                log(
+                    LogTag::PoolCalculator,
+                    "ERROR",
+                    &format!("DAMM: Invalid sqrt_price calculation result: {}", price_sol)
+                );
+            }
+            return None;
+        }
+
+        // For display purposes, calculate effective reserves from vault balances
+        // (These are not used for price calculation, only for informational display)
+        let sol_reserves_display = ((sol_balance as f64) / (10_f64).powi(sol_decimals as i32)).max(
+            0.0
+        );
+        let token_reserves_display = (
+            (token_balance as f64) / (10_f64).powi(token_decimals as i32)
+        ).max(0.0);
 
         if is_debug_pool_calculator_enabled() {
             log(
                 LogTag::PoolCalculator,
                 "INFO",
                 &format!(
-                    "DAMM price calculation: {:.12} SOL per token (sol_reserves={:.6}, token_reserves={:.6})",
+                    "DAMM sqrt_price calculation: sqrt_price_raw={}, sqrt_price_f64={:.12}, price_ratio={:.12}, price_sol={:.12} (reserves: sol={:.6}, token={:.6})",
+                    sqrt_price,
+                    sqrt_price_f64,
+                    price_ratio,
                     price_sol,
                     sol_reserves_display,
                     token_reserves_display
@@ -267,8 +350,19 @@ impl PoolDecoder for MeteoraDammDecoder {
 }
 
 impl MeteoraDammDecoder {
-    /// Parse DAMM pool account data to extract token mints and vault addresses
+    /// Parse DAMM pool account data to extract token mints, vault addresses, and sqrt_price
     /// Based on DAMM v2 Pool struct from official Meteora source code
+    ///
+    /// Key offsets in 1112-byte pool account:
+    /// - token_a_mint: 168 (32 bytes)
+    /// - token_b_mint: 200 (32 bytes)
+    /// - token_a_vault: 232 (32 bytes)
+    /// - token_b_vault: 264 (32 bytes)
+    /// - protocol_a_fee: 392 (8 bytes)
+    /// - protocol_b_fee: 400 (8 bytes)
+    /// - partner_a_fee: 408 (8 bytes)
+    /// - partner_b_fee: 416 (8 bytes)
+    /// - sqrt_price: ~712 (16 bytes) [CRITICAL: concentrated liquidity pricing]
     fn parse_damm_pool(data: &[u8]) -> Option<DammPoolInfo> {
         if data.len() < 1112 {
             if is_debug_pool_calculator_enabled() {
@@ -320,6 +414,21 @@ impl MeteoraDammDecoder {
                     partner_b_fee
                 )
             );
+
+            // Extract and log sqrt_price for debugging
+            if let Some(sqrt_price_raw) = Self::extract_u128_at_offset(data, 448) {
+                log(
+                    LogTag::PoolCalculator,
+                    "INFO",
+                    &format!("DAMM sqrt_price@448: {}", sqrt_price_raw)
+                );
+            } else {
+                log(
+                    LogTag::PoolCalculator,
+                    "WARN",
+                    "DAMM: Could not extract sqrt_price at offset 448"
+                );
+            }
         }
 
         Some(DammPoolInfo {
