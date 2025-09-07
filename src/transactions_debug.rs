@@ -833,10 +833,10 @@ impl TransactionsManager {
             .to_string();
 
         // Print the entire table directly to console
-        println!("{}", table_string);
+        log(LogTag::System, "INFO", &table_string);
 
         // Print summary
-        println!(
+        log(LogTag::System, "INFO", &format!(
             "📊 SUMMARY: {} Buys ({:.3} SOL), {} Sells ({:.3} SOL), Total Fees: {:.6} SOL, Net SOL: {:.3}",
             buy_count,
             total_sol_spent,
@@ -844,8 +844,8 @@ impl TransactionsManager {
             total_sol_received,
             total_fees,
             total_sol_received - total_sol_spent - total_fees
-        );
-        println!("=== END ANALYSIS ===");
+        ));
+        log(LogTag::System, "INFO", "=== END ANALYSIS ===");
 
         log(
             LogTag::Transactions,
@@ -973,10 +973,10 @@ impl TransactionsManager {
             .to_string();
 
         // Print the entire table directly to console
-        println!("{}", table_string);
+        log(LogTag::System, "INFO", &table_string);
 
         // Print summary
-        println!(
+        log(LogTag::System, "INFO", &format!(
             "📊 SUMMARY: {} Buys ({:.3} SOL), {} Sells ({:.3} SOL), Total Fees: {:.6} SOL, Net SOL: {:.3}",
             buy_count,
             total_sol_spent,
@@ -984,8 +984,8 @@ impl TransactionsManager {
             total_sol_received,
             total_fees,
             total_sol_received - total_sol_spent - total_fees
-        );
-        println!("=== END ANALYSIS ===");
+        ));
+        log(LogTag::System, "INFO", "=== END ANALYSIS ===");
 
         log(
             LogTag::Transactions,
@@ -1013,7 +1013,7 @@ impl TransactionsManager {
         log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE POSITION ANALYSIS ===");
 
         // Print header
-        println!("=== COMPREHENSIVE POSITION ANALYSIS ===");
+        log(LogTag::System, "INFO", "=== COMPREHENSIVE POSITION ANALYSIS ===");
 
         // Convert positions to display rows
         let mut display_rows: Vec<PositionDisplayRow> = Vec::new();
@@ -1132,7 +1132,7 @@ impl TransactionsManager {
             .to_string();
 
         // Print the entire table directly to console
-        println!("{}", table_string);
+        log(LogTag::System, "INFO", &table_string);
 
         let net_pnl_display = if total_pnl > 0.0 {
             format!("+{:.3}", total_pnl)
@@ -1143,7 +1143,7 @@ impl TransactionsManager {
         };
 
         // Print summary
-        println!(
+        log(LogTag::System, "INFO", &format!(
             "📊 SUMMARY: {} Open, {} Closed | Invested: {:.3} SOL | Received: {:.3} SOL | Fees: {:.3} SOL | Net PnL: {}",
             open_positions,
             closed_positions,
@@ -1151,8 +1151,8 @@ impl TransactionsManager {
             total_received,
             total_fees,
             net_pnl_display
-        );
-        println!("=== END POSITION ANALYSIS ===");
+        ));
+        log(LogTag::System, "INFO", "=== END POSITION ANALYSIS ===");
 
         log(
             LogTag::Transactions,

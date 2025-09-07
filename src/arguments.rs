@@ -1,3 +1,4 @@
+use crate::logger::{log, LogTag};
 /// Centralized argument handling system for ScreenerBot
 ///
 /// This module consolidates all command-line argument parsing and debug flag checking
@@ -437,15 +438,23 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
 pub fn print_debug_info() {
     let args = get_cmd_args();
     if !is_dashboard_enabled() {
-        println!("Command-line arguments: {:?}", args);
+        log(
+            LogTag::System,
+            "DEBUG",
+            &format!("Command-line arguments: {:?}", args),
+        );
     }
 
     let enabled_modes = get_enabled_debug_modes();
     if !is_dashboard_enabled() {
         if enabled_modes.is_empty() {
-            println!("No debug modes enabled");
+            log(LogTag::System, "DEBUG", "No debug modes enabled");
         } else {
-            println!("Enabled debug modes: {:?}", enabled_modes);
+            log(
+                LogTag::System,
+                "DEBUG",
+                &format!("Enabled debug modes: {:?}", enabled_modes),
+            );
         }
     }
 }

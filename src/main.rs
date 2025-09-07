@@ -37,8 +37,12 @@ async fn main() {
             "ERROR",
             &format!("Argument validation failed: {}", e),
         );
-        println!("Error: {}", e);
-        println!("Use --help to see all available options");
+        log(LogTag::System, "ERROR", &format!("Error: {}", e));
+        log(
+            LogTag::System,
+            "INFO",
+            "Use --help to see all available options",
+        );
         std::process::exit(1);
     }
 
@@ -76,7 +80,6 @@ async fn main() {
                 "INFO",
                 "Clear all functionality not yet implemented",
             );
-            println!("Clear all functionality not yet implemented");
             Ok(())
         }
         BotMode::PositionsSellAll => {
@@ -92,15 +95,17 @@ async fn main() {
                 "INFO",
                 "Positions sell all functionality not yet implemented",
             );
-            println!("Positions sell all functionality not yet implemented");
             Ok(())
         }
         BotMode::None => {
             let error_msg = "No valid mode specified";
             log(LogTag::System, "ERROR", error_msg);
-            println!("Error: {}", error_msg);
-            println!("Use --help to see all available options");
-            println!();
+            log(LogTag::System, "ERROR", &format!("Error: {}", error_msg));
+            log(
+                LogTag::System,
+                "INFO",
+                "Use --help to see all available options",
+            );
             print_help();
             std::process::exit(1);
         }
@@ -121,7 +126,7 @@ async fn main() {
                 "ERROR",
                 &format!("ScreenerBot failed: {}", e),
             );
-            println!("Error: {}", e);
+            log(LogTag::System, "ERROR", &format!("Error: {}", e));
             std::process::exit(1);
         }
     }
