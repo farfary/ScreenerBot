@@ -14,6 +14,7 @@ use crate::tokens::dexscreener::{ get_token_pools_from_dexscreener, TokenPair };
 use crate::tokens::geckoterminal::{ get_token_pools_from_geckoterminal, GeckoTerminalPool };
 use crate::tokens::raydium::{ get_token_pools_from_raydium, RaydiumPool };
 use super::types::{ PoolDescriptor, ProgramKind, SOL_MINT };
+use super::utils::{ is_stablecoin_mint };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -72,6 +73,18 @@ impl PoolDiscovery {
                 "INFO",
                 &format!("Starting pool discovery for token {}", &mint[..8])
             );
+        }
+
+        // Early stablecoin filtering - reject stablecoin tokens immediately
+        if is_stablecoin_mint(mint) {
+            if is_debug_pool_discovery_enabled() {
+                log(
+                    LogTag::PoolDiscovery,
+                    "WARN",
+                    &format!("Token {} is a stablecoin - skipping pool discovery", &mint[..8])
+                );
+            }
+            return Vec::new();
         }
 
         let mut discovered_pools = Vec::new();

@@ -1,26 +1,25 @@
-/// PumpFun AMM pool decoder
-///
-/// This module handles decoding PumpFun AMM pools.
-/// PumpFun uses bonding curves and has a specific pool structure with token and SOL vaults.
-/// Based on the proven logic from the old pool system.
-
+use std::collections::HashMap;
+use std::time::Instant;
+use solana_sdk::pubkey::Pubkey;
 use super::{ PoolDecoder, AccountData };
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
 use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
-use solana_sdk::pubkey::Pubkey;
-use std::collections::HashMap;
-use std::str::FromStr;
 
-/// PumpFun AMM decoder implementation
+// Import centralized utilities
+use super::super::utils::{ extract_pumpfun_mints_and_vaults, validate_sol_pool };
+
+/// PumpFun AMM pool decoder and calculator
 pub struct PumpFunAmmDecoder;
 
 impl PoolDecoder for PumpFunAmmDecoder {
+    /// Get the program kinds this decoder supports
     fn supported_programs() -> Vec<ProgramKind> {
         vec![ProgramKind::PumpFun]
     }
 
+    /// Decode pool data and calculate price using centralized utilities
     fn decode_and_calculate(
         accounts: &HashMap<String, AccountData>,
         base_mint: &str,
@@ -30,178 +29,117 @@ impl PoolDecoder for PumpFunAmmDecoder {
             log(
                 LogTag::PoolCalculator,
                 "DEBUG",
-                &format!("Decoding PumpFun AMM pool for {}/{}", base_mint, quote_mint)
+                &format!("PumpFun AMM: Processing for {} vs {}", base_mint, quote_mint)
             );
         }
 
-        // Find the pool account (length heuristic: pool state > 200 bytes, token accounts ~165)
-        let pool_account = match accounts.values().find(|a| a.data.len() >= 200) {
-            Some(a) => a,
-            None => {
+        // Find the pool account by looking for the PumpFun program account
+        // Pool account is the only one that should be decoded as pool data
+        for (pool_account, pool_data) in accounts.iter() {
+            // Skip non-pool accounts (vaults, mints) by checking size and owner
+            if pool_data.data.len() < 200 {
+                continue; // Too small to be a pool account
+            }
+
+            // Check if this is the actual pool account by looking for PumpFun program ownership
+            if pool_data.owner.to_string() != "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" {
+                continue; // Not owned by PumpFun program
+            }
+
+            if let Some(pool_info) = Self::decode_pump_fun_amm_pool(&pool_data.data) {
                 if is_debug_pool_calculator_enabled() {
                     log(
                         LogTag::PoolCalculator,
-                        "ERROR",
+                        "DEBUG",
                         &format!(
-                            "No suitable PumpFun pool account found (accounts: {})",
-                            accounts.len()
+                            "Successfully decoded PumpFun pool: {} -> {}",
+                            pool_info.base_mint,
+                            pool_info.quote_mint
                         )
+                    );
+                }
+
+                // Calculate price using the extracted pool info
+                if
+                    let Some(price_result) = Self::calculate_pump_fun_amm_price(
+                        &pool_info,
+                        accounts,
+                        base_mint,
+                        quote_mint,
+                        pool_account
+                    )
+                {
+                    return Some(price_result);
+                }
+            }
+        }
+
+        None
+    }
+}
+
+impl PumpFunAmmDecoder {
+    /// Decode PumpFun AMM pool data from account bytes using centralized utilities
+    fn decode_pump_fun_amm_pool(data: &[u8]) -> Option<PumpFunAmmPoolInfo> {
+        if is_debug_pool_calculator_enabled() {
+            log(
+                LogTag::PoolCalculator,
+                "DEBUG",
+                &format!("Decoding PumpFun pool data ({} bytes)", data.len())
+            );
+        }
+
+        // Extract mints and vaults using centralized utility
+        let pool_info = extract_pumpfun_mints_and_vaults(data)?;
+
+        // Validate this is a SOL-based pool and get normalized token pair info
+        let pair_info = match validate_sol_pool(pool_info) {
+            Ok(info) => info,
+            Err(e) => {
+                if is_debug_pool_calculator_enabled() {
+                    log(
+                        LogTag::PoolCalculator,
+                        "WARN",
+                        &format!("PumpFun pool validation failed: {}", e)
                     );
                 }
                 return None;
             }
         };
 
-        // Parse pool state from account data using the proven method
-        let pool_info = Self::decode_pump_fun_amm_pool(&pool_account.data)?;
-
-        // Calculate price using the working logic from old system
-        Self::calculate_pump_fun_amm_price(&pool_info, accounts, base_mint, quote_mint)
-    }
-}
-
-impl PumpFunAmmDecoder {
-    /// Decode PumpFun AMM pool data from account bytes (from old working system)
-    fn decode_pump_fun_amm_pool(data: &[u8]) -> Option<PumpFunAmmPoolInfo> {
-        if data.len() < 200 {
-            if is_debug_pool_calculator_enabled() {
-                log(
-                    LogTag::PoolCalculator,
-                    "ERROR",
-                    &format!("Invalid PumpFun AMM pool account data length: {}", data.len())
-                );
-            }
-            return None;
-        }
-
-        let mut offset = 8; // Skip discriminator
-
         if is_debug_pool_calculator_enabled() {
             log(
                 LogTag::PoolCalculator,
-                "DEBUG",
-                &format!("PumpFun pool data length: {} bytes, decoding structure...", data.len())
-            );
-        }
-
-        // Decode PUMP.FUN AMM pool structure based on schema:
-        // pool_bump (u8), index (u16), creator (pubkey), base_mint (pubkey), quote_mint (pubkey),
-        // lp_mint (pubkey), pool_base_token_account (pubkey), pool_quote_token_account (pubkey),
-        // lp_supply (u64), coin_creator (pubkey)
-
-        let _pool_bump = data[offset]; // u8
-        offset += 1;
-
-        let _index = u16::from_le_bytes(data[offset..offset + 2].try_into().ok()?); // u16
-        offset += 2;
-
-        let _creator = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // creator pubkey
-
-        // Read all the pubkeys from the pool structure
-        let _creator = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // creator pubkey
-        let mint1 = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let mint2 = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let _lp_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // lp_mint
-        let vault1 = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let vault2 = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-
-        // Define all possible SOL mint addresses
-        let wrapped_sol_mint = "So11111111111111111111111111111111111111112";
-        let native_sol_mint = "11111111111111111111111111111111"; // System Program ID
-        let usdc_mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // Sometimes USDC is used
-
-        // Determine which mint is which by examining the actual values
-        let (base_mint, quote_mint, base_vault, quote_vault) = if
-            mint1 == wrapped_sol_mint ||
-            mint1 == native_sol_mint
-        {
-            // mint1 is SOL, mint2 is token
-            (mint2, wrapped_sol_mint.to_string(), vault2, vault1)
-        } else if mint2 == wrapped_sol_mint || mint2 == native_sol_mint {
-            // mint2 is SOL, mint1 is token
-            (mint1, wrapped_sol_mint.to_string(), vault1, vault2)
-        } else if mint1 == usdc_mint {
-            // Special case: mint1 is USDC, treat as quote currency
-            if is_debug_pool_calculator_enabled() {
-                log(
-                    LogTag::PoolCalculator,
-                    "INFO",
-                    &format!("PumpFun pool uses USDC as quote currency: {} vs {}", mint1, mint2)
-                );
-            }
-            // For now, skip USDC pools as we want SOL-based pricing
-            return None;
-        } else if mint2 == usdc_mint {
-            // Special case: mint2 is USDC, treat as quote currency
-            if is_debug_pool_calculator_enabled() {
-                log(
-                    LogTag::PoolCalculator,
-                    "INFO",
-                    &format!("PumpFun pool uses USDC as quote currency: {} vs {}", mint1, mint2)
-                );
-            }
-            // For now, skip USDC pools as we want SOL-based pricing
-            return None;
-        } else {
-            // Neither mint is SOL or USDC - unexpected for PumpFun
-            if is_debug_pool_calculator_enabled() {
-                log(
-                    LogTag::PoolCalculator,
-                    "WARN",
-                    &format!(
-                        "PumpFun pool contains neither SOL nor USDC. Mint1: {}, Mint2: {}",
-                        mint1,
-                        mint2
-                    )
-                );
-            }
-            return None;
-        };
-
-        let lp_supply = if data.len() >= offset + 8 {
-            u64::from_le_bytes(data[offset..offset + 8].try_into().ok()?)
-        } else {
-            0
-        };
-        offset += 8;
-
-        let _coin_creator = Self::read_pubkey_at_offset(data, &mut offset).ok()?; // coin_creator
-
-        if is_debug_pool_calculator_enabled() {
-            log(
-                LogTag::PoolCalculator,
-                "DEBUG",
+                "SUCCESS",
                 &format!(
-                    "Extracted PumpFun pool structure (auto-detected SOL position):\n\
-                    - Base mint (token): {}\n\
-                    - Quote mint (SOL): {}\n\
-                    - Base token vault: {}\n\
-                    - Quote token vault: {}\n\
-                    - LP supply: {}",
-                    base_mint,
-                    quote_mint,
-                    base_vault,
-                    quote_vault,
-                    lp_supply
+                    "Valid PumpFun SOL pool: token={}, sol_is_first={}, token_vault={}, sol_vault={}",
+                    &pair_info.token_mint[..8],
+                    pair_info.sol_is_first,
+                    &pair_info.token_vault[..8],
+                    &pair_info.sol_vault[..8]
                 )
             );
         }
 
+        // Extract LP supply from the pool data
+        let lp_supply = extract_lp_supply(data).unwrap_or(0);
+
         Some(PumpFunAmmPoolInfo {
-            base_mint,
-            quote_mint,
-            pool_base_token_account: base_vault,
-            pool_quote_token_account: quote_vault,
+            base_mint: pair_info.token_mint,
+            quote_mint: pair_info.sol_mint,
+            pool_base_token_account: pair_info.token_vault,
+            pool_quote_token_account: pair_info.sol_vault,
             lp_supply,
         })
     }
 
-    /// Calculate price for PumpFun AMM pool (from old working system)
+    /// Calculate price for PumpFun AMM pool
     fn calculate_pump_fun_amm_price(
         pool_info: &PumpFunAmmPoolInfo,
         accounts: &HashMap<String, AccountData>,
         base_mint: &str,
-        quote_mint: &str
+        quote_mint: &str,
+        pool_account: &str
     ) -> Option<PriceResult> {
         if is_debug_pool_calculator_enabled() {
             log(
@@ -232,23 +170,13 @@ impl PumpFunAmmDecoder {
         }
 
         // Use the base mint (token) from the pool - this is the token we'll calculate price for
-        // No need to match against specific requested tokens since pool discovery already filtered correctly
         let target_mint = pool_info.base_mint.clone();
 
         if is_debug_pool_calculator_enabled() {
-            log(
-                LogTag::PoolCalculator,
-                "DEBUG",
-                &format!(
-                    "Calculating PumpFun price for token {} with quote {}",
-                    target_mint,
-                    pool_info.quote_mint
-                )
-            );
+            log(LogTag::PoolCalculator, "DEBUG", &format!("Using target mint: {}", target_mint));
         }
 
-        // Get vault balances from fetched account data
-        // Base vault contains the token, quote vault contains SOL
+        // Get token reserves from vault accounts
         let token_reserve = Self::get_vault_balance_from_accounts(
             accounts,
             &pool_info.pool_base_token_account
@@ -262,58 +190,33 @@ impl PumpFunAmmDecoder {
             log(
                 LogTag::PoolCalculator,
                 "DEBUG",
-                &format!(
-                    "Successfully fetched PumpFun vault balances:\n\
-                    - Token vault {} balance: {}\n\
-                    - SOL vault {} balance: {}",
-                    pool_info.pool_base_token_account,
-                    token_reserve,
-                    pool_info.pool_quote_token_account,
-                    sol_reserve
-                )
+                &format!("Raw reserves - Token: {}, SOL: {}", token_reserve, sol_reserve)
             );
         }
 
-        // Get token decimals - CRITICAL: must be cached, no fallback to defaults
-        let target_token_decimals = match get_cached_decimals(&target_mint) {
-            Some(decimals) => decimals,
-            None => {
-                if is_debug_pool_calculator_enabled() {
-                    log(
-                        LogTag::PoolCalculator,
-                        "ERROR",
-                        &format!("PumpFun: Token decimals not cached for {}, skipping price calculation", target_mint)
-                    );
-                }
-                return None;
-            }
-        };
-        let sol_decimals = SOL_DECIMALS;
-
-        // Validate reserves - for pump.fun, we might have placeholder values
-        // If reserves are the placeholders we set (1000000 and 1000), or zero, skip calculation
-        if
-            (sol_reserve == 1000 && token_reserve == 1_000_000) ||
-            sol_reserve == 0 ||
-            token_reserve == 0
-        {
+        // Reserve validation
+        if token_reserve == 0 || sol_reserve == 0 {
             if is_debug_pool_calculator_enabled() {
                 log(
                     LogTag::PoolCalculator,
-                    "WARN",
+                    "ERROR",
                     &format!(
-                        "PumpFun pool has placeholder/zero reserves (SOL: {}, Token: {}), skipping calculation",
-                        sol_reserve,
-                        token_reserve
+                        "Zero reserves detected - Token: {}, SOL: {}",
+                        token_reserve,
+                        sol_reserve
                     )
                 );
             }
             return None;
         }
 
-        // Calculate price in SOL: price = (SOL reserves / 10^SOL_decimals) / (token reserves / 10^token_decimals)
-        let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
-        let token_adjusted = (token_reserve as f64) / (10_f64).powi(target_token_decimals as i32);
+        // Get token decimals (standard assumption for PumpFun tokens)
+        let token_decimals = 6; // Most PumpFun tokens use 6 decimals
+        let sol_decimals = 9; // SOL always uses 9 decimals
+
+        // Adjust for decimals
+        let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals);
+        let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals);
 
         if token_adjusted <= 0.0 {
             if is_debug_pool_calculator_enabled() {
@@ -350,7 +253,7 @@ impl PumpFunAmmDecoder {
                     sol_decimals,
                     sol_adjusted,
                     token_reserve,
-                    target_token_decimals,
+                    token_decimals,
                     token_adjusted,
                     price_sol,
                     target_mint
@@ -358,53 +261,59 @@ impl PumpFunAmmDecoder {
             );
         }
 
-        Some(
-            PriceResult::new(
-                target_mint,
-                0.0, // No USD calculation
-                price_sol,
-                sol_adjusted,
-                token_adjusted,
-                String::new() // Pool address will be set by calculator
-            )
-        )
+        Some(PriceResult {
+            mint: target_mint,
+            price_usd: 0.0, // We don't calculate USD price here
+            price_sol,
+            confidence: 0.9, // High confidence for PumpFun pools
+            source_pool: Some("PumpFun".to_string()),
+            pool_address: pool_account.to_string(),
+            slot: 0, // Would need to be passed from the calling context
+            timestamp: Instant::now(),
+            sol_reserves: sol_adjusted,
+            token_reserves: token_adjusted,
+        })
     }
 
-    /// Extract vault balance from token account data (from old system)
+    /// Get token balance from vault account
     fn get_vault_balance_from_accounts(
         accounts: &HashMap<String, AccountData>,
-        vault_address: &str
+        vault_account: &str
     ) -> Option<u64> {
-        let account_data = match accounts.get(vault_address) {
-            Some(a) => a,
+        let vault_data = accounts.get(vault_account)?;
+
+        if vault_data.data.len() < 72 {
+            if is_debug_pool_calculator_enabled() {
+                log(
+                    LogTag::PoolCalculator,
+                    "ERROR",
+                    &format!(
+                        "Vault account {} has insufficient data: {} bytes",
+                        &vault_account[..8],
+                        vault_data.data.len()
+                    )
+                );
+            }
+            return None;
+        }
+
+        match Self::decode_token_account_amount(&vault_data.data) {
+            Some(amount) => {
+                if is_debug_pool_calculator_enabled() {
+                    log(
+                        LogTag::PoolCalculator,
+                        "DEBUG",
+                        &format!("Vault {} balance: {}", &vault_account[..8], amount)
+                    );
+                }
+                Some(amount)
+            }
             None => {
                 if is_debug_pool_calculator_enabled() {
                     log(
                         LogTag::PoolCalculator,
                         "ERROR",
-                        &format!(
-                            "Vault account {} not present in accounts map ({} keys)",
-                            vault_address,
-                            accounts.len()
-                        )
-                    );
-                }
-                return None;
-            }
-        };
-        match Self::decode_token_account_amount(&account_data.data) {
-            Ok(v) => Some(v),
-            Err(e) => {
-                if is_debug_pool_calculator_enabled() {
-                    log(
-                        LogTag::PoolCalculator,
-                        "ERROR",
-                        &format!(
-                            "Failed to decode token account {}: {} (len={})",
-                            vault_address,
-                            e,
-                            account_data.data.len()
-                        )
+                        &format!("Failed to decode vault balance for {}", &vault_account[..8])
                     );
                 }
                 None
@@ -412,22 +321,19 @@ impl PumpFunAmmDecoder {
         }
     }
 
-    /// Decode token account amount from account data (from old working system)
-    fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
+    /// Decode token account amount from account data
+    fn decode_token_account_amount(data: &[u8]) -> Option<u64> {
         if data.len() < 72 {
-            return Err("Invalid token account data length".to_string());
+            return None;
         }
 
-        // Token account amount is at offset 64 (8 bytes)
-        let amount_bytes = &data[64..72];
-        let amount = u64::from_le_bytes(
-            amount_bytes.try_into().map_err(|_| "Failed to parse token account amount".to_string())?
-        );
-
-        Ok(amount)
+        // Token account layout: mint(32) + owner(32) + amount(8) + ...
+        let amount_offset = 64;
+        let amount_bytes = &data[amount_offset..amount_offset + 8];
+        Some(u64::from_le_bytes(amount_bytes.try_into().ok()?))
     }
 
-    // Helper functions for reading pool data (from old working system)
+    /// Read a pubkey from data at given offset
     fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, String> {
         if *offset + 32 > data.len() {
             return Err("Insufficient data for pubkey".to_string());
@@ -442,6 +348,23 @@ impl PumpFunAmmDecoder {
 
         Ok(pubkey.to_string())
     }
+}
+
+/// Extract LP supply from pool data (helper function)
+fn extract_lp_supply(data: &[u8]) -> Option<u64> {
+    // LP supply is typically at a fixed offset after all the pubkeys
+    // For PumpFun: discriminator(8) + pool_bump(1) + index(2) + creator(32) + creator(32) +
+    // base_mint(32) + quote_mint(32) + lp_mint(32) + vault1(32) + vault2(32) = 235 bytes
+    let lp_supply_offset = 8 + 1 + 2 + 32 + 32 + 32 + 32 + 32 + 32 + 32; // 235
+
+    (
+        if data.len() >= lp_supply_offset + 8 {
+            let lp_supply_bytes = &data[lp_supply_offset..lp_supply_offset + 8];
+            u64::from_le_bytes(lp_supply_bytes.try_into().ok()?)
+        } else {
+            0
+        }
+    ).into()
 }
 
 /// PumpFun AMM pool information extracted from account data

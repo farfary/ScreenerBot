@@ -1,7 +1,7 @@
 use screenerbot::{
     arguments::{
-        is_clear_all_enabled, is_dry_run_enabled, is_positions_sell_all_enabled, is_run_enabled,
-        patterns, print_debug_info, print_help,
+        is_clear_all_enabled, is_dry_run_enabled, is_get_list_tools_enabled,
+        is_positions_sell_all_enabled, is_run_enabled, patterns, print_debug_info, print_help,
     },
     logger::{init_file_logging, log, LogTag},
 };
@@ -95,6 +95,17 @@ async fn main() {
             println!("Positions sell all functionality not yet implemented");
             Ok(())
         }
+        BotMode::GetListTools => {
+            log(
+                LogTag::System,
+                "INFO",
+                "🔧 Starting ScreenerBot in GET-LIST-TOOLS mode",
+            );
+
+            // Display available MCP tools
+            display_mcp_tools();
+            Ok(())
+        }
         BotMode::None => {
             let error_msg = "No valid mode specified";
             log(LogTag::System, "ERROR", error_msg);
@@ -133,6 +144,7 @@ enum BotMode {
     Run,
     ClearAll,
     PositionsSellAll,
+    GetListTools,
     None,
 }
 
@@ -144,6 +156,8 @@ fn get_bot_mode() -> BotMode {
         BotMode::ClearAll
     } else if is_positions_sell_all_enabled() {
         BotMode::PositionsSellAll
+    } else if is_get_list_tools_enabled() {
+        BotMode::GetListTools
     } else {
         BotMode::None
     }
@@ -162,16 +176,19 @@ fn validate_arguments() -> Result<(), String> {
     if is_positions_sell_all_enabled() {
         mode_count += 1;
     }
+    if is_get_list_tools_enabled() {
+        mode_count += 1;
+    }
 
     if mode_count == 0 {
         return Err(
-            "No execution mode specified. Use --run, --clear-all, or --positions-sell-all"
+            "No execution mode specified. Use --run, --clear-all, --positions-sell-all, or --get-list-tools"
                 .to_string(),
         );
     }
 
     if mode_count > 1 {
-        return Err("Multiple execution modes specified. Use only one of: --run, --clear-all, --positions-sell-all".to_string());
+        return Err("Multiple execution modes specified. Use only one of: --run, --clear-all, --positions-sell-all, --get-list-tools".to_string());
     }
 
     // Validate that --dry-run is only used with --run
@@ -188,4 +205,62 @@ fn validate_arguments() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// Displays available MCP tools by reading the MCP server configuration
+fn display_mcp_tools() {
+    use std::fs;
+    use std::path::Path;
+
+    println!("🔧 Available MCP Tools:");
+    println!();
+
+    // Try to read the MCP tools from the TypeScript file
+    let mcp_file_path = Path::new("mcp/src/index.ts");
+
+    if mcp_file_path.exists() {
+        match fs::read_to_string(mcp_file_path) {
+            Ok(content) => {
+                // Extract tool names from the tools array
+                let mut tools = Vec::new();
+                let lines: Vec<&str> = content.lines().collect();
+
+                for line in lines.iter() {
+                    if line.trim().starts_with("name: \"") {
+                        // Extract tool name from line like: name: "tool_name",
+                        if let Some(start) = line.find("\"") {
+                            if let Some(end) = line[start + 1..].find("\"") {
+                                let tool_name = &line[start + 1..start + 1 + end];
+                                tools.push(tool_name.to_string());
+                            }
+                        }
+                    }
+                }
+
+                if tools.is_empty() {
+                    println!("❌ No tools found in MCP configuration");
+                } else {
+                    println!("📋 Found {} MCP tools:", tools.len());
+                    println!();
+
+                    for (i, tool) in tools.iter().enumerate() {
+                        println!("  {}. {}", i + 1, tool);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("❌ Error reading MCP configuration: {}", e);
+            }
+        }
+    } else {
+        println!(
+            "❌ MCP configuration file not found at: {}",
+            mcp_file_path.display()
+        );
+        println!("   Expected location: mcp/src/index.ts");
+    }
+
+    println!();
+    println!("💡 To use these tools, start the MCP server and connect via Claude Desktop");
+    println!("   or use the MCP client tools directly.");
 }

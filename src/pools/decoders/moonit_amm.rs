@@ -5,9 +5,10 @@
 /// a CurveAccount structure with pricing information.
 
 use super::{ PoolDecoder, AccountData };
+use super::super::utils::{ is_sol_mint, WRAPPED_SOL_MINT };
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
-use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
+use crate::pools::types::{ ProgramKind, PriceResult };
 use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -202,7 +203,7 @@ impl MoonitAmmDecoder {
         }
 
         // Ensure we're working with SOL as quote currency
-        if quote_mint != SOL_MINT {
+        if !is_sol_mint(quote_mint) {
             if is_debug_pool_calculator_enabled() {
                 log(
                     LogTag::PoolCalculator,

@@ -10,6 +10,7 @@ use crate::global::is_debug_pool_service_enabled;
 use crate::logger::{ log, LogTag };
 use crate::rpc::RpcClient;
 use super::types::{ PoolDescriptor, ProgramKind };
+use super::utils::{ extract_pumpfun_mints_and_vaults, get_analyzer_vault_order, PoolMintVaultInfo };
 use crate::pools::service; // access global fetcher
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -769,29 +770,36 @@ impl PoolAnalyzer {
 
     /// Extract vault addresses from PumpFun pool account data
     fn extract_pumpfun_vault_addresses(data: &[u8]) -> Option<Vec<String>> {
-        if data.len() < 200 {
+        // Use the centralized utility function for consistent SOL detection
+        let pool_info = extract_pumpfun_mints_and_vaults(data)?;
+
+        // Get vaults in the correct order for the decoder
+        let vault_addresses = get_analyzer_vault_order(pool_info);
+
+        if vault_addresses.is_empty() {
+            if is_debug_pool_service_enabled() {
+                log(
+                    LogTag::PoolService,
+                    "WARN",
+                    "PumpFun pool does not contain SOL - skipping vault extraction"
+                );
+            }
             return None;
         }
 
-        let mut offset = 8; // Skip discriminator
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "SUCCESS",
+                &format!(
+                    "Extracted PumpFun vaults in correct order: token_vault={}, sol_vault={}",
+                    &vault_addresses[0][..8],
+                    &vault_addresses[1][..8]
+                )
+            );
+        }
 
-        // Skip pool_bump (u8) and index (u16)
-        offset += 1 + 2;
-
-        // Skip creator pubkey
-        offset += 32;
-
-        // Skip base_mint and quote_mint
-        offset += 32 + 32;
-
-        // Skip lp_mint
-        offset += 32;
-
-        // Extract vault addresses
-        let base_vault = Self::read_pubkey_at_offset_static(data, &mut offset).ok()?;
-        let quote_vault = Self::read_pubkey_at_offset_static(data, &mut offset).ok()?;
-
-        Some(vec![base_vault, quote_vault])
+        Some(vault_addresses)
     }
 
     /// Extract Moonit AMM accounts

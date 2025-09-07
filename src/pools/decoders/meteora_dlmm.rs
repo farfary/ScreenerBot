@@ -5,10 +5,11 @@
 /// in separate vault accounts.
 
 use super::{ PoolDecoder, AccountData };
+use super::super::utils::{ is_sol_mint, WRAPPED_SOL_MINT };
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
 use crate::tokens::decimals::get_cached_decimals;
-use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, METEORA_DLMM_PROGRAM_ID };
+use crate::pools::types::{ ProgramKind, PriceResult, METEORA_DLMM_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -69,14 +70,14 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         }
 
         // Determine which token is SOL and which is the base token
-        let (token_mint, sol_vault, token_vault) = if dlmm_info.token_y_mint == SOL_MINT {
+        let (token_mint, sol_vault, token_vault) = if is_sol_mint(&dlmm_info.token_y_mint) {
             // token_x is the base token, token_y is SOL
             (
                 dlmm_info.token_x_mint.clone(),
                 dlmm_info.reserve_y.clone(),
                 dlmm_info.reserve_x.clone(),
             )
-        } else if dlmm_info.token_x_mint == SOL_MINT {
+        } else if is_sol_mint(&dlmm_info.token_x_mint) {
             // token_x is SOL, token_y is the base token
             (
                 dlmm_info.token_y_mint.clone(),
@@ -133,7 +134,7 @@ impl PoolDecoder for MeteoraDlmmDecoder {
 
             // Verify mints match expected
             if let (Ok(sol_mint), Ok(token_mint_check)) = (sol_vault_mint, token_vault_mint) {
-                let sol_mint_correct = sol_mint == SOL_MINT;
+                let sol_mint_correct = is_sol_mint(&sol_mint);
                 let token_mint_correct = token_mint_check == token_mint;
 
                 log(

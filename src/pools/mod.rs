@@ -16,6 +16,7 @@ mod service;
 pub mod types; // Make types public
 mod cache;
 mod api;
+pub mod utils; // Utility functions for SOL detection and vault pairing
 
 // Re-export only the public API
 pub use api::{ get_pool_price, get_available_tokens, get_price_history, get_cache_stats };
@@ -29,7 +30,7 @@ pub use service::{
 pub use types::{ PriceResult, PoolError };
 
 // Internal modules (not exposed)
-mod discovery;
+pub mod discovery;
 mod analyzer;
 mod fetcher;
 mod calculator;

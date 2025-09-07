@@ -186,9 +186,9 @@ impl ProgramKind {
     }
 }
 
-/// Internal pool descriptor (not exposed in public API)
+/// Pool descriptor containing metadata about a discovered pool
 #[derive(Debug, Clone)]
-pub(crate) struct PoolDescriptor {
+pub struct PoolDescriptor {
     pub pool_id: Pubkey,
     pub program_kind: ProgramKind,
     pub base_mint: Pubkey,

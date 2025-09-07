@@ -5,10 +5,11 @@
 /// Based on the proven logic from pool_old.rs lines ~7220-7450.
 
 use super::{ PoolDecoder, AccountData };
+use super::super::utils::{ is_sol_mint, WRAPPED_SOL_MINT };
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
 use crate::tokens::decimals::get_cached_decimals;
-use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, METEORA_DAMM_PROGRAM_ID };
+use crate::pools::types::{ ProgramKind, PriceResult, METEORA_DAMM_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -66,7 +67,7 @@ impl PoolDecoder for MeteoraDammDecoder {
 
         // Determine which token is SOL and which is the base token
         let (token_mint, sol_vault, token_vault, sol_fees, token_fees) = if
-            damm_info.token_b_mint == SOL_MINT
+            is_sol_mint(&damm_info.token_b_mint)
         {
             // token_a is the custom token, token_b is SOL
             (
@@ -76,7 +77,7 @@ impl PoolDecoder for MeteoraDammDecoder {
                 damm_info.protocol_b_fee + damm_info.partner_b_fee, // SOL fees
                 damm_info.protocol_a_fee + damm_info.partner_a_fee, // Token fees
             )
-        } else if damm_info.token_a_mint == SOL_MINT {
+        } else if is_sol_mint(&damm_info.token_a_mint) {
             // token_b is the custom token, token_a is SOL
             (
                 damm_info.token_b_mint.clone(),
@@ -277,7 +278,7 @@ impl PoolDecoder for MeteoraDammDecoder {
 
         // Apply decimal adjustment based on token order
         // DAMM v2 stores sqrt_price as sqrt(token_b/token_a)
-        let price_sol = if damm_info.token_b_mint == SOL_MINT {
+        let price_sol = if is_sol_mint(&damm_info.token_b_mint) {
             // token_a is custom token, token_b is SOL
             // sqrt_price = sqrt(SOL/token) -> price = SOL per token (what we want)
             price_ratio * (10_f64).powi((sol_decimals as i32) - (token_decimals as i32))

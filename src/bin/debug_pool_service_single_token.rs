@@ -13,8 +13,9 @@ use screenerbot::pools::{
     get_pool_price,
 };
 use screenerbot::pools::types::ProgramKind;
+use screenerbot::pools::discovery::PoolDiscovery;
+use screenerbot::pools::utils::is_stablecoin_mint;
 use screenerbot::tokens::dexscreener::{ get_token_price_from_global_api, init_dexscreener_api };
-use screenerbot::tokens::dexscreener::get_token_pairs_from_api;
 use screenerbot::rpc::get_rpc_client;
 use screenerbot::logger::{ log, LogTag };
 use solana_sdk::pubkey::Pubkey;
@@ -62,7 +63,7 @@ async fn get_pool_program_info(pool_address: &str) -> (String, String) {
     }
 }
 
-/// Discover pools and identify the biggest pool by liquidity
+/// Discover pools using proper discovery module and identify the biggest SOL pool by liquidity
 async fn discover_and_identify_biggest_pool(
     token_address: &str
 ) -> Result<Option<(String, f64, String)>, String> {
@@ -72,71 +73,64 @@ async fn discover_and_identify_biggest_pool(
         &format!("Discovering pools for token: {}", token_address)
     );
 
-    match get_token_pairs_from_api(token_address).await {
-        Ok(pairs) => {
-            if pairs.is_empty() {
-                log(LogTag::PoolService, "DISCOVER_ERROR", "No pools found for token");
-                return Ok(None);
-            }
+    // Use the proper discovery module which already filters for SOL-only pools
+    let discovery = PoolDiscovery::new();
+    let pool_descriptors = discovery.discover_pools_for_token(token_address).await;
 
-            log(
-                LogTag::PoolService,
-                "DISCOVER_SUCCESS",
-                &format!("Found {} pools for token {}", pairs.len(), token_address)
-            );
+    if pool_descriptors.is_empty() {
+        log(LogTag::PoolService, "DISCOVER_ERROR", "No SOL-based pools found for token");
+        return Ok(None);
+    }
 
-            // Find the biggest pool by liquidity (or first pool if no liquidity data)
-            let mut biggest_pool = None;
-            let mut highest_liquidity = -1.0; // Start with negative to include 0 liquidity pools
+    log(
+        LogTag::PoolService,
+        "DISCOVER_SUCCESS",
+        &format!("Found {} SOL-based pools for token {}", pool_descriptors.len(), token_address)
+    );
 
-            for pair in &pairs {
-                let liquidity = if let Some(liq) = &pair.liquidity { liq.usd } else { 0.0 };
+    // Find the biggest pool by liquidity from the already-filtered SOL pools
+    let mut biggest_pool = None;
+    let mut highest_liquidity = -1.0;
 
-                if liquidity > highest_liquidity {
-                    highest_liquidity = liquidity;
-                    biggest_pool = Some(pair);
-                }
-            }
+    for descriptor in &pool_descriptors {
+        let liquidity = descriptor.liquidity_usd;
 
-            // If no pool was selected (all have negative liquidity somehow), take the first one
-            if biggest_pool.is_none() && !pairs.is_empty() {
-                biggest_pool = Some(&pairs[0]);
-                highest_liquidity = 0.0;
-            }
-
-            if let Some(pool) = biggest_pool {
-                // Get program info for the biggest pool
-                let (program_id, program_name) = get_pool_program_info(&pool.pair_address).await;
-                let program_display = format!("{} ({})", program_name, &program_id[..8]);
-
-                log(
-                    LogTag::PoolService,
-                    "BIGGEST_POOL",
-                    &format!(
-                        "Selected biggest pool: {} | {} | Liquidity: ${:.2}",
-                        &pool.pair_address[..8],
-                        program_display,
-                        highest_liquidity
-                    )
-                );
-
-                // Log summary of all pools for reference
-                log(
-                    LogTag::PoolService,
-                    "POOLS_SUMMARY",
-                    &format!("All pools: {} total, focusing on highest liquidity pool", pairs.len())
-                );
-
-                Ok(Some((pool.pair_address.clone(), highest_liquidity, program_display)))
-            } else {
-                log(LogTag::PoolService, "DISCOVER_ERROR", "No valid pools found");
-                Ok(None)
-            }
+        if liquidity > highest_liquidity {
+            highest_liquidity = liquidity;
+            biggest_pool = Some(descriptor);
         }
-        Err(e) => {
-            log(LogTag::PoolService, "DISCOVER_ERROR", &format!("Failed to discover pools: {}", e));
-            Err(e)
-        }
+    }
+
+    if let Some(pool) = biggest_pool {
+        // Get program info for the biggest pool
+        let (program_id, program_name) = get_pool_program_info(&pool.pool_id.to_string()).await;
+        let program_display = format!("{} ({})", program_name, &program_id[..8]);
+
+        log(
+            LogTag::PoolService,
+            "BIGGEST_POOL",
+            &format!(
+                "Selected biggest SOL pool: {} | {} | Liquidity: ${:.2}",
+                &pool.pool_id.to_string()[..8],
+                program_display,
+                highest_liquidity
+            )
+        );
+
+        // Log summary of all pools for reference
+        log(
+            LogTag::PoolService,
+            "POOLS_SUMMARY",
+            &format!(
+                "All SOL pools: {} total, focusing on highest liquidity pool",
+                pool_descriptors.len()
+            )
+        );
+
+        Ok(Some((pool.pool_id.to_string(), highest_liquidity, program_display)))
+    } else {
+        log(LogTag::PoolService, "DISCOVER_ERROR", "No valid SOL pools found");
+        Ok(None)
     }
 }
 
@@ -168,6 +162,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Pre-fetch token decimals to ensure they're cached
     log(LogTag::PoolService, "INIT", "Pre-fetching token decimals...");
+
+    // Early stablecoin validation - reject stablecoin tokens immediately
+    if is_stablecoin_mint(&args.token) {
+        log(
+            LogTag::PoolService,
+            "ERROR",
+            &format!(
+                "Token {} is a stablecoin (USDC/USDT) - not supported for price monitoring",
+                &args.token[..8]
+            )
+        );
+        return Err("Stablecoin tokens are not supported for price monitoring".into());
+    }
+
     match screenerbot::tokens::decimals::get_token_decimals_from_chain(&args.token).await {
         Ok(decimals) => {
             log(
