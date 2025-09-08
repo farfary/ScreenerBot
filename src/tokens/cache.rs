@@ -29,11 +29,17 @@ unsafe impl Sync for TokenDatabase {}
 
 /// Configure database connection for optimal performance and concurrency
 fn configure_database_connection(connection: &Connection) -> Result<(), rusqlite::Error> {
-    connection.execute("PRAGMA journal_mode = WAL", [])?; // Enable WAL mode for better concurrency
-    connection.execute("PRAGMA synchronous = NORMAL", [])?; // Better performance
-    connection.execute("PRAGMA temp_store = memory", [])?; // Use memory for temp storage
-    connection.execute("PRAGMA cache_size = 10000", [])?; // Larger cache
-    connection.execute("PRAGMA busy_timeout = 30000", [])?; // 30 second timeout for locks
+    // Use rusqlite pragma_update APIs to avoid statements that return rows
+    // Set Write-Ahead Logging for better concurrency
+    connection.pragma_update(None, "journal_mode", "WAL")?;
+    // Reasonable durability/perf tradeoff
+    connection.pragma_update(None, "synchronous", "NORMAL")?;
+    // Use memory for temp storage
+    connection.pragma_update(None, "temp_store", "memory")?;
+    // Increase cache size (number of pages if positive; SQLite also accepts negative for KB)
+    connection.pragma_update(None, "cache_size", 10000)?;
+    // Set busy timeout for lock contention
+    connection.busy_timeout(std::time::Duration::from_millis(30_000))?;
     Ok(())
 }
 
@@ -1821,9 +1827,15 @@ impl TokenDatabase {
         let migration_conn = create_configured_connection()?;
 
         // Check if failed_decimals table has retry_count column
-        let has_retry_count = migration_conn
-            .prepare("SELECT retry_count FROM failed_decimals LIMIT 1")
-            .is_ok();
+        let has_retry_count = {
+            match migration_conn.prepare("SELECT retry_count FROM failed_decimals LIMIT 1") {
+                Ok(mut stmt) => {
+                    // Try to execute the query to see if the column exists
+                    stmt.query_map([], |_| Ok(())).is_ok()
+                }
+                Err(_) => false,
+            }
+        };
 
         if !has_retry_count {
             log(
