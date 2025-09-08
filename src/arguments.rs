@@ -155,6 +155,11 @@ pub fn is_debug_rugcheck_enabled() -> bool {
     has_arg("--debug-rugcheck")
 }
 
+/// SOL price service debug mode
+pub fn is_debug_sol_price_enabled() -> bool {
+    has_arg("--debug-sol-price")
+}
+
 /// Entry module debug mode
 pub fn is_debug_entry_enabled() -> bool {
     has_arg("--debug-entry")
@@ -349,6 +354,7 @@ pub fn is_any_debug_enabled() -> bool {
         is_debug_discovery_enabled() ||
         is_debug_price_service_enabled() ||
         is_debug_rugcheck_enabled() ||
+        is_debug_sol_price_enabled() ||
         is_debug_entry_enabled() ||
         is_debug_ohlcv_enabled() ||
         is_debug_wallet_enabled() ||
@@ -411,6 +417,9 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     }
     if is_debug_rugcheck_enabled() {
         modes.push("rugcheck");
+    }
+    if is_debug_sol_price_enabled() {
+        modes.push("sol-price");
     }
     if is_debug_entry_enabled() {
         modes.push("entry");

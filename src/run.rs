@@ -256,6 +256,16 @@ pub async fn run_bot() -> Result<(), String> {
     let shutdown_wallet = shutdown.clone();
     let wallet_monitor_handle = wallet::start_wallet_monitoring_service(shutdown_wallet).await;
 
+    // Start SOL price monitoring background service
+    let shutdown_sol_price = shutdown.clone();
+    let sol_price_handle = tokio::spawn(async move {
+        debug_log(LogTag::System, "INFO", "SOL price service task started");
+        if let Err(e) = crate::sol_price::start_sol_price_service(shutdown_sol_price).await {
+            log(LogTag::System, "ERROR", &format!("Failed to start SOL price service: {}", e));
+        }
+        debug_log(LogTag::System, "INFO", "SOL price service task ended");
+    });
+
     // Start trader tasks (moved from trader() function for centralized management)
 
     // Initialize global transaction manager FIRST (before reconciliation)

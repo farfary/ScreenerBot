@@ -327,6 +327,7 @@ pub enum LogTag {
     Rugcheck,
     Profit,
     PriceService,
+    SolPrice,
     Rpc,
     Ohlcv,
     Decimals,
@@ -364,6 +365,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Rugcheck => format!("{:<8}", "RUGCHECK").bright_red().bold(), // 🛡️ Security red
             LogTag::Profit => format!("{:<8}", "PROFIT").bright_purple().bold(), // 💲 Profit green
             LogTag::PriceService => format!("{:<8}", "PRICE").bright_green().bold(), // 💹 Price service green
+            LogTag::SolPrice => format!("{:<8}", "SOLPRICE").bright_yellow().bold(), // 💰 SOL price yellow
             LogTag::Rpc => format!("{:<8}", "RPC").bright_cyan().bold(), // 🔗 RPC cyan
             LogTag::Ohlcv => format!("{:<8}", "OHLCV").bright_green().bold(), // 📈 OHLCV chart green
             LogTag::Decimals => format!("{:<8}", "DECIMALS").bright_white().bold(), // 🔢 Decimals white
@@ -521,6 +523,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             format!("{:<width$}", "PRICE", width = TAG_WIDTH)
                 .bright_green()
                 .bold(),
+        LogTag::SolPrice =>
+            format!("{:<width$}", "SOLPRICE", width = TAG_WIDTH)
+                .bright_yellow()
+                .bold(),
         LogTag::Rpc =>
             format!("{:<width$}", "RPC", width = TAG_WIDTH)
                 .bright_cyan()
@@ -637,6 +643,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Rugcheck => "RUGCHECK",
         LogTag::Profit => "PROFIT",
         LogTag::PriceService => "PRICE",
+        LogTag::SolPrice => "SOLPRICE",
         LogTag::Rpc => "RPC",
         LogTag::Ohlcv => "OHLCV",
         LogTag::Decimals => "DECIMALS",
