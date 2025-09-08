@@ -11,21 +11,29 @@ use std::time::Instant;
 
 /// Safe string truncation helper to prevent panic on out-of-bounds slicing
 pub fn safe_truncate(s: &str, len: usize) -> &str {
-    if s.len() >= len {
-        &s[..len]
-    } else {
+    if s.chars().count() <= len {
         s
+    } else {
+        // Find the byte boundary at the character position
+        match s.char_indices().nth(len) {
+            Some((byte_idx, _)) => &s[..byte_idx],
+            None => s, // Shouldn't happen given the count check above
+        }
     }
 }
 
 /// Safe signature formatting that shows first 8 and last 4 chars, or full string if short
 pub fn safe_format_signature(s: &str) -> String {
-    if s.len() > 12 {
-        format!(
-            "{}...{}",
-            safe_truncate(s, 8),
-            &s[s.len().saturating_sub(4)..]
-        )
+    let char_count = s.chars().count();
+    if char_count > 12 {
+        let first_8 = safe_truncate(s, 8);
+        // Get last 4 characters safely
+        let last_4 = if char_count >= 4 {
+            s.chars().skip(char_count - 4).collect::<String>()
+        } else {
+            s.to_string()
+        };
+        format!("{}...{}", first_8, last_4)
     } else {
         s.to_string()
     }

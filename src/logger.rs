@@ -806,35 +806,76 @@ fn break_long_word(word: &str, max_width: usize) -> Vec<String> {
     let mut remaining = word;
 
     while !remaining.is_empty() {
-        if remaining.len() <= max_width {
+        if remaining.chars().count() <= max_width {
             chunks.push(remaining.to_string());
             break;
         }
 
-        let chunk_length = max_width;
+        // Find a safe UTF-8 boundary at or before max_width characters
+        let mut char_boundary = 0;
+        let mut char_count = 0;
+        
+        for (byte_idx, _) in remaining.char_indices() {
+            if char_count >= max_width {
+                break;
+            }
+            char_boundary = byte_idx;
+            char_count += 1;
+        }
+        
+        // If we didn't find any characters (shouldn't happen), fall back to the next character boundary
+        if char_count == 0 {
+            if let Some((next_boundary, _)) = remaining.char_indices().nth(1) {
+                char_boundary = next_boundary;
+            } else {
+                // Single character that's somehow longer than max_width, just take it
+                chunks.push(remaining.to_string());
+                break;
+            }
+        }
 
         // For URLs and other structured text, try to break at natural points
-        let break_point = if chunk_length < remaining.len() {
+        let break_point = if char_count < remaining.chars().count() {
             // Look for good break points in the next few characters (up to 15 chars ahead)
-            let search_end = std::cmp::min(chunk_length + 15, remaining.len());
-            let search_slice = &remaining[chunk_length..search_end];
+            let search_start_chars = char_count;
+            let search_end_chars = std::cmp::min(char_count + 15, remaining.chars().count());
+            
+            // Get the byte indices for the search range
+            let search_start_bytes = remaining.char_indices().nth(search_start_chars).map(|(i, _)| i).unwrap_or(remaining.len());
+            let search_end_bytes = remaining.char_indices().nth(search_end_chars).map(|(i, _)| i).unwrap_or(remaining.len());
+            
+            if search_start_bytes < remaining.len() && search_end_bytes <= remaining.len() {
+                let search_slice = &remaining[search_start_bytes..search_end_bytes];
 
-            // Priority order for URL/JSON break points:
-            // 1. URL path separators and query params: /, ?, &
-            // 2. Assignment and value separators: =, :
-            // 3. General separators: ., -, _
-            // 4. JSON/data separators: {, }, [, ], ,
-            let break_chars = ['/', '?', '&', '=', ':', '.', '-', '_', '{', '}', '[', ']', ','];
+                // Priority order for URL/JSON break points:
+                // 1. URL path separators and query params: /, ?, &
+                // 2. Assignment and value separators: =, :
+                // 3. General separators: ., -, _
+                // 4. JSON/data separators: {, }, [, ], ,
+                let break_chars = ['/', '?', '&', '=', ':', '.', '-', '_', '{', '}', '[', ']', ','];
 
-            if let Some(pos) = search_slice.find(&break_chars[..]) {
-                let actual_pos = chunk_length + pos + 1;
-                // Make sure we don't go beyond the string
-                std::cmp::min(actual_pos, remaining.len())
+                if let Some(pos) = search_slice.find(&break_chars[..]) {
+                    let actual_pos = search_start_bytes + pos + 1;
+                    // Make sure we don't go beyond the string and find the character boundary
+                    let actual_pos = std::cmp::min(actual_pos, remaining.len());
+                    
+                    // Find the closest character boundary at or before actual_pos
+                    let mut boundary = actual_pos;
+                    for (byte_idx, _) in remaining.char_indices() {
+                        if byte_idx > actual_pos {
+                            break;
+                        }
+                        boundary = byte_idx;
+                    }
+                    boundary
+                } else {
+                    char_boundary
+                }
             } else {
-                chunk_length
+                char_boundary
             }
         } else {
-            chunk_length
+            char_boundary
         };
 
         let chunk = &remaining[..break_point];

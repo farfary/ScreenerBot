@@ -1154,18 +1154,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
         let handles_initial_size = scheduled_tokens.len(); // Track for summary logging
 
-        // Log detailed information about token processing
-        log(
-            LogTag::Trader,
-            "TOKEN_PROCESSING_START",
-            &format!(
-                "🔄 Starting token processing: {} tokens scheduled (of {} eligible). Preparation took {:.3}s",
-                scheduled_tokens.len(),
-                total_tokens,
-                cycle_start.elapsed().as_secs_f32()
-            )
-        );
-
         if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
