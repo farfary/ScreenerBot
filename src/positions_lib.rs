@@ -1,14 +1,18 @@
 use crate::{
     arguments::is_debug_positions_enabled,
-    logger::{log, LogTag},
-    positions::{acquire_position_lock, MINT_TO_POSITION_INDEX, POSITIONS, SIG_TO_MINT_INDEX},
+    logger::{ log, LogTag },
+    positions::{ acquire_position_lock, MINT_TO_POSITION_INDEX, POSITIONS, SIG_TO_MINT_INDEX },
     positions_db::{
-        delete_position_by_id, save_position, save_token_snapshot, update_position, TokenSnapshot,
+        delete_position_by_id,
+        save_position,
+        save_token_snapshot,
+        update_position,
+        TokenSnapshot,
     },
     positions_types::Position,
     rpc::lamports_to_sol,
     // Pool priority functions removed - no longer needed
-    tokens::{get_token_decimals, get_token_from_mint_global_api, get_token_rugcheck_data_safe},
+    tokens::{ get_token_decimals, get_global_dexscreener_api, get_token_rugcheck_data_safe },
     trader::PROFIT_EXTRA_NEEDED_SOL,
     utils::safe_truncate,
 };
@@ -25,7 +29,7 @@ pub async fn add_signature_to_index(signature: &str, mint: &str) {
         log(
             LogTag::Positions,
             "DEBUG",
-            &format!("📋 Added signature {} -> mint {} to index", signature, mint),
+            &format!("📋 Added signature {} -> mint {} to index", signature, mint)
         );
     }
 }
@@ -78,18 +82,13 @@ async fn find_position_by_signature(signature: &str) -> Option<(String, usize)> 
 /// NOTE: sol_received should contain ONLY the SOL from token sale, excluding ATA rent reclaim
 pub async fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
     // Safety check: validate position has valid entry price
-    let entry_price = position
-        .effective_entry_price
-        .unwrap_or(position.entry_price);
+    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
     if entry_price <= 0.0 || !entry_price.is_finite() {
         if is_debug_positions_enabled() {
             log(
                 LogTag::Positions,
                 "DEBUG",
-                &format!(
-                    "❌ Invalid entry price for {}: {}",
-                    position.symbol, entry_price
-                ),
+                &format!("❌ Invalid entry price for {}: {}", position.symbol, entry_price)
             );
         }
         // Invalid entry price - return neutral P&L to avoid triggering emergency exits
@@ -107,9 +106,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
     // For positions with pending exit transactions (closing in progress), use current price for estimation
     if position.exit_transaction_signature.is_some() && !position.transaction_exit_verified {
         if let Some(current) = current_price {
-            let entry_price = position
-                .effective_entry_price
-                .unwrap_or(position.entry_price);
+            let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
             let entry_cost = position.entry_size_sol;
 
             // Calculate estimated P&L based on current price (closing in progress)
@@ -121,9 +118,9 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
                     let current_value = ui_token_amount * current;
 
                     // Account for fees (estimated)
-                    let buy_fee = position
-                        .entry_fee_lamports
-                        .map_or(0.0, |fee| lamports_to_sol(fee));
+                    let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee|
+                        lamports_to_sol(fee)
+                    );
                     let estimated_sell_fee = buy_fee;
                     let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL;
                     let net_pnl_sol = current_value - entry_cost - total_fees;
@@ -135,9 +132,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 
             // Fallback calculation for closing positions
             let price_change = (current - entry_price) / entry_price;
-            let buy_fee = position
-                .entry_fee_lamports
-                .map_or(0.0, |fee| lamports_to_sol(fee));
+            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
             let estimated_sell_fee = buy_fee;
             let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL;
             let fee_percent = (total_fees / entry_cost) * 100.0;
@@ -154,20 +149,12 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         let sol_invested = position.entry_size_sol;
 
         // Use actual transaction fees plus profit buffer for P&L calculation
-        let buy_fee = position
-            .entry_fee_lamports
-            .map_or(0.0, |fee| lamports_to_sol(fee));
-        let sell_fee = position
-            .exit_fee_lamports
-            .map_or(0.0, |fee| lamports_to_sol(fee));
+        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
         let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer in P&L calculation
 
         let net_pnl_sol = sol_received - sol_invested - total_fees;
-        let safe_invested = if sol_invested < 0.00001 {
-            0.00001
-        } else {
-            sol_invested
-        };
+        let safe_invested = if sol_invested < 0.00001 { 0.00001 } else { sol_invested };
         let net_pnl_percent = (net_pnl_sol / safe_invested) * 100.0;
 
         return (net_pnl_sol, net_pnl_percent);
@@ -175,9 +162,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 
     // Fallback for closed positions without sol_received (backward compatibility)
     if let Some(exit_price) = position.exit_price {
-        let entry_price = position
-            .effective_entry_price
-            .unwrap_or(position.entry_price);
+        let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
         let effective_exit = position.effective_exit_price.unwrap_or(exit_price);
 
         // For closed positions: actual transaction-based calculation
@@ -206,12 +191,8 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             let exit_value = ui_token_amount * effective_exit;
 
             // Account for actual buy + sell fees plus profit buffer
-            let buy_fee = position
-                .entry_fee_lamports
-                .map_or(0.0, |fee| lamports_to_sol(fee));
-            let sell_fee = position
-                .exit_fee_lamports
-                .map_or(0.0, |fee| lamports_to_sol(fee));
+            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+            let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
             let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
             let net_pnl_sol = exit_value - entry_cost - total_fees;
             let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
@@ -221,12 +202,8 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 
         // Fallback for closed positions without token amount
         let price_change = (effective_exit - entry_price) / entry_price;
-        let buy_fee = position
-            .entry_fee_lamports
-            .map_or(0.0, |fee| lamports_to_sol(fee));
-        let sell_fee = position
-            .exit_fee_lamports
-            .map_or(0.0, |fee| lamports_to_sol(fee));
+        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
         let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
         let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
         let net_pnl_percent = price_change * 100.0 - fee_percent;
@@ -237,9 +214,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 
     // For open positions, use current price
     if let Some(current) = current_price {
-        let entry_price = position
-            .effective_entry_price
-            .unwrap_or(position.entry_price);
+        let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
 
         // For open positions: current value vs entry cost
         if let Some(token_amount) = position.token_amount {
@@ -267,9 +242,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             let entry_cost = position.entry_size_sol;
 
             // Account for actual buy fee (already paid) + estimated sell fee + profit buffer
-            let buy_fee = position
-                .entry_fee_lamports
-                .map_or(0.0, |fee| lamports_to_sol(fee));
+            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
             let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
             let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
             let net_pnl_sol = current_value - entry_cost - total_fees;
@@ -280,9 +253,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 
         // Fallback for open positions without token amount
         let price_change = (current - entry_price) / entry_price;
-        let buy_fee = position
-            .entry_fee_lamports
-            .map_or(0.0, |fee| lamports_to_sol(fee));
+        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
         let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
         let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
         let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
@@ -310,7 +281,7 @@ pub fn calculate_position_total_fees(position: &Position) -> f64 {
 async fn fetch_and_create_token_snapshot(
     position_id: i64,
     mint: &str,
-    snapshot_type: &str,
+    snapshot_type: &str
 ) -> Result<TokenSnapshot, String> {
     let fetch_start = Utc::now();
 
@@ -322,30 +293,54 @@ async fn fetch_and_create_token_snapshot(
                 "Fetching latest token data for {} snapshot of {}",
                 snapshot_type,
                 safe_truncate(mint, 8)
-            ),
+            )
         );
     }
 
     // Fetch latest data from DexScreener API
-    let dex_token = match get_token_from_mint_global_api(mint).await {
-        Ok(Some(token)) => Some(token),
-        Ok(None) => {
-            log(
-                LogTag::Positions,
-                "SNAPSHOT_NO_DEX_DATA",
-                &format!("No DexScreener data found for {}", safe_truncate(mint, 8)),
-            );
-            None
+    // Fetch latest data from DexScreener API (manual lock instead of global helper)
+    let dex_token = match get_global_dexscreener_api().await {
+        Ok(api) => {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), api.lock()).await {
+                Ok(mut guard) =>
+                    match guard.get_token_from_mint(mint).await {
+                        Ok(Some(token)) => Some(token),
+                        Ok(None) => {
+                            log(
+                                LogTag::Positions,
+                                "SNAPSHOT_NO_DEX_DATA",
+                                &format!("No DexScreener data found for {}", safe_truncate(mint, 8))
+                            );
+                            None
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Positions,
+                                "SNAPSHOT_DEX_ERROR",
+                                &format!(
+                                    "Error fetching DexScreener data for {}: {}",
+                                    safe_truncate(mint, 8),
+                                    e
+                                )
+                            );
+                            None
+                        }
+                    }
+                Err(_) => {
+                    log(
+                        LogTag::Positions,
+                        "SNAPSHOT_DEX_ERROR",
+                        &format!("DexScreener API lock timeout for {}", safe_truncate(mint, 8))
+                    );
+                    None
+                }
+            }
         }
         Err(e) => {
             log(
                 LogTag::Positions,
                 "SNAPSHOT_DEX_ERROR",
-                &format!(
-                    "Error fetching DexScreener data for {}: {}",
-                    safe_truncate(mint, 8),
-                    e
-                ),
+                &format!("Failed to acquire DexScreener API: {}", e)
             );
             None
         }
@@ -358,7 +353,7 @@ async fn fetch_and_create_token_snapshot(
             log(
                 LogTag::Positions,
                 "SNAPSHOT_NO_RUGCHECK",
-                &format!("No rugcheck data found for {}", safe_truncate(mint, 8)),
+                &format!("No rugcheck data found for {}", safe_truncate(mint, 8))
             );
             None
         }
@@ -366,20 +361,14 @@ async fn fetch_and_create_token_snapshot(
             log(
                 LogTag::Positions,
                 "SNAPSHOT_RUGCHECK_ERROR",
-                &format!(
-                    "Error fetching rugcheck data for {}: {}",
-                    safe_truncate(mint, 8),
-                    e
-                ),
+                &format!("Error fetching rugcheck data for {}: {}", safe_truncate(mint, 8), e)
             );
             None
         }
     };
 
     // Calculate data freshness score (0-100)
-    let fetch_duration_ms = Utc::now()
-        .signed_duration_since(fetch_start)
-        .num_milliseconds();
+    let fetch_duration_ms = Utc::now().signed_duration_since(fetch_start).num_milliseconds();
     let freshness_score = if fetch_duration_ms < 1000 {
         100 // Very fresh, under 1 second
     } else if fetch_duration_ms < 5000 {
@@ -444,38 +433,14 @@ async fn fetch_and_create_token_snapshot(
             token.volume.as_ref().and_then(|v| v.h6),
             token.volume.as_ref().and_then(|v| v.h1),
             token.volume.as_ref().and_then(|v| v.m5),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.h24.as_ref().and_then(|h| h.buys)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.h24.as_ref().and_then(|h| h.sells)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.h6.as_ref().and_then(|h| h.buys)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.h6.as_ref().and_then(|h| h.sells)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.h1.as_ref().and_then(|h| h.buys)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.h1.as_ref().and_then(|h| h.sells)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.m5.as_ref().and_then(|h| h.buys)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.m5.as_ref().and_then(|h| h.sells)),
+            token.txns.as_ref().and_then(|t| t.h24.as_ref().and_then(|h| h.buys)),
+            token.txns.as_ref().and_then(|t| t.h24.as_ref().and_then(|h| h.sells)),
+            token.txns.as_ref().and_then(|t| t.h6.as_ref().and_then(|h| h.buys)),
+            token.txns.as_ref().and_then(|t| t.h6.as_ref().and_then(|h| h.sells)),
+            token.txns.as_ref().and_then(|t| t.h1.as_ref().and_then(|h| h.buys)),
+            token.txns.as_ref().and_then(|t| t.h1.as_ref().and_then(|h| h.sells)),
+            token.txns.as_ref().and_then(|t| t.m5.as_ref().and_then(|h| h.buys)),
+            token.txns.as_ref().and_then(|t| t.m5.as_ref().and_then(|h| h.sells)),
             token.price_change.as_ref().and_then(|pc| pc.h24),
             token.price_change.as_ref().and_then(|pc| pc.h6),
             token.price_change.as_ref().and_then(|pc| pc.h1),
@@ -483,9 +448,36 @@ async fn fetch_and_create_token_snapshot(
         )
     } else {
         (
-            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
     };
 
@@ -525,8 +517,7 @@ async fn fetch_and_create_token_snapshot(
             None
         };
 
-        let lp_data = data
-            .markets
+        let lp_data = data.markets
             .as_ref()
             .and_then(|markets| markets.first())
             .and_then(|market| market.lp.as_ref());
@@ -536,12 +527,8 @@ async fn fetch_and_create_token_snapshot(
             data.score_normalised,
             data.rugged,
             risks_json,
-            data.mint_authority
-                .as_ref()
-                .and_then(|ma| serde_json::to_string(ma).ok()),
-            data.freeze_authority
-                .as_ref()
-                .and_then(|fa| serde_json::to_string(fa).ok()),
+            data.mint_authority.as_ref().and_then(|ma| serde_json::to_string(ma).ok()),
+            data.freeze_authority.as_ref().and_then(|fa| serde_json::to_string(fa).ok()),
             data.creator.clone(),
             data.creator_balance.clone(),
             data.total_holders,
@@ -551,15 +538,11 @@ async fn fetch_and_create_token_snapshot(
             lp_data.and_then(|lp| lp.lp_locked_pct),
             lp_data.and_then(|lp| lp.lp_locked_usd),
             data.transfer_fee.as_ref().and_then(|tf| tf.pct),
-            data.transfer_fee
-                .as_ref()
-                .and_then(|tf| tf.max_amount.clone()),
+            data.transfer_fee.as_ref().and_then(|tf| tf.max_amount.clone()),
             data.verification.as_ref().and_then(|v| v.jup_verified),
             data.verification.as_ref().and_then(|v| v.jup_strict),
             data.token_meta.as_ref().and_then(|tm| tm.uri.clone()),
-            data.file_meta
-                .as_ref()
-                .and_then(|fm| fm.description.clone()),
+            data.file_meta.as_ref().and_then(|fm| fm.description.clone()),
             data.file_meta.as_ref().and_then(|fm| fm.image.clone()),
             None, // website - extract from verification links if needed
             None, // twitter - extract from verification links if needed
@@ -567,8 +550,30 @@ async fn fetch_and_create_token_snapshot(
         )
     } else {
         (
-            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
     };
 
@@ -647,7 +652,7 @@ async fn fetch_and_create_token_snapshot(
             freshness_score,
             price_sol,
             rugcheck_score_normalised.or(rugcheck_score)
-        ),
+        )
     );
 
     Ok(snapshot)
@@ -657,7 +662,7 @@ async fn fetch_and_create_token_snapshot(
 pub async fn save_position_token_snapshot(
     position_id: i64,
     mint: &str,
-    snapshot_type: &str,
+    snapshot_type: &str
 ) -> Result<(), String> {
     let _lock = acquire_position_lock(mint).await;
 
@@ -675,7 +680,7 @@ pub async fn save_position_token_snapshot(
                     snapshot_type,
                     safe_truncate(mint, 8),
                     snapshot_id
-                ),
+                )
             );
             Ok(())
         }
@@ -688,7 +693,7 @@ pub async fn save_position_token_snapshot(
                     snapshot_type,
                     safe_truncate(mint, 8),
                     e
-                ),
+                )
             );
             Err(e)
         }
@@ -702,10 +707,7 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
     log(
         LogTag::Positions,
         "CLEANUP_START",
-        &format!(
-            "🗑️ Starting cleanup of position with signature {}",
-            signature
-        ),
+        &format!("🗑️ Starting cleanup of position with signature {}", signature)
     );
 
     // Find mint first, then acquire lock
@@ -714,8 +716,8 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
         positions
             .iter()
             .find(|p| {
-                p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
-                    || p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
+                p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature) ||
+                    p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
             })
             .map(|p| p.mint.clone())
     };
@@ -726,7 +728,7 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
             log(
                 LogTag::Positions,
                 "CLEANUP_NOT_FOUND",
-                &format!("⚠️ No position found with signature {}", signature),
+                &format!("⚠️ No position found with signature {}", signature)
             );
             return Ok(());
         }
@@ -738,10 +740,12 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
         let mut positions = POSITIONS.write().await;
 
         // Find position with matching entry or exit signature
-        let position_index = positions.iter().position(|p| {
-            p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
-                || p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
-        });
+        let position_index = positions
+            .iter()
+            .position(|p| {
+                p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature) ||
+                    p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
+            });
 
         if let Some(index) = position_index {
             let position = positions.remove(index);
@@ -772,8 +776,9 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
                 "CLEANUP_REMOVED",
                 &format!(
                     "🗑️ Removed position {} from memory (signature: {})",
-                    position.symbol, signature
-                ),
+                    position.symbol,
+                    signature
+                )
             );
 
             // Remove token from priority pool service since position is being cleaned up
@@ -787,7 +792,7 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
             log(
                 LogTag::Positions,
                 "CLEANUP_NOT_FOUND",
-                &format!("⚠️ No position found with signature {}", signature),
+                &format!("⚠️ No position found with signature {}", signature)
             );
             None
         }
@@ -803,8 +808,9 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
                         "CLEANUP_DB_SUCCESS",
                         &format!(
                             "🗑️ Removed position {} (ID: {}) from database",
-                            position.symbol, position_id
-                        ),
+                            position.symbol,
+                            position_id
+                        )
                     );
                 }
                 Err(e) => {
@@ -813,8 +819,10 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
                         "CLEANUP_DB_ERROR",
                         &format!(
                             "❌ Failed to remove position {} (ID: {}) from database: {}",
-                            position.symbol, position_id, e
-                        ),
+                            position.symbol,
+                            position_id,
+                            e
+                        )
                     );
                     return Err(format!("Database cleanup failed: {}", e));
                 }
@@ -826,8 +834,9 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
             "CLEANUP_COMPLETE",
             &format!(
                 "✅ Successfully cleaned up failed position {} with signature {}",
-                position.symbol, signature
-            ),
+                position.symbol,
+                signature
+            )
         );
     }
 
@@ -847,7 +856,7 @@ pub async fn sync_position_to_database(position: &Position) -> Result<(), String
         log(
             LogTag::Positions,
             "DB_SYNC",
-            &format!("Position synced to database with new ID {}", new_id),
+            &format!("Position synced to database with new ID {}", new_id)
         );
         Ok(())
     }

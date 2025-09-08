@@ -15,7 +15,7 @@ use screenerbot::pools::{
 use screenerbot::pools::types::ProgramKind;
 use screenerbot::pools::discovery::PoolDiscovery;
 use screenerbot::pools::utils::is_stablecoin_mint;
-use screenerbot::tokens::dexscreener::{ get_token_price_from_global_api, init_dexscreener_api };
+use screenerbot::tokens::dexscreener::{ init_dexscreener_api, get_global_dexscreener_api };
 use screenerbot::rpc::get_rpc_client;
 use screenerbot::logger::{ log, LogTag };
 use solana_sdk::pubkey::Pubkey;
@@ -257,7 +257,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let pool_price = get_pool_price(&args.token);
                 
                 // Get DexScreener API price for comparison
-                let api_price = get_token_price_from_global_api(&args.token).await;
+                let api_price = {
+                    if let Ok(api) = get_global_dexscreener_api().await {
+                        if let Ok(mut guard) = tokio::time::timeout(std::time::Duration::from_millis(8000), api.lock()).await {
+                            guard.get_price(&args.token).await
+                        } else { None }
+                    } else { None }
+                };
                 
                 // Check if we have a price from the pool service
                 if let Some(price) = &pool_price {

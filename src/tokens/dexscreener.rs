@@ -1,21 +1,10 @@
 use crate::global::is_debug_api_enabled;
-/// DexScreener API integration with Position-Aware Caching
+/// DexScreener API integration with SIMPLE 1-MINUTE TTL CACHING
 ///
-/// This module implements intelligent caching for tokens with open positions:
-/// - Tokens with open positions: NEVER make API calls, always use cached data
-/// - Cached data for open positions has extended TTL (24 hours)
-/// - Regular tokens: Normal caching with 5-minute TTL
-/// - Cache is automatically populated on first API call and used thereafter
-///
-/// Key features:
-/// - Prevents unnecessary API calls for actively traded tokens
-/// - Reduces rate limit pressure on DexScreener API
-/// - Maintains data freshness for discovery/monitoring use cases
-/// - Provides cache management utilities for position lifecycle
-///
-/// Configuration:
-/// - Enable/disable via trader::ENABLE_POSITION_AWARE_DEXSCREENER_CACHE
-/// - When disabled, all tokens behave normally (no position checking)
+/// Simplified design: we keep a single in-memory cache with a fixed 60s TTL
+/// for every token. No position-aware branching, no extended TTL paths.
+/// Always attempt to return cached data if still fresh; otherwise fetch,
+/// cache and return. This reduces complexity and duplicate logic.
 use crate::logger::{ log, LogTag };
 use crate::swaps::config::SOL_MINT;
 use crate::tokens::types::{
@@ -42,6 +31,8 @@ use std::time::{ Duration, Instant };
 use tokio::sync::{ Mutex, OnceCell, RwLock, Semaphore };
 use tokio::time::timeout;
 
+// (Removed internal FetchMode enum – not needed after simplification)
+
 // =============================================================================
 // DEXSCREENER API CONFIGURATION CONSTANTS
 // =============================================================================
@@ -59,7 +50,7 @@ pub const MAX_TOKENS_PER_API_CALL: usize = 30;
 pub const API_CALLS_PER_MONITORING_CYCLE: usize = 30;
 
 // =============================================================================
-// POSITION-AWARE CACHING SYSTEM
+// SIMPLE CACHING SYSTEM (GLOBAL 60s TTL)
 // =============================================================================
 
 /// Cache entry for storing token data with timestamp
@@ -74,62 +65,21 @@ static TOKEN_CACHE: LazyLock<RwLock<HashMap<String, CachedTokenData>>> = LazyLoc
     RwLock::new(HashMap::new())
 );
 
-/// Cache TTL in seconds (24 hours for tokens with open positions)
-const OPEN_POSITION_CACHE_TTL_SECS: i64 = 24 * 60 * 60; // 24 hours
+/// Cache TTL in seconds (1 minute maximum for price data)
+const PRICE_CACHE_TTL_SECS: i64 = 60; // 1 minute TTL for all token data
 
-/// Check if a token has an open position (async import to avoid circular dependency)
-async fn has_open_position(mint: &str) -> bool {
-    // Check if position-aware caching is enabled
-    if !crate::trader::ENABLE_POSITION_AWARE_DEXSCREENER_CACHE {
-        if is_debug_api_enabled() {
-            log(
-                LogTag::Api,
-                "DEBUG",
-                &format!("Position-aware caching DISABLED for {}", &mint[..8])
-            );
-        }
-        return false; // Feature disabled, treat as no open positions
-    }
-
-    // Import here to avoid circular dependency at module level
-    match crate::positions::is_open_position(mint).await {
-        true => {
-            if is_debug_api_enabled() {
-                log(
-                    LogTag::Api,
-                    "POSITION_CACHE",
-                    &format!("Token {} has open position - using cache", &mint[..8])
-                );
-            }
-            true
-        }
-        false => {
-            if is_debug_api_enabled() {
-                log(
-                    LogTag::Api,
-                    "DEBUG",
-                    &format!("Token {} has NO open position - API calls allowed", &mint[..8])
-                );
-            }
-            false
-        }
-    }
-}
+// (Removed has_open_position – no position-aware logic)
 
 /// Get cached token data if available and not expired
-async fn get_cached_token_data(mint: &str, force_cache_for_positions: bool) -> Option<ApiToken> {
+async fn get_cached_token_data(mint: &str) -> Option<ApiToken> {
     let cache = TOKEN_CACHE.read().await;
 
     if let Some(cached_data) = cache.get(mint) {
         let now = Utc::now();
         let age_seconds = (now - cached_data.cached_at).num_seconds();
 
-        // For tokens with open positions, use longer TTL
-        let ttl_seconds = if force_cache_for_positions {
-            OPEN_POSITION_CACHE_TTL_SECS
-        } else {
-            300 // 5 minutes for regular tokens
-        };
+        // For price data, always use 1 minute maximum TTL regardless of position status
+        let ttl_seconds = PRICE_CACHE_TTL_SECS; // 1 minute for all price data
 
         if age_seconds < ttl_seconds {
             if is_debug_api_enabled() {
@@ -137,28 +87,28 @@ async fn get_cached_token_data(mint: &str, force_cache_for_positions: bool) -> O
                     LogTag::Api,
                     "CACHE_HIT",
                     &format!(
-                        "Using cached data for {} (age: {}s, open_position: {})",
+                        "Using cached data for {} (age: {}s, TTL: {}s)",
                         mint,
                         age_seconds,
-                        force_cache_for_positions
+                        ttl_seconds
                     )
                 );
             }
             return Some(cached_data.token.clone());
-        } else if force_cache_for_positions {
-            // For open positions, always use cache even if expired rather than making API calls
+        } else {
+            // Cache is expired, don't use it for price data
             if is_debug_api_enabled() {
                 log(
                     LogTag::Api,
-                    "CACHE_EXPIRED_BUT_USED",
+                    "CACHE_EXPIRED",
                     &format!(
-                        "Using expired cache for open position {} (age: {}s)",
+                        "Cache expired for {} (age: {}s > TTL: {}s) - will fetch fresh data",
                         mint,
-                        age_seconds
+                        age_seconds,
+                        ttl_seconds
                     )
                 );
             }
-            return Some(cached_data.token.clone());
         }
     }
 
@@ -179,17 +129,7 @@ async fn cache_token_data(mint: &str, token: &ApiToken) {
 }
 
 /// Force cache a token (useful for tokens with open positions to ensure cache exists)
-pub async fn force_cache_token_data(mint: &str, token: &ApiToken) {
-    cache_token_data(mint, token).await;
-
-    if is_debug_api_enabled() {
-        log(
-            LogTag::Api,
-            "FORCE_CACHE",
-            &format!("Force cached data for token {} (likely for open position)", mint)
-        );
-    }
-}
+// (Removed force_cache_token_data – no special handling required now)
 
 /// Clear cache for a specific token (useful when position is closed)
 pub async fn clear_token_cache(mint: &str) {
@@ -215,7 +155,7 @@ pub async fn get_cache_stats() -> (usize, usize) {
         .values()
         .filter(|entry| {
             let age_seconds = (now - entry.cached_at).num_seconds();
-            age_seconds < OPEN_POSITION_CACHE_TTL_SECS
+            age_seconds < PRICE_CACHE_TTL_SECS // 1 minute validity for price data
         })
         .count();
 
@@ -229,10 +169,10 @@ pub async fn cleanup_expired_cache_entries() {
     let now = Utc::now();
     let mut removed_count = 0;
 
-    // Remove entries older than the maximum TTL
+    // Remove entries older than 1 minute for price data
     cache.retain(|_mint, entry| {
         let age_seconds = (now - entry.cached_at).num_seconds();
-        let should_keep = age_seconds < OPEN_POSITION_CACHE_TTL_SECS;
+        let should_keep = age_seconds < PRICE_CACHE_TTL_SECS; // 1 minute cleanup
         if !should_keep {
             removed_count += 1;
         }
@@ -243,51 +183,22 @@ pub async fn cleanup_expired_cache_entries() {
         log(
             LogTag::Api,
             "CACHE_CLEANUP",
-            &format!("Cleaned up {} expired cache entries", removed_count)
+            &format!("Cleaned up {} expired cache entries (older than 1 minute)", removed_count)
         );
     }
 }
 
 /// Check if position-aware caching is enabled
-pub fn is_position_aware_caching_enabled() -> bool {
-    crate::trader::ENABLE_POSITION_AWARE_DEXSCREENER_CACHE
-}
-
-/// Log the current status of position-aware caching feature
-pub fn log_position_aware_caching_status() {
-    let enabled = is_position_aware_caching_enabled();
-    if is_debug_api_enabled() {
-        log(
-            LogTag::Api,
-            "CONFIG",
-            &format!("Position-aware DexScreener caching: {}", if enabled {
-                "ENABLED"
-            } else {
-                "DISABLED"
-            })
-        );
-    }
-}
+// (Removed is_position_aware_caching_enabled + logging – obsolete)
 
 /// Get a summary of cache effectiveness (useful for debugging and monitoring)
 pub async fn get_cache_effectiveness_summary() -> String {
     let (total_entries, valid_entries) = get_cache_stats().await;
-    let enabled = is_position_aware_caching_enabled();
-
     format!(
-        "DexScreener Cache Status: {} | Entries: {} total, {} valid | Feature: {}",
-        if enabled {
-            "ACTIVE"
-        } else {
-            "INACTIVE"
-        },
+        "DexScreener Cache | Entries: {} total, {} valid (TTL {}s)",
         total_entries,
         valid_entries,
-        if enabled {
-            "enabled"
-        } else {
-            "disabled"
-        }
+        PRICE_CACHE_TTL_SECS
     )
 }
 
@@ -321,8 +232,7 @@ impl DexScreenerApi {
             log(LogTag::Api, "INIT", "Initializing DexScreener API client...");
         }
 
-        // Log position-aware caching status
-        log_position_aware_caching_status();
+        // Simplified caching – no config status to log
 
         if is_debug_api_enabled() {
             log(LogTag::Api, "SUCCESS", "DexScreener API client initialized successfully");
@@ -331,62 +241,15 @@ impl DexScreenerApi {
     }
 
     /// Get token price for a single mint address
-    pub async fn get_token_price(&mut self, mint: &str) -> Option<f64> {
-        // Check if token has open position
-        let has_position = has_open_position(mint).await;
-
-        // Try to get cached data first, especially for tokens with open positions
-        if let Some(cached_token) = get_cached_token_data(mint, has_position).await {
-            if has_position && is_debug_api_enabled() {
-                log(
-                    LogTag::Api,
-                    "POSITION_CACHE_HIT",
-                    &format!("Using cached price for {} (open position)", mint)
-                );
-            }
-            return cached_token.price_sol;
-        }
-
-        // If token has open position and no cache, log and return None (avoid API calls)
-        if has_position {
-            if is_debug_api_enabled() {
-                log(
-                    LogTag::Api,
-                    "POSITION_NO_CACHE",
-                    &format!("Token {} has open position but no cache - skipping API call", mint)
-                );
-            }
-            return None;
-        }
-
-        // Proceed with normal API call for tokens without open positions
-        match self.get_token_data(mint).await {
-            Ok(Some(token)) => {
-                // Cache the result for future use
-                cache_token_data(mint, &token).await;
-
-                if let Some(price) = token.price_sol {
-                    Some(price)
-                } else {
-                    None
-                }
-            }
-            Ok(None) => None,
-            Err(e) => {
-                if is_debug_api_enabled() {
-                    log(
-                        LogTag::Api,
-                        "ERROR",
-                        &format!("Failed to fetch price for {}: {}", mint, e)
-                    );
-                }
-                None
-            }
+    pub async fn get_price(&mut self, mint: &str) -> Option<f64> {
+        match self.fetch_and_cache_token(mint).await {
+            Ok(Some(t)) => t.price_sol,
+            _ => None,
         }
     }
 
     /// Get multiple token prices for multiple mint addresses (batch)
-    pub async fn get_multiple_token_prices(&mut self, mints: &[String]) -> HashMap<String, f64> {
+    pub async fn get_prices(&mut self, mints: &[String]) -> HashMap<String, f64> {
         let mut prices = HashMap::new();
         let start_time = Instant::now();
         let mut total_errors = 0;
@@ -404,21 +267,14 @@ impl DexScreenerApi {
 
         // First pass: Check positions and cache for all mints
         for mint in mints {
-            let has_position = has_open_position(mint).await;
-
             if
                 is_debug_api_enabled() &&
                 cached_count + position_skipped_count + api_call_mints.len() < 5
             {
-                log(
-                    LogTag::Api,
-                    "DEBUG",
-                    &format!("🔍 Checking token {} - has_position: {}", &mint[..8], has_position)
-                );
+                log(LogTag::Api, "DEBUG", &format!("🔍 Checking token {}", &mint[..8]));
             }
 
-            // Try cache first
-            if let Some(cached_token) = get_cached_token_data(mint, has_position).await {
+            if let Some(cached_token) = get_cached_token_data(mint).await {
                 if let Some(price) = cached_token.price_sol {
                     prices.insert(mint.clone(), price);
                     cached_count += 1;
@@ -433,20 +289,7 @@ impl DexScreenerApi {
                 continue;
             }
 
-            // If has position but no cache, skip API call
-            if has_position {
-                if is_debug_api_enabled() {
-                    log(
-                        LogTag::Api,
-                        "POSITION_SKIP",
-                        &format!("Skipping API call for {} (open position, no cache)", mint)
-                    );
-                }
-                position_skipped_count += 1;
-                continue;
-            }
-
-            // Add to list for API calls (no open position)
+            // Add to list for API calls
             api_call_mints.push(mint.clone());
         }
 
@@ -455,9 +298,8 @@ impl DexScreenerApi {
                 LogTag::Api,
                 "DEBUG",
                 &format!(
-                    "📊 Batch analysis: {} cached, {} position_skipped, {} need API calls",
+                    "📊 Batch analysis: {} cached, {} need API calls",
                     cached_count,
-                    position_skipped_count,
                     api_call_mints.len()
                 )
             );
@@ -560,12 +402,11 @@ impl DexScreenerApi {
                 LogTag::Api,
                 "BATCH_COMPLETE",
                 &format!(
-                    "Price batch: {}/{} tokens in {}ms (cached: {}, position_skipped: {}, api_calls: {}, errors: {})",
+                    "Price batch: {}/{} tokens in {}ms (cached: {}, api_calls: {}, errors: {})",
                     prices.len(),
                     mints.len(),
                     elapsed,
                     cached_count,
-                    position_skipped_count,
                     api_call_mints.len(),
                     total_errors
                 )
@@ -577,68 +418,24 @@ impl DexScreenerApi {
 
     /// Get detailed token data for a single mint
     pub async fn get_token_data(&mut self, mint: &str) -> Result<Option<ApiToken>, String> {
-        // Check if token has open position
-        let has_position = has_open_position(mint).await;
-
-        // Try to get cached data first, especially for tokens with open positions
-        if let Some(cached_token) = get_cached_token_data(mint, has_position).await {
-            return Ok(Some(cached_token));
-        }
-
-        // If token has open position and no cache, return None (avoid API calls)
-        if has_position {
-            if is_debug_api_enabled() {
-                log(
-                    LogTag::Api,
-                    "POSITION_NO_CACHE",
-                    &format!("Token {} has open position but no cache - skipping API call", mint)
-                );
-            }
-            return Ok(None);
-        }
-
-        // Proceed with normal API call for tokens without open positions
-        let tokens = self.get_tokens_info(&[mint.to_string()]).await?;
-        if let Some(token) = tokens.into_iter().next() {
-            // Cache the result
-            cache_token_data(mint, &token).await;
-            Ok(Some(token))
-        } else {
-            Ok(None)
-        }
+        self.fetch_and_cache_token(mint).await
     }
 
     /// Get Token object from mint address (converts ApiToken to Token)
     pub async fn get_token_from_mint(&mut self, mint: &str) -> Result<Option<Token>, String> {
-        // Check if token has open position
-        let has_position = has_open_position(mint).await;
-
-        // Try to get cached data first, especially for tokens with open positions
-        if let Some(cached_token) = get_cached_token_data(mint, has_position).await {
-            let token = Token::from(cached_token);
-            return Ok(Some(token));
+        match self.fetch_and_cache_token(mint).await? {
+            Some(api_token) => Ok(Some(Token::from(api_token))),
+            None => Ok(None),
         }
+    }
 
-        // If token has open position and no cache, return None (avoid API calls)
-        if has_position {
-            if is_debug_api_enabled() {
-                log(
-                    LogTag::Api,
-                    "POSITION_NO_CACHE",
-                    &format!("Token {} has open position but no cache - skipping API call", mint)
-                );
-            }
-            return Ok(None);
+    async fn fetch_and_cache_token(&mut self, mint: &str) -> Result<Option<ApiToken>, String> {
+        if let Some(cached) = get_cached_token_data(mint).await {
+            return Ok(Some(cached));
         }
-
-        // Proceed with normal API call for tokens without open positions
-        let api_tokens = self.get_tokens_info(&[mint.to_string()]).await?;
-
-        if let Some(api_token) = api_tokens.into_iter().next() {
-            // Cache the result
-            cache_token_data(mint, &api_token).await;
-
-            let token = Token::from(api_token);
+        let tokens = self.get_tokens_info(&[mint.to_string()]).await?;
+        if let Some(token) = tokens.into_iter().next() {
+            cache_token_data(mint, &token).await;
             Ok(Some(token))
         } else {
             Ok(None)
@@ -1371,11 +1168,6 @@ impl DexScreenerApi {
     }
 }
 
-/// Standalone function to get token prices from API
-pub async fn get_token_prices_from_api(mints: Vec<String>) -> HashMap<String, f64> {
-    get_multiple_token_prices_from_global_api(&mints).await
-}
-
 /// Standalone function to get token pairs from API (improved timeout handling)
 pub async fn get_token_pairs_from_api(token_address: &str) -> Result<Vec<TokenPair>, String> {
     let api = get_global_dexscreener_api().await?;
@@ -1543,89 +1335,4 @@ pub async fn get_global_dexscreener_api() -> Result<Arc<Mutex<DexScreenerApi>>, 
         .map(|api| api.clone())
 }
 
-/// Helper function to get token price using global API
-pub async fn get_token_price_from_global_api(mint: &str) -> Option<f64> {
-    match get_global_dexscreener_api().await {
-        Ok(api) => {
-            // Use timeout to prevent deadlock on API lock acquisition
-            let result = timeout(Duration::from_secs(15), api.lock()).await;
-            match result {
-                Ok(mut api_instance) => api_instance.get_token_price(mint).await,
-                Err(_) => {
-                    if is_debug_api_enabled() {
-                        log(
-                            LogTag::Api,
-                            "INFO",
-                            "DexScreener API lock timeout in get_token_price_from_global_api (system may be shutting down)"
-                        );
-                    }
-                    None
-                }
-            }
-        }
-        Err(e) => {
-            if is_debug_api_enabled() {
-                log(LogTag::Api, "ERROR", &format!("Failed to get global API client: {}", e));
-            }
-            None
-        }
-    }
-}
-
-/// Helper function to get Token object from mint using global API
-pub async fn get_token_from_mint_global_api(mint: &str) -> Result<Option<Token>, String> {
-    match get_global_dexscreener_api().await {
-        Ok(api) => {
-            // Use timeout to prevent deadlock on API lock acquisition
-            let result = timeout(Duration::from_secs(5), api.lock()).await;
-            match result {
-                Ok(mut api_instance) => api_instance.get_token_from_mint(mint).await,
-                Err(_) => {
-                    if is_debug_api_enabled() {
-                        log(
-                            LogTag::Api,
-                            "ERROR",
-                            "DexScreener API lock timeout in get_token_from_mint_global_api"
-                        );
-                    }
-                    Err("API lock timeout".to_string())
-                }
-            }
-        }
-        Err(e) => {
-            if is_debug_api_enabled() {
-                log(LogTag::Api, "ERROR", &format!("Failed to get global API client: {}", e));
-            }
-            Err(e)
-        }
-    }
-}
-
-/// Helper function to get multiple token prices using global API
-pub async fn get_multiple_token_prices_from_global_api(mints: &[String]) -> HashMap<String, f64> {
-    match get_global_dexscreener_api().await {
-        Ok(api) => {
-            // Use timeout to prevent deadlock on API lock acquisition
-            let result = timeout(Duration::from_secs(15), api.lock()).await;
-            match result {
-                Ok(mut api_instance) => api_instance.get_multiple_token_prices(mints).await,
-                Err(_) => {
-                    if is_debug_api_enabled() {
-                        log(
-                            LogTag::Api,
-                            "INFO",
-                            "DexScreener API lock timeout in get_multiple_token_prices_from_global_api (system may be shutting down)"
-                        );
-                    }
-                    HashMap::new()
-                }
-            }
-        }
-        Err(e) => {
-            if is_debug_api_enabled() {
-                log(LogTag::Api, "ERROR", &format!("Failed to get global API client: {}", e));
-            }
-            HashMap::new()
-        }
-    }
-}
+// (global helper wrappers removed – callers must lock global API and call methods directly)

@@ -43,9 +43,7 @@ pub use cache::{ DatabaseStats, TokenDatabase };
 pub use decimals::{ batch_fetch_token_decimals, get_token_decimals_from_chain };
 pub use dexscreener::{
     get_global_dexscreener_api,
-    get_token_from_mint_global_api,
     get_token_pairs_from_api,
-    get_token_prices_from_api,
     init_dexscreener_api,
     DexScreenerApi,
     API_CALLS_PER_MONITORING_CYCLE,

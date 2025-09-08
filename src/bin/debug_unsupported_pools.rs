@@ -36,7 +36,7 @@ use screenerbot::pools::utils::{ is_sol_mint, is_stablecoin_mint };
 use screenerbot::pools::AccountData;
 use screenerbot::rpc::get_rpc_client;
 use screenerbot::tokens::cache::TokenDatabase;
-use screenerbot::tokens::dexscreener::{ get_token_price_from_global_api, init_dexscreener_api };
+use screenerbot::tokens::dexscreener::{ init_dexscreener_api, get_global_dexscreener_api };
 use screenerbot::tokens::get_token_decimals_sync;
 use tokio::time::{ sleep, Duration };
 use solana_sdk::pubkey::Pubkey;
@@ -157,21 +157,38 @@ async fn validate_price_availability(
     }
 
     // Get API price for comparison
-    match get_token_price_from_global_api(token_mint).await {
-        Some(price) => {
-            api_price = Some(price);
-            log(
-                LogTag::System,
-                "API_PRICE",
-                &format!("API price for {}: {:.8} SOL", &token_mint[..8], price)
-            );
-        }
-        None => {
-            log(
-                LogTag::System,
-                "API_PRICE_MISS",
-                &format!("No API price available for {}", &token_mint[..8])
-            );
+    {
+        let price_opt = if let Ok(api) = get_global_dexscreener_api().await {
+            if
+                let Ok(mut guard) = tokio::time::timeout(
+                    std::time::Duration::from_secs(8),
+                    api.lock()
+                ).await
+            {
+                guard.get_price(token_mint).await
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        match price_opt {
+            Some(price) => {
+                api_price = Some(price);
+                log(
+                    LogTag::System,
+                    "API_PRICE",
+                    &format!("API price for {}: {:.8} SOL", &token_mint[..8], price)
+                );
+            }
+            None => {
+                log(
+                    LogTag::System,
+                    "API_PRICE_MISS",
+                    &format!("No API price available for {}", &token_mint[..8])
+                );
+            }
         }
     }
 
