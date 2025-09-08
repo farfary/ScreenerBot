@@ -94,6 +94,10 @@ impl PoolAccountBundle {
         self.slot = self.slot.max(account_data.slot);
         self.last_updated = Instant::now();
         self.accounts.insert(account_data.pubkey, account_data);
+
+        // Reset calculation requested flag when fresh account data is added
+        // This allows for new calculations when accounts are refreshed
+        self.calculation_requested = false;
     }
 
     /// Check if bundle is complete (has all required accounts)
