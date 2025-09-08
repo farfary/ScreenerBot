@@ -188,11 +188,11 @@ impl TransactionsManager {
 
         // Create shutdown signal for WebSocket
         let websocket_shutdown = Arc::new(Notify::new());
-        
+
         // Start WebSocket monitoring and get receiver
         let receiver = websocket::start_websocket_monitoring(
-            wallet_address, 
-            Some(ws_url), 
+            wallet_address,
+            Some(ws_url),
             websocket_shutdown.clone()
         ).await?;
 
@@ -213,12 +213,12 @@ impl TransactionsManager {
         if let Some(shutdown_signal) = &self.websocket_shutdown {
             log(
                 LogTag::Transactions,
-                "WEBSOCKET_SHUTDOWN", 
+                "WEBSOCKET_SHUTDOWN",
                 "🔌 Signaling WebSocket to shutdown gracefully"
             );
             shutdown_signal.notify_waiters();
         }
-        
+
         // Clear the receiver and shutdown signal
         self.websocket_receiver = None;
         self.websocket_shutdown = None;

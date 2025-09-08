@@ -91,7 +91,11 @@ impl SolanaWebSocketClient {
     }
 
     /// Start WebSocket connection and monitor for new transactions
-    pub async fn start_monitoring(&self, ws_url: &str, shutdown: Arc<Notify>) -> Result<(), String> {
+    pub async fn start_monitoring(
+        &self,
+        ws_url: &str,
+        shutdown: Arc<Notify>
+    ) -> Result<(), String> {
         if is_debug_websocket_enabled() {
             log(
                 LogTag::Websocket,
@@ -320,7 +324,7 @@ pub async fn start_websocket_monitoring(
             let connection_shutdown = Arc::new(Notify::new());
             let connection_shutdown_clone = connection_shutdown.clone();
             let main_shutdown_clone = shutdown_clone.clone();
-            
+
             // Forward main shutdown to connection shutdown
             tokio::spawn(async move {
                 main_shutdown_clone.notified().await;
@@ -331,7 +335,11 @@ pub async fn start_websocket_monitoring(
                 Ok(_) => {
                     // Normal exit (shutdown received)
                     if is_debug_websocket_enabled() {
-                        log(LogTag::Websocket, "NORMAL_EXIT", "WebSocket monitoring exited normally");
+                        log(
+                            LogTag::Websocket,
+                            "NORMAL_EXIT",
+                            "WebSocket monitoring exited normally"
+                        );
                     }
                     break;
                 }
