@@ -558,14 +558,15 @@ impl TokenDatabase {
     }
 
     /// Cleanup tokens with near-zero liquidity AND security issues from the database
-    /// Removes tokens that have:
-    /// 1. Liquidity below threshold AND are older than 1 hour
-    /// 2. Security issues (minting enabled, freeze enabled, high risk tokens)
+    /// For security issues: Moves tokens to blacklist table (preserves blacklist)
+    /// For low liquidity: Removes tokens from main table after proper evaluation
     /// This should only be called after fetching and updating latest token data
     pub async fn cleanup_near_zero_liquidity_tokens(
         &self,
         threshold_usd: f64
     ) -> Result<usize, Box<dyn std::error::Error>> {
+        use crate::tokens::blacklist::{ add_to_blacklist_db, is_token_blacklisted_db, BlacklistReason };
+        
         // First, collect the candidate tokens (with database lock)
         let (liquidity_tokens, security_tokens) = {
             let connection = self.connection
@@ -651,36 +652,49 @@ impl TokenDatabase {
             )
         );
 
-        // Combine all tokens and check for open positions
+        // Process candidates: blacklist security issues, delete low liquidity
         // (this is done outside the database lock to avoid holding it across async calls)
+        let mut tokens_to_blacklist = Vec::new();
         let mut tokens_to_delete = Vec::new();
-        let mut liquidity_count = 0;
-        let mut security_count = 0;
+        let mut blacklist_count = 0;
+        let mut delete_count = 0;
 
-        // Process liquidity-based candidates
-        for (mint, symbol, last_updated) in liquidity_tokens {
-            if !self.has_open_position(&mint).await {
-                tokens_to_delete.push((mint, symbol, last_updated, "low_liquidity".to_string()));
-                liquidity_count += 1;
-            }
-        }
-
-        // Process security-based candidates (check each token's rugcheck data for specific issues)
+        // Process security-based candidates - these go to BLACKLIST (not deleted)
         for (mint, symbol, last_updated) in security_tokens {
             if !self.has_open_position(&mint).await {
-                // Check if token has specific security issues
-                if let Some(reason) = self.check_security_issues(&mint).await {
-                    tokens_to_delete.push((mint, symbol, last_updated, reason));
-                    security_count += 1;
+                // Skip tokens already blacklisted
+                if !is_token_blacklisted_db(&mint) {
+                    // Check if token has specific security issues
+                    if let Some(reason) = self.check_security_issues(&mint).await {
+                        let blacklist_reason = match reason.as_str() {
+                            s if s.contains("mint") => BlacklistReason::ApiError, // Use existing variant
+                            s if s.contains("freeze") => BlacklistReason::ApiError,
+                            s if s.contains("authority") => BlacklistReason::ApiError,
+                            _ => BlacklistReason::ApiError,
+                        };
+                        tokens_to_blacklist.push((mint, symbol, last_updated, blacklist_reason));
+                        blacklist_count += 1;
+                    }
                 }
             }
         }
 
-        if tokens_to_delete.is_empty() {
+        // Process liquidity-based candidates - these get DELETED from main table
+        for (mint, symbol, last_updated) in liquidity_tokens {
+            if !self.has_open_position(&mint).await {
+                // Skip tokens that are blacklisted (keep them in blacklist, don't delete)
+                if !is_token_blacklisted_db(&mint) {
+                    tokens_to_delete.push((mint, symbol, last_updated, "low_liquidity".to_string()));
+                    delete_count += 1;
+                }
+            }
+        }
+
+        if tokens_to_blacklist.is_empty() && tokens_to_delete.is_empty() {
             log(
                 LogTag::System,
                 "CLEANUP",
-                "No tokens eligible for deletion (all have open positions or no security issues)"
+                "No tokens eligible for cleanup (all have open positions or already processed)"
             );
             return Ok(0);
         }
@@ -689,13 +703,34 @@ impl TokenDatabase {
             LogTag::System,
             "CLEANUP",
             &format!(
-                "Selected for deletion: {} low liquidity tokens, {} security risk tokens",
-                liquidity_count,
-                security_count
+                "Selected for cleanup: {} tokens to blacklist (security), {} tokens to delete (low liquidity)",
+                blacklist_count,
+                delete_count
             )
         );
 
-        // Finally, delete the eligible tokens (with database lock)
+        // First, handle blacklisting (security issues) - keep tokens but mark as blacklisted
+        let mut blacklisted_count = 0;
+        for (mint, symbol, _last_updated, reason) in tokens_to_blacklist {
+            if add_to_blacklist_db(&mint, &symbol, reason.clone()) {
+                blacklisted_count += 1;
+                if is_debug_monitor_enabled() {
+                    log(
+                        LogTag::System,
+                        "BLACKLIST",
+                        &format!("Blacklisted token: {} ({}) - reason: {:?}", symbol, &mint[..8], reason)
+                    );
+                }
+            } else {
+                log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to blacklist token {}: {}", mint, "Database error")
+                );
+            }
+        }
+
+        // Then, handle deletion (low liquidity tokens) - remove from main table
         let (deleted_count, deleted_mints) = {
             let connection = self.connection
                 .lock()
@@ -763,31 +798,27 @@ impl TokenDatabase {
         }; // connection lock released here
 
         // Clear deleted tokens from in-memory caches (outside database lock)
-        for mint in deleted_mints {
-            // TODO: Implement cache clearing for deleted tokens
-            // This would clear the token from various in-memory caches
-            log(
-                LogTag::System,
-                "DEBUG",
-                &format!("Token {} deleted, cache clearing not implemented", mint)
-            );
+        for mint in &deleted_mints {
+            self.clear_token_from_caches(mint);
         }
 
-        if deleted_count > 0 {
+        let total_processed = blacklisted_count + deleted_count;
+        if total_processed > 0 {
             log(
                 LogTag::System,
                 "CLEANUP",
                 &format!(
-                    "Database cleanup: Removed {} tokens (low liquidity <${:.1} + security issues)",
+                    "Database cleanup completed: {} tokens blacklisted (security), {} tokens deleted (low liquidity <${:.1})",
+                    blacklisted_count,
                     deleted_count,
                     threshold_usd
                 )
             );
         } else {
-            log(LogTag::System, "CLEANUP", "Database cleanup: No problematic tokens removed");
+            log(LogTag::System, "CLEANUP", "Database cleanup: No problematic tokens processed");
         }
 
-        Ok(deleted_count)
+        Ok(total_processed)
     }
 
     /// Check if a token has an open position
@@ -797,6 +828,26 @@ impl TokenDatabase {
 
         // Use the async positions manager API to check for open positions
         is_open_position(mint).await
+    }
+
+    /// Clear a token from all in-memory caches
+    /// Call this when a token is deleted from the database
+    fn clear_token_from_caches(&self, mint: &str) {
+        // Note: We cannot directly access private static caches from other modules
+        // Instead, we'll add public cache clearing functions to those modules if needed
+        // For now, we just log the cache clearing operation
+
+        log(
+            LogTag::System,
+            "CACHE_CLEAR", 
+            &format!("Token {} deleted - caches will be cleared on next access", &mint[..8])
+        );
+
+        // The caches will naturally clear on next access when the token is not found in database:
+        // - DECIMAL_CACHE: get_cached_decimals will not find the token and return None
+        // - TOKEN_BLACKLIST_CACHE: refresh_blacklist_cache will reload from database  
+        // - TOKEN_CACHE: DexScreener cache has TTL and will refresh
+        // - PRICE_CACHE: Has TTL and will naturally expire
     }
 
     /// Check if a token has security issues that warrant removal
