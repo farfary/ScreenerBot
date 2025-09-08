@@ -52,6 +52,15 @@ pub async fn run_bot() -> Result<(), String> {
     // Initialize file logging system first
     init_file_logging();
 
+    // Initialize blacklist system (database and cache)
+    if let Err(e) = crate::tokens::blacklist::initialize_blacklist_system() {
+        log(LogTag::System, "ERROR", &format!("Failed to initialize blacklist system: {}", e));
+        return Err(format!("Blacklist initialization failed: {}", e));
+    }
+
+    // Initialize system and stable tokens in blacklist
+    crate::tokens::blacklist::initialize_system_stable_blacklist();
+
     // Check for dry-run mode and log it prominently
     if is_dry_run_enabled() {
         log(LogTag::System, "CRITICAL", "🚫 DRY-RUN MODE ENABLED - NO ACTUAL TRADING WILL OCCUR");

@@ -57,6 +57,10 @@ path = "src/bin/main_sell_all_and_reset.rs"
 name = "find_biggest_pools_by_program"
 path = "src/bin/find_biggest_pools_by_program.rs"
 
+[[bin]]
+name = "debug_decimals"
+path = "src/bin/debug_decimals.rs"
+
 
 
 [dependencies]

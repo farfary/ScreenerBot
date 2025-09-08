@@ -1,12 +1,13 @@
-use crate::global::TOKEN_BLACKLIST as TOKEN_BLACKLIST_FILE;
-use crate::logger::{log, LogTag};
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use crate::global::TOKENS_DATABASE;
+use crate::logger::{ log, LogTag };
+use chrono::{ DateTime, Duration as ChronoDuration, Utc };
 /// Token blacklist system for managing problematic tokens
-/// Automatically blacklists tokens with poor liquidity performance
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
+/// Uses database storage for persistence and performance
+use rusqlite::{ Connection, Result as SqliteResult };
+use serde::{ Deserialize, Serialize };
+use std::collections::{ HashMap, HashSet };
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
@@ -21,20 +22,72 @@ pub const MIN_AGE_HOURS: i64 = 2;
 /// Maximum low liquidity occurrences before blacklisting
 pub const MAX_LOW_LIQUIDITY_COUNT: u32 = 5;
 
-/// Blacklist file path
-pub const BLACKLIST_FILE: &str = TOKEN_BLACKLIST_FILE;
+/// Maximum retry attempts before blacklisting permanently failed decimal tokens
+pub const MAX_DECIMAL_RETRY_ATTEMPTS: i32 = 3;
 
 /// System and stable tokens that should always be excluded from trading
 pub const SYSTEM_STABLE_TOKENS: &[&str] = &[
-    "So11111111111111111111111111111111111111112",  // SOL
+    "So11111111111111111111111111111111111111112", // SOL
     "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
     "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
     "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj", // stSOL
-    "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",  // mSOL
-    "11111111111111111111111111111111",             // System Program (invalid token)
-    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",  // Token Program
-    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",  // Token-2022 Program
+    "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
+    "11111111111111111111111111111111", // System Program (invalid token)
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
+    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", // Token-2022 Program
 ];
+
+// =============================================================================
+// DATABASE INITIALIZATION
+// =============================================================================
+
+/// Initialize blacklist database tables
+fn init_blacklist_database() -> SqliteResult<()> {
+    let conn = Connection::open(TOKENS_DATABASE)?;
+
+    // Create blacklist table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS blacklist (
+            mint TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            first_occurrence TEXT NOT NULL,
+            last_occurrence TEXT NOT NULL,
+            occurrence_count INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )",
+        []
+    )?;
+
+    // Create liquidity tracking table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS liquidity_tracking (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mint TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            liquidity_usd REAL NOT NULL,
+            token_age_hours INTEGER NOT NULL,
+            timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (mint) REFERENCES tokens(mint)
+        )",
+        []
+    )?;
+
+    // Create indices for performance
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_blacklist_reason ON blacklist(reason)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_blacklist_updated ON blacklist(updated_at)", [])?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_liquidity_tracking_mint ON liquidity_tracking(mint)",
+        []
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_liquidity_tracking_timestamp ON liquidity_tracking(timestamp)",
+        []
+    )?;
+
+    Ok(())
+}
 
 // =============================================================================
 // DATA STRUCTURES
@@ -60,7 +113,7 @@ pub enum BlacklistReason {
     ManualBlacklist,
     SystemToken, // System/program tokens
     StableToken, // Stable coins and major tokens
-    ApiError,    // Tokens that return API errors (502, etc.)
+    ApiError, // Tokens that return API errors (502, etc.)
 }
 
 /// Individual liquidity check record
@@ -71,250 +124,350 @@ pub struct LiquidityCheck {
     pub token_age_hours: i64,
 }
 
-/// Complete blacklist data structure
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TokenBlacklist {
-    pub blacklisted_tokens: HashMap<String, BlacklistEntry>, // mint -> entry
-    pub tracking_data: HashMap<String, Vec<LiquidityCheck>>, // mint -> checks
-    pub last_updated: Option<DateTime<Utc>>,
-}
-
 // =============================================================================
-// BLACKLIST MANAGER
+// DATABASE BLACKLIST FUNCTIONS
 // =============================================================================
 
-impl TokenBlacklist {
-    /// Create new empty blacklist
-    pub fn new() -> Self {
-        Self {
-            blacklisted_tokens: HashMap::new(),
-            tracking_data: HashMap::new(),
-            last_updated: Some(Utc::now()),
-        }
+/// Check if token is blacklisted in database
+pub fn is_token_blacklisted_db(mint: &str) -> bool {
+    if let Err(e) = init_blacklist_database() {
+        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        return false;
     }
 
-    /// Load blacklist from file
-    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        if !Path::new(BLACKLIST_FILE).exists() {
-            log(
-                LogTag::Blacklist,
-                "INFO",
-                "No blacklist file found, creating new one",
-            );
-            return Ok(Self::new());
-        }
-
-        match fs::read_to_string(BLACKLIST_FILE) {
-            Ok(content) => match serde_json::from_str::<Self>(&content) {
-                Ok(blacklist) => {
-                    if blacklist.blacklisted_tokens.len() > 0 {
-                        log(
-                            LogTag::Blacklist,
-                            "LOADED",
-                            &format!(
-                                "Loaded blacklist with {} entries",
-                                blacklist.blacklisted_tokens.len()
-                            ),
-                        );
-                    }
-                    Ok(blacklist)
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Blacklist,
-                        "WARN",
-                        &format!("Failed to parse blacklist file: {}", e),
-                    );
-                    Ok(Self::new())
-                }
-            },
-            Err(e) => {
-                log(
-                    LogTag::Blacklist,
-                    "WARN",
-                    &format!("Failed to read blacklist file: {}", e),
-                );
-                Ok(Self::new())
-            }
-        }
-    }
-
-    /// Save blacklist to file
-    pub fn save(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.last_updated = Some(Utc::now());
-
-        let json = serde_json::to_string_pretty(self)?;
-        fs::write(BLACKLIST_FILE, json)?;
-
-        // Only log if there are actually blacklisted entries
-        if self.blacklisted_tokens.len() > 0 {
-            log(
-                LogTag::Blacklist,
-                "SAVED",
-                &format!(
-                    "Saved blacklist with {} entries",
-                    self.blacklisted_tokens.len()
-                ),
-            );
-        }
-        Ok(())
-    }
-
-    /// Check if token is blacklisted
-    pub fn is_blacklisted(&self, mint: &str) -> bool {
-        self.blacklisted_tokens.contains_key(mint)
-    }
-
-    /// Add token to blacklist
-    pub fn add_to_blacklist(&mut self, mint: &str, symbol: &str, reason: BlacklistReason) {
-        let now = Utc::now();
-
-        let reason_description = match &reason {
-            BlacklistReason::LowLiquidity => "Low Liquidity",
-            BlacklistReason::PoorPerformance => "Poor Performance",
-            BlacklistReason::ManualBlacklist => "Manual",
-            BlacklistReason::SystemToken => "System Token",
-            BlacklistReason::StableToken => "Stable Token",
-            BlacklistReason::ApiError => "API Error",
-        };
-
-        let entry = BlacklistEntry {
-            mint: mint.to_string(),
-            symbol: symbol.to_string(),
-            reason,
-            first_occurrence: now,
-            last_occurrence: now,
-            occurrence_count: 1,
-            liquidity_checks: self.tracking_data.get(mint).cloned().unwrap_or_default(),
-        };
-
-        self.blacklisted_tokens.insert(mint.to_string(), entry);
-
-        log(
-            LogTag::Blacklist,
-            "ADDED",
-            &format!("Blacklisted {} ({}) - {}", symbol, mint, reason_description),
-        );
-    }
-
-    /// Check and track token liquidity for potential blacklisting
-    pub fn check_and_track_liquidity(
-        &mut self,
-        mint: &str,
-        symbol: &str,
-        liquidity_usd: f64,
-        token_age_hours: i64,
-    ) -> bool {
-        // Skip if already blacklisted
-        if self.is_blacklisted(mint) {
+    let conn = match Connection::open(TOKENS_DATABASE) {
+        Ok(conn) => conn,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
             return false;
         }
+    };
 
-        // Only track tokens older than minimum age
-        if token_age_hours < MIN_AGE_HOURS {
-            return true;
-        }
-
-        let now = Utc::now();
-        let check = LiquidityCheck {
-            timestamp: now,
-            liquidity_usd,
-            token_age_hours,
-        };
-
-        // Add to tracking data
-        self.tracking_data
-            .entry(mint.to_string())
-            .or_insert_with(Vec::new)
-            .push(check);
-
-        // Check if liquidity is below threshold
-        if liquidity_usd < LOW_LIQUIDITY_THRESHOLD {
-            let low_liquidity_count = self
-                .tracking_data
-                .get(mint)
-                .map(|checks| {
-                    checks
-                        .iter()
-                        .filter(|c| c.liquidity_usd < LOW_LIQUIDITY_THRESHOLD)
-                        .count() as u32
-                })
-                .unwrap_or(0);
-
+    let mut stmt = match conn.prepare("SELECT 1 FROM blacklist WHERE mint = ?1") {
+        Ok(stmt) => stmt,
+        Err(e) => {
             log(
                 LogTag::Blacklist,
-                "TRACK",
-                &format!(
-                    "Low liquidity for {} ({}): ${:.2} USD (count: {})",
-                    symbol, mint, liquidity_usd, low_liquidity_count
-                ),
+                "ERROR",
+                &format!("Failed to prepare blacklist check query: {}", e)
             );
-
-            // Blacklist if threshold exceeded
-            if low_liquidity_count >= MAX_LOW_LIQUIDITY_COUNT {
-                self.add_to_blacklist(mint, symbol, BlacklistReason::LowLiquidity);
-                return false;
-            }
+            return false;
         }
+    };
 
-        true
-    }
-
-    /// Remove token from blacklist
-    pub fn remove_from_blacklist(&mut self, mint: &str) -> bool {
-        if let Some(entry) = self.blacklisted_tokens.remove(mint) {
+    match stmt.exists([mint]) {
+        Ok(exists) => exists,
+        Err(e) => {
             log(
                 LogTag::Blacklist,
-                "REMOVED",
-                &format!("Removed {} ({}) from blacklist", entry.symbol, mint),
+                "ERROR",
+                &format!("Failed to check blacklist for {}: {}", mint, e)
             );
-            true
-        } else {
             false
         }
     }
+}
 
-    /// Get blacklist statistics
-    pub fn get_stats(&self) -> BlacklistStats {
-        let mut reason_counts = HashMap::new();
-
-        for entry in self.blacklisted_tokens.values() {
-            let reason_str = match entry.reason {
-                BlacklistReason::LowLiquidity => "LowLiquidity",
-                BlacklistReason::PoorPerformance => "PoorPerformance",
-                BlacklistReason::ManualBlacklist => "ManualBlacklist",
-                BlacklistReason::SystemToken => "SystemToken",
-                BlacklistReason::StableToken => "StableToken",
-                BlacklistReason::ApiError => "ApiError",
-            };
-            *reason_counts.entry(reason_str.to_string()).or_insert(0) += 1;
-        }
-
-        BlacklistStats {
-            total_blacklisted: self.blacklisted_tokens.len(),
-            total_tracked: self.tracking_data.len(),
-            reason_breakdown: reason_counts,
-        }
+/// Add token to blacklist in database
+pub fn add_to_blacklist_db(mint: &str, symbol: &str, reason: BlacklistReason) -> bool {
+    if let Err(e) = init_blacklist_database() {
+        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        return false;
     }
 
-    /// Clean old tracking data (older than 7 days)
-    pub fn cleanup_old_data(&mut self) {
-        let cutoff = Utc::now() - ChronoDuration::days(7);
-
-        for (mint, checks) in self.tracking_data.iter_mut() {
-            checks.retain(|check| check.timestamp > cutoff);
+    let conn = match Connection::open(TOKENS_DATABASE) {
+        Ok(conn) => conn,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            return false;
         }
+    };
 
-        // Remove empty tracking entries
-        self.tracking_data.retain(|_, checks| !checks.is_empty());
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
+    let reason_str = match reason {
+        BlacklistReason::LowLiquidity => "LowLiquidity",
+        BlacklistReason::PoorPerformance => "PoorPerformance",
+        BlacklistReason::ManualBlacklist => "ManualBlacklist",
+        BlacklistReason::SystemToken => "SystemToken",
+        BlacklistReason::StableToken => "StableToken",
+        BlacklistReason::ApiError => "ApiError",
+    };
+
+    let result = conn.execute(
+        "INSERT OR REPLACE INTO blacklist (mint, symbol, reason, first_occurrence, last_occurrence, occurrence_count, updated_at) 
+         VALUES (?1, ?2, ?3, ?4, ?4, 1, ?4)
+         ON CONFLICT(mint) DO UPDATE SET 
+         last_occurrence = ?4, 
+         occurrence_count = occurrence_count + 1,
+         updated_at = ?4",
+        [mint, symbol, reason_str, &now]
+    );
+
+    match result {
+        Ok(_) => {
+            log(
+                LogTag::Blacklist,
+                "ADDED",
+                &format!("Blacklisted {} ({}) - {}", symbol, mint, reason_str)
+            );
+            true
+        }
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to add {} to blacklist: {}", mint, e));
+            false
+        }
+    }
+}
+
+/// Track liquidity for a token in database
+pub fn track_liquidity_db(
+    mint: &str,
+    symbol: &str,
+    liquidity_usd: f64,
+    token_age_hours: i64
+) -> bool {
+    if let Err(e) = init_blacklist_database() {
+        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        return true; // Allow processing if we can't track
+    }
+
+    let conn = match Connection::open(TOKENS_DATABASE) {
+        Ok(conn) => conn,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            return true; // Allow processing if we can't track
+        }
+    };
+
+    // Add liquidity tracking record
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
+    if
+        let Err(e) = conn.execute(
+            "INSERT INTO liquidity_tracking (mint, symbol, liquidity_usd, token_age_hours, timestamp) 
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+            [mint, symbol, &liquidity_usd.to_string(), &token_age_hours.to_string(), &now]
+        )
+    {
+        log(LogTag::Blacklist, "ERROR", &format!("Failed to track liquidity for {}: {}", mint, e));
+        return true; // Allow processing if we can't track
+    }
+
+    // Check if we should blacklist due to low liquidity
+    if liquidity_usd < LOW_LIQUIDITY_THRESHOLD && token_age_hours >= MIN_AGE_HOURS {
+        // Count low liquidity occurrences
+        let mut stmt = match
+            conn.prepare(
+                "SELECT COUNT(*) FROM liquidity_tracking 
+             WHERE mint = ?1 AND liquidity_usd < ?2 AND datetime(timestamp) > datetime('now', '-7 days')"
+            )
+        {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                log(
+                    LogTag::Blacklist,
+                    "ERROR",
+                    &format!("Failed to prepare liquidity count query: {}", e)
+                );
+                return true;
+            }
+        };
+
+        let low_count: i64 = match
+            stmt.query_row([mint, &LOW_LIQUIDITY_THRESHOLD.to_string()], |row| row.get(0))
+        {
+            Ok(count) => count,
+            Err(e) => {
+                log(
+                    LogTag::Blacklist,
+                    "ERROR",
+                    &format!("Failed to count low liquidity for {}: {}", mint, e)
+                );
+                return true;
+            }
+        };
 
         log(
             LogTag::Blacklist,
-            "CLEANUP",
-            "Cleaned old blacklist tracking data",
+            "TRACK",
+            &format!(
+                "Low liquidity for {} ({}): ${:.2} USD (count: {})",
+                symbol,
+                mint,
+                liquidity_usd,
+                low_count
+            )
         );
+
+        if low_count >= (MAX_LOW_LIQUIDITY_COUNT as i64) {
+            add_to_blacklist_db(mint, symbol, BlacklistReason::LowLiquidity);
+            return false; // Don't allow processing
+        }
+    }
+
+    true
+}
+
+/// Get blacklist statistics from database
+pub fn get_blacklist_stats_db() -> Option<BlacklistStats> {
+    if let Err(e) = init_blacklist_database() {
+        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        return None;
+    }
+
+    let conn = match Connection::open(TOKENS_DATABASE) {
+        Ok(conn) => conn,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            return None;
+        }
+    };
+
+    // Get total blacklisted count
+    let total_blacklisted: usize = match
+        conn.query_row("SELECT COUNT(*) FROM blacklist", [], |row| row.get::<_, i64>(0))
+    {
+        Ok(count) => count as usize,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to get blacklist count: {}", e));
+            return None;
+        }
+    };
+
+    // Get tracked tokens count
+    let total_tracked: usize = match
+        conn.query_row(
+            "SELECT COUNT(DISTINCT mint) FROM liquidity_tracking WHERE datetime(timestamp) > datetime('now', '-7 days')",
+            [],
+            |row| row.get::<_, i64>(0)
+        )
+    {
+        Ok(count) => count as usize,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to get tracked count: {}", e));
+            return None;
+        }
+    };
+
+    // Get reason breakdown
+    let mut reason_breakdown = HashMap::new();
+    let mut stmt = match conn.prepare("SELECT reason, COUNT(*) FROM blacklist GROUP BY reason") {
+        Ok(stmt) => stmt,
+        Err(e) => {
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to prepare reason breakdown query: {}", e)
+            );
+            return None;
+        }
+    };
+
+    let rows = match
+        stmt.query_map([], |row| { Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)) })
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to get reason breakdown: {}", e));
+            return None;
+        }
+    };
+
+    for row in rows {
+        if let Ok((reason, count)) = row {
+            reason_breakdown.insert(reason, count as usize);
+        }
+    }
+
+    Some(BlacklistStats {
+        total_blacklisted,
+        total_tracked,
+        reason_breakdown,
+    })
+}
+
+/// Remove old liquidity tracking data (older than 7 days)
+pub fn cleanup_old_blacklist_data() -> bool {
+    if let Err(e) = init_blacklist_database() {
+        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        return false;
+    }
+
+    let conn = match Connection::open(TOKENS_DATABASE) {
+        Ok(conn) => conn,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            return false;
+        }
+    };
+
+    match
+        conn.execute(
+            "DELETE FROM liquidity_tracking WHERE datetime(timestamp) < datetime('now', '-7 days')",
+            []
+        )
+    {
+        Ok(deleted) => {
+            if deleted > 0 {
+                log(
+                    LogTag::Blacklist,
+                    "CLEANUP",
+                    &format!("Cleaned {} old liquidity tracking records", deleted)
+                );
+            }
+            true
+        }
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to cleanup old tracking data: {}", e));
+            false
+        }
     }
 }
+
+/// Get all blacklisted token mints (for efficient filtering)
+pub fn get_blacklisted_mints() -> Vec<String> {
+    if let Err(e) = init_blacklist_database() {
+        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        return Vec::new();
+    }
+
+    let conn = match Connection::open(TOKENS_DATABASE) {
+        Ok(conn) => conn,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            return Vec::new();
+        }
+    };
+
+    let mut stmt = match conn.prepare("SELECT mint FROM blacklist") {
+        Ok(stmt) => stmt,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to prepare blacklist query: {}", e));
+            return Vec::new();
+        }
+    };
+
+    let rows = match stmt.query_map([], |row| row.get::<_, String>(0)) {
+        Ok(rows) => rows,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to get blacklisted mints: {}", e));
+            return Vec::new();
+        }
+    };
+
+    let mut mints = Vec::new();
+    for row in rows {
+        if let Ok(mint) = row {
+            mints.push(mint);
+        }
+    }
+
+    mints
+}
+
+// =============================================================================
+// =============================================================================
+// BLACKLIST STATISTICS
+// =============================================================================
 
 /// Blacklist statistics
 #[derive(Debug, Clone)]
@@ -324,127 +477,164 @@ pub struct BlacklistStats {
     pub reason_breakdown: HashMap<String, usize>,
 }
 
+impl Default for BlacklistStats {
+    fn default() -> Self {
+        Self {
+            total_blacklisted: 0,
+            total_tracked: 0,
+            reason_breakdown: HashMap::new(),
+        }
+    }
+}
+
 // =============================================================================
-// GLOBAL BLACKLIST INSTANCE
+// =============================================================================
+// GLOBAL STATE & CACHING
 // =============================================================================
 
-use once_cell::sync::Lazy;
-use std::sync::Mutex;
+/// Simplified blacklist cache for performance
+static TOKEN_BLACKLIST_CACHE: Lazy<Mutex<HashSet<String>>> = Lazy::new(|| {
+    Mutex::new(HashSet::new())
+});
 
-/// Global blacklist instance
-pub static TOKEN_BLACKLIST: Lazy<Mutex<TokenBlacklist>> =
-    Lazy::new(|| match TokenBlacklist::load() {
-        Ok(blacklist) => Mutex::new(blacklist),
+/// Cache refresh timestamp
+static BLACKLIST_CACHE_LAST_REFRESH: Lazy<Mutex<Option<DateTime<Utc>>>> = Lazy::new(|| {
+    Mutex::new(None)
+});
+
+/// Cache refresh interval (5 minutes)
+const CACHE_REFRESH_INTERVAL_MINUTES: i64 = 5;
+
+/// Refresh blacklist cache from database
+fn refresh_blacklist_cache() -> bool {
+    let mints = get_blacklisted_mints();
+
+    let mut cache = match TOKEN_BLACKLIST_CACHE.lock() {
+        Ok(cache) => cache,
         Err(e) => {
-            log(
-                LogTag::Blacklist,
-                "ERROR",
-                &format!("Failed to load blacklist, using empty: {}", e),
-            );
-            Mutex::new(TokenBlacklist::new())
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to lock blacklist cache: {}", e));
+            return false;
         }
-    });
+    };
+
+    cache.clear();
+    for mint in mints {
+        cache.insert(mint);
+    }
+
+    let mut last_refresh = match BLACKLIST_CACHE_LAST_REFRESH.lock() {
+        Ok(last) => last,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to lock cache timestamp: {}", e));
+            return false;
+        }
+    };
+    *last_refresh = Some(Utc::now());
+
+    log(
+        LogTag::Blacklist,
+        "CACHE",
+        &format!("Refreshed blacklist cache with {} tokens", cache.len())
+    );
+    true
+}
+
+/// Check if cache needs refresh
+fn cache_needs_refresh() -> bool {
+    let last_refresh = match BLACKLIST_CACHE_LAST_REFRESH.lock() {
+        Ok(last) => last,
+        Err(_) => {
+            return true;
+        }
+    };
+
+    match *last_refresh {
+        Some(last) => {
+            let minutes_since_refresh = Utc::now().signed_duration_since(last).num_minutes();
+            minutes_since_refresh >= CACHE_REFRESH_INTERVAL_MINUTES
+        }
+        None => true,
+    }
+}
+
+/// Fast cached blacklist check
+pub fn is_token_blacklisted_cached(mint: &str) -> bool {
+    // Refresh cache if needed
+    if cache_needs_refresh() {
+        refresh_blacklist_cache();
+    }
+
+    let cache = match TOKEN_BLACKLIST_CACHE.lock() {
+        Ok(cache) => cache,
+        Err(_) => {
+            // Fall back to direct database check if cache fails
+            return is_token_blacklisted_db(mint);
+        }
+    };
+
+    cache.contains(mint)
+}
 
 // =============================================================================
-// HELPER FUNCTIONS
+// HELPER FUNCTIONS (Updated for Database Integration)
 // =============================================================================
 
-/// Check if token is blacklisted (thread-safe)
+/// Check if token is blacklisted (high-performance with cache)
 pub fn is_token_blacklisted(mint: &str) -> bool {
-    match TOKEN_BLACKLIST.try_lock() {
-        Ok(blacklist) => blacklist.is_blacklisted(mint),
-        Err(_) => {
-            log(
-                LogTag::Blacklist,
-                "WARN",
-                "Could not acquire blacklist lock for check",
-            );
-            false // Assume not blacklisted if can't check
-        }
-    }
+    is_token_blacklisted_cached(mint)
 }
 
-/// Track token liquidity for blacklisting (thread-safe)
-pub fn check_and_track_liquidity(
-    mint: &str,
-    symbol: &str,
-    liquidity_usd: f64,
-    token_age_hours: i64,
-) -> bool {
-    match TOKEN_BLACKLIST.try_lock() {
-        Ok(mut blacklist) => {
-            let result =
-                blacklist.check_and_track_liquidity(mint, symbol, liquidity_usd, token_age_hours);
-
-            // Only save if something was actually blacklisted (result is false)
-            if !result {
-                if let Err(e) = blacklist.save() {
-                    log(
-                        LogTag::Blacklist,
-                        "WARN",
-                        &format!("Failed to save blacklist after adding entry: {}", e),
-                    );
-                }
-            }
-
-            result
-        }
-        Err(_) => {
-            log(
-                LogTag::Blacklist,
-                "WARN",
-                "Could not acquire blacklist lock for tracking",
-            );
-            true // Assume allowed if can't track
-        }
+/// Check if token is excluded from trading (main filtering function)
+pub fn is_token_excluded_from_trading(mint: &str) -> bool {
+    // Check system/stable tokens first (fastest)
+    if is_system_or_stable_token(mint) {
+        return true;
     }
+
+    // Use cached check for maximum performance
+    if is_token_blacklisted_cached(mint) {
+        log(LogTag::Blacklist, "EXCLUDED", &format!("Blocked trading for {}: blacklisted", mint));
+        return true;
+    }
+    false
 }
 
-/// Get blacklist statistics (thread-safe)
-pub fn get_blacklist_stats() -> Option<BlacklistStats> {
-    match TOKEN_BLACKLIST.try_lock() {
-        Ok(blacklist) => Some(blacklist.get_stats()),
-        Err(_) => {
-            log(
-                LogTag::Blacklist,
-                "WARN",
-                "Could not acquire blacklist lock for stats",
-            );
-            None
+/// Add decimal fetch failure to blacklist
+pub fn add_decimal_failure_to_blacklist(mint: &str, symbol: &str, attempts: u32) -> bool {
+    log(
+        LogTag::Blacklist,
+        "DECIMAL_FAIL",
+        &format!(
+            "Adding {} ({}) to blacklist after {} decimal fetch attempts",
+            symbol,
+            mint,
+            attempts
+        )
+    );
+    let result = add_to_blacklist_db(mint, symbol, BlacklistReason::ApiError);
+    if result {
+        // Force cache refresh on next check
+        if let Ok(mut last_refresh) = BLACKLIST_CACHE_LAST_REFRESH.lock() {
+            *last_refresh = None;
         }
     }
+    result
 }
 
-/// Manual blacklist addition (thread-safe)
-pub fn add_to_blacklist_manual(mint: &str, symbol: &str) -> bool {
-    match TOKEN_BLACKLIST.try_lock() {
-        Ok(mut blacklist) => {
-            blacklist.add_to_blacklist(mint, symbol, BlacklistReason::ManualBlacklist);
+/// Initialize blacklist system
+pub fn initialize_blacklist_system() -> Result<(), Box<dyn std::error::Error>> {
+    init_blacklist_database()?;
+    refresh_blacklist_cache();
+    Ok(())
+}
 
-            if let Err(e) = blacklist.save() {
-                log(
-                    LogTag::Blacklist,
-                    "WARN",
-                    &format!("Failed to save blacklist after manual addition: {}", e),
-                );
-                false
-            } else {
-                true
-            }
-        }
-        Err(_) => {
-            log(
-                LogTag::Blacklist,
-                "WARN",
-                "Could not acquire blacklist lock for manual addition",
-            );
-            false
-        }
-    }
+/// Cleanup old data
+pub fn cleanup_blacklist_data() -> bool {
+    cleanup_old_blacklist_data()
 }
 
 // =============================================================================
-// CENTRALIZED TOKEN EXCLUSION SYSTEM
+// SYSTEM & STABLE TOKEN HANDLING
 // =============================================================================
 
 /// Check if token is a system or stable token that should be excluded from trading
@@ -452,138 +642,46 @@ pub fn is_system_or_stable_token(mint: &str) -> bool {
     SYSTEM_STABLE_TOKENS.contains(&mint)
 }
 
-/// Check if token should be excluded from trading (blacklisted OR system/stable)
-/// This is the main function that should be used everywhere for token exclusion checks
-pub fn is_token_excluded_from_trading(mint: &str) -> bool {
-    // Check system/stable tokens first (fastest)
-    if is_system_or_stable_token(mint) {
-        return true;
-    }
-
-    // Check dynamic blacklist
-    is_token_blacklisted(mint)
-}
-
-/// Add system/stable token to blacklist for permanent exclusion
-pub fn add_system_token_to_blacklist(mint: &str, symbol: &str) -> bool {
-    match TOKEN_BLACKLIST.try_lock() {
-        Ok(mut blacklist) => {
-            blacklist.add_to_blacklist(mint, symbol, BlacklistReason::SystemToken);
-
-            if let Err(e) = blacklist.save() {
-                log(
-                    LogTag::Blacklist,
-                    "WARN",
-                    &format!("Failed to save blacklist after adding system token: {}", e),
-                );
-                false
-            } else {
-                true
-            }
-        }
-        Err(_) => {
-            log(
-                LogTag::Blacklist,
-                "WARN",
-                "Could not acquire blacklist lock for system token",
-            );
-            false
-        }
-    }
-}
-
-/// Add stable token to blacklist for permanent exclusion
-pub fn add_stable_token_to_blacklist(mint: &str, symbol: &str) -> bool {
-    match TOKEN_BLACKLIST.try_lock() {
-        Ok(mut blacklist) => {
-            blacklist.add_to_blacklist(mint, symbol, BlacklistReason::StableToken);
-
-            if let Err(e) = blacklist.save() {
-                log(
-                    LogTag::Blacklist,
-                    "WARN",
-                    &format!("Failed to save blacklist after adding stable token: {}", e),
-                );
-                false
-            } else {
-                true
-            }
-        }
-        Err(_) => {
-            log(
-                LogTag::Blacklist,
-                "WARN",
-                "Could not acquire blacklist lock for stable token",
-            );
-            false
-        }
-    }
-}
-
-/// Add token to blacklist due to API errors (502, etc.)
-pub fn add_api_error_token_to_blacklist(mint: &str, symbol: &str) -> bool {
-    match TOKEN_BLACKLIST.try_lock() {
-        Ok(mut blacklist) => {
-            blacklist.add_to_blacklist(mint, symbol, BlacklistReason::ApiError);
-
-            if let Err(e) = blacklist.save() {
-                log(
-                    LogTag::Blacklist,
-                    "WARN",
-                    &format!(
-                        "Failed to save blacklist after adding API error token: {}",
-                        e
-                    ),
-                );
-                false
-            } else {
-                true
-            }
-        }
-        Err(_) => {
-            log(
-                LogTag::Blacklist,
-                "WARN",
-                "Could not acquire blacklist lock for API error token",
-            );
-            false
-        }
-    }
-}
-
-/// Initialize system and stable tokens in blacklist (run at startup)
+/// Initialize system and stable tokens in blacklist database (run at startup)
 pub fn initialize_system_stable_blacklist() {
+    let mut tokens_added = 0;
     for &mint in SYSTEM_STABLE_TOKENS {
-        if !is_token_blacklisted(mint) {
-            let symbol = match mint {
-                "So11111111111111111111111111111111111111112" => "SOL",
-                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" => "USDC",
-                "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" => "USDT",
-                "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj" => "stSOL",
-                "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" => "mSOL",
-                "11111111111111111111111111111111" => "SYSTEM",
-                "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" => "TOKEN_PROGRAM",
-                "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" => "TOKEN_2022",
-                _ => "UNKNOWN",
+        if !is_token_blacklisted_cached(mint) {
+            let (symbol, reason) = match mint {
+                "So11111111111111111111111111111111111111112" =>
+                    ("SOL", BlacklistReason::StableToken),
+                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" =>
+                    ("USDC", BlacklistReason::StableToken),
+                "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" =>
+                    ("USDT", BlacklistReason::StableToken),
+                "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj" =>
+                    ("stSOL", BlacklistReason::StableToken),
+                "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" =>
+                    ("mSOL", BlacklistReason::StableToken),
+                "11111111111111111111111111111111" => ("SYSTEM", BlacklistReason::SystemToken),
+                "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" =>
+                    ("TOKEN_PROGRAM", BlacklistReason::SystemToken),
+                "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" =>
+                    ("TOKEN_2022", BlacklistReason::SystemToken),
+                _ => ("UNKNOWN", BlacklistReason::SystemToken),
             };
 
-            let reason = match mint {
-                "11111111111111111111111111111111"
-                | "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-                | "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" => BlacklistReason::SystemToken,
-                _ => BlacklistReason::StableToken,
-            };
-
-            if let Ok(mut blacklist) = TOKEN_BLACKLIST.try_lock() {
-                blacklist.add_to_blacklist(mint, symbol, reason);
-                let _ = blacklist.save(); // Ignore save errors during initialization
+            if add_to_blacklist_db(mint, symbol, reason) {
+                tokens_added += 1;
             }
+        }
+    }
+
+    // Force cache refresh if we added any tokens
+    if tokens_added > 0 {
+        if let Ok(mut last_refresh) = BLACKLIST_CACHE_LAST_REFRESH.lock() {
+            *last_refresh = None;
         }
     }
 
     log(
         LogTag::Blacklist,
         "INIT",
-        "System and stable tokens initialized in blacklist",
+        &format!("System and stable tokens initialized in blacklist database ({} added)", tokens_added)
     );
 }

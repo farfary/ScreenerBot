@@ -6,7 +6,6 @@ use crate::tokens::types::{ Token, ApiToken };
 use crate::trader::MAX_OPEN_POSITIONS;
 use chrono::{ Duration as ChronoDuration, Utc };
 
-
 // =============================================================================
 // FILTERING CONFIGURATION PARAMETERS
 // =============================================================================
@@ -240,15 +239,38 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         );
     }
 
-    // 2. Apply 5000 token limit (hardcoded near MAX_WATCHED_TOKENS)
+    // 2. EARLY BLACKLIST FILTER - Remove blacklisted tokens immediately (highest priority)
+    let pre_blacklist_count = fresh_tokens.len();
+    let blacklist_filtered_tokens: Vec<
+        (String, String, chrono::DateTime<chrono::Utc>, f64)
+    > = fresh_tokens
+        .into_iter()
+        .filter(|(mint, _, _, _)| !is_token_excluded_from_trading(mint))
+        .collect();
+
+    let blacklisted_count = pre_blacklist_count - blacklist_filtered_tokens.len();
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG",
+            &format!(
+                "🚫 Early blacklist filter: {} tokens → {} tokens ({} blacklisted removed)",
+                pre_blacklist_count,
+                blacklist_filtered_tokens.len(),
+                blacklisted_count
+            )
+        );
+    }
+
+    // 3. Apply 5000 token limit (hardcoded near MAX_WATCHED_TOKENS)
     const MAX_TOKENS_FOR_PROCESSING: usize = 5000;
-    let limited_tokens = if fresh_tokens.len() > MAX_TOKENS_FOR_PROCESSING {
+    let limited_tokens = if blacklist_filtered_tokens.len() > MAX_TOKENS_FOR_PROCESSING {
         // Sort by liquidity (highest first) and take top 5000
-        let mut sorted_fresh = fresh_tokens;
+        let mut sorted_fresh = blacklist_filtered_tokens;
         sorted_fresh.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
         sorted_fresh.into_iter().take(MAX_TOKENS_FOR_PROCESSING).collect()
     } else {
-        fresh_tokens
+        blacklist_filtered_tokens
     };
 
     if is_debug_filtering_enabled() {
@@ -288,7 +310,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
             .as_ref()
             .and_then(|l| l.usd)
             .unwrap_or(0.0);
-        
+
         if liquidity_usd <= 0.0 {
             zero_liquidity_filtered += 1;
             return false;
@@ -305,7 +327,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
             let now = chrono::Utc::now();
             let token_age = now - created_at;
             let age_seconds = token_age.num_seconds();
-            
+
             if age_seconds > MAX_TOKEN_AGE_SECONDS {
                 old_tokens_filtered += 1;
                 return false;
@@ -417,7 +439,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
 // =============================================================================
 
 /// High-performance token filtering function for 1000 tokens per cycle
-/// Note: Assumes tokens have already passed early performance filtering 
+/// Note: Assumes tokens have already passed early performance filtering
 /// (zero liquidity, missing decimals, and age constraints)
 pub fn filter_token_for_trading(token: &Token) -> FilterResult {
     // Essential validations only - no debugging overhead for speed
@@ -438,7 +460,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
     }
 
     // Note: Age validation skipped - handled by early filtering
-    // Note: Liquidity validation skipped - handled by early filtering  
+    // Note: Liquidity validation skipped - handled by early filtering
     // Note: Decimal availability skipped - handled by early filtering
 
     // Price data validation (still needed for price ranges)
@@ -468,13 +490,17 @@ fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
                 log(
                     LogTag::Filtering,
                     "DEBUG_BLACKLIST",
-                    &format!("🚫 Token {} ({}) is a system or stable token - excluded", token.symbol, token.mint)
+                    &format!(
+                        "🚫 Token {} ({}) is a system or stable token - excluded",
+                        token.symbol,
+                        token.mint
+                    )
                 );
             }
             return Some(FilterReason::SystemOrStableToken);
         } else {
             // It's in the dynamic blacklist
-            let reason_description = if let Some(stats) = crate::tokens::get_blacklist_stats() {
+            let reason_description = if let Some(stats) = crate::tokens::get_blacklist_stats_db() {
                 format!("Blacklisted (total: {})", stats.total_blacklisted)
             } else {
                 "Blacklisted".to_string()
@@ -484,7 +510,12 @@ fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
                 log(
                     LogTag::Filtering,
                     "DEBUG_BLACKLIST",
-                    &format!("🚫 Token {} ({}) is blacklisted - {}", token.symbol, token.mint, reason_description)
+                    &format!(
+                        "🚫 Token {} ({}) is blacklisted - {}",
+                        token.symbol,
+                        token.mint,
+                        reason_description
+                    )
                 );
             }
 
@@ -515,7 +546,11 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
                 log(
                     LogTag::Filtering,
                     "RUGCHECK_MISSING",
-                    &format!("❌ Token {} ({}) REJECTED: No rugcheck data available", token.symbol, token.mint)
+                    &format!(
+                        "❌ Token {} ({}) REJECTED: No rugcheck data available",
+                        token.symbol,
+                        token.mint
+                    )
                 );
             }
             return Some(FilterReason::RugcheckRisk {
@@ -630,7 +665,12 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
         log(
             LogTag::Filtering,
             "RUGCHECK_PASS",
-            &format!("Token {} ({}) passed rugcheck validation (risk score: {})", token.symbol, token.mint, score)
+            &format!(
+                "Token {} ({}) passed rugcheck validation (risk score: {})",
+                token.symbol,
+                token.mint,
+                score
+            )
         );
     }
 
@@ -1272,7 +1312,11 @@ fn validate_transaction_activity(token: &Token) -> Option<FilterReason> {
         log(
             LogTag::Filtering,
             "DEBUG_TXN_ACTIVITY",
-            &format!("✅ Token {} ({}) passed transaction activity validation", token.symbol, token.mint)
+            &format!(
+                "✅ Token {} ({}) passed transaction activity validation",
+                token.symbol,
+                token.mint
+            )
         );
     }
 
@@ -1286,7 +1330,11 @@ fn validate_decimal_availability(token: &Token) -> Option<FilterReason> {
             log(
                 LogTag::Filtering,
                 "DEBUG_DECIMALS",
-                &format!("❌ Token {} ({}) decimals not available in cached data", token.symbol, token.mint)
+                &format!(
+                    "❌ Token {} ({}) decimals not available in cached data",
+                    token.symbol,
+                    token.mint
+                )
             );
         }
         return Some(FilterReason::DecimalsNotAvailable {

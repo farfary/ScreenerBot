@@ -824,7 +824,11 @@ impl RugcheckService {
                             );
 
                             // Blacklist the token due to API error
-                            let _ = blacklist::add_api_error_token_to_blacklist(mint, mint);
+                            let _ = blacklist::add_to_blacklist_db(
+                                mint,
+                                mint,
+                                blacklist::BlacklistReason::ApiError
+                            );
 
                             // Return special error to indicate token should be skipped
                             return Err("TOKEN_BLACKLISTED_502".to_string());

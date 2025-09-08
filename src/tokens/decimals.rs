@@ -3,6 +3,7 @@ use crate::global::{ is_debug_decimals_enabled, TOKENS_DATABASE };
 use crate::logger::{ log, LogTag };
 use crate::rpc::get_rpc_client;
 use crate::tokens::is_system_or_stable_token;
+use crate::tokens::blacklist::{ add_to_blacklist_db, BlacklistReason };
 use crate::utils::safe_truncate;
 use once_cell::sync::Lazy;
 use rusqlite::{ Connection, Result as SqliteResult };
@@ -58,6 +59,8 @@ fn init_decimals_database() -> SqliteResult<()> {
             mint TEXT PRIMARY KEY,
             error_message TEXT NOT NULL,
             is_permanent INTEGER NOT NULL DEFAULT 1,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            max_retries INTEGER NOT NULL DEFAULT 3,
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )",
@@ -117,7 +120,7 @@ fn save_decimals_to_db(mint: &str, decimals: u8) -> Result<(), String> {
 }
 
 /// Get failed token from database
-fn get_failed_decimals_from_db(mint: &str) -> Result<Option<(String, bool)>, String> {
+fn get_failed_decimals_from_db(mint: &str) -> Result<Option<(String, bool, i32, i32)>, String> {
     init_decimals_database().map_err(|e| format!("Database init error: {}", e))?;
 
     let conn = Connection::open(TOKENS_DATABASE).map_err(|e|
@@ -125,11 +128,20 @@ fn get_failed_decimals_from_db(mint: &str) -> Result<Option<(String, bool)>, Str
     )?;
 
     let mut stmt = conn
-        .prepare("SELECT error_message, is_permanent FROM failed_decimals WHERE mint = ?1")
+        .prepare(
+            "SELECT error_message, is_permanent, retry_count, max_retries FROM failed_decimals WHERE mint = ?1"
+        )
         .map_err(|e| format!("Database prepare error: {}", e))?;
 
     let mut rows = stmt
-        .query_map([mint], |row| { Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)? == 1)) })
+        .query_map([mint], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i32>(1)? == 1,
+                row.get::<_, i32>(2)?,
+                row.get::<_, i32>(3)?,
+            ))
+        })
         .map_err(|e| format!("Database query error: {}", e))?;
 
     if let Some(row) = rows.next() {
@@ -140,20 +152,83 @@ fn get_failed_decimals_from_db(mint: &str) -> Result<Option<(String, bool)>, Str
     }
 }
 
-/// Save failed token to database
+/// Save failed token to database with retry tracking
 fn save_failed_decimals_to_db(mint: &str, error: &str, is_permanent: bool) -> Result<(), String> {
+    let max_retries = 3; // Maximum retry attempts for network errors
+
     init_decimals_database().map_err(|e| format!("Database init error: {}", e))?;
 
     let conn = Connection::open(TOKENS_DATABASE).map_err(|e|
         format!("Database connection error: {}", e)
     )?;
 
-    conn
-        .execute(
-            "INSERT OR REPLACE INTO failed_decimals (mint, error_message, is_permanent, updated_at) VALUES (?1, ?2, ?3, datetime('now'))",
-            [mint, error, &(if is_permanent { 1 } else { 0 }).to_string()]
-        )
-        .map_err(|e| format!("Database save error: {}", e))?;
+    if is_permanent {
+        // Permanent errors - set retry_count to max to prevent further retries
+        conn
+            .execute(
+                "INSERT OR REPLACE INTO failed_decimals (mint, error_message, is_permanent, retry_count, max_retries, updated_at) VALUES (?1, ?2, 1, ?3, ?3, datetime('now'))",
+                [mint, error, &max_retries.to_string()]
+            )
+            .map_err(|e| format!("Database save error: {}", e))?;
+    } else {
+        // Network/temporary errors - increment retry count
+        match get_failed_decimals_from_db(mint) {
+            Ok(Some((_, _, retry_count, _))) => {
+                let new_retry_count = retry_count + 1;
+                let is_now_permanent = new_retry_count >= max_retries;
+
+                conn
+                    .execute(
+                        "UPDATE failed_decimals SET error_message = ?2, retry_count = ?3, is_permanent = ?4, updated_at = datetime('now') WHERE mint = ?1",
+                        [
+                            mint,
+                            error,
+                            &new_retry_count.to_string(),
+                            &(if is_now_permanent { 1 } else { 0 }).to_string(),
+                        ]
+                    )
+                    .map_err(|e| format!("Database update error: {}", e))?;
+
+                // If retry limit exceeded, add to blacklist
+                if is_now_permanent {
+                    let symbol = format!("RETRY_FAIL_{}", crate::utils::safe_truncate(mint, 8));
+
+                    if is_debug_decimals_enabled() {
+                        log(
+                            LogTag::Decimals,
+                            "RETRY_EXHAUSTED",
+                            &format!(
+                                "Token {} exceeded retry limit ({}), adding to blacklist: {}",
+                                mint,
+                                max_retries,
+                                error
+                            )
+                        );
+                    }
+
+                    // Add to blacklist due to retry exhaustion
+                    if !add_to_blacklist_db(mint, &symbol, BlacklistReason::ApiError) {
+                        if is_debug_decimals_enabled() {
+                            log(
+                                LogTag::Decimals,
+                                "BLACKLIST_ERROR",
+                                &format!("Failed to add retry-exhausted token {} to blacklist", mint)
+                            );
+                        }
+                    }
+                }
+            }
+            _ => {
+                // First failure for network error
+                conn
+                    .execute(
+                        "INSERT OR REPLACE INTO failed_decimals (mint, error_message, is_permanent, retry_count, max_retries, updated_at) VALUES (?1, ?2, 0, 1, ?3, datetime('now'))",
+                        [mint, error, &max_retries.to_string()]
+                    )
+                    .map_err(|e| format!("Database save error: {}", e))?;
+            }
+        }
+    }
 
     Ok(())
 }
@@ -223,27 +298,41 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
         }
     }
 
-    // Check failed decimals database - but allow retries for network/temporary errors
+    // Check failed decimals database - but allow retries for network/temporary errors within limit
     match get_failed_decimals_from_db(mint) {
-        Ok(Some((error, is_permanent))) => {
-            if is_permanent {
+        Ok(Some((error, is_permanent, retry_count, max_retries))) => {
+            if is_permanent || retry_count >= max_retries {
                 if is_debug_decimals_enabled() {
+                    let reason = if is_permanent {
+                        "permanent error"
+                    } else {
+                        "max retries exceeded"
+                    };
                     log(
                         LogTag::Decimals,
                         "CACHED_FAIL",
-                        &format!("Skipping permanently failed token {}: {}", mint, error)
+                        &format!(
+                            "Skipping failed token {} ({}): {} [attempts: {}/{}]",
+                            mint,
+                            reason,
+                            error,
+                            retry_count,
+                            max_retries
+                        )
                     );
                 }
                 return Err(error);
             } else {
-                // Network/temporary error - allow retry but log it
+                // Network/temporary error within retry limit - allow retry but log it
                 if is_debug_decimals_enabled() {
                     log(
                         LogTag::Decimals,
                         "RETRY_CACHED",
                         &format!(
-                            "Retrying previously failed token {} (network error): {}",
+                            "Retrying previously failed token {} (attempt {}/{}): {}",
                             mint,
+                            retry_count + 1,
+                            max_retries,
                             error
                         )
                     );
@@ -292,11 +381,12 @@ fn is_token_already_failed(mint: &str) -> bool {
     }
 }
 
-/// Check if a token failed with a permanent error (not retryable)
+/// Check if a token failed with a permanent error or exceeded retry limit
 fn is_token_failed_permanently(mint: &str) -> bool {
-    // Check database for permanent failures
+    // Check database for permanent failures or exceeded retry limit
     match get_failed_decimals_from_db(mint) {
-        Ok(Some((_, is_permanent))) => is_permanent,
+        Ok(Some((_, is_permanent, retry_count, max_retries))) =>
+            is_permanent || retry_count >= max_retries,
         _ => false,
     }
 }
@@ -311,7 +401,7 @@ fn cache_failed_token(mint: &str, error: &str) {
             log(
                 LogTag::Decimals,
                 "DB_SAVE_ERROR",
-                &format!("Failed to save failed token to database {}: {}", mint, e)
+                &format!("Failed to save failed token to database: {}", e)
             );
         }
     }
@@ -319,6 +409,31 @@ fn cache_failed_token(mint: &str, error: &str) {
     // Also keep in memory cache for immediate access
     if let Ok(mut failed_cache) = FAILED_DECIMALS_CACHE.lock() {
         failed_cache.insert(mint.to_string(), error.to_string());
+    }
+
+    // Add permanently failed tokens to blacklist to prevent future processing
+    if is_permanent {
+        // Use a generic symbol for failed tokens since we don't have the actual symbol here
+        let symbol = format!("FAILED_{}", crate::utils::safe_truncate(mint, 8));
+
+        if is_debug_decimals_enabled() {
+            log(
+                LogTag::Decimals,
+                "BLACKLIST_ADD",
+                &format!("Adding permanently failed token {} to blacklist: {}", mint, error)
+            );
+        }
+
+        // Add to blacklist with API error reason (most common permanent failure type)
+        if !add_to_blacklist_db(mint, &symbol, BlacklistReason::ApiError) {
+            if is_debug_decimals_enabled() {
+                log(
+                    LogTag::Decimals,
+                    "BLACKLIST_ERROR",
+                    &format!("Failed to add {} to blacklist", mint)
+                );
+            }
+        }
     }
 
     if is_debug_decimals_enabled() {
@@ -835,11 +950,14 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
             }
         }
 
-        // Check if permanently failed
+        // Check if permanently failed or exceeded retry limit
         if is_token_failed_permanently(mint_str) {
             // Get the error from database or memory cache
             let error = match get_failed_decimals_from_db(mint_str) {
-                Ok(Some((error, _))) => error,
+                Ok(Some((error, is_permanent, retry_count, max_retries))) => {
+                    let reason = if is_permanent { "permanent" } else { "max retries" };
+                    format!("{} [{}] ({}/{})", error, reason, retry_count, max_retries)
+                }
                 _ => "Previously failed".to_string(),
             };
             cached_results.push((mint_str.clone(), Err(error.clone())));
@@ -847,17 +965,26 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                 log(
                     LogTag::Decimals,
                     "SKIP_FAILED",
-                    &format!("Skipping permanently failed token {}: {}", mint_str, error)
+                    &format!("Skipping failed token {}: {}", mint_str, error)
                 );
             }
         } else {
-            // Either not failed, or failed with retryable error
+            // Either not failed, or failed with retryable error within limit
             if is_token_already_failed(mint_str) && is_debug_decimals_enabled() {
-                if let Ok(Some((error, _))) = get_failed_decimals_from_db(mint_str) {
+                if
+                    let Ok(Some((error, _, retry_count, max_retries))) =
+                        get_failed_decimals_from_db(mint_str)
+                {
                     log(
                         LogTag::Decimals,
                         "RETRY_BATCH",
-                        &format!("Retrying token {} (network error): {}", mint_str, error)
+                        &format!(
+                            "Retrying token {} (attempt {}/{}): {}",
+                            mint_str,
+                            retry_count + 1,
+                            max_retries,
+                            error
+                        )
                     );
                 }
             }
@@ -1319,6 +1446,92 @@ pub fn get_failed_cache_stats() -> Result<(usize, usize, Vec<String>), String> {
     }
 
     Ok((total_count as usize, permanent_count as usize, sample_errors))
+}
+
+/// Migrate existing permanently failed tokens to blacklist
+/// This function should be called periodically or on startup to ensure all permanently failed tokens are blacklisted
+pub fn migrate_failed_tokens_to_blacklist() -> Result<usize, String> {
+    init_decimals_database().map_err(|e| format!("Database init error: {}", e))?;
+
+    let conn = Connection::open(TOKENS_DATABASE).map_err(|e|
+        format!("Database connection error: {}", e)
+    )?;
+
+    // Get all permanently failed tokens that might not be in blacklist yet
+    // Use a simpler query that works with the current schema
+    let mut stmt = conn
+        .prepare("SELECT mint, error_message FROM failed_decimals WHERE is_permanent = 1")
+        .map_err(|e| format!("Database prepare error: {}", e))?;
+
+    let rows = stmt
+        .query_map([], |row| { Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)) })
+        .map_err(|e| format!("Database query error: {}", e))?;
+
+    let mut migrated_count = 0;
+
+    for row in rows {
+        let (mint, error) = row.map_err(|e| format!("Database row error: {}", e))?;
+
+        // Check if already blacklisted to avoid duplicates
+        if !crate::tokens::blacklist::is_token_blacklisted(&mint) {
+            let symbol = format!("MIGRATED_{}", safe_truncate(&mint, 8));
+
+            if add_to_blacklist_db(&mint, &symbol, BlacklistReason::ApiError) {
+                migrated_count += 1;
+
+                if is_debug_decimals_enabled() {
+                    log(
+                        LogTag::Decimals,
+                        "MIGRATE_BLACKLIST",
+                        &format!("Migrated failed token {} to blacklist: {}", mint, error)
+                    );
+                }
+            }
+        }
+    }
+
+    // Also migrate tokens that have failed multiple times (even if not marked as permanent)
+    // This handles tokens that existed before the permanent flag was implemented
+    let mut stmt = conn
+        .prepare(
+            "SELECT mint, error_message, COUNT(*) as failure_count FROM failed_decimals GROUP BY mint HAVING failure_count >= 3"
+        )
+        .map_err(|e| format!("Database prepare error: {}", e))?;
+
+    let rows = stmt
+        .query_map([], |row| { Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)) })
+        .map_err(|e| format!("Database query error: {}", e))?;
+
+    for row in rows {
+        let (mint, error) = row.map_err(|e| format!("Database row error: {}", e))?;
+
+        // Check if already blacklisted to avoid duplicates
+        if !crate::tokens::blacklist::is_token_blacklisted(&mint) {
+            let symbol = format!("RETRY_FAIL_{}", safe_truncate(&mint, 8));
+
+            if add_to_blacklist_db(&mint, &symbol, BlacklistReason::ApiError) {
+                migrated_count += 1;
+
+                if is_debug_decimals_enabled() {
+                    log(
+                        LogTag::Decimals,
+                        "MIGRATE_BLACKLIST",
+                        &format!("Migrated retry-failed token {} to blacklist: {}", mint, error)
+                    );
+                }
+            }
+        }
+    }
+
+    if migrated_count > 0 {
+        log(
+            LogTag::Decimals,
+            "MIGRATION_COMPLETE",
+            &format!("Migrated {} permanently failed tokens to blacklist", migrated_count)
+        );
+    }
+
+    Ok(migrated_count)
 }
 
 // =============================================================================

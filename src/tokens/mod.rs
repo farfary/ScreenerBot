@@ -31,14 +31,13 @@ pub use authority::{
     TokenRiskLevel,
 };
 pub use blacklist::{
-    add_to_blacklist_manual,
-    check_and_track_liquidity,
-    get_blacklist_stats,
+    get_blacklist_stats_db,
     initialize_system_stable_blacklist,
     is_system_or_stable_token,
     is_token_blacklisted,
     is_token_excluded_from_trading,
-    TokenBlacklist,
+    add_to_blacklist_db,
+    track_liquidity_db,
 };
 pub use cache::{ DatabaseStats, TokenDatabase };
 pub use decimals::{
@@ -180,7 +179,7 @@ impl TokensSystem {
         let db_stats = self.database
             .get_stats()
             .map_err(|e| format!("Failed to get database stats: {}", e))?;
-        let blacklist_stats = get_blacklist_stats();
+        let blacklist_stats = get_blacklist_stats_db();
 
         Ok(TokensSystemStats {
             total_tokens: db_stats.total_tokens,
