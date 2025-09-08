@@ -5,7 +5,6 @@
 /// - ATH prevention using multi-timeframe analysis
 /// - Database-driven confidence scoring with stability weighting
 /// - Higher confidence thresholds for quality entries
-/// - Enhanced liquidity filters for successful execution
 
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
@@ -114,10 +113,6 @@ pub async fn preload_exit_prices_batch(mints: &[String]) -> Result<(), String> {
 // Balanced windows for stable entries (30s to 10min)
 const MIN_PRICE_POINTS: usize = 5; // Increased from 3 for better analysis
 const MAX_DATA_AGE_MIN: i64 = 5; // Keep tight data freshness requirement
-
-// Conservative liquidity filter for more stable entries
-const MIN_RESERVE_SOL: f64 = 20.0; // Higher minimum for stability
-const MAX_RESERVE_SOL: f64 = 30000.0; // Higher maximum for less restrictive filtering
 
 // CONSERVATIVE entry windows - more balanced approach
 const WINDOWS_SEC: [i64; 6] = [10, 20, 40, 80, 160, 320]; // 30s to 10min windows
@@ -241,34 +236,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         return (false, 0.0, "Invalid price".to_string());
     };
 
-    let reserve_sol = price_info.sol_reserves;
     let activity_score = 0.5;
-    // Basic liquidity filter using SOL reserves (lightweight)
-    if reserve_sol < MIN_RESERVE_SOL || reserve_sol > MAX_RESERVE_SOL {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "LIQUIDITY_FILTER",
-                &format!(
-                    "❌ {} SOL reserves {:.2} outside bounds {:.1}-{:.0}",
-                    price_info.mint,
-                    reserve_sol,
-                    MIN_RESERVE_SOL,
-                    MAX_RESERVE_SOL
-                )
-            );
-        }
-        return (
-            false,
-            10.0,
-            format!(
-                "SOL reserves out of bounds: {:.2} (allowed {:.1}..{:.0})",
-                reserve_sol,
-                MIN_RESERVE_SOL,
-                MAX_RESERVE_SOL
-            ),
-        );
-    }
 
     // Get recent pool price history
     if is_debug_entry_enabled() {
@@ -449,10 +417,6 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
 
         // Transaction activity already applied above - removed duplicate
 
-        // Liquidity impact (moderate increase)
-        let liquidity_score = calculate_liquidity_score(reserve_sol);
-        confidence += liquidity_score * 10.0; // Reduced from 15.0
-
         // Window preference (favor longer-term drops for stability)
         confidence += match sig.window_sec {
             30 => 20.0, // Short-term but not too aggressive
@@ -477,8 +441,6 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
             sig.drop_percent >= adaptive_min_drop &&
             sig.drop_percent <= 20.0 + ((prior_count as f64) * 3.0).min(15.0) &&
             sig.window_sec >= 60 &&
-            reserve_sol >= 50.0 &&
-            reserve_sol <= 800.0 &&
             activity_score >= 0.6 &&
             ath_safe &&
             stabilization_score >= 0.25; // require some stabilization
@@ -506,7 +468,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 LogTag::Entry,
                 "ENTRY_ANALYSIS_COMPLETE",
                 &format!(
-                    "🎯 {} entry: -{:.1}%/{}s → conf {:.1}% → {} [activity:{:.1} liquidity:{:.0} ath_safe:{} ath_pct:{:.1}% good_entry:{} prior_exits:{} adapt_min_drop:{:.1}% stab:{:.2} intrarange:{:.1}%]",
+                    "🎯 {} entry: -{:.1}%/{}s → conf {:.1}% → {} [activity:{:.1} ath_safe:{} ath_pct:{:.1}% good_entry:{} prior_exits:{} adapt_min_drop:{:.1}% stab:{:.2} intrarange:{:.1}%]",
                     price_info.mint,
                     sig.drop_percent,
                     sig.window_sec,
@@ -517,7 +479,6 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                         "REJECT"
                     },
                     activity_score,
-                    reserve_sol,
                     ath_safe,
                     max_ath_pct,
                     is_good_entry,
@@ -535,10 +496,9 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
             if approved {
                 let reason = if is_good_entry {
                     format!(
-                        "Conservative entry: -{:.1}%/{}s, {:.0} SOL, ATH-safe, good activity",
+                        "Conservative entry: -{:.1}%/{}s, ATH-safe, good activity",
                         sig.drop_percent,
-                        sig.window_sec,
-                        reserve_sol
+                        sig.window_sec
                     )
                 } else {
                     format!(
@@ -702,22 +662,6 @@ fn calculate_drop_magnitude_score(drop_percent: f64) -> f64 {
     }
 }
 
-/// Calculate liquidity tier score (0.0 to 1.0 scale)
-/// Based on database analysis: 250-1000 SOL = 50%+ success rate
-fn calculate_liquidity_score(reserve_sol: f64) -> f64 {
-    if reserve_sol >= 250.0 && reserve_sol <= 1000.0 {
-        1.0 // Sweet spot (50%+ success rate)
-    } else if reserve_sol >= 100.0 && reserve_sol <= 500.0 {
-        0.8 // Good range (35% success rate)
-    } else if reserve_sol >= 50.0 {
-        0.6 // Acceptable range
-    } else if reserve_sol >= 10.0 {
-        0.3 // Minimum viable
-    } else {
-        0.1 // Very low liquidity (1.6% success rate)
-    }
-}
-
 fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
     if prices.len() < 2 {
         return 0.0;
@@ -831,30 +775,11 @@ pub async fn get_profit_target(
     price_history_opt: Option<&[(DateTime<Utc>, f64)]>
 ) -> (f64, f64) {
     let current_price_opt = Some(price_info.price_sol);
-    let reserve_sol = price_info.sol_reserves.max(30.0);
 
     let activity_score = 0.5;
 
     // Base profit targets with conservative approach for better success rates
-    let (mut min_profit, mut max_profit): (f64, f64) = if reserve_sol < 25.0 {
-        // Below minimum liquidity threshold
-        (35.0, 80.0) // Higher targets for risky low liquidity
-    } else if reserve_sol < 100.0 {
-        // Low liquidity tier
-        (25.0, 60.0)
-    } else if reserve_sol < 300.0 {
-        // Medium liquidity tier (good for conservative trading)
-        (18.0, 45.0)
-    } else if reserve_sol < 800.0 {
-        // High liquidity tier (optimal range)
-        (15.0, 35.0) // Conservative 15-35% targets
-    } else if reserve_sol < 1200.0 {
-        // Very high liquidity tier
-        (20.0, 40.0)
-    } else {
-        // Extremely high liquidity (higher targets for potential whale movements)
-        (25.0, 50.0)
-    };
+    let (mut min_profit, mut max_profit): (f64, f64) = (18.0, 45.0); // Conservative default targets
 
     // Activity multiplier (reduced impact for conservative approach)
     let activity_multiplier = 1.0 + (activity_score - 0.5) * 0.25; // Reduced from 0.4 to 0.25

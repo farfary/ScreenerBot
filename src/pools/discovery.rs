@@ -13,6 +13,7 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::dexscreener::{ get_token_pools_from_dexscreener, TokenPair };
 use crate::tokens::geckoterminal::{ get_token_pools_from_geckoterminal, GeckoTerminalPool };
 use crate::tokens::raydium::{ get_token_pools_from_raydium, RaydiumPool };
+use crate::filtering::{ MIN_SOL_RESERVES, MAX_SOL_RESERVES };
 use super::types::{ PoolDescriptor, ProgramKind, SOL_MINT };
 use super::utils::{ is_stablecoin_mint };
 use solana_sdk::pubkey::Pubkey;
@@ -159,7 +160,12 @@ impl PoolDiscovery {
         }
 
         // Deduplicate pools by pool address
-        self.deduplicate_pools(discovered_pools)
+        let deduplicated_pools = self.deduplicate_pools(discovered_pools);
+
+        // Apply SOL reserves filtering as final safety check
+        let filtered_pools = self.filter_pools_by_sol_reserves(deduplicated_pools);
+
+        filtered_pools
     }
 
     /// Discover pools from DexScreener API
@@ -408,5 +414,54 @@ impl PoolDiscovery {
         }
 
         result
+    }
+
+    /// Filter pools by SOL reserves criteria (safety check)
+    fn filter_pools_by_sol_reserves(&self, pools: Vec<PoolDescriptor>) -> Vec<PoolDescriptor> {
+        let mut filtered_pools = Vec::new();
+        let mut filtered_out_count = 0;
+
+        for pool in pools {
+            // For now, we'll use liquidity_usd as a proxy for SOL reserves
+            // This is not perfect but provides some filtering
+            // In the future, we could enhance this by fetching actual reserves
+            
+            // Convert USD liquidity to approximate SOL reserves (assuming SOL is ~$20-200)
+            // This is a rough estimate - actual SOL reserves would require pool account data
+            let estimated_sol_reserves = pool.liquidity_usd / 100.0; // Rough estimate
+
+            if estimated_sol_reserves >= MIN_SOL_RESERVES && estimated_sol_reserves <= MAX_SOL_RESERVES {
+                filtered_pools.push(pool);
+            } else {
+                filtered_out_count += 1;
+                if is_debug_pool_discovery_enabled() {
+                    log(
+                        LogTag::PoolDiscovery,
+                        "DEBUG",
+                        &format!(
+                            "Filtered out pool {} - estimated SOL reserves {:.2} outside bounds {:.1}-{:.0}",
+                            pool.pool_id,
+                            estimated_sol_reserves,
+                            MIN_SOL_RESERVES,
+                            MAX_SOL_RESERVES
+                        )
+                    );
+                }
+            }
+        }
+
+        if is_debug_pool_discovery_enabled() && filtered_out_count > 0 {
+            log(
+                LogTag::PoolDiscovery,
+                "INFO",
+                &format!(
+                    "SOL reserves filter: {} pools passed, {} pools filtered out",
+                    filtered_pools.len(),
+                    filtered_out_count
+                )
+            );
+        }
+
+        filtered_pools
     }
 }

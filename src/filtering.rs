@@ -23,6 +23,10 @@ pub const MAX_LIQUIDITY_USD: f64 = 500_000.0;
 pub const MAX_MARKET_CAP_USD: f64 = 10_000_000.0;
 pub const MIN_VOLUME_LIQUIDITY_RATIO: f64 = 0.1;
 
+// ===== SOL RESERVES FILTERING PARAMETERS =====
+pub const MIN_SOL_RESERVES: f64 = 20.0; // Higher minimum for stability
+pub const MAX_SOL_RESERVES: f64 = 30000.0; // Higher maximum for less restrictive filtering
+
 // ===== TRANSACTION ACTIVITY FILTERING PARAMETERS =====
 pub const MIN_TRANSACTIONS_5MIN: i64 = 100;
 pub const MAX_TRANSACTIONS_5MIN: i64 = 5000;
@@ -90,6 +94,16 @@ pub enum FilterReason {
     },
     MissingLiquidityData,
     MissingPriceData,
+
+    // SOL reserves validation failures
+    InsufficientSolReserves {
+        current_reserves: f64,
+        minimum_required: f64,
+    },
+    TooHighSolReserves {
+        current_reserves: f64,
+        maximum_allowed: f64,
+    },
 
     // Age-related failures
     TooYoung {
@@ -696,6 +710,80 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
         );
     }
 
+    None
+}
+
+/// Validate SOL reserves requirements for pool liquidity
+fn validate_sol_reserves(sol_reserves: f64) -> Option<FilterReason> {
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_SOL_RESERVES",
+            &format!(
+                "🔐 SOL reserves check: {:.2} SOL (min: {:.1}, max: {:.0})",
+                sol_reserves,
+                MIN_SOL_RESERVES,
+                MAX_SOL_RESERVES
+            )
+        );
+    }
+
+    if sol_reserves < MIN_SOL_RESERVES {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_SOL_RESERVES",
+                &format!(
+                    "❌ Insufficient SOL reserves: {:.2} < {:.1} minimum",
+                    sol_reserves,
+                    MIN_SOL_RESERVES
+                )
+            );
+        }
+        return Some(FilterReason::InsufficientSolReserves {
+            current_reserves: sol_reserves,
+            minimum_required: MIN_SOL_RESERVES,
+        });
+    }
+
+    if sol_reserves > MAX_SOL_RESERVES {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_SOL_RESERVES",
+                &format!(
+                    "❌ Too high SOL reserves: {:.2} > {:.0} maximum",
+                    sol_reserves,
+                    MAX_SOL_RESERVES
+                )
+            );
+        }
+        return Some(FilterReason::TooHighSolReserves {
+            current_reserves: sol_reserves,
+            maximum_allowed: MAX_SOL_RESERVES,
+        });
+    }
+
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_SOL_RESERVES",
+            &format!("✅ SOL reserves within bounds: {:.2} SOL", sol_reserves)
+        );
+    }
+
+    None
+}
+
+/// Validate PriceResult for trading eligibility (includes SOL reserves check)
+/// This function should be used when validating tokens with pool price data
+pub fn validate_price_result_for_trading(price_result: &crate::pools::PriceResult) -> Option<FilterReason> {
+    // Validate SOL reserves
+    if let Some(reason) = validate_sol_reserves(price_result.sol_reserves) {
+        return Some(reason);
+    }
+
+    // Additional price result validations can be added here
     None
 }
 
@@ -1335,7 +1423,9 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             | FilterReason::InsufficientLiquidity { .. }
             | FilterReason::TooHighLiquidity { .. }
             | FilterReason::TooHighMarketCap { .. }
-            | FilterReason::MissingLiquidityData => "Liquidity Issues",
+            | FilterReason::MissingLiquidityData
+            | FilterReason::InsufficientSolReserves { .. }
+            | FilterReason::TooHighSolReserves { .. } => "Liquidity Issues",
             | FilterReason::TooYoung { .. }
             | FilterReason::TooOld { .. }
             | FilterReason::NoCreationDate => "Age Constraints",

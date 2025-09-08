@@ -7,6 +7,7 @@ use crate::logger::{ log, LogTag };
 use crate::global::is_debug_pool_service_enabled;
 use crate::tokens::cache::TokenDatabase;
 use crate::rpc::{ get_rpc_client, RpcClient };
+use crate::filtering::{ filter_token_for_trading, FilterResult };
 use super::{ PoolError, cache };
 use super::discovery::PoolDiscovery;
 use super::analyzer::PoolAnalyzer;
@@ -258,20 +259,64 @@ async fn get_tokens_to_monitor() -> Result<Vec<String>, String> {
         format!("Failed to create token database: {}", e)
     )?;
 
-    // Get tokens ordered by liquidity (highest first)
-    let all_tokens = database
+    // Get all tokens from database with update time for freshness filtering
+    let all_tokens_with_time = database
         .get_all_tokens_with_update_time().await
         .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
 
-    // Get open position mints (always monitor these regardless of liquidity)
+    // Apply database freshness filter (last 1 hour only)
+    let now = chrono::Utc::now();
+    let one_hour_ago = now - chrono::Duration::hours(1);
+    
+    let fresh_tokens: Vec<(String, String, chrono::DateTime<chrono::Utc>, f64)> = all_tokens_with_time
+        .into_iter()
+        .filter(|(_, _, last_updated, _)| *last_updated >= one_hour_ago)
+        .collect();
+
+    if is_debug_pool_service_enabled() {
+        log(
+            LogTag::PoolService,
+            "DEBUG",
+            &format!("Database freshness filter: {} tokens updated in last hour", fresh_tokens.len())
+        );
+    }
+
+    // Apply 5000 token limit (hardcoded near MAX_WATCHED_TOKENS)
+    const MAX_TOKENS_FOR_PROCESSING: usize = 5000;
+    let limited_tokens = if fresh_tokens.len() > MAX_TOKENS_FOR_PROCESSING {
+        // Sort by liquidity (highest first) and take top 5000
+        let mut sorted_fresh = fresh_tokens;
+        sorted_fresh.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
+        sorted_fresh.into_iter().take(MAX_TOKENS_FOR_PROCESSING).collect()
+    } else {
+        fresh_tokens
+    };
+
+    if is_debug_pool_service_enabled() {
+        log(
+            LogTag::PoolService,
+            "DEBUG",
+            &format!("Token limit applied: processing {} tokens (max: {})", limited_tokens.len(), MAX_TOKENS_FOR_PROCESSING)
+        );
+    }
+
+    // Convert to Token objects for filtering
+    let token_mints: Vec<String> = limited_tokens.iter().map(|(mint, _, _, _)| mint.clone()).collect();
+    let mut all_tokens: Vec<crate::tokens::Token> = Vec::new();
+    
+    for mint in &token_mints {
+        if let Ok(Some(api_token)) = database.get_token_by_mint(mint) {
+            all_tokens.push(api_token.into());
+        }
+    }
+
+    // Get open position mints (always monitor these regardless of filtering)
     // This ensures position tokens are always monitored for price updates
     let open_position_mints = crate::positions::get_open_mints().await;
 
-    // Take up to MAX_WATCHED_TOKENS with minimum liquidity threshold
-    const MIN_LIQUIDITY_USD: f64 = 100.0; // Only monitor tokens with > $100 liquidity
-
     let mut monitored_tokens: Vec<String> = Vec::new();
     let mut open_positions_added = 0;
+    let mut filtered_tokens_added = 0;
 
     // First, add all open position tokens (priority monitoring)
     for mint in &open_position_mints {
@@ -281,27 +326,62 @@ async fn get_tokens_to_monitor() -> Result<Vec<String>, String> {
         }
     }
 
-    // Then add high-liquidity tokens from database up to the limit
-    let remaining_slots = MAX_WATCHED_TOKENS.saturating_sub(monitored_tokens.len());
-    let database_tokens: Vec<String> = all_tokens
-        .into_iter()
-        .filter(|(_, _, _, liquidity)| *liquidity >= MIN_LIQUIDITY_USD)
-        .take(remaining_slots)
-        .map(|(mint, _, _, _)| mint)
-        .filter(|mint| !monitored_tokens.contains(mint)) // Avoid duplicates
-        .collect();
+    // Apply comprehensive filtering to all tokens
+    if is_debug_pool_service_enabled() {
+        log(
+            LogTag::PoolService,
+            "DEBUG",
+            &format!("Applying filtering to {} tokens from database", all_tokens.len())
+        );
+    }
 
-    monitored_tokens.extend(database_tokens.clone());
+    let (eligible_tokens, rejected_tokens) = crate::filtering::filter_tokens_with_reasons(&all_tokens);
 
     if is_debug_pool_service_enabled() {
         log(
             LogTag::PoolService,
             "DEBUG",
             &format!(
-                "Selected {} tokens for monitoring: {} open positions + {} from database (total: {})",
+                "Filtering results: {} eligible, {} rejected out of {} total tokens",
+                eligible_tokens.len(),
+                rejected_tokens.len(),
+                all_tokens.len()
+            )
+        );
+    }
+
+    // Sort eligible tokens by liquidity (highest first) and take up to remaining slots
+    let remaining_slots = MAX_WATCHED_TOKENS.saturating_sub(monitored_tokens.len());
+    let mut sorted_eligible_tokens = eligible_tokens;
+    sorted_eligible_tokens.sort_by(|a, b| {
+        let a_liq = a.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0);
+        let b_liq = b.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0);
+        b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Add filtered tokens up to the limit, avoiding duplicates
+    for token in sorted_eligible_tokens.into_iter().take(remaining_slots) {
+        if !monitored_tokens.contains(&token.mint) {
+            monitored_tokens.push(token.mint.clone());
+            filtered_tokens_added += 1;
+        }
+    }
+
+    if is_debug_pool_service_enabled() {
+        log(
+            LogTag::PoolService,
+            "DEBUG",
+            &format!(
+                "Selected {} tokens for monitoring: {} open positions + {} filtered tokens (total: {})",
                 monitored_tokens.len(),
                 open_positions_added,
-                database_tokens.len(),
+                filtered_tokens_added,
                 monitored_tokens.len()
             )
         );
@@ -366,11 +446,13 @@ async fn run_pool_monitoring_supervisor(shutdown: Arc<Notify>) {
 
 /// Run a single pool monitoring cycle
 async fn run_monitoring_cycle() -> Result<(), String> {
-    if is_debug_pool_service_enabled() {
-        log(LogTag::PoolService, "DEBUG", "Starting pool monitoring cycle");
-    }
+    log(
+        LogTag::PoolService,
+        "INFO",
+        "Starting 10-minute pool monitoring cycle with token re-filtering"
+    );
 
-    // Get tokens to monitor
+    // Get tokens to monitor (applies comprehensive filtering each cycle)
     let tokens_to_monitor = get_tokens_to_monitor().await?;
 
     if tokens_to_monitor.is_empty() {

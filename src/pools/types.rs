@@ -245,7 +245,9 @@ impl PriceHistory {
 pub const PRICE_CACHE_TTL_SECONDS: u64 = 30;
 pub const PRICE_HISTORY_MAX_ENTRIES: usize = 1000;
 pub const MAX_WATCHED_TOKENS: usize = 500;
-pub const POOL_REFRESH_INTERVAL_SECONDS: u64 = 3;
+/// Pool monitoring refresh interval (seconds)
+/// Set to 600 seconds (10 minutes) to allow proper token re-filtering
+pub const POOL_REFRESH_INTERVAL_SECONDS: u64 = 600;
 
 /// SOL mint address (primary trading currency)
 pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
