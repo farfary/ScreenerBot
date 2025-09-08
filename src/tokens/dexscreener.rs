@@ -81,6 +81,13 @@ const OPEN_POSITION_CACHE_TTL_SECS: i64 = 24 * 60 * 60; // 24 hours
 async fn has_open_position(mint: &str) -> bool {
     // Check if position-aware caching is enabled
     if !crate::trader::ENABLE_POSITION_AWARE_DEXSCREENER_CACHE {
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "DEBUG",
+                &format!("Position-aware caching DISABLED for {}", &mint[..8])
+            );
+        }
         return false; // Feature disabled, treat as no open positions
     }
 
@@ -91,12 +98,21 @@ async fn has_open_position(mint: &str) -> bool {
                 log(
                     LogTag::Api,
                     "POSITION_CACHE",
-                    &format!("Token {} has open position - using cache", mint)
+                    &format!("Token {} has open position - using cache", &mint[..8])
                 );
             }
             true
         }
-        false => false,
+        false => {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "DEBUG",
+                    &format!("Token {} has NO open position - API calls allowed", &mint[..8])
+                );
+            }
+            false
+        }
     }
 }
 
@@ -369,7 +385,7 @@ impl DexScreenerApi {
         }
     }
 
-    /// Get token prices for multiple mint addresses (batch)
+    /// Get multiple token prices for multiple mint addresses (batch)
     pub async fn get_multiple_token_prices(&mut self, mints: &[String]) -> HashMap<String, f64> {
         let mut prices = HashMap::new();
         let start_time = Instant::now();
@@ -378,15 +394,38 @@ impl DexScreenerApi {
         let mut position_skipped_count = 0;
         let mut api_call_mints = Vec::new();
 
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "DEBUG",
+                &format!("🚀 Starting batch price fetch for {} tokens", mints.len())
+            );
+        }
+
         // First pass: Check positions and cache for all mints
         for mint in mints {
             let has_position = has_open_position(mint).await;
+
+            if is_debug_api_enabled() && cached_count + position_skipped_count + api_call_mints.len() < 5 {
+                log(
+                    LogTag::Api,
+                    "DEBUG",
+                    &format!("🔍 Checking token {} - has_position: {}", &mint[..8], has_position)
+                );
+            }
 
             // Try cache first
             if let Some(cached_token) = get_cached_token_data(mint, has_position).await {
                 if let Some(price) = cached_token.price_sol {
                     prices.insert(mint.clone(), price);
                     cached_count += 1;
+                    if is_debug_api_enabled() && cached_count <= 3 {
+                        log(
+                            LogTag::Api,
+                            "DEBUG",
+                            &format!("💾 Cache hit for {}: ${:.8}", &mint[..8], price)
+                        );
+                    }
                 }
                 continue;
             }
@@ -408,18 +447,60 @@ impl DexScreenerApi {
             api_call_mints.push(mint.clone());
         }
 
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "DEBUG",
+                &format!(
+                    "📊 Batch analysis: {} cached, {} position_skipped, {} need API calls",
+                    cached_count, position_skipped_count, api_call_mints.len()
+                )
+            );
+        }
+
         // Second pass: Make API calls only for tokens without open positions
         if !api_call_mints.is_empty() {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "DEBUG",
+                    &format!("🌐 Making API calls for {} tokens", api_call_mints.len())
+                );
+            }
+            
             // Process in chunks of MAX_TOKENS_PER_API_CALL (DexScreener API limit)
             for (chunk_idx, chunk) in api_call_mints.chunks(MAX_TOKENS_PER_API_CALL).enumerate() {
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "DEBUG",
+                        &format!("📦 Processing chunk {} with {} tokens", chunk_idx + 1, chunk.len())
+                    );
+                }
+                
                 match self.get_tokens_info(chunk).await {
                     Ok(tokens) => {
+                        if is_debug_api_enabled() {
+                            log(
+                                LogTag::Api,
+                                "DEBUG",
+                                &format!("✅ Chunk {} returned {} tokens", chunk_idx + 1, tokens.len())
+                            );
+                        }
+                        
                         for token in tokens {
                             // Cache the result
                             cache_token_data(&token.mint, &token).await;
 
                             if let Some(price) = token.price_sol {
                                 prices.insert(token.mint.clone(), price);
+                                if is_debug_api_enabled() && prices.len() <= 3 {
+                                    log(
+                                        LogTag::Api,
+                                        "DEBUG",
+                                        &format!("💰 Got price for {}: ${:.8}", &token.mint[..8], price)
+                                    );
+                                }
                             }
                         }
                     }
@@ -444,6 +525,14 @@ impl DexScreenerApi {
 
                 // Small delay between batches to be API-friendly
                 tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        } else {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "DEBUG",
+                    "🚫 No API calls needed - all tokens cached or skipped due to positions"
+                );
             }
         }
 
@@ -542,6 +631,9 @@ impl DexScreenerApi {
     /// Get token information for multiple mint addresses (main function)
     pub async fn get_tokens_info(&mut self, mints: &[String]) -> Result<Vec<ApiToken>, String> {
         if mints.is_empty() {
+            if is_debug_api_enabled() {
+                log(LogTag::Api, "DEBUG", "get_tokens_info called with empty mints array");
+            }
             return Ok(Vec::new());
         }
 
@@ -557,6 +649,23 @@ impl DexScreenerApi {
 
         let mint_list = mints.join(",");
         let url = format!("https://api.dexscreener.com/tokens/v1/solana/{}", mint_list);
+
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "DEBUG",
+                &format!(
+                    "🔍 DexScreener API request: {} tokens, URL: {}",
+                    mints.len(),
+                    if url.len() > 100 { format!("{}...", &url[..100]) } else { url.clone() }
+                )
+            );
+            log(
+                LogTag::Api,
+                "DEBUG",
+                &format!("📋 Mint addresses: {:?}", mints)
+            );
+        }
 
         let start_time = Instant::now();
 
@@ -587,14 +696,63 @@ impl DexScreenerApi {
             .json().await
             .map_err(|e| format!("Failed to parse JSON response: {}", e))?;
 
+        if is_debug_api_enabled() {
+            // Log response structure without full content to avoid spam
+            let response_info = if let Some(arr) = data.as_array() {
+                format!("📥 API response: array with {} items", arr.len())
+            } else if data.is_object() {
+                format!("📥 API response: object with keys: {:?}", 
+                    data.as_object().map(|obj| obj.keys().collect::<Vec<_>>()).unwrap_or_default())
+            } else if data.is_null() {
+                "📥 API response: null".to_string()
+            } else {
+                format!("📥 API response: {} type", 
+                    if data.is_string() { "string" } 
+                    else if data.is_number() { "number" } 
+                    else if data.is_boolean() { "boolean" } 
+                    else { "unknown" })
+            };
+            log(LogTag::Api, "DEBUG", &response_info);
+        }
+
         let mut tokens = Vec::new();
         let mut rejected_non_sol_pairs = 0;
         let mut parsing_errors = 0;
 
         if let Some(pairs_array) = data.as_array() {
-            for pair_data in pairs_array {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api, 
+                    "DEBUG", 
+                    &format!("🔄 Processing {} pairs from API response", pairs_array.len())
+                );
+            }
+            
+            for (idx, pair_data) in pairs_array.iter().enumerate() {
+                if is_debug_api_enabled() && idx < 3 {
+                    // Log first few pairs for debugging
+                    if let Some(base_token) = pair_data.get("baseToken") {
+                        let mint = base_token.get("address").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        let symbol = base_token.get("symbol").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        log(
+                            LogTag::Api,
+                            "DEBUG",
+                            &format!("🪙 Pair {}: {} ({})", idx + 1, symbol, &mint[..8])
+                        );
+                    }
+                }
+                
                 match self.parse_token_from_pair(pair_data) {
-                    Ok(token) => tokens.push(token),
+                    Ok(token) => {
+                        if is_debug_api_enabled() {
+                            log(
+                                LogTag::Api,
+                                "DEBUG",
+                                &format!("✅ Successfully parsed token: {} ({})", token.symbol, &token.mint[..8])
+                            );
+                        }
+                        tokens.push(token);
+                    },
                     Err(e) => {
                         if e.contains("not paired with SOL") || e.contains("not a SOL pair") {
                             rejected_non_sol_pairs += 1;
@@ -613,6 +771,14 @@ impl DexScreenerApi {
                         }
                     }
                 }
+            }
+        } else {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "WARN",
+                    "⚠️ API response is not an array - this might be the issue!"
+                );
             }
         }
 
@@ -652,6 +818,14 @@ impl DexScreenerApi {
             .ok_or("Missing token address")?
             .to_string();
 
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "DEBUG",
+                &format!("🔍 Parsing token: {}", &mint[..8])
+            );
+        }
+
         let symbol = base_token
             .get("symbol")
             .and_then(|v| v.as_str())
@@ -663,6 +837,77 @@ impl DexScreenerApi {
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown")
             .to_string();
+
+        // CRITICAL: Only accept tokens paired with SOL
+        let quote_token = pair_data.get("quoteToken");
+        let (price_sol, is_sol_pair) = if let Some(qt) = quote_token {
+            if let Some(quote_address) = qt.get("address").and_then(|v| v.as_str()) {
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "DEBUG",
+                        &format!("🔗 Token {} quote address: {}", &mint[..8], quote_address)
+                    );
+                }
+                
+                // Check if quote is SOL
+                if quote_address == SOL_MINT {
+                    let price_native_str = pair_data
+                        .get("priceNative")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("0");
+
+                    let price_native = price_native_str
+                        .parse::<f64>()
+                        .map_err(|_| format!("Invalid price_native: {}", price_native_str))?;
+                    
+                    if is_debug_api_enabled() {
+                        log(
+                            LogTag::Api,
+                            "DEBUG",
+                            &format!("✅ Token {} is SOL pair with price: {}", &mint[..8], price_native)
+                        );
+                    }
+                    
+                    (Some(price_native), true)
+                } else {
+                    // Reject non-SOL pairs
+                    if is_debug_api_enabled() {
+                        log(
+                            LogTag::Api,
+                            "DEBUG",
+                            &format!("❌ Token {} rejected - not SOL pair (quote: {})", &mint[..8], quote_address)
+                        );
+                    }
+                    return Err(
+                        format!("Token {} is not paired with SOL (quote: {})", mint, quote_address)
+                    );
+                }
+            } else {
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "DEBUG",
+                        &format!("❌ Token {} rejected - no quote address", &mint[..8])
+                    );
+                }
+                return Err(format!("Token {} has no quote address", mint));
+            }
+        } else {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "DEBUG",
+                    &format!("❌ Token {} rejected - no quote token", &mint[..8])
+                );
+            }
+            return Err(format!("Token {} has no quote token", mint));
+        };
+
+        // Only proceed if this is a SOL pair
+        if !is_sol_pair {
+            return Err(format!("Token {} is not a SOL pair", mint));
+        }
 
         let chain_id = pair_data
             .get("chainId")
@@ -687,7 +932,12 @@ impl DexScreenerApi {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        // Parse prices
+        let price_usd = if let Some(usd_str) = pair_data.get("priceUsd").and_then(|v| v.as_str()) {
+            usd_str.parse::<f64>().unwrap_or(0.0)
+        } else {
+            0.0
+        };
+
         let price_native_str = pair_data
             .get("priceNative")
             .and_then(|v| v.as_str())
@@ -696,37 +946,6 @@ impl DexScreenerApi {
         let price_native = price_native_str
             .parse::<f64>()
             .map_err(|_| format!("Invalid price_native: {}", price_native_str))?;
-
-        let price_usd = if let Some(usd_str) = pair_data.get("priceUsd").and_then(|v| v.as_str()) {
-            usd_str.parse::<f64>().unwrap_or(0.0)
-        } else {
-            0.0
-        };
-
-        // CRITICAL: Only accept tokens paired with SOL
-        let quote_token = pair_data.get("quoteToken");
-        let (price_sol, is_sol_pair) = if let Some(qt) = quote_token {
-            if let Some(quote_address) = qt.get("address").and_then(|v| v.as_str()) {
-                // Check if quote is SOL
-                if quote_address == SOL_MINT {
-                    (Some(price_native), true)
-                } else {
-                    // Reject non-SOL pairs
-                    return Err(
-                        format!("Token {} is not paired with SOL (quote: {})", mint, quote_address)
-                    );
-                }
-            } else {
-                return Err(format!("Token {} has no quote address", mint));
-            }
-        } else {
-            return Err(format!("Token {} has no quote token", mint));
-        };
-
-        // Only proceed if this is a SOL pair
-        if !is_sol_pair {
-            return Err(format!("Token {} is not a SOL pair", mint));
-        }
 
         // Parse additional fields
         let liquidity = self.parse_liquidity(pair_data.get("liquidity"));
