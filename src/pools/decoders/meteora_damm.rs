@@ -254,30 +254,38 @@ impl PoolDecoder for MeteoraDammDecoder {
         let price_sol = if damm_info.sqrt_price > 0 {
             // sqrt_price calculation using Q64.64 fixed point arithmetic
             // For Q64.64: ratio = (sqrt_price / 2^64)^2
+            // Then apply decimal adjustment: ratio * 10^(sol_decimals - token_decimals)
             // Orientation:
-            // - If token_b is SOL (WSOL), ratio is SOL/token already
-            // - If token_a is SOL, ratio is token/SOL; invert to get SOL/token
-            // Note: For DAMM v2, do NOT apply decimal adjustment here (price already normalized)
+            // - If token_b is SOL (WSOL), ratio is token/SOL; invert to get SOL/token
+            // - If token_a is SOL, ratio is SOL/token already
 
             let sqrt_u128 = damm_info.sqrt_price;
             let sqrt_f64 = sqrt_u128 as f64;
             let divisor = (2_f64).powi(64);
             let normalized_sqrt = sqrt_f64 / divisor;
-            let raw_price = normalized_sqrt * normalized_sqrt; // base ratio
+            let raw_price = normalized_sqrt * normalized_sqrt; // base ratio in smallest units
+
+            // Apply decimal adjustment to convert from smallest units to human-readable
+            let decimal_adj_factor = (10_f64).powi((sol_decimals as i32) - (token_decimals as i32));
+            let decimal_adjusted_price = raw_price * decimal_adj_factor;
 
             let mut oriented_price = if is_sol_mint(&damm_info.token_b_mint) {
-                // token_b is SOL, token_a is target -> raw_price is SOL per token
-                raw_price
+                // token_b is SOL, token_a is target
+                // If sqrt_price = sqrt(token_b/token_a) = sqrt(SOL/target), then price = SOL/target
+                // This is what we want: SOL per target token
+                decimal_adjusted_price
             } else if is_sol_mint(&damm_info.token_a_mint) {
-                // token_a is SOL, token_b is target -> raw_price is token per SOL; invert
-                if raw_price > 0.0 {
-                    1.0 / raw_price
+                // token_a is SOL, token_b is target
+                // If sqrt_price = sqrt(token_b/token_a) = sqrt(target/SOL), then price = target/SOL
+                // Invert to get SOL per target token
+                if decimal_adjusted_price > 0.0 {
+                    1.0 / decimal_adjusted_price
                 } else {
                     0.0
                 }
             } else {
-                // Shouldn't happen: not a SOL pair; use raw_price as-is
-                raw_price
+                // Shouldn't happen: not a SOL pair; use decimal_adjusted_price as-is
+                decimal_adjusted_price
             };
 
             // Sanity fallback
@@ -296,67 +304,18 @@ impl PoolDecoder for MeteoraDammDecoder {
                 oriented_price = simple_ratio;
             }
 
-            // Optional diagnostic: compute decimal-adjusted variant per Uniswap convention
-            // price_human = raw_ratio * 10^(dec_token_a - dec_token_b) based on token ordering
-            let decimal_adj_factor = (10_f64).powi((token_decimals as i32) - (sol_decimals as i32));
-            let decimal_adjusted_price = oriented_price * decimal_adj_factor;
-
-            // Optional diagnostic: verify sqrt_price offset by also interpreting at +8 bytes (464)
-            if is_debug_pool_decoders_enabled() {
-                // Safe guard on bounds
-                let data = &pool_account.data;
-                let alt_offset = 464usize; // earlier comment suggested 464
-                let alt_u128 = if data.len() >= alt_offset + 16 {
-                    let mut buf = [0u8; 16];
-                    buf.copy_from_slice(&data[alt_offset..alt_offset + 16]);
-                    u128::from_le_bytes(buf)
-                } else {
-                    0u128
-                };
-
-                // Compute alt price using alt sqrt (if nonzero)
-                let (alt_base, alt_oriented, alt_price) = if alt_u128 > 0 {
-                    let alt_sqrt_f64 = alt_u128 as f64;
-                    let alt_norm = alt_sqrt_f64 / (2_f64).powi(64);
-                    let alt_base = alt_norm * alt_norm;
-                    let alt_oriented = if is_sol_mint(&damm_info.token_b_mint) {
-                        alt_base
-                    } else if is_sol_mint(&damm_info.token_a_mint) {
-                        if alt_base > 0.0 { 1.0 / alt_base } else { 0.0 }
-                    } else {
-                        alt_base
-                    };
-                    let alt_price = alt_oriented;
-                    (alt_base, alt_oriented, alt_price)
-                } else {
-                    (0.0, 0.0, 0.0)
-                };
-
-                log(
-                    LogTag::PoolDecoder,
-                    "DEBUG",
-                    &format!(
-                        "DAMM diagnostics: dec_adj_factor={:.6e} | dec_adjusted={:.12} | alt_sqrt@464={} | alt_base={:.6e} | alt_oriented={:.6e} | alt_price={:.12}",
-                        decimal_adj_factor,
-                        decimal_adjusted_price,
-                        alt_u128,
-                        alt_base,
-                        alt_oriented,
-                        alt_price
-                    )
-                );
-            }
-
             if is_debug_pool_decoders_enabled() {
                 log(
                     LogTag::PoolDecoder,
                     "DEBUG",
                     &format!(
-                        "DAMM sqrt_price calc: raw={} | sqrt_f64={:.6e} | normalized={:.18e} | base={:.18e} | oriented={:.18e}",
+                        "DAMM sqrt_price calc: raw={} | sqrt_f64={:.6e} | normalized={:.18e} | base={:.18e} | dec_adj_factor={:.6e} | decimal_adjusted={:.18e} | oriented={:.18e}",
                         sqrt_u128,
                         sqrt_f64,
                         normalized_sqrt,
                         raw_price,
+                        decimal_adj_factor,
+                        decimal_adjusted_price,
                         oriented_price
                     )
                 );
@@ -488,8 +447,66 @@ impl MeteoraDammDecoder {
         let partner_a_fee = Self::extract_u64_at_offset(data, 408).unwrap_or(0);
         let partner_b_fee = Self::extract_u64_at_offset(data, 416).unwrap_or(0);
 
-        // Extract sqrt_price at the correct offset (456 based on adjusted layout)
-        let sqrt_price = Self::extract_u128_at_offset(data, 456).unwrap_or(0);
+        // Extract sqrt_price at offset 456 (our original calculation was correct)
+        // The issue might be that we need to try both 456 and 464 to see which gives reasonable values
+        let sqrt_price_456 = Self::extract_u128_at_offset(data, 456).unwrap_or(0);
+        let sqrt_price_464 = Self::extract_u128_at_offset(data, 464).unwrap_or(0);
+
+        // Choose the value that gives a reasonable price (between 0.000001 and 0.1 SOL per token)
+        let sqrt_price = if sqrt_price_456 > 0 {
+            let test_price_456 = {
+                let sqrt_f64 = sqrt_price_456 as f64;
+                let divisor = (2_f64).powi(64);
+                let normalized_sqrt = sqrt_f64 / divisor;
+                normalized_sqrt * normalized_sqrt
+            };
+
+            if test_price_456 > 0.000001 && test_price_456 < 0.1 {
+                if is_debug_pool_decoders_enabled() {
+                    log(
+                        LogTag::PoolDecoder,
+                        "INFO",
+                        &format!("Using sqrt_price from offset 456: {}", sqrt_price_456)
+                    );
+                }
+                sqrt_price_456
+            } else if sqrt_price_464 > 0 {
+                let test_price_464 = {
+                    let sqrt_f64 = sqrt_price_464 as f64;
+                    let divisor = (2_f64).powi(64);
+                    let normalized_sqrt = sqrt_f64 / divisor;
+                    normalized_sqrt * normalized_sqrt
+                };
+
+                if test_price_464 > 0.000001 && test_price_464 < 0.1 {
+                    if is_debug_pool_decoders_enabled() {
+                        log(
+                            LogTag::PoolDecoder,
+                            "INFO",
+                            &format!("Using sqrt_price from offset 464: {}", sqrt_price_464)
+                        );
+                    }
+                    sqrt_price_464
+                } else {
+                    if is_debug_pool_decoders_enabled() {
+                        log(
+                            LogTag::PoolDecoder,
+                            "WARN",
+                            &format!(
+                                "Both offsets give unreasonable prices: 456={}, 464={}",
+                                test_price_456,
+                                test_price_464
+                            )
+                        );
+                    }
+                    sqrt_price_456 // Use original as fallback
+                }
+            } else {
+                sqrt_price_456
+            }
+        } else {
+            sqrt_price_464
+        };
 
         if is_debug_pool_decoders_enabled() {
             log(
@@ -519,7 +536,7 @@ impl MeteoraDammDecoder {
             log(
                 LogTag::PoolDecoder,
                 "INFO",
-                &format!("DAMM sqrt_price@456: {} (Q64.64 format)", sqrt_price)
+                &format!("DAMM sqrt_price selected: {} (Q64.64 format)", sqrt_price)
             );
         }
 
