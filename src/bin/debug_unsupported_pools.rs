@@ -122,11 +122,7 @@ async fn validate_price_availability(
         Some(decimals) => decimals,
         None => {
             calculation_error = Some("Missing token decimals".to_string());
-            log(
-                LogTag::System,
-                "DECIMALS_MISS",
-                &format!("No decimals for {}", &token_mint[..8])
-            );
+            log(LogTag::System, "DECIMALS_MISS", &format!("No decimals for {}", &token_mint[..8]));
             return (calculated_price, api_price, price_diff_percent, calculation_error);
         }
     };

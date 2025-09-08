@@ -5,7 +5,8 @@
 /// from the old pool system.
 
 use super::{ PoolDecoder, AccountData };
-use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_pool_decoders_enabled;
+use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, RAYDIUM_CPMM_PROGRAM_ID };
 use crate::tokens::{ get_token_decimals_sync, decimals::{ SOL_DECIMALS, raw_to_ui_amount } };
 use solana_sdk::pubkey::Pubkey;

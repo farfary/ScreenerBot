@@ -8,7 +8,8 @@
 /// - Fetch vault token account balances from provided accounts map
 /// - Compute SOL price for target token
 use super::{ PoolDecoder, AccountData };
-use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_pool_decoders_enabled;
+use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
 use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 use solana_sdk::pubkey::Pubkey;
@@ -309,11 +310,7 @@ fn adjust_vaults(
                 if mint == info.pc_mint && (need_pc || pc_vault_wrong_mint) {
                     pc_vault = k.clone();
                     if is_debug_pool_decoders_enabled() {
-                        log(
-                            LogTag::PoolDecoder,
-                            "DEBUG",
-                            &format!("Found pc_vault: {}", pc_vault)
-                        );
+                        log(LogTag::PoolDecoder, "DEBUG", &format!("Found pc_vault: {}", pc_vault));
                     }
                 }
             }

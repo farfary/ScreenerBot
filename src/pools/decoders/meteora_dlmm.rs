@@ -6,7 +6,8 @@
 
 use super::{ PoolDecoder, AccountData };
 use super::super::utils::{ is_sol_mint, WRAPPED_SOL_MINT };
-use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_pool_decoders_enabled;
+use crate::logger::{ log, LogTag };
 use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 use crate::pools::types::{ ProgramKind, PriceResult, METEORA_DLMM_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;
@@ -151,11 +152,7 @@ impl PoolDecoder for MeteoraDlmmDecoder {
                 );
 
                 if !sol_mint_correct || !token_mint_correct {
-                    log(
-                        LogTag::PoolDecoder,
-                        "ERROR",
-                        "VAULT ASSIGNMENT ERROR - swapping vaults"
-                    );
+                    log(LogTag::PoolDecoder, "ERROR", "VAULT ASSIGNMENT ERROR - swapping vaults");
                     // Maybe we need to swap the assignments?
                     return None;
                 }

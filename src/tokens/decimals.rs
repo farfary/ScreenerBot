@@ -386,7 +386,7 @@ fn is_token_already_failed(mint: &str) -> bool {
 }
 
 /// Check if a token failed with a permanent error or exceeded retry limit
-fn is_token_failed_permanently(mint: &str) -> bool {
+pub fn is_token_failed_permanently(mint: &str) -> bool {
     // Check database for permanent failures or exceeded retry limit
     match get_failed_decimals_from_db(mint) {
         Ok(Some((_, is_permanent, retry_count, max_retries))) =>

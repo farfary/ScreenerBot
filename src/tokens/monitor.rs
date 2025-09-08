@@ -277,13 +277,13 @@ impl TokenMonitor {
                 LogTag::Monitor,
                 "CLEANUP_START",
                 &format!(
-                    "Starting cleanup cycle for tokens with liquidity below ${:.1} and security issues",
+                    "Starting cleanup cycle for problematic tokens: blacklisted, decimal-failed, security issues, and low liquidity below ${:.1}",
                     NEAR_ZERO_LIQUIDITY_USD
                 )
             );
         }
 
-        match self.database.cleanup_near_zero_liquidity_tokens(NEAR_ZERO_LIQUIDITY_USD).await {
+        match self.database.cleanup_problematic_tokens(NEAR_ZERO_LIQUIDITY_USD).await {
             Ok(deleted_count) => {
                 if deleted_count > 0 {
                     log(

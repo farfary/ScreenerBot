@@ -198,7 +198,7 @@ pub enum FilterResult {
 /// Get filtered tokens ready for pool service monitoring
 ///
 /// This is the main entry point for the pool service to get tokens.
-/// It handles all database fetching, blacklist filtering (FIRST), freshness filtering, 
+/// It handles all database fetching, blacklist filtering (FIRST), freshness filtering,
 /// SOL reserves validation, and comprehensive token filtering in one place.
 ///
 /// Returns a list of token mint addresses that are ready for pool monitoring.

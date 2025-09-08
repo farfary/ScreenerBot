@@ -5,7 +5,8 @@
 /// https://github.com/orca-so/whirlpools/blob/main/programs/whirlpool/src/state/whirlpool.rs
 
 use super::{ PoolDecoder, AccountData };
-use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_pool_decoders_enabled;
+use crate::logger::{ log, LogTag };
 use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, ORCA_WHIRLPOOL_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;

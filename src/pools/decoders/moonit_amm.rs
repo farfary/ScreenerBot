@@ -6,7 +6,8 @@
 
 use super::{ PoolDecoder, AccountData };
 use super::super::utils::{ is_sol_mint, WRAPPED_SOL_MINT };
-use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_pool_decoders_enabled;
+use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult };
 use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 use solana_sdk::pubkey::Pubkey;

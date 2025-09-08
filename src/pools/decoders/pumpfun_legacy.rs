@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use std::time::Instant;
 use solana_sdk::pubkey::Pubkey;
 use super::{ PoolDecoder, AccountData };
-use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_pool_decoders_enabled;
+use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
 use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 
