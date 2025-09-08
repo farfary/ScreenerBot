@@ -968,53 +968,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         }
     };
 
-    // Create TransactionsManager instance
-    let mut manager = match TransactionsManager::new(wallet_address).await {
-        Ok(manager) => manager,
-        Err(e) => {
-            log(
-                LogTag::Transactions,
-                "ERROR",
-                &format!("Failed to create TransactionsManager: {}", e)
-            );
-            return;
-        }
-    };
-
-    // Initialize known signatures
-    if let Err(e) = manager.initialize_known_signatures().await {
-        log(LogTag::Transactions, "ERROR", &format!("Failed to initialize: {}", e));
-        return;
-    }
-
-    log(
-        LogTag::Transactions,
-        "INFO",
-        &format!(
-            "TransactionsManager initialized for wallet: {} (known transactions: {})",
-            wallet_address,
-            manager.known_signatures.len()
-        )
-    );
-
-    // Perform startup transaction discovery and backfill
-    if let Err(e) = manager.startup_transaction_discovery().await {
-        log(LogTag::Transactions, "ERROR", &format!("Failed to complete startup discovery: {}", e));
-        // Don't return here - continue with normal operation even if discovery fails
-    }
-
-    // Initialize WebSocket monitoring after startup discovery
-    if let Err(e) = manager.initialize_websocket_monitoring().await {
-        log(
-            LogTag::Transactions,
-            "ERROR",
-            &format!("Failed to initialize WebSocket monitoring: {}", e)
-        );
-        // Fall back to polling if WebSocket fails
-        log(LogTag::Transactions, "INFO", "Falling back to polling-based monitoring");
-    }
-
-    // CRITICAL: Initialize global transaction manager for positions manager integration
+    // CRITICAL: Initialize global transaction manager FIRST - no local manager needed
     if let Err(e) = initialize_global_transaction_manager(wallet_address).await {
         log(
             LogTag::Transactions,
@@ -1022,6 +976,61 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
             &format!("Failed to initialize global transaction manager: {}", e)
         );
         return;
+    }
+
+    // Get the global manager for initialization
+    let global_manager = match get_global_transaction_manager().await {
+        Some(manager) => manager,
+        None => {
+            log(LogTag::Transactions, "ERROR", "Global transaction manager not available");
+            return;
+        }
+    };
+
+    // Initialize using the global manager
+    {
+        let mut manager_guard = global_manager.lock().await;
+        if let Some(ref mut manager) = manager_guard.as_mut() {
+            // Initialize known signatures
+            if let Err(e) = manager.initialize_known_signatures().await {
+                log(LogTag::Transactions, "ERROR", &format!("Failed to initialize: {}", e));
+                return;
+            }
+
+            log(
+                LogTag::Transactions,
+                "INFO",
+                &format!(
+                    "TransactionsManager initialized for wallet: {} (known transactions: {})",
+                    wallet_address,
+                    manager.known_signatures.len()
+                )
+            );
+
+            // Perform startup transaction discovery and backfill
+            if let Err(e) = manager.startup_transaction_discovery().await {
+                log(
+                    LogTag::Transactions,
+                    "ERROR",
+                    &format!("Failed to complete startup discovery: {}", e)
+                );
+                // Don't return here - continue with normal operation even if discovery fails
+            }
+
+            // Initialize WebSocket monitoring after startup discovery
+            if let Err(e) = manager.initialize_websocket_monitoring().await {
+                log(
+                    LogTag::Transactions,
+                    "ERROR",
+                    &format!("Failed to initialize WebSocket monitoring: {}", e)
+                );
+                // Fall back to polling if WebSocket fails
+                log(LogTag::Transactions, "INFO", "Falling back to polling-based monitoring");
+            }
+        } else {
+            log(LogTag::Transactions, "ERROR", "Global transaction manager is None");
+            return;
+        }
     }
 
     // Position verification and management is now handled by the positions manager service
@@ -1049,30 +1058,72 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
             _ = shutdown.notified() => {
                 log(LogTag::Transactions, "INFO", "TransactionsManager service shutting down");
                 
-                // Gracefully shutdown WebSocket monitoring
-                manager.shutdown_websocket();
+                // Gracefully shutdown WebSocket monitoring using global manager
+                {
+                    let mut manager_guard = global_manager.lock().await;
+                    if let Some(ref mut manager) = manager_guard.as_mut() {
+                        manager.shutdown_websocket();
+                    }
+                }
                 
                 log(LogTag::Transactions, "INFO", "TransactionsManager service shutdown complete");
                 break;
-            }
-            // NEW: WebSocket real-time transaction monitoring
+            },
+            // NEW: WebSocket real-time transaction monitoring using global manager
             result = async {
-                if let Some(ref mut receiver) = manager.websocket_receiver {
-                    receiver.recv().await
+                // We need to poll the global manager's websocket receiver
+                // Since receiver can't be shared, we check periodically
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                
+                let mut manager_guard = global_manager.lock().await;
+                if let Some(ref mut manager) = manager_guard.as_mut() {
+                    if let Some(ref mut receiver) = manager.websocket_receiver {
+                        // Try to receive without blocking
+                        match receiver.try_recv() {
+                            Ok(signature) => {
+                                drop(manager_guard); // Release lock early
+                                Some(Ok(signature))
+                            },
+                            Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+                                drop(manager_guard);
+                                Some(Err("empty")) // Not disconnected, just no messages
+                            },
+                            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                                log(LogTag::Transactions, "WEBSOCKET_DISCONNECTED", "WebSocket receiver disconnected");
+                                drop(manager_guard);
+                                Some(Err("disconnected"))
+                            }
+                        }
+                    } else {
+                        drop(manager_guard);
+                        Some(Err("no_receiver"))
+                    }
                 } else {
-                    // No WebSocket receiver available, wait indefinitely
-                    std::future::pending().await
+                    Some(Err("no_manager"))
                 }
             } => {
-                match result {
-                    Some(signature) => {
-                        // NEW: Real-time transaction detected via WebSocket
-                        if !manager.is_signature_known(&signature).await {
-                            log(
-                                LogTag::Transactions,
-                                "WEBSOCKET_NEW",
-                                &format!("🆕 Processing WebSocket transaction: {}", &signature)
-                            );
+                if let Some(websocket_result) = result {
+                    match websocket_result {
+                        Ok(signature) => {
+                            // NEW: Real-time transaction detected via WebSocket
+                            let mut should_process = false;
+                            {
+                                let manager_guard = global_manager.lock().await;
+                                if let Some(ref manager) = manager_guard.as_ref() {
+                                    should_process = !manager.is_signature_known(&signature).await;
+                                }
+                            }
+                            
+                            if should_process {
+                                log(
+                                    LogTag::Transactions,
+                                    "WEBSOCKET_NEW",
+                                    &format!("🆕 Processing WebSocket transaction: {}", &signature)
+                                );
+
+                                // Process using global manager
+                                let mut manager_guard = global_manager.lock().await;
+                                if let Some(ref mut manager) = manager_guard.as_mut() {
 
                             // Add to known signatures first
                             if let Err(e) = manager.add_known_signature(&signature).await {
@@ -1175,7 +1226,25 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                                     }
                                 }
                             }
-                        } else if manager.debug_enabled {
+                        } else {
+                            log(
+                                LogTag::Transactions,
+                                "ERROR",
+                                "Global transaction manager not available for WebSocket processing"
+                            );
+                        }
+                    } else {
+                        // Check if we should log this duplicate
+                        let should_log = {
+                            let manager_guard = global_manager.lock().await;
+                            if let Some(ref manager) = manager_guard.as_ref() {
+                                manager.debug_enabled
+                            } else {
+                                false
+                            }
+                        };
+                        
+                        if should_log {
                             log(
                                 LogTag::Transactions,
                                 "WEBSOCKET_DUPLICATE",
@@ -1183,86 +1252,111 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                             );
                         }
                     }
-                    None => {
-                        // WebSocket channel closed, try to reinitialize
-                        log(
-                            LogTag::Transactions,
-                            "WEBSOCKET_RECONNECT",
-                            "WebSocket channel closed, attempting to reinitialize"
-                        );
-                        
-                        if let Err(e) = manager.initialize_websocket_monitoring().await {
+                        },
+                        Err("disconnected") => {
+                            // Only reconnect on actual disconnection
                             log(
                                 LogTag::Transactions,
-                                "ERROR",
-                                &format!("Failed to reinitialize WebSocket: {}", e)
+                                "WEBSOCKET_RECONNECT",
+                                "WebSocket channel disconnected, attempting to reinitialize"
                             );
+                            
+                            let mut manager_guard = global_manager.lock().await;
+                            if let Some(ref mut manager) = manager_guard.as_mut() {
+                                if let Err(e) = manager.initialize_websocket_monitoring().await {
+                                    log(
+                                        LogTag::Transactions,
+                                        "ERROR",
+                                        &format!("Failed to reinitialize WebSocket: {}", e)
+                                    );
+                                }
+                            }
+                        },
+                        Err("empty") => {
+                            // Normal case - no messages available, continue polling
+                        },
+                        Err("no_receiver") | Err("no_manager") => {
+                            // Manager or receiver not available, wait for next cycle
+                        },
+                        Err(_) => {
+                            // Unknown error, continue
                         }
                     }
+                } else {
+                    // This should not happen with our current logic
                 }
-            }
+            },
             // Fallback check (less frequent, only if WebSocket is not working)
             _ = tokio::time::sleep_until(next_fallback_check) => {
-                if manager.websocket_receiver.is_none() {
-                    // WebSocket not available, do fallback check
-                    match manager.do_websocket_fallback_check().await {
-                        Ok(new_transaction_count) => {
-                            if new_transaction_count > 0 {
-                                log(LogTag::Transactions, "FALLBACK_SUCCESS", &format!(
-                                    "Found {} new transactions via fallback check",
-                                    new_transaction_count
-                                ));
+                let mut manager_guard = global_manager.lock().await;
+                if let Some(ref mut manager) = manager_guard.as_mut() {
+                    if manager.websocket_receiver.is_none() {
+                        // WebSocket not available, do fallback check
+                        match manager.do_websocket_fallback_check().await {
+                            Ok(new_transaction_count) => {
+                                if new_transaction_count > 0 {
+                                    log(LogTag::Transactions, "FALLBACK_SUCCESS", &format!(
+                                        "Found {} new transactions via fallback check",
+                                        new_transaction_count
+                                    ));
+                                }
                             }
-                        }
-                        Err(e) => {
-                            log(LogTag::Transactions, "ERROR", &format!("Fallback check error: {}", e));
+                            Err(e) => {
+                                log(LogTag::Transactions, "ERROR", &format!("Fallback check error: {}", e));
+                            }
                         }
                     }
                 }
                 next_fallback_check = tokio::time::Instant::now() + Duration::from_secs(30);
-            }
+            },
             _ = tokio::time::sleep_until(next_pending_check) => {
                 // Process pending transactions every 30 seconds
-                match manager.process_pending_transactions().await {
-                    Ok(processed_count) => {
-                        if processed_count > 0 {
-                            log(LogTag::Transactions, "PENDING_CHECK", &format!(
-                                "⏱️  Processed {} pending transactions",
-                                processed_count
-                            ));
-                        } else if manager.debug_enabled {
-                            log(LogTag::Transactions, "PENDING_CHECK", "No pending transactions to process");
+                let mut manager_guard = global_manager.lock().await;
+                if let Some(ref mut manager) = manager_guard.as_mut() {
+                    match manager.process_pending_transactions().await {
+                        Ok(processed_count) => {
+                            if processed_count > 0 {
+                                log(LogTag::Transactions, "PENDING_CHECK", &format!(
+                                    "⏱️  Processed {} pending transactions",
+                                    processed_count
+                                ));
+                            } else if manager.debug_enabled {
+                                log(LogTag::Transactions, "PENDING_CHECK", "No pending transactions to process");
+                            }
                         }
-                    }
-                    Err(e) => {
-                        log(LogTag::Transactions, "ERROR", &format!("Pending transaction processing error: {}", e));
+                        Err(e) => {
+                            log(LogTag::Transactions, "ERROR", &format!("Pending transaction processing error: {}", e));
+                        }
                     }
                 }
                 next_pending_check = tokio::time::Instant::now() + Duration::from_secs(30);
-            }
+            },
             _ = tokio::time::sleep_until(next_gap_check) => {
                 // Periodic gap detection and backfill every 5 minutes
-                match manager.check_and_backfill_gaps().await {
-                    Ok(backfilled_count) => {
-                        if backfilled_count > 0 {
-                            log(LogTag::Transactions, "GAP_DETECTION", &format!(
-                                "✅ Gap detection complete - backfilled {} transactions",
-                                backfilled_count
-                            ));
-                        } else if manager.debug_enabled {
-                            log(LogTag::Transactions, "GAP_DETECTION", "✅ No gaps found");
+                let mut manager_guard = global_manager.lock().await;
+                if let Some(ref mut manager) = manager_guard.as_mut() {
+                    match manager.check_and_backfill_gaps().await {
+                        Ok(backfilled_count) => {
+                            if backfilled_count > 0 {
+                                log(LogTag::Transactions, "GAP_DETECTION", &format!(
+                                    "✅ Gap detection complete - backfilled {} transactions",
+                                    backfilled_count
+                                ));
+                            } else if manager.debug_enabled {
+                                log(LogTag::Transactions, "GAP_DETECTION", "✅ No gaps found");
+                            }
+                        }
+                        Err(e) => {
+                            log(LogTag::Transactions, "ERROR", &format!("Gap detection error: {}", e));
                         }
                     }
-                    Err(e) => {
-                        log(LogTag::Transactions, "ERROR", &format!("Gap detection error: {}", e));
+
+                    // Periodic cleanup of expired deferred retries every 5 minutes
+                    if let Err(e) = manager.cleanup_expired_deferred_retries().await {
+                        log(LogTag::Transactions, "ERROR", &format!("Deferred retries cleanup error: {}", e));
                     }
                 }
                 next_gap_check = tokio::time::Instant::now() + Duration::from_secs(300);
-
-                // Periodic cleanup of expired deferred retries every 5 minutes
-                if let Err(e) = manager.cleanup_expired_deferred_retries().await {
-                    log(LogTag::Transactions, "ERROR", &format!("Deferred retries cleanup error: {}", e));
-                }
             }
         }
     }
