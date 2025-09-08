@@ -194,21 +194,6 @@ pub const COLLECTION_SHUTDOWN_CHECK_MS: u64 = 1;
 /// This prevents the 116s cycle timeout issue by reducing service contention
 pub const ENTRY_CHECK_CONCURRENCY: usize = 4; // Reduced from 24 to fix performance
 
-// Capacity-aware Scheduling
-// -------------------------
-/// Max number of tokens to fully process per cycle (rotated across cycles)
-/// Rule of thumb: ~2x concurrency to keep workers fed without overloading services
-pub const MAX_TOKENS_PER_CYCLE: usize = ENTRY_CHECK_CONCURRENCY * 2;
-/// Maximum number of tokens to keep after prioritization per cache refresh
-/// This caps the working set early to reduce churn and focus checks
-pub const PREPARED_TOKENS_CAP: usize = 100;
-
-/// Limit tokens analyzed for watchlist seeding per cycle (keeps history refresh light)
-
-/// Fraction of the cycle interval used as a soft time budget; beyond this we stop scheduling new tasks
-/// Increased to allow more time for token processing after preparation phase
-pub const TIME_BUDGET_FRACTION: f64 = 1.8;
-
 use crate::global::is_debug_trader_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::{ get_pool_price, PriceResult };
@@ -251,9 +236,6 @@ pub static CRITICAL_OPERATIONS_IN_PROGRESS: Lazy<Arc<std::sync::atomic::AtomicUs
 );
 
 /// Global tracker: number of buy operations currently in-flight (reserved but not yet reflected in open positions)
-
-/// Rotating scheduler offset for capacity-aware token batching across cycles
-static SCHEDULER_OFFSET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 // =============================================================================
 // TOKEN TRACKING FOR INTELLIGENT CHECKING
@@ -1185,33 +1167,28 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         use tokio::sync::Semaphore;
         let semaphore = Arc::new(Semaphore::new(ENTRY_CHECK_CONCURRENCY));
 
-        // Simple token processing - take first batch of price infos
+        // Process all available tokens in parallel
         let total_tokens = price_infos.len();
-        let batch_size = std::cmp::min(MAX_TOKENS_PER_CYCLE, total_tokens);
-        let scheduled_tokens = price_infos.into_iter().take(batch_size).collect::<Vec<_>>();
 
-        // Process scheduled tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         // Per-cycle aggregation counters (atomic to update from tasks)
         let price_available_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let price_unavailable_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
-        let handles_initial_size = scheduled_tokens.len(); // Track for summary logging
 
         if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
                 "DEBUG_TOKEN_PROCESSING",
                 &format!(
-                    "📋 Token processing details:\n  \
-                     - Total eligible tokens: {}\n  \
+                    "📋 Processing all {} tokens:\n  \
                      - Semaphore limit: {} concurrent checks\n  \
                      - Task timeout: {}s per token\n  \
-                     - Tokens being processed: [{}]",
-                    scheduled_tokens.len(),
-                    ENTRY_CHECK_CONCURRENCY, // semaphore limit
+                     - First 10 tokens: [{}]",
+                    total_tokens,
+                    ENTRY_CHECK_CONCURRENCY,
                     TOKEN_CHECK_TASK_TIMEOUT_SECS,
-                    scheduled_tokens
+                    price_infos
                         .iter()
                         .take(10)
                         .map(|p| p.mint.as_str())
@@ -1221,35 +1198,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             );
         }
 
-        let mut processed_count = 0;
-        // Separate time tracking: allow generous budget for actual token processing
-        // Don't penalize processing for slow preparation phase
-        let processing_start = std::time::Instant::now();
-        let processing_budget = Duration::from_secs_f64(
-            (ENTRY_MONITOR_INTERVAL_SECS as f64) * TIME_BUDGET_FRACTION
-        );
-
-        for price_info in scheduled_tokens.iter() {
-            processed_count += 1;
-
-            // Use processing time (not total cycle time) for budget check
-            // This allows token processing even if preparation took a long time
-            if processing_start.elapsed() >= processing_budget {
-                log(
-                    LogTag::Trader,
-                    "TIME_BUDGET_REACHED",
-                    &format!(
-                        "⏱️ Processing time budget reached at {:.3}s (limit {:.3}s). Scheduled {}/{} tokens. Total cycle time: {:.3}s",
-                        processing_start.elapsed().as_secs_f32(),
-                        processing_budget.as_secs_f32(),
-                        processed_count - 1,
-                        scheduled_tokens.len(),
-                        cycle_start.elapsed().as_secs_f32()
-                    )
-                );
-                break;
-            }
-
+        for price_info in price_infos.iter() {
             // Check for shutdown before spawning tasks
             if
                 check_shutdown_or_delay(
@@ -1508,13 +1457,14 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         }
 
         // Wait for tasks to finish with overall timeout (best-effort)
+        let handles_count = handles.len();
         if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
                 "COLLECT_START",
                 &format!(
                     "⏳ Collecting {} token tasks with {}s overall timeout",
-                    handles.len(),
+                    handles_count,
                     TOKEN_CHECK_COLLECTION_TIMEOUT_SECS
                 )
             );
@@ -1549,15 +1499,14 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Add cycle summary logging
         if is_debug_trader_enabled() {
             let final_positions_count = crate::positions::get_open_positions_count().await;
-            let actual_tasks = handles_initial_size; // scheduled count
             log(
                 LogTag::Trader,
                 "CYCLE_SUMMARY",
                 &format!(
-                    "🔄 Cycle summary: Scheduled {}/{} tokens → {} tasks spawned → Positions: {}/{}",
-                    actual_tasks,
+                    "🔄 Cycle summary: Processed {}/{} tokens → {} tasks spawned → Positions: {}/{}",
+                    handles_count,
                     total_tokens,
-                    actual_tasks,
+                    handles_count,
                     final_positions_count,
                     MAX_OPEN_POSITIONS
                 )
