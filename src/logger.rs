@@ -814,7 +814,7 @@ fn break_long_word(word: &str, max_width: usize) -> Vec<String> {
         // Find a safe UTF-8 boundary at or before max_width characters
         let mut char_boundary = 0;
         let mut char_count = 0;
-        
+
         for (byte_idx, _) in remaining.char_indices() {
             if char_count >= max_width {
                 break;
@@ -822,7 +822,7 @@ fn break_long_word(word: &str, max_width: usize) -> Vec<String> {
             char_boundary = byte_idx;
             char_count += 1;
         }
-        
+
         // If we didn't find any characters (shouldn't happen), fall back to the next character boundary
         if char_count == 0 {
             if let Some((next_boundary, _)) = remaining.char_indices().nth(1) {
@@ -839,11 +839,19 @@ fn break_long_word(word: &str, max_width: usize) -> Vec<String> {
             // Look for good break points in the next few characters (up to 15 chars ahead)
             let search_start_chars = char_count;
             let search_end_chars = std::cmp::min(char_count + 15, remaining.chars().count());
-            
+
             // Get the byte indices for the search range
-            let search_start_bytes = remaining.char_indices().nth(search_start_chars).map(|(i, _)| i).unwrap_or(remaining.len());
-            let search_end_bytes = remaining.char_indices().nth(search_end_chars).map(|(i, _)| i).unwrap_or(remaining.len());
-            
+            let search_start_bytes = remaining
+                .char_indices()
+                .nth(search_start_chars)
+                .map(|(i, _)| i)
+                .unwrap_or(remaining.len());
+            let search_end_bytes = remaining
+                .char_indices()
+                .nth(search_end_chars)
+                .map(|(i, _)| i)
+                .unwrap_or(remaining.len());
+
             if search_start_bytes < remaining.len() && search_end_bytes <= remaining.len() {
                 let search_slice = &remaining[search_start_bytes..search_end_bytes];
 
@@ -858,7 +866,7 @@ fn break_long_word(word: &str, max_width: usize) -> Vec<String> {
                     let actual_pos = search_start_bytes + pos + 1;
                     // Make sure we don't go beyond the string and find the character boundary
                     let actual_pos = std::cmp::min(actual_pos, remaining.len());
-                    
+
                     // Find the closest character boundary at or before actual_pos
                     let mut boundary = actual_pos;
                     for (byte_idx, _) in remaining.char_indices() {

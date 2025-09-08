@@ -117,7 +117,7 @@ const MAX_DATA_AGE_MIN: i64 = 5; // Keep tight data freshness requirement
 
 // Conservative liquidity filter for more stable entries
 const MIN_RESERVE_SOL: f64 = 20.0; // Higher minimum for stability
-const MAX_RESERVE_SOL: f64 = 3000.0; // Higher maximum for less restrictive filtering
+const MAX_RESERVE_SOL: f64 = 30000.0; // Higher maximum for less restrictive filtering
 
 // CONSERVATIVE entry windows - more balanced approach
 const WINDOWS_SEC: [i64; 6] = [10, 20, 40, 80, 160, 320]; // 30s to 10min windows

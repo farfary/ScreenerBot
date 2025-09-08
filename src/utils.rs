@@ -1,8 +1,8 @@
-use crate::errors::blockchain::{parse_structured_solana_error, BlockchainError};
+use crate::errors::blockchain::{ parse_structured_solana_error, BlockchainError };
 use crate::errors::parse_solana_error;
 use crate::errors::ScreenerBotError;
-use crate::logger::{log, LogTag};
-use chrono::{DateTime, Utc};
+use crate::logger::{ log, LogTag };
+use chrono::{ DateTime, Utc };
 use std::fs;
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -29,7 +29,9 @@ pub fn safe_format_signature(s: &str) -> String {
         let first_8 = safe_truncate(s, 8);
         // Get last 4 characters safely
         let last_4 = if char_count >= 4 {
-            s.chars().skip(char_count - 4).collect::<String>()
+            s.chars()
+                .skip(char_count - 4)
+                .collect::<String>()
         } else {
             s.to_string()
         };
@@ -48,7 +50,7 @@ pub use crate::swaps::SwapResult;
 
 use bs58;
 use solana_sdk::{
-    instruction::{AccountMeta, Instruction},
+    instruction::{ AccountMeta, Instruction },
     pubkey::Pubkey,
     signature::Keypair,
     signer::Signer,
@@ -67,7 +69,8 @@ pub fn get_wallet_address() -> Result<String, ScreenerBotError> {
     })?;
 
     // Decode the private key from base58
-    let private_key_bytes = bs58::decode(&configs.main_wallet_private)
+    let private_key_bytes = bs58
+        ::decode(&configs.main_wallet_private)
         .into_vec()
         .map_err(|e| {
             ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
@@ -89,11 +92,7 @@ pub fn get_wallet_address() -> Result<String, ScreenerBotError> {
 pub fn format_age_string(created_at: Option<DateTime<Utc>>) -> String {
     if let Some(dt) = created_at {
         let now = Utc::now();
-        let mut seconds = if now > dt {
-            (now - dt).num_seconds()
-        } else {
-            0
-        };
+        let mut seconds = if now > dt { (now - dt).num_seconds() } else { 0 };
         let years = seconds / 31_536_000; // 365*24*60*60
         seconds %= 31_536_000;
         let days = seconds / 86_400;
@@ -173,7 +172,7 @@ pub fn hex_dump_data(
     data: &[u8],
     start_offset: usize,
     length: usize,
-    log_callback: impl Fn(&str, &str),
+    log_callback: impl Fn(&str, &str)
 ) {
     let end = std::cmp::min(start_offset + length, data.len());
 
@@ -198,18 +197,11 @@ pub fn hex_dump_data(
         let ascii_str: String = chunk
             .iter()
             .map(|&b| {
-                if b.is_ascii_graphic() || b == b' ' {
-                    b as char
-                } else {
-                    '.'
-                }
+                if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' }
             })
             .collect();
 
-        log_callback(
-            "DEBUG",
-            &format!("{}: {} |{}|", offset_str, hex_padded, ascii_str),
-        );
+        log_callback("DEBUG", &format!("{}: {} |{}|", offset_str, hex_padded, ascii_str));
     }
 }
 
@@ -220,7 +212,7 @@ pub async fn cleanup_all_empty_atas() -> Result<(u32, Vec<String>), ScreenerBotE
     log(
         LogTag::Wallet,
         "ATA",
-        "⚠️ Manual ATA cleanup triggered (normally handled by background service)",
+        "⚠️ Manual ATA cleanup triggered (normally handled by background service)"
     );
     let wallet_address = get_wallet_address()?;
     close_all_empty_atas(&wallet_address).await
@@ -235,7 +227,7 @@ pub async fn get_sol_balance(wallet_address: &str) -> Result<f64, ScreenerBotErr
 /// Checks wallet balance for a specific token
 pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, ScreenerBotError> {
     use crate::arguments::is_debug_ata_enabled;
-    use crate::logger::{log, LogTag};
+    use crate::logger::{ log, LogTag };
 
     if is_debug_ata_enabled() {
         log(
@@ -245,7 +237,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
                 "🔍 TOKEN_BALANCE_START: wallet={}, mint={}",
                 safe_truncate(wallet_address, 8),
                 safe_truncate(mint, 8)
-            ),
+            )
         );
     }
 
@@ -256,17 +248,13 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
             "🔍 Fetching token balance: wallet={}, mint={}",
             safe_truncate(wallet_address, 8),
             safe_truncate(mint, 8)
-        ),
+        )
     );
 
     let rpc_client = crate::rpc::get_rpc_client();
 
     if is_debug_ata_enabled() {
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!("🌐 TOKEN_BALANCE_RPC: querying RPC for balance"),
-        );
+        log(LogTag::Wallet, "DEBUG", &format!("🌐 TOKEN_BALANCE_RPC: querying RPC for balance"));
     }
 
     match rpc_client.get_token_balance(wallet_address, mint).await {
@@ -279,7 +267,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
                         "📊 TOKEN_BALANCE_RESULT: {} units for mint {}",
                         balance,
                         safe_truncate(&mint, 8)
-                    ),
+                    )
                 );
             }
             log(
@@ -289,7 +277,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
                     "✅ Token balance fetched successfully: {} units for mint {}",
                     balance,
                     safe_truncate(mint, 8)
-                ),
+                )
             );
             Ok(balance)
         }
@@ -303,7 +291,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
                         "❌ TOKEN_BALANCE_ERROR: {} for mint {}",
                         blockchain_error,
                         safe_truncate(&mint, 8)
-                    ),
+                    )
                 );
             }
             log(
@@ -313,7 +301,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
                     "❌ Failed to fetch token balance for mint {}: {}",
                     safe_truncate(&mint, 8),
                     e
-                ),
+                )
             );
             Err(e)
         }
@@ -322,7 +310,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
 
 /// Gets all token accounts for a wallet
 pub async fn get_all_token_accounts(
-    wallet_address: &str,
+    wallet_address: &str
 ) -> Result<Vec<crate::rpc::TokenAccountInfo>, ScreenerBotError> {
     let rpc_client = crate::rpc::get_rpc_client();
     rpc_client.get_all_token_accounts(wallet_address).await
@@ -332,15 +320,12 @@ pub async fn get_all_token_accounts(
 /// Returns the transaction signature if successful
 pub async fn close_single_ata(
     wallet_address: &str,
-    mint: &str,
+    mint: &str
 ) -> Result<String, ScreenerBotError> {
     log(
         LogTag::Wallet,
         "ATA",
-        &format!(
-            "Attempting to close single ATA for mint {}",
-            safe_truncate(&mint, 8)
-        ),
+        &format!("Attempting to close single ATA for mint {}", safe_truncate(&mint, 8))
     );
 
     // Get all token accounts to find the specific one
@@ -356,22 +341,11 @@ pub async fn close_single_ata(
             log(
                 LogTag::Wallet,
                 "ATA",
-                &format!(
-                    "Found empty ATA {} for mint {}",
-                    account.account,
-                    &mint[..8]
-                ),
+                &format!("Found empty ATA {} for mint {}", account.account, &mint[..8])
             );
 
             // Close the ATA
-            match close_ata(
-                wallet_address,
-                &account.account,
-                mint,
-                account.is_token_2022,
-            )
-            .await
-            {
+            match close_ata(wallet_address, &account.account, mint, account.is_token_2022).await {
                 Ok(signature) => {
                     log(
                         LogTag::Wallet,
@@ -381,7 +355,7 @@ pub async fn close_single_ata(
                             account.account,
                             &mint[..8],
                             signature
-                        ),
+                        )
                     );
                     Ok(signature)
                 }
@@ -394,7 +368,7 @@ pub async fn close_single_ata(
                             account.account,
                             &mint[..8],
                             e
-                        ),
+                        )
                     );
                     Err(e)
                 }
@@ -403,10 +377,12 @@ pub async fn close_single_ata(
         None => {
             let error_msg = format!("No empty ATA found for mint {}", &mint[..8]);
             log(LogTag::Wallet, "WARNING", &error_msg);
-            Err(ScreenerBotError::invalid_amount(
-                error_msg.clone(),
-                "No empty ATA found".to_string(),
-            ))
+            Err(
+                ScreenerBotError::invalid_amount(
+                    error_msg.clone(),
+                    "No empty ATA found".to_string()
+                )
+            )
         }
     }
 }
@@ -415,13 +391,9 @@ pub async fn close_single_ata(
 /// This reclaims the rent SOL (~0.002 SOL per account) from all empty token accounts
 /// Returns the number of accounts closed and total signatures
 pub async fn close_all_empty_atas(
-    wallet_address: &str,
+    wallet_address: &str
 ) -> Result<(u32, Vec<String>), ScreenerBotError> {
-    log(
-        LogTag::Wallet,
-        "ATA",
-        "🔍 Checking for empty token accounts to close...",
-    );
+    log(LogTag::Wallet, "ATA", "🔍 Checking for empty token accounts to close...");
 
     // Get all token accounts for the wallet
     let all_accounts = get_all_token_accounts(wallet_address).await?;
@@ -438,21 +410,14 @@ pub async fn close_all_empty_atas(
         .collect();
 
     if empty_accounts.is_empty() {
-        log(
-            LogTag::Wallet,
-            "ATA",
-            "No empty token accounts found to close",
-        );
+        log(LogTag::Wallet, "ATA", "No empty token accounts found to close");
         return Ok((0, vec![]));
     }
 
     log(
         LogTag::Wallet,
         "ATA",
-        &format!(
-            "Found {} empty token accounts to close",
-            empty_accounts.len()
-        ),
+        &format!("Found {} empty token accounts to close", empty_accounts.len())
     );
 
     let mut signatures = Vec::new();
@@ -472,25 +437,22 @@ pub async fn close_all_empty_atas(
                 },
                 account_info.account,
                 account_info.mint
-            ),
+            )
         );
 
-        match close_ata(
-            wallet_address,
-            &account_info.account,
-            &account_info.mint,
-            account_info.is_token_2022,
-        )
-        .await
+        match
+            close_ata(
+                wallet_address,
+                &account_info.account,
+                &account_info.mint,
+                account_info.is_token_2022
+            ).await
         {
             Ok(signature) => {
                 log(
                     LogTag::Wallet,
                     "SUCCESS",
-                    &format!(
-                        "✅ Closed empty ATA {}. TX: {}",
-                        account_info.account, signature
-                    ),
+                    &format!("✅ Closed empty ATA {}. TX: {}", account_info.account, signature)
                 );
                 signatures.push(signature);
                 closed_count += 1;
@@ -502,7 +464,7 @@ pub async fn close_all_empty_atas(
                 log(
                     LogTag::Wallet,
                     "ERROR",
-                    &format!("❌ Failed to close ATA {}: {}", account_info.account, e),
+                    &format!("❌ Failed to close ATA {}: {}", account_info.account, e)
                 );
                 // Continue with other accounts even if one fails
             }
@@ -515,8 +477,9 @@ pub async fn close_all_empty_atas(
         "ATA",
         &format!(
             "🎉 ATA cleanup complete! Closed {} accounts, reclaimed ~{:.6} SOL in rent",
-            closed_count, rent_reclaimed
-        ),
+            closed_count,
+            rent_reclaimed
+        )
     );
 
     Ok((closed_count, signatures))
@@ -532,7 +495,7 @@ pub async fn close_all_empty_atas(
 /// * `recently_sold` - Optional flag indicating if tokens were recently sold (enables longer wait times)
 pub async fn close_token_account(
     mint: &str,
-    wallet_address: &str,
+    wallet_address: &str
 ) -> Result<String, ScreenerBotError> {
     close_token_account_with_context(mint, wallet_address, false).await
 }
@@ -541,15 +504,11 @@ pub async fn close_token_account(
 pub async fn close_token_account_with_context(
     mint: &str,
     wallet_address: &str,
-    recently_sold: bool,
+    recently_sold: bool
 ) -> Result<String, ScreenerBotError> {
     use crate::arguments::is_debug_ata_enabled;
 
-    log(
-        LogTag::Wallet,
-        "ATA",
-        &format!("Attempting to close token account for mint: {}", mint),
-    );
+    log(LogTag::Wallet, "ATA", &format!("Attempting to close token account for mint: {}", mint));
 
     if is_debug_ata_enabled() {
         log(
@@ -560,7 +519,7 @@ pub async fn close_token_account_with_context(
                 &wallet_address[..8],
                 &mint[..8],
                 recently_sold
-            ),
+            )
         );
     }
 
@@ -593,7 +552,7 @@ pub async fn close_token_account_with_context(
                     balance_check_attempts,
                     max_checks,
                     &mint[..8]
-                ),
+                )
             );
         }
 
@@ -607,7 +566,7 @@ pub async fn close_token_account_with_context(
                             "📊 ATA_BALANCE_RESULT: {} tokens remaining for mint {}",
                             balance,
                             &mint[..8]
-                        ),
+                        )
                     );
                 }
 
@@ -668,10 +627,7 @@ pub async fn close_token_account_with_context(
                 log(
                     LogTag::Wallet,
                     "ATA",
-                    &format!(
-                        "Verified zero balance for {}, proceeding to close ATA",
-                        mint
-                    ),
+                    &format!("Verified zero balance for {}, proceeding to close ATA", mint)
                 );
                 break;
             }
@@ -682,8 +638,10 @@ pub async fn close_token_account_with_context(
                         "DEBUG",
                         &format!(
                             "⚠️ ATA_BALANCE_ERROR: attempt {}/{} failed: {}",
-                            balance_check_attempts, max_checks, e
-                        ),
+                            balance_check_attempts,
+                            max_checks,
+                            e
+                        )
                     );
                 }
 
@@ -692,10 +650,7 @@ pub async fn close_token_account_with_context(
                         log(
                             LogTag::Wallet,
                             "DEBUG",
-                            &format!(
-                                "🔄 ATA_BALANCE_RETRY: waiting {}ms before retry due to error",
-                                delay_ms
-                            ),
+                            &format!("🔄 ATA_BALANCE_RETRY: waiting {}ms before retry due to error", delay_ms)
                         );
                     }
                     tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
@@ -722,10 +677,7 @@ pub async fn close_token_account_with_context(
         log(
             LogTag::Wallet,
             "DEBUG",
-            &format!(
-                "🔍 ATA_DISCOVER: finding associated token account for mint {}",
-                &mint[..8]
-            ),
+            &format!("🔍 ATA_DISCOVER: finding associated token account for mint {}", &mint[..8])
         );
     }
 
@@ -739,7 +691,7 @@ pub async fn close_token_account_with_context(
                         "✅ ATA_FOUND: token_account={} for mint={}",
                         &account[..8],
                         &mint[..8]
-                    ),
+                    )
                 );
             }
             account
@@ -753,26 +705,19 @@ pub async fn close_token_account_with_context(
                         "❌ ATA_NOT_FOUND: error finding token account for mint {}: {}",
                         &mint[..8],
                         e
-                    ),
+                    )
                 );
             }
             log(
                 LogTag::Wallet,
                 "WARN",
-                &format!(
-                    "Could not find associated token account for {}: {}",
-                    mint, e
-                ),
+                &format!("Could not find associated token account for {}: {}", mint, e)
             );
             return Err(e);
         }
     };
 
-    log(
-        LogTag::Wallet,
-        "ATA",
-        &format!("Found token account to close: {}", token_account),
-    );
+    log(LogTag::Wallet, "ATA", &format!("Found token account to close: {}", token_account));
 
     // Determine if this is a Token-2022 account by checking the token ACCOUNT's program (not the mint)
     if is_debug_ata_enabled() {
@@ -782,14 +727,13 @@ pub async fn close_token_account_with_context(
             &format!(
                 "🔍 ATA_PROGRAM_CHECK: determining token program for account {}",
                 &token_account[..8]
-            ),
+            )
         );
     }
 
     let rpc_client = crate::rpc::get_rpc_client();
     let is_token_2022 = rpc_client
-        .is_token_account_token_2022(&token_account)
-        .await
+        .is_token_account_token_2022(&token_account).await
         .unwrap_or(false);
 
     if is_token_2022 {
@@ -800,14 +744,10 @@ pub async fn close_token_account_with_context(
                 &format!(
                     "🆕 ATA_TOKEN2022: using Token Extensions program for account {}",
                     &token_account[..8]
-                ),
+                )
             );
         }
-        log(
-            LogTag::Wallet,
-            "ATA",
-            "Detected Token-2022, using Token Extensions program",
-        );
+        log(LogTag::Wallet, "ATA", "Detected Token-2022, using Token Extensions program");
     } else {
         if is_debug_ata_enabled() {
             log(
@@ -816,7 +756,7 @@ pub async fn close_token_account_with_context(
                 &format!(
                     "🔧 ATA_SPL_TOKEN: using standard SPL Token program for account {}",
                     &token_account[..8]
-                ),
+                )
             );
         }
         log(LogTag::Wallet, "ATA", "Using standard SPL Token program");
@@ -830,7 +770,7 @@ pub async fn close_token_account_with_context(
             &format!(
                 "🚀 ATA_CLOSE_EXECUTE: initiating close instruction for account {}",
                 &token_account[..8]
-            ),
+            )
         );
     }
     match close_ata(wallet_address, &token_account, mint, is_token_2022).await {
@@ -844,16 +784,13 @@ pub async fn close_token_account_with_context(
                         &signature[..8],
                         &token_account[..8],
                         &mint[..8]
-                    ),
+                    )
                 );
             }
             log(
                 LogTag::Wallet,
                 "SUCCESS",
-                &format!(
-                    "Successfully closed token account for {}. TX: {}",
-                    mint, signature
-                ),
+                &format!("Successfully closed token account for {}. TX: {}", mint, signature)
             );
             Ok(signature)
         }
@@ -867,13 +804,13 @@ pub async fn close_token_account_with_context(
                         &token_account[..8],
                         &mint[..8],
                         e
-                    ),
+                    )
                 );
             }
             log(
                 LogTag::Wallet,
                 "ERROR",
-                &format!("Failed to close token account for {}: {}", mint, e),
+                &format!("Failed to close token account for {}: {}", mint, e)
             );
             Err(e)
         }
@@ -883,12 +820,10 @@ pub async fn close_token_account_with_context(
 /// Gets the associated token account address for a wallet and mint
 async fn get_associated_token_account(
     wallet_address: &str,
-    mint: &str,
+    mint: &str
 ) -> Result<String, ScreenerBotError> {
     let rpc_client = crate::rpc::get_rpc_client();
-    rpc_client
-        .get_associated_token_account(wallet_address, mint)
-        .await
+    rpc_client.get_associated_token_account(wallet_address, mint).await
 }
 
 /// Closes ATA using proper Solana SDK for real ATA closing
@@ -896,7 +831,7 @@ async fn close_ata(
     wallet_address: &str,
     token_account: &str,
     mint: &str,
-    is_token_2022: bool,
+    is_token_2022: bool
 ) -> Result<String, ScreenerBotError> {
     use crate::arguments::is_debug_ata_enabled;
 
@@ -914,23 +849,20 @@ async fn close_ata(
                 } else {
                     "SPL Token"
                 }
-            ),
+            )
         );
     }
 
     log(
         LogTag::Wallet,
         "ATA",
-        &format!(
-            "Closing ATA {} for mint {} using {} program",
-            token_account,
-            mint,
-            if is_token_2022 {
-                "Token-2022"
-            } else {
-                "SPL Token"
-            }
-        ),
+        &format!("Closing ATA {} for mint {} using {} program", token_account, mint, if
+            is_token_2022
+        {
+            "Token-2022"
+        } else {
+            "SPL Token"
+        })
     );
 
     // Use proper Solana SDK to build and send close instruction
@@ -941,7 +873,7 @@ async fn close_ata(
             &format!(
                 "🛠️ ATA_BUILD_INSTRUCTION: preparing close instruction for account {}",
                 &token_account[..8]
-            ),
+            )
         );
     }
 
@@ -954,14 +886,10 @@ async fn close_ata(
                     &format!(
                         "✅ ATA_SDK_SUCCESS: instruction executed, transaction={}",
                         &signature[..8]
-                    ),
+                    )
                 );
             }
-            log(
-                LogTag::Wallet,
-                "SUCCESS",
-                &format!("ATA closed successfully. TX: {}", signature),
-            );
+            log(LogTag::Wallet, "SUCCESS", &format!("ATA closed successfully. TX: {}", signature));
             Ok(signature)
         }
         Err(e) => {
@@ -973,7 +901,7 @@ async fn close_ata(
                         "❌ ATA_SDK_FAILED: instruction failed for account {}: {}",
                         &token_account[..8],
                         e
-                    ),
+                    )
                 );
             }
             Err(e)
@@ -985,7 +913,7 @@ async fn close_ata(
 async fn build_and_send_close_instruction(
     wallet_address: &str,
     token_account: &str,
-    is_token_2022: bool,
+    is_token_2022: bool
 ) -> Result<String, ScreenerBotError> {
     use crate::arguments::is_debug_ata_enabled;
 
@@ -996,7 +924,7 @@ async fn build_and_send_close_instruction(
             &format!(
                 "🔨 ATA_INSTRUCTION_START: building close instruction for account {}",
                 &token_account[..8]
-            ),
+            )
         );
     }
 
@@ -1015,34 +943,31 @@ async fn build_and_send_close_instruction(
                 "🔑 ATA_PARSE_ADDRESSES: wallet={}, account={}",
                 &wallet_address[..8],
                 &token_account[..8]
-            ),
+            )
         );
     }
 
     let owner_pubkey = Pubkey::from_str(wallet_address).map_err(|e| {
         ScreenerBotError::invalid_amount(
             format!("Invalid wallet address: {}", e),
-            "Wallet validation failed".to_string(),
+            "Wallet validation failed".to_string()
         )
     })?;
 
     let token_account_pubkey = Pubkey::from_str(token_account).map_err(|e| {
         ScreenerBotError::invalid_amount(
             format!("Invalid token account: {}", e),
-            "Token account validation failed".to_string(),
+            "Token account validation failed".to_string()
         )
     })?;
 
     // Decode private key
     if is_debug_ata_enabled() {
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!("🔐 ATA_KEYPAIR: creating keypair from config"),
-        );
+        log(LogTag::Wallet, "DEBUG", &format!("🔐 ATA_KEYPAIR: creating keypair from config"));
     }
 
-    let private_key_bytes = bs58::decode(&configs.main_wallet_private)
+    let private_key_bytes = bs58
+        ::decode(&configs.main_wallet_private)
         .into_vec()
         .map_err(|e| {
             ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
@@ -1061,14 +986,11 @@ async fn build_and_send_close_instruction(
         log(
             LogTag::Wallet,
             "DEBUG",
-            &format!(
-                "⚙️ ATA_INSTRUCTION_BUILD: creating {} close instruction",
-                if is_token_2022 {
-                    "Token-2022"
-                } else {
-                    "SPL Token"
-                }
-            ),
+            &format!("⚙️ ATA_INSTRUCTION_BUILD: creating {} close instruction", if is_token_2022 {
+                "Token-2022"
+            } else {
+                "SPL Token"
+            })
         );
     }
 
@@ -1082,9 +1004,8 @@ async fn build_and_send_close_instruction(
             &token_account_pubkey,
             &owner_pubkey,
             &owner_pubkey,
-            &[],
-        )
-        .map_err(|e| {
+            &[]
+        ).map_err(|e| {
             ScreenerBotError::Blockchain(crate::errors::BlockchainError::InvalidInstruction {
                 signature: "unknown".to_string(),
                 instruction_index: 0,
@@ -1097,28 +1018,24 @@ async fn build_and_send_close_instruction(
         log(
             LogTag::Wallet,
             "DEBUG",
-            &format!(
-                "✅ ATA_INSTRUCTION_BUILT: close instruction created for {} program",
-                if is_token_2022 {
-                    "Token-2022"
-                } else {
-                    "SPL Token"
-                }
-            ),
+            &format!("✅ ATA_INSTRUCTION_BUILT: close instruction created for {} program", if
+                is_token_2022
+            {
+                "Token-2022"
+            } else {
+                "SPL Token"
+            })
         );
     }
 
     log(
         LogTag::Wallet,
         "ATA",
-        &format!(
-            "Built close instruction for {} account",
-            if is_token_2022 {
-                "Token-2022"
-            } else {
-                "SPL Token"
-            }
-        ),
+        &format!("Built close instruction for {} account", if is_token_2022 {
+            "Token-2022"
+        } else {
+            "SPL Token"
+        })
     );
 
     // Get recent blockhash via RPC
@@ -1126,7 +1043,7 @@ async fn build_and_send_close_instruction(
         log(
             LogTag::Wallet,
             "DEBUG",
-            &format!("🌐 ATA_BLOCKHASH: fetching recent blockhash via RPC"),
+            &format!("🌐 ATA_BLOCKHASH: fetching recent blockhash via RPC")
         );
     }
 
@@ -1137,10 +1054,7 @@ async fn build_and_send_close_instruction(
         log(
             LogTag::Wallet,
             "DEBUG",
-            &format!(
-                "📦 ATA_BLOCKHASH_OK: blockhash={}",
-                &recent_blockhash.to_string()[..8]
-            ),
+            &format!("📦 ATA_BLOCKHASH_OK: blockhash={}", &recent_blockhash.to_string()[..8])
         );
     }
 
@@ -1149,7 +1063,7 @@ async fn build_and_send_close_instruction(
         log(
             LogTag::Wallet,
             "DEBUG",
-            &format!("📝 ATA_TRANSACTION_BUILD: creating signed transaction"),
+            &format!("📝 ATA_TRANSACTION_BUILD: creating signed transaction")
         );
     }
 
@@ -1157,14 +1071,14 @@ async fn build_and_send_close_instruction(
         &[close_instruction],
         Some(&owner_pubkey),
         &[&keypair],
-        recent_blockhash,
+        recent_blockhash
     );
 
     if is_debug_ata_enabled() {
         log(
             LogTag::Wallet,
             "DEBUG",
-            &format!("✅ ATA_TRANSACTION_READY: transaction built and signed"),
+            &format!("✅ ATA_TRANSACTION_READY: transaction built and signed")
         );
     }
 
@@ -1175,7 +1089,7 @@ async fn build_and_send_close_instruction(
         log(
             LogTag::Wallet,
             "DEBUG",
-            &format!("🚀 ATA_TRANSACTION_SEND: submitting transaction to network"),
+            &format!("🚀 ATA_TRANSACTION_SEND: submitting transaction to network")
         );
     }
 
@@ -1190,16 +1104,19 @@ async fn build_and_send_close_instruction(
                     &format!(
                         "🎉 ATA_TRANSACTION_SUCCESS: submitted successfully, signature={}",
                         &signature[..8]
-                    ),
+                    )
                 );
             }
             Err(e) => {
-                let blockchain_error =
-                    parse_solana_error(&e.to_string(), None, "create_ata_transaction");
+                let blockchain_error = parse_solana_error(
+                    &e.to_string(),
+                    None,
+                    "create_ata_transaction"
+                );
                 log(
                     LogTag::Wallet,
                     "DEBUG",
-                    &format!("❌ ATA_TRANSACTION_FAILED: {}", blockchain_error),
+                    &format!("❌ ATA_TRANSACTION_FAILED: {}", blockchain_error)
                 );
             }
         }
@@ -1211,19 +1128,20 @@ async fn build_and_send_close_instruction(
 /// Builds close instruction for Token-2022 accounts
 fn build_token_2022_close_instruction(
     token_account: &Pubkey,
-    owner: &Pubkey,
+    owner: &Pubkey
 ) -> Result<Instruction, ScreenerBotError> {
     // Token-2022 uses the same close account instruction format as SPL Token
     // but with different program ID
-    let token_2022_program_id = Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
-        .map_err(|e| {
-            ScreenerBotError::Blockchain(crate::errors::BlockchainError::InvalidAccountData {
-                signature: "unknown".to_string(),
-                account: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb".to_string(),
-                expected_owner: "Program ID".to_string(),
-                actual_owner: None,
-            })
-        })?;
+    let token_2022_program_id = Pubkey::from_str(
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    ).map_err(|e| {
+        ScreenerBotError::Blockchain(crate::errors::BlockchainError::InvalidAccountData {
+            signature: "unknown".to_string(),
+            account: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb".to_string(),
+            expected_owner: "Program ID".to_string(),
+            actual_owner: None,
+        })
+    })?;
 
     // Manually build the close account instruction for Token-2022
     // CloseAccount instruction: [9] (instruction discriminator)
@@ -1231,8 +1149,8 @@ fn build_token_2022_close_instruction(
 
     let accounts = vec![
         AccountMeta::new(*token_account, false), // Token account to close
-        AccountMeta::new(*owner, false),         // Destination for lamports
-        AccountMeta::new_readonly(*owner, true), // Authority (signer)
+        AccountMeta::new(*owner, false), // Destination for lamports
+        AccountMeta::new_readonly(*owner, true) // Authority (signer)
     ];
 
     Ok(Instruction {
@@ -1249,7 +1167,7 @@ fn build_token_2022_close_instruction(
 /// Safe wrapper for RwLock read operations that logs poison errors instead of panicking
 pub fn safe_read_lock<'a, T>(
     lock: &'a std::sync::RwLock<T>,
-    operation: &str,
+    operation: &str
 ) -> Option<std::sync::RwLockReadGuard<'a, T>> {
     match lock.read() {
         Ok(guard) => Some(guard),
@@ -1257,7 +1175,7 @@ pub fn safe_read_lock<'a, T>(
             log(
                 LogTag::Trader,
                 "LOCK_POISON_ERROR",
-                &format!("🔒 RwLock read poisoned during {}: {}", operation, e),
+                &format!("🔒 RwLock read poisoned during {}: {}", operation, e)
             );
             None
         }
@@ -1267,7 +1185,7 @@ pub fn safe_read_lock<'a, T>(
 /// Safe wrapper for RwLock write operations that logs poison errors instead of panicking
 pub fn safe_write_lock<'a, T>(
     lock: &'a std::sync::RwLock<T>,
-    operation: &str,
+    operation: &str
 ) -> Option<std::sync::RwLockWriteGuard<'a, T>> {
     match lock.write() {
         Ok(guard) => Some(guard),
@@ -1275,7 +1193,7 @@ pub fn safe_write_lock<'a, T>(
             log(
                 LogTag::Trader,
                 "LOCK_POISON_ERROR",
-                &format!("🔒 RwLock write poisoned during {}: {}", operation, e),
+                &format!("🔒 RwLock write poisoned during {}: {}", operation, e)
             );
             None
         }
@@ -1289,4 +1207,3 @@ pub fn debug_trader_log(log_type: &str, message: &str) {
         log(LogTag::Trader, log_type, message);
     }
 }
-
