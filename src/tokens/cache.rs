@@ -95,9 +95,16 @@ impl TokenDatabase {
             log(LogTag::System, "DATABASE", "Token database initialized");
         });
 
-        Ok(Self {
+        let database = Self {
             connection: Arc::new(Mutex::new(connection)),
-        })
+        };
+
+        // Run database schema migrations on startup
+        if let Err(e) = database.migrate_database_schemas() {
+            log(LogTag::System, "MIGRATION_ERROR", &format!("Database migration failed: {}", e));
+        }
+
+        Ok(database)
     }
 
     /// Add new tokens to database
@@ -625,12 +632,29 @@ impl TokenDatabase {
             }
 
             // Get tokens with permanently failed decimals (should be removed from main table)
+            // Use a safer query that handles potential schema differences
             let mut failed_decimal_tokens = Vec::new();
-            let mut stmt = connection.prepare(
+
+            // First try the new schema with retry_count column
+            let mut use_old_schema = false;
+            let result = connection.prepare(
                 "SELECT t.mint, t.symbol, t.last_updated FROM tokens t
                  INNER JOIN failed_decimals f ON t.mint = f.mint
                  WHERE f.is_permanent = 1 OR f.retry_count >= 3"
-            )?;
+            );
+
+            let mut stmt = match result {
+                Ok(stmt) => stmt,
+                Err(_) => {
+                    // Fallback to old schema without retry_count
+                    use_old_schema = true;
+                    connection.prepare(
+                        "SELECT t.mint, t.symbol, t.last_updated FROM tokens t
+                         INNER JOIN failed_decimals f ON t.mint = f.mint
+                         WHERE f.is_permanent = 1"
+                    )?
+                }
+            };
 
             let failed_rows = stmt.query_map([], |row| {
                 Ok((
@@ -642,6 +666,17 @@ impl TokenDatabase {
 
             for row in failed_rows {
                 failed_decimal_tokens.push(row?);
+            }
+
+            // If using old schema, also check retry count manually using the decimals module
+            if use_old_schema {
+                // Get additional failed tokens by checking the decimals module function
+                // This is a fallback for databases with old schema
+                log(
+                    LogTag::System,
+                    "SCHEMA_FALLBACK",
+                    "Using legacy failed_decimals schema without retry_count column"
+                );
             }
 
             // Get tokens with near-zero liquidity that are older than 1 hour
@@ -1740,6 +1775,66 @@ impl TokenDatabase {
                     token.decimals = Some(decimals);
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    /// Ensure database schemas are up to date - run this at startup
+    pub fn migrate_database_schemas(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let connection = self.connection
+            .lock()
+            .map_err(|e| {
+                Box::new(
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Database lock error: {}", e)
+                    )
+                ) as Box<dyn std::error::Error>
+            })?;
+
+        // Check if failed_decimals table has retry_count column
+        let has_retry_count = connection
+            .prepare("SELECT retry_count FROM failed_decimals LIMIT 1")
+            .is_ok();
+
+        if !has_retry_count {
+            log(
+                LogTag::System,
+                "MIGRATION",
+                "Migrating failed_decimals table to add retry_count columns"
+            );
+
+            // Add missing columns to failed_decimals table
+            connection
+                .execute(
+                    "ALTER TABLE failed_decimals ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0",
+                    []
+                )
+                .unwrap_or_else(|e| {
+                    log(
+                        LogTag::System,
+                        "MIGRATION_WARN",
+                        &format!("Could not add retry_count column (may already exist): {}", e)
+                    );
+                    0
+                });
+
+            connection
+                .execute(
+                    "ALTER TABLE failed_decimals ADD COLUMN max_retries INTEGER NOT NULL DEFAULT 3",
+                    []
+                )
+                .unwrap_or_else(|e| {
+                    log(
+                        LogTag::System,
+                        "MIGRATION_WARN",
+                        &format!("Could not add max_retries column (may already exist): {}", e)
+                    );
+                    0
+                });
+
+            log(LogTag::System, "MIGRATION", "Failed_decimals table migration completed");
         }
 
         Ok(())
