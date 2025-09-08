@@ -13,6 +13,8 @@ pub use crate::arguments::{
     has_arg,
     is_any_debug_enabled,
     is_debug_api_enabled,
+    is_debug_ata_enabled,
+    is_debug_blacklist_enabled,
     is_debug_decimals_enabled,
     is_debug_discovery_enabled,
     is_debug_entry_enabled,

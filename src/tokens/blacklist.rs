@@ -1,5 +1,6 @@
 use crate::global::TOKENS_DATABASE;
 use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_blacklist_enabled;
 use chrono::{ DateTime, Duration as ChronoDuration, Utc };
 /// Token blacklist system for managing problematic tokens
 /// Uses database storage for persistence and performance
@@ -593,7 +594,9 @@ pub fn is_token_excluded_from_trading(mint: &str) -> bool {
 
     // Use cached check for maximum performance
     if is_token_blacklisted_cached(mint) {
-        log(LogTag::Blacklist, "EXCLUDED", &format!("Blocked trading for {}: blacklisted", mint));
+        if is_debug_blacklist_enabled() {
+            log(LogTag::Blacklist, "DEBUG", &format!("Blocked trading for {}: blacklisted", mint));
+        }
         return true;
     }
     false

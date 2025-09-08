@@ -3,6 +3,22 @@
 /// This tool starts the complete pool service but configures it to monitor
 /// only one specific token. It identifies the biggest pool by liquidity and
 /// only logs when price changes occur, providing efficient change-based monitoring.
+///
+/// Debug Modes:
+/// The tool uses the set_cmd_args() function to configure global debug flags that
+/// are recognized throughout the system. You can enable specific debug modes:
+/// - --debug-pool-calculator: Debug pool price calculations
+/// - --debug-pool-discovery: Debug pool discovery process
+/// - --debug-pool-service: Debug pool service operations
+/// - --debug-pool-decoders: Debug pool data decoding
+/// - --debug-pool-fetcher: Debug pool data fetching
+/// - --debug-pool-cache: Debug pool caching operations
+/// - --debug-pool-analyzer: Debug pool analysis
+/// - --debug-all-pools: Enable all pool debug modes at once
+///
+/// Usage Examples:
+/// cargo run --bin debug_pool_service_single_token -- --token <MINT> --debug-all-pools
+/// cargo run --bin debug_pool_service_single_token -- --token <MINT> --debug-pool-service --debug-pool-calculator
 
 use clap::Parser;
 use screenerbot::arguments::set_cmd_args;
@@ -41,6 +57,38 @@ struct Args {
     /// Duration to run in seconds
     #[arg(short, long, default_value = "60")]
     duration: u64,
+
+    /// Enable debug mode for pool calculator
+    #[arg(long)]
+    debug_pool_calculator: bool,
+
+    /// Enable debug mode for pool discovery
+    #[arg(long)]
+    debug_pool_discovery: bool,
+
+    /// Enable debug mode for pool service
+    #[arg(long)]
+    debug_pool_service: bool,
+
+    /// Enable debug mode for pool decoders
+    #[arg(long)]
+    debug_pool_decoders: bool,
+
+    /// Enable debug mode for pool fetcher
+    #[arg(long)]
+    debug_pool_fetcher: bool,
+
+    /// Enable debug mode for pool cache
+    #[arg(long)]
+    debug_pool_cache: bool,
+
+    /// Enable debug mode for pool analyzer
+    #[arg(long)]
+    debug_pool_analyzer: bool,
+
+    /// Enable all pool debug modes
+    #[arg(long)]
+    debug_all_pools: bool,
 }
 
 /// Get program type from pool address by fetching the account owner
@@ -138,15 +186,62 @@ async fn discover_and_identify_biggest_pool(
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    // Set up command line arguments with debug flags enabled
-    let cmd_args = vec![
-        "debug_pool_service_single_token".to_string(),
-        "--debug-pool-calculator".to_string(),
-        "--debug-pool-discovery".to_string(),
-        "--debug-pool-service".to_string(),
-        "--debug-pool-decoders".to_string()
-    ];
-    set_cmd_args(cmd_args);
+    // Build command line arguments with debug flags based on user input
+    let mut cmd_args = vec!["debug_pool_service_single_token".to_string()];
+
+    // Add debug flags based on command line arguments
+    if args.debug_all_pools {
+        cmd_args.push("--debug-pool-calculator".to_string());
+        cmd_args.push("--debug-pool-discovery".to_string());
+        cmd_args.push("--debug-pool-service".to_string());
+        cmd_args.push("--debug-pool-decoders".to_string());
+        cmd_args.push("--debug-pool-fetcher".to_string());
+        cmd_args.push("--debug-pool-cache".to_string());
+        cmd_args.push("--debug-pool-analyzer".to_string());
+    } else {
+        // Add individual debug flags if specified
+        if args.debug_pool_calculator {
+            cmd_args.push("--debug-pool-calculator".to_string());
+        }
+        if args.debug_pool_discovery {
+            cmd_args.push("--debug-pool-discovery".to_string());
+        }
+        if args.debug_pool_service {
+            cmd_args.push("--debug-pool-service".to_string());
+        }
+        if args.debug_pool_decoders {
+            cmd_args.push("--debug-pool-decoders".to_string());
+        }
+        if args.debug_pool_fetcher {
+            cmd_args.push("--debug-pool-fetcher".to_string());
+        }
+        if args.debug_pool_cache {
+            cmd_args.push("--debug-pool-cache".to_string());
+        }
+        if args.debug_pool_analyzer {
+            cmd_args.push("--debug-pool-analyzer".to_string());
+        }
+    }
+
+    // Set the global command arguments so all parts of the system recognize debug modes
+    set_cmd_args(cmd_args.clone());
+
+    // Log which debug modes are enabled
+    let enabled_modes: Vec<&str> = cmd_args
+        .iter()
+        .filter(|arg| arg.starts_with("--debug-"))
+        .map(|arg| arg.as_str())
+        .collect();
+
+    if !enabled_modes.is_empty() {
+        log(
+            LogTag::PoolService,
+            "DEBUG",
+            &format!("Debug modes enabled: {}", enabled_modes.join(", "))
+        );
+    } else {
+        log(LogTag::PoolService, "INFO", "No debug modes enabled");
+    }
 
     log(
         LogTag::PoolService,

@@ -221,6 +221,11 @@ pub fn is_debug_ata_enabled() -> bool {
     has_arg("--debug-ata")
 }
 
+/// Blacklist operations debug mode
+pub fn is_debug_blacklist_enabled() -> bool {
+    has_arg("--debug-blacklist")
+}
+
 /// System operations debug mode
 pub fn is_debug_system_enabled() -> bool {
     has_arg("--debug-system")
@@ -291,6 +296,7 @@ pub fn print_help() {
     println!();
     println!("DEBUG FLAGS:");
     println!("    --debug-api               API calls debug mode");
+    println!("    --debug-blacklist         Blacklist operations debug mode");
     println!("    --debug-decimals          Decimals module debug mode");
     println!("    --debug-discovery         Discovery module debug mode");
     println!("    --debug-entry             Entry module debug mode");
@@ -367,7 +373,8 @@ pub fn is_any_debug_enabled() -> bool {
         is_debug_websocket_enabled() ||
         is_debug_rpc_enabled() ||
         is_debug_positions_enabled() ||
-        is_debug_ata_enabled()
+        is_debug_ata_enabled() ||
+        is_debug_blacklist_enabled()
 }
 
 /// Gets a list of all enabled debug modes
@@ -454,6 +461,12 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     }
     if is_debug_positions_enabled() {
         modes.push("positions");
+    }
+    if is_debug_ata_enabled() {
+        modes.push("ata");
+    }
+    if is_debug_blacklist_enabled() {
+        modes.push("blacklist");
     }
     if is_dry_run_enabled() {
         modes.push("dry-run");
