@@ -143,7 +143,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "debug_pool_service_single_token".to_string(),
         "--debug-pool-calculator".to_string(),
         "--debug-pool-discovery".to_string(),
-        "--debug-pool-service".to_string()
+        "--debug-pool-service".to_string(),
+        "--debug-pool-decoders".to_string()
     ];
     set_cmd_args(cmd_args);
 
@@ -310,8 +311,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             log(
                                 LogTag::PoolService, 
                                 "PRICE_CHANGE", 
-                                &format!("[{}] {:.12} SOL{} {} | Confidence: {:.2}", 
-                                    check_count, price.price_sol, change_info, price_comparison, price.confidence)
+                                &format!("[{}] {:.12} SOL{} {}{} | Confidence: {:.2}", 
+                                    check_count, 
+                                    price.price_sol, 
+                                    change_info, 
+                                    price_comparison,
+                                    match api_price { 
+                                        Some(api) if api > 0.0 => {
+                                            let diff_pct = ((price.price_sol - api) / api) * 100.0;
+                                            format!(" | Diff vs API: {:+.2}%", diff_pct)
+                                        },
+                                        _ => String::new()
+                                    },
+                                    price.confidence)
                             );
                             log(
                                 LogTag::PoolService, 

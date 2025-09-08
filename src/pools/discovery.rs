@@ -10,10 +10,28 @@
 
 use crate::global::is_debug_pool_discovery_enabled;
 use crate::logger::{ log, LogTag };
-use crate::tokens::dexscreener::{ get_token_pools_from_dexscreener, TokenPair };
-use crate::tokens::geckoterminal::{ get_token_pools_from_geckoterminal, GeckoTerminalPool };
-use crate::tokens::raydium::{ get_token_pools_from_raydium, RaydiumPool };
-use super::types::{ PoolDescriptor, ProgramKind, SOL_MINT };
+use crate::tokens::dexscreener::{
+    get_token_pools_from_dexscreener,
+    get_batch_token_pools_from_dexscreener,
+    TokenPair,
+};
+use crate::tokens::geckoterminal::{
+    get_token_pools_from_geckoterminal,
+    get_batch_token_pools_from_geckoterminal,
+    GeckoTerminalPool,
+};
+use crate::tokens::raydium::{
+    get_token_pools_from_raydium,
+    get_batch_token_pools_from_raydium,
+    RaydiumPool,
+};
+use super::types::{ PoolDescriptor, ProgramKind, SOL_MINT, MAX_WATCHED_TOKENS };
+use crate::pools::service::{
+    get_pool_analyzer,
+    is_single_pool_mode_enabled,
+    get_debug_token_override,
+};
+use crate::filtering;
 use super::utils::{ is_stablecoin_mint };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -54,15 +72,269 @@ impl PoolDiscovery {
                         break;
                     }
                     _ = interval.tick() => {
-                        // TODO: Implement actual pool discovery for watched tokens
-                        // For now, just log that we're running
-                        if is_debug_pool_discovery_enabled() {
-                            log(LogTag::PoolDiscovery, "DEBUG", "Pool discovery tick - discovery implementation pending");
-                        }
+                        Self::batched_discovery_tick().await;
                     }
                 }
             }
         });
+    }
+
+    /// Execute one batched discovery tick: fetch pools for all tokens via batch APIs and stream to analyzer
+    async fn batched_discovery_tick() {
+        // Build token list (respect debug override and global filtering)
+        let mut tokens: Vec<String> = if let Some(override_tokens) = get_debug_token_override() {
+            override_tokens
+        } else {
+            match filtering::get_filtered_tokens().await {
+                Ok(v) => v,
+                Err(e) => {
+                    if is_debug_pool_discovery_enabled() {
+                        log(
+                            LogTag::PoolDiscovery,
+                            "WARN",
+                            &format!("Failed to load filtered tokens: {}", e)
+                        );
+                    }
+                    Vec::new()
+                }
+            }
+        };
+
+        if tokens.is_empty() {
+            if is_debug_pool_discovery_enabled() {
+                log(LogTag::PoolDiscovery, "DEBUG", "No tokens to discover this tick");
+            }
+            return;
+        }
+
+        // Early stablecoin filtering and cap to MAX_WATCHED_TOKENS
+        tokens.retain(|m| !is_stablecoin_mint(m));
+        if tokens.len() > MAX_WATCHED_TOKENS {
+            tokens.truncate(MAX_WATCHED_TOKENS);
+        }
+
+        if is_debug_pool_discovery_enabled() {
+            log(
+                LogTag::PoolDiscovery,
+                "DEBUG",
+                &format!("Discovery tick: {} tokens queued", tokens.len())
+            );
+        }
+
+        // Run batch fetches for all sources (each handles rate limiting internally)
+        // DexScreener
+        let dexs_batch = get_batch_token_pools_from_dexscreener(&tokens).await;
+        // GeckoTerminal (serialized inside)
+        let gecko_batch = get_batch_token_pools_from_geckoterminal(&tokens).await;
+        // Raydium
+        let raydium_batch = get_batch_token_pools_from_raydium(&tokens).await;
+
+        // Convert to PoolDescriptor list
+        let mut descriptors: Vec<PoolDescriptor> = Vec::new();
+
+        for (mint, pairs) in dexs_batch.pools.into_iter() {
+            for pair in pairs {
+                if let Ok(desc) = Self::convert_dexscreener_pair_to_descriptor_static(&pair) {
+                    descriptors.push(desc);
+                }
+            }
+            if is_debug_pool_discovery_enabled() {
+                log(
+                    LogTag::PoolDiscovery,
+                    "DEBUG",
+                    &format!("DexScreener batched pools for {}: {}", &mint[..8], descriptors.len())
+                );
+            }
+        }
+
+        for (mint, pools) in gecko_batch.pools.into_iter() {
+            for pool in pools {
+                if let Ok(desc) = Self::convert_gecko_pool_to_descriptor_static(&pool) {
+                    descriptors.push(desc);
+                }
+            }
+            if is_debug_pool_discovery_enabled() {
+                log(
+                    LogTag::PoolDiscovery,
+                    "DEBUG",
+                    &format!("Gecko batched pools for {} appended", &mint[..8])
+                );
+            }
+        }
+
+        for (mint, pools) in raydium_batch.pools.into_iter() {
+            for pool in pools {
+                if let Ok(desc) = Self::convert_raydium_pool_to_descriptor_static(&pool) {
+                    descriptors.push(desc);
+                }
+            }
+            if is_debug_pool_discovery_enabled() {
+                log(
+                    LogTag::PoolDiscovery,
+                    "DEBUG",
+                    &format!("Raydium batched pools for {} appended", &mint[..8])
+                );
+            }
+        }
+
+        if descriptors.is_empty() {
+            if is_debug_pool_discovery_enabled() {
+                log(LogTag::PoolDiscovery, "DEBUG", "No pools discovered in this tick");
+            }
+            return;
+        }
+
+        // Deduplicate by pool_id and sort by liquidity desc
+        let mut deduped = Self::deduplicate_discovered(descriptors);
+
+        // If single pool mode, keep only highest-liquidity pool per token mint
+        if is_single_pool_mode_enabled() {
+            deduped = Self::select_highest_liquidity_per_token(deduped);
+        }
+
+        // Stream to analyzer immediately
+        if let Some(analyzer) = get_pool_analyzer() {
+            let sender = analyzer.get_sender();
+            for pool in deduped.into_iter() {
+                // Let analyzer determine actual program id
+                let _ = sender.send(crate::pools::analyzer::AnalyzerMessage::AnalyzePool {
+                    pool_id: pool.pool_id,
+                    program_id: Pubkey::default(),
+                    base_mint: pool.base_mint,
+                    quote_mint: pool.quote_mint,
+                    liquidity_usd: pool.liquidity_usd,
+                });
+            }
+        } else if is_debug_pool_discovery_enabled() {
+            log(
+                LogTag::PoolDiscovery,
+                "WARN",
+                "Analyzer not initialized; cannot stream discovered pools"
+            );
+        }
+    }
+
+    fn deduplicate_discovered(pools: Vec<PoolDescriptor>) -> Vec<PoolDescriptor> {
+        let mut map: HashMap<Pubkey, PoolDescriptor> = HashMap::new();
+        for p in pools.into_iter() {
+            match map.get(&p.pool_id) {
+                Some(existing) => {
+                    if p.liquidity_usd > existing.liquidity_usd {
+                        map.insert(p.pool_id, p);
+                    }
+                }
+                None => {
+                    map.insert(p.pool_id, p);
+                }
+            }
+        }
+        let mut v: Vec<PoolDescriptor> = map.into_values().collect();
+        v.sort_by(|a, b|
+            b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
+        );
+        v
+    }
+
+    fn select_highest_liquidity_per_token(pools: Vec<PoolDescriptor>) -> Vec<PoolDescriptor> {
+        // Group by non-SOL token
+        let sol = Pubkey::from_str(SOL_MINT).unwrap();
+        let mut best_by_token: HashMap<Pubkey, PoolDescriptor> = HashMap::new();
+        for p in pools.into_iter() {
+            let token = if p.base_mint == sol { p.quote_mint } else { p.base_mint };
+            match best_by_token.get(&token) {
+                Some(existing) => {
+                    if p.liquidity_usd > existing.liquidity_usd {
+                        best_by_token.insert(token, p);
+                    }
+                }
+                None => {
+                    best_by_token.insert(token, p);
+                }
+            }
+        }
+        best_by_token.into_values().collect()
+    }
+
+    fn convert_dexscreener_pair_to_descriptor_static(
+        pair: &TokenPair
+    ) -> Result<PoolDescriptor, String> {
+        let pool_id = Pubkey::from_str(&pair.pair_address).map_err(|_| "Invalid pool address")?;
+        let base_mint = Pubkey::from_str(&pair.base_token.address).map_err(
+            |_| "Invalid base token address"
+        )?;
+        let quote_mint = Pubkey::from_str(&pair.quote_token.address).map_err(
+            |_| "Invalid quote token address"
+        )?;
+
+        // Ensure SOL on one side
+        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
+        if base_mint != sol_mint_pubkey && quote_mint != sol_mint_pubkey {
+            return Err("Pool does not contain SOL - skipping".to_string());
+        }
+
+        let liquidity_usd = pair.liquidity
+            .as_ref()
+            .map(|l| l.usd)
+            .unwrap_or(0.0);
+        Ok(PoolDescriptor {
+            pool_id,
+            program_kind: ProgramKind::Unknown,
+            base_mint,
+            quote_mint,
+            reserve_accounts: Vec::new(),
+            liquidity_usd,
+            last_updated: std::time::Instant::now(),
+        })
+    }
+
+    fn convert_gecko_pool_to_descriptor_static(
+        pool: &GeckoTerminalPool
+    ) -> Result<PoolDescriptor, String> {
+        let pool_id = Pubkey::from_str(&pool.pool_address).map_err(|_| "Invalid pool address")?;
+        let base_mint = Pubkey::from_str(&pool.base_token).map_err(
+            |_| "Invalid base token address"
+        )?;
+        let quote_mint = Pubkey::from_str(&pool.quote_token).map_err(
+            |_| "Invalid quote token address"
+        )?;
+        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
+        if base_mint != sol_mint_pubkey && quote_mint != sol_mint_pubkey {
+            return Err("Pool does not contain SOL - skipping".to_string());
+        }
+        Ok(PoolDescriptor {
+            pool_id,
+            program_kind: ProgramKind::Unknown,
+            base_mint,
+            quote_mint,
+            reserve_accounts: Vec::new(),
+            liquidity_usd: pool.liquidity_usd,
+            last_updated: std::time::Instant::now(),
+        })
+    }
+
+    fn convert_raydium_pool_to_descriptor_static(
+        pool: &RaydiumPool
+    ) -> Result<PoolDescriptor, String> {
+        let pool_id = Pubkey::from_str(&pool.pool_address).map_err(|_| "Invalid pool address")?;
+        let base_mint = Pubkey::from_str(&pool.base_token).map_err(
+            |_| "Invalid base token address"
+        )?;
+        let quote_mint = Pubkey::from_str(&pool.quote_token).map_err(
+            |_| "Invalid quote token address"
+        )?;
+        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
+        if base_mint != sol_mint_pubkey && quote_mint != sol_mint_pubkey {
+            return Err("Pool does not contain SOL - skipping".to_string());
+        }
+        Ok(PoolDescriptor {
+            pool_id,
+            program_kind: ProgramKind::Unknown,
+            base_mint,
+            quote_mint,
+            reserve_accounts: Vec::new(),
+            liquidity_usd: pool.liquidity_usd,
+            last_updated: std::time::Instant::now(),
+        })
     }
 
     /// Discover pools for a specific token

@@ -49,6 +49,9 @@ pub(super) fn get_account_fetcher() -> Option<Arc<AccountFetcher>> {
 pub(super) fn get_price_calculator() -> Option<Arc<PriceCalculator>> {
     unsafe { PRICE_CALCULATOR.clone() }
 }
+pub(super) fn get_pool_analyzer() -> Option<Arc<PoolAnalyzer>> {
+    unsafe { POOL_ANALYZER.clone() }
+}
 
 /// Start the pool service with all background tasks
 ///
@@ -263,6 +266,14 @@ async fn start_background_tasks(shutdown: Arc<Notify>) {
         log(LogTag::PoolService, "DEBUG", "Starting background tasks...");
     }
 
+    // Start discovery task (now the primary source of pools → analyzer)
+    if let Some(discovery) = (unsafe { POOL_DISCOVERY.as_ref() }) {
+        let shutdown_discovery = shutdown.clone();
+        tokio::spawn(async move {
+            discovery.start_discovery_task(shutdown_discovery).await;
+        });
+    }
+
     // Start pool monitoring supervisor task
     let shutdown_supervisor = shutdown.clone();
     tokio::spawn(async move {
@@ -313,126 +324,15 @@ async fn run_pool_monitoring_supervisor(shutdown: Arc<Notify>) {
 
 /// Run a single pool monitoring cycle
 async fn run_monitoring_cycle() -> Result<(), String> {
-    log(
-        LogTag::PoolService,
-        "INFO",
-        "Starting 10-second pool monitoring cycle with token re-filtering"
-    );
-
-    // Get tokens to monitor (applies comprehensive filtering each cycle)
-    let tokens_to_monitor = get_tokens_to_monitor().await?;
-
-    if tokens_to_monitor.is_empty() {
-        if is_debug_pool_service_enabled() {
-            log(LogTag::PoolService, "DEBUG", "No tokens to monitor, skipping cycle");
-        }
-        return Ok(());
-    }
-
-    // Discover pools for monitored tokens
-    let pool_discovery = (unsafe { POOL_DISCOVERY.as_ref() }).ok_or(
-        "Pool discovery not initialized"
-    )?;
-
-    let mut total_pools_discovered = 0;
-    let mut total_pools_processed = 0;
-
-    for token_mint in tokens_to_monitor.iter() {
-        let mut pools = pool_discovery.discover_pools_for_token(token_mint).await;
-        total_pools_discovered += pools.len();
-
-        // Apply single pool mode filtering if enabled
-        if ENABLE_SINGLE_POOL_MODE && !pools.is_empty() {
-            // Sort pools by liquidity (highest first) and take only the first one
-            pools.sort_by(|a, b|
-                b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
-            );
-            let highest_liquidity_pool = pools.into_iter().next().unwrap();
-            pools = vec![highest_liquidity_pool];
-
-            if is_debug_pool_service_enabled() {
-                log(
-                    LogTag::PoolService,
-                    "DEBUG",
-                    &format!(
-                        "Single pool mode: Selected highest liquidity pool for {} (${:.2})",
-                        &token_mint[..8],
-                        pools[0].liquidity_usd
-                    )
-                );
-            }
-        }
-
-        total_pools_processed += pools.len();
-
-        // Send pools to analyzer for processing
-        if let Some(analyzer) = (unsafe { POOL_ANALYZER.as_ref() }) {
-            for pool in pools {
-                // For Unknown pools, we'll let the analyzer determine the program ID
-                // by fetching the pool account and checking its owner
-                let program_id = if pool.program_kind == ProgramKind::Unknown {
-                    // Use a dummy pubkey - analyzer will determine the real program ID
-                    Pubkey::default()
-                } else {
-                    match Pubkey::from_str(pool.program_kind.program_id()) {
-                        Ok(id) => id,
-                        Err(_) => {
-                            log(
-                                LogTag::PoolService,
-                                "WARN",
-                                &format!("Invalid program ID for pool: {}", pool.pool_id)
-                            );
-                            continue;
-                        }
-                    }
-                };
-
-                if
-                    let Err(e) = analyzer
-                        .get_sender()
-                        .send(super::analyzer::AnalyzerMessage::AnalyzePool {
-                            pool_id: pool.pool_id,
-                            program_id,
-                            base_mint: pool.base_mint,
-                            quote_mint: pool.quote_mint,
-                            liquidity_usd: pool.liquidity_usd,
-                        })
-                {
-                    log(
-                        LogTag::PoolService,
-                        "WARN",
-                        &format!("Failed to send pool to analyzer: {}", e)
-                    );
-                }
-            }
-        }
-    }
-
+    // Discovery is now handled by the dedicated discovery task (batch APIs → analyzer)
+    // Keep this cycle lightweight for future health checks or adaptive tuning.
     if is_debug_pool_service_enabled() {
-        if ENABLE_SINGLE_POOL_MODE {
-            log(
-                LogTag::PoolService,
-                "DEBUG",
-                &format!(
-                    "Monitoring cycle completed: {} tokens, {} pools discovered, {} pools processed (single pool mode)",
-                    tokens_to_monitor.len(),
-                    total_pools_discovered,
-                    total_pools_processed
-                )
-            );
-        } else {
-            log(
-                LogTag::PoolService,
-                "DEBUG",
-                &format!(
-                    "Monitoring cycle completed: {} tokens, {} pools discovered and processed (all pools mode)",
-                    tokens_to_monitor.len(),
-                    total_pools_discovered
-                )
-            );
-        }
+        log(
+            LogTag::PoolService,
+            "DEBUG",
+            "Supervisor tick: discovery handled asynchronously; no per-token discovery here"
+        );
     }
-
     Ok(())
 }
 
