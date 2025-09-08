@@ -111,7 +111,7 @@ pub async fn preload_exit_prices_batch(mints: &[String]) -> Result<(), String> {
 // =============================================================================
 
 // Balanced windows for stable entries (30s to 10min)
-const MIN_PRICE_POINTS: usize = 3; // Increased from 3 for better analysis
+const MIN_PRICE_POINTS: usize = 10; // Increased from 3 for better analysis
 const MAX_DATA_AGE_MIN: i64 = 5; // Keep tight data freshness requirement
 
 // CONSERVATIVE entry windows - more balanced approach
