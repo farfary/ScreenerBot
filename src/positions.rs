@@ -3088,6 +3088,43 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                     );
                 }
 
+                // CRITICAL FIX: Update in-memory position to match database state
+                // This prevents the "UNVERIFIED" display bug where database shows verified=1
+                // but memory shows verified=false, causing UI to display stale state
+                {
+                    let mut positions = POSITIONS.write().await;
+                    if let Some(in_memory_position) = positions.iter_mut().find(|p| {
+                        p.id == position.id && p.mint == position.mint
+                    }) {
+                        // Update memory state to match database state
+                        in_memory_position.transaction_entry_verified = position.transaction_entry_verified;
+                        in_memory_position.transaction_exit_verified = position.transaction_exit_verified;
+                        
+                        if is_debug_positions_enabled() {
+                            log(
+                                LogTag::Positions,
+                                "MEMORY_SYNC",
+                                &format!(
+                                    "✅ Synchronized in-memory position {} verification status: entry={}, exit={}",
+                                    position.symbol,
+                                    in_memory_position.transaction_entry_verified,
+                                    in_memory_position.transaction_exit_verified
+                                )
+                            );
+                        }
+                    } else {
+                        log(
+                            LogTag::Positions,
+                            "MEMORY_SYNC_WARNING",
+                            &format!(
+                                "⚠️ Could not find in-memory position {} (ID: {}) to sync verification status",
+                                position.symbol,
+                                position.id.unwrap_or(0)
+                            )
+                        );
+                    }
+                }
+
                 // Save closing token snapshot if this is an exit transaction verification
                 if position.transaction_exit_verified && position.id.is_some() {
                     let position_id = position.id.unwrap();
