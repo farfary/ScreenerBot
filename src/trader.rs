@@ -1250,19 +1250,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 break;
             }
 
-            if is_debug_trader_enabled() {
-                log(
-                    LogTag::Trader,
-                    "DEBUG_TOKEN_START",
-                    &format!(
-                        "🎯 Processing token {}/{}: {} ({})",
-                        processed_count,
-                        scheduled_tokens.len(),
-                        price_info.mint,
-                        &price_info.mint[..8]
-                    )
-                );
-            }
             // Check for shutdown before spawning tasks
             if
                 check_shutdown_or_delay(

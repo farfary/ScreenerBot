@@ -28,7 +28,7 @@ pub const MIN_VOLUME_LIQUIDITY_RATIO: f64 = 0.1;
 
 // ===== SOL RESERVES FILTERING PARAMETERS =====
 pub const MIN_SOL_RESERVES: f64 = 20.0; // Higher minimum for stability
-pub const MAX_SOL_RESERVES: f64 = 30000000.0; // Higher maximum for less restrictive filtering
+pub const MAX_SOL_RESERVES: f64 = 3000.0; // Higher maximum for less restrictive filtering
 
 // ===== TRANSACTION ACTIVITY FILTERING PARAMETERS =====
 pub const MIN_TRANSACTIONS_5MIN: i64 = 5; // Reduced from 100 - much more realistic
