@@ -1146,16 +1146,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let batch_size = std::cmp::min(MAX_TOKENS_PER_CYCLE, total_tokens);
         let scheduled_tokens = price_infos.into_iter().take(batch_size).collect::<Vec<_>>();
 
-        log(
-            LogTag::Trader,
-            "TOKEN_SCHEDULING",
-            &format!(
-                "✅ Scheduled {} tokens for processing (of {} total)",
-                scheduled_tokens.len(),
-                total_tokens
-            )
-        );
-
         // Process scheduled tokens in parallel; for valid entries, send OpenPosition via PositionsHandle
         // Per-cycle aggregation counters (atomic to update from tasks)
         let price_available_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
