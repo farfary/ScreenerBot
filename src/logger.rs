@@ -330,6 +330,7 @@ pub enum LogTag {
     Rpc,
     Ohlcv,
     Decimals,
+    Cache,
     Swap,
     Entry,
     RlLearn,
@@ -366,6 +367,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Rpc => format!("{:<8}", "RPC").bright_cyan().bold(), // 🔗 RPC cyan
             LogTag::Ohlcv => format!("{:<8}", "OHLCV").bright_green().bold(), // 📈 OHLCV chart green
             LogTag::Decimals => format!("{:<8}", "DECIMALS").bright_white().bold(), // 🔢 Decimals white
+            LogTag::Cache => format!("{:<8}", "CACHE").bright_cyan().bold(), // 💾 Cache storage
             LogTag::Swap => format!("{:<8}", "SWAP").bright_magenta().bold(), // 🔄 Swap magenta
             LogTag::Entry => format!("{:<8}", "ENTRY").bright_yellow().bold(), // 🚪 Entry yellow
             LogTag::RlLearn => format!("{:<8}", "RL_LEARN").bright_cyan().bold(), // 🤖 AI cyan
@@ -531,6 +533,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             format!("{:<width$}", "DECIMALS", width = TAG_WIDTH)
                 .bright_white()
                 .bold(),
+        LogTag::Cache =>
+            format!("{:<width$}", "CACHE", width = TAG_WIDTH)
+                .bright_cyan()
+                .bold(),
         LogTag::Swap =>
             format!("{:<width$}", "SWAP", width = TAG_WIDTH)
                 .bright_magenta()
@@ -574,50 +580,6 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         "ERROR" =>
             format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
                 .bright_red()
-                .bold(),
-        "FAILED" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_red()
-                .bold(),
-        "WARN" | "WARNING" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_yellow()
-                .bold(),
-        "SUCCESS" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_green()
-                .bold(),
-        "INFO" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_blue()
-                .bold(),
-        "DEBUG" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_black()
-                .bold(),
-        "PROFIT" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_green()
-                .bold(),
-        "LOSS" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_red()
-                .bold(),
-        "BUY" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_cyan()
-                .bold(),
-        "SELL" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_magenta()
-                .bold(),
-        "BALANCE" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_yellow()
-                .bold(),
-        "PRICE" =>
-            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
-                .bright_blue()
                 .bold(),
         _ =>
             format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
@@ -678,6 +640,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Rpc => "RPC",
         LogTag::Ohlcv => "OHLCV",
         LogTag::Decimals => "DECIMALS",
+        LogTag::Cache => "CACHE",
         LogTag::Swap => "SWAP",
         LogTag::Entry => "ENTRY",
         LogTag::RlLearn => "RL_LEARN",

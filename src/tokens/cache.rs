@@ -115,7 +115,7 @@ impl TokenDatabase {
         // Only log on first initialization - reduce log spam
         static DATABASE_INITIALIZED: std::sync::Once = std::sync::Once::new();
         DATABASE_INITIALIZED.call_once(|| {
-            log(LogTag::System, "DATABASE", "Token database initialized");
+            log(LogTag::Cache, "DATABASE", "Token database initialized");
         });
 
         let database = Self {
@@ -124,7 +124,7 @@ impl TokenDatabase {
 
         // Run database schema migrations on startup
         if let Err(e) = database.migrate_database_schemas() {
-            log(LogTag::System, "MIGRATION_ERROR", &format!("Database migration failed: {}", e));
+            log(LogTag::Cache, "MIGRATION_ERROR", &format!("Database migration failed: {}", e));
         }
 
         Ok(database)
@@ -137,7 +137,7 @@ impl TokenDatabase {
         }
 
         if is_debug_monitor_enabled() {
-            log(LogTag::System, "DATABASE", &format!("Added/updated {} tokens", tokens.len()));
+            log(LogTag::Cache, "DATABASE", &format!("Added/updated {} tokens", tokens.len()));
         }
 
         Ok(())
@@ -153,7 +153,7 @@ impl TokenDatabase {
 
         // Only log on errors or significant updates (> 50 tokens)
         if tokens.len() > 50 {
-            log(LogTag::System, "DATABASE", &format!("Updated {} tokens", tokens.len()));
+            log(LogTag::Cache, "DATABASE", &format!("Updated {} tokens", tokens.len()));
         }
         Ok(())
     }
@@ -488,7 +488,7 @@ impl TokenDatabase {
         }
 
         log(
-            LogTag::System,
+            LogTag::Cache,
             "CLEANUP",
             &format!("Found {} tokens with zero liquidity older than 1 hour", tokens_to_check.len())
         );
@@ -505,7 +505,7 @@ impl TokenDatabase {
 
         if tokens_to_delete.is_empty() {
             log(
-                LogTag::System,
+                LogTag::Cache,
                 "CLEANUP",
                 "No tokens eligible for deletion (all have open positions)"
             );
@@ -540,7 +540,7 @@ impl TokenDatabase {
                                 )
                             {
                                 log(
-                                    LogTag::System,
+                                    LogTag::Cache,
                                     "ERROR",
                                     &format!(
                                         "Failed to delete rugcheck data for token {}: {}",
@@ -551,7 +551,7 @@ impl TokenDatabase {
                             }
 
                             log(
-                                LogTag::System,
+                                LogTag::Cache,
                                 "CLEANUP",
                                 &format!(
                                     "Deleted stale zero liquidity token: {} ({}) - last updated: {}",
@@ -564,7 +564,7 @@ impl TokenDatabase {
                     }
                     Err(e) => {
                         log(
-                            LogTag::System,
+                            LogTag::Cache,
                             "ERROR",
                             &format!("Failed to delete token {}: {}", mint, e)
                         );
@@ -576,12 +576,12 @@ impl TokenDatabase {
 
         if deleted_count > 0 {
             log(
-                LogTag::System,
+                LogTag::Cache,
                 "CLEANUP",
                 &format!("Database cleanup: Removed {} stale tokens with zero liquidity (>1h old)", deleted_count)
             );
         } else {
-            log(LogTag::System, "CLEANUP", "Database cleanup: No stale tokens removed");
+            log(LogTag::Cache, "CLEANUP", "Database cleanup: No stale tokens removed");
         }
 
         Ok(deleted_count)
@@ -696,7 +696,7 @@ impl TokenDatabase {
                 // Get additional failed tokens by checking the decimals module function
                 // This is a fallback for databases with old schema
                 log(
-                    LogTag::System,
+                    LogTag::Cache,
                     "SCHEMA_FALLBACK",
                     "Using legacy failed_decimals schema without retry_count column"
                 );
@@ -764,7 +764,7 @@ impl TokenDatabase {
         }
 
         log(
-            LogTag::System,
+            LogTag::Cache,
             "CLEANUP",
             &format!(
                 "Found tokens for cleanup: {} blacklisted, {} decimal-failed, {} low liquidity (<${:.1}), {} security issues",
@@ -855,7 +855,7 @@ impl TokenDatabase {
 
         if tokens_to_blacklist_then_delete.is_empty() && tokens_to_delete.is_empty() {
             log(
-                LogTag::System,
+                LogTag::Cache,
                 "CLEANUP",
                 "No tokens eligible for cleanup (all have open positions or already processed)"
             );
@@ -863,7 +863,7 @@ impl TokenDatabase {
         }
 
         log(
-            LogTag::System,
+            LogTag::Cache,
             "CLEANUP",
             &format!(
                 "Selected for cleanup: {} tokens to blacklist+delete (security), {} total tokens to delete",
@@ -879,7 +879,7 @@ impl TokenDatabase {
                 security_blacklisted_count += 1;
                 if is_debug_monitor_enabled() {
                     log(
-                        LogTag::System,
+                        LogTag::Cache,
                         "BLACKLIST",
                         &format!(
                             "Blacklisted security issue token: {} ({}) - reason: {:?}",
@@ -891,7 +891,7 @@ impl TokenDatabase {
                 }
             } else {
                 log(
-                    LogTag::System,
+                    LogTag::Cache,
                     "ERROR",
                     &format!("Failed to blacklist security token {}: Database error", mint)
                 );
@@ -928,7 +928,7 @@ impl TokenDatabase {
                                 )
                             {
                                 log(
-                                    LogTag::System,
+                                    LogTag::Cache,
                                     "ERROR",
                                     &format!(
                                         "Failed to delete rugcheck data for token {}: {}",
@@ -940,7 +940,7 @@ impl TokenDatabase {
 
                             if is_debug_monitor_enabled() {
                                 log(
-                                    LogTag::System,
+                                    LogTag::Cache,
                                     "CLEANUP",
                                     &format!(
                                         "Deleted token from main table: {} ({}) - reason: {} - last updated: {}",
@@ -955,7 +955,7 @@ impl TokenDatabase {
                     }
                     Err(e) => {
                         log(
-                            LogTag::System,
+                            LogTag::Cache,
                             "ERROR",
                             &format!("Failed to delete token {}: {}", mint, e)
                         );
@@ -973,7 +973,7 @@ impl TokenDatabase {
         let total_processed = security_blacklisted_count + deleted_count;
         if total_processed > 0 {
             log(
-                LogTag::System,
+                LogTag::Cache,
                 "CLEANUP",
                 &format!(
                     "Cleanup completed: {} security tokens blacklisted, {} total tokens removed from main table (blacklisted: {}, decimal-failed: {}, security: {}, low-liquidity: {})",
@@ -1002,7 +1002,7 @@ impl TokenDatabase {
                 )
             );
         } else {
-            log(LogTag::System, "CLEANUP", "Database cleanup: No problematic tokens processed");
+            log(LogTag::Cache, "CLEANUP", "Database cleanup: No problematic tokens processed");
         }
 
         Ok(total_processed)
@@ -1025,7 +1025,7 @@ impl TokenDatabase {
         // For now, we just log the cache clearing operation
 
         log(
-            LogTag::System,
+            LogTag::Cache,
             "CACHE_CLEAR",
             &format!("Token {} deleted - caches will be cleared on next access", &mint[..8])
         );
@@ -1802,7 +1802,7 @@ impl TokenDatabase {
                     Err(e) => {
                         // Log error but continue with other tokens
                         log(
-                            LogTag::System,
+                            LogTag::Cache,
                             "ERROR",
                             &format!("Failed to get rugcheck data for {}: {}", token.mint, e)
                         );
@@ -1839,7 +1839,7 @@ impl TokenDatabase {
 
         if !has_retry_count {
             log(
-                LogTag::System,
+                LogTag::Cache,
                 "MIGRATION",
                 "Migrating failed_decimals table to add retry_count columns"
             );
@@ -1852,7 +1852,7 @@ impl TokenDatabase {
                 )
                 .unwrap_or_else(|e| {
                     log(
-                        LogTag::System,
+                        LogTag::Cache,
                         "MIGRATION_WARN",
                         &format!("Could not add retry_count column (may already exist): {}", e)
                     );
@@ -1866,14 +1866,14 @@ impl TokenDatabase {
                 )
                 .unwrap_or_else(|e| {
                     log(
-                        LogTag::System,
+                        LogTag::Cache,
                         "MIGRATION_WARN",
                         &format!("Could not add max_retries column (may already exist): {}", e)
                     );
                     0
                 });
 
-            log(LogTag::System, "MIGRATION", "Failed_decimals table migration completed");
+            log(LogTag::Cache, "MIGRATION", "Failed_decimals table migration completed");
         }
 
         // Close migration connection explicitly
