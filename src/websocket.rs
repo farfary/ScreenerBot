@@ -1,6 +1,6 @@
 use serde::{ Deserialize, Serialize };
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{ mpsc, Notify };
 use tokio_tungstenite::{ connect_async, tungstenite::Message };
 use futures_util::{ SinkExt, StreamExt };
 
@@ -91,7 +91,7 @@ impl SolanaWebSocketClient {
     }
 
     /// Start WebSocket connection and monitor for new transactions
-    pub async fn start_monitoring(&self, ws_url: &str) -> Result<(), String> {
+    pub async fn start_monitoring(&self, ws_url: &str, shutdown: Arc<Notify>) -> Result<(), String> {
         if is_debug_websocket_enabled() {
             log(
                 LogTag::Websocket,
@@ -140,34 +140,58 @@ impl SolanaWebSocketClient {
             .send(Message::Text(subscribe_text)).await
             .map_err(|e| format!("Failed to send subscription: {}", e))?;
 
-        // Listen for messages
-        while let Some(message) = ws_receiver.next().await {
-            match message {
-                Ok(Message::Text(text)) => {
-                    if let Err(e) = self.handle_websocket_message(&text).await {
+        // Listen for messages with shutdown handling
+        loop {
+            tokio::select! {
+                _ = shutdown.notified() => {
+                    if is_debug_websocket_enabled() {
+                        log(LogTag::Websocket, "SHUTDOWN", "WebSocket monitoring received shutdown signal");
+                    }
+                    
+                    // Send close message to server
+                    if let Err(e) = ws_sender.send(Message::Close(None)).await {
                         if is_debug_websocket_enabled() {
-                            log(
-                                LogTag::Websocket,
-                                "ERROR",
-                                &format!("Failed to handle WebSocket message: {}", e)
-                            );
+                            log(LogTag::Websocket, "CLOSE_ERROR", &format!("Failed to send close message: {}", e));
                         }
                     }
-                }
-                Ok(Message::Close(_)) => {
-                    if is_debug_websocket_enabled() {
-                        log(LogTag::Websocket, "CLOSE", "WebSocket connection closed by server");
-                    }
+                    
                     break;
                 }
-                Ok(_) => {
-                    // Ignore other message types (binary, ping, pong)
-                }
-                Err(e) => {
-                    if is_debug_websocket_enabled() {
-                        log(LogTag::Websocket, "ERROR", &format!("WebSocket error: {}", e));
+                message = ws_receiver.next() => {
+                    match message {
+                        Some(Ok(Message::Text(text))) => {
+                            if let Err(e) = self.handle_websocket_message(&text).await {
+                                if is_debug_websocket_enabled() {
+                                    log(
+                                        LogTag::Websocket,
+                                        "ERROR",
+                                        &format!("Failed to handle WebSocket message: {}", e)
+                                    );
+                                }
+                            }
+                        }
+                        Some(Ok(Message::Close(_))) => {
+                            if is_debug_websocket_enabled() {
+                                log(LogTag::Websocket, "CLOSE", "WebSocket connection closed by server");
+                            }
+                            break;
+                        }
+                        Some(Ok(_)) => {
+                            // Ignore other message types (binary, ping, pong)
+                        }
+                        Some(Err(e)) => {
+                            if is_debug_websocket_enabled() {
+                                log(LogTag::Websocket, "ERROR", &format!("WebSocket error: {}", e));
+                            }
+                            break;
+                        }
+                        None => {
+                            if is_debug_websocket_enabled() {
+                                log(LogTag::Websocket, "CLOSE", "WebSocket stream ended");
+                            }
+                            break;
+                        }
                     }
-                    break;
                 }
             }
         }
@@ -257,7 +281,8 @@ impl SolanaWebSocketClient {
 /// Start WebSocket monitoring as a background task
 pub async fn start_websocket_monitoring(
     wallet_address: String,
-    ws_url: Option<String>
+    ws_url: Option<String>,
+    shutdown: Arc<Notify>
 ) -> Result<mpsc::UnboundedReceiver<String>, String> {
     let (client, tx_receiver) = SolanaWebSocketClient::new(wallet_address.clone());
 
@@ -266,9 +291,23 @@ pub async fn start_websocket_monitoring(
     // Start monitoring in background task
     let monitoring_client = Arc::new(client);
     let ws_url_clone = ws_url.clone();
+    let shutdown_clone = shutdown.clone();
 
     tokio::spawn(async move {
         loop {
+            // Check for shutdown before attempting connection
+            tokio::select! {
+                _ = shutdown_clone.notified() => {
+                    if is_debug_websocket_enabled() {
+                        log(LogTag::Websocket, "SHUTDOWN", "WebSocket background task received shutdown signal");
+                    }
+                    break;
+                }
+                _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
+                    // Continue with connection attempt
+                }
+            }
+
             if is_debug_websocket_enabled() {
                 log(
                     LogTag::Websocket,
@@ -277,24 +316,52 @@ pub async fn start_websocket_monitoring(
                 );
             }
 
-            if let Err(e) = monitoring_client.start_monitoring(&ws_url_clone).await {
-                if is_debug_websocket_enabled() {
-                    log(
-                        LogTag::Websocket,
-                        "RECONNECT",
-                        &format!("WebSocket disconnected: {} - Reconnecting in 5 seconds", e)
-                    );
+            // Create a shutdown signal for this connection attempt
+            let connection_shutdown = Arc::new(Notify::new());
+            let connection_shutdown_clone = connection_shutdown.clone();
+            let main_shutdown_clone = shutdown_clone.clone();
+            
+            // Forward main shutdown to connection shutdown
+            tokio::spawn(async move {
+                main_shutdown_clone.notified().await;
+                connection_shutdown_clone.notify_waiters();
+            });
+
+            match monitoring_client.start_monitoring(&ws_url_clone, connection_shutdown).await {
+                Ok(_) => {
+                    // Normal exit (shutdown received)
+                    if is_debug_websocket_enabled() {
+                        log(LogTag::Websocket, "NORMAL_EXIT", "WebSocket monitoring exited normally");
+                    }
+                    break;
                 }
+                Err(e) => {
+                    if is_debug_websocket_enabled() {
+                        log(
+                            LogTag::Websocket,
+                            "RECONNECT",
+                            &format!("WebSocket disconnected: {} - Reconnecting in 5 seconds", e)
+                        );
+                    }
 
-                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                continue;
+                    // Wait for 5 seconds or shutdown signal
+                    tokio::select! {
+                        _ = shutdown_clone.notified() => {
+                            if is_debug_websocket_enabled() {
+                                log(LogTag::Websocket, "SHUTDOWN_DURING_WAIT", "Shutdown received during reconnection wait");
+                            }
+                            break;
+                        }
+                        _ = tokio::time::sleep(tokio::time::Duration::from_secs(5)) => {
+                            // Continue reconnection loop
+                        }
+                    }
+                }
             }
+        }
 
-            // If we exit normally, wait before reconnecting
-            if is_debug_websocket_enabled() {
-                log(LogTag::Websocket, "RESTART_DELAY", "Reconnecting in 2 seconds (normal exit)");
-            }
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        if is_debug_websocket_enabled() {
+            log(LogTag::Websocket, "TASK_EXIT", "WebSocket background task exiting");
         }
     });
 

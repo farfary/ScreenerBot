@@ -80,6 +80,9 @@ pub struct TransactionsManager {
     // WebSocket receiver for real-time transaction monitoring
     pub websocket_receiver: Option<tokio::sync::mpsc::UnboundedReceiver<String>>,
 
+    // WebSocket shutdown signal for graceful cleanup
+    pub websocket_shutdown: Option<Arc<Notify>>,
+
     // Pending transactions that need to be rechecked for status updates
     pub pending_transactions: HashMap<String, chrono::DateTime<chrono::Utc>>,
 }
@@ -134,6 +137,7 @@ impl TransactionsManager {
             transaction_database,
             deferred_retries: HashMap::new(),
             websocket_receiver: None, // Will be set up later
+            websocket_shutdown: None, // Will be set up later
             pending_transactions: HashMap::new(), // Track pending transactions for reprocessing
         })
     }
@@ -182,10 +186,18 @@ impl TransactionsManager {
             }
         };
 
+        // Create shutdown signal for WebSocket
+        let websocket_shutdown = Arc::new(Notify::new());
+        
         // Start WebSocket monitoring and get receiver
-        let receiver = websocket::start_websocket_monitoring(wallet_address, Some(ws_url)).await?;
+        let receiver = websocket::start_websocket_monitoring(
+            wallet_address, 
+            Some(ws_url), 
+            websocket_shutdown.clone()
+        ).await?;
 
         self.websocket_receiver = Some(receiver);
+        self.websocket_shutdown = Some(websocket_shutdown);
 
         log(
             LogTag::Transactions,
@@ -194,6 +206,22 @@ impl TransactionsManager {
         );
 
         Ok(())
+    }
+
+    /// Gracefully shutdown WebSocket monitoring
+    pub fn shutdown_websocket(&mut self) {
+        if let Some(shutdown_signal) = &self.websocket_shutdown {
+            log(
+                LogTag::Transactions,
+                "WEBSOCKET_SHUTDOWN", 
+                "🔌 Signaling WebSocket to shutdown gracefully"
+            );
+            shutdown_signal.notify_waiters();
+        }
+        
+        // Clear the receiver and shutdown signal
+        self.websocket_receiver = None;
+        self.websocket_shutdown = None;
     }
 
     /// Process pending transactions to check if they've been confirmed/finalized
@@ -1020,6 +1048,11 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         tokio::select! {
             _ = shutdown.notified() => {
                 log(LogTag::Transactions, "INFO", "TransactionsManager service shutting down");
+                
+                // Gracefully shutdown WebSocket monitoring
+                manager.shutdown_websocket();
+                
+                log(LogTag::Transactions, "INFO", "TransactionsManager service shutdown complete");
                 break;
             }
             // NEW: WebSocket real-time transaction monitoring
