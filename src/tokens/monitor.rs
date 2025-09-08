@@ -15,7 +15,7 @@ use tokio::time::{ sleep, Duration };
 // =============================================================================
 
 /// Monitoring cycle duration in seconds (runs every 30 seconds)
-const MONITOR_CYCLE_SECONDS: u64 = 5;
+const MONITOR_CYCLE_SECONDS: u64 = 3;
 
 /// Minimum time between updates for a token (1 hour)
 const MIN_UPDATE_INTERVAL_HOURS: i64 = 1;

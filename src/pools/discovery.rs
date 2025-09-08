@@ -425,12 +425,15 @@ impl PoolDiscovery {
             // For now, we'll use liquidity_usd as a proxy for SOL reserves
             // This is not perfect but provides some filtering
             // In the future, we could enhance this by fetching actual reserves
-            
+
             // Convert USD liquidity to approximate SOL reserves (assuming SOL is ~$20-200)
             // This is a rough estimate - actual SOL reserves would require pool account data
             let estimated_sol_reserves = pool.liquidity_usd / 100.0; // Rough estimate
 
-            if estimated_sol_reserves >= MIN_SOL_RESERVES && estimated_sol_reserves <= MAX_SOL_RESERVES {
+            if
+                estimated_sol_reserves >= MIN_SOL_RESERVES &&
+                estimated_sol_reserves <= MAX_SOL_RESERVES
+            {
                 filtered_pools.push(pool);
             } else {
                 filtered_out_count += 1;

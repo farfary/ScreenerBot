@@ -406,7 +406,10 @@ impl DexScreenerApi {
         for mint in mints {
             let has_position = has_open_position(mint).await;
 
-            if is_debug_api_enabled() && cached_count + position_skipped_count + api_call_mints.len() < 5 {
+            if
+                is_debug_api_enabled() &&
+                cached_count + position_skipped_count + api_call_mints.len() < 5
+            {
                 log(
                     LogTag::Api,
                     "DEBUG",
@@ -453,7 +456,9 @@ impl DexScreenerApi {
                 "DEBUG",
                 &format!(
                     "📊 Batch analysis: {} cached, {} position_skipped, {} need API calls",
-                    cached_count, position_skipped_count, api_call_mints.len()
+                    cached_count,
+                    position_skipped_count,
+                    api_call_mints.len()
                 )
             );
         }
@@ -467,27 +472,35 @@ impl DexScreenerApi {
                     &format!("🌐 Making API calls for {} tokens", api_call_mints.len())
                 );
             }
-            
+
             // Process in chunks of MAX_TOKENS_PER_API_CALL (DexScreener API limit)
             for (chunk_idx, chunk) in api_call_mints.chunks(MAX_TOKENS_PER_API_CALL).enumerate() {
                 if is_debug_api_enabled() {
                     log(
                         LogTag::Api,
                         "DEBUG",
-                        &format!("📦 Processing chunk {} with {} tokens", chunk_idx + 1, chunk.len())
+                        &format!(
+                            "📦 Processing chunk {} with {} tokens",
+                            chunk_idx + 1,
+                            chunk.len()
+                        )
                     );
                 }
-                
+
                 match self.get_tokens_info(chunk).await {
                     Ok(tokens) => {
                         if is_debug_api_enabled() {
                             log(
                                 LogTag::Api,
                                 "DEBUG",
-                                &format!("✅ Chunk {} returned {} tokens", chunk_idx + 1, tokens.len())
+                                &format!(
+                                    "✅ Chunk {} returned {} tokens",
+                                    chunk_idx + 1,
+                                    tokens.len()
+                                )
                             );
                         }
-                        
+
                         for token in tokens {
                             // Cache the result
                             cache_token_data(&token.mint, &token).await;
@@ -498,7 +511,11 @@ impl DexScreenerApi {
                                     log(
                                         LogTag::Api,
                                         "DEBUG",
-                                        &format!("💰 Got price for {}: ${:.8}", &token.mint[..8], price)
+                                        &format!(
+                                            "💰 Got price for {}: ${:.8}",
+                                            &token.mint[..8],
+                                            price
+                                        )
                                     );
                                 }
                             }
@@ -654,17 +671,15 @@ impl DexScreenerApi {
             log(
                 LogTag::Api,
                 "DEBUG",
-                &format!(
-                    "🔍 DexScreener API request: {} tokens, URL: {}",
-                    mints.len(),
-                    if url.len() > 100 { format!("{}...", &url[..100]) } else { url.clone() }
-                )
+                &format!("🔍 DexScreener API request: {} tokens, URL: {}", mints.len(), if
+                    url.len() > 100
+                {
+                    format!("{}...", &url[..100])
+                } else {
+                    url.clone()
+                })
             );
-            log(
-                LogTag::Api,
-                "DEBUG",
-                &format!("📋 Mint addresses: {:?}", mints)
-            );
+            log(LogTag::Api, "DEBUG", &format!("📋 Mint addresses: {:?}", mints));
         }
 
         let start_time = Instant::now();
@@ -701,16 +716,25 @@ impl DexScreenerApi {
             let response_info = if let Some(arr) = data.as_array() {
                 format!("📥 API response: array with {} items", arr.len())
             } else if data.is_object() {
-                format!("📥 API response: object with keys: {:?}", 
-                    data.as_object().map(|obj| obj.keys().collect::<Vec<_>>()).unwrap_or_default())
+                format!(
+                    "📥 API response: object with keys: {:?}",
+                    data
+                        .as_object()
+                        .map(|obj| obj.keys().collect::<Vec<_>>())
+                        .unwrap_or_default()
+                )
             } else if data.is_null() {
                 "📥 API response: null".to_string()
             } else {
-                format!("📥 API response: {} type", 
-                    if data.is_string() { "string" } 
-                    else if data.is_number() { "number" } 
-                    else if data.is_boolean() { "boolean" } 
-                    else { "unknown" })
+                format!("📥 API response: {} type", if data.is_string() {
+                    "string"
+                } else if data.is_number() {
+                    "number"
+                } else if data.is_boolean() {
+                    "boolean"
+                } else {
+                    "unknown"
+                })
             };
             log(LogTag::Api, "DEBUG", &response_info);
         }
@@ -722,18 +746,35 @@ impl DexScreenerApi {
         if let Some(pairs_array) = data.as_array() {
             if is_debug_api_enabled() {
                 log(
-                    LogTag::Api, 
-                    "DEBUG", 
+                    LogTag::Api,
+                    "DEBUG",
                     &format!("🔄 Processing {} pairs from API response", pairs_array.len())
                 );
+
+                if pairs_array.is_empty() {
+                    log(
+                        LogTag::Api,
+                        "WARN",
+                        &format!(
+                            "⚠️ API returned empty array for {} tokens - these tokens may not exist on DexScreener",
+                            mints.len()
+                        )
+                    );
+                }
             }
-            
+
             for (idx, pair_data) in pairs_array.iter().enumerate() {
                 if is_debug_api_enabled() && idx < 3 {
                     // Log first few pairs for debugging
                     if let Some(base_token) = pair_data.get("baseToken") {
-                        let mint = base_token.get("address").and_then(|v| v.as_str()).unwrap_or("unknown");
-                        let symbol = base_token.get("symbol").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        let mint = base_token
+                            .get("address")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        let symbol = base_token
+                            .get("symbol")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
                         log(
                             LogTag::Api,
                             "DEBUG",
@@ -741,18 +782,22 @@ impl DexScreenerApi {
                         );
                     }
                 }
-                
+
                 match self.parse_token_from_pair(pair_data) {
                     Ok(token) => {
                         if is_debug_api_enabled() {
                             log(
                                 LogTag::Api,
                                 "DEBUG",
-                                &format!("✅ Successfully parsed token: {} ({})", token.symbol, &token.mint[..8])
+                                &format!(
+                                    "✅ Successfully parsed token: {} ({})",
+                                    token.symbol,
+                                    &token.mint[..8]
+                                )
                             );
                         }
                         tokens.push(token);
-                    },
+                    }
                     Err(e) => {
                         if e.contains("not paired with SOL") || e.contains("not a SOL pair") {
                             rejected_non_sol_pairs += 1;
@@ -819,11 +864,7 @@ impl DexScreenerApi {
             .to_string();
 
         if is_debug_api_enabled() {
-            log(
-                LogTag::Api,
-                "DEBUG",
-                &format!("🔍 Parsing token: {}", &mint[..8])
-            );
+            log(LogTag::Api, "DEBUG", &format!("🔍 Parsing token: {}", &mint[..8]));
         }
 
         let symbol = base_token
@@ -849,7 +890,7 @@ impl DexScreenerApi {
                         &format!("🔗 Token {} quote address: {}", &mint[..8], quote_address)
                     );
                 }
-                
+
                 // Check if quote is SOL
                 if quote_address == SOL_MINT {
                     let price_native_str = pair_data
@@ -860,15 +901,19 @@ impl DexScreenerApi {
                     let price_native = price_native_str
                         .parse::<f64>()
                         .map_err(|_| format!("Invalid price_native: {}", price_native_str))?;
-                    
+
                     if is_debug_api_enabled() {
                         log(
                             LogTag::Api,
                             "DEBUG",
-                            &format!("✅ Token {} is SOL pair with price: {}", &mint[..8], price_native)
+                            &format!(
+                                "✅ Token {} is SOL pair with price: {}",
+                                &mint[..8],
+                                price_native
+                            )
                         );
                     }
-                    
+
                     (Some(price_native), true)
                 } else {
                     // Reject non-SOL pairs
@@ -876,7 +921,11 @@ impl DexScreenerApi {
                         log(
                             LogTag::Api,
                             "DEBUG",
-                            &format!("❌ Token {} rejected - not SOL pair (quote: {})", &mint[..8], quote_address)
+                            &format!(
+                                "❌ Token {} rejected - not SOL pair (quote: {})",
+                                &mint[..8],
+                                quote_address
+                            )
                         );
                     }
                     return Err(
