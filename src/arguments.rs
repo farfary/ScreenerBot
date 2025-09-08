@@ -122,8 +122,7 @@ pub fn is_debug_pool_fetcher_enabled() -> bool {
 
 /// Pool decoders debug mode
 pub fn is_debug_pool_decoders_enabled() -> bool {
-    true // Temporarily force enabled for debugging
-    // has_arg("--debug-pool-decoders")
+    has_arg("--debug-pool-decoders")
 }
 
 /// Trader module debug mode
