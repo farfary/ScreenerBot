@@ -15,7 +15,7 @@ use tokio::time::{ sleep, Duration };
 // =============================================================================
 
 /// Monitoring cycle duration in seconds (runs every 30 seconds)
-const MONITOR_CYCLE_SECONDS: u64 = 3;
+const MONITOR_CYCLE_SECONDS: u64 = 1;
 
 /// Minimum time between updates for a token (1 hour)
 const MIN_UPDATE_INTERVAL_HOURS: i64 = 1;
@@ -24,7 +24,7 @@ const MIN_UPDATE_INTERVAL_HOURS: i64 = 1;
 const MAX_UPDATE_INTERVAL_HOURS: i64 = 2;
 
 /// Number of tokens to update per cycle (adjust based on performance)
-const TOKENS_PER_CYCLE: usize = 60;
+const TOKENS_PER_CYCLE: usize = 30;
 
 /// Batch size for API calls (DexScreener limit)
 const API_BATCH_SIZE: usize = 30;

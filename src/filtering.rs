@@ -306,24 +306,68 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         }
     }
 
-    // 6. EARLY PERFORMANCE FILTERING - Remove obvious rejects before detailed processing
-    let initial_count = all_tokens.len();
-    let mut zero_liquidity_filtered = 0;
-    let mut no_decimals_filtered = 0;
-    let mut old_tokens_filtered = 0;
-
+    // 6.1 Remove zero-liquidity tokens first to avoid unnecessary decimals work
+    let before_zero_liq = all_tokens.len();
+    let mut zero_liquidity_filtered = 0usize;
     all_tokens.retain(|token| {
-        // Filter tokens with zero or missing liquidity
         let liquidity_usd = token.liquidity
             .as_ref()
             .and_then(|l| l.usd)
             .unwrap_or(0.0);
-
         if liquidity_usd <= 0.0 {
             zero_liquidity_filtered += 1;
             return false;
         }
+        true
+    });
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG",
+            &format!(
+                "🧹 STEP 4a - Zero-liquidity prefilter: {} → {} ({} removed)",
+                before_zero_liq,
+                all_tokens.len(),
+                zero_liquidity_filtered
+            )
+        );
+    }
 
+    // Populate cached fields (decimals, rugcheck) before decimal/age early filtering
+    let mut decimals_populated = 0usize;
+    let mut populate_errors = 0usize;
+    for token in all_tokens.iter_mut() {
+        if token.decimals.is_none() {
+            match token.populate_cached_data() {
+                Ok(()) => {
+                    if token.decimals.is_some() {
+                        decimals_populated += 1;
+                    }
+                }
+                Err(_) => {
+                    populate_errors += 1;
+                }
+            }
+        }
+    }
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG",
+            &format!(
+                "🧩 STEP 4b - Populated decimals for {} tokens ({} errors)",
+                decimals_populated,
+                populate_errors
+            )
+        );
+    }
+
+    // 6. EARLY PERFORMANCE FILTERING - Remove obvious rejects before detailed processing
+    let initial_count = all_tokens.len();
+    let mut no_decimals_filtered = 0;
+    let mut old_tokens_filtered = 0;
+
+    all_tokens.retain(|token| {
         // Filter tokens without decimals
         if token.decimals.is_none() {
             no_decimals_filtered += 1;
@@ -350,10 +394,9 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
             LogTag::Filtering,
             "DEBUG",
             &format!(
-                "🚀 Early performance filtering: {} tokens → {} tokens ({} zero liquidity, {} no decimals, {} too old filtered)",
+                "🚀 Early performance filtering: {} tokens → {} tokens ({} no decimals, {} too old filtered)",
                 initial_count,
                 all_tokens.len(),
-                zero_liquidity_filtered,
                 no_decimals_filtered,
                 old_tokens_filtered
             )
