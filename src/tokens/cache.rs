@@ -27,10 +27,27 @@ pub struct TokenDatabase {
 unsafe impl Send for TokenDatabase {}
 unsafe impl Sync for TokenDatabase {}
 
+/// Configure database connection for optimal performance and concurrency
+fn configure_database_connection(connection: &Connection) -> Result<(), rusqlite::Error> {
+    connection.execute("PRAGMA journal_mode = WAL", [])?; // Enable WAL mode for better concurrency
+    connection.execute("PRAGMA synchronous = NORMAL", [])?; // Better performance
+    connection.execute("PRAGMA temp_store = memory", [])?; // Use memory for temp storage
+    connection.execute("PRAGMA cache_size = 10000", [])?; // Larger cache
+    connection.execute("PRAGMA busy_timeout = 30000", [])?; // 30 second timeout for locks
+    Ok(())
+}
+
+/// Create a properly configured database connection
+pub fn create_configured_connection() -> Result<Connection, Box<dyn std::error::Error>> {
+    let connection = Connection::open(TOKENS_DATABASE)?;
+    configure_database_connection(&connection)?;
+    Ok(connection)
+}
+
 impl TokenDatabase {
     /// Create new token database instance
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let connection = Connection::open(TOKENS_DATABASE)?;
+        let connection = create_configured_connection()?;
 
         // Create tables if they don't exist
         connection.execute(
@@ -1309,14 +1326,32 @@ impl TokenDatabase {
         &self,
         data: &crate::tokens::rugcheck::RugcheckResponse
     ) -> Result<(), rusqlite::Error> {
-        let connection = self.connection
-            .lock()
-            .map_err(|_| {
-                rusqlite::Error::SqliteFailure(
-                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
-                    Some("Failed to acquire database lock".to_string())
-                )
-            })?;
+        // Use a timeout when trying to acquire the lock
+        use std::time::{ Duration, Instant };
+
+        let timeout = Duration::from_secs(5); // 5 second timeout
+        let start = Instant::now();
+
+        let connection = loop {
+            match self.connection.try_lock() {
+                Ok(conn) => {
+                    break conn;
+                }
+                Err(_) => {
+                    if start.elapsed() > timeout {
+                        return Err(
+                            rusqlite::Error::SqliteFailure(
+                                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                                Some(
+                                    "Database lock timeout - could not acquire lock within 5 seconds".to_string()
+                                )
+                            )
+                        );
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            }
+        };
 
         // Serialize complex fields to JSON
         let token_extensions_json = data.token_extensions
@@ -1782,19 +1817,11 @@ impl TokenDatabase {
 
     /// Ensure database schemas are up to date - run this at startup
     pub fn migrate_database_schemas(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let connection = self.connection
-            .lock()
-            .map_err(|e| {
-                Box::new(
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Database lock error: {}", e)
-                    )
-                ) as Box<dyn std::error::Error>
-            })?;
+        // Use a separate configured connection for migration to avoid long-held locks
+        let migration_conn = create_configured_connection()?;
 
         // Check if failed_decimals table has retry_count column
-        let has_retry_count = connection
+        let has_retry_count = migration_conn
             .prepare("SELECT retry_count FROM failed_decimals LIMIT 1")
             .is_ok();
 
@@ -1806,7 +1833,7 @@ impl TokenDatabase {
             );
 
             // Add missing columns to failed_decimals table
-            connection
+            migration_conn
                 .execute(
                     "ALTER TABLE failed_decimals ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0",
                     []
@@ -1820,7 +1847,7 @@ impl TokenDatabase {
                     0
                 });
 
-            connection
+            migration_conn
                 .execute(
                     "ALTER TABLE failed_decimals ADD COLUMN max_retries INTEGER NOT NULL DEFAULT 3",
                     []
@@ -1837,6 +1864,8 @@ impl TokenDatabase {
             log(LogTag::System, "MIGRATION", "Failed_decimals table migration completed");
         }
 
+        // Close migration connection explicitly
+        drop(migration_conn);
         Ok(())
     }
 }
