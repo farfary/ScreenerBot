@@ -7,7 +7,7 @@
 use super::{ PoolDecoder, AccountData };
 use super::super::utils::{ is_sol_mint, WRAPPED_SOL_MINT };
 use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
-use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
+use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 use crate::pools::types::{ ProgramKind, PriceResult, METEORA_DAMM_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -201,15 +201,15 @@ impl PoolDecoder for MeteoraDammDecoder {
             return None;
         }
 
-        // Get token decimals - CRITICAL: must be cached, no fallback to defaults
-        let token_decimals = match get_cached_decimals(&token_mint) {
+        // Get token decimals - CRITICAL: must be available, no fallback to defaults
+        let token_decimals = match get_token_decimals_sync(&token_mint) {
             Some(decimals) => decimals,
             None => {
                 if is_debug_pool_decoders_enabled() {
                     log(
                         LogTag::PoolDecoder,
                         "ERROR",
-                        &format!("DAMM: Token decimals not cached for {}, skipping price calculation", token_mint)
+                        &format!("DAMM: Token decimals not found for {}, skipping price calculation", token_mint)
                     );
                 }
                 return None;

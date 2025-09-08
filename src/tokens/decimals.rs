@@ -28,6 +28,10 @@ pub const DEFAULT_TOKEN_DECIMALS: u8 = 9;
 /// SOL token lamports per SOL constant - ALWAYS use this instead of hardcoding 1_000_000_000
 pub const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 
+// Split into chunks of 50 to avoid provider HTTP 413 (Request Entity Too Large) limits
+// Some providers enforce tighter POST body limits; 50 is safer in practice.
+const MAX_ACCOUNTS_PER_CALL: usize = 100;
+
 // In-memory cache for frequently accessed decimals to avoid database hits
 static DECIMAL_CACHE: Lazy<Arc<Mutex<HashMap<String, u8>>>> = Lazy::new(||
     Arc::new(Mutex::new(HashMap::new()))
@@ -495,9 +499,6 @@ async fn batch_fetch_decimals_with_fallback(
 ) -> Result<Vec<(Pubkey, Result<u8, String>)>, String> {
     let rpc_client = get_rpc_client();
 
-    // Split into chunks of 50 to avoid provider HTTP 413 (Request Entity Too Large) limits
-    // Some providers enforce tighter POST body limits; 50 is safer in practice.
-    const MAX_ACCOUNTS_PER_CALL: usize = 50;
     let mut all_results = Vec::new();
 
     for chunk in mint_pubkeys.chunks(MAX_ACCOUNTS_PER_CALL) {

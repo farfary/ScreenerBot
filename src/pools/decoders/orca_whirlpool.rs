@@ -6,7 +6,7 @@
 
 use super::{ PoolDecoder, AccountData };
 use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
-use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
+use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, ORCA_WHIRLPOOL_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -115,14 +115,14 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         } else {
             &pool_info.token_mint_a
         };
-        let token_decimals = match get_cached_decimals(token_mint) {
+        let token_decimals = match get_token_decimals_sync(token_mint) {
             Some(decimals) => decimals,
             None => {
                 if is_debug_pool_decoders_enabled() {
                     log(
                         LogTag::PoolDecoder,
                         "ERROR",
-                        &format!("No cached decimals for Orca token: {}, skipping pool calculation", token_mint)
+                        &format!("No decimals found for Orca token: {}, skipping pool calculation", token_mint)
                     );
                 }
                 return None;

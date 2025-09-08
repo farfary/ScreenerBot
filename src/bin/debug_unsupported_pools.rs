@@ -37,7 +37,7 @@ use screenerbot::pools::AccountData;
 use screenerbot::rpc::get_rpc_client;
 use screenerbot::tokens::cache::TokenDatabase;
 use screenerbot::tokens::dexscreener::{ get_token_price_from_global_api, init_dexscreener_api };
-use screenerbot::tokens::decimals::get_cached_decimals;
+use screenerbot::tokens::get_token_decimals_sync;
 use tokio::time::{ sleep, Duration };
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
@@ -118,14 +118,14 @@ async fn validate_price_availability(
     let mut calculation_error = None;
 
     // Get token decimals first (required for price calculation)
-    let token_decimals = match get_cached_decimals(token_mint) {
+    let token_decimals = match get_token_decimals_sync(token_mint) {
         Some(decimals) => decimals,
         None => {
-            calculation_error = Some("Missing token decimals in cache".to_string());
+            calculation_error = Some("Missing token decimals".to_string());
             log(
                 LogTag::System,
                 "DECIMALS_MISS",
-                &format!("No cached decimals for {}", &token_mint[..8])
+                &format!("No decimals for {}", &token_mint[..8])
             );
             return (calculated_price, api_price, price_diff_percent, calculation_error);
         }

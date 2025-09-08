@@ -1531,7 +1531,7 @@ impl TokenDatabase {
         &self,
         tokens: &mut [crate::tokens::types::Token]
     ) -> Result<(), String> {
-        use crate::tokens::decimals::get_cached_decimals;
+        use crate::tokens::get_token_decimals;
 
         for token in tokens.iter_mut() {
             // Populate rugcheck_data from database
@@ -1554,9 +1554,9 @@ impl TokenDatabase {
                 }
             }
 
-            // Populate decimals from cache
+            // Populate decimals from cache and blockchain if needed
             if token.decimals.is_none() {
-                if let Some(decimals) = get_cached_decimals(&token.mint) {
+                if let Some(decimals) = get_token_decimals(&token.mint).await {
                     token.decimals = Some(decimals);
                 }
             }

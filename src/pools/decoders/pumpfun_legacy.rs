@@ -7,7 +7,7 @@ use solana_sdk::pubkey::Pubkey;
 use super::{ PoolDecoder, AccountData };
 use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
-use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
+use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 
 // Import centralized utilities
 use super::super::utils::{ is_sol_mint, analyze_token_pair, PoolMintVaultInfo };
@@ -214,7 +214,7 @@ impl PumpFunLegacyDecoder {
         }
 
         // Get decimals for the target token
-        let target_decimals = get_cached_decimals(target_mint)? as u32;
+        let target_decimals = get_token_decimals_sync(target_mint)? as u32;
 
         if is_debug_pool_decoders_enabled() {
             log(

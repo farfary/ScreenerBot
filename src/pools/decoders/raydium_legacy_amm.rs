@@ -10,7 +10,7 @@
 use super::{ PoolDecoder, AccountData };
 use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
-use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
+use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
@@ -84,7 +84,7 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
         // Map SOL vs token - CRITICAL: decimals must be cached, no fallback
         let (sol_reserve_raw, token_reserve_raw, token_decimals) = if info.pc_mint == SOL_MINT {
             // pc=SOL vault at pc_vault, coin=token vault at coin_vault
-            let decimals = match get_cached_decimals(&info.coin_mint) {
+            let decimals = match get_token_decimals_sync(&info.coin_mint) {
                 Some(decimals) => decimals,
                 None => {
                     if is_debug_pool_decoders_enabled() {
@@ -92,7 +92,7 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
                             LogTag::PoolDecoder,
                             "ERROR",
                             &format!(
-                                "Legacy AMM: Token decimals not cached for {}, skipping price calculation",
+                                "Legacy AMM: Token decimals not found for {}, skipping price calculation",
                                 info.coin_mint
                             )
                         );
@@ -102,7 +102,7 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             };
             (pc_reserve, coin_reserve, decimals)
         } else if info.coin_mint == SOL_MINT {
-            let decimals = match get_cached_decimals(&info.pc_mint) {
+            let decimals = match get_token_decimals_sync(&info.pc_mint) {
                 Some(decimals) => decimals,
                 None => {
                     if is_debug_pool_decoders_enabled() {
@@ -110,7 +110,7 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
                             LogTag::PoolDecoder,
                             "ERROR",
                             &format!(
-                                "Legacy AMM: Token decimals not cached for {}, skipping price calculation",
+                                "Legacy AMM: Token decimals not found for {}, skipping price calculation",
                                 info.pc_mint
                             )
                         );

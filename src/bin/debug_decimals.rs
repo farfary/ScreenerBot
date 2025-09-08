@@ -11,13 +11,13 @@ use screenerbot::rpc::{ init_rpc_client };
 use screenerbot::tokens::cache::TokenDatabase;
 use screenerbot::tokens::decimals::{
     batch_fetch_token_decimals,
-    get_cached_decimals,
     get_database_stats,
     get_failed_cache_stats,
     cleanup_retryable_failed_cache,
     migrate_failed_tokens_to_blacklist,
     get_token_decimals_from_chain,
 };
+use screenerbot::tokens::get_token_decimals_sync;
 use screenerbot::tokens::blacklist;
 use screenerbot::rpc::get_rpc_client;
 use screenerbot::utils::safe_truncate;
@@ -349,7 +349,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (mint, symbol, _, liquidity_usd) in fresh_tokens.iter().take(max_tokens_to_analyze) {
         // Check if token has cached decimals
-        let has_decimals = get_cached_decimals(mint).is_some();
+        let has_decimals = get_token_decimals_sync(mint).is_some();
 
         if has_decimals {
             tokens_with_decimals += 1;
@@ -621,26 +621,26 @@ async fn debug_single_token_fetching(mint_str: &str, symbol: &str) -> DetailedDe
 
     let pubkey = pubkey_result.unwrap();
 
-    // Step 2: Check cache
+    // Step 2: Check cache+online
     let step_start = std::time::Instant::now();
-    let cached_decimals = get_cached_decimals(mint_str);
+    let cached_decimals = get_token_decimals_sync(mint_str);
     let step_time = step_start.elapsed().as_millis() as u64;
 
     match cached_decimals {
         Some(decimals) => {
             steps.push(DebugStep {
-                step_name: "2. Cache Check".to_string(),
+                step_name: "2. Cache/Online Check".to_string(),
                 success: true,
-                details: format!("Found in cache: {} decimals", decimals),
+                details: format!("Found: {} decimals", decimals),
                 time_ms: step_time,
             });
             final_decimals = Some(decimals);
         }
         None => {
             steps.push(DebugStep {
-                step_name: "2. Cache Check".to_string(),
+                step_name: "2. Cache/Online Check".to_string(),
                 success: false,
-                details: "Not found in cache".to_string(),
+                details: "Not found in cache or online".to_string(),
                 time_ms: step_time,
             });
         }

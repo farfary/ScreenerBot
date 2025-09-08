@@ -6,7 +6,7 @@
 
 use super::{ PoolDecoder, AccountData };
 use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
-use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
+use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, RAYDIUM_CLMM_PROGRAM_ID };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -149,15 +149,15 @@ impl PoolDecoder for RaydiumClmmDecoder {
             }
         }
 
-        // Get token decimals - CRITICAL: must be cached, no fallback to defaults
-        let token_decimals = match get_cached_decimals(&token_mint) {
+        // Get token decimals - CRITICAL: must be available, no fallback to defaults
+        let token_decimals = match get_token_decimals_sync(&token_mint) {
             Some(decimals) => decimals,
             None => {
                 if is_debug_pool_decoders_enabled() {
                     log(
                         LogTag::PoolDecoder,
                         "ERROR",
-                        &format!("CLMM: Token decimals not cached for {}, skipping price calculation", token_mint)
+                        &format!("CLMM: Token decimals not found for {}, skipping price calculation", token_mint)
                     );
                 }
                 return None;

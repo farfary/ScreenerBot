@@ -223,8 +223,8 @@ impl Token {
             }
         }
 
-        // Populate decimals from cache
-        self.decimals = crate::tokens::decimals::get_cached_decimals(&self.mint);
+        // Populate decimals from cache and blockchain if needed
+        self.decimals = crate::tokens::get_token_decimals_sync(&self.mint);
 
         Ok(())
     }

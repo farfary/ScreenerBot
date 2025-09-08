@@ -7,7 +7,7 @@
 use super::{ PoolDecoder, AccountData };
 use crate::arguments::is_debug_pool_decoders_enabled;use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, RAYDIUM_CPMM_PROGRAM_ID };
-use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS, raw_to_ui_amount };
+use crate::tokens::{ get_token_decimals_sync, decimals::{ SOL_DECIMALS, raw_to_ui_amount } };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -93,8 +93,8 @@ impl RaydiumCpmmDecoder {
         let pool_mint_0_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
         let pool_mint_1_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
 
-        // Get token decimals - CRITICAL: must be cached, no fallback to pool defaults
-        let mint_0_decimals = match get_cached_decimals(&token_0_mint) {
+        // Get token decimals - CRITICAL: must be available, no fallback to pool defaults
+        let mint_0_decimals = match get_token_decimals_sync(&token_0_mint) {
             Some(decimals) => decimals,
             None => {
                 if is_debug_pool_decoders_enabled() {
@@ -102,7 +102,7 @@ impl RaydiumCpmmDecoder {
                         LogTag::PoolDecoder,
                         "ERROR",
                         &format!(
-                            "No cached decimals for CPMM token_0: {}, skipping pool calculation",
+                            "No decimals found for CPMM token_0: {}, skipping pool calculation",
                             token_0_mint.chars().take(8).collect::<String>()
                         )
                     );
@@ -111,7 +111,7 @@ impl RaydiumCpmmDecoder {
             }
         };
 
-        let mint_1_decimals = match get_cached_decimals(&token_1_mint) {
+        let mint_1_decimals = match get_token_decimals_sync(&token_1_mint) {
             Some(decimals) => decimals,
             None => {
                 if is_debug_pool_decoders_enabled() {
@@ -119,7 +119,7 @@ impl RaydiumCpmmDecoder {
                         LogTag::PoolDecoder,
                         "ERROR",
                         &format!(
-                            "No cached decimals for CPMM token_1: {}, skipping pool calculation",
+                            "No decimals found for CPMM token_1: {}, skipping pool calculation",
                             token_1_mint.chars().take(8).collect::<String>()
                         )
                     );

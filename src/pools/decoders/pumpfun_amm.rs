@@ -5,7 +5,7 @@ use super::{ PoolDecoder, AccountData };
 use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
-use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
+use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 
 // Import centralized utilities
 use super::super::utils::{ extract_pumpfun_mints_and_vaults, validate_sol_pool };
@@ -210,15 +210,15 @@ impl PumpFunAmmDecoder {
             return None;
         }
 
-        // Get token decimals from cache - CRITICAL: must be cached, no assumptions
-        let token_decimals = match get_cached_decimals(&target_mint) {
+        // Get token decimals - CRITICAL: must be available, no assumptions
+        let token_decimals = match get_token_decimals_sync(&target_mint) {
             Some(decimals) => decimals,
             None => {
                 if is_debug_pool_decoders_enabled() {
                     log(
                         LogTag::PoolDecoder,
                         "ERROR",
-                        &format!("No cached decimals for PumpFun token: {}, skipping pool calculation", target_mint)
+                        &format!("No decimals found for PumpFun token: {}, skipping pool calculation", target_mint)
                     );
                 }
                 return None;

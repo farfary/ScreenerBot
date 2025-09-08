@@ -42,7 +42,6 @@ pub use blacklist::{
 pub use cache::{ DatabaseStats, TokenDatabase };
 pub use decimals::{
     batch_fetch_token_decimals,
-    get_cached_decimals,
     get_token_decimals_from_chain,
 };
 pub use dexscreener::{
@@ -321,7 +320,7 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
     }
 
     // First check cache (always available)
-    if let Some(decimals) = get_cached_decimals(mint) {
+    if let Some(decimals) = decimals::get_cached_decimals(mint) {
         if debug_enabled {
             log(
                 LogTag::Decimals,

@@ -8,7 +8,7 @@
 
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{ log, LogTag };
-use crate::tokens::decimals::{ get_cached_decimals, SOL_DECIMALS };
+use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 use super::cache;
 use super::decoders;
 use super::fetcher::{ AccountData, PoolAccountBundle };
