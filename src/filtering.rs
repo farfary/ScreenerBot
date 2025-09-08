@@ -198,8 +198,8 @@ pub enum FilterResult {
 /// Get filtered tokens ready for pool service monitoring
 ///
 /// This is the main entry point for the pool service to get tokens.
-/// It handles all database fetching, freshness filtering, SOL reserves validation,
-/// and comprehensive token filtering in one place.
+/// It handles all database fetching, blacklist filtering (FIRST), freshness filtering, 
+/// SOL reserves validation, and comprehensive token filtering in one place.
 ///
 /// Returns a list of token mint addresses that are ready for pool monitoring.
 pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
@@ -207,43 +207,29 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         log(LogTag::Filtering, "DEBUG", "🔍 Starting token acquisition and filtering process");
     }
 
-    // 1. Get tokens from database with freshness filtering
+    // 1. Get ALL tokens from database (no filtering yet)
     let database = TokenDatabase::new().map_err(|e|
         format!("Failed to create token database: {}", e)
     )?;
 
-    // Get all tokens from database with update time for freshness filtering
+    // Get all tokens from database with update time
     let all_tokens_with_time = database
         .get_all_tokens_with_update_time().await
         .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
-
-    // Apply database freshness filter (last 1 hour only)
-    let now = chrono::Utc::now();
-    let one_hour_ago = now - chrono::Duration::hours(1);
-
-    let fresh_tokens: Vec<
-        (String, String, chrono::DateTime<chrono::Utc>, f64)
-    > = all_tokens_with_time
-        .into_iter()
-        .filter(|(_, _, last_updated, _)| *last_updated >= one_hour_ago)
-        .collect();
 
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "DEBUG",
-            &format!(
-                "📊 Database freshness filter: {} tokens updated in last hour",
-                fresh_tokens.len()
-            )
+            &format!("📊 Retrieved {} total tokens from database", all_tokens_with_time.len())
         );
     }
 
-    // 2. EARLY BLACKLIST FILTER - Remove blacklisted tokens immediately (highest priority)
-    let pre_blacklist_count = fresh_tokens.len();
+    // 2. BLACKLIST FILTER FIRST - Remove blacklisted tokens immediately (HIGHEST PRIORITY)
+    let pre_blacklist_count = all_tokens_with_time.len();
     let blacklist_filtered_tokens: Vec<
         (String, String, chrono::DateTime<chrono::Utc>, f64)
-    > = fresh_tokens
+    > = all_tokens_with_time
         .into_iter()
         .filter(|(mint, _, _, _)| !is_token_excluded_from_trading(mint))
         .collect();
@@ -254,7 +240,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
             LogTag::Filtering,
             "DEBUG",
             &format!(
-                "🚫 Early blacklist filter: {} tokens → {} tokens ({} blacklisted removed)",
+                "� STEP 1 - Blacklist filter: {} tokens → {} tokens ({} blacklisted removed)",
                 pre_blacklist_count,
                 blacklist_filtered_tokens.len(),
                 blacklisted_count
@@ -262,15 +248,37 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         );
     }
 
-    // 3. Apply 5000 token limit (hardcoded near MAX_WATCHED_TOKENS)
+    // 3. Apply freshness filter (last 1 hour only) - AFTER blacklist filtering
+    let now = chrono::Utc::now();
+    let one_hour_ago = now - chrono::Duration::hours(1);
+
+    let fresh_tokens: Vec<
+        (String, String, chrono::DateTime<chrono::Utc>, f64)
+    > = blacklist_filtered_tokens
+        .into_iter()
+        .filter(|(_, _, last_updated, _)| *last_updated >= one_hour_ago)
+        .collect();
+
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG",
+            &format!(
+                "⏱️ STEP 2 - Freshness filter: {} tokens updated in last hour",
+                fresh_tokens.len()
+            )
+        );
+    }
+
+    // 4. Apply 5000 token limit (hardcoded near MAX_WATCHED_TOKENS)
     const MAX_TOKENS_FOR_PROCESSING: usize = 5000;
-    let limited_tokens = if blacklist_filtered_tokens.len() > MAX_TOKENS_FOR_PROCESSING {
+    let limited_tokens = if fresh_tokens.len() > MAX_TOKENS_FOR_PROCESSING {
         // Sort by liquidity (highest first) and take top 5000
-        let mut sorted_fresh = blacklist_filtered_tokens;
+        let mut sorted_fresh = fresh_tokens;
         sorted_fresh.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
         sorted_fresh.into_iter().take(MAX_TOKENS_FOR_PROCESSING).collect()
     } else {
-        blacklist_filtered_tokens
+        fresh_tokens
     };
 
     if is_debug_filtering_enabled() {
@@ -278,14 +286,14 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
             LogTag::Filtering,
             "DEBUG",
             &format!(
-                "📊 Token limit applied: processing {} tokens (max: {})",
+                "📊 STEP 3 - Token limit applied: processing {} tokens (max: {})",
                 limited_tokens.len(),
                 MAX_TOKENS_FOR_PROCESSING
             )
         );
     }
 
-    // 3. Convert to Token objects for filtering
+    // 5. Convert to Token objects for filtering
     let token_mints: Vec<String> = limited_tokens
         .iter()
         .map(|(mint, _, _, _)| mint.clone())
@@ -298,7 +306,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         }
     }
 
-    // 4. EARLY PERFORMANCE FILTERING - Remove obvious rejects before detailed processing
+    // 6. EARLY PERFORMANCE FILTERING - Remove obvious rejects before detailed processing
     let initial_count = all_tokens.len();
     let mut zero_liquidity_filtered = 0;
     let mut no_decimals_filtered = 0;
@@ -352,7 +360,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         );
     }
 
-    // 5. Get open position mints (always monitor these regardless of filtering)
+    // 7. Get open position mints (always monitor these regardless of filtering)
     let open_position_mints = crate::positions::get_open_mints().await;
     let mut monitored_tokens: Vec<String> = Vec::new();
     let mut open_positions_added = 0;
@@ -365,7 +373,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         }
     }
 
-    // 6. Apply comprehensive filtering to all tokens
+    // 8. Apply comprehensive filtering to all tokens
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
