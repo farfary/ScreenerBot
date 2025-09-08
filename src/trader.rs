@@ -29,6 +29,11 @@
 /// - Semaphore-based concurrency limiting (5 entry checks, 3 concurrent sells)
 /// - Comprehensive timeout handling for all operations
 /// - Graceful shutdown with proper cleanup
+///
+/// **Debug Features:**
+/// - `DEBUG_FORCE_SELL_MODE` - Automatically sell positions after timeout
+/// - `DEBUG_FORCE_BUY_MODE` - Automatically buy tokens on price drops (≥3% by default)
+/// - Both debug modes can be independently enabled/disabled for testing
 
 // =============================================================================
 // TRADING SYSTEM CONFIGURATION CONSTANTS
@@ -89,6 +94,12 @@ pub const DEBUG_FORCE_SELL_MODE: bool = false;
 
 /// Debug mode: Force sell timeout in seconds
 pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 20.0;
+
+/// Debug mode: Force buy tokens when they have a simple price drop (for testing)
+pub const DEBUG_FORCE_BUY_MODE: bool = false;
+
+/// Debug mode: Price drop threshold percentage to trigger force buy (e.g., 3.0 for 3% drop)
+pub const DEBUG_FORCE_BUY_DROP_THRESHOLD_PERCENT: f64 = 3.0;
 
 /// Enable position-aware DexScreener API caching
 /// When enabled: Tokens with open positions never make API calls, always use cached data
@@ -832,6 +843,39 @@ pub fn should_debug_force_sell(position: &crate::positions_types::Position) -> b
     false
 }
 
+/// Debug function: Check if a token should be force-bought due to simple price drop
+pub fn should_debug_force_buy(
+    current_price: f64,
+    previous_price: Option<f64>,
+    symbol: &str
+) -> bool {
+    if !DEBUG_FORCE_BUY_MODE {
+        return false;
+    }
+
+    if let Some(prev_price) = previous_price {
+        if prev_price > 0.0 && current_price > 0.0 {
+            let drop_percent = ((prev_price - current_price) / prev_price) * 100.0;
+
+            if drop_percent >= DEBUG_FORCE_BUY_DROP_THRESHOLD_PERCENT {
+                log(
+                    LogTag::Trader,
+                    "DEBUG_FORCE_BUY",
+                    &format!(
+                        "🚨 DEBUG MODE: Force buying {} - {:.2}% drop detected (threshold: {:.1}%)",
+                        symbol,
+                        drop_percent,
+                        DEBUG_FORCE_BUY_DROP_THRESHOLD_PERCENT
+                    )
+                );
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 /// Update token tracking after checking a token
 pub fn update_token_check_info(
     mint: &str,
@@ -1326,7 +1370,55 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             );
                         }
 
-                        if !approved {
+                        // Check for debug force buy (overrides normal entry logic)
+                        let mut force_buy_triggered = false;
+                        if DEBUG_FORCE_BUY_MODE {
+                            // Get previous price from token tracker
+                            let previous_price = {
+                                if let Ok(tracker) = TOKEN_CHECK_TRACKER.read() {
+                                    tracker.get(&price_info.mint).and_then(|info| info.last_price)
+                                } else {
+                                    None
+                                }
+                            };
+
+                            // Check if we have available position slots
+                            let open_positions_count =
+                                crate::positions::get_open_positions_count().await;
+                            let has_position_space = open_positions_count < MAX_OPEN_POSITIONS;
+
+                            if
+                                has_position_space &&
+                                should_debug_force_buy(
+                                    current_price,
+                                    previous_price,
+                                    &price_info.mint
+                                )
+                            {
+                                force_buy_triggered = true;
+                                log(
+                                    LogTag::Trader,
+                                    "DEBUG_FORCE_BUY_TRIGGERED",
+                                    &format!(
+                                        "🚨 DEBUG FORCE BUY: Overriding normal entry logic for {} (positions: {}/{})",
+                                        price_info.mint,
+                                        open_positions_count,
+                                        MAX_OPEN_POSITIONS
+                                    )
+                                );
+                            }
+                        }
+
+                        // Use force buy or normal entry approval
+                        if !approved && !force_buy_triggered {
+                            // Update token tracking for unsuccessful check
+                            update_token_check_info(
+                                &price_info.mint,
+                                Some(current_price),
+                                false,
+                                true,
+                                Some(current_price)
+                            );
                             return;
                         }
 
@@ -1376,6 +1468,15 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                         position_duration.as_secs_f32()
                                     )
                                 );
+
+                                // Update token tracking for successful entry
+                                update_token_check_info(
+                                    &price_info.mint,
+                                    Some(current_price),
+                                    force_buy_triggered, // Mark as drop if force buy was triggered
+                                    true,
+                                    Some(current_price)
+                                );
                             }
                             Err(e) => {
                                 log(
@@ -1387,6 +1488,15 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                         position_duration.as_secs_f32(),
                                         e
                                     )
+                                );
+
+                                // Update token tracking for failed entry
+                                update_token_check_info(
+                                    &price_info.mint,
+                                    Some(current_price),
+                                    force_buy_triggered, // Mark as drop if force buy was triggered
+                                    true,
+                                    Some(current_price)
                                 );
                             }
                         }
