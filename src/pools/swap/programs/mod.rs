@@ -8,6 +8,7 @@ use crate::pools::AccountData;
 
 // Program implementations
 pub mod raydium_cpmm;
+pub mod raydium_clmm;
 
 /// Common trait for all program swap implementations
 pub trait ProgramSwap {

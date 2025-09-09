@@ -7,7 +7,8 @@
 use super::types::{ SwapRequest, SwapResult, SwapDirection, SwapError, constants::* };
 use super::programs::ProgramSwap;
 use super::programs::raydium_cpmm::RaydiumCpmmSwap;
-use crate::pools::types::{ ProgramKind, RAYDIUM_CPMM_PROGRAM_ID };
+use super::programs::raydium_clmm::RaydiumClmmSwap;
+use crate::pools::types::{ ProgramKind, RAYDIUM_CPMM_PROGRAM_ID, RAYDIUM_CLMM_PROGRAM_ID };
 use crate::pools::decoders::PoolDecoder;
 use crate::pools::AccountData;
 use crate::rpc::get_rpc_client;
@@ -48,6 +49,7 @@ impl SwapBuilder {
         // Delegate to appropriate program implementation
         match program_kind {
             ProgramKind::RaydiumCpmm => { RaydiumCpmmSwap::execute_swap(request, pool_data).await }
+            ProgramKind::RaydiumClmm => { RaydiumClmmSwap::execute_swap(request, pool_data).await }
             _ => Err(SwapError::InvalidPool(format!("Unsupported program: {:?}", program_kind))),
         }
     }
@@ -103,6 +105,7 @@ impl SwapBuilder {
         // Determine program type from owner
         let program_kind = match account_data.owner.to_string().as_str() {
             RAYDIUM_CPMM_PROGRAM_ID => ProgramKind::RaydiumCpmm,
+            RAYDIUM_CLMM_PROGRAM_ID => ProgramKind::RaydiumClmm,
             _ => {
                 return Err(
                     SwapError::InvalidPool(

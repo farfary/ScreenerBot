@@ -27,3 +27,4 @@ pub use types::{ SwapRequest, SwapResult, SwapDirection, SwapError };
 
 // Re-export program implementations for direct access if needed
 pub use programs::raydium_cpmm::RaydiumCpmmSwap;
+pub use programs::raydium_clmm::RaydiumClmmSwap;
