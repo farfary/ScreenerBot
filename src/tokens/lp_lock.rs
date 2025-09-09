@@ -531,6 +531,17 @@ async fn find_liquidity_pool(
         return Ok(Some(pool_info));
     }
 
+    // Try Pump.fun AMM pools
+    if
+        let Ok(Some(pool_info)) = search_dex_pool(
+            token_mint,
+            &PoolSearchConfig::pumpfun_amm()
+        ).await
+    {
+        log(LogTag::Rpc, "POOL_FOUND", "Found Pump.fun AMM pool");
+        return Ok(Some(pool_info));
+    }
+
     log(
         LogTag::Rpc,
         "POOL_NOT_FOUND",
@@ -642,6 +653,17 @@ impl PoolSearchConfig {
             },
         }
     }
+
+    fn pumpfun_amm() -> Self {
+        Self {
+            program_id: "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+            pool_name: "Pump.fun AMM",
+            data_size: 300, // Exact size to reduce search scope and avoid pagination issues
+            token_a_offset: 43, // SOL mint position (verified from pool analysis)
+            token_b_offset: 75, // Token mint position (verified from pool analysis)
+            lp_extraction_method: LpExtractionMethod::FromPoolData { offset: 107 }, // LP mint position (verified)
+        }
+    }
 }
 
 /// Generic pool search function that eliminates code duplication
@@ -670,58 +692,103 @@ async fn search_dex_pool(
     for (position_name, offset) in positions {
         let filters = create_search_filters(config.data_size, offset, token_mint);
 
-        match
-            rpc_client.get_program_accounts(
-                config.program_id,
-                Some(filters),
-                Some("base64"),
-                Some(30)
-            ).await
-        {
-            Ok(accounts) => {
-                if let Some(account) = accounts.first() {
-                    if let Some(pool_address) = account.get("pubkey").and_then(|v| v.as_str()) {
-                        if
-                            let Some(lp_mint) = extract_lp_mint(
-                                pool_address,
-                                account,
-                                &config.lp_extraction_method,
-                                config.program_id
-                            ).await
-                        {
-                            log(
-                                LogTag::Rpc,
-                                "POOL_FOUND",
-                                &format!(
-                                    "Found {} pool at {} ({})",
-                                    config.pool_name,
-                                    truncate_address(pool_address, 8),
-                                    position_name
-                                )
-                            );
-                            return Ok(
-                                Some((
-                                    pool_address.to_string(),
-                                    lp_mint,
-                                    config.pool_name.to_string(),
-                                ))
-                            );
-                        }
-                    }
+        // Check if this is a large program that needs pagination (Pump.fun AMM and Meteora DAMM v2)
+        let needs_pagination = match config.program_id {
+            "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => true, // Pump.fun AMM
+            "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG" => true, // Meteora DAMM v2
+            "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => true, // Meteora DLMM (might be large)
+            _ => false, // Use regular getProgramAccounts for smaller programs
+        };
+
+        let accounts = if needs_pagination {
+            // Use getProgramAccountsV2 for large programs
+            log(
+                LogTag::Rpc,
+                "DEBUG",
+                &format!("Using paginated search for {} (large program)", config.pool_name)
+            );
+
+            match
+                rpc_client.get_all_program_accounts_v2(
+                    config.program_id,
+                    Some(filters),
+                    Some("base64"),
+                    None, // No data slice needed since we have exact filters
+                    Some(1000), // Batch size
+                    Some(60) // Timeout
+                ).await
+            {
+                Ok(accounts) => accounts,
+                Err(e) => {
+                    log(
+                        LogTag::Rpc,
+                        "DEX_SEARCH_ERROR",
+                        &format!(
+                            "Error searching {} {} position with pagination: {}",
+                            config.pool_name,
+                            position_name,
+                            e
+                        )
+                    );
+                    continue;
                 }
             }
-            Err(e) => {
-                log(
-                    LogTag::Rpc,
-                    "DEX_SEARCH_ERROR",
-                    &format!(
-                        "Error searching {} {} position: {}",
-                        config.pool_name,
-                        position_name,
-                        e
-                    )
-                );
-                // Continue to next position instead of failing immediately
+        } else {
+            // Use regular getProgramAccounts for smaller programs
+            match
+                rpc_client.get_program_accounts(
+                    config.program_id,
+                    Some(filters),
+                    Some("base64"),
+                    Some(30)
+                ).await
+            {
+                Ok(accounts) => accounts,
+                Err(e) => {
+                    log(
+                        LogTag::Rpc,
+                        "DEX_SEARCH_ERROR",
+                        &format!(
+                            "Error searching {} {} position: {}",
+                            config.pool_name,
+                            position_name,
+                            e
+                        )
+                    );
+                    continue;
+                }
+            }
+        };
+
+        if let Some(account) = accounts.first() {
+            if let Some(pool_address) = account.get("pubkey").and_then(|v| v.as_str()) {
+                if
+                    let Some(lp_mint) = extract_lp_mint(
+                        pool_address,
+                        account,
+                        &config.lp_extraction_method,
+                        config.program_id
+                    ).await
+                {
+                    log(
+                        LogTag::Rpc,
+                        "POOL_FOUND",
+                        &format!(
+                            "Found {} pool at {} ({}) {}",
+                            config.pool_name,
+                            truncate_address(pool_address, 8),
+                            position_name,
+                            if needs_pagination {
+                                "(paginated)"
+                            } else {
+                                ""
+                            }
+                        )
+                    );
+                    return Ok(
+                        Some((pool_address.to_string(), lp_mint, config.pool_name.to_string()))
+                    );
+                }
             }
         }
     }

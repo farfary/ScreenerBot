@@ -138,6 +138,15 @@ pub struct UiTokenAmount {
     pub ui_amount_string: Option<String>,
 }
 
+/// Response structure for getProgramAccountsV2 with pagination support
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginatedAccountsResponse {
+    /// The accounts returned in this page
+    pub accounts: Vec<serde_json::Value>,
+    /// Pagination key for next page (None if this is the last page)
+    pub pagination_key: Option<String>,
+}
+
 /// Signature status response structure for getSignatureStatuses
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SignatureStatusResponse {
@@ -4182,6 +4191,328 @@ impl RpcClient {
                 )
             }
         }
+    }
+
+    /// Enhanced getProgramAccountsV2 with cursor-based pagination for large program account sets
+    /// This method is required for handling large programs like Pump.fun AMM that exceed regular RPC limits
+    ///
+    /// Parameters:
+    /// - program_id: The program ID to query accounts for
+    /// - filters: Optional filters to apply
+    /// - encoding: Data encoding format (default: "base64")
+    /// - data_slice: Optional data slice configuration
+    /// - limit: Maximum accounts per request (1-10,000, optimal 1,000-5,000)
+    /// - pagination_key: Cursor for pagination (use None for first request)
+    /// - changed_since_slot: Optional slot for incremental updates
+    /// - timeout_seconds: Request timeout
+    pub async fn get_program_accounts_v2(
+        &self,
+        program_id: &str,
+        filters: Option<serde_json::Value>,
+        encoding: Option<&str>,
+        data_slice: Option<serde_json::Value>,
+        limit: Option<u32>,
+        pagination_key: Option<String>,
+        changed_since_slot: Option<u64>,
+        timeout_seconds: Option<u64>
+    ) -> Result<PaginatedAccountsResponse, ScreenerBotError> {
+        let mut params = vec![serde_json::Value::String(program_id.to_string())];
+
+        // Build config object for getProgramAccountsV2
+        let mut config = serde_json::Map::new();
+        config.insert(
+            "encoding".to_string(),
+            serde_json::Value::String(encoding.unwrap_or("base64").to_string())
+        );
+
+        if let Some(filters_value) = filters {
+            config.insert("filters".to_string(), filters_value);
+        }
+
+        // Add dataSlice if provided
+        if let Some(slice_value) = data_slice {
+            config.insert("dataSlice".to_string(), slice_value);
+        }
+
+        // Add limit (default to 1000 for optimal performance)
+        config.insert(
+            "limit".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(limit.unwrap_or(1000)))
+        );
+
+        // Add pagination key if provided
+        if let Some(key) = pagination_key {
+            config.insert("paginationKey".to_string(), serde_json::Value::String(key));
+        }
+
+        // Add changedSinceSlot if provided
+        if let Some(slot) = changed_since_slot {
+            config.insert(
+                "changedSinceSlot".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(slot))
+            );
+        }
+
+        params.push(serde_json::Value::Object(config));
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getProgramAccountsV2",
+            "params": params
+        });
+
+        // Use round-robin RPC rotation
+        let current_url = self.rotate_to_next_url();
+
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "DEBUG",
+                &format!(
+                    "Getting program accounts V2 (paginated) for program: {} limit: {} from RPC: {}",
+                    crate::utils::safe_truncate(program_id, 12),
+                    limit.unwrap_or(1000),
+                    current_url
+                )
+            );
+        }
+
+        // Apply rate limiting
+        self.wait_for_rate_limit().await;
+        self.record_call("getProgramAccountsV2");
+
+        // Create client with extended timeout for pagination
+        let client = reqwest::Client
+            ::builder()
+            .timeout(std::time::Duration::from_secs(timeout_seconds.unwrap_or(120)))
+            .build()
+            .map_err(|e| {
+                ScreenerBotError::Network(NetworkError::Generic {
+                    message: format!("Failed to create HTTP client: {}", e),
+                })
+            })?;
+
+        match
+            client
+                .post(&current_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let error_text = response
+                        .text().await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+
+                    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                        self.record_429_error(Some(&current_url));
+                        return Err(
+                            ScreenerBotError::RpcProvider(RpcProviderError::RateLimitExceeded {
+                                provider_name: current_url.clone(),
+                                limit_type: "requests_per_second".to_string(),
+                                reset_at: chrono::Utc::now() + chrono::Duration::seconds(60),
+                            })
+                        );
+                    } else if status == reqwest::StatusCode::REQUEST_TIMEOUT {
+                        return Err(
+                            ScreenerBotError::Network(NetworkError::ConnectionTimeout {
+                                endpoint: current_url.clone(),
+                                timeout_ms: timeout_seconds.unwrap_or(120) * 1000,
+                            })
+                        );
+                    } else {
+                        return Err(
+                            ScreenerBotError::Network(NetworkError::HttpStatusError {
+                                endpoint: current_url.clone(),
+                                status: status.as_u16(),
+                                body: Some(error_text),
+                            })
+                        );
+                    }
+                }
+
+                let rpc_response = response.json::<serde_json::Value>().await.map_err(|e| {
+                    ScreenerBotError::Data(DataError::ParseError {
+                        data_type: "RPC V2 response".to_string(),
+                        error: e.to_string(),
+                    })
+                })?;
+
+                // Check for RPC-level errors
+                if let Some(error) = rpc_response.get("error") {
+                    if let Some(message) = error.get("message").and_then(|m| m.as_str()) {
+                        let error_msg = message.to_lowercase();
+
+                        if error_msg.contains("timeout") || error_msg.contains("too many accounts") {
+                            return Err(
+                                ScreenerBotError::Network(NetworkError::ConnectionTimeout {
+                                    endpoint: current_url.clone(),
+                                    timeout_ms: timeout_seconds.unwrap_or(120) * 1000,
+                                })
+                            );
+                        } else if error_msg.contains("rate limit") || error_msg.contains("429") {
+                            self.record_429_error(Some(&current_url));
+                            return Err(
+                                ScreenerBotError::RpcProvider(RpcProviderError::RateLimitExceeded {
+                                    provider_name: current_url.clone(),
+                                    limit_type: "requests_per_second".to_string(),
+                                    reset_at: chrono::Utc::now() + chrono::Duration::seconds(60),
+                                })
+                            );
+                        } else {
+                            return Err(
+                                ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                                    provider_name: current_url.clone(),
+                                    message: format!("RPC V2 error: {}", message),
+                                })
+                            );
+                        }
+                    }
+                }
+
+                if let Some(result) = rpc_response.get("result") {
+                    // Parse accounts array
+                    let accounts = result
+                        .get("accounts")
+                        .and_then(|a| a.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+
+                    // Extract pagination key (can be null)
+                    let next_pagination_key = result
+                        .get("paginationKey")
+                        .and_then(|k| k.as_str())
+                        .map(|s| s.to_string());
+
+                    // Record successful call
+                    self.record_success(Some(&current_url));
+
+                    if is_debug_rpc_enabled() {
+                        log(
+                            LogTag::Rpc,
+                            "SUCCESS",
+                            &format!(
+                                "Retrieved {} program accounts V2 from RPC: {} (hasMore: {})",
+                                accounts.len(),
+                                current_url,
+                                next_pagination_key.is_some()
+                            )
+                        );
+                    }
+
+                    return Ok(PaginatedAccountsResponse {
+                        accounts,
+                        pagination_key: next_pagination_key,
+                    });
+                }
+
+                Err(
+                    ScreenerBotError::Data(DataError::ParseError {
+                        data_type: "program accounts V2".to_string(),
+                        error: "No accounts found or invalid response format".to_string(),
+                    })
+                )
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+
+                // Check for rate limiting errors
+                if Self::is_rate_limit_error(&error_msg) {
+                    self.record_429_error(Some(&current_url));
+                    log(
+                        LogTag::Rpc,
+                        "WARN",
+                        &format!("Rate limited on RPC {} for program accounts V2", current_url)
+                    );
+                } else {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!(
+                            "Failed to get program accounts V2 from RPC {}: {}",
+                            current_url,
+                            e
+                        )
+                    );
+                }
+
+                Err(
+                    ScreenerBotError::Network(NetworkError::Generic {
+                        message: format!("Failed to get program accounts V2 from RPC: {}", e),
+                    })
+                )
+            }
+        }
+    }
+
+    /// Fetch all program accounts using getProgramAccountsV2 pagination
+    /// This method handles pagination automatically and returns all accounts
+    /// Use this for complete data collection when you need all accounts for a program
+    pub async fn get_all_program_accounts_v2(
+        &self,
+        program_id: &str,
+        filters: Option<serde_json::Value>,
+        encoding: Option<&str>,
+        data_slice: Option<serde_json::Value>,
+        batch_size: Option<u32>,
+        timeout_seconds: Option<u64>
+    ) -> Result<Vec<serde_json::Value>, ScreenerBotError> {
+        let mut all_accounts = Vec::new();
+        let mut pagination_key: Option<String> = None;
+        let batch_size = batch_size.unwrap_or(2000); // Optimal batch size
+
+        loop {
+            let response = self.get_program_accounts_v2(
+                program_id,
+                filters.clone(),
+                encoding,
+                data_slice.clone(),
+                Some(batch_size),
+                pagination_key.clone(),
+                None, // changedSinceSlot
+                timeout_seconds
+            ).await?;
+
+            // Add accounts from this batch
+            all_accounts.extend(response.accounts);
+
+            // Check if we have more pages
+            if let Some(next_key) = response.pagination_key {
+                pagination_key = Some(next_key);
+
+                if is_debug_rpc_enabled() {
+                    log(
+                        LogTag::Rpc,
+                        "DEBUG",
+                        &format!(
+                            "Fetched {} accounts so far, continuing pagination...",
+                            all_accounts.len()
+                        )
+                    );
+                }
+            } else {
+                // No more pages
+                break;
+            }
+        }
+
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "SUCCESS",
+                &format!(
+                    "Completed pagination fetch: {} total accounts for program {}",
+                    all_accounts.len(),
+                    crate::utils::safe_truncate(program_id, 12)
+                )
+            );
+        }
+
+        Ok(all_accounts)
     }
 
     /// Get mint account data to check authorities (minting, freeze, update metadata)
