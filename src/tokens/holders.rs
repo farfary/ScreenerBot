@@ -80,18 +80,31 @@ pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usiz
     };
 
     // Create filters for getProgramAccounts
-    let filters =
+    let filters = if is_token_2022 {
+        // Token-2022 accounts can have variable sizes due to extensions
+        // Don't filter by dataSize for Token-2022 to catch all accounts
         serde_json::json!([
-        {
-            "dataSize": if is_token_2022 { 82 } else { 165 }
-        },
-        {
-            "memcmp": {
-                "offset": 0,
-                "bytes": mint_address
+            {
+                "memcmp": {
+                    "offset": 0,
+                    "bytes": mint_address
+                }
             }
-        }
-    ]);
+        ])
+    } else {
+        // SPL Token accounts have fixed size
+        serde_json::json!([
+            {
+                "dataSize": 165  // Standard SPL token account size
+            },
+            {
+                "memcmp": {
+                    "offset": 0,
+                    "bytes": mint_address
+                }
+            }
+        ])
+    };
 
     // Use dataSlice with 0 length to only get account count without data (OPTIMIZATION!)
     let data_slice = serde_json::json!({
@@ -203,18 +216,31 @@ async fn fetch_token_accounts(
     };
 
     // Create filters for getProgramAccounts
-    let filters =
+    let filters = if is_token_2022 {
+        // Token-2022 accounts can have variable sizes due to extensions
+        // Don't filter by dataSize for Token-2022 to catch all accounts
         serde_json::json!([
-        {
-            "dataSize": 165  // Standard token account size
-        },
-        {
-            "memcmp": {
-                "offset": 0,
-                "bytes": mint_address
+            {
+                "memcmp": {
+                    "offset": 0,
+                    "bytes": mint_address
+                }
             }
-        }
-    ]);
+        ])
+    } else {
+        // SPL Token accounts have fixed size
+        serde_json::json!([
+            {
+                "dataSize": 165  // Standard SPL token account size
+            },
+            {
+                "memcmp": {
+                    "offset": 0,
+                    "bytes": mint_address
+                }
+            }
+        ])
+    };
 
     log(
         LogTag::Rpc,
