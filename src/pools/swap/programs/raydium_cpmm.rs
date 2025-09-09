@@ -75,10 +75,7 @@ impl ProgramSwap for RaydiumCpmmSwap {
         ).await?;
 
         // Execute transaction
-        let mut result = SwapExecutor::execute_transaction(transaction, request.dry_run).await?;
-        result.params = swap_params;
-
-        Ok(result)
+        SwapExecutor::execute_transaction(transaction, swap_params, request.dry_run).await
     }
 }
 

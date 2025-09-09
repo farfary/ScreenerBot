@@ -3,9 +3,9 @@
 /// This module handles the actual execution of swap transactions,
 /// including transaction signing and broadcasting.
 
-use super::types::{ SwapResult, SwapError };
+use super::types::{SwapResult, SwapError, SwapParams};
 use crate::rpc::get_rpc_client;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 
 use solana_sdk::{ transaction::Transaction, signature::Signature };
 use base64::Engine;
@@ -17,19 +17,14 @@ impl SwapExecutor {
     /// Execute a transaction with retries and proper error handling
     pub async fn execute_transaction(
         transaction: Transaction,
+        swap_params: SwapParams,
         dry_run: bool
     ) -> Result<SwapResult, SwapError> {
         if dry_run {
             log(LogTag::System, "INFO", "🧪 Dry run mode - transaction not sent");
             return Ok(SwapResult {
                 signature: None,
-                params: super::types::SwapParams {
-                    input_amount: 0.0,
-                    expected_output: 0.0,
-                    minimum_output: 0.0,
-                    input_amount_raw: 0,
-                    minimum_output_raw: 0,
-                },
+                params: swap_params,
                 transaction: Some(transaction),
                 success: true,
                 error: None,
@@ -63,13 +58,7 @@ impl SwapExecutor {
 
         Ok(SwapResult {
             signature: Some(signature),
-            params: super::types::SwapParams {
-                input_amount: 0.0,
-                expected_output: 0.0,
-                minimum_output: 0.0,
-                input_amount_raw: 0,
-                minimum_output_raw: 0,
-            },
+            params: swap_params,
             transaction: Some(transaction),
             success: true,
             error: None,

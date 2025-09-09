@@ -99,7 +99,7 @@ impl ProgramSwap for RaydiumClmmSwap {
         let transaction = Self::build_swap_transaction(&wallet, &request, &pool_info, &swap_params).await?;
 
         // Execute transaction
-        SwapExecutor::execute_transaction(transaction, request.dry_run).await
+        SwapExecutor::execute_transaction(transaction, swap_params, request.dry_run).await
     }
 }
 
