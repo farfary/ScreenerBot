@@ -3,7 +3,7 @@
 
 use screenerbot::pools::swap::SwapBuilder;
 use screenerbot::pools::swap::types::SwapDirection;
-use screenerbot::logger::{log, LogTag};
+use screenerbot::logger::{ log, LogTag };
 use std::error::Error;
 
 #[tokio::main]
@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Test 1: Buy 0.001 SOL worth of tokens (dry run)
     log(LogTag::System, "INFO", "🔄 Test 1: Buy tokens with 0.001 SOL (dry run)");
-    
+
     let buy_result = SwapBuilder::new()
         .pool_address(pool_address)?
         .token_mint(token_mint)?
@@ -27,21 +27,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .buy()
         .slippage_percent(1.0)
         .dry_run(true)
-        .execute()
-        .await;
+        .execute().await;
 
     match buy_result {
         Ok(result) => {
             log(LogTag::System, "SUCCESS", "✅ Buy test successful!");
-            log(LogTag::System, "INFO", &format!(
-                "💰 Input: {} SOL → Expected output: {} tokens (min: {})",
-                result.params.input_amount,
-                result.params.expected_output,
-                result.params.minimum_output
-            ));
-            
+            log(
+                LogTag::System,
+                "INFO",
+                &format!(
+                    "💰 Input: {} SOL → Expected output: {} tokens (min: {})",
+                    result.params.input_amount,
+                    result.params.expected_output,
+                    result.params.minimum_output
+                )
+            );
+
             if let Some(transaction) = &result.transaction {
-                log(LogTag::System, "INFO", &format!("📝 Transaction accounts: {}", transaction.message.account_keys.len()));
+                log(
+                    LogTag::System,
+                    "INFO",
+                    &format!("📝 Transaction accounts: {}", transaction.message.account_keys.len())
+                );
             }
         }
         Err(e) => {
@@ -52,7 +59,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Test 2: Sell 1000 tokens (dry run)
     log(LogTag::System, "INFO", "🔄 Test 2: Sell 1000 tokens (dry run)");
-    
+
     let sell_result = SwapBuilder::new()
         .pool_address(pool_address)?
         .token_mint(token_mint)?
@@ -60,21 +67,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .sell()
         .slippage_percent(1.0)
         .dry_run(true)
-        .execute()
-        .await;
+        .execute().await;
 
     match sell_result {
         Ok(result) => {
             log(LogTag::System, "SUCCESS", "✅ Sell test successful!");
-            log(LogTag::System, "INFO", &format!(
-                "💰 Input: {} tokens → Expected output: {} SOL (min: {})",
-                result.params.input_amount,
-                result.params.expected_output,
-                result.params.minimum_output
-            ));
+            log(
+                LogTag::System,
+                "INFO",
+                &format!(
+                    "💰 Input: {} tokens → Expected output: {} SOL (min: {})",
+                    result.params.input_amount,
+                    result.params.expected_output,
+                    result.params.minimum_output
+                )
+            );
 
             if let Some(transaction) = &result.transaction {
-                log(LogTag::System, "INFO", &format!("📝 Transaction accounts: {}", transaction.message.account_keys.len()));
+                log(
+                    LogTag::System,
+                    "INFO",
+                    &format!("📝 Transaction accounts: {}", transaction.message.account_keys.len())
+                );
             }
         }
         Err(e) => {
@@ -84,7 +98,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     log(LogTag::System, "SUCCESS", "🎉 All CLMM tests completed successfully!");
-    log(LogTag::System, "INFO", "✨ New implementation properly derives accounts and builds transactions");
+    log(
+        LogTag::System,
+        "INFO",
+        "✨ New implementation properly derives accounts and builds transactions"
+    );
 
     Ok(())
 }

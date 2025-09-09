@@ -2,7 +2,7 @@
 /// This test performs real transactions to verify the implementation works on-chain
 
 use screenerbot::pools::swap::SwapBuilder;
-use screenerbot::logger::{log, LogTag};
+use screenerbot::logger::{ log, LogTag };
 use std::error::Error;
 
 #[tokio::main]
@@ -17,7 +17,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Test: Buy with very small amount (0.0001 SOL = ~$0.02)
     log(LogTag::System, "INFO", "💎 Executing REAL buy with 0.0001 SOL");
-    
+
     let buy_result = SwapBuilder::new()
         .pool_address(pool_address)?
         .token_mint(token_mint)?
@@ -25,23 +25,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .buy()
         .slippage_percent(2.0) // 2% slippage for safety
         .dry_run(false) // REAL TRANSACTION
-        .execute()
-        .await;
+        .execute().await;
 
     match buy_result {
         Ok(result) => {
             if let Some(signature) = result.signature {
-                log(LogTag::System, "SUCCESS", &format!("✅ REAL BUY SUCCESSFUL! Signature: {}", signature));
-                log(LogTag::System, "INFO", &format!(
-                    "💰 Swapped {} SOL for {} tokens",
-                    result.params.input_amount,
-                    result.params.expected_output
-                ));
-                
+                log(
+                    LogTag::System,
+                    "SUCCESS",
+                    &format!("✅ REAL BUY SUCCESSFUL! Signature: {}", signature)
+                );
+                log(
+                    LogTag::System,
+                    "INFO",
+                    &format!(
+                        "💰 Swapped {} SOL for {} tokens",
+                        result.params.input_amount,
+                        result.params.expected_output
+                    )
+                );
+
                 // Verify transaction on-chain
                 log(LogTag::System, "INFO", "🔍 Verifying transaction on-chain...");
                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                
+
                 // TODO: Add verification logic here
                 log(LogTag::System, "SUCCESS", "🎉 Transaction confirmed on-chain!");
             } else {
@@ -55,7 +62,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     log(LogTag::System, "SUCCESS", "🏆 Real CLMM swap test completed!");
-    log(LogTag::System, "INFO", "🎯 New implementation successfully executed on-chain transaction!");
+    log(
+        LogTag::System,
+        "INFO",
+        "🎯 New implementation successfully executed on-chain transaction!"
+    );
 
     Ok(())
 }
