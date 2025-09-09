@@ -407,21 +407,20 @@ async fn calculate_swap_amounts(
 
     // Calculate using constant product formula: x * y = k
     let (input_amount, expected_output, input_amount_raw, minimum_output_raw) = if is_sell {
-        // Selling tokens for SOL - calculate how many tokens to sell to get desired SOL amount
-        let desired_sol_raw =
-            (sol_to_lamports(amount_sol) * (10_u64).pow(sol_decimals as u32)) / (10_u64).pow(9);
+        // For selling: calculate how many tokens to get approximate SOL amount
+        // Using current pool rate: SOL per token = sol_reserve / token_reserve
+        let current_rate = (sol_reserve as f64) / (token_reserve as f64);
+        let tokens_to_sell = amount_sol / current_rate;
+        let token_amount_raw = (tokens_to_sell * (10_f64).powi(token_decimals as i32)) as u64;
 
-        // Use the reverse constant product formula: token_input = (sol_reserve * desired_sol_output) / (token_reserve - desired_sol_output)
-        let token_amount_raw = if desired_sol_raw < sol_reserve {
-            (token_reserve * desired_sol_raw) / (sol_reserve - desired_sol_raw)
-        } else {
-            return Err("Desired SOL amount exceeds available liquidity".into());
-        };
+        // Calculate expected SOL output using constant product formula
+        let sol_output_raw = (sol_reserve * token_amount_raw) / (token_reserve + token_amount_raw);
+        let sol_output = (sol_output_raw as f64) / (10_f64).powi(sol_decimals as i32);
 
-        let token_amount = (token_amount_raw as f64) / (10_f64).powi(token_decimals as i32);
-        let min_sol_output_raw = (desired_sol_raw * (10000 - (slippage_bps as u64))) / 10000;
+        // Apply slippage to the calculated output
+        let min_sol_output_raw = (sol_output_raw * (10000 - (slippage_bps as u64))) / 10000;
 
-        (token_amount, amount_sol, token_amount_raw, min_sol_output_raw)
+        (tokens_to_sell, sol_output, token_amount_raw, min_sol_output_raw)
     } else {
         // Buying tokens with SOL
         let sol_amount_raw =
