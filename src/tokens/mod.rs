@@ -18,6 +18,7 @@ pub mod monitor;
 pub mod ohlcv_db;
 pub mod ohlcvs;
 pub mod raydium;
+pub mod security;
 pub mod types;
 
 // Re-export main types and functions
