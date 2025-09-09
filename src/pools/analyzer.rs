@@ -35,6 +35,7 @@ pub enum AnalyzerMessage {
         base_mint: Pubkey,
         quote_mint: Pubkey,
         liquidity_usd: f64,
+        volume_h24_usd: f64,
     },
     /// Signal shutdown
     Shutdown,
@@ -114,7 +115,8 @@ impl PoolAnalyzer {
                                 program_id, 
                                 base_mint, 
                                 quote_mint, 
-                                liquidity_usd 
+                                liquidity_usd,
+                                volume_h24_usd
                             }) => {
                                 if let Some(descriptor) = Self::analyze_pool_static(
                                     pool_id,
@@ -122,6 +124,7 @@ impl PoolAnalyzer {
                                     base_mint,
                                     quote_mint,
                                     liquidity_usd,
+                                    volume_h24_usd,
                                     &rpc_client
                                 ).await {
                                     // Store analyzed pool in directory
@@ -199,6 +202,7 @@ impl PoolAnalyzer {
         base_mint: Pubkey,
         quote_mint: Pubkey,
         liquidity_usd: f64,
+        volume_h24_usd: f64,
         rpc_client: &RpcClient
     ) -> Option<PoolDescriptor> {
         // First, try to determine the actual program type by fetching the pool account
@@ -294,6 +298,7 @@ impl PoolAnalyzer {
             quote_mint,
             reserve_accounts,
             liquidity_usd,
+            volume_h24_usd,
             last_updated: Instant::now(),
         })
     }
@@ -847,7 +852,8 @@ impl PoolAnalyzer {
         program_id: Pubkey,
         base_mint: Pubkey,
         quote_mint: Pubkey,
-        liquidity_usd: f64
+        liquidity_usd: f64,
+        volume_h24_usd: f64
     ) -> Result<(), String> {
         let message = AnalyzerMessage::AnalyzePool {
             pool_id,
@@ -855,6 +861,7 @@ impl PoolAnalyzer {
             base_mint,
             quote_mint,
             liquidity_usd,
+            volume_h24_usd,
         };
 
         self.analyzer_tx

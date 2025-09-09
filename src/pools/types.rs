@@ -205,6 +205,7 @@ pub struct PoolDescriptor {
     pub quote_mint: Pubkey,
     pub reserve_accounts: Vec<Pubkey>,
     pub liquidity_usd: f64,
+    pub volume_h24_usd: f64,
     pub last_updated: Instant,
 }
 

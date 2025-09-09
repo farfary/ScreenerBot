@@ -121,13 +121,13 @@ impl PoolDiscovery {
             );
         }
 
-        // Run batch fetches for all sources (each handles rate limiting internally)
-        // DexScreener
-        let dexs_batch = get_batch_token_pools_from_dexscreener(&tokens).await;
-        // GeckoTerminal (serialized inside)
-        let gecko_batch = get_batch_token_pools_from_geckoterminal(&tokens).await;
-        // Raydium
-        let raydium_batch = get_batch_token_pools_from_raydium(&tokens).await;
+        // Run batch fetches for all sources concurrently (each handles rate limiting internally)
+        // Using tokio::join! to minimize total tick latency vs sequential awaits
+        let (dexs_batch, gecko_batch, raydium_batch) = tokio::join!(
+            get_batch_token_pools_from_dexscreener(&tokens),
+            get_batch_token_pools_from_geckoterminal(&tokens),
+            get_batch_token_pools_from_raydium(&tokens)
+        );
 
         // Convert to PoolDescriptor list
         let mut descriptors: Vec<PoolDescriptor> = Vec::new();
@@ -203,6 +203,7 @@ impl PoolDiscovery {
                     base_mint: pool.base_mint,
                     quote_mint: pool.quote_mint,
                     liquidity_usd: pool.liquidity_usd,
+                    volume_h24_usd: pool.volume_h24_usd,
                 });
             }
         } else if is_debug_pool_discovery_enabled() {
@@ -243,7 +244,22 @@ impl PoolDiscovery {
             let token = if p.base_mint == sol { p.quote_mint } else { p.base_mint };
             match best_by_token.get(&token) {
                 Some(existing) => {
-                    if p.liquidity_usd > existing.liquidity_usd {
+                    // Smart pool selection: prioritize volume when liquidity is misleading
+                    let should_replace = if existing.liquidity_usd <= 0.0 && p.liquidity_usd <= 0.0 {
+                        // Both have no/low liquidity, choose based on volume
+                        p.volume_h24_usd > existing.volume_h24_usd
+                    } else if existing.liquidity_usd <= 0.0 {
+                        // Current has no liquidity, new has some - prefer new
+                        true
+                    } else if p.liquidity_usd <= 0.0 {
+                        // New has no liquidity, current has some - keep current unless volume is massively higher
+                        p.volume_h24_usd > existing.volume_h24_usd * 100.0 // 100x volume threshold
+                    } else {
+                        // Both have liquidity, use traditional liquidity comparison
+                        p.liquidity_usd > existing.liquidity_usd
+                    };
+
+                    if should_replace {
                         best_by_token.insert(token, p);
                     }
                 }
@@ -276,6 +292,7 @@ impl PoolDiscovery {
             .as_ref()
             .map(|l| l.usd)
             .unwrap_or(0.0);
+        let volume_h24_usd = pair.volume.h24.unwrap_or(0.0);
         Ok(PoolDescriptor {
             pool_id,
             program_kind: ProgramKind::Unknown,
@@ -283,6 +300,7 @@ impl PoolDiscovery {
             quote_mint,
             reserve_accounts: Vec::new(),
             liquidity_usd,
+            volume_h24_usd,
             last_updated: std::time::Instant::now(),
         })
     }
@@ -308,6 +326,7 @@ impl PoolDiscovery {
             quote_mint,
             reserve_accounts: Vec::new(),
             liquidity_usd: pool.liquidity_usd,
+            volume_h24_usd: pool.volume_24h,
             last_updated: std::time::Instant::now(),
         })
     }
@@ -333,6 +352,7 @@ impl PoolDiscovery {
             quote_mint,
             reserve_accounts: Vec::new(),
             liquidity_usd: pool.liquidity_usd,
+            volume_h24_usd: 0.0,
             last_updated: std::time::Instant::now(),
         })
     }
@@ -579,6 +599,7 @@ impl PoolDiscovery {
             quote_mint,
             reserve_accounts: Vec::new(),
             liquidity_usd,
+            volume_h24_usd: 0.0,
             last_updated: std::time::Instant::now(),
         })
     }
@@ -612,6 +633,7 @@ impl PoolDiscovery {
             quote_mint,
             reserve_accounts: Vec::new(),
             liquidity_usd: pool.liquidity_usd,
+            volume_h24_usd: 0.0,
             last_updated: std::time::Instant::now(),
         })
     }
@@ -645,6 +667,7 @@ impl PoolDiscovery {
             quote_mint,
             reserve_accounts: Vec::new(),
             liquidity_usd: pool.liquidity_usd,
+            volume_h24_usd: 0.0,
             last_updated: std::time::Instant::now(),
         })
     }

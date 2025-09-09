@@ -1663,12 +1663,35 @@ impl TransactionsManager {
             let sol_amount = self.extract_sol_amount_from_pumpfun(transaction).await;
             let token_amount = self.extract_token_amount_from_pumpfun(transaction).await;
 
+            // Enforce real mint extraction now (no placeholder usage). If not found, log and return early error.
+            let target_token_mint = match target_token_mint {
+                Some(m) => {
+                    log(
+                        LogTag::Transactions,
+                        "PUMP_MINT_EXTRACT_SUCCESS",
+                        &format!("{} mint={}", &transaction.signature[..8], m)
+                    );
+                    Some(m)
+                }
+                None => {
+                    log(
+                        LogTag::Transactions,
+                        "PUMP_MINT_EXTRACT_FAIL",
+                        &format!(
+                            "{} could not extract Pump.fun mint yet",
+                            &transaction.signature[..8]
+                        )
+                    );
+                    return Err("PumpFunMissingMint".to_string());
+                }
+            };
+
             // Determine direction based on instruction patterns and balance changes
             // Note: sol_amount is always positive (abs value), so we use sol_balance_change for direction
             if has_buy_instruction || transaction.sol_balance_change < -0.000001 {
                 // SOL to Token (Buy) - SOL was spent (negative balance change)
                 return Ok(TransactionType::SwapSolToToken {
-                    token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
+                    token_mint: target_token_mint.clone().unwrap(),
                     sol_amount: sol_amount, // Use extracted amount (excludes ATA rent)
                     token_amount: token_amount,
                     router: "Pump.fun".to_string(),
@@ -1676,7 +1699,7 @@ impl TransactionsManager {
             } else if has_sell_instruction || transaction.sol_balance_change > 0.000001 {
                 // Token to SOL (Sell) - SOL was received (positive balance change)
                 return Ok(TransactionType::SwapTokenToSol {
-                    token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
+                    token_mint: target_token_mint.clone().unwrap(),
                     token_amount: token_amount,
                     sol_amount: sol_amount, // Use extracted amount (excludes ATA rent)
                     router: "Pump.fun".to_string(),
@@ -1687,9 +1710,7 @@ impl TransactionsManager {
                     if transaction.sol_balance_change < 0.0 {
                         // SOL spent = Buy
                         return Ok(TransactionType::SwapSolToToken {
-                            token_mint: target_token_mint.unwrap_or_else(||
-                                "Pump.fun_Token".to_string()
-                            ),
+                            token_mint: target_token_mint.clone().unwrap(),
                             sol_amount: sol_amount, // Use extracted amount (excludes ATA rent)
                             token_amount: token_amount,
                             router: "Pump.fun".to_string(),
@@ -1697,9 +1718,7 @@ impl TransactionsManager {
                     } else {
                         // SOL received = Sell
                         return Ok(TransactionType::SwapTokenToSol {
-                            token_mint: target_token_mint.unwrap_or_else(||
-                                "Pump.fun_Token".to_string()
-                            ),
+                            token_mint: target_token_mint.clone().unwrap(),
                             token_amount: token_amount,
                             sol_amount: sol_amount, // Use extracted amount (excludes ATA rent)
                             router: "Pump.fun".to_string(),
@@ -1929,6 +1948,7 @@ impl TransactionsManager {
         // Only detect simple SOL transfers with very specific criteria:
         // 1. Must be 1-3 instructions maximum (simple transfers)
         // 2. Must have meaningful SOL amount change (not just fees)
+
         // 3. Must be primarily system program transfers
 
         if transaction.instructions.len() > 3 {
@@ -3079,9 +3099,46 @@ impl TransactionsManager {
                 );
             }
 
-            if let Ok(swap_type) = self.analyze_pump_fun_swap(transaction).await {
-                transaction.transaction_type = swap_type;
-                return Ok(());
+            match self.analyze_pump_fun_swap(transaction).await {
+                Ok(swap_type) => {
+                    transaction.transaction_type = swap_type;
+                    return Ok(());
+                }
+                Err(e) if e == "PumpFunMissingMint" => {
+                    // Second pass: re-run extraction explicitly, then retry classification once
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "PUMP_MINT_SECOND_PASS",
+                            &format!(
+                                "{} attempting second pass mint extraction",
+                                &transaction.signature[..8]
+                            )
+                        );
+                    }
+                    // Force re-derive instructions (already parsed) and call extraction directly
+                    let re_mint = self.extract_target_token_mint_from_pumpfun(transaction).await;
+                    if let Some(_m) = re_mint {
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "PUMP_MINT_SECOND_PASS_SUCCESS",
+                                &format!("{} mint now resolved", &transaction.signature[..8])
+                            );
+                        }
+                        if let Ok(swap_type2) = self.analyze_pump_fun_swap(transaction).await {
+                            transaction.transaction_type = swap_type2;
+                            return Ok(());
+                        }
+                    } else if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "PUMP_MINT_SECOND_PASS_FAIL",
+                            &format!("{} still missing mint", &transaction.signature[..8])
+                        );
+                    }
+                }
+                Err(_e) => {/* continue cascade */}
             }
         }
 

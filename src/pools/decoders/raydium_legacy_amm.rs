@@ -182,12 +182,25 @@ impl LegacyPoolInfo {
         if data.len() < 0x1c0 {
             return None;
         }
-        // Observed structure: 0x190 = token mint, 0x1b0 = SOL mint (in sample pool)
-        // Vaults: 0x150 (SOL vault), 0x160 (token vault)
-        let pc_vault = read_pubkey_at(data, 0x150)?; // pc(SOL) vault
-        let coin_vault = read_pubkey_at(data, 0x160)?; // coin(token) vault
-        let coin_mint = read_pubkey_at(data, 0x190)?; // token mint
-        let pc_mint = read_pubkey_at(data, 0x1b0)?; // SOL mint
+        // Extract mints and vaults from fixed offsets, but don't assume which is which
+        let vault_a = read_pubkey_at(data, 0x150)?; // vault at 0x150
+        let vault_b = read_pubkey_at(data, 0x160)?; // vault at 0x160
+        let mint_a = read_pubkey_at(data, 0x190)?; // mint at 0x190
+        let mint_b = read_pubkey_at(data, 0x1b0)?; // mint at 0x1b0
+
+        // Determine which mint is SOL and which is token
+        let (coin_mint, pc_mint, coin_vault, pc_vault) = if mint_a == SOL_MINT {
+            // mint_a is SOL, mint_b is token
+            (mint_b, mint_a, vault_b, vault_a)
+        } else if mint_b == SOL_MINT {
+            // mint_b is SOL, mint_a is token
+            (mint_a, mint_b, vault_a, vault_b)
+        } else {
+            // Neither mint is SOL, use original assumption (mint_a=token, mint_b=SOL)
+            // This handles wrapped SOL cases
+            (mint_a, mint_b, vault_a, vault_b)
+        };
+
         Some(Self { coin_mint, pc_mint, coin_vault, pc_vault })
     }
 }
