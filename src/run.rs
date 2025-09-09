@@ -169,35 +169,6 @@ pub async fn run_bot() -> Result<(), String> {
 
     let shutdown_tokens = shutdown.clone();
 
-    // Initialize global rugcheck service
-    let database = match TokenDatabase::new() {
-        Ok(db) => db,
-        Err(e) => {
-            debug_log(
-                LogTag::System,
-                "ERROR",
-                &format!("Failed to create database for rugcheck: {}", e)
-            );
-            return Err(format!("Failed to create database for rugcheck: {}", e));
-        }
-    };
-
-    let shutdown_rugcheck = shutdown.clone();
-    let rugcheck_handle = match
-        tokens::initialize_global_rugcheck_service(database, shutdown_rugcheck).await
-    {
-        Ok(handle) => handle,
-        Err(e) => {
-            debug_log(
-                LogTag::System,
-                "ERROR",
-                &format!("Failed to initialize global rugcheck service: {}", e)
-            );
-            return Err(format!("Failed to initialize global rugcheck service: {}", e));
-        }
-    };
-    debug_log(LogTag::System, "INFO", "Global rugcheck service initialized successfully");
-
     // Start token monitoring service for database updates
     let shutdown_monitor = shutdown.clone();
     let _token_monitor_handle = tokio::spawn(async move {
@@ -223,7 +194,7 @@ pub async fn run_bot() -> Result<(), String> {
         debug_log(LogTag::System, "INFO", "Token monitoring service task ended");
     });
 
-    // Start tokens system background tasks (includes rugcheck service)
+    // Start tokens system background tasks
     let tokens_handles = match tokens_system.start_background_tasks(shutdown_tokens).await {
         Ok(handles) => handles,
         Err(e) => {
@@ -704,7 +675,7 @@ pub async fn run_bot() -> Result<(), String> {
                 log(LogTag::System, "INFO", "✅ Transaction manager task shutdown completed");
             }
 
-            // Wait for tokens system tasks (includes rugcheck-related tasks)
+            // Wait for tokens system tasks
             log(
                 LogTag::System,
                 "INFO",
@@ -732,18 +703,6 @@ pub async fn run_bot() -> Result<(), String> {
                         &format!("✅ Tokens task {} shutdown completed", i)
                     );
                 }
-            }
-
-            // Wait for Rugcheck service task explicitly
-            log(LogTag::System, "INFO", "🔄 Waiting for Rugcheck service task to shutdown...");
-            if let Err(e) = rugcheck_handle.await {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!("Rugcheck task failed to shutdown cleanly: {}", e)
-                );
-            } else {
-                log(LogTag::System, "INFO", "✅ Rugcheck service task shutdown completed");
             }
         }
     );

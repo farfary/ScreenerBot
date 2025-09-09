@@ -12,7 +12,7 @@ use crate::{
     positions_types::Position,
     rpc::lamports_to_sol,
     // Pool priority functions removed - no longer needed
-    tokens::{ get_token_decimals, get_global_dexscreener_api, get_token_rugcheck_data_safe },
+    tokens::{ get_token_decimals, get_global_dexscreener_api },
     trader::PROFIT_EXTRA_NEEDED_SOL,
     utils::safe_truncate,
 };
@@ -346,26 +346,54 @@ async fn fetch_and_create_token_snapshot(
         }
     };
 
-    // Fetch latest rugcheck data
-    let rugcheck_data = match get_token_rugcheck_data_safe(mint).await {
-        Ok(Some(data)) => Some(data),
-        Ok(None) => {
-            log(
-                LogTag::Positions,
-                "SNAPSHOT_NO_RUGCHECK",
-                &format!("No rugcheck data found for {}", safe_truncate(mint, 8))
-            );
-            None
-        }
-        Err(e) => {
-            log(
-                LogTag::Positions,
-                "SNAPSHOT_RUGCHECK_ERROR",
-                &format!("Error fetching rugcheck data for {}: {}", safe_truncate(mint, 8), e)
-            );
-            None
-        }
-    };
+    // Rugcheck data removed - no longer collected for snapshots
+    let (
+        rugcheck_score,
+        rugcheck_score_normalised,
+        rugcheck_rugged,
+        rugcheck_risks_json,
+        rugcheck_mint_authority_json,
+        rugcheck_freeze_authority_json,
+        rugcheck_lp_locked_pct,
+        rugcheck_total_supply,
+        rugcheck_supply_type,
+        rugcheck_decimals,
+        rugcheck_is_initialized,
+        rugcheck_top_10_holders_pct,
+        rugcheck_total_holders,
+        rugcheck_total_market_liquidity,
+        rugcheck_total_stable_liquidity,
+        rugcheck_pre_market_type,
+        rugcheck_address,
+        token_description,
+        token_image,
+        token_website,
+        token_twitter,
+        token_telegram,
+    ) = (
+        None, // rugcheck_score
+        None, // rugcheck_score_normalised
+        None, // rugcheck_rugged
+        None, // rugcheck_risks_json
+        None, // rugcheck_mint_authority_json
+        None, // rugcheck_freeze_authority_json
+        None, // rugcheck_lp_locked_pct
+        None, // rugcheck_total_supply
+        None, // rugcheck_supply_type
+        None, // rugcheck_decimals
+        None, // rugcheck_is_initialized
+        None, // rugcheck_top_10_holders_pct
+        None, // rugcheck_total_holders
+        None, // rugcheck_total_market_liquidity
+        None, // rugcheck_total_stable_liquidity
+        None, // rugcheck_pre_market_type
+        None, // rugcheck_address
+        None, // token_description
+        None, // token_image
+        None, // token_website
+        None, // token_twitter
+        None, // token_telegram
+    );
 
     // Calculate data freshness score (0-100)
     let fetch_duration_ms = Utc::now().signed_duration_since(fetch_start).num_milliseconds();

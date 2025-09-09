@@ -33,11 +33,6 @@ pub const MIN_TRANSACTIONS_1H: i64 = 3; // Reduced from 15 - more realistic
 pub const MIN_BUY_SELL_RATIO: f64 = 0.45;
 pub const MAX_BUY_SELL_RATIO: f64 = 2.5;
 
-// ===== RUGCHECK SECURITY PARAMETERS =====
-pub const MAX_RUGCHECK_RISK_SCORE: i32 = 100;
-pub const EMERGENCY_MAX_RISK_SCORE: i32 = 100;
-pub const MAX_CRITICAL_RISK_ISSUES: usize = 5;
-
 // ===== LP LOCK SECURITY PARAMETERS =====
 pub const MIN_LP_LOCK_PERCENTAGE: f64 = 80.0;
 pub const MIN_LP_LOCK_PERCENTAGE_NEW_TOKENS: f64 = 80.0;
@@ -115,12 +110,6 @@ pub enum FilterReason {
     // Account/Token status issues
     AccountFrozen,
     TokenAccountFrozen,
-
-    // Rugcheck security risks
-    RugcheckRisk {
-        risk_level: String,
-        reasons: Vec<String>,
-    },
 
     // LP lock security risks
     InsufficientLpLock {
@@ -319,7 +308,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         );
     }
 
-    // Populate cached fields (decimals, rugcheck) before decimal/age early filtering
+    // Populate cached fields (decimals) before decimal/age early filtering
     let mut decimals_populated = 0usize;
     let mut populate_errors = 0usize;
     for token in all_tokens.iter_mut() {
@@ -486,11 +475,6 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         return FilterResult::Rejected(reason);
     }
 
-    // Security check using cached rugcheck data
-    if let Some(reason) = validate_rugcheck_risks(token) {
-        return FilterResult::Rejected(reason);
-    }
-
     // Basic metadata validation
     if let Some(reason) = validate_basic_token_info(token) {
         return FilterResult::Rejected(reason);
@@ -567,147 +551,6 @@ fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
             LogTag::Filtering,
             "DEBUG_BLACKLIST",
             &format!("✅ Token {} ({}) passed blacklist/exclusion check", token.symbol, token.mint)
-        );
-    }
-
-    None
-}
-
-/// Validate rugcheck security risks using cached data (no API calls)
-fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
-    // STRICT REQUIREMENT: Token must have rugcheck data
-    let rugcheck_data = match &token.rugcheck_data {
-        Some(data) => data,
-        None => {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "RUGCHECK_MISSING",
-                    &format!(
-                        "❌ Token {} ({}) REJECTED: No rugcheck data available",
-                        token.symbol,
-                        token.mint
-                    )
-                );
-            }
-            return Some(FilterReason::RugcheckRisk {
-                risk_level: "MISSING_DATA".to_string(),
-                reasons: vec!["No rugcheck security data available".to_string()],
-            });
-        }
-    };
-
-    // Check if token is marked as rugged
-    if rugcheck_data.rugged.unwrap_or(false) {
-        return Some(FilterReason::RugcheckRisk {
-            risk_level: "CRITICAL".to_string(),
-            reasons: vec!["Token is marked as RUGGED".to_string()],
-        });
-    }
-
-    // Check risk score (higher scores mean more risk)
-    if let Some(risk_score) = rugcheck_data.score_normalised.or(rugcheck_data.score) {
-        if risk_score >= EMERGENCY_MAX_RISK_SCORE {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "EMERGENCY_RISK",
-                    &format!(
-                        "Token {} ({}) EMERGENCY REJECTED - Risk score {} >= {} (VERY HIGH RISK)",
-                        token.symbol,
-                        token.mint,
-                        risk_score,
-                        EMERGENCY_MAX_RISK_SCORE
-                    )
-                );
-            }
-            return Some(FilterReason::RugcheckRisk {
-                risk_level: "EMERGENCY".to_string(),
-                reasons: vec![
-                    format!(
-                        "Risk score {} is too high (max allowed: {})",
-                        risk_score,
-                        EMERGENCY_MAX_RISK_SCORE
-                    )
-                ],
-            });
-        }
-
-        if risk_score > MAX_RUGCHECK_RISK_SCORE {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "HIGH_RISK_SCORE",
-                    &format!(
-                        "Token {} ({}) rejected - Risk score {} > {} (HIGH RISK)",
-                        token.symbol,
-                        token.mint,
-                        risk_score,
-                        MAX_RUGCHECK_RISK_SCORE
-                    )
-                );
-            }
-            return Some(FilterReason::RugcheckRisk {
-                risk_level: "HIGH".to_string(),
-                reasons: vec![
-                    format!(
-                        "Risk score {} exceeds maximum allowed {}",
-                        risk_score,
-                        MAX_RUGCHECK_RISK_SCORE
-                    )
-                ],
-            });
-        }
-    }
-
-    // Check for critical risks
-    if let Some(risks) = &rugcheck_data.risks {
-        let critical_risks: Vec<_> = risks
-            .iter()
-            .filter(|r| r.level.as_deref() == Some("critical"))
-            .collect();
-
-        if critical_risks.len() > MAX_CRITICAL_RISK_ISSUES {
-            return Some(FilterReason::RugcheckRisk {
-                risk_level: "CRITICAL".to_string(),
-                reasons: critical_risks
-                    .iter()
-                    .map(|r| r.name.clone())
-                    .collect(),
-            });
-        }
-    }
-
-    // Check LP lock status from rugcheck data
-    if let Some(markets) = &rugcheck_data.markets {
-        let mut best_lock_pct = 0.0f64;
-        for market in markets {
-            if let Some(lp) = &market.lp {
-                if let Some(pct) = lp.lp_locked_pct {
-                    best_lock_pct = best_lock_pct.max(pct);
-                }
-            }
-        }
-
-        if best_lock_pct < MIN_LP_LOCK_PERCENTAGE {
-            return Some(FilterReason::InsufficientLpLock {
-                current_lock_percentage: best_lock_pct,
-                minimum_required: MIN_LP_LOCK_PERCENTAGE,
-            });
-        }
-    }
-
-    if is_debug_filtering_enabled() {
-        let score = rugcheck_data.score_normalised.or(rugcheck_data.score).unwrap_or(0);
-        log(
-            LogTag::Filtering,
-            "RUGCHECK_PASS",
-            &format!(
-                "Token {} ({}) passed rugcheck validation (risk score: {})",
-                token.symbol,
-                token.mint,
-                score
-            )
         );
     }
 
@@ -1643,7 +1486,6 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             FilterReason::ExistingOpenPosition | FilterReason::MaxPositionsReached { .. } =>
                 "Position Constraints",
             FilterReason::AccountFrozen | FilterReason::TokenAccountFrozen => "Account Issues",
-            FilterReason::RugcheckRisk { .. } => "Security Risks",
             FilterReason::InsufficientLpLock { .. } => "LP Lock Security",
             FilterReason::WhaleConcentrationRisk { .. } => "Whale Concentration Risk",
             FilterReason::LockAcquisitionFailed => "System Errors",
