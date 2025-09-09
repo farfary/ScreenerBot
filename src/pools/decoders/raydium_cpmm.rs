@@ -81,7 +81,8 @@ impl PoolDecoder for RaydiumCpmmDecoder {
 
 impl RaydiumCpmmDecoder {
     /// Decode Raydium CPMM pool data from account bytes (enhanced for swap operations)
-    fn decode_raydium_cpmm_pool(data: &[u8], pool_id: &str) -> Option<RaydiumCpmmPoolInfo> {
+    /// Made public for use by the direct swap system
+    pub fn decode_raydium_cpmm_pool(data: &[u8], pool_id: &str) -> Option<RaydiumCpmmPoolInfo> {
         if data.len() < 8 + 32 * 10 + 8 * 10 {
             if is_debug_pool_decoders_enabled() {
                 log(

@@ -42,6 +42,9 @@ mod fetcher;
 mod calculator;
 pub mod decoders; // Temporarily public for debug tooling (consider gating with feature flag)
 
+// Direct swap module - modular direct swap system
+pub mod swap;
+
 // Temporary re-exports for debug tooling (consider gating with a feature flag)
 pub use fetcher::AccountData;
 
