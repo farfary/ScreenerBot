@@ -37,7 +37,23 @@ impl PoolDecoder for RaydiumCpmmDecoder {
         // Find the pool account by checking owner program ID (like CLMM decoder)
         let pool_account = accounts.values().find(|acc| {
             // Look for account with Raydium CPMM program as owner
-            acc.owner.to_string() == RAYDIUM_CPMM_PROGRAM_ID
+            let owner_str = acc.owner.to_string();
+            let matches = owner_str == RAYDIUM_CPMM_PROGRAM_ID;
+
+            if is_debug_pool_decoders_enabled() {
+                log(
+                    LogTag::PoolDecoder,
+                    "DEBUG",
+                    &format!(
+                        "Checking account owner: {} vs expected: {}, matches: {}",
+                        owner_str,
+                        RAYDIUM_CPMM_PROGRAM_ID,
+                        matches
+                    )
+                );
+            }
+
+            matches
         })?;
 
         if is_debug_pool_decoders_enabled() {
@@ -52,8 +68,11 @@ impl PoolDecoder for RaydiumCpmmDecoder {
             );
         }
 
-        // Parse pool state from account data using the proven method
-        let pool_info = Self::decode_raydium_cpmm_pool(&pool_account.data)?;
+        // Parse pool state from account data using the enhanced method
+        let pool_info = Self::decode_raydium_cpmm_pool(
+            &pool_account.data,
+            &pool_account.pubkey.to_string()
+        )?;
 
         // Calculate price using the working logic from old system
         Self::calculate_raydium_cpmm_price(&pool_info, accounts, base_mint, quote_mint)
@@ -61,8 +80,8 @@ impl PoolDecoder for RaydiumCpmmDecoder {
 }
 
 impl RaydiumCpmmDecoder {
-    /// Decode Raydium CPMM pool data from account bytes (from old working system)
-    fn decode_raydium_cpmm_pool(data: &[u8]) -> Option<RaydiumCpmmPoolInfo> {
+    /// Decode Raydium CPMM pool data from account bytes (enhanced for swap operations)
+    fn decode_raydium_cpmm_pool(data: &[u8], pool_id: &str) -> Option<RaydiumCpmmPoolInfo> {
         if data.len() < 8 + 32 * 10 + 8 * 10 {
             if is_debug_pool_decoders_enabled() {
                 log(
@@ -76,21 +95,21 @@ impl RaydiumCpmmDecoder {
 
         let mut offset = 8; // Skip discriminator
 
-        // Decode pool data according to Raydium CPMM layout (from working old system)
-        let _amm_config = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let _pool_creator = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
+        // Decode pool data according to Raydium CPMM layout (enhanced version)
+        let amm_config = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
+        let pool_creator = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
         let token_0_vault = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
         let token_1_vault = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let _lp_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
+        let lp_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
         let token_0_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
         let token_1_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let _token_0_program = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let _token_1_program = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let _observation_key = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
+        let token_0_program = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
+        let token_1_program = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
+        let observation_key = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
 
-        let _auth_bump = Self::read_u8_at_offset(data, &mut offset).ok()?;
-        let _status = Self::read_u8_at_offset(data, &mut offset).ok()?;
-        let _lp_mint_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
+        let auth_bump = Self::read_u8_at_offset(data, &mut offset).ok()?;
+        let status = Self::read_u8_at_offset(data, &mut offset).ok()?;
+        let lp_mint_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
         let pool_mint_0_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
         let pool_mint_1_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
 
@@ -176,12 +195,25 @@ impl RaydiumCpmmDecoder {
         }
 
         Some(RaydiumCpmmPoolInfo {
+            // Basic token information
             token_0_mint,
             token_1_mint,
             token_0_vault,
             token_1_vault,
             token_0_decimals: mint_0_decimals,
             token_1_decimals: mint_1_decimals,
+
+            // Additional fields for swap operations
+            pool_id: pool_id.to_string(),
+            amm_config,
+            pool_creator,
+            lp_mint,
+            token_0_program,
+            token_1_program,
+            observation_key,
+            auth_bump,
+            status,
+            lp_mint_decimals,
         })
     }
 
@@ -423,12 +455,26 @@ impl RaydiumCpmmDecoder {
 }
 
 /// Raydium CPMM pool information extracted from account data
+/// Enhanced version with all fields needed for direct swap operations
 #[derive(Debug, Clone)]
 pub struct RaydiumCpmmPoolInfo {
+    // Basic token information
     pub token_0_mint: String,
     pub token_1_mint: String,
     pub token_0_vault: String,
     pub token_1_vault: String,
     pub token_0_decimals: u8,
     pub token_1_decimals: u8,
+
+    // Additional fields required for swap operations
+    pub pool_id: String, // Pool's public key
+    pub amm_config: String, // AMM configuration account
+    pub pool_creator: String, // Pool creator account
+    pub lp_mint: String, // LP token mint
+    pub token_0_program: String, // Token 0 program ID
+    pub token_1_program: String, // Token 1 program ID
+    pub observation_key: String, // Observation state account
+    pub auth_bump: u8, // Authority bump seed
+    pub status: u8, // Pool status
+    pub lp_mint_decimals: u8, // LP token decimals
 }
