@@ -230,7 +230,20 @@ async fn fetch_token_accounts(
         )
     );
 
-    // Use the RPC client's get_program_accounts method
+    log(
+        LogTag::Rpc,
+        "FETCH_ACCOUNTS",
+        &format!(
+            "Querying {} accounts for mint {} (60s timeout)",
+            if is_token_2022 {
+                "Token-2022"
+            } else {
+                "SPL Token"
+            },
+            safe_truncate(mint_address, 8)
+        )
+    );
+
     match
         rpc_client.get_program_accounts(
             program_id,

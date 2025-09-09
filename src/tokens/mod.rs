@@ -64,7 +64,6 @@ pub use holders::{
 pub use lp_lock::{
     check_lp_lock_status,
     check_multiple_lp_locks,
-    get_lp_lock_summary,
     is_lp_safe,
     LockPrograms,
     LpLockAnalysis,
