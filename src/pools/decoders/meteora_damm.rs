@@ -401,41 +401,38 @@ impl MeteoraDammDecoder {
     /// Parse DAMM pool account data to extract token mints, vault addresses, and sqrt_price
     /// Based on DAMM v2 Pool struct from official Meteora source code
     ///
-    /// Official Pool struct (1112 bytes, from damm-v2/programs/cp-amm/src/state/pool.rs):
-    /// pub struct Pool {
-    ///     pub pool_fees: PoolFeesStruct,      // offset 8, size 168
-    ///     pub token_a_mint: Pubkey,           // offset 176, size 32
-    ///     pub token_b_mint: Pubkey,           // offset 208, size 32
-    ///     pub token_a_vault: Pubkey,          // offset 240, size 32
-    ///     pub token_b_vault: Pubkey,          // offset 272, size 32
-    ///     pub whitelisted_vault: Pubkey,      // offset 304, size 32
-    ///     pub partner: Pubkey,                // offset 336, size 32
-    ///     pub liquidity: u128,                // offset 368, size 16
-    ///     pub _padding: u128,                 // offset 384, size 16
-    ///     pub protocol_a_fee: u64,            // offset 400, size 8
-    ///     pub protocol_b_fee: u64,            // offset 408, size 8
-    ///     pub partner_a_fee: u64,             // offset 416, size 8
-    ///     pub partner_b_fee: u64,             // offset 424, size 8
-    ///     pub sqrt_min_price: u128,           // offset 432, size 16
-    ///     pub sqrt_max_price: u128,           // offset 448, size 16
-    ///     pub sqrt_price: u128,               // offset 464, size 16  *** CORRECT OFFSET ***
-    ///     pub activation_point: u64,          // offset 480, size 8
-    ///     // ... rest of the struct
-    /// }
+    /// Account data layout with Anchor discriminator:
+    /// [0..8]    : Anchor discriminator (8 bytes)
+    /// [8..168]  : PoolFeesStruct (160 bytes)
+    /// [168..200]: token_a_mint (32 bytes)
+    /// [200..232]: token_b_mint (32 bytes)
+    /// [232..264]: token_a_vault (32 bytes)
+    /// [264..296]: token_b_vault (32 bytes)
+    /// [296..328]: whitelisted_vault (32 bytes)
+    /// [328..360]: partner (32 bytes)
+    /// [360..376]: liquidity (16 bytes)
+    /// [376..392]: _padding (16 bytes)
+    /// [392..400]: protocol_a_fee (8 bytes)
+    /// [400..408]: protocol_b_fee (8 bytes)
+    /// [408..416]: partner_a_fee (8 bytes)
+    /// [416..424]: partner_b_fee (8 bytes)
+    /// [424..440]: sqrt_min_price (16 bytes)
+    /// [440..456]: sqrt_max_price (16 bytes)
+    /// [456..472]: sqrt_price (16 bytes) *** CORRECT OFFSET WITH DISCRIMINATOR ***
+    /// [472..480]: activation_point (8 bytes)
     fn parse_damm_pool(data: &[u8]) -> Option<DammPoolInfo> {
-        if data.len() < 1112 {
+        if data.len() < 480 {
             if is_debug_pool_decoders_enabled() {
                 log(
                     LogTag::PoolDecoder,
                     "ERROR",
-                    &format!("DAMM pool data too short: {} bytes (expected >= 1112)", data.len())
+                    &format!("DAMM pool data too short: {} bytes (expected >= 480)", data.len())
                 );
             }
             return None;
         }
 
-        // Extract pubkeys at fixed offsets (based on empirical analysis of actual pool data)
-        // The actual offsets are 8 bytes earlier than the theoretical struct layout suggests
+        // Extract pubkeys at fixed offsets (adjusted for 8-byte Anchor discriminator)
         let token_a_mint = Self::extract_pubkey_at_fixed_offset(data, 168)?;
         let token_b_mint = Self::extract_pubkey_at_fixed_offset(data, 200)?;
         let token_a_vault = Self::extract_pubkey_at_fixed_offset(data, 232)?;
@@ -447,66 +444,8 @@ impl MeteoraDammDecoder {
         let partner_a_fee = Self::extract_u64_at_offset(data, 408).unwrap_or(0);
         let partner_b_fee = Self::extract_u64_at_offset(data, 416).unwrap_or(0);
 
-        // Extract sqrt_price at offset 456 (our original calculation was correct)
-        // The issue might be that we need to try both 456 and 464 to see which gives reasonable values
-        let sqrt_price_456 = Self::extract_u128_at_offset(data, 456).unwrap_or(0);
-        let sqrt_price_464 = Self::extract_u128_at_offset(data, 464).unwrap_or(0);
-
-        // Choose the value that gives a reasonable price (between 0.000001 and 0.1 SOL per token)
-        let sqrt_price = if sqrt_price_456 > 0 {
-            let test_price_456 = {
-                let sqrt_f64 = sqrt_price_456 as f64;
-                let divisor = (2_f64).powi(64);
-                let normalized_sqrt = sqrt_f64 / divisor;
-                normalized_sqrt * normalized_sqrt
-            };
-
-            if test_price_456 > 0.000001 && test_price_456 < 0.1 {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "INFO",
-                        &format!("Using sqrt_price from offset 456: {}", sqrt_price_456)
-                    );
-                }
-                sqrt_price_456
-            } else if sqrt_price_464 > 0 {
-                let test_price_464 = {
-                    let sqrt_f64 = sqrt_price_464 as f64;
-                    let divisor = (2_f64).powi(64);
-                    let normalized_sqrt = sqrt_f64 / divisor;
-                    normalized_sqrt * normalized_sqrt
-                };
-
-                if test_price_464 > 0.000001 && test_price_464 < 0.1 {
-                    if is_debug_pool_decoders_enabled() {
-                        log(
-                            LogTag::PoolDecoder,
-                            "INFO",
-                            &format!("Using sqrt_price from offset 464: {}", sqrt_price_464)
-                        );
-                    }
-                    sqrt_price_464
-                } else {
-                    if is_debug_pool_decoders_enabled() {
-                        log(
-                            LogTag::PoolDecoder,
-                            "WARN",
-                            &format!(
-                                "Both offsets give unreasonable prices: 456={}, 464={}",
-                                test_price_456,
-                                test_price_464
-                            )
-                        );
-                    }
-                    sqrt_price_456 // Use original as fallback
-                }
-            } else {
-                sqrt_price_456
-            }
-        } else {
-            sqrt_price_464
-        };
+        // Extract sqrt_price at the CORRECT offset 456 (448 + 8 for discriminator)
+        let sqrt_price = Self::extract_u128_at_offset(data, 456).unwrap_or(0);
 
         if is_debug_pool_decoders_enabled() {
             log(
@@ -536,7 +475,7 @@ impl MeteoraDammDecoder {
             log(
                 LogTag::PoolDecoder,
                 "INFO",
-                &format!("DAMM sqrt_price selected: {} (Q64.64 format)", sqrt_price)
+                &format!("DAMM sqrt_price at offset 456: {} (Q64.64 format)", sqrt_price)
             );
         }
 

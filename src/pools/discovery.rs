@@ -38,6 +38,36 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Notify;
+use std::time::{ Instant, Duration };
+
+// =============================================================================
+// DISCOVERY TUNING CONSTANTS
+// =============================================================================
+// Maximum number of tokens to process per tick (rotation shard size)
+const TOKENS_PER_TICK: usize = 25; // keep small to reduce latency
+// Minimum freshness interval before re-discovering same token
+const MIN_DISCOVERY_INTERVAL: Duration = Duration::from_secs(90);
+// Timeout per upstream source in a batched tick
+const SOURCE_TIMEOUT: Duration = Duration::from_secs(8);
+// Liquidity threshold to short-circuit further sources in single pool mode
+const SHORT_CIRCUIT_LIQUIDITY_USD: f64 = 25_000.0;
+
+// Global lightweight state for rotation & freshness (no locking complexity; best-effort)
+struct TokenDiscoveryState {
+    rotation_index: usize,
+    last_discovery: HashMap<String, Instant>,
+}
+
+static mut TOKEN_DISCOVERY_STATE: Option<TokenDiscoveryState> = None;
+
+fn get_state_mut() -> &'static mut TokenDiscoveryState {
+    unsafe {
+        TOKEN_DISCOVERY_STATE.get_or_insert(TokenDiscoveryState {
+            rotation_index: 0,
+            last_discovery: HashMap::new(),
+        })
+    }
+}
 
 /// Pool discovery service state
 pub struct PoolDiscovery {
@@ -81,8 +111,9 @@ impl PoolDiscovery {
 
     /// Execute one batched discovery tick: fetch pools for all tokens via batch APIs and stream to analyzer
     async fn batched_discovery_tick() {
+        let tick_start = Instant::now();
         // Build token list (respect debug override and global filtering)
-        let mut tokens: Vec<String> = if let Some(override_tokens) = get_debug_token_override() {
+        let mut all_tokens: Vec<String> = if let Some(override_tokens) = get_debug_token_override() {
             override_tokens
         } else {
             match filtering::get_filtered_tokens().await {
@@ -100,80 +131,191 @@ impl PoolDiscovery {
             }
         };
 
-        if tokens.is_empty() {
+        if all_tokens.is_empty() {
             if is_debug_pool_discovery_enabled() {
                 log(LogTag::PoolDiscovery, "DEBUG", "No tokens to discover this tick");
             }
             return;
         }
 
-        // Early stablecoin filtering and cap to MAX_WATCHED_TOKENS
-        tokens.retain(|m| !is_stablecoin_mint(m));
-        if tokens.len() > MAX_WATCHED_TOKENS {
-            tokens.truncate(MAX_WATCHED_TOKENS);
+        // Early stablecoin filtering & cap
+        all_tokens.retain(|m| !is_stablecoin_mint(m));
+        if all_tokens.len() > MAX_WATCHED_TOKENS {
+            all_tokens.truncate(MAX_WATCHED_TOKENS);
+        }
+
+        // Rotation slice selection
+        let state = get_state_mut();
+        if state.rotation_index >= all_tokens.len() {
+            state.rotation_index = 0;
+        }
+        let start_index = state.rotation_index;
+        let end = (state.rotation_index + TOKENS_PER_TICK).min(all_tokens.len());
+        let mut tokens: Vec<String> = all_tokens[state.rotation_index..end].to_vec();
+        let original_slice_size = tokens.len();
+        state.rotation_index = end; // advance
+
+        // Freshness gating: skip tokens discovered recently
+        let now = Instant::now();
+        tokens.retain(|t| {
+            match state.last_discovery.get(t) {
+                Some(ts) => now.duration_since(*ts) >= MIN_DISCOVERY_INTERVAL,
+                None => true,
+            }
+        });
+
+        if tokens.is_empty() {
+            if is_debug_pool_discovery_enabled() {
+                log(LogTag::PoolDiscovery, "DEBUG", "Rotation slice empty or all fresh");
+            }
+            return;
         }
 
         if is_debug_pool_discovery_enabled() {
+            let fresh_skipped = original_slice_size.saturating_sub(tokens.len());
             log(
                 LogTag::PoolDiscovery,
                 "DEBUG",
-                &format!("Discovery tick: {} tokens queued", tokens.len())
+                &format!(
+                    "Discovery tick: slice_size={} queued_tokens={} rotation_index={} total_tokens={} fresh_skipped={} ",
+                    original_slice_size,
+                    tokens.len(),
+                    state.rotation_index,
+                    all_tokens.len(),
+                    fresh_skipped
+                )
             );
         }
 
-        // Run batch fetches for all sources concurrently (each handles rate limiting internally)
-        // Using tokio::join! to minimize total tick latency vs sequential awaits
-        let (dexs_batch, gecko_batch, raydium_batch) = tokio::join!(
-            get_batch_token_pools_from_dexscreener(&tokens),
-            get_batch_token_pools_from_geckoterminal(&tokens),
-            get_batch_token_pools_from_raydium(&tokens)
-        );
+        // Fetch DexScreener first (fastest) then concurrently fetch others with timeout
+        let dexs_start = Instant::now();
+        let dexs_batch = match
+            tokio::time::timeout(
+                SOURCE_TIMEOUT,
+                get_batch_token_pools_from_dexscreener(&tokens)
+            ).await
+        {
+            Ok(res) => res,
+            Err(_) => {
+                if is_debug_pool_discovery_enabled() {
+                    log(LogTag::PoolDiscovery, "WARN", "DexScreener batch timeout");
+                }
+                // empty fallback
+                get_batch_token_pools_from_dexscreener(&Vec::new()).await
+            }
+        };
+        let dexs_ms = dexs_start.elapsed().as_millis();
 
-        // Convert to PoolDescriptor list
-        let mut descriptors: Vec<PoolDescriptor> = Vec::new();
+        // Early process DexScreener pools and optionally short-circuit
+        let mut descriptors: Vec<PoolDescriptor> = Vec::with_capacity(tokens.len() * 6); // heuristic
+        let mut best_liquidity_by_token: HashMap<Pubkey, f64> = HashMap::new();
+        let sol_pk = Pubkey::from_str(SOL_MINT).unwrap();
 
-        for (mint, pairs) in dexs_batch.pools.into_iter() {
+        for (mint, pairs) in dexs_batch.pools.iter() {
             for pair in pairs {
-                if let Ok(desc) = Self::convert_dexscreener_pair_to_descriptor_static(&pair) {
+                if let Ok(desc) = Self::convert_dexscreener_pair_to_descriptor_static(pair) {
+                    let token = if desc.base_mint == sol_pk {
+                        desc.quote_mint
+                    } else {
+                        desc.base_mint
+                    };
+                    let entry = best_liquidity_by_token.entry(token).or_insert(0.0);
+                    if desc.liquidity_usd > *entry {
+                        *entry = desc.liquidity_usd;
+                    }
                     descriptors.push(desc);
                 }
-            }
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    &format!("DexScreener batched pools for {}: {}", &mint[..8], descriptors.len())
-                );
             }
         }
 
-        for (mint, pools) in gecko_batch.pools.into_iter() {
-            for pool in pools {
-                if let Ok(desc) = Self::convert_gecko_pool_to_descriptor_static(&pool) {
-                    descriptors.push(desc);
+        let mut short_circuit = false;
+        if is_single_pool_mode_enabled() {
+            // If every token in slice already has liquidity above threshold, skip slower sources
+            let mut covered = 0usize;
+            for (mint, _pairs) in dexs_batch.pools.iter() {
+                if let Ok(pk) = Pubkey::from_str(mint) {
+                    if
+                        best_liquidity_by_token
+                            .get(&pk)
+                            .map(|v| *v >= SHORT_CIRCUIT_LIQUIDITY_USD)
+                            .unwrap_or(false)
+                    {
+                        covered += 1;
+                    }
                 }
             }
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    &format!("Gecko batched pools for {} appended", &mint[..8])
-                );
+            if covered == dexs_batch.pools.len() && !dexs_batch.pools.is_empty() {
+                short_circuit = true;
+                if is_debug_pool_discovery_enabled() {
+                    log(
+                        LogTag::PoolDiscovery,
+                        "DEBUG",
+                        "Short-circuit: sufficient liquidity from DexScreener only"
+                    );
+                }
             }
         }
 
-        for (mint, pools) in raydium_batch.pools.into_iter() {
-            for pool in pools {
-                if let Ok(desc) = Self::convert_raydium_pool_to_descriptor_static(&pool) {
-                    descriptors.push(desc);
+        // Concurrently fetch Gecko & Raydium unless short-circuited
+        let (gecko_batch_opt, raydium_batch_opt, gecko_ms, raydium_ms) = if short_circuit {
+            (None, None, 0u128, 0u128)
+        } else {
+            let gecko_start = Instant::now();
+            let ray_start = Instant::now();
+            let (gecko_res, ray_res) = tokio::join!(
+                tokio::time::timeout(SOURCE_TIMEOUT, async {
+                    get_batch_token_pools_from_geckoterminal(&tokens).await
+                }),
+                tokio::time::timeout(SOURCE_TIMEOUT, async {
+                    get_batch_token_pools_from_raydium(&tokens).await
+                })
+            );
+            let gecko_batch = match gecko_res {
+                Ok(v) => v,
+                Err(_) => get_batch_token_pools_from_geckoterminal(&Vec::new()).await,
+            };
+            let raydium_batch = match ray_res {
+                Ok(v) => v,
+                Err(_) => get_batch_token_pools_from_raydium(&Vec::new()).await,
+            };
+            (
+                Some(gecko_batch),
+                Some(raydium_batch),
+                gecko_start.elapsed().as_millis(),
+                ray_start.elapsed().as_millis(),
+            )
+        };
+
+        if let Some(gecko_batch) = gecko_batch_opt.as_ref() {
+            for (mint, pools) in gecko_batch.pools.iter() {
+                for pool in pools {
+                    if let Ok(desc) = Self::convert_gecko_pool_to_descriptor_static(pool) {
+                        descriptors.push(desc);
+                    }
+                }
+                if is_debug_pool_discovery_enabled() {
+                    log(
+                        LogTag::PoolDiscovery,
+                        "DEBUG",
+                        &format!("Gecko pools appended for {}", &mint[..8])
+                    );
                 }
             }
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    &format!("Raydium batched pools for {} appended", &mint[..8])
-                );
+        }
+        if let Some(raydium_batch) = raydium_batch_opt.as_ref() {
+            for (mint, pools) in raydium_batch.pools.iter() {
+                for pool in pools {
+                    if let Ok(desc) = Self::convert_raydium_pool_to_descriptor_static(pool) {
+                        descriptors.push(desc);
+                    }
+                }
+                if is_debug_pool_discovery_enabled() {
+                    log(
+                        LogTag::PoolDiscovery,
+                        "DEBUG",
+                        &format!("Raydium pools appended for {}", &mint[..8])
+                    );
+                }
             }
         }
 
@@ -192,11 +334,17 @@ impl PoolDiscovery {
             deduped = Self::select_highest_liquidity_per_token(deduped);
         }
 
+        // Update state freshness timestamps
+        let state = get_state_mut();
+        let now = Instant::now();
+        for t in tokens.iter() {
+            state.last_discovery.insert(t.clone(), now);
+        }
+
         // Stream to analyzer immediately
         if let Some(analyzer) = get_pool_analyzer() {
             let sender = analyzer.get_sender();
             for pool in deduped.into_iter() {
-                // Let analyzer determine actual program id
                 let _ = sender.send(crate::pools::analyzer::AnalyzerMessage::AnalyzePool {
                     pool_id: pool.pool_id,
                     program_id: Pubkey::default(),
@@ -211,6 +359,24 @@ impl PoolDiscovery {
                 LogTag::PoolDiscovery,
                 "WARN",
                 "Analyzer not initialized; cannot stream discovered pools"
+            );
+        }
+
+        if is_debug_pool_discovery_enabled() {
+            let total_ms = tick_start.elapsed().as_millis();
+            log(
+                LogTag::PoolDiscovery,
+                "DEBUG",
+                &format!(
+                    "TickComplete ms_total={} ms_dexs={} ms_gecko={} ms_raydium={} pools_sent={} tokens_slice={} short_circuit={} ",
+                    total_ms,
+                    dexs_ms,
+                    gecko_ms,
+                    raydium_ms,
+                    state.last_discovery.len(),
+                    tokens.len(),
+                    short_circuit
+                )
             );
         }
     }
