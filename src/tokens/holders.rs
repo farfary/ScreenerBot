@@ -41,6 +41,131 @@ pub struct TopHoldersAnalysis {
     pub is_token_2022: bool,
 }
 
+/// Maximum number of token accounts we'll analyze (to prevent RPC timeouts)
+const MAX_ANALYZABLE_ACCOUNTS: usize = 2000;
+
+/// Estimate the number of token accounts for a mint without fetching full data
+/// This is used to determine if we should skip expensive holder analysis
+/// Uses dataSlice to efficiently count accounts without downloading account data
+pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usize, String> {
+    log(
+        LogTag::Rpc,
+        "ACCOUNT_COUNT",
+        &format!("Estimating token account count for mint {}", safe_truncate(mint_address, 8))
+    );
+
+    let rpc_client = get_rpc_client();
+
+    // Determine token type first
+    let is_token_2022 = match rpc_client.is_token_2022_mint(mint_address).await {
+        Ok(is_2022) => is_2022,
+        Err(e) => {
+            log(
+                LogTag::Rpc,
+                "ERROR",
+                &format!(
+                    "Failed to determine token type for {}: {}",
+                    safe_truncate(mint_address, 8),
+                    e
+                )
+            );
+            return Err(format!("Failed to determine token type: {}", e));
+        }
+    };
+
+    let program_id = if is_token_2022 {
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    } else {
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    };
+
+    // Create filters for getProgramAccounts
+    let filters =
+        serde_json::json!([
+        {
+            "dataSize": if is_token_2022 { 82 } else { 165 }
+        },
+        {
+            "memcmp": {
+                "offset": 0,
+                "bytes": mint_address
+            }
+        }
+    ]);
+
+    // Use dataSlice with 0 length to only get account count without data (OPTIMIZATION!)
+    let data_slice = serde_json::json!({
+        "offset": 0,
+        "length": 0
+    });
+
+    log(
+        LogTag::Rpc,
+        "DEBUG",
+        &format!(
+            "Using dataSlice optimization for account counting for mint {}",
+            safe_truncate(mint_address, 8)
+        )
+    );
+
+    match
+        rpc_client.get_program_accounts_with_dateslice(
+            program_id,
+            Some(filters),
+            Some("base64"),
+            Some(data_slice),
+            Some(30) // 30 second timeout for count estimation
+        ).await
+    {
+        Ok(accounts) => {
+            let count = accounts.len();
+            log(
+                LogTag::Rpc,
+                "ACCOUNT_COUNT",
+                &format!(
+                    "Found {} token accounts for mint {} (dataSlice optimized)",
+                    count,
+                    safe_truncate(mint_address, 8)
+                )
+            );
+            Ok(count)
+        }
+        Err(e) => {
+            log(
+                LogTag::Rpc,
+                "ERROR",
+                &format!(
+                    "Failed to get account count for {} with dataSlice: {}",
+                    safe_truncate(mint_address, 8),
+                    e
+                )
+            );
+            Err(format!("Failed to get account count: {}", e))
+        }
+    }
+}
+
+/// Check if a token has too many accounts for efficient analysis
+pub async fn should_skip_holder_analysis(mint_address: &str) -> Result<bool, String> {
+    let account_count = get_token_account_count_estimate(mint_address).await?;
+    let should_skip = account_count > MAX_ANALYZABLE_ACCOUNTS;
+
+    if should_skip {
+        log(
+            LogTag::Rpc,
+            "SKIP_ANALYSIS",
+            &format!(
+                "Skipping holder analysis for {} - {} accounts exceeds maximum {}",
+                safe_truncate(mint_address, 8),
+                account_count,
+                MAX_ANALYZABLE_ACCOUNTS
+            )
+        );
+    }
+
+    Ok(should_skip)
+}
+
 /// Core function to fetch all token accounts for a mint
 /// This is the single source of truth for token account data
 async fn fetch_token_accounts(
@@ -276,6 +401,13 @@ pub async fn get_top_holders_analysis(
         &format!("Analyzing top {} holders for mint {}", limit, safe_truncate(mint_address, 8))
     );
 
+    // Pre-check if token has too many accounts for efficient analysis
+    if should_skip_holder_analysis(mint_address).await? {
+        return Err(
+            format!("Token has too many holders for single query (>{})", MAX_ANALYZABLE_ACCOUNTS)
+        );
+    }
+
     let (accounts, is_token_2022) = fetch_token_accounts(mint_address).await?;
     let mut holders = extract_holders_from_accounts(&accounts);
 
@@ -317,6 +449,13 @@ pub async fn get_holder_stats(mint_address: &str) -> Result<HolderStats, String>
         "HOLDER_STATS",
         &format!("Getting holder statistics for mint {}", safe_truncate(mint_address, 8))
     );
+
+    // Pre-check if token has too many accounts for efficient analysis
+    if should_skip_holder_analysis(mint_address).await? {
+        return Err(
+            format!("Token has too many holders for single query (>{})", MAX_ANALYZABLE_ACCOUNTS)
+        );
+    }
 
     let (accounts, is_token_2022) = fetch_token_accounts(mint_address).await?;
     let holders = extract_holders_from_accounts(&accounts);

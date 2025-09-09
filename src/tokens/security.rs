@@ -21,7 +21,14 @@ use crate::{
             TokenAuthorities,
             TokenRiskLevel,
         },
-        holders::{ get_holder_stats, get_top_holders_analysis, HolderStats, TopHoldersAnalysis },
+        holders::{
+            get_holder_stats,
+            get_top_holders_analysis,
+            should_skip_holder_analysis,
+            get_token_account_count_estimate,
+            HolderStats,
+            TopHoldersAnalysis,
+        },
         lp_lock::{ check_lp_lock_status, check_multiple_lp_locks, LpLockAnalysis, LpLockStatus },
     },
     utils::safe_truncate,
@@ -1214,24 +1221,123 @@ impl TokenSecurityAnalyzer {
         Ok(results)
     }
 
-    /// Get holder security information
+    /// Get holder security information with intelligent error handling and pre-checks
     async fn get_holder_security_info(
         &self,
         mint: &str
     ) -> Result<HolderSecurityInfo, ScreenerBotError> {
+        // Pre-check if token has too many accounts before attempting analysis
+        match should_skip_holder_analysis(mint).await {
+            Ok(should_skip) => {
+                if should_skip {
+                    log(
+                        LogTag::Security,
+                        "HOLDER_SKIP_PRECHECK",
+                        &format!(
+                            "Skipping holder analysis for {} - pre-check indicates too many holders",
+                            safe_truncate(mint, 8)
+                        )
+                    );
+                    // Return conservative holder info for tokens with many holders
+                    return Ok(HolderSecurityInfo {
+                        total_holders: u32::MAX, // Indicates very high count
+                        top_10_concentration: 0.0, // Unknown
+                        top_5_concentration: 0.0, // Unknown
+                        largest_holder_percentage: 0.0, // Unknown
+                        whale_count: 0, // Unknown
+                        average_balance: 0.0, // Unknown
+                        distribution_score: 50, // Neutral score for unknown distribution
+                    });
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Security,
+                    "HOLDER_PRECHECK_ERROR",
+                    &format!("Pre-check failed for {}: {}", safe_truncate(mint, 8), e)
+                );
+                // Continue with analysis if pre-check fails
+            }
+        }
+
         // Get basic holder stats
-        let holder_stats = get_holder_stats(mint).await.map_err(|e| {
-            ScreenerBotError::Data(crate::errors::DataError::Generic {
-                message: format!("Failed to get holder stats: {}", e),
-            })
-        })?;
+        let holder_stats = match get_holder_stats(mint).await {
+            Ok(stats) => stats,
+            Err(e) => {
+                // Check if error is due to too many holders
+                let error_msg = e.to_string();
+                if
+                    error_msg.contains("too many holders") ||
+                    error_msg.contains("timeout") ||
+                    error_msg.contains("deprioritized") ||
+                    error_msg.contains("Request too large")
+                {
+                    log(
+                        LogTag::Security,
+                        "HOLDER_SKIP",
+                        &format!(
+                            "Skipping holder analysis for {} - too many holders",
+                            safe_truncate(mint, 8)
+                        )
+                    );
+                    // Return minimal holder info indicating high holder count
+                    return Ok(HolderSecurityInfo {
+                        total_holders: u32::MAX, // Indicates unknown/high count
+                        top_10_concentration: 0.0,
+                        top_5_concentration: 0.0,
+                        largest_holder_percentage: 0.0,
+                        whale_count: 0,
+                        average_balance: 0.0,
+                        distribution_score: 30, // Conservative score for unknown distribution
+                    });
+                }
+
+                return Err(
+                    ScreenerBotError::Data(crate::errors::DataError::Generic {
+                        message: format!("Failed to get holder stats: {}", e),
+                    })
+                );
+            }
+        };
 
         // Get top holders for concentration analysis
-        let top_holders = get_top_holders_analysis(mint, Some(10)).await.map_err(|e| {
-            ScreenerBotError::Data(crate::errors::DataError::Generic {
-                message: format!("Failed to get top holders: {}", e),
-            })
-        })?;
+        let top_holders = match get_top_holders_analysis(mint, Some(10)).await {
+            Ok(holders) => holders,
+            Err(e) => {
+                let error_msg = e.to_string();
+                if
+                    error_msg.contains("too many holders") ||
+                    error_msg.contains("timeout") ||
+                    error_msg.contains("deprioritized") ||
+                    error_msg.contains("Request too large")
+                {
+                    log(
+                        LogTag::Security,
+                        "HOLDER_SKIP",
+                        &format!(
+                            "Skipping top holders analysis for {} - too many holders",
+                            safe_truncate(mint, 8)
+                        )
+                    );
+                    // Use the basic stats we already have
+                    return Ok(HolderSecurityInfo {
+                        total_holders: holder_stats.total_holders,
+                        top_10_concentration: holder_stats.top_10_concentration,
+                        top_5_concentration: holder_stats.top_10_concentration * 0.8, // Estimate
+                        largest_holder_percentage: 0.0, // Unknown
+                        whale_count: 0, // Unknown
+                        average_balance: holder_stats.average_balance,
+                        distribution_score: 40, // Conservative score
+                    });
+                }
+
+                return Err(
+                    ScreenerBotError::Data(crate::errors::DataError::Generic {
+                        message: format!("Failed to get top holders: {}", e),
+                    })
+                );
+            }
+        };
 
         Ok(self.create_holder_security_info(&holder_stats, &top_holders))
     }

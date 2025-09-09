@@ -25,9 +25,10 @@ OPTIONS:
     --help                     Show this help message
     --mint <ADDRESS>           Analyze security for specific token mint
                               (use tokens from our database, NOT SOL/USDC!)
-    --top <N>                  Analyze top N tokens from OUR database (default: 10, max: 100)
+    --top <N>                  Analyze top N tokens from OUR database (default: 10, max: 800)
                               (these are discovered tokens, not mainstream tokens)
     --search <QUERY>           Search tokens by symbol/name and analyze security
+    --search-limit <N>         Limit search results (default: 20, max: 100)
     --batch <MINTS>            Batch analyze comma-separated mint addresses
     --force-refresh            Force refresh cached data
     --risk-level <LEVEL>       Filter by risk level (safe, low, medium, high, critical)
@@ -74,6 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut mint_address: Option<String> = None;
     let mut top_count: Option<usize> = None;
     let mut search_query: Option<String> = None;
+    let mut search_limit: usize = 20; // Default search limit
     let mut batch_mints: Option<Vec<String>> = None;
     let mut force_refresh = false;
     let mut risk_filter: Option<SecurityRiskLevel> = None;
@@ -99,8 +101,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if i + 1 < args.len() {
                     match args[i + 1].parse::<usize>() {
                         Ok(count) => {
-                            if count > 100 {
-                                eprintln!("Error: Maximum top count is 100");
+                            if count > 800 {
+                                eprintln!("Error: Maximum top count is 800");
                                 return Ok(());
                             }
                             top_count = Some(count);
@@ -122,6 +124,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     i += 1;
                 } else {
                     eprintln!("Error: --search requires a query string");
+                    return Ok(());
+                }
+            }
+            "--search-limit" => {
+                if i + 1 < args.len() {
+                    match args[i + 1].parse::<usize>() {
+                        Ok(limit) => {
+                            if limit > 100 {
+                                eprintln!("Error: Maximum search limit is 100");
+                                return Ok(());
+                            }
+                            if limit == 0 {
+                                eprintln!("Error: Search limit must be at least 1");
+                                return Ok(());
+                            }
+                            search_limit = limit;
+                        }
+                        Err(_) => {
+                            eprintln!("Error: --search-limit requires a valid number");
+                            return Ok(());
+                        }
+                    }
+                    i += 1;
+                } else {
+                    eprintln!("Error: --search-limit requires a number");
                     return Ok(());
                 }
             }
@@ -214,7 +241,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else if let Some(count) = top_count {
         analyze_top_tokens(&analyzer, count, force_refresh, risk_filter).await?;
     } else if let Some(query) = search_query {
-        search_and_analyze_tokens(&analyzer, &query, force_refresh, risk_filter).await?;
+        search_and_analyze_tokens(
+            &analyzer,
+            &query,
+            search_limit,
+            force_refresh,
+            risk_filter
+        ).await?;
     } else if let Some(mints) = batch_mints {
         batch_analyze_tokens(&analyzer, &mints, force_refresh).await?;
     } else if !show_cache_stats && !cleanup_old {
@@ -321,14 +354,15 @@ async fn analyze_top_tokens(
 async fn search_and_analyze_tokens(
     analyzer: &TokenSecurityAnalyzer,
     query: &str,
+    limit: usize,
     _force_refresh: bool,
     risk_filter: Option<SecurityRiskLevel>
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("🔍 Searching tokens with query: '{}'", query);
+    println!("🔍 Searching tokens with query: '{}' (limit: {})", query, limit);
     println!("{}", "=".repeat(80));
 
-    // Search tokens in database (this would need to be implemented)
-    let tokens = search_tokens_in_db(query).await?;
+    // Search tokens in database with limit
+    let tokens = search_tokens_in_db(query, limit).await?;
 
     if tokens.is_empty() {
         println!("❌ No tokens found matching query: '{}'", query);
@@ -577,22 +611,85 @@ fn print_risk_distribution(results: &[TokenSecurityInfo]) {
 
 // Placeholder functions for database operations
 // These would need to be implemented based on your database structure
-async fn get_top_tokens_from_db(_count: usize) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    // This is a placeholder - you would implement actual database query here
-    // For now, return some example tokens for testing
-    Ok(
-        vec![
-            "So11111111111111111111111111111111111111112".to_string(), // SOL
-            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(), // USDC
-            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB".to_string() // USDT
-            // Add more tokens as needed for testing
-        ]
-    )
+async fn get_top_tokens_from_db(count: usize) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    // Connect to tokens database and get smaller tokens (not mainstream ones)
+    use rusqlite::Connection;
+
+    let db_path = "data/tokens.db";
+    let conn = Connection::open(db_path)?;
+
+    // Get tokens that are NOT mainstream tokens and have reasonable market caps
+    // Exclude SOL, USDC, USDT, WSOL, BTC, ETH and other huge tokens
+    let mut stmt = conn.prepare(
+        "SELECT mint FROM tokens 
+         WHERE symbol IS NOT NULL 
+         AND symbol NOT IN ('SOL', 'USDC', 'USDT', 'WSOL', 'BTC', 'ETH', 'WBTC', 'BONK', 'PENGU')
+         AND market_cap IS NOT NULL 
+         AND market_cap > 1000000 
+         AND market_cap < 50000000000
+         ORDER BY market_cap DESC 
+         LIMIT ?1"
+    )?;
+
+    let rows = stmt.query_map([count], |row| { Ok(row.get::<_, String>(0)?) })?;
+
+    let mut tokens = Vec::new();
+    for row in rows {
+        if let Ok(mint) = row {
+            tokens.push(mint);
+        }
+    }
+
+    // If no tokens found in database, return some smaller known tokens for testing
+    if tokens.is_empty() {
+        println!("⚠️  No suitable tokens found in database, using fallback test tokens");
+        return Ok(
+            vec![
+                "EPD9qjtFaFrR3GvTPmPt8spmu4hfwUN6Dc5tHtDmpump".to_string(), // Small pump token
+                "BwC4NhHGfT5GrzUSjiYe2LcUeyWqSRt5JY5EqHH8pump".to_string(), // Small pump token
+                "67ESYv7wxKu2vo637GhtffzSU2USwLHLZCQogsVmpump".to_string() // Small pump token
+            ]
+        );
+    }
+
+    println!(
+        "📊 Found {} suitable tokens from database (excluding mainstream tokens)",
+        tokens.len()
+    );
+    Ok(tokens)
 }
 
-async fn search_tokens_in_db(_query: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    // This is a placeholder - you would implement actual database search here
-    // For now, return tokens that might match the query
-    let all_tokens = get_top_tokens_from_db(10).await?;
-    Ok(all_tokens) // In real implementation, filter by query
+async fn search_tokens_in_db(
+    query: &str,
+    limit: usize
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    use rusqlite::Connection;
+
+    let db_path = "data/tokens.db";
+    let conn = Connection::open(db_path)?;
+
+    // Search by symbol or name, excluding mainstream tokens
+    let mut stmt = conn.prepare(
+        "SELECT mint FROM tokens 
+         WHERE (symbol LIKE ?1 OR name LIKE ?1)
+         AND symbol NOT IN ('SOL', 'USDC', 'USDT', 'WSOL', 'BTC', 'ETH', 'WBTC', 'BONK', 'PENGU')
+         AND market_cap IS NOT NULL 
+         AND market_cap < 50000000000
+         ORDER BY market_cap DESC 
+         LIMIT ?2"
+    )?;
+
+    let search_pattern = format!("%{}%", query);
+    let rows = stmt.query_map([&search_pattern, &limit.to_string()], |row| {
+        Ok(row.get::<_, String>(0)?)
+    })?;
+
+    let mut tokens = Vec::new();
+    for row in rows {
+        if let Ok(mint) = row {
+            tokens.push(mint);
+        }
+    }
+
+    Ok(tokens)
 }

@@ -3991,6 +3991,199 @@ impl RpcClient {
         }
     }
 
+    /// Enhanced get program accounts with dataSlice support for efficient token account counting
+    /// This method supports dataSlice to minimize data transfer when only counting accounts
+    pub async fn get_program_accounts_with_dateslice(
+        &self,
+        program_id: &str,
+        filters: Option<serde_json::Value>,
+        encoding: Option<&str>,
+        data_slice: Option<serde_json::Value>,
+        timeout_seconds: Option<u64>
+    ) -> Result<Vec<serde_json::Value>, ScreenerBotError> {
+        let mut params = vec![serde_json::Value::String(program_id.to_string())];
+
+        // Build config object
+        let mut config = serde_json::Map::new();
+        config.insert(
+            "encoding".to_string(),
+            serde_json::Value::String(encoding.unwrap_or("base64").to_string())
+        );
+
+        if let Some(filters_value) = filters {
+            config.insert("filters".to_string(), filters_value);
+        }
+
+        // Add dataSlice if provided (this is the key optimization)
+        if let Some(slice_value) = data_slice {
+            config.insert("dataSlice".to_string(), slice_value);
+        }
+
+        params.push(serde_json::Value::Object(config));
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getProgramAccounts",
+            "params": params
+        });
+
+        // Use round-robin RPC rotation - get next URL from client
+        let current_url = self.rotate_to_next_url();
+
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "DEBUG",
+                &format!(
+                    "Getting program accounts with dataSlice for program: {} from RPC: {}",
+                    crate::utils::safe_truncate(program_id, 12),
+                    current_url
+                )
+            );
+        }
+
+        // Apply rate limiting
+        self.wait_for_rate_limit().await;
+        self.record_call("getProgramAccounts");
+
+        // Create client with timeout
+        let client = reqwest::Client
+            ::builder()
+            .timeout(std::time::Duration::from_secs(timeout_seconds.unwrap_or(30)))
+            .build()
+            .map_err(|e| {
+                ScreenerBotError::Network(NetworkError::Generic {
+                    message: format!("Failed to create HTTP client: {}", e),
+                })
+            })?;
+
+        match
+            client
+                .post(&current_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let error_text = response
+                        .text().await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+
+                    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                        self.record_429_error(Some(&current_url));
+                        return Err(
+                            ScreenerBotError::RpcProvider(RpcProviderError::RateLimitExceeded {
+                                provider_name: current_url.clone(),
+                                limit_type: "requests_per_second".to_string(),
+                                reset_at: chrono::Utc::now() + chrono::Duration::seconds(60),
+                            })
+                        );
+                    } else if status == reqwest::StatusCode::REQUEST_TIMEOUT {
+                        return Err(
+                            ScreenerBotError::Network(NetworkError::ConnectionTimeout {
+                                endpoint: current_url.clone(),
+                                timeout_ms: timeout_seconds.unwrap_or(30) * 1000,
+                            })
+                        );
+                    } else {
+                        return Err(
+                            ScreenerBotError::Network(NetworkError::HttpStatusError {
+                                endpoint: current_url.clone(),
+                                status: status.as_u16(),
+                                body: Some(error_text),
+                            })
+                        );
+                    }
+                }
+
+                let rpc_response = response.json::<serde_json::Value>().await.map_err(|e| {
+                    ScreenerBotError::Data(DataError::ParseError {
+                        data_type: "RPC response".to_string(),
+                        error: e.to_string(),
+                    })
+                })?;
+
+                if let Some(error) = rpc_response.get("error") {
+                    if let Some(message) = error.get("message").and_then(|m| m.as_str()) {
+                        if Self::is_rate_limit_error(message) {
+                            self.record_429_error(Some(&current_url));
+                            return Err(
+                                ScreenerBotError::RpcProvider(RpcProviderError::RateLimitExceeded {
+                                    provider_name: current_url.clone(),
+                                    limit_type: "requests_per_second".to_string(),
+                                    reset_at: chrono::Utc::now() + chrono::Duration::seconds(60),
+                                })
+                            );
+                        } else {
+                            return Err(
+                                ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                                    provider_name: current_url.clone(),
+                                    message: format!("RPC error: {}", message),
+                                })
+                            );
+                        }
+                    }
+                }
+
+                if let Some(result) = rpc_response.get("result") {
+                    if let Some(accounts) = result.as_array() {
+                        // Record successful call
+                        self.record_success(Some(&current_url));
+
+                        if is_debug_rpc_enabled() {
+                            log(
+                                LogTag::Rpc,
+                                "SUCCESS",
+                                &format!(
+                                    "Retrieved {} program accounts (with dataSlice) from RPC: {}",
+                                    accounts.len(),
+                                    current_url
+                                )
+                            );
+                        }
+
+                        return Ok(accounts.clone());
+                    }
+                }
+
+                Err(
+                    ScreenerBotError::Data(DataError::ParseError {
+                        data_type: "program accounts".to_string(),
+                        error: "No accounts found or invalid response format".to_string(),
+                    })
+                )
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+
+                if Self::is_rate_limit_error(&error_msg) {
+                    self.record_429_error(Some(&current_url));
+                    log(
+                        LogTag::Rpc,
+                        "WARN",
+                        &format!("Rate limited on RPC {} for program accounts", current_url)
+                    );
+                } else {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("Failed to get program accounts from RPC {}: {}", current_url, e)
+                    );
+                }
+
+                Err(
+                    ScreenerBotError::Network(NetworkError::Generic {
+                        message: format!("Failed to get program accounts from RPC: {}", e),
+                    })
+                )
+            }
+        }
+    }
+
     /// Get mint account data to check authorities (minting, freeze, update metadata)
     /// Returns the raw mint account data for authority parsing using round-robin RPC rotation
     pub async fn get_mint_account(
