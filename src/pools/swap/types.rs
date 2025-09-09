@@ -99,6 +99,12 @@ impl fmt::Display for SwapError {
 
 impl std::error::Error for SwapError {}
 
+impl From<solana_sdk::program_error::ProgramError> for SwapError {
+    fn from(error: solana_sdk::program_error::ProgramError) -> Self {
+        SwapError::TransactionError(format!("Program error: {:?}", error))
+    }
+}
+
 /// Common constants
 pub mod constants {
     /// WSOL mint address (Wrapped SOL)
