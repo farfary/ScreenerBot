@@ -59,7 +59,6 @@ struct TokenWithoutDecimals {
     pub symbol: String,
     pub liquidity_usd: f64,
     pub age_hours: Option<i64>,
-    pub has_rugcheck: bool,
     pub has_transactions: bool,
 }
 
@@ -369,7 +368,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     symbol: symbol.clone(),
                     liquidity_usd: *liquidity_usd,
                     age_hours,
-                    has_rugcheck: token.info.is_some(), // Use info field as proxy for additional data
                     has_transactions: token.txns.is_some(),
                 };
 

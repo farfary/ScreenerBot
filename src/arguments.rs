@@ -150,11 +150,6 @@ pub fn is_debug_price_service_enabled() -> bool {
     has_arg("--debug-price-service")
 }
 
-/// Rugcheck module debug mode
-pub fn is_debug_rugcheck_enabled() -> bool {
-    has_arg("--debug-rugcheck")
-}
-
 /// SOL price service debug mode
 pub fn is_debug_sol_price_enabled() -> bool {
     has_arg("--debug-sol-price")
@@ -312,7 +307,6 @@ pub fn print_help() {
     println!("    --debug-positions         Positions module debug mode");
     println!("    --debug-profit            Profit calculation debug mode");
     println!("    --debug-rpc               RPC operations debug mode");
-    println!("    --debug-rugcheck          Rugcheck module debug mode");
     println!("    --debug-summary           Summary module debug mode");
     println!("    --debug-summary-logging   Write summary tables to log file");
     println!("    --debug-swaps             Swap operations debug mode");
@@ -359,7 +353,6 @@ pub fn is_any_debug_enabled() -> bool {
         is_debug_monitor_enabled() ||
         is_debug_discovery_enabled() ||
         is_debug_price_service_enabled() ||
-        is_debug_rugcheck_enabled() ||
         is_debug_sol_price_enabled() ||
         is_debug_entry_enabled() ||
         is_debug_ohlcv_enabled() ||
@@ -421,9 +414,6 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     }
     if is_debug_price_service_enabled() {
         modes.push("price-service");
-    }
-    if is_debug_rugcheck_enabled() {
-        modes.push("rugcheck");
     }
     if is_debug_sol_price_enabled() {
         modes.push("sol-price");
