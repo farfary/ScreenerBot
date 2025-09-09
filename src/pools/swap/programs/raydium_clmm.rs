@@ -1,25 +1,25 @@
 use solana_sdk::{
-    instruction::{AccountMeta, Instruction},
+    instruction::{ AccountMeta, Instruction },
     pubkey::Pubkey,
     program_error::ProgramError,
     transaction::Transaction,
-    signature::{Keypair, Signer},
+    signature::{ Keypair, Signer },
     system_instruction,
 };
 use spl_token;
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
-use std::collections::{VecDeque, HashMap};
+use serde::{ Deserialize, Serialize };
+use std::collections::{ VecDeque, HashMap };
 
-use crate::pools::swap::types::{SwapRequest, SwapResult, SwapDirection, SwapError, SwapParams};
+use crate::pools::swap::types::{ SwapRequest, SwapResult, SwapDirection, SwapError, SwapParams };
 use crate::pools::swap::programs::ProgramSwap;
-use crate::pools::swap::executor::SwapExecutor;
+use crate::pools::decoders::raydium_clmm::{ RaydiumClmmDecoder, ClmmPoolInfo, ClmmBasicInfo };
 use crate::pools::AccountData;
-use crate::pools::decoders::raydium_clmm::RaydiumClmmDecoder;
+use crate::pools::swap::executor::SwapExecutor;
 use crate::pools::types::RAYDIUM_CLMM_PROGRAM_ID;
-use crate::rpc::{get_rpc_client, sol_to_lamports};
-use crate::configs::{read_configs, load_wallet_from_config};
-use crate::logger::{log, LogTag};
+use crate::rpc::{ get_rpc_client, sol_to_lamports };
+use crate::configs::{ read_configs, load_wallet_from_config };
+use crate::logger::{ log, LogTag };
 
 /// SwapV2 instruction discriminator for Raydium CLMM
 /// Based on Anchor discriminator pattern
@@ -63,13 +63,8 @@ pub struct RaydiumClmmPoolInfo {
     pub token_vault_0: String,
     pub token_vault_1: String,
     pub sqrt_price_x64: u128,
-    pub tick_current: i32,
-    pub liquidity: u128,
-    pub fee_rate: u32,
     pub amm_config: String,
     pub observation_key: String,
-    pub token_0_decimals: u8,
-    pub token_1_decimals: u8,
 }
 
 /// Raydium CLMM swap implementation
@@ -78,16 +73,16 @@ pub struct RaydiumClmmSwap;
 impl ProgramSwap for RaydiumClmmSwap {
     async fn execute_swap(
         request: SwapRequest,
-        pool_data: AccountData,
+        pool_data: AccountData
     ) -> Result<SwapResult, SwapError> {
         log(
             LogTag::System,
             "INFO",
-            &format!("🔀 Executing Raydium CLMM {:?} swap", request.direction),
+            &format!("🔀 Executing Raydium CLMM {:?} swap", request.direction)
         );
 
-        // Decode pool state using centralized decoder (mock for now)
-        let pool_info = Self::decode_pool_state(&pool_data)?;
+        // Decode pool state using centralized decoder
+        let pool_info = Self::decode_pool_state(&pool_data).await?;
 
         // Load wallet
         let wallet = Self::load_wallet().await?;
@@ -96,7 +91,12 @@ impl ProgramSwap for RaydiumClmmSwap {
         let swap_params = Self::calculate_swap_params(&request, &pool_info).await?;
 
         // Build transaction
-        let transaction = Self::build_swap_transaction(&wallet, &request, &pool_info, &swap_params).await?;
+        let transaction = Self::build_swap_transaction(
+            &wallet,
+            &request,
+            &pool_info,
+            &swap_params
+        ).await?;
 
         // Execute transaction
         SwapExecutor::execute_transaction(transaction, swap_params, request.dry_run).await
@@ -104,28 +104,58 @@ impl ProgramSwap for RaydiumClmmSwap {
 }
 
 impl RaydiumClmmSwap {
-    /// Decode pool state - simplified version for CLMM
-    fn decode_pool_state(pool_data: &AccountData) -> Result<RaydiumClmmPoolInfo, SwapError> {
-        // For now, create a mock CLMM pool info
-        // In production, this would use the centralized CLMM decoder
-        
-        log(LogTag::System, "INFO", "📊 Decoding Raydium CLMM pool state");
+    /// Decode pool state using the centralized CLMM decoder
+    async fn decode_pool_state(pool_data: &AccountData) -> Result<RaydiumClmmPoolInfo, SwapError> {
+        log(
+            LogTag::System,
+            "INFO",
+            "📊 Extracting complete Raydium CLMM pool data using centralized decoder"
+        );
 
-        // Mock CLMM pool info - in production this would come from the decoder
+        // Create accounts map for the decoder
+        let mut accounts = std::collections::HashMap::new();
+        accounts.insert(pool_data.pubkey.to_string(), pool_data.clone());
+
+        // Extract complete pool data using the new raw data extraction approach
+        let full_pool_info = match RaydiumClmmDecoder::extract_pool_data(&accounts) {
+            Some(data) => data,
+            None => {
+                log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("No pool data found for {}", pool_data.pubkey)
+                );
+                return Err(SwapError::InvalidPool("No pool data found".to_string()));
+            }
+        };
+
+        // Get basic info for trading
+        let basic_info = RaydiumClmmDecoder::get_basic_pool_info(&full_pool_info);
+
+        log(
+            LogTag::System,
+            "INFO",
+            &format!(
+                "✅ Complete CLMM pool data extracted - token_0: {}, token_1: {}, sqrt_price_x64: {}, liquidity: {}, tick_current: {}, tick_spacing: {}",
+                basic_info.token_mint_0,
+                basic_info.token_mint_1,
+                basic_info.sqrt_price_x64,
+                basic_info.liquidity,
+                basic_info.tick_current,
+                basic_info.tick_spacing
+            )
+        );
+
+        // Convert to our internal format with basic trading info
         Ok(RaydiumClmmPoolInfo {
             pool_id: pool_data.pubkey.to_string(),
-            token_mint_0: "So11111111111111111111111111111111111111112".to_string(), // SOL
-            token_mint_1: "5DhEM7PZrPVPfA4UK3tcNxxZ8UGwc6yFYwpAXB14uw2t".to_string(), // Example token
-            token_vault_0: Pubkey::new_unique().to_string(),
-            token_vault_1: Pubkey::new_unique().to_string(),
-            sqrt_price_x64: 1000000000000000000u128, // Mock price
-            tick_current: 0,
-            liquidity: 10000000000u128,
-            fee_rate: 2500, // 0.25%
-            amm_config: Pubkey::new_unique().to_string(),
-            observation_key: Pubkey::new_unique().to_string(),
-            token_0_decimals: 9,
-            token_1_decimals: 6,
+            token_mint_0: basic_info.token_mint_0,
+            token_mint_1: basic_info.token_mint_1,
+            token_vault_0: basic_info.token_vault_0,
+            token_vault_1: basic_info.token_vault_1,
+            sqrt_price_x64: basic_info.sqrt_price_x64,
+            amm_config: full_pool_info.amm_config,
+            observation_key: full_pool_info.observation_key,
         })
     }
 
@@ -143,56 +173,59 @@ impl RaydiumClmmSwap {
     /// Calculate swap parameters using CLMM math (simplified)
     async fn calculate_swap_params(
         request: &SwapRequest,
-        pool_info: &RaydiumClmmPoolInfo,
+        pool_info: &RaydiumClmmPoolInfo
     ) -> Result<SwapParams, SwapError> {
         log(LogTag::System, "INFO", "🧮 Calculating CLMM swap parameters");
 
-        // Convert input amount to raw units
+        // Convert input amount to raw units - use standard decimals for now
         let input_amount_raw = match request.direction {
             SwapDirection::Buy => sol_to_lamports(request.amount),
-            SwapDirection::Sell => (request.amount * 10f64.powi(pool_info.token_1_decimals as i32)) as u64,
+            SwapDirection::Sell => (request.amount * (10f64).powi(6)) as u64, // Assume 6 decimals for token
         };
 
         // Use simplified constant product formula for CLMM estimation
         // Real CLMM would use concentrated liquidity math with sqrt pricing
         let estimated_output_raw = {
-            // Mock reserves based on liquidity
+            // Mock reserves based on liquidity - we need to implement real vault balance fetching
             let reserve_0 = 1000000000u64; // 1000 SOL equivalent
             let reserve_1 = 50000000000u64; // 50000 tokens equivalent
-            
-            let fee_rate = pool_info.fee_rate as u64; // fee in basis points
+
+            let fee_rate = 2500u64; // 0.25% default for CLMM
             let fee_denominator = 1000000u64;
-            
+
             Self::estimate_clmm_output(
                 input_amount_raw,
                 reserve_0,
                 reserve_1,
                 fee_rate,
                 fee_denominator,
-                matches!(request.direction, SwapDirection::Buy),
+                matches!(request.direction, SwapDirection::Buy)
             )?
         };
 
         // Apply slippage to get minimum output
-        let slippage_multiplier = (10000u64.saturating_sub(request.slippage_bps as u64)) as u128;
-        let minimum_output_raw = ((estimated_output_raw as u128 * slippage_multiplier) / 10000u128) as u64;
+        let slippage_multiplier = (10000u64).saturating_sub(request.slippage_bps as u64) as u128;
+        let minimum_output_raw = (((estimated_output_raw as u128) * slippage_multiplier) /
+            10000u128) as u64;
 
-        // Convert to UI amounts for display
+        // Convert to UI amounts for display - use standard decimals
         let output_decimals = match request.direction {
-            SwapDirection::Buy => pool_info.token_1_decimals,
-            SwapDirection::Sell => pool_info.token_0_decimals,
+            SwapDirection::Buy => 6u8, // Token decimals
+            SwapDirection::Sell => 9u8, // SOL decimals
         };
 
-        let expected_output = estimated_output_raw as f64 / 10f64.powi(output_decimals as i32);
-        let minimum_output = minimum_output_raw as f64 / 10f64.powi(output_decimals as i32);
+        let expected_output = (estimated_output_raw as f64) / (10f64).powi(output_decimals as i32);
+        let minimum_output = (minimum_output_raw as f64) / (10f64).powi(output_decimals as i32);
 
         log(
             LogTag::System,
             "INFO",
             &format!(
                 "💹 CLMM Swap calculation: {} → {} (min: {})",
-                request.amount, expected_output, minimum_output
-            ),
+                request.amount,
+                expected_output,
+                minimum_output
+            )
         );
 
         Ok(SwapParams {
@@ -211,7 +244,7 @@ impl RaydiumClmmSwap {
         reserve_out: u64,
         fee_numerator: u64,
         fee_denominator: u64,
-        _is_zero_for_one: bool,
+        _is_zero_for_one: bool
     ) -> Result<u64, SwapError> {
         if input_amount == 0 || reserve_in == 0 || reserve_out == 0 {
             return Ok(0);
@@ -248,7 +281,7 @@ impl RaydiumClmmSwap {
             .ok_or_else(|| SwapError::CalculationError("Division by zero".to_string()))?;
 
         // Convert back to u64, ensuring it fits
-        if output_amount > u64::MAX as u128 {
+        if output_amount > (u64::MAX as u128) {
             return Err(SwapError::CalculationError("Output amount overflow".to_string()));
         }
 
@@ -260,7 +293,7 @@ impl RaydiumClmmSwap {
         wallet: &Keypair,
         request: &SwapRequest,
         pool_info: &RaydiumClmmPoolInfo,
-        swap_params: &SwapParams,
+        swap_params: &SwapParams
     ) -> Result<Transaction, SwapError> {
         log(LogTag::System, "INFO", "🔨 Building Raydium CLMM swap transaction");
 
@@ -271,15 +304,14 @@ impl RaydiumClmmSwap {
             &wallet.pubkey(),
             pool_info,
             request,
-            swap_params,
+            swap_params
         )?;
 
         instructions.push(swap_instruction);
 
         // Create transaction
         let recent_blockhash = get_rpc_client()
-            .get_latest_blockhash()
-            .await
+            .get_latest_blockhash().await
             .map_err(|e| SwapError::RpcError(format!("Failed to get blockhash: {}", e)))?;
 
         let transaction = Transaction::new_unsigned(
@@ -294,10 +326,11 @@ impl RaydiumClmmSwap {
         user: &Pubkey,
         pool_info: &RaydiumClmmPoolInfo,
         request: &SwapRequest,
-        swap_params: &SwapParams,
+        swap_params: &SwapParams
     ) -> Result<Instruction, SwapError> {
-        let program_id = Pubkey::from_str(RAYDIUM_CLMM_PROGRAM_ID)
-            .map_err(|e| SwapError::InvalidPool(format!("Invalid CLMM program ID: {}", e)))?;
+        let program_id = Pubkey::from_str(RAYDIUM_CLMM_PROGRAM_ID).map_err(|e|
+            SwapError::InvalidPool(format!("Invalid CLMM program ID: {}", e))
+        )?;
 
         // Create SwapV2 instruction data
         let swap_data = SwapV2Data {
@@ -308,22 +341,28 @@ impl RaydiumClmmSwap {
         };
 
         let mut instruction_data = SWAP_V2_DISCRIMINATOR.to_vec();
-        let serialized_data = bincode::serialize(&swap_data)
+        let serialized_data = bincode
+            ::serialize(&swap_data)
             .map_err(|e| SwapError::InvalidPool(format!("Failed to serialize data: {}", e)))?;
         instruction_data.extend_from_slice(&serialized_data);
 
         // Mock account addresses - in production these would be derived properly
-        let pool_id = Pubkey::from_str(&pool_info.pool_id)
-            .map_err(|e| SwapError::InvalidPool(format!("Invalid pool ID: {}", e)))?;
-        let amm_config = Pubkey::from_str(&pool_info.amm_config)
-            .map_err(|e| SwapError::InvalidPool(format!("Invalid AMM config: {}", e)))?;
-        let observation_state = Pubkey::from_str(&pool_info.observation_key)
-            .map_err(|e| SwapError::InvalidPool(format!("Invalid observation key: {}", e)))?;
+        let pool_id = Pubkey::from_str(&pool_info.pool_id).map_err(|e|
+            SwapError::InvalidPool(format!("Invalid pool ID: {}", e))
+        )?;
+        let amm_config = Pubkey::from_str(&pool_info.amm_config).map_err(|e|
+            SwapError::InvalidPool(format!("Invalid AMM config: {}", e))
+        )?;
+        let observation_state = Pubkey::from_str(&pool_info.observation_key).map_err(|e|
+            SwapError::InvalidPool(format!("Invalid observation key: {}", e))
+        )?;
 
-        let mock_input_vault = Pubkey::from_str(&pool_info.token_vault_0)
-            .map_err(|e| SwapError::InvalidPool(format!("Invalid input vault: {}", e)))?;
-        let mock_output_vault = Pubkey::from_str(&pool_info.token_vault_1)
-            .map_err(|e| SwapError::InvalidPool(format!("Invalid output vault: {}", e)))?;
+        let mock_input_vault = Pubkey::from_str(&pool_info.token_vault_0).map_err(|e|
+            SwapError::InvalidPool(format!("Invalid input vault: {}", e))
+        )?;
+        let mock_output_vault = Pubkey::from_str(&pool_info.token_vault_1).map_err(|e|
+            SwapError::InvalidPool(format!("Invalid output vault: {}", e))
+        )?;
 
         // Mock user token accounts
         let mock_input_token = Pubkey::new_unique();
@@ -356,7 +395,7 @@ impl RaydiumClmmSwap {
             // Input vault mint (readonly)
             AccountMeta::new_readonly(Pubkey::from_str(&pool_info.token_mint_0).unwrap(), false),
             // Output vault mint (readonly)
-            AccountMeta::new_readonly(Pubkey::from_str(&pool_info.token_mint_1).unwrap(), false),
+            AccountMeta::new_readonly(Pubkey::from_str(&pool_info.token_mint_1).unwrap(), false)
         ];
 
         // Add mock tick arrays (CLMM requires multiple tick arrays)
