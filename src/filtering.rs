@@ -2,9 +2,16 @@ use crate::global::is_debug_filtering_enabled;
 use crate::logger::{ log, LogTag };
 use crate::tokens::is_token_excluded_from_trading;
 use crate::tokens::cache::TokenDatabase;
+use crate::tokens::security::{
+    get_security_analyzer,
+    TokenSecurityInfo,
+    SecurityRiskLevel,
+    SecurityFlags,
+};
 use crate::tokens::types::{ Token, ApiToken };
 use crate::trader::MAX_OPEN_POSITIONS;
 use chrono::{ Duration as ChronoDuration, Utc };
+use std::collections::HashMap;
 
 // =============================================================================
 // FILTERING CONFIGURATION PARAMETERS
@@ -44,6 +51,13 @@ pub const MAX_AVERAGE_LOSS_PERCENTAGE: f64 = 50.0;
 // ===== VALIDATION TIMEOUTS =====
 pub const DB_LOCK_TIMEOUT_MS: u64 = 5000;
 pub const PRICE_HISTORY_LOCK_TIMEOUT_MS: u64 = 3000;
+
+// ===== SECURITY FILTERING PARAMETERS =====
+pub const MIN_SECURITY_SCORE: u8 = 60; // Overall security score threshold
+pub const MAX_WHALE_CONCENTRATION: f64 = 25.0; // Single holder percentage limit
+pub const MAX_TOP_5_CONCENTRATION: f64 = 60.0; // Top 5 holders percentage limit
+pub const MIN_HOLDER_COUNT: u32 = 20; // Minimum number of holders required
+pub const REQUIRE_LP_LOCKED: bool = true; // LP lock requirement for trading
 
 // =============================================================================
 // FILTERING RESULT ENUM
@@ -151,6 +165,27 @@ pub enum FilterReason {
         max_ratio: f64,
     },
     NoTransactionData,
+
+    // Security-related filtering (NEW)
+    SecurityInfoMissing,
+    SecurityScoreTooLow {
+        score: u8,
+        minimum: u8,
+    },
+    AuthorityRisk {
+        can_mint: bool,
+        can_freeze: bool,
+    },
+    HolderConcentrationRisk {
+        concentration: f64,
+        max_allowed: f64,
+    },
+    InsufficientHolders {
+        count: u32,
+        minimum: u32,
+    },
+    LpNotLocked,
+    SecurityAnalysisIncomplete,
 
     // Performance-related filtering
     PerformanceLimitExceeded {
@@ -380,7 +415,44 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         }
     }
 
-    // 8. Apply comprehensive filtering to all tokens
+    // 8. Load security information for batch filtering performance
+    let mut security_cache: HashMap<String, TokenSecurityInfo> = HashMap::new();
+    let security_analyzer = get_security_analyzer();
+
+    let token_mints: Vec<String> = all_tokens
+        .iter()
+        .map(|t| t.mint.clone())
+        .collect();
+    if !token_mints.is_empty() {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG",
+                &format!("🔐 Loading security info for {} tokens", token_mints.len())
+            );
+        }
+
+        // Load security info for all tokens (this uses the cache internally)
+        for mint in &token_mints {
+            if let Ok(Some(security_info)) = security_analyzer.database.get_security_info(mint) {
+                security_cache.insert(mint.clone(), security_info);
+            }
+        }
+
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG",
+                &format!(
+                    "🔐 Loaded security info for {}/{} tokens from database",
+                    security_cache.len(),
+                    token_mints.len()
+                )
+            );
+        }
+    }
+
+    // 9. Apply comprehensive filtering to all tokens
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
@@ -392,7 +464,10 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         );
     }
 
-    let (eligible_tokens, rejected_tokens) = filter_tokens_with_reasons(&all_tokens);
+    let (eligible_tokens, rejected_tokens) = filter_tokens_with_reasons_and_security(
+        &all_tokens,
+        &security_cache
+    );
 
     if is_debug_filtering_enabled() {
         log(
@@ -457,11 +532,27 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
 /// Note: Assumes tokens have already passed early performance filtering
 /// (zero liquidity, missing decimals, and age constraints)
 pub fn filter_token_for_trading(token: &Token) -> FilterResult {
+    filter_token_for_trading_with_security(token, &HashMap::new())
+}
+
+/// High-performance token filtering function with security validation
+/// This version requires a security cache for optimal performance
+pub fn filter_token_for_trading_with_security(
+    token: &Token,
+    security_cache: &HashMap<String, TokenSecurityInfo>
+) -> FilterResult {
     // Essential validations only - no debugging overhead for speed
 
     // Blacklist/exclusion check (highest priority)
     if let Some(reason) = validate_blacklist_exclusion(token) {
         return FilterResult::Rejected(reason);
+    }
+
+    // Security validation (early rejection for risky tokens)
+    if !security_cache.is_empty() {
+        if let Some(reason) = validate_security_requirements(token, security_cache) {
+            return FilterResult::Rejected(reason);
+        }
     }
 
     // Basic metadata validation
@@ -1146,6 +1237,180 @@ fn validate_decimal_availability(token: &Token) -> Option<FilterReason> {
     None
 }
 
+/// Validate security requirements for trading eligibility
+/// This function checks cached security information and applies security filters
+fn validate_security_requirements(
+    token: &Token,
+    security_cache: &HashMap<String, TokenSecurityInfo>
+) -> Option<FilterReason> {
+    // Check if security info exists in cache
+    let security_info = match security_cache.get(&token.mint) {
+        Some(info) => info,
+        None => {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_SECURITY",
+                    &format!(
+                        "❌ Token {} ({}) missing security information",
+                        token.symbol,
+                        token.mint
+                    )
+                );
+            }
+            return Some(FilterReason::SecurityInfoMissing);
+        }
+    };
+
+    // Check security score threshold
+    if security_info.security_score < MIN_SECURITY_SCORE {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_SECURITY",
+                &format!(
+                    "❌ Token {} ({}) security score too low: {} < {}",
+                    token.symbol,
+                    token.mint,
+                    security_info.security_score,
+                    MIN_SECURITY_SCORE
+                )
+            );
+        }
+        return Some(FilterReason::SecurityScoreTooLow {
+            score: security_info.security_score,
+            minimum: MIN_SECURITY_SCORE,
+        });
+    }
+
+    // Check authority risks (mint/freeze capabilities)
+    if security_info.security_flags.can_mint || security_info.security_flags.can_freeze {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_SECURITY",
+                &format!(
+                    "❌ Token {} ({}) has authority risks: can_mint={}, can_freeze={}",
+                    token.symbol,
+                    token.mint,
+                    security_info.security_flags.can_mint,
+                    security_info.security_flags.can_freeze
+                )
+            );
+        }
+        return Some(FilterReason::AuthorityRisk {
+            can_mint: security_info.security_flags.can_mint,
+            can_freeze: security_info.security_flags.can_freeze,
+        });
+    }
+
+    // Check LP lock requirement
+    if REQUIRE_LP_LOCKED && !security_info.security_flags.lp_locked {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_SECURITY",
+                &format!("❌ Token {} ({}) LP not locked", token.symbol, token.mint)
+            );
+        }
+        return Some(FilterReason::LpNotLocked);
+    }
+
+    // Check holder concentration and counts if available
+    if let Some(holder_info) = &security_info.holder_info {
+        // Check minimum holder count
+        if holder_info.total_holders < MIN_HOLDER_COUNT {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_SECURITY",
+                    &format!(
+                        "❌ Token {} ({}) insufficient holders: {} < {}",
+                        token.symbol,
+                        token.mint,
+                        holder_info.total_holders,
+                        MIN_HOLDER_COUNT
+                    )
+                );
+            }
+            return Some(FilterReason::InsufficientHolders {
+                count: holder_info.total_holders,
+                minimum: MIN_HOLDER_COUNT,
+            });
+        }
+
+        // Check whale concentration (single largest holder)
+        if holder_info.largest_holder_percentage > MAX_WHALE_CONCENTRATION {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_SECURITY",
+                    &format!(
+                        "❌ Token {} ({}) whale concentration too high: {:.1}% > {:.1}%",
+                        token.symbol,
+                        token.mint,
+                        holder_info.largest_holder_percentage,
+                        MAX_WHALE_CONCENTRATION
+                    )
+                );
+            }
+            return Some(FilterReason::HolderConcentrationRisk {
+                concentration: holder_info.largest_holder_percentage,
+                max_allowed: MAX_WHALE_CONCENTRATION,
+            });
+        }
+
+        // Check top 5 holder concentration
+        if holder_info.top_5_concentration > MAX_TOP_5_CONCENTRATION {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_SECURITY",
+                    &format!(
+                        "❌ Token {} ({}) top 5 concentration too high: {:.1}% > {:.1}%",
+                        token.symbol,
+                        token.mint,
+                        holder_info.top_5_concentration,
+                        MAX_TOP_5_CONCENTRATION
+                    )
+                );
+            }
+            return Some(FilterReason::HolderConcentrationRisk {
+                concentration: holder_info.top_5_concentration,
+                max_allowed: MAX_TOP_5_CONCENTRATION,
+            });
+        }
+    }
+
+    // Check if security analysis is incomplete
+    if security_info.security_flags.analysis_incomplete {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_SECURITY",
+                &format!("❌ Token {} ({}) security analysis incomplete", token.symbol, token.mint)
+            );
+        }
+        return Some(FilterReason::SecurityAnalysisIncomplete);
+    }
+
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_SECURITY",
+            &format!(
+                "✅ Token {} ({}) passed security validation (score: {}, risk: {:?})",
+                token.symbol,
+                token.mint,
+                security_info.security_score,
+                security_info.risk_level
+            )
+        );
+    }
+
+    None
+}
+
 // =============================================================================
 // TOKEN SORTING AND SELECTION UTILITIES (moved from trader.rs)
 // =============================================================================
@@ -1359,6 +1624,152 @@ pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, 
     (eligible, rejected)
 }
 
+/// Filter a list of tokens with security validation and return both eligible and rejected with reasons
+pub fn filter_tokens_with_reasons_and_security(
+    tokens: &[Token],
+    security_cache: &HashMap<String, TokenSecurityInfo>
+) -> (Vec<Token>, Vec<(Token, FilterReason)>) {
+    let (tokens_to_process, pre_filtered_rejected) = if
+        tokens.len() > MAX_TOKENS_FOR_DETAILED_FILTERING
+    {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "PERFORMANCE",
+                &format!(
+                    "⚡ Large token set detected: {} tokens. Prioritizing by data-availability score, then liquidity (cap {}).",
+                    tokens.len(),
+                    MAX_TOKENS_FOR_DETAILED_FILTERING
+                )
+            );
+        }
+
+        // Score tokens by cheap-to-compute signals that correlate with usable price history
+        // Score components (0-5):
+        //  - +1 has pool price now (price_pool_sol)
+        //  - +1 has dexscreener price (price_dexscreener_sol)
+        //  - +1 has m5 txn activity >= MIN_TRANSACTIONS_5MIN
+        //  - +1 has m5 volume
+        //  - +1 has non-zero liquidity USD
+        let mut scored: Vec<(i32, f64, &Token)> = tokens
+            .iter()
+            .map(|t| {
+                let mut score: i32 = 0;
+                if t.price_pool_sol.unwrap_or(0.0) > 0.0 {
+                    score += 1;
+                }
+                if t.price_dexscreener_sol.unwrap_or(0.0) > 0.0 {
+                    score += 1;
+                }
+                // txn m5
+                if let Some(ref txns) = t.txns {
+                    if let Some(ref m5) = txns.m5 {
+                        let total_txns = m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0);
+                        if total_txns >= MIN_TRANSACTIONS_5MIN {
+                            score += 1;
+                        }
+                    }
+                }
+                // volume m5
+                if let Some(ref volume) = t.volume {
+                    if let Some(m5_volume) = volume.m5 {
+                        if m5_volume > 0.0 {
+                            score += 1;
+                        }
+                    }
+                }
+                // liquidity
+                let liquidity_usd = t.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(0.0);
+                if liquidity_usd > 0.0 {
+                    score += 1;
+                }
+
+                (score, liquidity_usd, t)
+            })
+            .collect();
+
+        // Sort primarily by score (highest first), secondarily by liquidity (highest first)
+        scored.sort_by(|a, b| {
+            match b.0.cmp(&a.0) {
+                std::cmp::Ordering::Equal => {
+                    // If scores are equal, sort by liquidity
+                    b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                }
+                other => other,
+            }
+        });
+
+        // Take the top-N
+        let mut top_tokens: Vec<Token> = Vec::with_capacity(MAX_TOKENS_FOR_DETAILED_FILTERING);
+        for (_, _, tok) in scored.iter().take(MAX_TOKENS_FOR_DETAILED_FILTERING) {
+            top_tokens.push((*tok).clone());
+        }
+
+        // Everything else is excluded for performance
+        let mut excluded_tokens: Vec<(Token, FilterReason)> = Vec::new();
+        for (_, _, tok) in scored.into_iter().skip(MAX_TOKENS_FOR_DETAILED_FILTERING) {
+            excluded_tokens.push((
+                tok.clone(),
+                FilterReason::PerformanceLimitExceeded {
+                    total_tokens: tokens.len(),
+                    max_allowed: MAX_TOKENS_FOR_DETAILED_FILTERING,
+                },
+            ));
+        }
+
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "PERFORMANCE",
+                &format!(
+                    "📊 Performance limiting: Selected top {} by score→liquidity, excluded {}",
+                    top_tokens.len(),
+                    excluded_tokens.len()
+                )
+            );
+        }
+
+        (top_tokens, excluded_tokens)
+    } else {
+        (tokens.to_vec(), Vec::new())
+    };
+
+    let mut eligible = Vec::new();
+    let mut rejected = pre_filtered_rejected; // Start with pre-filtered rejected tokens
+
+    // FAST PRE-SCREEN: cheaply discard obvious rejects without verbose step-by-step logging
+    // This dramatically reduces the workload of full filtering when token sets are large
+    // Note: Skip liquidity, age, and decimals checks here since they're handled by early filtering
+    let mut fast_pass: Vec<&Token> = Vec::with_capacity(tokens_to_process.len());
+    for token in &tokens_to_process {
+        // Only check price validity since liquidity, age, and decimals are pre-filtered
+        if let Some(reason) = validate_price_data(token) {
+            rejected.push((token.clone(), reason));
+            continue;
+        }
+        // Passed fast pre-screen
+        fast_pass.push(token);
+    }
+
+    // Now run the full filter with security validation only on pre-screened tokens
+    for token in fast_pass {
+        match filter_token_for_trading_with_security(token, security_cache) {
+            FilterResult::Approved => eligible.push(token.clone()),
+            FilterResult::Rejected(reason) => rejected.push((token.clone(), reason)),
+        }
+    }
+
+    // Log detailed breakdown only in debug mode
+    if is_debug_filtering_enabled() && !tokens.is_empty() {
+        log_filtering_breakdown(&rejected);
+    }
+
+    (eligible, rejected)
+}
+
 /// Count how many tokens would pass filtering without processing them all
 pub fn count_eligible_tokens(tokens: &[Token]) -> usize {
     tokens
@@ -1477,6 +1888,14 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             FilterReason::AccountFrozen | FilterReason::TokenAccountFrozen => "Account Issues",
             FilterReason::InsufficientLpLock { .. } => "LP Lock Security",
             FilterReason::WhaleConcentrationRisk { .. } => "Whale Concentration Risk",
+            // NEW: Security-related rejections
+            FilterReason::SecurityInfoMissing => "Security Info Missing",
+            FilterReason::SecurityScoreTooLow { .. } => "Security Score Too Low",
+            FilterReason::AuthorityRisk { .. } => "Authority Risk",
+            FilterReason::HolderConcentrationRisk { .. } => "Holder Concentration Risk",
+            FilterReason::InsufficientHolders { .. } => "Insufficient Holders",
+            FilterReason::LpNotLocked => "LP Not Locked",
+            FilterReason::SecurityAnalysisIncomplete => "Security Analysis Incomplete",
             FilterReason::LockAcquisitionFailed => "System Errors",
             FilterReason::DecimalsNotAvailable { .. } => "Decimal Issues",
             | FilterReason::InsufficientTransactionActivity { .. }
