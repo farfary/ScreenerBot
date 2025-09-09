@@ -245,7 +245,7 @@ impl PriceHistory {
 /// Configuration constants
 pub const PRICE_CACHE_TTL_SECONDS: u64 = 30;
 pub const PRICE_HISTORY_MAX_ENTRIES: usize = 1000;
-pub const MAX_WATCHED_TOKENS: usize = 500;
+pub const MAX_WATCHED_TOKENS: usize = 2000;
 /// Pool monitoring refresh interval (seconds)
 /// Set to 600 seconds (10 minutes) to allow proper token re-filtering
 pub const POOL_REFRESH_INTERVAL_SECONDS: u64 = 10;

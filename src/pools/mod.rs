@@ -28,6 +28,12 @@ pub use service::{
     get_debug_token_override,
 };
 pub use types::{ PriceResult, PoolError };
+pub use discovery::{
+    PoolDiscovery,
+    ENABLE_DEXSCREENER_DISCOVERY,
+    ENABLE_GECKOTERMINAL_DISCOVERY,
+    ENABLE_RAYDIUM_DISCOVERY,
+}; // Expose for configuration access
 
 // Internal modules (not exposed)
 pub mod discovery;
