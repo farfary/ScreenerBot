@@ -14,7 +14,7 @@ pub mod orca_whirlpool;
 pub mod moonit_amm;
 
 // Re-export commonly used types for external access
-pub use raydium_cpmm::{RaydiumCpmmDecoder, RaydiumCpmmPoolInfo};
+pub use raydium_cpmm::{ RaydiumCpmmDecoder, RaydiumCpmmPoolInfo };
 
 use super::fetcher::AccountData;
 use super::types::{ ProgramKind, PriceResult };

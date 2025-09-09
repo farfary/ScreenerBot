@@ -3,15 +3,12 @@
 /// This module handles the actual execution of swap transactions,
 /// including transaction signing and broadcasting.
 
-use super::types::{SwapResult, SwapError};
-use crate::configs::{read_configs, load_wallet_from_config};
+use super::types::{ SwapResult, SwapError };
 use crate::rpc::get_rpc_client;
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 
-use solana_sdk::{
-    transaction::Transaction,
-    signature::{Keypair, Signer},
-};
+use solana_sdk::{ transaction::Transaction, signature::Signature };
+use base64::Engine;
 
 /// Transaction executor for swaps
 pub struct SwapExecutor;
@@ -39,36 +36,30 @@ impl SwapExecutor {
             });
         }
 
-        // Load wallet
-        let configs = read_configs()
-            .map_err(|e| SwapError::ExecutionError(format!("Failed to load config: {}", e)))?;
-        let wallet = load_wallet_from_config(&configs)
-            .map_err(|e| SwapError::ExecutionError(format!("Failed to load wallet: {}", e)))?;
+        // Serialize transaction to base64 for signing service
+        let serialized_tx = bincode
+            ::serialize(&transaction)
+            .map_err(|e|
+                SwapError::ExecutionError(format!("Failed to serialize transaction: {}", e))
+            )?;
+        let transaction_base64 = base64::engine::general_purpose::STANDARD.encode(&serialized_tx);
 
-        // Sign transaction
-        let mut signed_transaction = transaction.clone();
-        signed_transaction.sign(&[&wallet], signed_transaction.message.recent_blockhash);
-
-        // Send transaction
+        // Send transaction using centralized signing service
         let rpc_client = get_rpc_client();
-        
+
         log(LogTag::System, "INFO", "📤 Sending transaction to blockchain...");
-        
-        // Use the appropriate RPC method for sending transactions
+
+        // Use the centralized sign_and_send_transaction method
         let signature_str = rpc_client
-            .send_transaction(&signed_transaction)
-            .await
+            .sign_and_send_transaction(&transaction_base64).await
             .map_err(|e| SwapError::ExecutionError(format!("Transaction failed: {}", e)))?;
 
         // Parse signature string back to Signature type
-        let signature = signature_str.parse()
+        let signature = signature_str
+            .parse()
             .map_err(|e| SwapError::ExecutionError(format!("Invalid signature format: {}", e)))?;
 
-        log(
-            LogTag::System,
-            "SUCCESS",
-            &format!("✅ Transaction sent: {}", signature)
-        );
+        log(LogTag::System, "SUCCESS", &format!("✅ Transaction sent: {}", signature));
 
         Ok(SwapResult {
             signature: Some(signature),
@@ -79,7 +70,7 @@ impl SwapExecutor {
                 input_amount_raw: 0,
                 minimum_output_raw: 0,
             },
-            transaction: Some(signed_transaction),
+            transaction: Some(transaction),
             success: true,
             error: None,
         })

@@ -12,6 +12,7 @@
 /// - Real-time pool state fetching
 
 // Public modules
+
 pub mod types;
 pub mod builder;
 pub mod executor;
@@ -22,7 +23,7 @@ pub mod programs;
 // Re-export main API
 pub use builder::SwapBuilder;
 pub use executor::SwapExecutor;
-pub use types::{SwapRequest, SwapResult, SwapDirection, SwapError};
+pub use types::{ SwapRequest, SwapResult, SwapDirection, SwapError };
 
 // Re-export program implementations for direct access if needed
 pub use programs::raydium_cpmm::RaydiumCpmmSwap;
