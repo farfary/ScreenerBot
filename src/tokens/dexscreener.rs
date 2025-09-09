@@ -1166,6 +1166,94 @@ impl DexScreenerApi {
     ) -> Result<Vec<TokenPair>, String> {
         self.get_token_pairs("solana", token_address).await
     }
+
+    /// Get token pairs for multiple Solana tokens using batch endpoint (up to 30 tokens)
+    pub async fn get_batch_solana_token_pairs(
+        &mut self,
+        token_addresses: &[String]
+    ) -> Result<Vec<TokenPair>, String> {
+        if token_addresses.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        if token_addresses.len() > MAX_TOKENS_PER_API_CALL {
+            return Err(
+                format!(
+                    "Too many tokens for batch request: {}. Maximum is {}",
+                    token_addresses.len(),
+                    MAX_TOKENS_PER_API_CALL
+                )
+            );
+        }
+
+        // Join token addresses with commas for batch endpoint
+        let token_list = token_addresses.join(",");
+        let url = format!("https://api.dexscreener.com/tokens/v1/solana/{}", token_list);
+
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "REQUEST",
+                &format!("Batch fetching pools for {} tokens", token_addresses.len())
+            );
+        }
+
+        let start_time = Instant::now();
+
+        // Rate limiting
+        let permit = self.rate_limiter
+            .clone()
+            .acquire_owned().await
+            .map_err(|e| format!("Failed to acquire rate limit permit: {}", e))?;
+
+        // Make HTTP request
+        let response = self.client
+            .get(&url)
+            .send().await
+            .map_err(|e| format!("Failed to fetch batch token pairs: {}", e))?;
+
+        drop(permit);
+
+        let response_time = start_time.elapsed().as_millis() as f64;
+        let success = response.status().is_success();
+
+        self.stats.record_request(success, response_time);
+
+        if !success {
+            let error_msg = format!("Batch API request failed with status: {}", response.status());
+            if is_debug_api_enabled() {
+                log(LogTag::Api, "ERROR", &error_msg);
+            }
+            return Err(error_msg);
+        }
+
+        // Parse response - the batch endpoint returns an array of pairs directly
+        let response_text = response
+            .text().await
+            .map_err(|e| format!("Failed to read batch response: {}", e))?;
+
+        let pairs: Vec<TokenPair> = serde_json
+            ::from_str(&response_text)
+            .map_err(|e| format!("Failed to parse batch token pairs response: {}", e))?;
+
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "SUCCESS",
+                &format!(
+                    "Batch found {} pools for {} tokens ({:.0}ms)",
+                    pairs.len(),
+                    token_addresses.len(),
+                    response_time
+                )
+            );
+        }
+
+        // Update last request time
+        self.last_request_time = Some(Instant::now());
+
+        Ok(pairs)
+    }
 }
 
 /// Standalone function to get token pairs from API (improved timeout handling)
@@ -1197,6 +1285,30 @@ pub async fn get_token_pools_from_dexscreener(
     get_token_pairs_from_api(token_address).await
 }
 
+/// Get token pairs for multiple tokens using the batch API endpoint
+async fn get_batch_token_pairs_from_api(
+    token_addresses: &[String]
+) -> Result<Vec<TokenPair>, String> {
+    let api = get_global_dexscreener_api().await?;
+
+    // Use longer timeout to reduce timeout errors during system stress
+    let result = timeout(Duration::from_secs(15), api.lock()).await;
+    match result {
+        Ok(mut api_instance) => api_instance.get_batch_solana_token_pairs(token_addresses).await,
+        Err(_) => {
+            // Reduce log level to INFO since timeouts can be normal during shutdown
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "INFO",
+                    "DexScreener API lock timeout in get_batch_token_pairs_from_api (system may be shutting down)"
+                );
+            }
+            Err("API lock timeout".to_string())
+        }
+    }
+}
+
 /// Batch result for multiple tokens from DexScreener
 pub struct DexScreenerBatchResult {
     pub pools: HashMap<String, Vec<TokenPair>>,
@@ -1205,7 +1317,7 @@ pub struct DexScreenerBatchResult {
     pub failed_tokens: usize,
 }
 
-/// Get pools for multiple tokens in batch from DexScreener API (consistent naming)
+/// Get pools for multiple tokens in batch from DexScreener API using proper batch endpoint
 pub async fn get_batch_token_pools_from_dexscreener(
     token_addresses: &[String]
 ) -> DexScreenerBatchResult {
@@ -1216,7 +1328,7 @@ pub async fn get_batch_token_pools_from_dexscreener(
             LogTag::Api,
             "DEXSCREENER_BATCH_START",
             &format!(
-                "🟡 Starting DexScreener batch pool fetch for {} tokens",
+                "🟡 Starting DexScreener batch pool fetch for {} tokens using batch endpoint",
                 token_addresses.len()
             )
         );
@@ -1227,39 +1339,79 @@ pub async fn get_batch_token_pools_from_dexscreener(
     let mut successful_tokens = 0;
     let mut failed_tokens = 0;
 
-    // Process tokens with rate limiting
-    for (i, token_address) in token_addresses.iter().enumerate() {
-        // Rate limiting: conservative delay between requests (300 req/min = 5 req/sec = 200ms between requests)
-        if i > 0 {
+    // Process tokens in chunks of MAX_TOKENS_PER_API_CALL (30) to use batch endpoint efficiently
+    for (chunk_idx, chunk) in token_addresses.chunks(MAX_TOKENS_PER_API_CALL).enumerate() {
+        // Rate limiting: delay between chunks (not individual tokens)
+        if chunk_idx > 0 {
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
 
-        match get_token_pools_from_dexscreener(token_address).await {
-            Ok(token_pools) => {
-                if is_debug_api_enabled() {
-                    log(
-                        LogTag::Api,
-                        "DEXSCREENER_BATCH_SUCCESS",
-                        &format!(
-                            "✅ DexScreener: {} found {} pools",
-                            &token_address[..8],
-                            token_pools.len()
-                        )
-                    );
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "DEXSCREENER_BATCH_CHUNK",
+                &format!("📦 Processing chunk {}: {} tokens", chunk_idx + 1, chunk.len())
+            );
+        }
+
+        match get_batch_token_pairs_from_api(chunk).await {
+            Ok(batch_pairs) => {
+                // Group pairs by token address
+                let mut chunk_pools: HashMap<String, Vec<TokenPair>> = HashMap::new();
+
+                for pair in batch_pairs {
+                    // Determine which token this pair belongs to
+                    let base_token_addr = &pair.base_token.address;
+                    let quote_token_addr = &pair.quote_token.address;
+
+                    // Find which of our requested tokens this pair represents
+                    for token_addr in chunk {
+                        if base_token_addr == token_addr || quote_token_addr == token_addr {
+                            chunk_pools
+                                .entry(token_addr.clone())
+                                .or_insert_with(Vec::new)
+                                .push(pair.clone());
+                            break;
+                        }
+                    }
                 }
-                pools.insert(token_address.clone(), token_pools);
-                successful_tokens += 1;
+
+                // Update results
+                for token_addr in chunk {
+                    if let Some(token_pools) = chunk_pools.remove(token_addr) {
+                        if is_debug_api_enabled() {
+                            log(
+                                LogTag::Api,
+                                "DEXSCREENER_BATCH_SUCCESS",
+                                &format!(
+                                    "✅ DexScreener batch: {} found {} pools",
+                                    &token_addr[..8],
+                                    token_pools.len()
+                                )
+                            );
+                        }
+                        pools.insert(token_addr.clone(), token_pools);
+                        successful_tokens += 1;
+                    } else {
+                        // No pools found for this token
+                        pools.insert(token_addr.clone(), Vec::new());
+                        successful_tokens += 1;
+                    }
+                }
             }
             Err(e) => {
-                if is_debug_api_enabled() {
-                    log(
-                        LogTag::Api,
-                        "DEXSCREENER_BATCH_ERROR",
-                        &format!("❌ DexScreener: {} failed: {}", &token_address[..8], e)
-                    );
+                // Mark all tokens in this chunk as failed
+                for token_addr in chunk {
+                    if is_debug_api_enabled() {
+                        log(
+                            LogTag::Api,
+                            "DEXSCREENER_BATCH_ERROR",
+                            &format!("❌ DexScreener batch: {} failed: {}", &token_addr[..8], e)
+                        );
+                    }
+                    errors.insert(token_addr.clone(), e.clone());
+                    failed_tokens += 1;
                 }
-                errors.insert(token_address.clone(), e);
-                failed_tokens += 1;
             }
         }
     }
@@ -1271,10 +1423,11 @@ pub async fn get_batch_token_pools_from_dexscreener(
             LogTag::Api,
             "DEXSCREENER_BATCH_COMPLETE",
             &format!(
-                "✅ DexScreener batch complete: {}/{} successful in {:.2}s",
+                "✅ DexScreener batch complete: {}/{} successful in {:.2}s ({} chunks)",
                 successful_tokens,
                 token_addresses.len(),
-                elapsed.as_secs_f64()
+                elapsed.as_secs_f64(),
+                (token_addresses.len() + MAX_TOKENS_PER_API_CALL - 1) / MAX_TOKENS_PER_API_CALL
             )
         );
     }

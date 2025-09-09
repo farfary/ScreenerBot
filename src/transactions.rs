@@ -234,10 +234,13 @@ impl TransactionsManager {
         let mut signatures_to_remove = Vec::new();
         let now = chrono::Utc::now();
 
-        // Collect signatures that need to be rechecked (older than 30 seconds)
+        // Collect signatures needing recheck using tiered backoff to accelerate verification:
+        // <10s age: recheck after 5s; <30s age: recheck after 15s; otherwise 30s.
         let mut signatures_to_recheck = Vec::new();
         for (signature, first_seen) in &self.pending_transactions {
-            if now.signed_duration_since(*first_seen).num_seconds() > 30 {
+            let age = now.signed_duration_since(*first_seen).num_seconds();
+            let threshold = if age < 10 { 5 } else if age < 30 { 15 } else { 30 };
+            if age > threshold {
                 signatures_to_recheck.push(signature.clone());
             }
         }
@@ -521,6 +524,11 @@ impl TransactionsManager {
                 &format!("Processing transaction: {}", &signature)
             );
         }
+
+        // NOTE: Upstream WebSocket handler now classifies initial indexing gaps as transient and
+        // inserts signature into pending_transactions for rapid reprocessing. This function should
+        // therefore treat RPC fetch errors carefully; only hard failures propagate as Err while
+        // indexing delays get converted earlier into pending status.
 
         // Not in database, fetch fresh data from RPC
         if self.debug_enabled {
@@ -1193,36 +1201,49 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                                     }
                                 }
                                 Err(e) => {
-                                    log(
-                                        LogTag::Transactions,
-                                        "WARN",
-                                        &format!("Failed to process WebSocket transaction {}: {}", &signature, e)
-                                    );
+                                    // Determine if error is transient RPC indexing delay
+                                    let is_indexing_delay = e.contains("not yet indexed") || e.contains("Transaction not found") || e.contains("Failed to fetch transaction details");
 
-                                    // Save failed state to database
-                                    if let Err(db_err) = manager.save_failed_transaction_state(&signature, &e).await {
+                                    if is_indexing_delay {
+                                        // Treat as transient: mark as pending-like to reprocess quickly
+                                        manager.pending_transactions.insert(signature.clone(), chrono::Utc::now());
                                         log(
                                             LogTag::Transactions,
-                                            "ERROR",
-                                            &format!("Failed to save WebSocket transaction failure state for {}: {}", &signature, db_err)
+                                            "WEBSOCKET_TRANSIENT",
+                                            &format!("⏳ Transient WebSocket processing issue for {} (indexing delay) - scheduled fast pending recheck", &signature)
                                         );
-                                    }
-
-                                    // Create deferred retry
-                                    let retry = DeferredRetry {
-                                        signature: signature.clone(),
-                                        next_retry_at: chrono::Utc::now() + chrono::Duration::minutes(5),
-                                        remaining_attempts: 3,
-                                        current_delay_secs: 300,
-                                        last_error: Some(e),
-                                    };
-
-                                    if let Err(retry_err) = manager.store_deferred_retry(&retry).await {
+                                    } else {
                                         log(
                                             LogTag::Transactions,
-                                            "ERROR",
-                                            &format!("Failed to store WebSocket deferred retry for {}: {}", &signature, retry_err)
+                                            "WARN",
+                                            &format!("Failed to process WebSocket transaction {}: {}", &signature, e)
                                         );
+
+                                        // Save failed state to database only for non-transient failures
+                                        if let Err(db_err) = manager.save_failed_transaction_state(&signature, &e).await {
+                                            log(
+                                                LogTag::Transactions,
+                                                "ERROR",
+                                                &format!("Failed to save WebSocket transaction failure state for {}: {}", &signature, db_err)
+                                            );
+                                        }
+
+                                        // Create deferred retry (retain existing behavior)
+                                        let retry = DeferredRetry {
+                                            signature: signature.clone(),
+                                            next_retry_at: chrono::Utc::now() + chrono::Duration::minutes(5),
+                                            remaining_attempts: 3,
+                                            current_delay_secs: 300,
+                                            last_error: Some(e),
+                                        };
+
+                                        if let Err(retry_err) = manager.store_deferred_retry(&retry).await {
+                                            log(
+                                                LogTag::Transactions,
+                                                "ERROR",
+                                                &format!("Failed to store WebSocket deferred retry for {}: {}", &signature, retry_err)
+                                            );
+                                        }
                                     }
                                 }
                             }
