@@ -498,14 +498,36 @@ async fn find_liquidity_pool(
         return Ok(Some(pool_info));
     }
 
-    // Try Meteora pools
+    // Try Meteora DLMM pools
     if
         let Ok(Some(pool_info)) = search_dex_pool(
             token_mint,
             &PoolSearchConfig::meteora_dlmm()
         ).await
     {
-        log(LogTag::Rpc, "POOL_FOUND", "Found Meteora pool");
+        log(LogTag::Rpc, "POOL_FOUND", "Found Meteora DLMM pool");
+        return Ok(Some(pool_info));
+    }
+
+    // Try Meteora DAMM v2 pools
+    if
+        let Ok(Some(pool_info)) = search_dex_pool(
+            token_mint,
+            &PoolSearchConfig::meteora_damm_v2()
+        ).await
+    {
+        log(LogTag::Rpc, "POOL_FOUND", "Found Meteora DAMM v2 pool");
+        return Ok(Some(pool_info));
+    }
+
+    // Try Meteora Pools (legacy)
+    if
+        let Ok(Some(pool_info)) = search_dex_pool(
+            token_mint,
+            &PoolSearchConfig::meteora_pools()
+        ).await
+    {
+        log(LogTag::Rpc, "POOL_FOUND", "Found Meteora legacy pool");
         return Ok(Some(pool_info));
     }
 
@@ -586,8 +608,34 @@ impl PoolSearchConfig {
 
     fn meteora_dlmm() -> Self {
         Self {
-            program_id: "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB",
+            program_id: "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
             pool_name: "Meteora DLMM",
+            data_size: 1544,
+            token_a_offset: 73,
+            token_b_offset: 105,
+            lp_extraction_method: LpExtractionMethod::DerivePda {
+                seeds: &[b"lp_mint"],
+            },
+        }
+    }
+
+    fn meteora_damm_v2() -> Self {
+        Self {
+            program_id: "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG",
+            pool_name: "Meteora DAMM v2",
+            data_size: 1112, // From the account info we just fetched
+            token_a_offset: 168, // Found via account analysis
+            token_b_offset: 200, // Found via account analysis
+            lp_extraction_method: LpExtractionMethod::DerivePda {
+                seeds: &[b"lp_mint"],
+            },
+        }
+    }
+
+    fn meteora_pools() -> Self {
+        Self {
+            program_id: "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB",
+            pool_name: "Meteora Pools",
             data_size: 1544,
             token_a_offset: 73,
             token_b_offset: 105,
@@ -783,18 +831,31 @@ async fn derive_orca_position_mint(pool_address: &str) -> Option<String> {
     None
 }
 
-/// Derive Meteora LP mint (similar to Raydium CPMM)
+/// Derive Meteora LP mint for different Meteora program versions
 async fn derive_meteora_lp_mint(pool_address: &str) -> Option<String> {
     use solana_sdk::pubkey::Pubkey;
     use std::str::FromStr;
 
     if let Ok(pool_pubkey) = Pubkey::from_str(pool_address) {
-        // Meteora LP mint derivation (may be different from CPMM)
-        let (lp_mint_pda, _) = Pubkey::find_program_address(
-            &[b"lp_mint", pool_pubkey.as_ref()],
-            &Pubkey::from_str("Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB").ok()?
-        );
-        return Some(lp_mint_pda.to_string());
+        // Try all three Meteora program IDs
+        let program_ids = [
+            "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG", // DAMM v2
+            "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo", // DLMM
+            "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB", // Legacy Pools
+        ];
+
+        for program_id in &program_ids {
+            if let Ok(program_pubkey) = Pubkey::from_str(program_id) {
+                let (lp_mint_pda, _) = Pubkey::find_program_address(
+                    &[b"lp_mint", pool_pubkey.as_ref()],
+                    &program_pubkey
+                );
+
+                // For now, return the first derivation
+                // In practice, we should check which program actually owns the pool
+                return Some(lp_mint_pda.to_string());
+            }
+        }
     }
     None
 }

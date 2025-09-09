@@ -750,46 +750,71 @@ impl TokenSecurityAnalyzer {
         &self,
         mint: &str
     ) -> Result<TokenSecurityInfo, ScreenerBotError> {
+        self.analyze_token_security_with_options(mint, false).await
+    }
+
+    /// Analyze token security with force refresh option
+    pub async fn analyze_token_security_with_options(
+        &self,
+        mint: &str,
+        force_refresh: bool
+    ) -> Result<TokenSecurityInfo, ScreenerBotError> {
         log(
             LogTag::Security,
             "ANALYZE",
-            &format!("Starting security analysis for {}", safe_truncate(mint, 8))
+            &format!(
+                "Starting security analysis for {} (force_refresh: {})",
+                safe_truncate(mint, 8),
+                force_refresh
+            )
         );
 
-        // Check cache first
-        if let Some(cached_info) = self.cache.get(mint) {
+        // Skip cache and database checks if force refresh is requested
+        if !force_refresh {
+            // Check cache first
+            if let Some(cached_info) = self.cache.get(mint) {
+                log(
+                    LogTag::Security,
+                    "CACHE_HIT",
+                    &format!("Using cached security info for {}", safe_truncate(mint, 8))
+                );
+                return Ok(cached_info);
+            }
+
+            // Check database
+            if let Some(db_info) = self.database.get_security_info(mint)? {
+                // Determine if we need to update based on age and strategy
+                let update_needed = self.should_update_security_info(&db_info);
+
+                if !update_needed {
+                    log(
+                        LogTag::Security,
+                        "DB_HIT",
+                        &format!("Using database security info for {}", safe_truncate(mint, 8))
+                    );
+                    self.cache.set(db_info.clone());
+                    return Ok(db_info);
+                } else {
+                    log(
+                        LogTag::Security,
+                        "UPDATE_NEEDED",
+                        &format!("Security info needs update for {}", safe_truncate(mint, 8))
+                    );
+                    return self.update_security_info(db_info).await;
+                }
+            }
+        } else {
             log(
                 LogTag::Security,
-                "CACHE_HIT",
-                &format!("Using cached security info for {}", safe_truncate(mint, 8))
+                "FORCE_REFRESH",
+                &format!(
+                    "Force refresh requested - bypassing cache and database for {}",
+                    safe_truncate(mint, 8)
+                )
             );
-            return Ok(cached_info);
         }
 
-        // Check database
-        if let Some(db_info) = self.database.get_security_info(mint)? {
-            // Determine if we need to update based on age and strategy
-            let update_needed = self.should_update_security_info(&db_info);
-
-            if !update_needed {
-                log(
-                    LogTag::Security,
-                    "DB_HIT",
-                    &format!("Using database security info for {}", safe_truncate(mint, 8))
-                );
-                self.cache.set(db_info.clone());
-                return Ok(db_info);
-            } else {
-                log(
-                    LogTag::Security,
-                    "UPDATE_NEEDED",
-                    &format!("Security info needs update for {}", safe_truncate(mint, 8))
-                );
-                return self.update_security_info(db_info).await;
-            }
-        }
-
-        // No cached data, perform full analysis
+        // No cached data or force refresh requested, perform full analysis
         log(
             LogTag::Security,
             "FULL_ANALYSIS",
@@ -1573,6 +1598,13 @@ pub fn get_security_analyzer() -> &'static TokenSecurityAnalyzer {
 /// Convenience function for single token analysis
 pub async fn analyze_token_security(mint: &str) -> Result<TokenSecurityInfo, ScreenerBotError> {
     get_security_analyzer().analyze_token_security(mint).await
+}
+
+/// Convenience function for single token analysis with force refresh
+pub async fn analyze_token_security_force_refresh(
+    mint: &str
+) -> Result<TokenSecurityInfo, ScreenerBotError> {
+    get_security_analyzer().analyze_token_security_with_options(mint, true).await
 }
 
 /// Convenience function for batch token analysis

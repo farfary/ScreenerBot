@@ -265,7 +265,7 @@ fn print_help() {
 async fn analyze_single_token(
     analyzer: &TokenSecurityAnalyzer,
     mint: &str,
-    _force_refresh: bool
+    force_refresh: bool
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Check for SOL or USDC and warn
     if mint == "So11111111111111111111111111111111111111112" {
@@ -283,11 +283,14 @@ async fn analyze_single_token(
     }
 
     println!("🔍 Analyzing security for token: {}", mint);
+    if force_refresh {
+        println!("🔄 Force refresh enabled - bypassing cache");
+    }
     println!("{}", "=".repeat(80));
 
     let start = std::time::Instant::now();
 
-    let security_info = analyzer.analyze_token_security(mint).await?;
+    let security_info = analyzer.analyze_token_security_with_options(mint, force_refresh).await?;
 
     let duration = start.elapsed();
 
