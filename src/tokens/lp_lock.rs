@@ -586,12 +586,10 @@ impl PoolSearchConfig {
         Self {
             program_id: "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
             pool_name: "Raydium CPMM",
-            data_size: 1544,
-            token_a_offset: 73,
-            token_b_offset: 105,
-            lp_extraction_method: LpExtractionMethod::DerivePda {
-                seeds: &[b"lp_mint"],
-            },
+            data_size: 637,
+            token_a_offset: 168, // 8 + 32*5 (token_0_mint position)
+            token_b_offset: 200, // 8 + 32*6 (token_1_mint position)
+            lp_extraction_method: LpExtractionMethod::FromPoolData { offset: 136 }, // 8 + 32*4 (lp_mint position)
         }
     }
 
