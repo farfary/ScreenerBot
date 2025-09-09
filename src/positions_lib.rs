@@ -346,55 +346,6 @@ async fn fetch_and_create_token_snapshot(
         }
     };
 
-    // Rugcheck data removed - no longer collected for snapshots
-    let (
-        rugcheck_score,
-        rugcheck_score_normalised,
-        rugcheck_rugged,
-        rugcheck_risks_json,
-        rugcheck_mint_authority_json,
-        rugcheck_freeze_authority_json,
-        rugcheck_lp_locked_pct,
-        rugcheck_total_supply,
-        rugcheck_supply_type,
-        rugcheck_decimals,
-        rugcheck_is_initialized,
-        rugcheck_top_10_holders_pct,
-        rugcheck_total_holders,
-        rugcheck_total_market_liquidity,
-        rugcheck_total_stable_liquidity,
-        rugcheck_pre_market_type,
-        rugcheck_address,
-        token_description,
-        token_image,
-        token_website,
-        token_twitter,
-        token_telegram,
-    ) = (
-        None, // rugcheck_score
-        None, // rugcheck_score_normalised
-        None, // rugcheck_rugged
-        None, // rugcheck_risks_json
-        None, // rugcheck_mint_authority_json
-        None, // rugcheck_freeze_authority_json
-        None, // rugcheck_lp_locked_pct
-        None, // rugcheck_total_supply
-        None, // rugcheck_supply_type
-        None, // rugcheck_decimals
-        None, // rugcheck_is_initialized
-        None, // rugcheck_top_10_holders_pct
-        None, // rugcheck_total_holders
-        None, // rugcheck_total_market_liquidity
-        None, // rugcheck_total_stable_liquidity
-        None, // rugcheck_pre_market_type
-        None, // rugcheck_address
-        None, // token_description
-        None, // token_image
-        None, // token_website
-        None, // token_twitter
-        None, // token_telegram
-    );
-
     // Calculate data freshness score (0-100)
     let fetch_duration_ms = Utc::now().signed_duration_since(fetch_start).num_milliseconds();
     let freshness_score = if fetch_duration_ms < 1000 {
@@ -509,102 +460,6 @@ async fn fetch_and_create_token_snapshot(
         )
     };
 
-    // Extract rugcheck data
-    let (
-        rugcheck_score,
-        rugcheck_score_normalised,
-        rugcheck_rugged,
-        rugcheck_risks_json,
-        rugcheck_mint_authority,
-        rugcheck_freeze_authority,
-        rugcheck_creator,
-        rugcheck_creator_balance,
-        rugcheck_total_holders,
-        rugcheck_total_market_liquidity,
-        rugcheck_total_stable_liquidity,
-        rugcheck_total_lp_providers,
-        rugcheck_lp_locked_pct,
-        rugcheck_lp_locked_usd,
-        rugcheck_transfer_fee_pct,
-        rugcheck_transfer_fee_max_amount,
-        rugcheck_jup_verified,
-        rugcheck_jup_strict,
-        token_uri,
-        token_description,
-        token_image,
-        token_website,
-        token_twitter,
-        token_telegram,
-    ) = if let Some(ref data) = rugcheck_data {
-        let risks_json = if let Some(risks) = &data.risks {
-            match serde_json::to_string(risks) {
-                Ok(json) => Some(json),
-                Err(_) => None,
-            }
-        } else {
-            None
-        };
-
-        let lp_data = data.markets
-            .as_ref()
-            .and_then(|markets| markets.first())
-            .and_then(|market| market.lp.as_ref());
-
-        (
-            data.score,
-            data.score_normalised,
-            data.rugged,
-            risks_json,
-            data.mint_authority.as_ref().and_then(|ma| serde_json::to_string(ma).ok()),
-            data.freeze_authority.as_ref().and_then(|fa| serde_json::to_string(fa).ok()),
-            data.creator.clone(),
-            data.creator_balance.clone(),
-            data.total_holders,
-            data.total_market_liquidity,
-            data.total_stable_liquidity,
-            data.total_lp_providers,
-            lp_data.and_then(|lp| lp.lp_locked_pct),
-            lp_data.and_then(|lp| lp.lp_locked_usd),
-            data.transfer_fee.as_ref().and_then(|tf| tf.pct),
-            data.transfer_fee.as_ref().and_then(|tf| tf.max_amount.clone()),
-            data.verification.as_ref().and_then(|v| v.jup_verified),
-            data.verification.as_ref().and_then(|v| v.jup_strict),
-            data.token_meta.as_ref().and_then(|tm| tm.uri.clone()),
-            data.file_meta.as_ref().and_then(|fm| fm.description.clone()),
-            data.file_meta.as_ref().and_then(|fm| fm.image.clone()),
-            None, // website - extract from verification links if needed
-            None, // twitter - extract from verification links if needed
-            None, // telegram - extract from verification links if needed
-        )
-    } else {
-        (
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-    };
-
     // Create snapshot
     let snapshot = TokenSnapshot {
         id: None,
@@ -641,30 +496,30 @@ async fn fetch_and_create_token_snapshot(
         price_change_h6,
         price_change_h1,
         price_change_m5,
-        rugcheck_score,
-        rugcheck_score_normalised,
-        rugcheck_rugged,
-        rugcheck_risks_json,
-        rugcheck_mint_authority,
-        rugcheck_freeze_authority,
-        rugcheck_creator,
-        rugcheck_creator_balance,
-        rugcheck_total_holders,
-        rugcheck_total_market_liquidity,
-        rugcheck_total_stable_liquidity,
-        rugcheck_total_lp_providers,
-        rugcheck_lp_locked_pct,
-        rugcheck_lp_locked_usd,
-        rugcheck_transfer_fee_pct,
-        rugcheck_transfer_fee_max_amount,
-        rugcheck_jup_verified,
-        rugcheck_jup_strict,
-        token_uri,
-        token_description,
-        token_image,
-        token_website,
-        token_twitter,
-        token_telegram,
+        rugcheck_score: None,
+        rugcheck_score_normalised: None,
+        rugcheck_rugged: None,
+        rugcheck_risks_json: None,
+        rugcheck_mint_authority: None,
+        rugcheck_freeze_authority: None,
+        rugcheck_creator: None,
+        rugcheck_creator_balance: None,
+        rugcheck_total_holders: None,
+        rugcheck_total_market_liquidity: None,
+        rugcheck_total_stable_liquidity: None,
+        rugcheck_total_lp_providers: None,
+        rugcheck_lp_locked_pct: None,
+        rugcheck_lp_locked_usd: None,
+        rugcheck_transfer_fee_pct: None,
+        rugcheck_transfer_fee_max_amount: None,
+        rugcheck_jup_verified: None,
+        rugcheck_jup_strict: None,
+        token_uri: None,
+        token_description: None,
+        token_image: None,
+        token_website: None,
+        token_twitter: None,
+        token_telegram: None,
         snapshot_time: Utc::now(),
         api_fetch_time: fetch_start,
         data_freshness_score: freshness_score,
@@ -674,12 +529,11 @@ async fn fetch_and_create_token_snapshot(
         LogTag::Positions,
         "SNAPSHOT_CREATED",
         &format!(
-            "Created {} snapshot for {} - freshness: {}/100, price: {:?} SOL, rugcheck: {:?}",
+            "Created {} snapshot for {} - freshness: {}/100, price: {:?} SOL",
             snapshot_type,
             safe_truncate(mint, 8),
             freshness_score,
-            price_sol,
-            rugcheck_score_normalised.or(rugcheck_score)
+            price_sol
         )
     );
 

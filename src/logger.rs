@@ -324,7 +324,6 @@ pub enum LogTag {
     Discovery,
     Filtering,
     Api,
-    Rugcheck,
     Profit,
     PriceService,
     SolPrice,
@@ -362,7 +361,6 @@ impl std::fmt::Display for LogTag {
             LogTag::Discovery => format!("{:<8}", "DISCOVER").bright_white().bold(), // 🔍 Search white
             LogTag::Filtering => format!("{:<8}", "FILTER").bright_yellow().bold(), // 🔄 Filter yellow
             LogTag::Api => format!("{:<8}", "API").bright_purple().bold(), // 🌐 API purple
-            LogTag::Rugcheck => format!("{:<8}", "RUGCHECK").bright_red().bold(), // 🛡️ Security red
             LogTag::Profit => format!("{:<8}", "PROFIT").bright_purple().bold(), // 💲 Profit green
             LogTag::PriceService => format!("{:<8}", "PRICE").bright_green().bold(), // 💹 Price service green
             LogTag::SolPrice => format!("{:<8}", "SOLPRICE").bright_yellow().bold(), // 💰 SOL price yellow
@@ -513,10 +511,6 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             format!("{:<width$}", "API", width = TAG_WIDTH)
                 .bright_purple()
                 .bold(),
-        LogTag::Rugcheck =>
-            format!("{:<width$}", "RUGCHECK", width = TAG_WIDTH)
-                .bright_red()
-                .bold(),
         LogTag::Profit =>
             format!("{:<width$}", "PROFIT", width = TAG_WIDTH)
                 .bright_green()
@@ -642,7 +636,6 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Discovery => "DISCOVER",
         LogTag::Filtering => "FILTER",
         LogTag::Api => "API",
-        LogTag::Rugcheck => "RUGCHECK",
         LogTag::Profit => "PROFIT",
         LogTag::PriceService => "PRICE",
         LogTag::SolPrice => "SOLPRICE",

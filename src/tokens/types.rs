@@ -108,7 +108,7 @@ pub struct SocialInfo {
     pub handle: String,
 }
 
-/// Token struct with cached rugcheck and decimal data for fast filtering
+/// Token struct with cached decimal data for fast filtering
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Token {
     pub mint: String,
@@ -118,7 +118,6 @@ pub struct Token {
 
     // Cached data for fast filtering (no API calls needed)
     pub decimals: Option<u8>,
-    pub rugcheck_data: Option<crate::tokens::rugcheck::RugcheckResponse>,
 
     // Existing fields we need to keep
     pub logo_url: Option<String>,
@@ -195,41 +194,6 @@ pub struct TokenRecord {
 // CONVERSION IMPLEMENTATIONS
 // =============================================================================
 
-impl Token {
-    /// Populate rugcheck data and decimals from database
-    pub fn populate_cached_data(&mut self) -> Result<(), String> {
-        // Populate rugcheck data from database
-        match crate::tokens::cache::TokenDatabase::get_rugcheck_data(&self.mint) {
-            Ok(Some(rugcheck_data)) => {
-                self.rugcheck_data = Some(rugcheck_data);
-            }
-            Ok(None) => {
-                if crate::global::is_debug_filtering_enabled() {
-                    crate::logger::log(
-                        crate::logger::LogTag::Filtering,
-                        "RUGCHECK_POPULATE",
-                        &format!("No rugcheck data found for token: {}", self.symbol)
-                    );
-                }
-            }
-            Err(e) => {
-                if crate::global::is_debug_filtering_enabled() {
-                    crate::logger::log(
-                        crate::logger::LogTag::Filtering,
-                        "RUGCHECK_POPULATE",
-                        &format!("Failed to get rugcheck data for {}: {}", self.symbol, e)
-                    );
-                }
-            }
-        }
-
-        // Populate decimals from cache and blockchain if needed
-        self.decimals = crate::tokens::get_token_decimals_sync(&self.mint);
-
-        Ok(())
-    }
-}
-
 impl From<ApiToken> for Token {
     fn from(api_token: ApiToken) -> Self {
         Self {
@@ -240,7 +204,6 @@ impl From<ApiToken> for Token {
 
             // Initialize cached data as None - will be populated later
             decimals: None,
-            rugcheck_data: None,
 
             logo_url: api_token.info.as_ref().and_then(|i| i.image_url.clone()),
             coingecko_id: None,
@@ -360,10 +323,6 @@ pub enum DiscoverySourceType {
     DexScreenerBoosts,
     DexScreenerBoostsTop,
     DexScreenerProfiles,
-    RugCheckVerified,
-    RugCheckTrending,
-    RugCheckRecent,
-    RugCheckNew,
 }
 
 /// Price source information

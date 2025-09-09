@@ -32,7 +32,6 @@ pub use crate::arguments::{
     is_debug_price_service_enabled,
     is_debug_profit_enabled,
     is_debug_rpc_enabled,
-    is_debug_rugcheck_enabled,
     is_debug_sol_price_enabled,
     is_debug_summary_enabled,
     is_debug_swaps_enabled,

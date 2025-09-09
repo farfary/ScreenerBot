@@ -164,35 +164,12 @@ impl PoolDiscovery {
             return;
         }
 
-        if is_debug_pool_discovery_enabled() {
-            log(LogTag::PoolDiscovery, "DEBUG", "🔄 Starting batched discovery tick");
-        }
-
         // Build token list (respect debug override and global filtering)
         let mut tokens: Vec<String> = if let Some(override_tokens) = get_debug_token_override() {
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    &format!("📋 Using debug token override: {} tokens", override_tokens.len())
-                );
-            }
             override_tokens
         } else {
-            if is_debug_pool_discovery_enabled() {
-                log(LogTag::PoolDiscovery, "DEBUG", "📋 Loading filtered tokens from database");
-            }
             match filtering::get_filtered_tokens().await {
-                Ok(v) => {
-                    if is_debug_pool_discovery_enabled() {
-                        log(
-                            LogTag::PoolDiscovery,
-                            "DEBUG",
-                            &format!("📋 Loaded {} tokens from database before filtering", v.len())
-                        );
-                    }
-                    v
-                }
+                Ok(v) => v,
                 Err(e) => {
                     if is_debug_pool_discovery_enabled() {
                         log(
@@ -208,93 +185,28 @@ impl PoolDiscovery {
 
         if tokens.is_empty() {
             if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    "❌ No tokens to discover this tick - token list is empty"
-                );
+                log(LogTag::PoolDiscovery, "DEBUG", "No tokens to discover this tick");
             }
             return;
         }
 
         // Early stablecoin filtering and cap to MAX_WATCHED_TOKENS
-        let original_count = tokens.len();
         tokens.retain(|m| !is_stablecoin_mint(m));
-        let after_stablecoin_filter = tokens.len();
-
         if tokens.len() > MAX_WATCHED_TOKENS {
             tokens.truncate(MAX_WATCHED_TOKENS);
         }
 
         if is_debug_pool_discovery_enabled() {
-            if original_count != after_stablecoin_filter {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    &format!(
-                        "🚫 Filtered out {} stablecoin tokens ({} -> {})",
-                        original_count - after_stablecoin_filter,
-                        original_count,
-                        after_stablecoin_filter
-                    )
-                );
-            }
-            if tokens.len() > MAX_WATCHED_TOKENS {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    &format!(
-                        "✂️ Truncated to {} tokens (from {})",
-                        MAX_WATCHED_TOKENS,
-                        after_stablecoin_filter
-                    )
-                );
-            }
             log(
                 LogTag::PoolDiscovery,
                 "DEBUG",
-                &format!("🎯 Discovery tick: {} tokens queued for processing", tokens.len())
+                &format!("Discovery tick: {} tokens queued", tokens.len())
             );
-
-            // Log first few token addresses for debugging
-            if tokens.len() > 0 {
-                let sample_tokens: Vec<String> = tokens
-                    .iter()
-                    .take(3)
-                    .map(|t| format!("{}...", &t[..8]))
-                    .collect();
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    &format!("📋 Sample tokens: [{}]", sample_tokens.join(", "))
-                );
-            }
         }
 
         // Run batch fetches for all sources concurrently (each handles rate limiting internally)
         // Using tokio::join! to minimize total tick latency vs sequential awaits
         // Only fetch from enabled sources
-        if is_debug_pool_discovery_enabled() {
-            let enabled_sources: Vec<&str> = [
-                if ENABLE_DEXSCREENER_DISCOVERY { Some("DexScreener") } else { None },
-                if ENABLE_GECKOTERMINAL_DISCOVERY { Some("GeckoTerminal") } else { None },
-                if ENABLE_RAYDIUM_DISCOVERY { Some("Raydium") } else { None },
-            ]
-                .iter()
-                .filter_map(|&s| s)
-                .collect();
-
-            log(
-                LogTag::PoolDiscovery,
-                "DEBUG",
-                &format!(
-                    "🚀 Starting batch fetch from {} sources: [{}]",
-                    enabled_sources.len(),
-                    enabled_sources.join(", ")
-                )
-            );
-        }
-
         let (dexs_batch, gecko_batch, raydium_batch) = tokio::join!(
             async {
                 if ENABLE_DEXSCREENER_DISCOVERY {
@@ -334,179 +246,107 @@ impl PoolDiscovery {
             }
         );
 
-        if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "DEBUG",
-                &format!(
-                    "📊 Batch fetch results - DexScreener: {}/{} tokens successful, GeckoTerminal: {}/{} tokens successful, Raydium: {}/{} tokens successful",
-                    dexs_batch.successful_tokens,
-                    dexs_batch.successful_tokens + dexs_batch.failed_tokens,
-                    gecko_batch.successful_tokens,
-                    gecko_batch.successful_tokens + gecko_batch.failed_tokens,
-                    raydium_batch.successful_tokens,
-                    raydium_batch.successful_tokens + raydium_batch.failed_tokens
-                )
-            );
-        }
-
         // Convert to PoolDescriptor list
         let mut descriptors: Vec<PoolDescriptor> = Vec::new();
 
         // Process DexScreener results only if enabled
         if ENABLE_DEXSCREENER_DISCOVERY {
-            let mut dexs_pools_added = 0;
             for (mint, pairs) in dexs_batch.pools.into_iter() {
                 for pair in pairs {
                     if let Ok(desc) = Self::convert_dexscreener_pair_to_descriptor_static(&pair) {
                         descriptors.push(desc);
-                        dexs_pools_added += 1;
                     }
                 }
-            }
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    &format!("✅ DexScreener: Added {} pool descriptors", dexs_pools_added)
-                );
+                if is_debug_pool_discovery_enabled() {
+                    log(
+                        LogTag::PoolDiscovery,
+                        "DEBUG",
+                        &format!(
+                            "DexScreener batched pools for {}: {}",
+                            &mint[..8],
+                            descriptors.len()
+                        )
+                    );
+                }
             }
         } else if is_debug_pool_discovery_enabled() {
-            log(LogTag::PoolDiscovery, "DEBUG", "🚫 DexScreener discovery disabled");
+            log(LogTag::PoolDiscovery, "DEBUG", "DexScreener discovery disabled");
         }
 
         // Process GeckoTerminal results only if enabled
         if ENABLE_GECKOTERMINAL_DISCOVERY {
-            let mut gecko_pools_added = 0;
             for (mint, pools) in gecko_batch.pools.into_iter() {
                 for pool in pools {
                     if let Ok(desc) = Self::convert_gecko_pool_to_descriptor_static(&pool) {
                         descriptors.push(desc);
-                        gecko_pools_added += 1;
                     }
                 }
-            }
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    &format!("✅ GeckoTerminal: Added {} pool descriptors", gecko_pools_added)
-                );
+                if is_debug_pool_discovery_enabled() {
+                    log(
+                        LogTag::PoolDiscovery,
+                        "DEBUG",
+                        &format!("Gecko batched pools for {} appended", &mint[..8])
+                    );
+                }
             }
         } else if is_debug_pool_discovery_enabled() {
-            log(LogTag::PoolDiscovery, "DEBUG", "🚫 GeckoTerminal discovery disabled");
+            log(LogTag::PoolDiscovery, "DEBUG", "GeckoTerminal discovery disabled");
         }
 
         // Process Raydium results only if enabled
         if ENABLE_RAYDIUM_DISCOVERY {
-            let mut raydium_pools_added = 0;
             for (mint, pools) in raydium_batch.pools.into_iter() {
                 for pool in pools {
                     if let Ok(desc) = Self::convert_raydium_pool_to_descriptor_static(&pool) {
                         descriptors.push(desc);
-                        raydium_pools_added += 1;
                     }
                 }
-            }
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    &format!("✅ Raydium: Added {} pool descriptors", raydium_pools_added)
-                );
+                if is_debug_pool_discovery_enabled() {
+                    log(
+                        LogTag::PoolDiscovery,
+                        "DEBUG",
+                        &format!("Raydium batched pools for {} appended", &mint[..8])
+                    );
+                }
             }
         } else if is_debug_pool_discovery_enabled() {
-            log(LogTag::PoolDiscovery, "DEBUG", "🚫 Raydium discovery disabled");
-        }
-
-        if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "DEBUG",
-                &format!(
-                    "📊 Total pools discovered: {} descriptors before deduplication",
-                    descriptors.len()
-                )
-            );
+            log(LogTag::PoolDiscovery, "DEBUG", "Raydium discovery disabled");
         }
 
         if descriptors.is_empty() {
             if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "WARN",
-                    "⚠️ No pools discovered in this tick - check token filtering and API responses"
-                );
+                log(LogTag::PoolDiscovery, "DEBUG", "No pools discovered in this tick");
             }
             return;
         }
 
         // Deduplicate by pool_id and sort by liquidity desc
         let mut deduped = Self::deduplicate_discovered(descriptors);
-        if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "DEBUG",
-                &format!("🔄 After deduplication: {} unique pools", deduped.len())
-            );
-        }
 
         // If single pool mode, keep only highest-liquidity pool per token mint
         if is_single_pool_mode_enabled() {
-            let before_single_pool = deduped.len();
             deduped = Self::select_highest_liquidity_per_token(deduped);
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    &format!(
-                        "🎯 Single pool mode: {} -> {} pools (highest liquidity per token)",
-                        before_single_pool,
-                        deduped.len()
-                    )
-                );
-            }
         }
 
         // Stream to analyzer immediately
         if let Some(analyzer) = get_pool_analyzer() {
             let sender = analyzer.get_sender();
-            let mut sent_count = 0;
             for pool in deduped.into_iter() {
                 // Let analyzer determine actual program id
-                if
-                    let Err(e) = sender.send(crate::pools::analyzer::AnalyzerMessage::AnalyzePool {
-                        pool_id: pool.pool_id,
-                        program_id: Pubkey::default(),
-                        base_mint: pool.base_mint,
-                        quote_mint: pool.quote_mint,
-                        liquidity_usd: pool.liquidity_usd,
-                        volume_h24_usd: pool.volume_h24_usd,
-                    })
-                {
-                    if is_debug_pool_discovery_enabled() {
-                        log(
-                            LogTag::PoolDiscovery,
-                            "WARN",
-                            &format!("Failed to send pool to analyzer: {}", e)
-                        );
-                    }
-                } else {
-                    sent_count += 1;
-                }
-            }
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    &format!("✅ Successfully sent {} pools to analyzer for processing", sent_count)
-                );
+                let _ = sender.send(crate::pools::analyzer::AnalyzerMessage::AnalyzePool {
+                    pool_id: pool.pool_id,
+                    program_id: Pubkey::default(),
+                    base_mint: pool.base_mint,
+                    quote_mint: pool.quote_mint,
+                    liquidity_usd: pool.liquidity_usd,
+                    volume_h24_usd: pool.volume_h24_usd,
+                });
             }
         } else if is_debug_pool_discovery_enabled() {
             log(
                 LogTag::PoolDiscovery,
                 "WARN",
-                "❌ Analyzer not initialized; cannot stream discovered pools"
+                "Analyzer not initialized; cannot stream discovered pools"
             );
         }
     }

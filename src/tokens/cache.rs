@@ -1,4 +1,4 @@
-// Token database and rugcheck persistence module.
+// Token database persistence module.
 // NOTE: Legacy in-memory PriceCache removed in favor of TokenPriceService (price.rs).
 use crate::global::{ is_debug_monitor_enabled, TOKENS_DATABASE };
 use crate::logger::{ log, LogTag };
@@ -532,24 +532,6 @@ impl TokenDatabase {
                         if rows_affected > 0 {
                             deleted_count += 1;
 
-                            // Also delete rugcheck data for this token
-                            if
-                                let Err(e) = connection.execute(
-                                    "DELETE FROM rugcheck_data WHERE mint = ?1",
-                                    params![mint]
-                                )
-                            {
-                                log(
-                                    LogTag::Cache,
-                                    "ERROR",
-                                    &format!(
-                                        "Failed to delete rugcheck data for token {}: {}",
-                                        mint,
-                                        e
-                                    )
-                                );
-                            }
-
                             log(
                                 LogTag::Cache,
                                 "CLEANUP",
@@ -609,7 +591,7 @@ impl TokenDatabase {
         let blacklisted_mints = get_blacklisted_mints();
 
         // Step 2: Collect candidates for removal from main database
-        let (liquidity_tokens, security_tokens, blacklisted_tokens, failed_decimal_tokens) = {
+        let (liquidity_tokens, blacklisted_tokens, failed_decimal_tokens) = {
             let connection = self.connection
                 .lock()
                 .map_err(|_e| {
@@ -723,40 +705,11 @@ impl TokenDatabase {
                 liquidity_tokens.push(row?);
             }
 
-            // Get tokens with security issues (need to be blacklisted first, then removed)
-            let mut security_stmt = connection.prepare(
-                "SELECT t.mint, t.symbol, t.last_updated FROM tokens t
-                 INNER JOIN rugcheck_data r ON t.mint = r.mint
-                 WHERE (
-                     r.token_mint_authority IS NOT NULL OR 
-                     r.token_freeze_authority IS NOT NULL OR
-                     r.freeze_authority_json IS NOT NULL OR
-                     r.mint_authority_json IS NOT NULL OR
-                     r.risks_json LIKE '%mint%' OR 
-                     r.risks_json LIKE '%freeze%' OR
-                     r.risks_json LIKE '%authority%'
-                 )"
-            )?;
-
-            let security_rows = security_stmt.query_map([], |row| {
-                Ok((
-                    row.get::<_, String>("mint")?,
-                    row.get::<_, String>("symbol")?,
-                    row.get::<_, String>("last_updated")?,
-                ))
-            })?;
-
-            let mut security_tokens = Vec::new();
-            for row in security_rows {
-                security_tokens.push(row?);
-            }
-
-            (liquidity_tokens, security_tokens, blacklisted_tokens, failed_decimal_tokens)
+            (liquidity_tokens, blacklisted_tokens, failed_decimal_tokens)
         }; // connection lock released here
 
         if
             liquidity_tokens.is_empty() &&
-            security_tokens.is_empty() &&
             blacklisted_tokens.is_empty() &&
             failed_decimal_tokens.is_empty()
         {
@@ -767,20 +720,17 @@ impl TokenDatabase {
             LogTag::Cache,
             "CLEANUP",
             &format!(
-                "Found tokens for cleanup: {} blacklisted, {} decimal-failed, {} low liquidity (<${:.1}), {} security issues",
+                "Found tokens for cleanup: {} blacklisted, {} decimal-failed, {} low liquidity (<${:.1})",
                 blacklisted_tokens.len(),
                 failed_decimal_tokens.len(),
                 liquidity_tokens.len(),
-                threshold_usd,
-                security_tokens.len()
+                threshold_usd
             )
         );
 
         // Step 3: Process candidates for removal - check open positions first
         // (this is done outside the database lock to avoid holding it across async calls)
-        let mut tokens_to_blacklist_then_delete = Vec::new(); // Security issues - blacklist first
         let mut tokens_to_delete = Vec::new(); // All others - direct delete
-        let mut security_blacklist_count = 0;
         let mut total_delete_count = 0;
 
         // Process blacklisted tokens - these should be removed from main table immediately
@@ -809,34 +759,6 @@ impl TokenDatabase {
             }
         }
 
-        // Process security-based candidates - blacklist first, then delete
-        for (mint, symbol, last_updated) in security_tokens {
-            if !self.has_open_position(&mint).await {
-                // Only process if not already blacklisted
-                if !is_token_blacklisted_db(&mint) {
-                    // Check if token has specific security issues
-                    if let Some(reason) = self.check_security_issues(&mint).await {
-                        let blacklist_reason = match reason.as_str() {
-                            s if s.contains("mint") => BlacklistReason::ApiError,
-                            s if s.contains("freeze") => BlacklistReason::ApiError,
-                            s if s.contains("authority") => BlacklistReason::ApiError,
-                            _ => BlacklistReason::ApiError,
-                        };
-                        tokens_to_blacklist_then_delete.push((
-                            mint.clone(),
-                            symbol.clone(),
-                            last_updated.clone(),
-                            blacklist_reason,
-                        ));
-                        security_blacklist_count += 1;
-                    }
-                }
-                // Always add to delete list (either already blacklisted or will be blacklisted)
-                tokens_to_delete.push((mint, symbol, last_updated, "security_issue".to_string()));
-                total_delete_count += 1;
-            }
-        }
-
         // Process liquidity-based candidates - delete from main table
         for (mint, symbol, last_updated) in liquidity_tokens {
             if !self.has_open_position(&mint).await {
@@ -853,7 +775,7 @@ impl TokenDatabase {
             }
         }
 
-        if tokens_to_blacklist_then_delete.is_empty() && tokens_to_delete.is_empty() {
+        if tokens_to_delete.is_empty() {
             log(
                 LogTag::Cache,
                 "CLEANUP",
@@ -865,40 +787,10 @@ impl TokenDatabase {
         log(
             LogTag::Cache,
             "CLEANUP",
-            &format!(
-                "Selected for cleanup: {} tokens to blacklist+delete (security), {} total tokens to delete",
-                security_blacklist_count,
-                total_delete_count
-            )
+            &format!("Selected for cleanup: {} total tokens to delete", total_delete_count)
         );
 
-        // Step 4: Handle blacklisting security issues first (before deletion)
-        let mut security_blacklisted_count = 0;
-        for (mint, symbol, _last_updated, reason) in tokens_to_blacklist_then_delete {
-            if add_to_blacklist_db(&mint, &symbol, reason.clone()) {
-                security_blacklisted_count += 1;
-                if is_debug_monitor_enabled() {
-                    log(
-                        LogTag::Cache,
-                        "BLACKLIST",
-                        &format!(
-                            "Blacklisted security issue token: {} ({}) - reason: {:?}",
-                            symbol,
-                            &mint[..8],
-                            reason
-                        )
-                    );
-                }
-            } else {
-                log(
-                    LogTag::Cache,
-                    "ERROR",
-                    &format!("Failed to blacklist security token {}: Database error", mint)
-                );
-            }
-        }
-
-        // Step 5: Remove all problematic tokens from main table (with database lock)
+        // Step 4: Remove all problematic tokens from main table (with database lock)
         let (deleted_count, deleted_mints) = {
             let connection = self.connection
                 .lock()
@@ -919,24 +811,6 @@ impl TokenDatabase {
                         if rows_affected > 0 {
                             deleted_count += 1;
                             deleted_mints.push(mint.clone());
-
-                            // Also delete rugcheck data for this token
-                            if
-                                let Err(e) = connection.execute(
-                                    "DELETE FROM rugcheck_data WHERE mint = ?1",
-                                    params![mint]
-                                )
-                            {
-                                log(
-                                    LogTag::Cache,
-                                    "ERROR",
-                                    &format!(
-                                        "Failed to delete rugcheck data for token {}: {}",
-                                        mint,
-                                        e
-                                    )
-                                );
-                            }
 
                             if is_debug_monitor_enabled() {
                                 log(
@@ -970,30 +844,21 @@ impl TokenDatabase {
             self.clear_token_from_caches(mint);
         }
 
-        let total_processed = security_blacklisted_count + deleted_count;
+        let total_processed = deleted_count;
         if total_processed > 0 {
             log(
                 LogTag::Cache,
                 "CLEANUP",
                 &format!(
-                    "Cleanup completed: {} security tokens blacklisted, {} total tokens removed from main table (blacklisted: {}, decimal-failed: {}, security: {}, low-liquidity: {})",
-                    security_blacklisted_count,
+                    "Cleanup completed: {} total tokens removed from main table (blacklisted: {}, decimal-failed: {}, low-liquidity: {})",
                     deleted_count,
-                    blacklisted_tokens.len().saturating_sub(
-                        tokens_to_delete
-                            .iter()
-                            .filter(|(_, _, _, reason)| reason != "already_blacklisted")
-                            .count()
-                    ),
-                    failed_decimal_tokens.len().saturating_sub(
-                        tokens_to_delete
-                            .iter()
-                            .filter(|(_, _, _, reason)| reason != "decimal_fetch_failed")
-                            .count()
-                    ),
                     tokens_to_delete
                         .iter()
-                        .filter(|(_, _, _, reason)| reason == "security_issue")
+                        .filter(|(_, _, _, reason)| reason == "already_blacklisted")
+                        .count(),
+                    tokens_to_delete
+                        .iter()
+                        .filter(|(_, _, _, reason)| reason == "decimal_fetch_failed")
                         .count(),
                     tokens_to_delete
                         .iter()
@@ -1039,85 +904,6 @@ impl TokenDatabase {
 
     /// Check if a token has security issues that warrant removal
     /// Returns Some(reason) if token should be removed, None otherwise
-    async fn check_security_issues(&self, mint: &str) -> Option<String> {
-        // Get rugcheck data for this token
-        match self.get_rugcheck_data_instance(mint) {
-            Ok(Some(rugcheck_data)) => {
-                // Check for active mint authority (dangerous - can mint unlimited tokens)
-                // First check the JSON field, then the basic text field
-                if let Some(mint_authority) = &rugcheck_data.mint_authority {
-                    match mint_authority {
-                        serde_json::Value::String(s) if !s.is_empty() => {
-                            return Some("mint_authority_enabled".to_string());
-                        }
-                        serde_json::Value::Null => {
-                            // Null is good - mint authority disabled
-                        }
-                        _ => {
-                            // Any other value indicates active mint authority
-                            return Some("mint_authority_enabled".to_string());
-                        }
-                    }
-                }
-
-                // Also check the basic token mint authority field
-                if let Some(token) = &rugcheck_data.token {
-                    if let Some(mint_auth) = &token.mint_authority {
-                        if !mint_auth.is_empty() {
-                            return Some("token_mint_authority_enabled".to_string());
-                        }
-                    }
-
-                    // Check token freeze authority
-                    if let Some(freeze_auth) = &token.freeze_authority {
-                        if !freeze_auth.is_empty() {
-                            return Some("token_freeze_authority_enabled".to_string());
-                        }
-                    }
-                }
-
-                // Check for active freeze authority (dangerous - can freeze user accounts)
-                if let Some(freeze_authority) = &rugcheck_data.freeze_authority {
-                    match freeze_authority {
-                        serde_json::Value::String(s) if !s.is_empty() => {
-                            return Some("freeze_authority_enabled".to_string());
-                        }
-                        serde_json::Value::Null => {
-                            // Null is good - freeze authority disabled
-                        }
-                        _ => {
-                            // Any other value indicates active freeze authority
-                            return Some("freeze_authority_enabled".to_string());
-                        }
-                    }
-                }
-
-                // Check for specific risks in rugcheck data
-                if let Some(risks) = &rugcheck_data.risks {
-                    for risk in risks {
-                        let risk_name = risk.name.to_lowercase();
-                        // Look for critical security risks
-                        if risk_name.contains("mint") && risk_name.contains("authority") {
-                            return Some(format!("security_risk_{}", risk_name.replace(' ', "_")));
-                        }
-                        if risk_name.contains("freeze") && risk_name.contains("authority") {
-                            return Some(format!("security_risk_{}", risk_name.replace(' ', "_")));
-                        }
-                        if
-                            risk_name.contains("ownership") &&
-                            risk.level.as_ref().map_or(false, |l| l == "high")
-                        {
-                            return Some(format!("security_risk_{}", risk_name.replace(' ', "_")));
-                        }
-                    }
-                }
-
-                None // No security issues found
-            }
-            _ => None, // No rugcheck data or error - don't delete based on security
-        }
-    }
-
     /// Get all tokens with their last update times for monitoring
     /// Returns tokens ordered by liquidity (highest first) with update time information
     pub async fn get_all_tokens_with_update_time(
@@ -1214,612 +1000,6 @@ impl TokenDatabase {
 
         Ok(tokens)
     }
-}
-
-/// Database statistics
-#[derive(Debug, Clone)]
-pub struct DatabaseStats {
-    pub total_tokens: usize,
-    pub tokens_with_liquidity: usize,
-    pub last_updated: chrono::DateTime<chrono::Utc>,
-}
-
-impl TokenDatabase {
-    /// Initialize rugcheck table in the database
-    pub fn initialize_rugcheck_table(&self) -> Result<(), rusqlite::Error> {
-        let connection = self.connection
-            .lock()
-            .map_err(|_| {
-                rusqlite::Error::SqliteFailure(
-                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
-                    Some("Failed to acquire database lock".to_string())
-                )
-            })?;
-
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS rugcheck_data (
-                mint TEXT PRIMARY KEY,
-                token_program TEXT,
-                creator TEXT,
-                creator_balance TEXT, -- Changed from INTEGER to TEXT to handle large numbers
-                
-                -- Token Info
-                token_mint_authority TEXT,
-                token_supply TEXT, -- Changed from INTEGER to TEXT to handle large numbers
-                token_decimals INTEGER,
-                token_is_initialized BOOLEAN,
-                token_freeze_authority TEXT,
-                
-                -- Token Meta
-                token_meta_name TEXT,
-                token_meta_symbol TEXT,
-                token_meta_uri TEXT,
-                token_meta_mutable BOOLEAN,
-                token_meta_update_authority TEXT,
-                
-                -- Risk Analysis
-                score INTEGER,
-                score_normalised INTEGER,
-                rugged BOOLEAN,
-                token_type TEXT,
-                
-                -- File Meta
-                file_meta_description TEXT,
-                file_meta_name TEXT,
-                file_meta_symbol TEXT,
-                file_meta_image TEXT,
-                
-                -- Market Data
-                total_market_liquidity REAL,
-                total_stable_liquidity REAL,
-                total_lp_providers INTEGER,
-                total_holders INTEGER,
-                price REAL,
-                
-                -- Transfer Fee
-                transfer_fee_pct REAL,
-                transfer_fee_max_amount TEXT, -- Changed from INTEGER to TEXT to handle large numbers
-                transfer_fee_authority TEXT,
-                
-                -- Analysis Info
-                graph_insiders_detected INTEGER,
-                detected_at TEXT,
-                
-                -- JSON Fields (for complex nested data)
-                token_extensions TEXT,
-                top_holders_json TEXT,
-                freeze_authority_json TEXT,
-                mint_authority_json TEXT,
-                risks_json TEXT,
-                locker_owners_json TEXT,
-                lockers_json TEXT,
-                markets_json TEXT,
-                known_accounts_json TEXT,
-                events_json TEXT,
-                verification_json TEXT,
-                insider_networks_json TEXT,
-                creator_tokens_json TEXT,
-                launchpad_json TEXT,
-                
-                -- Metadata
-                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )",
-            []
-        )?;
-
-        // Create indexes for better performance
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_rugcheck_score ON rugcheck_data(score DESC)",
-            []
-        )?;
-
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_rugcheck_rugged ON rugcheck_data(rugged)",
-            []
-        )?;
-
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_rugcheck_updated ON rugcheck_data(updated_at)",
-            []
-        )?;
-
-        Ok(())
-    }
-
-    /// Store rugcheck data in the database
-    pub fn store_rugcheck_data(
-        &self,
-        data: &crate::tokens::rugcheck::RugcheckResponse
-    ) -> Result<(), rusqlite::Error> {
-        // Use a timeout when trying to acquire the lock
-        use std::time::{ Duration, Instant };
-
-        let timeout = Duration::from_secs(5); // 5 second timeout
-        let start = Instant::now();
-
-        let connection = loop {
-            match self.connection.try_lock() {
-                Ok(conn) => {
-                    break conn;
-                }
-                Err(_) => {
-                    if start.elapsed() > timeout {
-                        return Err(
-                            rusqlite::Error::SqliteFailure(
-                                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
-                                Some(
-                                    "Database lock timeout - could not acquire lock within 5 seconds".to_string()
-                                )
-                            )
-                        );
-                    }
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-            }
-        };
-
-        // Serialize complex fields to JSON
-        let token_extensions_json = data.token_extensions
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let top_holders_json = data.top_holders
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let freeze_authority_json = data.freeze_authority
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let mint_authority_json = data.mint_authority
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let risks_json = data.risks
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let locker_owners_json = data.locker_owners
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let lockers_json = data.lockers
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let markets_json = data.markets
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let known_accounts_json = data.known_accounts
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let events_json = data.events
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let verification_json = data.verification
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let insider_networks_json = data.insider_networks
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let creator_tokens_json = data.creator_tokens
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        let launchpad_json = data.launchpad
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_default())
-            .unwrap_or_default();
-
-        connection.execute(
-            "INSERT OR REPLACE INTO rugcheck_data (
-                mint, token_program, creator, creator_balance,
-                token_mint_authority, token_supply, token_decimals, token_is_initialized, token_freeze_authority,
-                token_meta_name, token_meta_symbol, token_meta_uri, token_meta_mutable, token_meta_update_authority,
-                score, score_normalised, rugged, token_type,
-                file_meta_description, file_meta_name, file_meta_symbol, file_meta_image,
-                total_market_liquidity, total_stable_liquidity, total_lp_providers, total_holders, price,
-                transfer_fee_pct, transfer_fee_max_amount, transfer_fee_authority,
-                graph_insiders_detected, detected_at,
-                token_extensions, top_holders_json, freeze_authority_json, mint_authority_json,
-                risks_json, locker_owners_json, lockers_json, markets_json, known_accounts_json,
-                events_json, verification_json, insider_networks_json, creator_tokens_json, launchpad_json,
-                updated_at
-            ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
-                ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34,
-                ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, datetime('now')
-            )",
-            params![
-                data.mint,
-                data.token_program,
-                data.creator,
-                data.creator_balance,
-
-                // Token info
-                data.token.as_ref().and_then(|t| t.mint_authority.as_ref()),
-                data.token.as_ref().and_then(|t| t.supply.as_ref()),
-                data.token.as_ref().and_then(|t| t.decimals),
-                data.token.as_ref().and_then(|t| t.is_initialized),
-                data.token.as_ref().and_then(|t| t.freeze_authority.as_ref()),
-
-                // Token meta
-                data.token_meta.as_ref().and_then(|m| m.name.as_ref()),
-                data.token_meta.as_ref().and_then(|m| m.symbol.as_ref()),
-                data.token_meta.as_ref().and_then(|m| m.uri.as_ref()),
-                data.token_meta.as_ref().and_then(|m| m.mutable),
-                data.token_meta.as_ref().and_then(|m| m.update_authority.as_ref()),
-
-                // Risk analysis
-                data.score,
-                data.score_normalised,
-                data.rugged,
-                data.token_type,
-
-                // File meta
-                data.file_meta.as_ref().and_then(|f| f.description.as_ref()),
-                data.file_meta.as_ref().and_then(|f| f.name.as_ref()),
-                data.file_meta.as_ref().and_then(|f| f.symbol.as_ref()),
-                data.file_meta.as_ref().and_then(|f| f.image.as_ref()),
-
-                // Market data
-                data.total_market_liquidity,
-                data.total_stable_liquidity,
-                data.total_lp_providers,
-                data.total_holders,
-                data.price,
-
-                // Transfer fee
-                data.transfer_fee.as_ref().and_then(|f| f.pct),
-                data.transfer_fee.as_ref().and_then(|f| f.max_amount.as_ref()),
-                data.transfer_fee.as_ref().and_then(|f| f.authority.as_ref()),
-
-                // Analysis info
-                data.graph_insiders_detected,
-                data.detected_at,
-
-                // JSON fields
-                token_extensions_json,
-                top_holders_json,
-                freeze_authority_json,
-                mint_authority_json,
-                risks_json,
-                locker_owners_json,
-                lockers_json,
-                markets_json,
-                known_accounts_json,
-                events_json,
-                verification_json,
-                insider_networks_json,
-                creator_tokens_json,
-                launchpad_json
-            ]
-        )?;
-
-        Ok(())
-    }
-
-    /// Get rugcheck data for a specific token with timestamp
-    pub fn get_rugcheck_data_with_timestamp(
-        &self,
-        mint: &str
-    ) -> Result<
-        Option<(crate::tokens::rugcheck::RugcheckResponse, chrono::DateTime<chrono::Utc>)>,
-        rusqlite::Error
-    > {
-        let connection = self.connection
-            .lock()
-            .map_err(|_| {
-                rusqlite::Error::SqliteFailure(
-                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
-                    Some("Failed to acquire database lock".to_string())
-                )
-            })?;
-
-        let mut stmt = connection.prepare(
-            "SELECT *, updated_at FROM rugcheck_data WHERE mint = ?1"
-        )?;
-
-        let mut rows = stmt.query_map(params![mint], |row| {
-            let rugcheck_response = self.row_to_rugcheck_response(row)?;
-            let updated_at_str: String = row.get("updated_at")?;
-
-            // Parse SQLite datetime format: "YYYY-MM-DD HH:MM:SS"
-            let updated_at = chrono::NaiveDateTime
-                ::parse_from_str(&updated_at_str, "%Y-%m-%d %H:%M:%S")
-                .map_err(|_| {
-                    rusqlite::Error::InvalidColumnType(
-                        0,
-                        "updated_at".to_string(),
-                        rusqlite::types::Type::Text
-                    )
-                })?
-                .and_utc(); // Convert to UTC DateTime
-
-            Ok((rugcheck_response, updated_at))
-        })?;
-
-        if let Some(row) = rows.next() {
-            Ok(Some(row?))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Get rugcheck data for a specific token (static method)
-    pub fn get_rugcheck_data(
-        mint: &str
-    ) -> Result<Option<crate::tokens::rugcheck::RugcheckResponse>, String> {
-        use std::sync::Arc;
-
-        let connection = Arc::new(
-            std::sync::Mutex::new(
-                Connection::open(&*TOKENS_DATABASE).map_err(|e|
-                    format!("Database connection failed: {}", e)
-                )?
-            )
-        );
-
-        let conn = connection.lock().map_err(|_| "Failed to acquire database lock".to_string())?;
-
-        let mut stmt = conn
-            .prepare("SELECT * FROM rugcheck_data WHERE mint = ?1")
-            .map_err(|e| format!("Failed to prepare rugcheck query: {}", e))?;
-
-        let mut rows = stmt
-            .query_map(params![mint], |row| { Self::row_to_rugcheck_response_static(row) })
-            .map_err(|e| format!("Failed to execute rugcheck query: {}", e))?;
-
-        if let Some(row) = rows.next() {
-            Ok(Some(row.map_err(|e| format!("Failed to parse rugcheck row: {}", e))?))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Get rugcheck data for a specific token (instance method)
-    pub fn get_rugcheck_data_instance(
-        &self,
-        mint: &str
-    ) -> Result<Option<crate::tokens::rugcheck::RugcheckResponse>, rusqlite::Error> {
-        let connection = self.connection
-            .lock()
-            .map_err(|_| {
-                rusqlite::Error::SqliteFailure(
-                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
-                    Some("Failed to acquire database lock".to_string())
-                )
-            })?;
-
-        let mut stmt = connection.prepare("SELECT * FROM rugcheck_data WHERE mint = ?1")?;
-
-        let mut rows = stmt.query_map(params![mint], |row|
-            Ok(self.row_to_rugcheck_response(row)?)
-        )?;
-
-        if let Some(row) = rows.next() {
-            Ok(Some(row?))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Convert database row to RugcheckResponse
-    /// Static version of row_to_rugcheck_response for static methods
-    fn row_to_rugcheck_response_static(
-        row: &rusqlite::Row
-    ) -> Result<crate::tokens::rugcheck::RugcheckResponse, rusqlite::Error> {
-        use crate::tokens::rugcheck::*;
-
-        // Parse JSON fields
-        let token_extensions: Option<serde_json::Value> = row
-            .get::<_, Option<String>>("token_extensions")?
-            .and_then(|s| {
-                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
-            });
-
-        let top_holders: Option<Vec<Holder>> = row
-            .get::<_, Option<String>>("top_holders_json")?
-            .and_then(|s| {
-                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
-            });
-
-        let freeze_authority: Option<serde_json::Value> = row
-            .get::<_, Option<String>>("freeze_authority_json")?
-            .and_then(|s| {
-                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
-            });
-
-        let mint_authority: Option<serde_json::Value> = row
-            .get::<_, Option<String>>("mint_authority_json")?
-            .and_then(|s| {
-                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
-            });
-
-        let risks: Option<Vec<Risk>> = row.get::<_, Option<String>>("risks_json")?.and_then(|s| {
-            if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
-        });
-
-        let markets: Option<Vec<Market>> = row
-            .get::<_, Option<String>>("markets_json")?
-            .and_then(|s| {
-                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
-            });
-
-        let known_accounts: Option<Vec<KnownAccount>> = row
-            .get::<_, Option<String>>("known_accounts_json")?
-            .and_then(|s| {
-                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
-            });
-
-        let events: Option<Vec<Event>> = row.get::<_, Option<String>>("events_json")?.and_then(|s| {
-            if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
-        });
-
-        let verification: Option<Verification> = row
-            .get::<_, Option<String>>("verification_json")?
-            .and_then(|s| {
-                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
-            });
-
-        let insider_networks: Option<serde_json::Value> = row
-            .get::<_, Option<String>>("insider_networks_json")?
-            .and_then(|s| {
-                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
-            });
-
-        let creator_tokens: Option<serde_json::Value> = row
-            .get::<_, Option<String>>("creator_tokens_json")?
-            .and_then(|s| {
-                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
-            });
-
-        let launchpad: Option<serde_json::Value> = row
-            .get::<_, Option<String>>("launchpad_json")?
-            .and_then(|s| {
-                if s.is_empty() { None } else { serde_json::from_str(&s).ok() }
-            });
-
-        Ok(RugcheckResponse {
-            mint: row.get("mint")?,
-            token_program: row.get("token_program")?,
-            creator: row.get("creator")?,
-            creator_balance: row.get("creator_balance")?,
-            token: Some(TokenInfo {
-                mint_authority: row.get("token_mint_authority")?,
-                supply: row.get("token_supply")?,
-                decimals: row.get("token_decimals")?,
-                is_initialized: row.get("token_is_initialized")?,
-                freeze_authority: row.get("token_freeze_authority")?,
-            }),
-            token_extensions,
-            token_meta: Some(TokenMeta {
-                name: row.get("token_meta_name")?,
-                symbol: row.get("token_meta_symbol")?,
-                uri: row.get("token_meta_uri")?,
-                mutable: row.get("token_meta_mutable")?,
-                update_authority: row.get("token_meta_update_authority")?,
-            }),
-            top_holders,
-            freeze_authority,
-            mint_authority,
-            risks,
-            score: row.get("score")?,
-            score_normalised: row.get("score_normalised")?,
-            file_meta: Some(FileMeta {
-                description: row.get("file_meta_description")?,
-                name: row.get("file_meta_name")?,
-                symbol: row.get("file_meta_symbol")?,
-                image: row.get("file_meta_image")?,
-            }),
-            locker_owners: None, // Not stored in database yet
-            lockers: None, // Not stored in database yet
-            markets,
-            total_market_liquidity: row.get("total_market_liquidity")?,
-            total_stable_liquidity: row.get("total_stable_liquidity")?,
-            total_lp_providers: row.get("total_lp_providers")?,
-            total_holders: row.get("total_holders")?,
-            price: row.get("price")?,
-            rugged: row.get("rugged")?,
-            token_type: row.get("token_type")?,
-            transfer_fee: Some(TransferFee {
-                pct: row.get("transfer_fee_pct")?,
-                max_amount: row.get("transfer_fee_max_amount")?,
-                authority: row.get("transfer_fee_authority")?,
-            }),
-            known_accounts: None, // Will be populated from JSON
-            events,
-            verification,
-            graph_insiders_detected: row.get("graph_insiders_detected")?,
-            insider_networks,
-            detected_at: row.get("detected_at")?,
-            creator_tokens,
-            launchpad,
-        })
-    }
-
-    fn row_to_rugcheck_response(
-        &self,
-        row: &rusqlite::Row
-    ) -> Result<crate::tokens::rugcheck::RugcheckResponse, rusqlite::Error> {
-        Self::row_to_rugcheck_response_static(row)
-    }
-
-    /// Delete rugcheck data for a specific token
-    pub fn delete_rugcheck_data(&self, mint: &str) -> Result<bool, rusqlite::Error> {
-        let connection = self.connection
-            .lock()
-            .map_err(|_| {
-                rusqlite::Error::SqliteFailure(
-                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
-                    Some("Failed to acquire database lock".to_string())
-                )
-            })?;
-
-        let rows_affected = connection.execute(
-            "DELETE FROM rugcheck_data WHERE mint = ?1",
-            params![mint]
-        )?;
-        Ok(rows_affected > 0)
-    }
-
-    /// Populate tokens with rugcheck_data and decimals from database
-    pub async fn populate_tokens_with_cached_data(
-        &self,
-        tokens: &mut [crate::tokens::types::Token]
-    ) -> Result<(), String> {
-        use crate::tokens::get_token_decimals;
-
-        for token in tokens.iter_mut() {
-            // Populate rugcheck_data from database
-            if token.rugcheck_data.is_none() {
-                match self.get_rugcheck_data_instance(&token.mint) {
-                    Ok(Some(rugcheck_data)) => {
-                        token.rugcheck_data = Some(rugcheck_data);
-                    }
-                    Ok(None) => {
-                        // No rugcheck data found - leave as None
-                    }
-                    Err(e) => {
-                        // Log error but continue with other tokens
-                        log(
-                            LogTag::Cache,
-                            "ERROR",
-                            &format!("Failed to get rugcheck data for {}: {}", token.mint, e)
-                        );
-                    }
-                }
-            }
-
-            // Populate decimals from cache and blockchain if needed
-            if token.decimals.is_none() {
-                if let Some(decimals) = get_token_decimals(&token.mint).await {
-                    token.decimals = Some(decimals);
-                }
-            }
-        }
-
-        Ok(())
-    }
 
     /// Ensure database schemas are up to date - run this at startup
     pub fn migrate_database_schemas(&self) -> Result<(), Box<dyn std::error::Error>> {
@@ -1880,4 +1060,12 @@ impl TokenDatabase {
         drop(migration_conn);
         Ok(())
     }
+}
+
+/// Database statistics
+#[derive(Debug, Clone)]
+pub struct DatabaseStats {
+    pub total_tokens: usize,
+    pub tokens_with_liquidity: usize,
+    pub last_updated: chrono::DateTime<chrono::Utc>,
 }

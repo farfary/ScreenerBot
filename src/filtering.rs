@@ -310,18 +310,11 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
 
     // Populate cached fields (decimals) before decimal/age early filtering
     let mut decimals_populated = 0usize;
-    let mut populate_errors = 0usize;
     for token in all_tokens.iter_mut() {
         if token.decimals.is_none() {
-            match token.populate_cached_data() {
-                Ok(()) => {
-                    if token.decimals.is_some() {
-                        decimals_populated += 1;
-                    }
-                }
-                Err(_) => {
-                    populate_errors += 1;
-                }
+            token.decimals = crate::tokens::get_token_decimals_sync(&token.mint);
+            if token.decimals.is_some() {
+                decimals_populated += 1;
             }
         }
     }
@@ -329,11 +322,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         log(
             LogTag::Filtering,
             "DEBUG",
-            &format!(
-                "🧩 STEP 4b - Populated decimals for {} tokens ({} errors)",
-                decimals_populated,
-                populate_errors
-            )
+            &format!("🧩 STEP 4b - Populated decimals for {} tokens", decimals_populated)
         );
     }
 

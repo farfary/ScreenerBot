@@ -58,21 +58,37 @@ use tokio::time::{ sleep, Duration };
 fn print_help() {
     log(LogTag::System, "INFO", "🔄 Sell All Tokens, Close ATAs, and Reset Bot Data Tool");
     log(LogTag::System, "INFO", "======================================================");
-    log(LogTag::System, "INFO", "Comprehensive wallet cleanup and bot reset utility that sells all tokens for SOL,");
-    log(LogTag::System, "INFO", "closes all Associated Token Accounts (ATAs), and resets bot data files.");
+    log(
+        LogTag::System,
+        "INFO",
+        "Comprehensive wallet cleanup and bot reset utility that sells all tokens for SOL,"
+    );
+    log(
+        LogTag::System,
+        "INFO",
+        "closes all Associated Token Accounts (ATAs), and resets bot data files."
+    );
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "WARNING", "⚠️  WARNING: This tool will:");
     log(LogTag::System, "WARNING", "    • Sell ALL tokens in your wallet for SOL");
     log(LogTag::System, "WARNING", "    • Close all Associated Token Accounts (ATAs)");
     log(LogTag::System, "WARNING", "    • DELETE specific bot data files (irreversible)");
-    log(LogTag::System, "WARNING", "    Use with extreme caution and understand the risks involved.");
+    log(
+        LogTag::System,
+        "WARNING",
+        "    Use with extreme caution and understand the risks involved."
+    );
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "INFO", "USAGE:");
     log(LogTag::System, "INFO", "    cargo run --bin tool_sell_all_and_reset [OPTIONS]");
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "INFO", "OPTIONS:");
     log(LogTag::System, "INFO", "    --help, -h          Show this help message");
-    log(LogTag::System, "INFO", "    --dry-run, -d      Simulate operations without executing transactions");
+    log(
+        LogTag::System,
+        "INFO",
+        "    --dry-run, -d      Simulate operations without executing transactions"
+    );
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "INFO", "EXAMPLES:");
     log(LogTag::System, "INFO", "    # Simulate cleanup to see what would happen");
@@ -120,7 +136,11 @@ fn print_help() {
     log(LogTag::System, "INFO", "    • Fresh bot state with preserved configuration");
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "WARNING", "RISK WARNINGS:");
-    log(LogTag::System, "WARNING", "    • Irreversible operation - tokens will be permanently sold");
+    log(
+        LogTag::System,
+        "WARNING",
+        "    • Irreversible operation - tokens will be permanently sold"
+    );
     log(LogTag::System, "WARNING", "    • Bot data files will be permanently deleted");
     log(LogTag::System, "WARNING", "    • Market slippage may result in lower SOL amounts");
     log(LogTag::System, "WARNING", "    • Some tokens may fail to sell due to liquidity issues");
@@ -914,7 +934,6 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
         info: None,
         boosts: None,
         decimals: None,
-        rugcheck_data: None,
     };
 
     // Get quote and execute swap

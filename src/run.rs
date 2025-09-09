@@ -169,6 +169,15 @@ pub async fn run_bot() -> Result<(), String> {
 
     let shutdown_tokens = shutdown.clone();
 
+    // Initialize token database
+    let database = match TokenDatabase::new() {
+        Ok(db) => db,
+        Err(e) => {
+            debug_log(LogTag::System, "ERROR", &format!("Failed to create token database: {}", e));
+            return Err(format!("Failed to create token database: {}", e));
+        }
+    };
+
     // Start token monitoring service for database updates
     let shutdown_monitor = shutdown.clone();
     let _token_monitor_handle = tokio::spawn(async move {
