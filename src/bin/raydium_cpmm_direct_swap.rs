@@ -370,6 +370,19 @@ fn decode_cpmm_pool_manually(
         auth_bump,
         status,
         lp_mint_decimals,
+
+        // Complete CPMM pool state fields (default values for this legacy decoder)
+        lp_supply: 0,
+        protocol_fees_token_0: 0,
+        protocol_fees_token_1: 0,
+        fund_fees_token_0: 0,
+        fund_fees_token_1: 0,
+        open_time: 0,
+        recent_epoch: 0,
+        creator_fee_on: 0,
+        enable_creator_fee: false,
+        creator_fees_token_0: 0,
+        creator_fees_token_1: 0,
     })
 }
 

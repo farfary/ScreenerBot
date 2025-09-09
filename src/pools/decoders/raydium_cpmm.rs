@@ -114,6 +114,26 @@ impl RaydiumCpmmDecoder {
         let pool_mint_0_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
         let pool_mint_1_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
 
+        // Skip padding to reach LP supply field at offset 333
+        offset = 333;
+        let lp_supply = Self::read_u64_at_offset(data, &mut offset).ok()?;
+        let protocol_fees_token_0 = Self::read_u64_at_offset(data, &mut offset).ok()?;
+        let protocol_fees_token_1 = Self::read_u64_at_offset(data, &mut offset).ok()?;
+        let fund_fees_token_0 = Self::read_u64_at_offset(data, &mut offset).ok()?;
+        let fund_fees_token_1 = Self::read_u64_at_offset(data, &mut offset).ok()?;
+        let open_time = Self::read_u64_at_offset(data, &mut offset).ok()?;
+        let recent_epoch = Self::read_u64_at_offset(data, &mut offset).ok()?;
+
+        // Skip padding to reach creator fee fields
+        offset = 389; // After recent_epoch
+        let creator_fee_on = Self::read_u8_at_offset(data, &mut offset).ok()?;
+        let enable_creator_fee = Self::read_bool_at_offset(data, &mut offset).ok()?;
+
+        // Skip padding1[6] bytes
+        offset += 6;
+        let creator_fees_token_0 = Self::read_u64_at_offset(data, &mut offset).ok()?;
+        let creator_fees_token_1 = Self::read_u64_at_offset(data, &mut offset).ok()?;
+
         // Get token decimals - CRITICAL: must be available, no fallback to pool defaults
         let mint_0_decimals = match get_token_decimals_sync(&token_0_mint) {
             Some(decimals) => decimals,
@@ -215,6 +235,19 @@ impl RaydiumCpmmDecoder {
             auth_bump,
             status,
             lp_mint_decimals,
+
+            // Complete CPMM pool state fields
+            lp_supply,
+            protocol_fees_token_0,
+            protocol_fees_token_1,
+            fund_fees_token_0,
+            fund_fees_token_1,
+            open_time,
+            recent_epoch,
+            creator_fee_on,
+            enable_creator_fee,
+            creator_fees_token_0,
+            creator_fees_token_1,
         })
     }
 
@@ -453,10 +486,33 @@ impl RaydiumCpmmDecoder {
         *offset += 1;
         Ok(value)
     }
+
+    fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, String> {
+        if *offset + 8 > data.len() {
+            return Err("Insufficient data for u64".to_string());
+        }
+
+        let value_bytes = &data[*offset..*offset + 8];
+        *offset += 8;
+        let value = u64::from_le_bytes(
+            value_bytes.try_into().map_err(|_| "Failed to parse u64".to_string())?
+        );
+        Ok(value)
+    }
+
+    fn read_bool_at_offset(data: &[u8], offset: &mut usize) -> Result<bool, String> {
+        if *offset >= data.len() {
+            return Err("Insufficient data for bool".to_string());
+        }
+
+        let value = data[*offset] != 0;
+        *offset += 1;
+        Ok(value)
+    }
 }
 
 /// Raydium CPMM pool information extracted from account data
-/// Enhanced version with all fields needed for direct swap operations
+/// Enhanced version with all fields needed for direct swap operations and complete pool state
 #[derive(Debug, Clone)]
 pub struct RaydiumCpmmPoolInfo {
     // Basic token information
@@ -478,4 +534,17 @@ pub struct RaydiumCpmmPoolInfo {
     pub auth_bump: u8, // Authority bump seed
     pub status: u8, // Pool status
     pub lp_mint_decimals: u8, // LP token decimals
+
+    // Complete CPMM pool state fields
+    pub lp_supply: u64, // LP token supply
+    pub protocol_fees_token_0: u64, // Protocol fees for token 0
+    pub protocol_fees_token_1: u64, // Protocol fees for token 1
+    pub fund_fees_token_0: u64, // Fund fees for token 0
+    pub fund_fees_token_1: u64, // Fund fees for token 1
+    pub open_time: u64, // Pool open timestamp
+    pub recent_epoch: u64, // Recent epoch number
+    pub creator_fee_on: u8, // Creator fee status
+    pub enable_creator_fee: bool, // Creator fee enabled flag
+    pub creator_fees_token_0: u64, // Creator fees for token 0
+    pub creator_fees_token_1: u64, // Creator fees for token 1
 }
