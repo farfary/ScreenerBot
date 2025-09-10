@@ -86,6 +86,24 @@ impl PoolDecoder for RaydiumCpmmDecoder {
 }
 
 impl RaydiumCpmmDecoder {
+    /// Extract reserve account addresses from CPMM pool data for analyzer use
+    /// Returns the account addresses that need to be fetched: [token_0_vault, token_1_vault]
+    pub fn extract_reserve_accounts(pool_data: &[u8]) -> Option<Vec<String>> {
+        if pool_data.len() < 8 + 32 * 4 {
+            return None;
+        }
+
+        let mut offset = 8; // Skip discriminator
+
+        // Extract vault addresses (same logic as decode_raydium_cpmm_pool)
+        let _amm_config = read_pubkey_at_offset(pool_data, &mut offset).ok()?;
+        let _pool_creator = read_pubkey_at_offset(pool_data, &mut offset).ok()?;
+        let token_0_vault = read_pubkey_at_offset(pool_data, &mut offset).ok()?;
+        let token_1_vault = read_pubkey_at_offset(pool_data, &mut offset).ok()?;
+
+        Some(vec![token_0_vault, token_1_vault])
+    }
+
     /// Decode Raydium CPMM pool data from account bytes (enhanced for swap operations)
     /// Made public for use by the direct swap system
     pub fn decode_raydium_cpmm_pool(data: &[u8], pool_id: &str) -> Option<RaydiumCpmmPoolInfo> {

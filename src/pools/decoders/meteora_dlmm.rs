@@ -256,6 +256,20 @@ impl PoolDecoder for MeteoraDlmmDecoder {
 }
 
 impl MeteoraDlmmDecoder {
+    /// Extract reserve account addresses from DLMM pool data for analyzer use
+    /// Returns the account addresses that need to be fetched: [reserve_x, reserve_y]
+    pub fn extract_reserve_accounts(pool_data: &[u8]) -> Option<Vec<String>> {
+        if pool_data.len() < 216 {
+            return None;
+        }
+
+        // Extract reserve pubkeys at known offsets (same logic as parse_dlmm_pool)
+        let reserve_x = Self::extract_pubkey_at_offset(pool_data, 152)?;
+        let reserve_y = Self::extract_pubkey_at_offset(pool_data, 184)?;
+
+        Some(vec![reserve_x.to_string(), reserve_y.to_string()])
+    }
+
     /// Parse DLMM pool account data to extract token mints and reserve addresses
     fn parse_dlmm_pool(data: &[u8]) -> Option<DlmmPoolInfo> {
         if data.len() < 216 {

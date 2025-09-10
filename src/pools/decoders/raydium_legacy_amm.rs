@@ -170,6 +170,22 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
     }
 }
 
+impl RaydiumLegacyAmmDecoder {
+    /// Extract reserve account addresses from Legacy AMM pool data for analyzer use
+    /// Returns the account addresses that need to be fetched: [coin_vault, pc_vault]
+    pub fn extract_reserve_accounts(pool_data: &[u8]) -> Option<Vec<String>> {
+        if pool_data.len() < 0x1c0 {
+            return None;
+        }
+
+        // Extract vault addresses at fixed offsets (same logic as LegacyPoolInfo::parse)
+        let vault_a = read_pubkey_at(pool_data, 0x150)?; // vault at 0x150
+        let vault_b = read_pubkey_at(pool_data, 0x160)?; // vault at 0x160
+
+        Some(vec![vault_a, vault_b])
+    }
+}
+
 struct LegacyPoolInfo {
     coin_mint: String,
     pc_mint: String,

@@ -376,3 +376,20 @@ pub struct PumpFunAmmPoolInfo {
     pub pool_quote_token_account: String,
     pub lp_supply: u64,
 }
+
+impl PumpFunAmmDecoder {
+    /// Extract reserve account addresses from PumpFun AMM pool data
+    pub fn extract_reserve_accounts(data: &[u8]) -> Option<Vec<String>> {
+        // Use the centralized utility function for consistent SOL detection
+        let pool_info = extract_pumpfun_mints_and_vaults(data)?;
+
+        // Get vaults in the correct order for the decoder
+        let vault_addresses = super::super::utils::get_analyzer_vault_order(pool_info);
+
+        if vault_addresses.is_empty() {
+            return None;
+        }
+
+        Some(vault_addresses)
+    }
+}

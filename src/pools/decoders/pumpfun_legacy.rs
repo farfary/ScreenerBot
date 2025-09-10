@@ -281,3 +281,17 @@ pub struct PumpFunLegacyPoolInfo {
     pub pool_base_token_account: String,
     pub pool_quote_token_account: String,
 }
+
+impl PumpFunLegacyDecoder {
+    /// Extract reserve account addresses from PumpFun Legacy pool data
+    pub fn extract_reserve_accounts(data: &[u8]) -> Option<Vec<String>> {
+        // For legacy PumpFun, extract pool info first
+        let pool_info = super::super::utils::extract_pumpfun_mints_and_vaults(data)?;
+
+        // Analyze the pool data to find SOL and token vault accounts
+        let pair_info = super::super::utils::analyze_token_pair(pool_info);
+
+        // Return vaults in standard order (token, sol)
+        Some(vec![pair_info.token_vault, pair_info.sol_vault])
+    }
+}

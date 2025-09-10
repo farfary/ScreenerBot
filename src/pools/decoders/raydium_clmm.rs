@@ -239,6 +239,27 @@ impl PoolDecoder for RaydiumClmmDecoder {
 }
 
 impl RaydiumClmmDecoder {
+    /// Extract reserve account addresses from CLMM pool data for analyzer use
+    /// Returns the account addresses that need to be fetched: [token_vault_0, token_vault_1]
+    pub fn extract_reserve_accounts(pool_data: &[u8]) -> Option<Vec<String>> {
+        if pool_data.len() < 800 {
+            return None;
+        }
+
+        // Based on Raydium CLMM PoolState struct layout
+        // Skip discriminator (8 bytes), bump (1 byte), amm_config (32 bytes), owner (32 bytes)
+        let base_offset = 8 + 1 + 32 + 32;
+
+        // Skip token_mint_0 (32 bytes) and token_mint_1 (32 bytes)
+        let vault_offset = base_offset + 32 + 32;
+
+        // Extract vault pubkeys at calculated offsets
+        let token_vault_0 = Self::extract_pubkey_at_offset(pool_data, vault_offset)?;
+        let token_vault_1 = Self::extract_pubkey_at_offset(pool_data, vault_offset + 32)?;
+
+        Some(vec![token_vault_0, token_vault_1])
+    }
+
     /// Parse CLMM pool account data to extract complete PoolState structure
     /// Based on Raydium CLMM PoolState struct from official GitHub source code
     fn parse_clmm_pool(data: &[u8]) -> Option<ClmmPoolInfo> {

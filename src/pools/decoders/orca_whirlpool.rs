@@ -189,6 +189,30 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
 }
 
 impl OrcaWhirlpoolDecoder {
+    /// Extract reserve account addresses from Whirlpool pool data for analyzer use
+    /// Returns the account addresses that need to be fetched: [token_vault_a, token_vault_b]
+    pub fn extract_reserve_accounts(pool_data: &[u8]) -> Option<Vec<String>> {
+        if pool_data.len() < 653 {
+            return None;
+        }
+
+        // Use the exact Orca Whirlpool structure offsets based on official source
+        // Skip discriminator (8), whirlpools_config (32), whirlpool_bump (1),
+        // tick_spacing (2), fee_tier_index_seed (2), fee_rate (2), protocol_fee_rate (2),
+        // liquidity (16), sqrt_price (16), tick_current_index (4),
+        // protocol_fee_owed_a (8), protocol_fee_owed_b (8)
+        // This brings us to token_mint_a at offset 99
+
+        // token_vault_a at offset 131 (99 + 32)
+        let token_vault_a = Self::extract_pubkey_at_offset(pool_data, 131)?;
+
+        // token_vault_b at offset 211 (131 + 32 + 16 + 32)
+        // (vault_a + fee_growth_global_a + token_mint_b)
+        let token_vault_b = Self::extract_pubkey_at_offset(pool_data, 211)?;
+
+        Some(vec![token_vault_a, token_vault_b])
+    }
+
     /// Parse Orca Whirlpool pool data according to the official structure
     fn parse_whirlpool_data(data: &[u8]) -> Option<WhirlpoolInfo> {
         if data.len() < 653 {
@@ -276,6 +300,17 @@ impl OrcaWhirlpoolDecoder {
 
         // Token account balance is at offset 64 (8 bytes)
         Some(u64::from_le_bytes(data[64..72].try_into().ok()?))
+    }
+
+    /// Extract pubkey at fixed offset for analyzer use
+    fn extract_pubkey_at_offset(data: &[u8], offset: usize) -> Option<String> {
+        if offset + 32 > data.len() {
+            return None;
+        }
+
+        let pubkey_bytes = &data[offset..offset + 32];
+        let pubkey = Pubkey::new_from_array(pubkey_bytes.try_into().ok()?);
+        Some(pubkey.to_string())
     }
 }
 

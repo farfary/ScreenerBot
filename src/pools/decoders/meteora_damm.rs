@@ -405,6 +405,20 @@ impl PoolDecoder for MeteoraDammDecoder {
 }
 
 impl MeteoraDammDecoder {
+    /// Extract reserve account addresses from DAMM pool data for analyzer use
+    /// Returns the account addresses that need to be fetched: [token_a_vault, token_b_vault]
+    pub fn extract_reserve_accounts(pool_data: &[u8]) -> Option<Vec<String>> {
+        if pool_data.len() < 1112 {
+            return None;
+        }
+
+        // Extract vault pubkeys at fixed offsets (same logic as parse_damm_pool)
+        let token_a_vault = Self::extract_pubkey_at_fixed_offset(pool_data, 232)?;
+        let token_b_vault = Self::extract_pubkey_at_fixed_offset(pool_data, 264)?;
+
+        Some(vec![token_a_vault, token_b_vault])
+    }
+
     /// Parse DAMM pool account data to extract token mints, vault addresses, and sqrt_price
     /// Based on DAMM v2 Pool struct from official Meteora source code
     ///
