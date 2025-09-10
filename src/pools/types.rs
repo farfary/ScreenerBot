@@ -133,6 +133,7 @@ pub enum ProgramKind {
     OrcaWhirlpool,
     MeteoraDamm,
     MeteoraDlmm,
+    MeteoraDbc,
     PumpFunAmm,
     PumpFunLegacy,
     Moonit,
@@ -149,6 +150,7 @@ impl ProgramKind {
             ProgramKind::OrcaWhirlpool => ORCA_WHIRLPOOL_PROGRAM_ID,
             ProgramKind::MeteoraDamm => METEORA_DAMM_PROGRAM_ID,
             ProgramKind::MeteoraDlmm => METEORA_DLMM_PROGRAM_ID,
+            ProgramKind::MeteoraDbc => METEORA_DBC_PROGRAM_ID,
             ProgramKind::PumpFunAmm => PUMP_FUN_AMM_PROGRAM_ID,
             ProgramKind::PumpFunLegacy => PUMP_FUN_LEGACY_PROGRAM_ID,
             ProgramKind::Moonit => MOONIT_AMM_PROGRAM_ID,
@@ -165,6 +167,7 @@ impl ProgramKind {
             ProgramKind::OrcaWhirlpool => "ORCA WHIRLPOOL",
             ProgramKind::MeteoraDamm => "METEORA DAMM v2",
             ProgramKind::MeteoraDlmm => "METEORA DLMM",
+            ProgramKind::MeteoraDbc => "METEORA DBC",
             ProgramKind::PumpFunAmm => "PUMP.FUN AMM",
             ProgramKind::PumpFunLegacy => "PUMP.FUN",
             ProgramKind::Moonit => "MOONIT AMM",
@@ -181,6 +184,7 @@ impl ProgramKind {
             ORCA_WHIRLPOOL_PROGRAM_ID => ProgramKind::OrcaWhirlpool,
             METEORA_DAMM_PROGRAM_ID => ProgramKind::MeteoraDamm,
             METEORA_DLMM_PROGRAM_ID => ProgramKind::MeteoraDlmm,
+            METEORA_DBC_PROGRAM_ID => ProgramKind::MeteoraDbc,
             PUMP_FUN_AMM_PROGRAM_ID => ProgramKind::PumpFunAmm,
             PUMP_FUN_LEGACY_PROGRAM_ID => ProgramKind::PumpFunLegacy,
             MOONIT_AMM_PROGRAM_ID => ProgramKind::Moonit,
@@ -260,6 +264,7 @@ pub const RAYDIUM_CLMM_PROGRAM_ID: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7gr
 pub const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 pub const METEORA_DAMM_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
 pub const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
+pub const METEORA_DBC_PROGRAM_ID: &str = "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN";
 pub const PUMP_FUN_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
 pub const PUMP_FUN_LEGACY_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 pub const MOONIT_AMM_PROGRAM_ID: &str = "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG";

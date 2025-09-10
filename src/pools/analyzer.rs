@@ -377,6 +377,15 @@ impl PoolAnalyzer {
                 ).await
             }
 
+            ProgramKind::MeteoraDbc => {
+                // For DBC, we need pool account + two vaults; reuse DAMM-style extraction if available later.
+                // For now, include pool and mints; vaults will be discovered by decoder via accounts set.
+                let mut accounts = vec![*pool_id];
+                accounts.push(*base_mint);
+                accounts.push(*quote_mint);
+                Some(accounts)
+            }
+
             ProgramKind::PumpFunAmm => {
                 Self::extract_pump_fun_accounts(pool_id, base_mint, quote_mint, rpc_client).await
             }

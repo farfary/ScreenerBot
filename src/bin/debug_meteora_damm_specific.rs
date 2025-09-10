@@ -36,10 +36,9 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    set_cmd_args(vec![
-        "debug_meteora_damm_specific".to_string(),
-        "--debug-pool-decoders".to_string(),
-    ]);
+    set_cmd_args(
+        vec!["debug_meteora_damm_specific".to_string(), "--debug-pool-decoders".to_string()]
+    );
 
     println!("\n🔍 METEORA DAMM v2 SPECIFIC DEBUGGER\n====================================");
     println!("Pool address: {}", args.pool);
@@ -54,16 +53,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📦 POOL ACCOUNT\n==============");
     println!("Owner: {}", pool_acc.owner);
     println!("Data size: {} bytes", pool_acc.data.len());
-    println!(
-        "Owner is Meteora DAMM: {}",
-        if pool_acc.owner.to_string() == METEORA_DAMM_PROGRAM_ID { "✅" } else { "❌" }
-    );
+    println!("Owner is Meteora DAMM: {}", if pool_acc.owner.to_string() == METEORA_DAMM_PROGRAM_ID {
+        "✅"
+    } else {
+        "❌"
+    });
 
     if args.show_hex {
         println!("\n📄 RAW HEX (first 256 bytes)");
         for (i, chunk) in pool_acc.data.chunks(16).take(16).enumerate() {
             print!("{:04x}: ", i * 16);
-            for b in chunk { print!("{:02x} ", b); }
+            for b in chunk {
+                print!("{:02x} ", b);
+            }
             println!();
         }
     }
@@ -85,7 +87,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("token_b_mint: {}", token_b_mint);
     println!("token_a_vault: {}", token_a_vault);
     println!("token_b_vault: {}", token_b_vault);
-    println!("fees: protocol_a={} protocol_b={} partner_a={} partner_b={}", protocol_a_fee, protocol_b_fee, partner_a_fee, partner_b_fee);
+    println!(
+        "fees: protocol_a={} protocol_b={} partner_a={} partner_b={}",
+        protocol_a_fee,
+        protocol_b_fee,
+        partner_a_fee,
+        partner_b_fee
+    );
     println!("sqrt_price@456: {}", sqrt_456);
     println!("sqrt_price@464: {}", sqrt_464);
 
@@ -104,10 +112,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("b_vault amount(raw): {}", b_amt_raw);
 
     // Orient relative to SOL
-    let (token_mint, sol_vault_pk, token_vault_pk, sol_fees, token_fees) = if token_b_mint == SOL_MINT {
-        (token_a_mint.clone(), b_vault_pk, a_vault_pk, protocol_b_fee + partner_b_fee, protocol_a_fee + partner_a_fee)
+    let (token_mint, sol_vault_pk, token_vault_pk, sol_fees, token_fees) = if
+        token_b_mint == SOL_MINT
+    {
+        (
+            token_a_mint.clone(),
+            b_vault_pk,
+            a_vault_pk,
+            protocol_b_fee + partner_b_fee,
+            protocol_a_fee + partner_a_fee,
+        )
     } else if token_a_mint == SOL_MINT {
-        (token_b_mint.clone(), a_vault_pk, b_vault_pk, protocol_a_fee + partner_a_fee, protocol_b_fee + partner_b_fee)
+        (
+            token_b_mint.clone(),
+            a_vault_pk,
+            b_vault_pk,
+            protocol_a_fee + partner_a_fee,
+            protocol_b_fee + partner_b_fee,
+        )
     } else {
         println!("Pool has no SOL side; aborting");
         return Ok(());
@@ -142,7 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tok_dec,
         sol_dec,
         &token_a_mint,
-        &token_b_mint,
+        &token_b_mint
     );
     println!("sqrt selected offset: {}", sqrt_sel);
     println!("Sqrt-based price: {:.12} SOL/token", sqrt_based_price);
@@ -176,9 +198,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n🧪 DECODER CHECK\n================");
     let d1 = MeteoraDammDecoder::decode_and_calculate(&accounts, &token_mint, &SOL_MINT);
-    if let Some(r) = &d1 { println!("Orientation TOKEN/SOL → {:.12} (pool {})", r.price_sol, r.pool_address); } else { println!("Orientation TOKEN/SOL → None"); }
+    if let Some(r) = &d1 {
+        println!("Orientation TOKEN/SOL → {:.12} (pool {})", r.price_sol, r.pool_address);
+    } else {
+        println!("Orientation TOKEN/SOL → None");
+    }
     let d2 = MeteoraDammDecoder::decode_and_calculate(&accounts, &SOL_MINT, &token_mint);
-    if let Some(r) = &d2 { println!("Orientation SOL/TOKEN → {:.12} (pool {})", r.price_sol, r.pool_address); } else { println!("Orientation SOL/TOKEN → None"); }
+    if let Some(r) = &d2 {
+        println!("Orientation SOL/TOKEN → {:.12} (pool {})", r.price_sol, r.pool_address);
+    } else {
+        println!("Orientation SOL/TOKEN → None");
+    }
 
     // DexScreener diff
     println!("\n📊 DEXSCREENER DIFF (SOL)\n========================");
@@ -192,10 +222,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(best) = best {
                         let dec = best.price_sol;
                         let diff_abs = (dec - api_sol).abs();
-                        let diff_pct = if api_sol > 0.0 { (diff_abs / api_sol) * 100.0 } else { 0.0 };
+                        let diff_pct = if api_sol > 0.0 {
+                            (diff_abs / api_sol) * 100.0
+                        } else {
+                            0.0
+                        };
                         println!(
                             "Decoded SOL price: {:.12}\nDexScreener SOL:  {:.12}\nDiff: {:.12} SOL ({:.4}%)",
-                            dec, api_sol, diff_abs, diff_pct
+                            dec,
+                            api_sol,
+                            diff_abs,
+                            diff_pct
                         );
                     } else {
                         println!("Decoder returned None; cannot compare.");
@@ -216,23 +253,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn read_pubkey(data: &[u8], off: usize) -> Option<String> {
-    let bytes: [u8; 32] = data.get(off..off + 32)?.try_into().ok()?;
+    let bytes: [u8; 32] = data
+        .get(off..off + 32)?
+        .try_into()
+        .ok()?;
     Some(Pubkey::new_from_array(bytes).to_string())
 }
 
 fn read_u64(data: &[u8], off: usize) -> Option<u64> {
-    let bytes: [u8; 8] = data.get(off..off + 8)?.try_into().ok()?;
+    let bytes: [u8; 8] = data
+        .get(off..off + 8)?
+        .try_into()
+        .ok()?;
     Some(u64::from_le_bytes(bytes))
 }
 
 fn read_u128(data: &[u8], off: usize) -> Option<u128> {
-    let bytes: [u8; 16] = data.get(off..off + 16)?.try_into().ok()?;
+    let bytes: [u8; 16] = data
+        .get(off..off + 16)?
+        .try_into()
+        .ok()?;
     Some(u128::from_le_bytes(bytes))
 }
 
 fn decode_token_amount(data: &[u8]) -> Option<u64> {
-    if data.len() < 72 { return None; }
-    let amt = u64::from_le_bytes(data.get(64..72)?.try_into().ok()?);
+    if data.len() < 72 {
+        return None;
+    }
+    let amt = u64::from_le_bytes(
+        data
+            .get(64..72)?
+            .try_into()
+            .ok()?
+    );
     Some(amt)
 }
 
@@ -242,11 +295,16 @@ fn select_sqrt_and_price(
     token_decimals: u8,
     sol_decimals: u8,
     token_a_mint: &str,
-    _token_b_mint: &str,
+    _token_b_mint: &str
 ) -> (&'static str, f64) {
-    let cands = [("456", sqrt_456), ("464", sqrt_464)];
+    let cands = [
+        ("456", sqrt_456),
+        ("464", sqrt_464),
+    ];
     for (lab, val) in cands {
-        if val == 0 { continue; }
+        if val == 0 {
+            continue;
+        }
         let sqrt_f64 = val as f64;
         let base = (sqrt_f64 / (2f64).powi(64)).powi(2);
         let dec_adj = (10f64).powi((token_decimals as i32) - (sol_decimals as i32));
@@ -254,7 +312,9 @@ fn select_sqrt_and_price(
         if token_a_mint == SOL_MINT {
             price = if price > 0.0 { 1.0 / price } else { 0.0 };
         }
-        if price.is_finite() && price > 0.0 && price < 1e6 { return (lab, price); }
+        if price.is_finite() && price > 0.0 && price < 1e6 {
+            return (lab, price);
+        }
     }
     ("none", 0.0)
 }

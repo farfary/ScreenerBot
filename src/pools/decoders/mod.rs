@@ -10,6 +10,7 @@ pub mod pumpfun_legacy;
 pub mod raydium_legacy_amm;
 pub mod meteora_dlmm;
 pub mod meteora_damm;
+pub mod meteora_dbc;
 pub mod orca_whirlpool;
 pub mod moonit_amm;
 
@@ -64,6 +65,8 @@ pub fn decode_pool(
             meteora_dlmm::MeteoraDlmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
         ProgramKind::MeteoraDamm =>
             meteora_damm::MeteoraDammDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
+        ProgramKind::MeteoraDbc =>
+            meteora_dbc::MeteoraDbcDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
         ProgramKind::OrcaWhirlpool =>
             orca_whirlpool::OrcaWhirlpoolDecoder::decode_and_calculate(
                 accounts,
