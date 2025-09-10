@@ -8,6 +8,7 @@
 /// - Fetch vault token account balances from provided accounts map
 /// - Compute SOL price for target token
 use super::{ PoolDecoder, AccountData };
+use super::super::utils::{ read_pubkey_at };
 use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
@@ -203,14 +204,6 @@ impl LegacyPoolInfo {
 
         Some(Self { coin_mint, pc_mint, coin_vault, pc_vault })
     }
-}
-
-fn read_pubkey_at(data: &[u8], offset: usize) -> Option<String> {
-    if offset + 32 > data.len() {
-        return None;
-    }
-    let pk = Pubkey::new_from_array(data[offset..offset + 32].try_into().ok()?);
-    Some(pk.to_string())
 }
 
 fn get_token_account_amount(accounts: &HashMap<String, AccountData>, key: &str) -> Option<u64> {

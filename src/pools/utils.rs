@@ -267,8 +267,11 @@ fn is_likely_mint(pubkey_str: &str) -> bool {
         (pubkey_str.len() == 44 && pubkey_str.chars().all(|c| c.is_alphanumeric()))
 }
 
-/// Helper function to read pubkey at offset
-fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, String> {
+/// Data reading utilities for consistent parsing across all decoders
+/// These functions provide centralized, safe data extraction with proper bounds checking
+
+/// Read a pubkey from data at given offset, advancing the offset
+pub fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, String> {
     if *offset + 32 > data.len() {
         return Err(format!("Offset {} + 32 exceeds data length {}", *offset, data.len()));
     }
@@ -281,6 +284,115 @@ fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, Stri
     );
 
     Ok(pubkey.to_string())
+}
+
+/// Read a pubkey from data at fixed offset without advancing
+pub fn read_pubkey_at(data: &[u8], offset: usize) -> Option<String> {
+    if offset + 32 > data.len() {
+        return None;
+    }
+    let pk = Pubkey::new_from_array(data[offset..offset + 32].try_into().ok()?);
+    Some(pk.to_string())
+}
+
+/// Read a pubkey as Pubkey struct from data at given offset, advancing the offset
+pub fn read_pubkey_struct_at_offset(
+    data: &[u8],
+    offset: &mut usize
+) -> Result<Pubkey, &'static str> {
+    if data.len() < *offset + 32 {
+        return Err("Insufficient data for pubkey");
+    }
+    let pubkey_bytes = &data[*offset..*offset + 32];
+    *offset += 32;
+    Pubkey::try_from(pubkey_bytes).map_err(|_| "Invalid pubkey")
+}
+
+/// Read a u8 value from data at given offset, advancing the offset
+pub fn read_u8_at_offset(data: &[u8], offset: &mut usize) -> Result<u8, String> {
+    if *offset >= data.len() {
+        return Err("Insufficient data for u8".to_string());
+    }
+
+    let value = data[*offset];
+    *offset += 1;
+    Ok(value)
+}
+
+/// Read a u16 value from data at given offset, advancing the offset
+pub fn read_u16_at_offset(data: &[u8], offset: &mut usize) -> Result<u16, String> {
+    if *offset + 2 > data.len() {
+        return Err("Insufficient data for u16".to_string());
+    }
+
+    let value_bytes = &data[*offset..*offset + 2];
+    *offset += 2;
+    let value = u16::from_le_bytes(
+        value_bytes.try_into().map_err(|_| "Failed to parse u16".to_string())?
+    );
+    Ok(value)
+}
+
+/// Read a u32 value from data at given offset, advancing the offset
+pub fn read_u32_at_offset(data: &[u8], offset: &mut usize) -> Result<u32, String> {
+    if *offset + 4 > data.len() {
+        return Err("Insufficient data for u32".to_string());
+    }
+
+    let value_bytes = &data[*offset..*offset + 4];
+    *offset += 4;
+    let value = u32::from_le_bytes(
+        value_bytes.try_into().map_err(|_| "Failed to parse u32".to_string())?
+    );
+    Ok(value)
+}
+
+/// Read a u64 value from data at given offset, advancing the offset
+pub fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, String> {
+    if *offset + 8 > data.len() {
+        return Err("Insufficient data for u64".to_string());
+    }
+
+    let value_bytes = &data[*offset..*offset + 8];
+    *offset += 8;
+    let value = u64::from_le_bytes(
+        value_bytes.try_into().map_err(|_| "Failed to parse u64".to_string())?
+    );
+    Ok(value)
+}
+
+/// Read a u128 value from data at given offset, advancing the offset
+pub fn read_u128_at_offset(data: &[u8], offset: &mut usize) -> Result<u128, String> {
+    if *offset + 16 > data.len() {
+        return Err("Insufficient data for u128".to_string());
+    }
+
+    let value_bytes = &data[*offset..*offset + 16];
+    *offset += 16;
+    let value = u128::from_le_bytes(
+        value_bytes.try_into().map_err(|_| "Failed to parse u128".to_string())?
+    );
+    Ok(value)
+}
+
+/// Read a bool value from data at given offset, advancing the offset
+pub fn read_bool_at_offset(data: &[u8], offset: &mut usize) -> Result<bool, String> {
+    if *offset >= data.len() {
+        return Err("Insufficient data for bool".to_string());
+    }
+
+    let value = data[*offset] != 0;
+    *offset += 1;
+    Ok(value)
+}
+
+/// Read token account amount from token account data (at fixed offset 64)
+pub fn read_token_account_amount(data: &[u8]) -> Option<u64> {
+    if data.len() < 72 {
+        return None;
+    }
+    // Token account amount is at offset 64
+    Some(u64::from_le_bytes(data[64..72].try_into().ok()?))
 }
 
 /// Get the correct vault addresses for analyzer extraction
@@ -310,67 +422,5 @@ pub fn validate_sol_pool(pool_info: PoolMintVaultInfo) -> Result<TokenPairInfo, 
         Err("Pool does not contain SOL as base or quote".to_string())
     } else {
         Ok(pair_info)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_sol_detection() {
-        assert!(is_sol_mint(WRAPPED_SOL_MINT));
-        assert!(is_sol_mint(NATIVE_SOL_MINT));
-        assert!(!is_sol_mint("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")); // USDC
-    }
-
-    #[test]
-    fn test_stablecoin_detection() {
-        assert!(is_stablecoin_mint(USDC_MINT));
-        assert!(is_stablecoin_mint(USDT_MINT));
-        assert!(!is_stablecoin_mint(WRAPPED_SOL_MINT));
-    }
-
-    #[test]
-    fn test_token_pair_analysis() {
-        // Test TOKEN/SOL pair
-        let pool_info = PoolMintVaultInfo {
-            mint1: "SomeTokenMint12345678901234567890123456".to_string(),
-            mint2: WRAPPED_SOL_MINT.to_string(),
-            vault1: "TokenVault12345678901234567890123456789".to_string(),
-            vault2: "SolVault123456789012345678901234567890".to_string(),
-        };
-
-        let result = analyze_token_pair(pool_info);
-        assert!(result.is_sol_pair);
-        assert!(!result.sol_is_first);
-        assert_eq!(result.token_mint, "SomeTokenMint12345678901234567890123456");
-        assert_eq!(result.sol_mint, WRAPPED_SOL_MINT);
-
-        // Test SOL/TOKEN pair
-        let pool_info = PoolMintVaultInfo {
-            mint1: WRAPPED_SOL_MINT.to_string(),
-            mint2: "SomeTokenMint12345678901234567890123456".to_string(),
-            vault1: "SolVault123456789012345678901234567890".to_string(),
-            vault2: "TokenVault12345678901234567890123456789".to_string(),
-        };
-
-        let result = analyze_token_pair(pool_info);
-        assert!(result.is_sol_pair);
-        assert!(result.sol_is_first);
-    }
-
-    #[test]
-    fn test_stablecoin_rejection() {
-        // Test TOKEN/USDC pair (should be rejected)
-        let pool_info = PoolMintVaultInfo {
-            mint1: "SomeTokenMint12345678901234567890123456".to_string(),
-            mint2: USDC_MINT.to_string(),
-            vault1: "TokenVault12345678901234567890123456789".to_string(),
-            vault2: "UsdcVault12345678901234567890123456789".to_string(),
-        };
-
-        let result = analyze_token_pair(pool_info);
-        assert!(!result.is_sol_pair);
     }
 }

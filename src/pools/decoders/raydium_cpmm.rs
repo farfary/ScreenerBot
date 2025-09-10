@@ -8,6 +8,12 @@ use super::{ PoolDecoder, AccountData };
 use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT, RAYDIUM_CPMM_PROGRAM_ID };
+use crate::pools::utils::{
+    read_pubkey_at_offset,
+    read_u8_at_offset,
+    read_u64_at_offset,
+    read_bool_at_offset,
+};
 use crate::tokens::{ get_token_decimals_sync, decimals::{ SOL_DECIMALS, raw_to_ui_amount } };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -97,42 +103,42 @@ impl RaydiumCpmmDecoder {
         let mut offset = 8; // Skip discriminator
 
         // Decode pool data according to Raydium CPMM layout (enhanced version)
-        let amm_config = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let pool_creator = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let token_0_vault = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let token_1_vault = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let lp_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let token_0_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let token_1_mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let token_0_program = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let token_1_program = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
-        let observation_key = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
+        let amm_config = read_pubkey_at_offset(data, &mut offset).ok()?;
+        let pool_creator = read_pubkey_at_offset(data, &mut offset).ok()?;
+        let token_0_vault = read_pubkey_at_offset(data, &mut offset).ok()?;
+        let token_1_vault = read_pubkey_at_offset(data, &mut offset).ok()?;
+        let lp_mint = read_pubkey_at_offset(data, &mut offset).ok()?;
+        let token_0_mint = read_pubkey_at_offset(data, &mut offset).ok()?;
+        let token_1_mint = read_pubkey_at_offset(data, &mut offset).ok()?;
+        let token_0_program = read_pubkey_at_offset(data, &mut offset).ok()?;
+        let token_1_program = read_pubkey_at_offset(data, &mut offset).ok()?;
+        let observation_key = read_pubkey_at_offset(data, &mut offset).ok()?;
 
-        let auth_bump = Self::read_u8_at_offset(data, &mut offset).ok()?;
-        let status = Self::read_u8_at_offset(data, &mut offset).ok()?;
-        let lp_mint_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
-        let pool_mint_0_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
-        let pool_mint_1_decimals = Self::read_u8_at_offset(data, &mut offset).ok()?;
+        let auth_bump = read_u8_at_offset(data, &mut offset).ok()?;
+        let status = read_u8_at_offset(data, &mut offset).ok()?;
+        let lp_mint_decimals = read_u8_at_offset(data, &mut offset).ok()?;
+        let pool_mint_0_decimals = read_u8_at_offset(data, &mut offset).ok()?;
+        let pool_mint_1_decimals = read_u8_at_offset(data, &mut offset).ok()?;
 
         // Skip padding to reach LP supply field at offset 333
         offset = 333;
-        let lp_supply = Self::read_u64_at_offset(data, &mut offset).ok()?;
-        let protocol_fees_token_0 = Self::read_u64_at_offset(data, &mut offset).ok()?;
-        let protocol_fees_token_1 = Self::read_u64_at_offset(data, &mut offset).ok()?;
-        let fund_fees_token_0 = Self::read_u64_at_offset(data, &mut offset).ok()?;
-        let fund_fees_token_1 = Self::read_u64_at_offset(data, &mut offset).ok()?;
-        let open_time = Self::read_u64_at_offset(data, &mut offset).ok()?;
-        let recent_epoch = Self::read_u64_at_offset(data, &mut offset).ok()?;
+        let lp_supply = read_u64_at_offset(data, &mut offset).ok()?;
+        let protocol_fees_token_0 = read_u64_at_offset(data, &mut offset).ok()?;
+        let protocol_fees_token_1 = read_u64_at_offset(data, &mut offset).ok()?;
+        let fund_fees_token_0 = read_u64_at_offset(data, &mut offset).ok()?;
+        let fund_fees_token_1 = read_u64_at_offset(data, &mut offset).ok()?;
+        let open_time = read_u64_at_offset(data, &mut offset).ok()?;
+        let recent_epoch = read_u64_at_offset(data, &mut offset).ok()?;
 
         // Skip padding to reach creator fee fields
         offset = 389; // After recent_epoch
-        let creator_fee_on = Self::read_u8_at_offset(data, &mut offset).ok()?;
-        let enable_creator_fee = Self::read_bool_at_offset(data, &mut offset).ok()?;
+        let creator_fee_on = read_u8_at_offset(data, &mut offset).ok()?;
+        let enable_creator_fee = read_bool_at_offset(data, &mut offset).ok()?;
 
         // Skip padding1[6] bytes
         offset += 6;
-        let creator_fees_token_0 = Self::read_u64_at_offset(data, &mut offset).ok()?;
-        let creator_fees_token_1 = Self::read_u64_at_offset(data, &mut offset).ok()?;
+        let creator_fees_token_0 = read_u64_at_offset(data, &mut offset).ok()?;
+        let creator_fees_token_1 = read_u64_at_offset(data, &mut offset).ok()?;
 
         // Get token decimals - CRITICAL: must be available, no fallback to pool defaults
         let mint_0_decimals = match get_token_decimals_sync(&token_0_mint) {
@@ -459,55 +465,6 @@ impl RaydiumCpmmDecoder {
         );
 
         Ok(amount)
-    }
-
-    // Helper functions for reading pool data (from old working system)
-    fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, String> {
-        if *offset + 32 > data.len() {
-            return Err("Insufficient data for pubkey".to_string());
-        }
-
-        let pubkey_bytes = &data[*offset..*offset + 32];
-        *offset += 32;
-
-        let pubkey = Pubkey::new_from_array(
-            pubkey_bytes.try_into().map_err(|_| "Failed to parse pubkey".to_string())?
-        );
-
-        Ok(pubkey.to_string())
-    }
-
-    fn read_u8_at_offset(data: &[u8], offset: &mut usize) -> Result<u8, String> {
-        if *offset >= data.len() {
-            return Err("Insufficient data for u8".to_string());
-        }
-
-        let value = data[*offset];
-        *offset += 1;
-        Ok(value)
-    }
-
-    fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, String> {
-        if *offset + 8 > data.len() {
-            return Err("Insufficient data for u64".to_string());
-        }
-
-        let value_bytes = &data[*offset..*offset + 8];
-        *offset += 8;
-        let value = u64::from_le_bytes(
-            value_bytes.try_into().map_err(|_| "Failed to parse u64".to_string())?
-        );
-        Ok(value)
-    }
-
-    fn read_bool_at_offset(data: &[u8], offset: &mut usize) -> Result<bool, String> {
-        if *offset >= data.len() {
-            return Err("Insufficient data for bool".to_string());
-        }
-
-        let value = data[*offset] != 0;
-        *offset += 1;
-        Ok(value)
     }
 }
 

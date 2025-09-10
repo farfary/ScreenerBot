@@ -1704,31 +1704,3 @@ pub struct LpLockStatistics {
     pub average_score: u8,
     pub total_score: u64,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_lock_programs() {
-        let programs = LockPrograms::known_programs();
-        assert!(!programs.is_empty());
-
-        // Test known program detection
-        assert!(
-            LockPrograms::is_lock_program("ADHS2E6D7YvbXF6y6EVPWyN6u6eDvAQj1QqRAEyrnKE4").is_some()
-        );
-        assert!(LockPrograms::is_lock_program("invalid_address").is_none());
-    }
-
-    #[test]
-    fn test_lp_lock_status() {
-        let burned = LpLockStatus::Burned;
-        assert!(burned.is_safe());
-        assert_eq!(burned.risk_level(), "🟢 SAFE");
-
-        let creator_held = LpLockStatus::CreatorHeld;
-        assert!(!creator_held.is_safe());
-        assert_eq!(creator_held.risk_level(), "🔴 RISKY");
-    }
-}

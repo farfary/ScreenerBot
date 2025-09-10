@@ -8,7 +8,11 @@ use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
 use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 
 // Import centralized utilities
-use super::super::utils::{ extract_pumpfun_mints_and_vaults, validate_sol_pool };
+use super::super::utils::{
+    extract_pumpfun_mints_and_vaults,
+    validate_sol_pool,
+    read_pubkey_at_offset,
+};
 
 /// PumpFun AMM pool decoder and calculator
 pub struct PumpFunAmmDecoder;
@@ -343,22 +347,6 @@ impl PumpFunAmmDecoder {
         let amount_offset = 64;
         let amount_bytes = &data[amount_offset..amount_offset + 8];
         Some(u64::from_le_bytes(amount_bytes.try_into().ok()?))
-    }
-
-    /// Read a pubkey from data at given offset
-    fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, String> {
-        if *offset + 32 > data.len() {
-            return Err("Insufficient data for pubkey".to_string());
-        }
-
-        let pubkey_bytes = &data[*offset..*offset + 32];
-        *offset += 32;
-
-        let pubkey = Pubkey::new_from_array(
-            pubkey_bytes.try_into().map_err(|_| "Failed to parse pubkey".to_string())?
-        );
-
-        Ok(pubkey.to_string())
     }
 }
 

@@ -5,7 +5,12 @@
 /// a CurveAccount structure with pricing information.
 
 use super::{ PoolDecoder, AccountData };
-use super::super::utils::{ is_sol_mint, WRAPPED_SOL_MINT };
+use super::super::utils::{
+    is_sol_mint,
+    WRAPPED_SOL_MINT,
+    read_pubkey_struct_at_offset,
+    read_token_account_amount,
+};
 use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::types::{ ProgramKind, PriceResult };
@@ -106,7 +111,7 @@ impl MoonitAmmDecoder {
         let curve_amount = u64::from_le_bytes(data[offset..offset + 8].try_into().ok()?);
         offset += 8;
 
-        let mint = Self::read_pubkey_at_offset(data, &mut offset).ok()?;
+        let mint = read_pubkey_struct_at_offset(data, &mut offset).ok()?;
 
         let decimals = data[offset];
         offset += 1;
@@ -358,25 +363,6 @@ impl MoonitAmmDecoder {
                 "".to_string() // Pool address not needed for calculation
             )
         )
-    }
-
-    /// Helper function to read a pubkey from data at offset
-    fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<Pubkey, &'static str> {
-        if data.len() < *offset + 32 {
-            return Err("Insufficient data for pubkey");
-        }
-        let pubkey_bytes = &data[*offset..*offset + 32];
-        *offset += 32;
-        Pubkey::try_from(pubkey_bytes).map_err(|_| "Invalid pubkey")
-    }
-
-    /// Helper function to read token account amount
-    fn read_token_account_amount(data: &[u8]) -> Option<u64> {
-        if data.len() < 72 {
-            return None;
-        }
-        // Token account amount is at offset 64
-        Some(u64::from_le_bytes(data[64..72].try_into().ok()?))
     }
 }
 

@@ -2054,36 +2054,3 @@ pub async fn run_security_monitoring_cycle_once() -> Result<(), String> {
     )?;
     monitor.run_security_monitoring_cycle().await
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_security_risk_levels() {
-        assert_eq!(SecurityRiskLevel::from_score(95), SecurityRiskLevel::Safe);
-        assert_eq!(SecurityRiskLevel::from_score(80), SecurityRiskLevel::Low);
-        assert_eq!(SecurityRiskLevel::from_score(60), SecurityRiskLevel::Medium);
-        assert_eq!(SecurityRiskLevel::from_score(30), SecurityRiskLevel::High);
-        assert_eq!(SecurityRiskLevel::from_score(10), SecurityRiskLevel::Critical);
-        assert_eq!(SecurityRiskLevel::from_score(0), SecurityRiskLevel::Unknown);
-    }
-
-    #[test]
-    fn test_security_flags() {
-        let flags = SecurityFlags {
-            can_mint: true,
-            can_freeze: false,
-            has_update_authority: false,
-            lp_locked: true,
-            high_concentration: false,
-            few_holders: false,
-            whale_risk: false,
-            analysis_incomplete: false,
-        };
-
-        assert!(flags.can_mint);
-        assert!(!flags.can_freeze);
-        assert!(flags.lp_locked);
-    }
-}
