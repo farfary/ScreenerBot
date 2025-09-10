@@ -8,6 +8,14 @@ use crate::logger::{ log, LogTag };
 use crate::arguments::is_debug_websocket_enabled;
 
 /// WebSocket client for real-time Solana transaction monitoring
+///
+/// Features:
+/// - Real-time transaction subscription via logs monitoring
+/// - Automatic heartbeat/ping mechanism (30s interval) to prevent timeouts
+/// - Proper ping/pong handling for connection keep-alive
+/// - Exponential backoff reconnection strategy with attempt tracking
+/// - Graceful shutdown handling with proper cleanup
+/// - Debug logging for connection monitoring and troubleshooting
 pub struct SolanaWebSocketClient {
     wallet_address: String,
     tx_sender: mpsc::UnboundedSender<String>, // Channel to send new transaction signatures
@@ -144,7 +152,15 @@ impl SolanaWebSocketClient {
             .send(Message::Text(subscribe_text)).await
             .map_err(|e| format!("Failed to send subscription: {}", e))?;
 
-        // Listen for messages with shutdown handling
+        // Create heartbeat timer (ping every 30 seconds to prevent server timeout)
+        let mut heartbeat_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+        heartbeat_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        if is_debug_websocket_enabled() {
+            log(LogTag::Websocket, "HEARTBEAT", "📡 Heartbeat timer initialized (30s interval)");
+        }
+
+        // Listen for messages with shutdown and heartbeat handling
         loop {
             tokio::select! {
                 _ = shutdown.notified() => {
@@ -161,6 +177,17 @@ impl SolanaWebSocketClient {
                     
                     break;
                 }
+                _ = heartbeat_interval.tick() => {
+                    // Send periodic ping to keep connection alive
+                    if let Err(e) = ws_sender.send(Message::Ping(vec![])).await {
+                        if is_debug_websocket_enabled() {
+                            log(LogTag::Websocket, "HEARTBEAT_ERROR", &format!("Failed to send heartbeat ping: {}", e));
+                        }
+                        break; // Connection failed, exit to trigger reconnect
+                    } else if is_debug_websocket_enabled() {
+                        log(LogTag::Websocket, "HEARTBEAT", "💓 Sent heartbeat ping to keep connection alive");
+                    }
+                }
                 message = ws_receiver.next() => {
                     match message {
                         Some(Ok(Message::Text(text))) => {
@@ -174,14 +201,40 @@ impl SolanaWebSocketClient {
                                 }
                             }
                         }
+                        Some(Ok(Message::Ping(payload))) => {
+                            // Respond to server ping with pong to keep connection alive
+                            if let Err(e) = ws_sender.send(Message::Pong(payload)).await {
+                                if is_debug_websocket_enabled() {
+                                    log(LogTag::Websocket, "PONG_ERROR", &format!("Failed to respond to ping: {}", e));
+                                }
+                                break; // Connection failed, exit to trigger reconnect
+                            } else if is_debug_websocket_enabled() {
+                                log(LogTag::Websocket, "PONG", "🏓 Responded to server ping with pong");
+                            }
+                        }
+                        Some(Ok(Message::Pong(_))) => {
+                            // Server responded to our ping - connection is alive
+                            if is_debug_websocket_enabled() {
+                                log(LogTag::Websocket, "PONG_RECEIVED", "🏓 Received pong response - connection alive");
+                            }
+                        }
                         Some(Ok(Message::Close(_))) => {
                             if is_debug_websocket_enabled() {
                                 log(LogTag::Websocket, "CLOSE", "WebSocket connection closed by server");
                             }
                             break;
                         }
-                        Some(Ok(_)) => {
-                            // Ignore other message types (binary, ping, pong)
+                        Some(Ok(Message::Binary(_))) => {
+                            // Ignore binary messages
+                            if is_debug_websocket_enabled() {
+                                log(LogTag::Websocket, "BINARY", "Received binary message (ignored)");
+                            }
+                        }
+                        Some(Ok(Message::Frame(_))) => {
+                            // Ignore raw frame messages (handled by tungstenite internally)
+                            if is_debug_websocket_enabled() {
+                                log(LogTag::Websocket, "FRAME", "Received raw frame message (ignored)");
+                            }
                         }
                         Some(Err(e)) => {
                             if is_debug_websocket_enabled() {
@@ -298,6 +351,9 @@ pub async fn start_websocket_monitoring(
     let shutdown_clone = shutdown.clone();
 
     tokio::spawn(async move {
+        let mut reconnect_attempts = 0u32;
+        let max_reconnect_delay = 60; // Maximum delay of 60 seconds
+
         loop {
             // Check for shutdown before attempting connection
             tokio::select! {
@@ -316,7 +372,11 @@ pub async fn start_websocket_monitoring(
                 log(
                     LogTag::Websocket,
                     "CONNECT",
-                    &format!("🔄 Connecting to WebSocket: {}", ws_url_clone)
+                    &format!(
+                        "🔄 Connecting to WebSocket: {} (attempt {})",
+                        ws_url_clone,
+                        reconnect_attempts + 1
+                    )
                 );
             }
 
@@ -333,7 +393,8 @@ pub async fn start_websocket_monitoring(
 
             match monitoring_client.start_monitoring(&ws_url_clone, connection_shutdown).await {
                 Ok(_) => {
-                    // Normal exit (shutdown received)
+                    // Normal exit (shutdown received) or successful long-running connection
+                    reconnect_attempts = 0; // Reset attempt counter on successful connection
                     if is_debug_websocket_enabled() {
                         log(
                             LogTag::Websocket,
@@ -344,15 +405,28 @@ pub async fn start_websocket_monitoring(
                     break;
                 }
                 Err(e) => {
+                    reconnect_attempts += 1;
+
+                    // Exponential backoff: 2^attempt seconds, capped at max_reconnect_delay
+                    let delay_seconds = std::cmp::min(
+                        (2u64).pow(std::cmp::min(reconnect_attempts, 6)), // Cap at 2^6 = 64, but we'll limit to max_reconnect_delay
+                        max_reconnect_delay
+                    );
+
                     if is_debug_websocket_enabled() {
                         log(
                             LogTag::Websocket,
                             "RECONNECT",
-                            &format!("WebSocket disconnected: {} - Reconnecting in 5 seconds", e)
+                            &format!(
+                                "WebSocket disconnected: {} - Reconnecting in {}s (attempt {})",
+                                e,
+                                delay_seconds,
+                                reconnect_attempts
+                            )
                         );
                     }
 
-                    // Wait for 5 seconds or shutdown signal
+                    // Wait for calculated delay or shutdown signal
                     tokio::select! {
                         _ = shutdown_clone.notified() => {
                             if is_debug_websocket_enabled() {
@@ -360,7 +434,7 @@ pub async fn start_websocket_monitoring(
                             }
                             break;
                         }
-                        _ = tokio::time::sleep(tokio::time::Duration::from_secs(5)) => {
+                        _ = tokio::time::sleep(tokio::time::Duration::from_secs(delay_seconds)) => {
                             // Continue reconnection loop
                         }
                     }
