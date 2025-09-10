@@ -116,39 +116,93 @@ pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usiz
         LogTag::Rpc,
         "DEBUG",
         &format!(
-            "Using dataSlice optimization for account counting for mint {}",
+            "Using getProgramAccountsV2 with smart estimation for account counting for mint {}",
             safe_truncate(mint_address, 8)
         )
     );
 
+    // Use V2 method with LIMITED pagination for quick estimation
+    // We don't need exact count, just need to know if it's a large token
     match
-        rpc_client.get_program_accounts_with_dateslice(
+        rpc_client.get_program_accounts_v2(
             program_id,
-            Some(filters),
+            Some(filters.clone()),
             Some("base64"),
-            Some(data_slice),
+            Some(data_slice.clone()),
+            Some(2000), // Larger first batch for better estimation
+            None, // No pagination key for first request
+            None, // No changed_since_slot
             Some(30) // 30 second timeout for count estimation
         ).await
     {
-        Ok(accounts) => {
-            let count = accounts.len();
+        Ok(response) => {
+            let first_page_count = response.accounts.len();
+
+            // Smart estimation: if first page is full and there's more, it's a large token
+            let estimated_count = if response.pagination_key.is_some() && first_page_count >= 2000 {
+                // If there's pagination and first page is full, estimate it's much larger
+                // For security purposes, we just need to know it's >5000
+                log(
+                    LogTag::Rpc,
+                    "ACCOUNT_COUNT",
+                    &format!(
+                        "Large token detected: {} accounts in first page with more pages - estimating >10000 total for mint {}",
+                        first_page_count,
+                        safe_truncate(mint_address, 8)
+                    )
+                );
+                first_page_count * 5 // Conservative estimate for large tokens
+            } else if response.pagination_key.is_some() {
+                // If there's pagination but first page isn't full, fetch one more page for better estimate
+                match
+                    rpc_client.get_program_accounts_v2(
+                        program_id,
+                        Some(filters.clone()),
+                        Some("base64"),
+                        Some(data_slice.clone()),
+                        Some(2000),
+                        response.pagination_key,
+                        None,
+                        Some(30)
+                    ).await
+                {
+                    Ok(second_page) => {
+                        let total_from_two_pages = first_page_count + second_page.accounts.len();
+                        if second_page.pagination_key.is_some() {
+                            // Still more pages, estimate total
+                            total_from_two_pages * 3 // Conservative estimate
+                        } else {
+                            // No more pages, exact count
+                            total_from_two_pages
+                        }
+                    }
+                    Err(_) => {
+                        // Failed to get second page, use first page estimate
+                        first_page_count * 2
+                    }
+                }
+            } else {
+                // No pagination, exact count
+                first_page_count
+            };
+
             log(
                 LogTag::Rpc,
                 "ACCOUNT_COUNT",
                 &format!(
-                    "Found {} token accounts for mint {} (dataSlice optimized)",
-                    count,
+                    "Estimated {} token accounts for mint {} (smart estimation with getProgramAccountsV2)",
+                    estimated_count,
                     safe_truncate(mint_address, 8)
                 )
             );
-            Ok(count)
+            Ok(estimated_count)
         }
         Err(e) => {
             log(
                 LogTag::Rpc,
                 "ERROR",
                 &format!(
-                    "Failed to get account count for {} with dataSlice: {}",
+                    "Failed to get account count for {} with getProgramAccountsV2: {}",
                     safe_truncate(mint_address, 8),
                     e
                 )
@@ -260,77 +314,155 @@ async fn fetch_token_accounts(
         LogTag::Rpc,
         "FETCH_ACCOUNTS",
         &format!(
-            "Querying {} accounts for mint {} (60s timeout)",
+            "Using getProgramAccountsV2 with LIMITED fetching for {} accounts for mint {} (max {} accounts for security analysis)",
             if is_token_2022 {
                 "Token-2022"
             } else {
                 "SPL Token"
             },
+            safe_truncate(mint_address, 8),
+            MAX_ANALYZABLE_ACCOUNTS
+        )
+    );
+
+    // For security analysis, we only need enough accounts to analyze top holders
+    // Don't fetch ALL accounts - just enough for security assessment
+    let mut all_accounts = Vec::new();
+    let mut pagination_key: Option<String> = None;
+    let max_pages = 3; // Limit to 3 pages maximum (6000 accounts at 2000 per page)
+    let mut page_count = 0;
+
+    loop {
+        match
+            rpc_client.get_program_accounts_v2(
+                program_id,
+                Some(filters.clone()),
+                Some("jsonParsed"),
+                None, // No dataSlice for full account data
+                Some(2000), // 2000 accounts per page
+                pagination_key.clone(),
+                None,
+                Some(60) // 60 second timeout per page
+            ).await
+        {
+            Ok(response) => {
+                let page_accounts_count = response.accounts.len();
+                all_accounts.extend(response.accounts);
+                page_count += 1;
+
+                log(
+                    LogTag::Rpc,
+                    "FETCH_ACCOUNTS",
+                    &format!(
+                        "Fetched page {} with {} accounts (total: {}) for mint {}",
+                        page_count,
+                        page_accounts_count,
+                        all_accounts.len(),
+                        safe_truncate(mint_address, 8)
+                    )
+                );
+
+                // Stop if we have enough accounts for security analysis OR reached max pages
+                if
+                    all_accounts.len() >= MAX_ANALYZABLE_ACCOUNTS ||
+                    page_count >= max_pages ||
+                    response.pagination_key.is_none()
+                {
+                    if
+                        response.pagination_key.is_some() &&
+                        all_accounts.len() >= MAX_ANALYZABLE_ACCOUNTS
+                    {
+                        log(
+                            LogTag::Rpc,
+                            "FETCH_ACCOUNTS",
+                            &format!(
+                                "Stopping fetch at {} accounts (sufficient for security analysis) for mint {}",
+                                all_accounts.len(),
+                                safe_truncate(mint_address, 8)
+                            )
+                        );
+                    }
+                    break;
+                }
+
+                pagination_key = response.pagination_key;
+            }
+            Err(e) => {
+                let error_msg = match e {
+                    ScreenerBotError::Network(ref net_err) => {
+                        match net_err {
+                            crate::errors::NetworkError::ConnectionTimeout {
+                                endpoint,
+                                timeout_ms,
+                            } => {
+                                format!(
+                                    "Token fetch timeout for page {} ({}ms timeout): {}",
+                                    page_count + 1,
+                                    timeout_ms,
+                                    endpoint
+                                )
+                            }
+                            _ => format!("Network error: {}", net_err),
+                        }
+                    }
+                    ScreenerBotError::RpcProvider(ref rpc_err) => {
+                        match rpc_err {
+                            crate::errors::RpcProviderError::RateLimitExceeded {
+                                provider_name,
+                                ..
+                            } => {
+                                format!("RPC rate limited ({}): Try again later", provider_name)
+                            }
+                            _ => format!("RPC provider error: {}", rpc_err),
+                        }
+                    }
+                    _ => format!("Error: {}", e),
+                };
+
+                log(
+                    LogTag::Rpc,
+                    "ERROR",
+                    &format!(
+                        "Failed to fetch accounts page {} for mint {}: {}",
+                        page_count + 1,
+                        safe_truncate(mint_address, 8),
+                        error_msg
+                    )
+                );
+
+                // If we failed on first page, return error
+                // If we failed on later pages but have some data, continue with what we have
+                if page_count == 0 {
+                    return Err(error_msg);
+                } else {
+                    log(
+                        LogTag::Rpc,
+                        "WARN",
+                        &format!(
+                            "Continuing with {} accounts from {} successful pages for mint {}",
+                            all_accounts.len(),
+                            page_count,
+                            safe_truncate(mint_address, 8)
+                        )
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    log(
+        LogTag::Rpc,
+        "FETCH_ACCOUNTS",
+        &format!(
+            "Successfully fetched {} total accounts from {} pages for mint {} (limited for security analysis)",
+            all_accounts.len(),
+            page_count,
             safe_truncate(mint_address, 8)
         )
     );
 
-    match
-        rpc_client.get_program_accounts(
-            program_id,
-            Some(filters),
-            Some("jsonParsed"),
-            Some(60) // 60 second timeout
-        ).await
-    {
-        Ok(accounts) => {
-            log(
-                LogTag::Rpc,
-                "FETCH_ACCOUNTS",
-                &format!(
-                    "Successfully fetched {} total accounts for mint {}",
-                    accounts.len(),
-                    safe_truncate(mint_address, 8)
-                )
-            );
-            Ok((accounts, is_token_2022))
-        }
-        Err(e) => {
-            let error_msg = match e {
-                ScreenerBotError::Network(ref net_err) => {
-                    match net_err {
-                        crate::errors::NetworkError::ConnectionTimeout { endpoint, timeout_ms } => {
-                            format!(
-                                "Token has too many holders for single query ({}ms timeout): {}",
-                                timeout_ms,
-                                endpoint
-                            )
-                        }
-                        _ => format!("Network error: {}", net_err),
-                    }
-                }
-                ScreenerBotError::RpcProvider(ref rpc_err) => {
-                    match rpc_err {
-                        crate::errors::RpcProviderError::RateLimitExceeded {
-                            provider_name,
-                            ..
-                        } => {
-                            format!("RPC rate limited ({}): Try again later", provider_name)
-                        }
-                        _ => format!("RPC provider error: {}", rpc_err),
-                    }
-                }
-                _ => format!("Error: {}", e),
-            };
-
-            log(
-                LogTag::Rpc,
-                "ERROR",
-                &format!(
-                    "Failed to fetch accounts for mint {}: {}",
-                    safe_truncate(mint_address, 8),
-                    error_msg
-                )
-            );
-
-            Err(error_msg)
-        }
-    }
+    Ok((all_accounts, is_token_2022))
 }
 
 /// Extract holders from raw account data
