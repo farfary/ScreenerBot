@@ -170,20 +170,8 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
     }
 }
 
-/// Extract mints and vaults from PumpFun pool account data
-///
-/// PumpFun pool structure:
-/// - discriminator (8 bytes)
-/// - pool_bump (u8)
-/// - index (u16)
-/// - creator (32 bytes)
-/// - creator (32 bytes) - duplicate in some pool versions
-/// - base_mint (32 bytes)
-/// - quote_mint (32 bytes)
-/// - lp_mint (32 bytes)
-/// - pool_base_token_account (32 bytes)
-/// - pool_quote_token_account (32 bytes)
-/// - ... additional fields
+/// Data reading utilities for consistent parsing across all decoders
+/// These functions provide centralized, safe data extraction with proper bounds checking
 pub fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo> {
     if data.len() < 200 {
         if is_debug_pool_service_enabled() {
@@ -196,8 +184,6 @@ pub fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo
         return None;
     }
 
-    let mut offset = 8; // Skip discriminator
-
     if is_debug_pool_service_enabled() {
         log(
             LogTag::PoolService,
@@ -206,28 +192,13 @@ pub fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo
         );
     }
 
-    // Skip pool_bump (u8) and index (u16)
-    offset += 1 + 2;
+    // PumpFun AMM structure (confirmed via structure analysis):
+    // discriminator(8) + pool_bump(1) + index(2) + creator(32) + base_mint(32) + quote_mint(32) + lp_mint(32) + vault1(32) + vault2(32) + ...
+    let mut offset = 8 + 1 + 2 + 32; // Skip discriminator, bump, index, and creator
 
-    // Skip first creator pubkey
-    offset += 32;
-
-    // Handle potential duplicate creator field (exists in some pool versions)
-    // We'll read the next 32 bytes and check if it looks like a creator or a mint
-    let potential_creator_or_mint = read_pubkey_at_offset(data, &mut offset).ok()?;
-
-    // Check if this looks like a mint by trying to parse as pubkey and checking length
-    // If it's a valid mint, we'll treat it as mint1, otherwise skip as duplicate creator
-    let (mint1, mint2) = if is_likely_mint(&potential_creator_or_mint) {
-        // This is mint1, read mint2 next
-        let mint2 = read_pubkey_at_offset(data, &mut offset).ok()?;
-        (potential_creator_or_mint, mint2)
-    } else {
-        // This was duplicate creator, read both mints
-        let mint1 = read_pubkey_at_offset(data, &mut offset).ok()?;
-        let mint2 = read_pubkey_at_offset(data, &mut offset).ok()?;
-        (mint1, mint2)
-    };
+    // Read base mint and quote mint
+    let mint1 = read_pubkey_at_offset(data, &mut offset).ok()?; // base_mint
+    let mint2 = read_pubkey_at_offset(data, &mut offset).ok()?; // quote_mint
 
     // Skip lp_mint
     offset += 32;
@@ -256,15 +227,6 @@ pub fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo
         vault1,
         vault2,
     })
-}
-
-/// Check if a pubkey string is likely a mint address (heuristic)
-fn is_likely_mint(pubkey_str: &str) -> bool {
-    // Check if it matches known mint patterns or is a valid pubkey format
-    // SOL mints, USDC, USDT, or other token mints typically have specific characteristics
-    is_sol_mint(pubkey_str) ||
-        is_stablecoin_mint(pubkey_str) ||
-        (pubkey_str.len() == 44 && pubkey_str.chars().all(|c| c.is_alphanumeric()))
 }
 
 /// Data reading utilities for consistent parsing across all decoders

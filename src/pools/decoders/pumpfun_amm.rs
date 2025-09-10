@@ -8,11 +8,7 @@ use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
 use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 
 // Import centralized utilities
-use super::super::utils::{
-    extract_pumpfun_mints_and_vaults,
-    validate_sol_pool,
-    read_pubkey_at_offset,
-};
+use super::super::utils::{ validate_sol_pool, read_pubkey_at_offset, PoolMintVaultInfo };
 
 /// PumpFun AMM pool decoder and calculator
 pub struct PumpFunAmmDecoder;
@@ -83,6 +79,66 @@ impl PoolDecoder for PumpFunAmmDecoder {
 }
 
 impl PumpFunAmmDecoder {
+    /// Extract mints and vaults from PumpFun AMM pool data
+    fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo> {
+        use crate::arguments::is_debug_pool_service_enabled;
+
+        if data.len() < 200 {
+            if is_debug_pool_service_enabled() {
+                log(
+                    LogTag::PoolDecoder,
+                    "ERROR",
+                    &format!("PumpFun pool data too short: {} bytes", data.len())
+                );
+            }
+            return None;
+        }
+
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolDecoder,
+                "DEBUG",
+                &format!("Extracting PumpFun pool data ({} bytes)", data.len())
+            );
+        }
+
+        // PumpFun AMM structure (confirmed via structure analysis):
+        // discriminator(8) + pool_bump(1) + index(2) + creator(32) + base_mint(32) + quote_mint(32) + lp_mint(32) + vault1(32) + vault2(32) + ...
+        let mut offset = 8 + 1 + 2 + 32; // Skip discriminator, bump, index, and creator
+
+        // Read base mint and quote mint
+        let mint1 = read_pubkey_at_offset(data, &mut offset).ok()?; // base_mint
+        let mint2 = read_pubkey_at_offset(data, &mut offset).ok()?; // quote_mint
+
+        // Skip lp_mint
+        offset += 32;
+
+        // Read vault addresses
+        let vault1 = read_pubkey_at_offset(data, &mut offset).ok()?;
+        let vault2 = read_pubkey_at_offset(data, &mut offset).ok()?;
+
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolDecoder,
+                "DEBUG",
+                &format!(
+                    "Extracted PumpFun: mint1={}, mint2={}, vault1={}, vault2={}",
+                    &mint1[..8],
+                    &mint2[..8],
+                    &vault1[..8],
+                    &vault2[..8]
+                )
+            );
+        }
+
+        Some(PoolMintVaultInfo {
+            mint1,
+            mint2,
+            vault1,
+            vault2,
+        })
+    }
+
     /// Decode PumpFun AMM pool data from account bytes using centralized utilities
     fn decode_pump_fun_amm_pool(data: &[u8]) -> Option<PumpFunAmmPoolInfo> {
         if is_debug_pool_decoders_enabled() {
@@ -93,8 +149,8 @@ impl PumpFunAmmDecoder {
             );
         }
 
-        // Extract mints and vaults using centralized utility
-        let pool_info = extract_pumpfun_mints_and_vaults(data)?;
+        // Extract mints and vaults using local extraction method
+        let pool_info = Self::extract_pumpfun_mints_and_vaults(data)?;
 
         // Validate this is a SOL-based pool and get normalized token pair info
         let pair_info = match validate_sol_pool(pool_info) {
@@ -380,8 +436,8 @@ pub struct PumpFunAmmPoolInfo {
 impl PumpFunAmmDecoder {
     /// Extract reserve account addresses from PumpFun AMM pool data
     pub fn extract_reserve_accounts(data: &[u8]) -> Option<Vec<String>> {
-        // Use the centralized utility function for consistent SOL detection
-        let pool_info = extract_pumpfun_mints_and_vaults(data)?;
+        // Use the local extraction method for consistent SOL detection
+        let pool_info = Self::extract_pumpfun_mints_and_vaults(data)?;
 
         // Get vaults in the correct order for the decoder
         let vault_addresses = super::super::utils::get_analyzer_vault_order(pool_info);

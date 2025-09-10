@@ -11,7 +11,12 @@ use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
 use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 
 // Import centralized utilities
-use super::super::utils::{ is_sol_mint, analyze_token_pair, PoolMintVaultInfo };
+use super::super::utils::{
+    is_sol_mint,
+    analyze_token_pair,
+    PoolMintVaultInfo,
+    read_pubkey_at_offset,
+};
 
 const PUMP_FUN_LEGACY_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 
@@ -83,6 +88,66 @@ impl PoolDecoder for PumpFunLegacyDecoder {
 }
 
 impl PumpFunLegacyDecoder {
+    /// Extract mints and vaults from PumpFun Legacy pool data
+    fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo> {
+        use crate::arguments::is_debug_pool_service_enabled;
+
+        if data.len() < 200 {
+            if is_debug_pool_service_enabled() {
+                log(
+                    LogTag::PoolDecoder,
+                    "ERROR",
+                    &format!("PumpFun Legacy pool data too short: {} bytes", data.len())
+                );
+            }
+            return None;
+        }
+
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolDecoder,
+                "DEBUG",
+                &format!("Extracting PumpFun Legacy pool data ({} bytes)", data.len())
+            );
+        }
+
+        // PumpFun Legacy structure (same as AMM for extraction purposes):
+        // discriminator(8) + pool_bump(1) + index(2) + creator(32) + base_mint(32) + quote_mint(32) + lp_mint(32) + vault1(32) + vault2(32) + ...
+        let mut offset = 8 + 1 + 2 + 32; // Skip discriminator, bump, index, and creator
+
+        // Read base mint and quote mint
+        let mint1 = read_pubkey_at_offset(data, &mut offset).ok()?; // base_mint
+        let mint2 = read_pubkey_at_offset(data, &mut offset).ok()?; // quote_mint
+
+        // Skip lp_mint
+        offset += 32;
+
+        // Read vault addresses
+        let vault1 = read_pubkey_at_offset(data, &mut offset).ok()?;
+        let vault2 = read_pubkey_at_offset(data, &mut offset).ok()?;
+
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolDecoder,
+                "DEBUG",
+                &format!(
+                    "Extracted PumpFun Legacy: mint1={}, mint2={}, vault1={}, vault2={}",
+                    &mint1[..8],
+                    &mint2[..8],
+                    &vault1[..8],
+                    &vault2[..8]
+                )
+            );
+        }
+
+        Some(PoolMintVaultInfo {
+            mint1,
+            mint2,
+            vault1,
+            vault2,
+        })
+    }
+
     /// Decode PumpFun Legacy pool data from account bytes
     fn decode_pump_fun_legacy_pool(data: &[u8]) -> Option<PumpFunLegacyPoolInfo> {
         if is_debug_pool_decoders_enabled() {
@@ -286,7 +351,7 @@ impl PumpFunLegacyDecoder {
     /// Extract reserve account addresses from PumpFun Legacy pool data
     pub fn extract_reserve_accounts(data: &[u8]) -> Option<Vec<String>> {
         // For legacy PumpFun, extract pool info first
-        let pool_info = super::super::utils::extract_pumpfun_mints_and_vaults(data)?;
+        let pool_info = Self::extract_pumpfun_mints_and_vaults(data)?;
 
         // Analyze the pool data to find SOL and token vault accounts
         let pair_info = super::super::utils::analyze_token_pair(pool_info);
