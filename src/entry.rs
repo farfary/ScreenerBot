@@ -116,7 +116,7 @@ const MAX_DATA_AGE_MIN: i64 = 5; // Keep tight data freshness requirement
 
 // CONSERVATIVE entry windows - more balanced approach
 const WINDOWS_SEC: [i64; 6] = [10, 20, 40, 80, 160, 320]; // 30s to 10min windows
-const MIN_DROP_PERCENT: f64 = 1.0; // Higher minimum for quality entries
+const MIN_DROP_PERCENT: f64 = 8.0; // Higher minimum for quality entries
 const MAX_DROP_PERCENT: f64 = 75.0; // Allow larger drops for volatile tokens
 
 // ATH Prevention parameters for scalping
