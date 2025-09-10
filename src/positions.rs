@@ -34,7 +34,7 @@ use crate::{
         update_mint_position_index,
     },
     positions_types::Position,
-    rpc::{ lamports_to_sol, sol_to_lamports },
+    rpc::{ get_rpc_client, lamports_to_sol, sol_to_lamports },
     swaps::{
         config::{ QUOTE_SLIPPAGE_PERCENT, SOL_MINT },
         execute_best_swap,
@@ -52,6 +52,32 @@ use serde::{ Deserialize, Serialize };
 use std::sync::atomic::{ AtomicU64, Ordering };
 use std::{ collections::{ HashMap, HashSet }, str::FromStr, sync::{ Arc, LazyLock } };
 use tokio::{ sync::{ Mutex, Notify, OwnedMutexGuard, RwLock }, time::{ sleep, Duration } };
+
+/// Verification data for tracking transaction status with slot-based expiration
+#[derive(Debug, Clone)]
+pub struct VerificationData {
+    pub timestamp: DateTime<Utc>,
+    pub last_valid_block_height: Option<u64>, // Block height when transaction expires
+    pub retry_count: u32,
+}
+
+impl VerificationData {
+    pub fn new(last_valid_block_height: Option<u64>) -> Self {
+        Self {
+            timestamp: Utc::now(),
+            last_valid_block_height,
+            retry_count: 0,
+        }
+    }
+
+    pub fn with_retry_increment(&self) -> Self {
+        Self {
+            timestamp: self.timestamp,
+            last_valid_block_height: self.last_valid_block_height,
+            retry_count: self.retry_count + 1,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct PositionLockGuard {
@@ -92,9 +118,9 @@ impl Drop for PositionLockGuard {
 pub static POSITIONS: LazyLock<RwLock<Vec<Position>>> = LazyLock::new(|| RwLock::new(Vec::new()));
 
 // Verification queue - isolated from position data for fast enqueue/dequeue
-static PENDING_VERIFICATIONS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> = LazyLock::new(||
-    RwLock::new(HashMap::new())
-);
+static PENDING_VERIFICATIONS: LazyLock<
+    RwLock<HashMap<String, (String, i64, bool, VerificationData)>>
+> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
 // Individual control maps, each with their own lock
 static FROZEN_COOLDOWNS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> = LazyLock::new(||
@@ -199,8 +225,10 @@ pub async fn get_proceeds_metrics_snapshot() -> ProceedsMetricsSnapshot {
 const VERIFICATION_BATCH_SIZE: usize = 10;
 const POSITION_OPEN_COOLDOWN_SECS: i64 = 5; // No global cooldown (from backup)
 
-// Verification safety windows - reduced for better UX
-const ENTRY_VERIFICATION_MAX_SECS: i64 = 90; // hard cap for entry verification age before treating as timeout
+// Verification safety windows - aligned with Solana transaction validity
+const ENTRY_VERIFICATION_MAX_SECS: i64 = 180; // 3 minutes for time-based fallback
+const SOLANA_BLOCKHASH_VALIDITY_SLOTS: u64 = 150; // ~150 slots ≈ 1.5 minutes for transaction expiration
+const MAX_VERIFICATION_RETRIES: u32 = 3; // Maximum retry attempts for expired transactions
 
 // Sell retry slippages now sourced from trader unified constants
 use crate::trader::SLIPPAGE_EXIT_RETRY_STEPS_PCT;
@@ -253,6 +281,91 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
     PositionLockGuard {
         mint: mint_key,
         _owned_guard: Some(owned_guard),
+    }
+}
+
+// ==================== VERIFICATION QUEUE MANAGEMENT ====================
+
+/// Add transaction to verification queue with proper block height tracking
+async fn enqueue_for_verification(
+    signature: String,
+    mint: String,
+    position_id: i64,
+    is_entry: bool,
+    last_valid_block_height: Option<u64>
+) -> Result<(), String> {
+    let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
+    let already_present = pending_verifications.contains_key(&signature);
+
+    if !already_present {
+        let verification_data = VerificationData::new(last_valid_block_height);
+        pending_verifications.insert(signature.clone(), (
+            mint,
+            position_id,
+            is_entry,
+            verification_data,
+        ));
+
+        if is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "VERIFICATION_ENQUEUE",
+                &format!(
+                    "📥 Enqueued transaction {} for verification (height: {:?}, queue_size: {})",
+                    safe_truncate(&signature, 8),
+                    last_valid_block_height,
+                    pending_verifications.len()
+                )
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Check if a transaction has expired based on current block height
+async fn is_transaction_expired(verification_data: &VerificationData) -> Result<bool, String> {
+    if let Some(last_valid_height) = verification_data.last_valid_block_height {
+        let rpc_client = get_rpc_client();
+        match rpc_client.get_block_height().await {
+            Ok(current_height) => {
+                let is_expired = current_height > last_valid_height;
+
+                if is_expired && is_debug_positions_enabled() {
+                    log(
+                        LogTag::Positions,
+                        "VERIFICATION_EXPIRED",
+                        &format!(
+                            "❌ Transaction expired: current height {} > last valid height {}",
+                            current_height,
+                            last_valid_height
+                        )
+                    );
+                }
+
+                Ok(is_expired)
+            }
+            Err(e) => {
+                if is_debug_positions_enabled() {
+                    log(
+                        LogTag::Positions,
+                        "VERIFICATION_HEIGHT_ERROR",
+                        &format!("⚠️ Failed to get current block height: {}", e)
+                    );
+                }
+                // Fallback to time-based check if block height lookup fails
+                let age_seconds = Utc::now()
+                    .signed_duration_since(verification_data.timestamp)
+                    .num_seconds();
+                Ok(age_seconds > ENTRY_VERIFICATION_MAX_SECS)
+            }
+        }
+    } else {
+        // No block height info available, use time-based fallback
+        let age_seconds = Utc::now()
+            .signed_duration_since(verification_data.timestamp)
+            .num_seconds();
+        Ok(age_seconds > ENTRY_VERIFICATION_MAX_SECS)
     }
 }
 
@@ -579,6 +692,24 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         return Err(format!("Invalid base58 format: {}", transaction_signature));
     }
 
+    // Get current block height for transaction expiration tracking
+    let last_valid_block_height = match get_rpc_client().get_block_height().await {
+        Ok(current_height) => {
+            // Add buffer for transaction validity (typical Solana transaction is valid for ~150 slots)
+            Some(current_height + SOLANA_BLOCKHASH_VALIDITY_SLOTS)
+        }
+        Err(e) => {
+            if is_debug_positions_enabled() {
+                log(
+                    LogTag::Positions,
+                    "WARN",
+                    &format!("Failed to get block height for transaction expiration tracking: {}", e)
+                );
+            }
+            None // Fallback to time-based verification
+        }
+    };
+
     // Log swap execution details
     if is_debug_positions_enabled() {
         log(
@@ -635,37 +766,6 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
 
     // Add position to sharded state and database (still under global creation lock)
     let position_id = {
-        // Phase 2: Add to verification queue using dedicated lock
-        {
-            let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
-            let already_present = pending_verifications.contains_key(&transaction_signature);
-            pending_verifications.insert(transaction_signature.clone(), Utc::now());
-            let queue_size = pending_verifications.len();
-
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!(
-                        "📝 Enqueuing entry transaction {} for verification (already_present={})",
-                        transaction_signature,
-                        already_present
-                    )
-                );
-            }
-
-            log(
-                LogTag::Positions,
-                "VERIFICATION_ENQUEUE_ENTRY",
-                &format!(
-                    "📥 Enqueued ENTRY tx {} (already_present={}, queue_size={})",
-                    transaction_signature,
-                    already_present,
-                    queue_size
-                )
-            );
-        }
-
         // Save to database first to get the ID (with retries BEFORE mutating in-memory state)
         let mut position_id: i64 = -1;
         let mut attempt = 0;
@@ -746,6 +846,23 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         let mut position_with_id = new_position.clone();
         if position_id > 0 {
             position_with_id.id = Some(position_id);
+
+            // Enqueue entry transaction for verification now that we have position_id
+            if
+                let Err(e) = enqueue_for_verification(
+                    transaction_signature.clone(),
+                    token.mint.clone(),
+                    position_id,
+                    true, // is_entry: true for entry transaction
+                    last_valid_block_height
+                ).await
+            {
+                log(
+                    LogTag::Positions,
+                    "ERROR",
+                    &format!("Failed to enqueue entry transaction for verification: {}", e)
+                );
+            }
         }
 
         // Add position to in-memory list with correct ID
@@ -1399,6 +1516,24 @@ pub async fn close_position_direct(
         return Err(format!("Invalid base58 format: {}", transaction_signature));
     }
 
+    // Get current block height for transaction expiration tracking
+    let last_valid_block_height = match get_rpc_client().get_block_height().await {
+        Ok(current_height) => {
+            // Add buffer for transaction validity (typical Solana transaction is valid for ~150 slots)
+            Some(current_height + SOLANA_BLOCKHASH_VALIDITY_SLOTS)
+        }
+        Err(e) => {
+            if is_debug_positions_enabled() {
+                log(
+                    LogTag::Positions,
+                    "WARN",
+                    &format!("Failed to get block height for exit transaction expiration tracking: {}", e)
+                );
+            }
+            None // Fallback to time-based verification
+        }
+    };
+
     // === Phase 2: Sharded locks + O(1) index lookup for exit signature update ===
     // 1. Find position index using O(1) mint lookup (no scan needed)
     let position_idx = get_position_index_by_mint(mint).await;
@@ -1763,33 +1898,18 @@ pub async fn close_position_direct(
                 }
 
                 // Phase 2: Use dedicated verification queue lock (micro-contention)
-                let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
-                let already_present = pending_verifications.contains_key(&transaction_signature);
-                let queue_size = pending_verifications.len();
-
+                enqueue_for_verification(
+                    transaction_signature.clone(),
+                    mint.to_string(),
+                    position_id.unwrap_or(0),
+                    false, // is_entry: false for exit
+                    last_valid_block_height
+                ).await;
                 if is_debug_positions_enabled() {
                     log(
                         LogTag::Positions,
                         "DEBUG",
-                        &format!(
-                            "🔍 Verification queue check: already_present={}, queue_size={}",
-                            already_present,
-                            queue_size
-                        )
-                    );
-                }
-
-                pending_verifications.insert(transaction_signature.clone(), Utc::now());
-
-                if is_debug_positions_enabled() {
-                    log(
-                        LogTag::Positions,
-                        "DEBUG",
-                        &format!(
-                            "📝 Enqueuing exit transaction {} for verification (already_present={})",
-                            transaction_signature,
-                            already_present
-                        )
+                        &format!("📝 Enqueued exit transaction {} for verification using block height system", transaction_signature)
                     );
                 }
 
@@ -1797,10 +1917,8 @@ pub async fn close_position_direct(
                     LogTag::Positions,
                     "VERIFICATION_ENQUEUE_EXIT",
                     &format!(
-                        "📥 Enqueued EXIT tx {} (already_present={}, queue_size={}, attempt={})",
+                        "📥 Enqueued EXIT tx {} using block height system (attempt={})",
                         transaction_signature,
-                        already_present,
-                        queue_size + 1,
                         enqueue_attempt
                     )
                 );
@@ -1886,6 +2004,9 @@ pub async fn close_position_direct(
 
         // Spawn a background task to keep retrying indefinitely
         let bg_signature = transaction_signature.clone();
+        let bg_mint = mint.to_string();
+        let bg_position_id = position_id.unwrap_or(0);
+        let bg_last_valid_block_height = last_valid_block_height;
         tokio::spawn(async move {
             let mut bg_attempt = 1;
             loop {
@@ -1903,28 +2024,28 @@ pub async fn close_position_direct(
 
                 match
                     tokio::time::timeout(tokio::time::Duration::from_secs(10), async {
-                        // Phase 2: Use sharded verification queue lock
-                        let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
-                        if !pending_verifications.contains_key(&bg_signature) {
-                            pending_verifications.insert(bg_signature.clone(), Utc::now());
-                            let queue_size = pending_verifications.len();
-                            log(
-                                LogTag::Positions,
-                                "VERIFICATION_ENQUEUE_EXIT_BACKGROUND",
-                                &format!(
-                                    "📥 Background enqueued EXIT tx {} (queue_size={}, bg_attempt={})",
-                                    bg_signature,
-                                    queue_size,
-                                    bg_attempt
-                                )
-                            );
-                            true
-                        } else {
-                            false // Already in queue
-                        }
+                        // Use new block height system for background enqueue
+                        enqueue_for_verification(
+                            bg_signature.clone(),
+                            bg_mint.clone(),
+                            bg_position_id,
+                            false, // is_entry: false for exit
+                            bg_last_valid_block_height
+                        ).await?;
+
+                        log(
+                            LogTag::Positions,
+                            "VERIFICATION_ENQUEUE_EXIT_BACKGROUND",
+                            &format!(
+                                "📥 Background enqueued EXIT tx {} using block height system (bg_attempt={})",
+                                bg_signature,
+                                bg_attempt
+                            )
+                        );
+                        Ok::<(), String>(())
                     }).await
                 {
-                    Ok(true) => {
+                    Ok(Ok(())) => {
                         log(
                             LogTag::Positions,
                             "SUCCESS",
@@ -1936,13 +2057,19 @@ pub async fn close_position_direct(
                         );
                         break; // Success - exit background retry loop
                     }
-                    Ok(false) => {
+                    Ok(Err(e)) => {
                         log(
                             LogTag::Positions,
-                            "INFO",
-                            &format!("ℹ️ Transaction {} already in verification queue - background retry successful", bg_signature)
+                            "WARN",
+                            &format!(
+                                "⚠️ Background verification enqueue failed for transaction {} (attempt {}): {}",
+                                bg_signature,
+                                bg_attempt,
+                                e
+                            )
                         );
-                        break; // Already in queue - exit background retry loop
+                        // Continue retrying
+                        bg_attempt += 1;
                     }
                     Err(_) => {
                         // Timeout - continue retrying
@@ -2368,8 +2495,8 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
             // Transaction not found - check verification age
             let verification_age_seconds = {
                 let pending_verifications = PENDING_VERIFICATIONS.read().await;
-                if let Some(added_at) = pending_verifications.get(signature) {
-                    Utc::now().signed_duration_since(*added_at).num_seconds()
+                if let Some((_, _, _, verification_data)) = pending_verifications.get(signature) {
+                    Utc::now().signed_duration_since(verification_data.timestamp).num_seconds()
                 } else {
                     0
                 }
@@ -3319,69 +3446,70 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                 }
                 // GUARD: Re-enqueue any exit signatures that are set but not yet verified and missing from pending queue
                 {
-                    // Collect missing exit sigs using sharded locks
-                    let mut to_enqueue: Vec<String> = Vec::new();
+                    // Collect missing exit sigs with their position metadata
+                    let mut to_enqueue: Vec<(String, String, i64)> = Vec::new(); // (signature, mint, position_id)
                     {
                         let positions = POSITIONS.read().await;
                         let pending_verifications = PENDING_VERIFICATIONS.read().await;
                         for p in &*positions {
                             if let Some(sig) = &p.exit_transaction_signature {
                                 if !p.transaction_exit_verified && !pending_verifications.contains_key(sig) {
-                                    to_enqueue.push(sig.clone());
+                                    to_enqueue.push((sig.clone(), p.mint.clone(), p.id.unwrap_or(0)));
                                 }
                             }
                         }
                     }
                     if !to_enqueue.is_empty() {
-                        let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
-                        for sig in &to_enqueue {
-                            pending_verifications.insert(sig.clone(), Utc::now());
+                        for (sig, mint, position_id) in &to_enqueue {
+                            enqueue_for_verification(
+                                sig.clone(),
+                                mint.clone(),
+                                *position_id,
+                                false, // is_entry: false for exit
+                                None, // No block height available for guard re-enqueue
+                            ).await;
                         }
                         log(
                             LogTag::Positions,
                             "VERIFICATION_GUARD_REQUEUE",
                             &format!(
-                                "🛡️ Re-enqueued {} missing exit verifications: {}",
+                                "🛡️ Re-enqueued {} missing exit verifications using new system: {}",
                                 to_enqueue.len(),
-                                to_enqueue.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                                to_enqueue.iter().map(|(sig, _, _)| sig.as_str()).collect::<Vec<_>>().join(", ")
                             )
                         );
                     }
                 }
-                // First, cleanup stale pending verifications
-                let now = Utc::now();
-                let stale_sigs: Vec<String> = {
+                // First, cleanup stale pending verifications using block height expiration
+                let expired_sigs: Vec<String> = {
+                    let mut to_remove = Vec::new();
                     let pending_verifications = PENDING_VERIFICATIONS.read().await;
-                    pending_verifications
-                        .iter()
-                        .filter_map(|(sig, added_at)| {
-                            let age_seconds = now.signed_duration_since(*added_at).num_seconds();
-                            if age_seconds > ENTRY_VERIFICATION_MAX_SECS * 2 { // 180 seconds = 3 minutes
-                                Some(sig.clone())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect()
+                    
+                    for (sig, (mint, position_id, is_entry, verification_data)) in pending_verifications.iter() {
+                        if is_transaction_expired(verification_data).await.unwrap_or(false) {
+                            to_remove.push(sig.clone());
+                        }
+                    }
+                    to_remove
                 };
 
-                if !stale_sigs.is_empty() {
+                if !expired_sigs.is_empty() {
                     let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
-                    for sig in &stale_sigs {
+                    for sig in &expired_sigs {
                         pending_verifications.remove(sig);
                     }
                     log(
                         LogTag::Positions,
                         "CLEANUP",
-                        &format!("🧹 Cleaned up {} stale pending verifications (age > {}s)", stale_sigs.len(), ENTRY_VERIFICATION_MAX_SECS * 2)
+                        &format!("🧹 Cleaned up {} expired pending verifications using block height expiration", expired_sigs.len())
                     );
 
                     if is_debug_positions_enabled() {
                         log(
                             LogTag::Positions,
                             "DEBUG",
-                            &format!("🗑️ Stale signatures removed: {}",
-                                stale_sigs.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
+                            &format!("🗑️ Expired signatures removed: {}",
+                                expired_sigs.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
                         );
                     }
                 }
@@ -3394,8 +3522,8 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                     // Sort by age - prioritize newest transactions (within 60 seconds) for responsive verification
                     let mut sig_ages: Vec<(String, i64)> = pending_verifications
                         .iter()
-                        .map(|(sig, added_at)| {
-                            let age_seconds = now.signed_duration_since(*added_at).num_seconds();
+                        .map(|(sig, (mint, position_id, is_entry, verification_data))| {
+                            let age_seconds = now.signed_duration_since(verification_data.timestamp).num_seconds();
                             (sig.clone(), age_seconds)
                         })
                         .collect();
@@ -3428,13 +3556,13 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                             // Log detailed verification queue information with ages
                             let pending_verifications = PENDING_VERIFICATIONS.read().await;
                             for (i, sig) in sigs.iter().enumerate() {
-                                if let Some(added_at) = pending_verifications.get(sig) {
-                                    let age_seconds = now.signed_duration_since(*added_at).num_seconds();
+                                if let Some((mint, position_id, is_entry, verification_data)) = pending_verifications.get(sig) {
+                                    let age_seconds = now.signed_duration_since(verification_data.timestamp).num_seconds();
                                     log(
                                         LogTag::Positions,
                                         "DEBUG",
-                                        &format!("📋 Queue item {}: {} (age: {}s)",
-                                            i + 1, sig, age_seconds)
+                                        &format!("📋 Queue item {}: {} (age: {}s, mint: {}, pos_id: {}, is_entry: {})",
+                                            i + 1, sig, age_seconds, mint, position_id, is_entry)
                                     );
                                 }
                             }
@@ -3681,9 +3809,10 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                                         } else {
                                             // Check verification age before removing position
                                             let verification_age_seconds = {
+                                                let now = Utc::now();
                                                 let pending_verifications = PENDING_VERIFICATIONS.read().await;
-                                                if let Some(added_at) = pending_verifications.get(&sig_clone) {
-                                                    now.signed_duration_since(*added_at).num_seconds()
+                                                if let Some((_, _, _, verification_data)) = pending_verifications.get(&sig_clone) {
+                                                    now.signed_duration_since(verification_data.timestamp).num_seconds()
                                                 } else {
                                                     0 // If not found, treat as new
                                                 }
@@ -4043,17 +4172,22 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                 // Check if entry transaction needs verification
                 if !position.transaction_entry_verified {
                     if let Some(entry_sig) = &position.entry_transaction_signature {
-                        let dup = pending_verifications.contains_key(entry_sig.as_str());
-                        pending_verifications.insert(entry_sig.clone(), Utc::now());
+                        // For startup requeue, we don't have the original block height,
+                        // so we'll use None to fall back to time-based verification
+                        enqueue_for_verification(
+                            entry_sig.clone(),
+                            position.mint.clone(),
+                            position.id.unwrap_or(0),
+                            true, // is_entry: true for entry
+                            None // No block height available from startup
+                        ).await;
                         log(
                             LogTag::Positions,
                             "VERIFICATION_REQUEUE_ENTRY",
                             &format!(
-                                "♻️ Startup requeue ENTRY {} for {} (dup={}, queue_size={})",
+                                "♻️ Startup requeue ENTRY {} for {} using new system",
                                 entry_sig,
-                                safe_truncate(&position.symbol, 8),
-                                dup,
-                                pending_verifications.len()
+                                safe_truncate(&position.symbol, 8)
                             )
                         );
                         unverified_count += 1;
@@ -4062,17 +4196,22 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                 // Check if exit transaction needs verification
                 if !position.transaction_exit_verified {
                     if let Some(exit_sig) = &position.exit_transaction_signature {
-                        let dup = pending_verifications.contains_key(exit_sig.as_str());
-                        pending_verifications.insert(exit_sig.clone(), Utc::now());
+                        // For startup requeue, we don't have the original block height,
+                        // so we'll use None to fall back to time-based verification
+                        enqueue_for_verification(
+                            exit_sig.clone(),
+                            position.mint.clone(),
+                            position.id.unwrap_or(0),
+                            false, // is_entry: false for exit
+                            None // No block height available from startup
+                        ).await;
                         log(
                             LogTag::Positions,
                             "VERIFICATION_REQUEUE_EXIT",
                             &format!(
-                                "♻️ Startup requeue EXIT {} for {} (dup={}, queue_size={})",
+                                "♻️ Startup requeue EXIT {} for {} using new system",
                                 exit_sig,
-                                safe_truncate(&position.symbol, 8),
-                                dup,
-                                pending_verifications.len()
+                                safe_truncate(&position.symbol, 8)
                             )
                         );
                         unverified_count += 1;
@@ -4469,23 +4608,23 @@ pub async fn attempt_position_recovery_from_transactions(
                 sig_to_mint.insert(best_signature.clone(), mint.to_string());
             }
 
-            // Add to verification queue
-            {
-                let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
-                let dup = pending_verifications.contains_key(best_signature);
-                pending_verifications.insert(best_signature.clone(), Utc::now());
-                log(
-                    LogTag::Positions,
-                    "VERIFICATION_ENQUEUE_EXIT_RECOVERY",
-                    &format!(
-                        "📥 Enqueued EXIT (recovery) {} for {} (dup={}, queue_size={})",
-                        best_signature,
-                        safe_truncate(&symbol, 8),
-                        dup,
-                        pending_verifications.len()
-                    )
-                );
-            }
+            // Add to verification queue using new block height system
+            enqueue_for_verification(
+                best_signature.clone(),
+                mint.to_string(),
+                position.id.unwrap_or(0),
+                false, // is_entry: false for exit
+                None // Recovery mode - no block height available
+            ).await;
+            log(
+                LogTag::Positions,
+                "VERIFICATION_ENQUEUE_EXIT_RECOVERY",
+                &format!(
+                    "📥 Enqueued EXIT (recovery) {} for {} using new system",
+                    best_signature,
+                    safe_truncate(&symbol, 8)
+                )
+            );
 
             // Update database with exit signature immediately
             if let Some(position_id) = position.id {

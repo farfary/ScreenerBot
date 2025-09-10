@@ -4,7 +4,6 @@ use crate::global::is_debug_monitor_enabled;
 use crate::logger::{ log, LogTag };
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::dexscreener::get_global_dexscreener_api;
-use crate::tokens::security::{ get_security_analyzer, TokenSecurityInfo, SecurityRiskLevel };
 use chrono::{ DateTime, Utc };
 use futures::TryFutureExt;
 use rand::seq::SliceRandom;
@@ -36,13 +35,6 @@ const NEAR_ZERO_LIQUIDITY_USD: f64 = 10.0;
 
 /// Cleanup cycle interval in monitoring cycles (run cleanup every N cycles)
 const CLEANUP_CYCLE_INTERVAL: u64 = 12; // Every 12 cycles = 1 minute (12 * 5 seconds)
-
-/// Security monitoring constants
-const SECURITY_UPDATE_CYCLE_INTERVAL: u64 = 5; // Every 5 cycles
-const SECURITY_TOKENS_PER_CYCLE: usize = 15; // Smaller batches for RPC-intensive operations
-const MAX_SECURITY_UPDATE_AGE_HOURS: i64 = 24; // Force update after 24 hours
-const SECURITY_STATIC_UPDATE_AGE_HOURS: i64 = 168; // Static properties: weekly
-const SECURITY_DYNAMIC_UPDATE_AGE_HOURS: i64 = 12; // Dynamic properties: twice daily
 
 // =============================================================================
 // TOKEN MONITOR
@@ -312,203 +304,6 @@ impl TokenMonitor {
         }
     }
 
-    /// Get tokens that are missing security information completely
-    async fn get_tokens_missing_security_info(&self) -> Result<Vec<String>, String> {
-        let all_tokens = self.database
-            .get_all_tokens_with_update_time().await
-            .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
-
-        let security_analyzer = get_security_analyzer();
-        let mut tokens_missing_security = Vec::new();
-
-        for (mint, _, _, _) in all_tokens {
-            // Check if security info exists in database
-            match security_analyzer.database.get_security_info(&mint) {
-                Ok(None) => tokens_missing_security.push(mint),
-                Ok(Some(_)) => {} // Has security info
-                Err(_) => tokens_missing_security.push(mint), // Error = treat as missing
-            }
-        }
-
-        if is_debug_monitor_enabled() && !tokens_missing_security.is_empty() {
-            log(
-                LogTag::Monitor,
-                "SECURITY_MISSING",
-                &format!(
-                    "Found {} tokens missing security information",
-                    tokens_missing_security.len()
-                )
-            );
-        }
-
-        Ok(tokens_missing_security)
-    }
-
-    /// Get tokens with stale security information that need updates
-    async fn get_tokens_with_stale_security_info(&self) -> Result<Vec<String>, String> {
-        let all_tokens = self.database
-            .get_all_tokens_with_update_time().await
-            .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
-
-        let security_analyzer = get_security_analyzer();
-        let mut tokens_with_stale_security = Vec::new();
-        let now = Utc::now();
-
-        for (mint, _, _, _) in all_tokens {
-            if let Ok(Some(security_info)) = security_analyzer.database.get_security_info(&mint) {
-                // Check if static security info is stale (authority, LP lock)
-                let static_age = now.signed_duration_since(
-                    security_info.timestamps.authority_last_checked
-                );
-                let dynamic_age = security_info.timestamps.holder_last_checked
-                    .map(|t| now.signed_duration_since(t))
-                    .unwrap_or_else(||
-                        chrono::Duration::hours(SECURITY_DYNAMIC_UPDATE_AGE_HOURS + 1)
-                    );
-
-                if
-                    static_age.num_hours() > SECURITY_STATIC_UPDATE_AGE_HOURS ||
-                    dynamic_age.num_hours() > SECURITY_DYNAMIC_UPDATE_AGE_HOURS
-                {
-                    tokens_with_stale_security.push(mint);
-                }
-            }
-        }
-
-        if is_debug_monitor_enabled() && !tokens_with_stale_security.is_empty() {
-            log(
-                LogTag::Monitor,
-                "SECURITY_STALE",
-                &format!(
-                    "Found {} tokens with stale security information",
-                    tokens_with_stale_security.len()
-                )
-            );
-        }
-
-        Ok(tokens_with_stale_security)
-    }
-
-    /// Update security information for a batch of tokens
-    async fn update_security_batch(&mut self, mints: &[String]) -> Result<usize, String> {
-        if mints.is_empty() {
-            return Ok(0);
-        }
-
-        if is_debug_monitor_enabled() {
-            log(
-                LogTag::Monitor,
-                "SECURITY_UPDATE",
-                &format!("Updating security info for {} tokens", mints.len())
-            );
-        }
-
-        let security_analyzer = get_security_analyzer();
-        let mut successful_updates = 0;
-
-        // Process tokens in smaller batches to avoid overwhelming RPC
-        for batch in mints.chunks(10) {
-            let batch_vec: Vec<String> = batch.to_vec();
-
-            match security_analyzer.analyze_multiple_tokens(&batch_vec).await {
-                Ok(security_results) => {
-                    successful_updates += security_results.len();
-
-                    if is_debug_monitor_enabled() {
-                        log(
-                            LogTag::Monitor,
-                            "SECURITY_BATCH_SUCCESS",
-                            &format!(
-                                "Successfully analyzed {} tokens in batch",
-                                security_results.len()
-                            )
-                        );
-                    }
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Monitor,
-                        "SECURITY_BATCH_ERROR",
-                        &format!("Failed to analyze security batch: {}", e)
-                    );
-                }
-            }
-
-            // Small delay between batches to avoid RPC overload
-            if batch.len() == 10 {
-                tokio::time::sleep(Duration::from_millis(500)).await;
-            }
-        }
-
-        if is_debug_monitor_enabled() {
-            log(
-                LogTag::Monitor,
-                "SECURITY_UPDATE_COMPLETE",
-                &format!(
-                    "Security update completed: {}/{} tokens analyzed",
-                    successful_updates,
-                    mints.len()
-                )
-            );
-        }
-
-        Ok(successful_updates)
-    }
-
-    /// Run security monitoring cycle
-    async fn run_security_monitoring_cycle(&mut self) -> Result<(), String> {
-        if is_debug_monitor_enabled() {
-            log(LogTag::Monitor, "SECURITY_CYCLE_START", "Starting security monitoring cycle");
-        }
-
-        // Priority 1: Tokens missing security info completely
-        let missing_security_tokens = self.get_tokens_missing_security_info().await?;
-        let mut tokens_to_process = missing_security_tokens
-            .into_iter()
-            .take(SECURITY_TOKENS_PER_CYCLE)
-            .collect::<Vec<_>>();
-
-        // Priority 2: Fill remaining capacity with stale security tokens
-        if tokens_to_process.len() < SECURITY_TOKENS_PER_CYCLE {
-            let remaining_capacity = SECURITY_TOKENS_PER_CYCLE - tokens_to_process.len();
-            let stale_security_tokens = self.get_tokens_with_stale_security_info().await?;
-
-            // Randomize to ensure fair distribution
-            let mut stale_tokens = stale_security_tokens;
-            stale_tokens.shuffle(&mut rand::thread_rng());
-
-            for token in stale_tokens.into_iter().take(remaining_capacity) {
-                if !tokens_to_process.contains(&token) {
-                    tokens_to_process.push(token);
-                }
-            }
-        }
-
-        if tokens_to_process.is_empty() {
-            if is_debug_monitor_enabled() {
-                log(LogTag::Monitor, "SECURITY_CYCLE_IDLE", "No tokens need security updates");
-            }
-            return Ok(());
-        }
-
-        // Update security information for selected tokens
-        let updated_count = self.update_security_batch(&tokens_to_process).await?;
-
-        if is_debug_monitor_enabled() {
-            log(
-                LogTag::Monitor,
-                "SECURITY_CYCLE_COMPLETE",
-                &format!(
-                    "Security cycle completed: {}/{} tokens updated",
-                    updated_count,
-                    tokens_to_process.len()
-                )
-            );
-        }
-
-        Ok(())
-    }
-
     /// Start continuous monitoring loop in background
     pub async fn start_monitoring_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
         log(LogTag::Monitor, "INIT", "Token monitoring loop started");
@@ -533,17 +328,6 @@ impl TokenMonitor {
                             "CYCLE_ERROR",
                             &format!("Monitoring cycle failed: {}", e)
                         );
-                    }
-
-                    // Run security monitoring cycle every 5th cycle
-                    if self.cycle_counter % SECURITY_UPDATE_CYCLE_INTERVAL == 0 {
-                        if let Err(e) = self.run_security_monitoring_cycle().await {
-                            log(
-                                LogTag::Monitor,
-                                "SECURITY_CYCLE_ERROR",
-                                &format!("Security monitoring cycle failed: {}", e)
-                            );
-                        }
                     }
 
                     // Run cleanup cycle periodically

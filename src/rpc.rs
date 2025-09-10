@@ -1854,6 +1854,224 @@ impl RpcClient {
         )
     }
 
+    /// Get latest blockhash with validity information for transaction expiration checking
+    pub async fn get_latest_blockhash_with_commitment(
+        &self
+    ) -> Result<(Hash, u64), ScreenerBotError> {
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getLatestBlockhash",
+            "params": [
+                {
+                    "commitment": "finalized"
+                }
+            ]
+        });
+
+        let current_url = self.rotate_to_next_url();
+
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "BLOCKHASH_WITH_HEIGHT",
+                &format!("Fetching latest blockhash with height from RPC: {}", current_url)
+            );
+        }
+
+        self.wait_for_rate_limit().await;
+        self.record_call("getLatestBlockhash");
+
+        let client = reqwest::Client::new();
+
+        match
+            client
+                .post(&current_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    match response.json::<serde_json::Value>().await {
+                        Ok(rpc_response) => {
+                            if let Some(error) = rpc_response.get("error") {
+                                let error_str = error.to_string();
+                                if Self::is_rate_limit_error(&error_str) {
+                                    self.record_429_error(Some(&current_url));
+                                }
+                                return Err(
+                                    ScreenerBotError::Blockchain(
+                                        parse_solana_error(
+                                            &error_str,
+                                            None,
+                                            "get_latest_blockhash_with_commitment"
+                                        )
+                                    )
+                                );
+                            }
+
+                            if let Some(result) = rpc_response.get("result") {
+                                if let Some(value) = result.get("value") {
+                                    if
+                                        let (Some(blockhash_str), Some(last_valid_block_height)) = (
+                                            value.get("blockhash").and_then(|v| v.as_str()),
+                                            value
+                                                .get("lastValidBlockHeight")
+                                                .and_then(|v| v.as_u64()),
+                                        )
+                                    {
+                                        if let Ok(blockhash) = Hash::from_str(blockhash_str) {
+                                            if is_debug_rpc_enabled() {
+                                                log(
+                                                    LogTag::Rpc,
+                                                    "BLOCKHASH_WITH_HEIGHT",
+                                                    &format!(
+                                                        "Successfully fetched blockhash {} with last valid height {} from {}",
+                                                        blockhash,
+                                                        last_valid_block_height,
+                                                        current_url
+                                                    )
+                                                );
+                                            }
+                                            return Ok((blockhash, last_valid_block_height));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Rpc,
+                                "ERROR",
+                                &format!("Failed to parse blockhash with height response: {}", e)
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                if Self::is_rate_limit_error(&error_msg) {
+                    self.record_429_error(Some(&current_url));
+                }
+                return Err(
+                    ScreenerBotError::Network(NetworkError::Generic {
+                        message: format!("Failed to get latest blockhash with height from RPC: {}", e),
+                    })
+                );
+            }
+        }
+
+        Err(
+            ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                provider_name: "round_robin_rpc".to_string(),
+                message: "Failed to get latest blockhash with height from current RPC endpoint".to_string(),
+            })
+        )
+    }
+
+    /// Get current block height for transaction expiration checking
+    pub async fn get_block_height(&self) -> Result<u64, ScreenerBotError> {
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getBlockHeight",
+            "params": [
+                {
+                    "commitment": "finalized"
+                }
+            ]
+        });
+
+        let current_url = self.rotate_to_next_url();
+
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "BLOCK_HEIGHT",
+                &format!("Fetching current block height from RPC: {}", current_url)
+            );
+        }
+
+        self.wait_for_rate_limit().await;
+        self.record_call("getBlockHeight");
+
+        let client = reqwest::Client::new();
+
+        match
+            client
+                .post(&current_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    match response.json::<serde_json::Value>().await {
+                        Ok(rpc_response) => {
+                            if let Some(error) = rpc_response.get("error") {
+                                let error_str = error.to_string();
+                                if Self::is_rate_limit_error(&error_str) {
+                                    self.record_429_error(Some(&current_url));
+                                }
+                                return Err(
+                                    ScreenerBotError::Blockchain(
+                                        parse_solana_error(&error_str, None, "get_block_height")
+                                    )
+                                );
+                            }
+
+                            if let Some(result) = rpc_response.get("result") {
+                                if let Some(block_height) = result.as_u64() {
+                                    if is_debug_rpc_enabled() {
+                                        log(
+                                            LogTag::Rpc,
+                                            "BLOCK_HEIGHT",
+                                            &format!(
+                                                "Successfully fetched block height {} from {}",
+                                                block_height,
+                                                current_url
+                                            )
+                                        );
+                                    }
+                                    return Ok(block_height);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Rpc,
+                                "ERROR",
+                                &format!("Failed to parse block height response: {}", e)
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                if Self::is_rate_limit_error(&error_msg) {
+                    self.record_429_error(Some(&current_url));
+                }
+                return Err(
+                    ScreenerBotError::Network(NetworkError::Generic {
+                        message: format!("Failed to get block height from RPC: {}", e),
+                    })
+                );
+            }
+        }
+
+        Err(
+            ScreenerBotError::RpcProvider(RpcProviderError::Generic {
+                provider_name: "round_robin_rpc".to_string(),
+                message: "Failed to get block height from current RPC endpoint".to_string(),
+            })
+        )
+    }
+
     /// Send transaction using round-robin RPC rotation
     pub async fn send_transaction(
         &self,
