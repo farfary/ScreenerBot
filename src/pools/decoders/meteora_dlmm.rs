@@ -203,39 +203,37 @@ impl PoolDecoder for MeteoraDlmmDecoder {
             );
         }
 
-        // Calculate price: SOL per token using vault balances (more accurate for current price)
-        let price_sol =
-            (sol_balance as f64) /
-            (10_f64).powi(sol_decimals as i32) /
-            ((token_balance as f64) / (10_f64).powi(token_decimals as i32));
+        // Calculate price using DLMM theoretical price (more accurate than vault balances)
+        let price_sol = Self::calculate_dlmm_price(&dlmm_info, &token_mint)?;
 
         // Convert reserves to human-readable format for display
         let sol_reserves_display = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
         let token_reserves_display = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
 
         if is_debug_pool_decoders_enabled() {
+            let vault_price =
+                (sol_balance as f64) /
+                (10_f64).powi(sol_decimals as i32) /
+                ((token_balance as f64) / (10_f64).powi(token_decimals as i32));
+
             log(
                 LogTag::PoolDecoder,
                 "CALC",
                 &format!(
-                    "DLMM price from vault balances: {:.12} SOL per token (sol_bal={} token_bal={} decimals={})",
+                    "DLMM theoretical price: {:.12} SOL per token (active_id={} bin_step={})",
                     price_sol,
-                    sol_balance,
-                    token_balance,
-                    token_decimals
+                    dlmm_info.active_id,
+                    dlmm_info.bin_step
                 )
-            );
-            let theoretical_price = Self::calculate_dlmm_price(&dlmm_info, &token_mint).unwrap_or(
-                0.0
             );
             log(
                 LogTag::PoolDecoder,
                 "DEBUG",
                 &format!(
-                    "DLMM theoretical price from active_id: {:.12} (active_id={} bin_step={})",
-                    theoretical_price,
-                    dlmm_info.active_id,
-                    dlmm_info.bin_step
+                    "DLMM vault price (reference): {:.12} SOL per token (sol_bal={} token_bal={})",
+                    vault_price,
+                    sol_balance,
+                    token_balance
                 )
             );
         }
@@ -378,16 +376,24 @@ impl MeteoraDlmmDecoder {
             );
         }
 
+        // Get decimals for proper price scaling
+        let token_x_decimals = get_token_decimals_sync(&dlmm_info.token_x_mint).unwrap_or(6);
+        let token_y_decimals = get_token_decimals_sync(&dlmm_info.token_y_mint).unwrap_or(9);
+
+        // Adjust for decimals difference: price_in_human_units = raw_price * 10^(token_x_decimals - token_y_decimals)
+        let decimals_scale = (10f64).powi((token_x_decimals as i32) - (token_y_decimals as i32));
+        let adjusted_price = raw_price * decimals_scale;
+
         // Determine if we need to invert the price based on token order
         let price_sol = if dlmm_info.token_x_mint == token_mint {
             // token_x is our target token, token_y is SOL
-            // raw_price gives SOL per token (what we want)
-            raw_price
+            // adjusted_price gives SOL per token (what we want)
+            adjusted_price
         } else if dlmm_info.token_y_mint == token_mint {
             // token_y is our target token, token_x is SOL
-            // raw_price gives token per SOL, so we need to invert
-            if raw_price != 0.0 {
-                1.0 / raw_price
+            // adjusted_price gives token per SOL, so we need to invert
+            if adjusted_price != 0.0 {
+                1.0 / adjusted_price
             } else {
                 return None;
             }
@@ -401,10 +407,13 @@ impl MeteoraDlmmDecoder {
                 LogTag::PoolDecoder,
                 "DEBUG",
                 &format!(
-                    "DLMM price direction: token_x={} token_y={} target={}, final_price={:.12}",
+                    "DLMM price direction: token_x={} ({}d) token_y={} ({}d) target={}, decimals_scale={:.6}, final_price={:.12}",
                     dlmm_info.token_x_mint,
+                    token_x_decimals,
                     dlmm_info.token_y_mint,
+                    token_y_decimals,
                     token_mint,
+                    decimals_scale,
                     price_sol
                 )
             );
