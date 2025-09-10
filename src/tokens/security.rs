@@ -255,7 +255,7 @@ impl SecurityDatabase {
                 })
             })?;
 
-        log(LogTag::System, "INIT", "Security database initialized successfully");
+        log(LogTag::Security, "INIT", "Security database initialized successfully");
         Ok(())
     }
 
@@ -641,7 +641,7 @@ impl SecurityDatabase {
                 })
             })?;
 
-        log(LogTag::System, "CLEANUP", &format!("Cleaned {} old security records", deleted));
+        log(LogTag::Security, "CLEANUP", &format!("Cleaned {} old security records", deleted));
         Ok(deleted)
     }
 }
@@ -761,7 +761,7 @@ impl TokenSecurityAnalyzer {
     ) -> Result<TokenSecurityInfo, ScreenerBotError> {
         log(
             LogTag::Security,
-            "ANALYZE",
+            "DEBUG",
             &format!(
                 "Starting security analysis for {} (force_refresh: {})",
                 safe_truncate(mint, 8),
@@ -775,7 +775,7 @@ impl TokenSecurityAnalyzer {
             if let Some(cached_info) = self.cache.get(mint) {
                 log(
                     LogTag::Security,
-                    "CACHE_HIT",
+                    "DEBUG",
                     &format!("Using cached security info for {}", safe_truncate(mint, 8))
                 );
                 return Ok(cached_info);
@@ -789,7 +789,7 @@ impl TokenSecurityAnalyzer {
                 if !update_needed {
                     log(
                         LogTag::Security,
-                        "DB_HIT",
+                        "DEBUG",
                         &format!("Using database security info for {}", safe_truncate(mint, 8))
                     );
                     self.cache.set(db_info.clone());
@@ -797,7 +797,7 @@ impl TokenSecurityAnalyzer {
                 } else {
                     log(
                         LogTag::Security,
-                        "UPDATE_NEEDED",
+                        "DEBUG",
                         &format!("Security info needs update for {}", safe_truncate(mint, 8))
                     );
                     return self.update_security_info(db_info).await;
@@ -806,7 +806,7 @@ impl TokenSecurityAnalyzer {
         } else {
             log(
                 LogTag::Security,
-                "FORCE_REFRESH",
+                "DEBUG",
                 &format!(
                     "Force refresh requested - bypassing cache and database for {}",
                     safe_truncate(mint, 8)
@@ -817,7 +817,7 @@ impl TokenSecurityAnalyzer {
         // No cached data or force refresh requested, perform full analysis
         log(
             LogTag::Security,
-            "FULL_ANALYSIS",
+            "DEBUG",
             &format!("Performing full security analysis for {}", safe_truncate(mint, 8))
         );
         self.perform_full_security_analysis(mint).await
@@ -1640,6 +1640,9 @@ pub async fn get_security_summary(mint: &str) -> Result<String, ScreenerBotError
 /// Security monitoring cycle duration in seconds
 const SECURITY_MONITOR_CYCLE_SECONDS: u64 = 3;
 
+/// Security summary report interval in seconds (every 30 seconds)
+const SECURITY_SUMMARY_INTERVAL_SECONDS: u64 = 30;
+
 /// Number of tokens to analyze per cycle (not more)
 const SECURITY_TOKENS_PER_CYCLE: usize = 10;
 
@@ -1654,6 +1657,7 @@ use rand::seq::SliceRandom;
 /// Security monitoring system for background security analysis
 pub struct SecurityMonitor {
     cycle_counter: u64,
+    last_summary_time: std::time::Instant,
 }
 
 impl SecurityMonitor {
@@ -1661,6 +1665,7 @@ impl SecurityMonitor {
     pub fn new() -> Result<Self, ScreenerBotError> {
         Ok(Self {
             cycle_counter: 0,
+            last_summary_time: std::time::Instant::now(),
         })
     }
 
@@ -1808,7 +1813,7 @@ impl SecurityMonitor {
 
     /// Run security monitoring cycle
     async fn run_security_monitoring_cycle(&mut self) -> Result<(), String> {
-        log(LogTag::Security, "CYCLE_START", "Starting security monitoring cycle");
+        log(LogTag::Security, "DEBUG", "Starting security monitoring cycle");
 
         // Priority 1: Tokens missing security info completely
         let missing_security_tokens = self.get_tokens_missing_security_info().await?;
@@ -1834,7 +1839,7 @@ impl SecurityMonitor {
         }
 
         if tokens_to_process.is_empty() {
-            log(LogTag::Security, "CYCLE_IDLE", "No tokens need security updates");
+            log(LogTag::Security, "DEBUG", "No tokens need security updates");
             return Ok(());
         }
 
@@ -1854,6 +1859,122 @@ impl SecurityMonitor {
         Ok(())
     }
 
+    /// Display comprehensive security summary (non-debug log)
+    async fn display_security_summary(&self) -> Result<(), String> {
+        let security_analyzer = get_security_analyzer();
+
+        // Get security statistics from database
+        let database = &security_analyzer.database;
+        let conn = Connection::open(&database.db_path).map_err(|e|
+            format!("Failed to open security database: {}", e)
+        )?;
+
+        // Query overall security statistics
+        let stats_query =
+            r#"
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN security_score >= 80 THEN 1 ELSE 0 END) as safe_count,
+                SUM(CASE WHEN security_score >= 60 AND security_score < 80 THEN 1 ELSE 0 END) as low_risk_count,
+                SUM(CASE WHEN security_score >= 40 AND security_score < 60 THEN 1 ELSE 0 END) as medium_risk_count,
+                SUM(CASE WHEN security_score < 40 THEN 1 ELSE 0 END) as high_risk_count,
+                AVG(security_score) as avg_score
+            FROM security_info
+        "#;
+
+        let stats = conn
+            .query_row(stats_query, [], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?, // total
+                    row.get::<_, i64>(1)?, // safe_count
+                    row.get::<_, i64>(2)?, // low_risk_count
+                    row.get::<_, i64>(3)?, // medium_risk_count
+                    row.get::<_, i64>(4)?, // high_risk_count
+                    row.get::<_, Option<f64>>(5)?.unwrap_or(0.0), // avg_score
+                ))
+            })
+            .map_err(|e| format!("Failed to query security stats: {}", e))?;
+
+        let (total, safe_count, low_risk_count, medium_risk_count, high_risk_count, avg_score) =
+            stats;
+
+        // Query fresh security data (last 24 hours)
+        let fresh_query =
+            r#"
+            SELECT COUNT(*) FROM security_info 
+            WHERE (julianday('now') - julianday(last_updated)) * 24 <= 24
+        "#;
+
+        let fresh_count: i64 = conn
+            .query_row(fresh_query, [], |row| row.get(0))
+            .map_err(|e| format!("Failed to query fresh security data: {}", e))?;
+
+        // Query authority statistics
+        let authority_query =
+            r#"
+            SELECT 
+                COUNT(*) as total_with_authority,
+                SUM(CASE WHEN authority_info LIKE '%"mint_authority":null%' THEN 1 ELSE 0 END) as mint_disabled,
+                SUM(CASE WHEN authority_info LIKE '%"freeze_authority":null%' THEN 1 ELSE 0 END) as freeze_disabled
+            FROM security_info
+            WHERE authority_info IS NOT NULL
+        "#;
+
+        let authority_stats = conn
+            .query_row(authority_query, [], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?, // total_with_authority
+                    row.get::<_, i64>(1)?, // mint_disabled
+                    row.get::<_, i64>(2)?, // freeze_disabled
+                ))
+            })
+            .map_err(|e| format!("Failed to query authority stats: {}", e))?;
+
+        let (total_with_authority, mint_disabled, freeze_disabled) = authority_stats;
+
+        // Cache statistics
+        let (cache_total, cache_static, cache_dynamic) = security_analyzer.cache.stats();
+
+        // Display comprehensive summary (INFO level, not DEBUG)
+        log(
+            LogTag::Security,
+            "SUMMARY",
+            &format!(
+                "Security Analysis Summary: {} tokens | Avg Score: {:.1} | Safe: {} | Low Risk: {} | Medium Risk: {} | High Risk: {} | Fresh Data: {}/{} | Mint Disabled: {}/{} | Freeze Disabled: {}/{} | Cache: {} entries ({} static, {} dynamic)",
+                total,
+                avg_score,
+                safe_count,
+                low_risk_count,
+                medium_risk_count,
+                high_risk_count,
+                fresh_count,
+                total,
+                mint_disabled,
+                total_with_authority,
+                freeze_disabled,
+                total_with_authority,
+                cache_total,
+                cache_static,
+                cache_dynamic
+            )
+        );
+
+        Ok(())
+    }
+
+    /// Check if it's time to display security summary (every 30 seconds)
+    fn should_display_summary(&mut self) -> bool {
+        let now = std::time::Instant::now();
+        let elapsed = now.duration_since(self.last_summary_time);
+
+        if elapsed.as_secs() >= SECURITY_SUMMARY_INTERVAL_SECONDS {
+            self.last_summary_time = now;
+            true
+        } else {
+            false
+        }
+    }
+
     /// Start continuous security monitoring loop in background
     pub async fn start_monitoring_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
         log(LogTag::Security, "INIT", "Security monitoring loop started");
@@ -1867,7 +1988,7 @@ impl SecurityMonitor {
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(SECURITY_MONITOR_CYCLE_SECONDS)) => {
                     self.cycle_counter += 1;
 
-                    log(LogTag::Security, "CYCLE", &format!("Starting security monitoring cycle #{}", self.cycle_counter));
+                    log(LogTag::Security, "DEBUG", &format!("Starting security monitoring cycle #{}", self.cycle_counter));
 
                     // Run security monitoring cycle
                     if let Err(e) = self.run_security_monitoring_cycle().await {
@@ -1876,6 +1997,17 @@ impl SecurityMonitor {
                             "CYCLE_ERROR",
                             &format!("Security monitoring cycle failed: {}", e)
                         );
+                    }
+
+                    // Check if it's time to display security summary
+                    if self.should_display_summary() {
+                        if let Err(e) = self.display_security_summary().await {
+                            log(
+                                LogTag::Security,
+                                "DEBUG",
+                                &format!("Failed to display security summary: {}", e)
+                            );
+                        }
                     }
                 }
             }

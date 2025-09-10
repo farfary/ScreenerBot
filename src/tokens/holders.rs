@@ -49,8 +49,8 @@ const MAX_ANALYZABLE_ACCOUNTS: usize = 2000;
 /// Uses dataSlice to efficiently count accounts without downloading account data
 pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usize, String> {
     log(
-        LogTag::Rpc,
-        "ACCOUNT_COUNT",
+        LogTag::Security,
+        "DEBUG",
         &format!("Estimating token account count for mint {}", safe_truncate(mint_address, 8))
     );
 

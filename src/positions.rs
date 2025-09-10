@@ -3152,39 +3152,106 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                 // but memory shows verified=false, causing UI to display stale state
                 {
                     let mut positions = POSITIONS.write().await;
-                    if
-                        let Some(in_memory_position) = positions
-                            .iter_mut()
-                            .find(|p| { p.id == position.id && p.mint == position.mint })
-                    {
-                        // Update memory state to match database state
-                        in_memory_position.transaction_entry_verified =
-                            position.transaction_entry_verified;
-                        in_memory_position.transaction_exit_verified =
-                            position.transaction_exit_verified;
 
-                        if is_debug_positions_enabled() {
-                            log(
-                                LogTag::Positions,
-                                "MEMORY_SYNC",
-                                &format!(
-                                    "✅ Synchronized in-memory position {} verification status: entry={}, exit={}",
-                                    position.symbol,
-                                    in_memory_position.transaction_entry_verified,
-                                    in_memory_position.transaction_exit_verified
-                                )
-                            );
+                    // Try multiple matching strategies to find the position reliably
+                    let mut found_position = false;
+
+                    // Strategy 1: Match by ID and mint (preferred)
+                    if let Some(position_id) = position.id {
+                        if
+                            let Some(in_memory_position) = positions
+                                .iter_mut()
+                                .find(|p| p.id == Some(position_id) && p.mint == position.mint)
+                        {
+                            // Update memory state to match database state
+                            in_memory_position.transaction_entry_verified =
+                                position.transaction_entry_verified;
+                            in_memory_position.transaction_exit_verified =
+                                position.transaction_exit_verified;
+                            found_position = true;
+
+                            if is_debug_positions_enabled() {
+                                log(
+                                    LogTag::Positions,
+                                    "MEMORY_SYNC",
+                                    &format!(
+                                        "✅ [ID+Mint] Synchronized in-memory position {} (ID: {}) verification status: entry={}, exit={}",
+                                        position.symbol,
+                                        position_id,
+                                        in_memory_position.transaction_entry_verified,
+                                        in_memory_position.transaction_exit_verified
+                                    )
+                                );
+                            }
                         }
-                    } else {
+                    }
+
+                    // Strategy 2: Fallback to mint + entry_transaction_signature if ID matching failed
+                    if !found_position {
+                        if let Some(ref entry_sig) = position.entry_transaction_signature {
+                            if
+                                let Some(in_memory_position) = positions
+                                    .iter_mut()
+                                    .find(
+                                        |p|
+                                            p.mint == position.mint &&
+                                            p.entry_transaction_signature.as_ref() ==
+                                                Some(entry_sig)
+                                    )
+                            {
+                                // Update memory state to match database state
+                                in_memory_position.transaction_entry_verified =
+                                    position.transaction_entry_verified;
+                                in_memory_position.transaction_exit_verified =
+                                    position.transaction_exit_verified;
+                                found_position = true;
+
+                                if is_debug_positions_enabled() {
+                                    log(
+                                        LogTag::Positions,
+                                        "MEMORY_SYNC",
+                                        &format!(
+                                            "✅ [Mint+Sig] Synchronized in-memory position {} verification status: entry={}, exit={}",
+                                            position.symbol,
+                                            in_memory_position.transaction_entry_verified,
+                                            in_memory_position.transaction_exit_verified
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                    // Log warning if position still not found
+                    if !found_position {
                         log(
                             LogTag::Positions,
                             "MEMORY_SYNC_WARNING",
                             &format!(
-                                "⚠️ Could not find in-memory position {} (ID: {}) to sync verification status",
+                                "⚠️ Could not find in-memory position {} (ID: {}, Mint: {}) to sync verification status - checking position count: {}",
                                 position.symbol,
-                                position.id.unwrap_or(0)
+                                position.id.unwrap_or(0),
+                                safe_truncate(&position.mint, 8),
+                                positions.len()
                             )
                         );
+
+                        // Debug: Log existing positions to help diagnose the issue
+                        if is_debug_positions_enabled() && positions.len() < 10 {
+                            for (i, p) in positions.iter().enumerate() {
+                                log(
+                                    LogTag::Positions,
+                                    "MEMORY_SYNC_DEBUG",
+                                    &format!(
+                                        "Position {}: ID={}, Symbol={}, Mint={}",
+                                        i,
+                                        p.id.unwrap_or(0),
+                                        p.symbol,
+                                        safe_truncate(&p.mint, 8)
+                                    )
+                                );
+                            }
+                        }
                     }
                 }
 

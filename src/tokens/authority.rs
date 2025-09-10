@@ -127,8 +127,8 @@ impl TokenRiskLevel {
 /// This function handles both SPL tokens and Token-2022 tokens
 pub async fn get_token_authorities(mint: &str) -> Result<TokenAuthorities, ScreenerBotError> {
     log(
-        LogTag::Rpc,
-        "AUTH_CHECK",
+        LogTag::Security,
+        "DEBUG",
         &format!("Checking authorities for mint: {}", crate::utils::safe_truncate(mint, 12))
     );
 
@@ -141,8 +141,8 @@ pub async fn get_token_authorities(mint: &str) -> Result<TokenAuthorities, Scree
     let is_token_2022 = rpc_client.is_token_2022_mint(mint).await.unwrap_or(false);
 
     log(
-        LogTag::Rpc,
-        "AUTH_CHECK",
+        LogTag::Security,
+        "DEBUG",
         &format!(
             "Token type detected: {} for mint: {}",
             if is_token_2022 {
@@ -158,8 +158,8 @@ pub async fn get_token_authorities(mint: &str) -> Result<TokenAuthorities, Scree
     let authorities = parse_mint_authorities(&account_data, mint, is_token_2022)?;
 
     log(
-        LogTag::Rpc,
-        "AUTH_RESULT",
+        LogTag::Security,
+        "DEBUG",
         &format!(
             "Authority check complete for {}: {}",
             crate::utils::safe_truncate(mint, 12),
@@ -250,7 +250,7 @@ pub async fn get_multiple_token_authorities(
         return Ok(Vec::new());
     }
 
-    log(LogTag::Rpc, "AUTH_BATCH", &format!("Checking authorities for {} tokens", mints.len()));
+    log(LogTag::Security, "DEBUG", &format!("Checking authorities for {} tokens", mints.len()));
 
     let mut results = Vec::with_capacity(mints.len());
     let mut successful_checks = 0;

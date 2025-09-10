@@ -395,6 +395,7 @@ fn should_force_console_debug(tag: &LogTag, log_type: &str) -> bool {
         is_debug_pool_fetcher_enabled,
         is_debug_pool_decoders_enabled,
         is_debug_blacklist_enabled,
+        is_debug_security_enabled,
     };
 
     if log_type.to_uppercase() != "DEBUG" {
@@ -410,6 +411,7 @@ fn should_force_console_debug(tag: &LogTag, log_type: &str) -> bool {
         LogTag::PoolFetcher => is_debug_pool_fetcher_enabled(),
         LogTag::PoolDecoder => is_debug_pool_decoders_enabled(),
         LogTag::Blacklist => is_debug_blacklist_enabled(),
+        LogTag::Security => is_debug_security_enabled(),
         _ => false,
     }
 }

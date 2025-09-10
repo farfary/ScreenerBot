@@ -225,6 +225,11 @@ pub fn is_debug_system_enabled() -> bool {
     has_arg("--debug-system")
 }
 
+/// Security operations debug mode
+pub fn is_debug_security_enabled() -> bool {
+    has_arg("--debug-security")
+}
+
 /// Dry-run mode - simulates trading without executing actual transactions
 pub fn is_dry_run_enabled() -> bool {
     has_arg("--dry-run")
@@ -311,6 +316,7 @@ pub fn print_help() {
     println!("    --debug-summary-logging   Write summary tables to log file");
     println!("    --debug-swaps             Swap operations debug mode");
     println!("    --debug-system            System operations debug mode");
+    println!("    --debug-security          Security operations debug mode");
     println!("    --debug-trader            Trader module debug mode");
     println!("    --debug-transactions      Transactions module debug mode");
     println!("    --debug-websocket         WebSocket connection debug mode");
@@ -366,7 +372,8 @@ pub fn is_any_debug_enabled() -> bool {
         is_debug_rpc_enabled() ||
         is_debug_positions_enabled() ||
         is_debug_ata_enabled() ||
-        is_debug_blacklist_enabled()
+        is_debug_blacklist_enabled() ||
+        is_debug_security_enabled()
 }
 
 /// Gets a list of all enabled debug modes
@@ -456,6 +463,9 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     }
     if is_debug_blacklist_enabled() {
         modes.push("blacklist");
+    }
+    if is_debug_security_enabled() {
+        modes.push("security");
     }
     if is_dry_run_enabled() {
         modes.push("dry-run");

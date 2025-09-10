@@ -253,16 +253,16 @@ impl LockPrograms {
 /// This is the main function that should be used everywhere
 pub async fn check_lp_lock_status(token_mint: &str) -> Result<LpLockAnalysis, ScreenerBotError> {
     log(
-        LogTag::Rpc,
-        "LP_LOCK_CHECK",
+        LogTag::Security,
+        "DEBUG",
         &format!("Checking LP lock status for token {}", truncate_address(token_mint, 8))
     );
 
     // SAFETY CHECK: Pre-check token holder count using dataSlice to prevent hanging
     // Large tokens with millions of holders will cause RPC timeouts
     log(
-        LogTag::Rpc,
-        "LP_TOKEN_PRECHECK",
+        LogTag::Security,
+        "DEBUG",
         &format!("Pre-checking token holder count for {}", truncate_address(token_mint, 8))
     );
 
@@ -271,8 +271,8 @@ pub async fn check_lp_lock_status(token_mint: &str) -> Result<LpLockAnalysis, Sc
             const MAX_SAFE_HOLDERS: usize = 5000;
             if holder_count > MAX_SAFE_HOLDERS {
                 log(
-                    LogTag::Rpc,
-                    "LP_SKIP_LARGE_HOLDERS",
+                    LogTag::Security,
+                    "DEBUG",
                     &format!(
                         "Skipping LP analysis for token {} - {} holders exceeds maximum {} (prevents hanging)",
                         truncate_address(token_mint, 8),
