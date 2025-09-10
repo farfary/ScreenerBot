@@ -91,8 +91,12 @@ impl ExpectedValues {
     }
 }
 
-/// Parse pool data with extreme verbosity
-fn parse_pool_data_verbose(data: &[u8], expected: &ExpectedValues, show_hex: bool) -> Option<()> {
+/// Parse pool data with extreme verbosity and return (mint_a, mint_b, vault_a, vault_b)
+fn parse_pool_data_verbose(
+    data: &[u8],
+    expected: &ExpectedValues,
+    show_hex: bool
+) -> Option<(String, String, String, String)> {
     println!("\n🔍 DETAILED POOL DATA ANALYSIS");
     println!("==============================");
     println!("Pool data size: {} bytes", data.len());
@@ -333,7 +337,7 @@ fn parse_pool_data_verbose(data: &[u8], expected: &ExpectedValues, show_hex: boo
         println!("Token B: {}", mint_b_str);
     }
 
-    Some(())
+    Some((mint_a_str, mint_b_str, vault_a_str, vault_b_str))
 }
 
 /// Fetch and analyze token account data
@@ -404,7 +408,7 @@ async fn analyze_token_account(vault_address: &str, vault_name: &str) -> Option<
 /// Test the Orca decoder with verbose debugging
 async fn test_orca_decoder_verbose(
     pool_accounts: &HashMap<String, AccountData>,
-    expected: &ExpectedValues
+    target_token_mint: &str
 ) {
     println!("\n🧪 TESTING ORCA DECODER");
     println!("========================");
@@ -423,7 +427,7 @@ async fn test_orca_decoder_verbose(
     println!("\n🔄 Testing TOKEN/SOL orientation...");
     let result1 = OrcaWhirlpoolDecoder::decode_and_calculate(
         pool_accounts,
-        &expected.token_mint_b, // BONK as base
+        target_token_mint, // Target as base
         SOL_MINT // SOL as quote
     );
 
@@ -444,7 +448,7 @@ async fn test_orca_decoder_verbose(
     let result2 = OrcaWhirlpoolDecoder::decode_and_calculate(
         pool_accounts,
         SOL_MINT, // SOL as base
-        &expected.token_mint_b // BONK as quote
+        target_token_mint // Target as quote
     );
 
     match result2 {
@@ -517,15 +521,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "❌"
     });
 
-    // Parse pool data with extreme verbosity
-    parse_pool_data_verbose(&pool_account.data, &expected, args.show_hex);
+    // Parse pool data with extreme verbosity and capture parsed keys
+    let (mint_a, mint_b, vault_a, vault_b) = match
+        parse_pool_data_verbose(&pool_account.data, &expected, args.show_hex)
+    {
+        Some(t) => t,
+        None => {
+            println!("❌ ERROR: Failed to parse pool core fields");
+            std::process::exit(1);
+        }
+    };
 
     // Fetch vault accounts
     println!("\n🏦 FETCHING VAULT ACCOUNTS");
     println!("==========================");
 
-    let sol_vault_balance = analyze_token_account(&expected.token_vault_a, "SOL").await;
-    let token_vault_balance = analyze_token_account(&expected.token_vault_b, "TOKEN").await;
+    // Determine SOL orientation to know which vault is SOL and which is token
+    let (sol_vault, token_vault, target_token_mint) = if mint_a == SOL_MINT {
+        (vault_a.clone(), vault_b.clone(), mint_b.clone())
+    } else if mint_b == SOL_MINT {
+        (vault_b.clone(), vault_a.clone(), mint_a.clone())
+    } else {
+        // Fallback: assume mint_b is target, vault_b is token vault
+        (vault_a.clone(), vault_b.clone(), mint_b.clone())
+    };
+
+    let sol_vault_balance = analyze_token_account(&sol_vault, "SOL").await;
+    let token_vault_balance = analyze_token_account(&token_vault, "TOKEN").await;
 
     // Create accounts map for decoder testing
     let mut pool_accounts = HashMap::new();
@@ -539,9 +561,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Add vault accounts if fetched successfully
-    if let Ok(vault_a_pubkey) = parse_pubkey(&expected.token_vault_a) {
+    if let Ok(vault_a_pubkey) = parse_pubkey(&vault_a) {
         if let Ok(vault_a_account) = rpc_client.client().get_account(&vault_a_pubkey) {
-            pool_accounts.insert(expected.token_vault_a.clone(), AccountData {
+            pool_accounts.insert(vault_a.clone(), AccountData {
                 pubkey: vault_a_pubkey,
                 data: vault_a_account.data,
                 slot: 0,
@@ -552,9 +574,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    if let Ok(vault_b_pubkey) = parse_pubkey(&expected.token_vault_b) {
+    if let Ok(vault_b_pubkey) = parse_pubkey(&vault_b) {
         if let Ok(vault_b_account) = rpc_client.client().get_account(&vault_b_pubkey) {
-            pool_accounts.insert(expected.token_vault_b.clone(), AccountData {
+            pool_accounts.insert(vault_b.clone(), AccountData {
                 pubkey: vault_b_pubkey,
                 data: vault_b_account.data,
                 slot: 0,
@@ -566,7 +588,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Test decoder with verbose debugging
-    test_orca_decoder_verbose(&pool_accounts, &expected).await;
+    test_orca_decoder_verbose(&pool_accounts, &target_token_mint).await;
 
     // Calculate expected price manually for comparison
     if let (Some(sol_balance), Some(token_balance)) = (sol_vault_balance, token_vault_balance) {
@@ -574,7 +596,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("============================");
 
         // Get token decimals
-        let token_decimals = get_token_decimals_sync(&expected.token_mint_b).unwrap_or(9);
+        let token_decimals = get_token_decimals_sync(&target_token_mint).unwrap_or(9);
         let sol_decimals = SOL_DECIMALS;
 
         let sol_adjusted = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
@@ -598,7 +620,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Reuse the same accounts to compute decoder price (TOKEN/SOL orientation)
     let decoded_price_opt = OrcaWhirlpoolDecoder::decode_and_calculate(
         &pool_accounts,
-        &expected.token_mint_b,
+        &target_token_mint,
         SOL_MINT
     );
 
@@ -615,7 +637,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match get_global_dexscreener_api().await {
                 Ok(api) => {
                     let mut guard = api.lock().await;
-                    match guard.get_token_data(&expected.token_mint_b).await {
+                    match guard.get_token_data(&target_token_mint).await {
                         Ok(Some(api_token)) => {
                             // Prefer price_sol when available; fallback to price_native
                             let api_price = api_token.price_sol.unwrap_or(api_token.price_native);
