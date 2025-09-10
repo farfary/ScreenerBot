@@ -14,6 +14,7 @@ use super::types::{ PoolDescriptor, ProgramKind };
 use super::utils::{ PoolMintVaultInfo, is_sol_mint };
 use super::decoders::{
     meteora_damm::MeteoraDammDecoder,
+    meteora_dbc::MeteoraDbcDecoder,
     meteora_dlmm::MeteoraDlmmDecoder,
     raydium_cpmm::RaydiumCpmmDecoder,
     raydium_clmm::RaydiumClmmDecoder,
@@ -378,11 +379,57 @@ impl PoolAnalyzer {
             }
 
             ProgramKind::MeteoraDbc => {
-                // For DBC, we need pool account + two vaults; reuse DAMM-style extraction if available later.
-                // For now, include pool and mints; vaults will be discovered by decoder via accounts set.
+                if is_debug_pool_analyzer_enabled() {
+                    log(
+                        LogTag::PoolAnalyzer,
+                        "INFO",
+                        &format!("Extracting DBC accounts for pool {}", pool_id)
+                    );
+                }
+
                 let mut accounts = vec![*pool_id];
+
+                // Fetch pool account to extract vault addresses using decoder function
+                if let Ok(pool_account) = rpc_client.get_account(pool_id).await {
+                    if
+                        let Some(vault_addresses) =
+                            super::decoders::meteora_dbc::MeteoraDbcDecoder::extract_reserve_accounts(
+                                &pool_account.data
+                            )
+                    {
+                        let vault_count = vault_addresses.len();
+                        for vault_str in vault_addresses {
+                            if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
+                                accounts.push(vault_pubkey);
+                            }
+                        }
+
+                        if is_debug_pool_analyzer_enabled() {
+                            log(
+                                LogTag::PoolAnalyzer,
+                                "INFO",
+                                &format!(
+                                    "DBC pool {} extracted {} vault accounts",
+                                    pool_id,
+                                    vault_count
+                                )
+                            );
+                        }
+                    } else {
+                        if is_debug_pool_analyzer_enabled() {
+                            log(
+                                LogTag::PoolAnalyzer,
+                                "WARN",
+                                &format!("Failed to extract vault addresses from DBC pool {}", pool_id)
+                            );
+                        }
+                    }
+                }
+
+                // Always include the mints
                 accounts.push(*base_mint);
                 accounts.push(*quote_mint);
+
                 Some(accounts)
             }
 
