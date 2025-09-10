@@ -35,7 +35,6 @@ const PROGRESS_UPDATE_INTERVAL_SECS: u64 = 2;
 const DEFAULT_TASK_TIMEOUT_SECS: u64 = 15;
 
 // Hardcoded feature toggles
-const ENABLE_SOLSCAN_INTEGRATION: bool = false; // Set to true to enable Solscan API integration, false to completely disable it
 const DASHBOARD_TASK_TIMEOUT_SECS: u64 = 20;
 const EXTENDED_TASK_TIMEOUT_SECS: u64 = 120;
 const DASHBOARD_MIN_TIMEOUT_SECS: u64 = 22;
@@ -309,76 +308,6 @@ pub async fn run_bot() -> Result<(), String> {
                         format!("Failed to load wallet keypair for transaction manager: {}", e)
                     );
                 }
-            }
-
-            // Initialize Solscan API client if enabled and token is provided
-            if ENABLE_SOLSCAN_INTEGRATION {
-                if let Some(solscan_token) = configs.solscan_api_token {
-                    if !solscan_token.is_empty() {
-                        match crate::solscan::initialize_solscan_client(solscan_token) {
-                            Ok(_) => {
-                                debug_log(
-                                    LogTag::System,
-                                    "INFO",
-                                    "Solscan API client initialized successfully"
-                                );
-
-                                // Perform initial health check
-                                if let Some(client) = crate::solscan::get_solscan_client() {
-                                    match client.health_check().await {
-                                        Ok(healthy) => {
-                                            if healthy {
-                                                debug_log(
-                                                    LogTag::System,
-                                                    "INFO",
-                                                    "✅ Solscan API is healthy and ready"
-                                                );
-                                            } else {
-                                                debug_log(
-                                                    LogTag::System,
-                                                    "WARN",
-                                                    "⚠️ Solscan API initialized but may have limited functionality"
-                                                );
-                                            }
-                                        }
-                                        Err(e) => {
-                                            debug_log(
-                                                LogTag::System,
-                                                "WARN",
-                                                &format!("Solscan API health check failed: {}", e)
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                debug_log(
-                                    LogTag::System,
-                                    "WARN",
-                                    &format!("Failed to initialize Solscan client: {}", e)
-                                );
-                            }
-                        }
-                    } else {
-                        debug_log(
-                            LogTag::System,
-                            "INFO",
-                            "Solscan API token is empty - external API features disabled"
-                        );
-                    }
-                } else {
-                    debug_log(
-                        LogTag::System,
-                        "INFO",
-                        "No Solscan API token configured - external API features disabled"
-                    );
-                }
-            } else {
-                debug_log(
-                    LogTag::System,
-                    "INFO",
-                    "Solscan API integration disabled by configuration - external API features unavailable"
-                );
             }
         }
         Err(e) => {

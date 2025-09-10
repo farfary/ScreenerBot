@@ -4953,7 +4953,6 @@ pub struct BackwardCompatibleConfig {
     pub rpc_url_premium: String,
     pub rpc_url_ws_premium: String,
     pub rpc_fallbacks: Vec<String>,
-    pub solscan_api_token: Option<String>,
 }
 
 /// Extracts token account information from RPC response

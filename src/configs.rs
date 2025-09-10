@@ -27,8 +27,6 @@ pub struct Configs {
     pub main_wallet_private: String,
     /// List of RPC URLs for round-robin usage - each call cycles through these URLs
     pub rpc_urls: Vec<String>,
-    /// Solscan API token for external transaction analysis (optional)
-    pub solscan_api_token: Option<String>,
 }
 
 /// Reads the configs.json file from the default data directory and returns a Configs object
@@ -255,7 +253,6 @@ pub fn create_default_config() -> Configs {
             "https://fallback1.com".to_string(),
             "https://fallback2.com".to_string()
         ],
-        solscan_api_token: None,
     }
 }
 
