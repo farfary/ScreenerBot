@@ -10,6 +10,7 @@ use crate::positions::*;
 use crate::positions_lib::{ calculate_position_pnl, calculate_position_total_fees };
 use crate::positions_types::Position;
 use crate::rpc::get_global_rpc_stats;
+use crate::tokens::get_token_from_db;
 use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
 use crate::trader::*;
 use crate::transactions::TransactionsManager;
@@ -32,6 +33,144 @@ const MAX_RECENT_CLOSED_POSITIONS: usize = 20;
 
 /// Summary display refresh interval (seconds) - optimized for 5s priority checking
 pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 15;
+
+// =============================================================================
+// TOKEN SYMBOL CACHE HELPERS
+// =============================================================================
+
+/// Safely batch-fetch token names from database for swap display
+/// This function is performance-optimized and error-safe
+async fn build_token_symbol_cache(transactions: &[Transaction]) -> std::collections::HashMap<String, String> {
+    let mut token_cache = std::collections::HashMap::new();
+    
+    // Extract unique token mints from all transactions
+    let mut unique_mints = std::collections::HashSet::new();
+    for tx in transactions {
+        match &tx.transaction_type {
+            TransactionType::SwapSolToToken { token_mint, .. } |
+            TransactionType::SwapTokenToSol { token_mint, .. } => {
+                if !token_mint.is_empty() && token_mint != "Unknown" {
+                    unique_mints.insert(token_mint.clone());
+                }
+            }
+            TransactionType::SwapTokenToToken { from_mint, to_mint, .. } => {
+                if !from_mint.is_empty() && from_mint != "Unknown" {
+                    unique_mints.insert(from_mint.clone());
+                }
+                if !to_mint.is_empty() && to_mint != "Unknown" {
+                    unique_mints.insert(to_mint.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    
+    if unique_mints.is_empty() {
+        return token_cache;
+    }
+    
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "TOKEN_CACHE",
+            &format!("Building token symbol cache for {} unique mints", unique_mints.len())
+        );
+    }
+    
+    // Fetch token names from database with timeout protection
+    let fetch_start = std::time::Instant::now();
+    let mut successful_fetches = 0;
+    let mut timeout_count = 0;
+    
+    for mint in unique_mints {
+        // Skip if we already have this token cached
+        if token_cache.contains_key(&mint) {
+            continue;
+        }
+        
+        // Handle SOL native token immediately
+        if mint == "So11111111111111111111111111111111111111112" {
+            token_cache.insert(mint.clone(), "SOL".to_string());
+            continue;
+        }
+        
+        // Skip invalid mints
+        if mint.len() < 32 {
+            token_cache.insert(mint.clone(), format!("INVALID_{}", &mint[..std::cmp::min(8, mint.len())]));
+            continue;
+        }
+        
+        // Add timeout protection for each database query
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(100), // 100ms timeout per token
+            get_token_from_db(&mint)
+        ).await {
+            Ok(Some(token)) => {
+                let symbol = if !token.symbol.is_empty() && 
+                              token.symbol != "Unknown" && 
+                              token.symbol.len() <= 20 {
+                    token.symbol
+                } else if !token.name.is_empty() && 
+                          token.name != "Unknown" && 
+                          token.name.len() <= 30 {
+                    // Fallback to name if symbol is empty/unknown
+                    if token.name.len() > 12 {
+                        format!("{}...", &token.name[..9])
+                    } else {
+                        token.name
+                    }
+                } else {
+                    // Final fallback to shortened mint
+                    format!("TOKEN_{}", &mint[..8])
+                };
+                
+                token_cache.insert(mint.clone(), symbol);
+                successful_fetches += 1;
+            }
+            Ok(None) => {
+                // Token not found in database, use fallback
+                token_cache.insert(mint.clone(), format!("TOKEN_{}", &mint[..8]));
+            }
+            Err(_) => {
+                // Timeout or error, use fallback and continue
+                token_cache.insert(mint.clone(), format!("TOKEN_{}", &mint[..8]));
+                timeout_count += 1;
+            }
+        }
+        
+        // If fetching is taking too long overall, break early to avoid blocking
+        if fetch_start.elapsed() > std::time::Duration::from_millis(2000) {
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "TOKEN_CACHE_LIMIT",
+                    "Token cache building time limit reached, using fallbacks for remaining tokens"
+                );
+            }
+            break;
+        }
+    }
+    
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "TOKEN_CACHE_COMPLETE",
+            &format!(
+                "Token cache built: {}/{} tokens fetched successfully, {} timeouts, in {}ms",
+                successful_fetches,
+                token_cache.len(),
+                timeout_count,
+                fetch_start.elapsed().as_millis()
+            )
+        );
+    }
+    
+    token_cache
+}
+
+// =============================================================================
+// DISPLAY STRUCTURES
+// =============================================================================
 
 /// Display structure for closed positions with specific "Exit" column
 #[derive(Tabled)]
@@ -1115,7 +1254,14 @@ async fn build_recent_swaps_section() -> Result<String, String> {
                 ).await
             {
                 if let Some(ref mut manager) = *guard {
-                    let token_cache = std::collections::HashMap::new();
+                    // Build token symbol cache from database for better token names
+                    // Only build cache if we have transactions to process
+                    let token_cache = if swaps.len() > 0 {
+                        build_token_symbol_cache(&swaps).await
+                    } else {
+                        std::collections::HashMap::new()
+                    };
+                    
                     swaps
                         .into_iter()
                         .filter_map(|tx| {
