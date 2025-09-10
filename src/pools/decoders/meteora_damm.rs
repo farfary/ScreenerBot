@@ -254,7 +254,7 @@ impl PoolDecoder for MeteoraDammDecoder {
         let price_sol = if damm_info.sqrt_price > 0 {
             // sqrt_price calculation using Q64.64 fixed point arithmetic
             // For Q64.64: ratio = (sqrt_price / 2^64)^2
-            // Then apply decimal adjustment: ratio * 10^(sol_decimals - token_decimals)
+            // The raw ratio is in smallest units, so we need to adjust for decimals
             // Orientation:
             // - If token_b is SOL (WSOL), ratio is token/SOL; invert to get SOL/token
             // - If token_a is SOL, ratio is SOL/token already
@@ -266,7 +266,9 @@ impl PoolDecoder for MeteoraDammDecoder {
             let raw_price = normalized_sqrt * normalized_sqrt; // base ratio in smallest units
 
             // Apply decimal adjustment to convert from smallest units to human-readable
-            let decimal_adj_factor = (10_f64).powi((sol_decimals as i32) - (token_decimals as i32));
+            // The raw_price is in ratio of smallest units: (token_smallest / sol_smallest)
+            // To get human units: raw_price * (10^sol_decimals / 10^token_decimals)
+            let decimal_adj_factor = (10_f64).powi((token_decimals as i32) - (sol_decimals as i32));
             let decimal_adjusted_price = raw_price * decimal_adj_factor;
 
             let mut oriented_price = if is_sol_mint(&damm_info.token_b_mint) {
@@ -288,14 +290,19 @@ impl PoolDecoder for MeteoraDammDecoder {
                 decimal_adjusted_price
             };
 
-            // Sanity fallback
-            if !oriented_price.is_finite() || oriented_price <= 0.0 {
+            // Sanity fallback - if sqrt_price result differs significantly from vault ratio, use vault ratio
+            if
+                !oriented_price.is_finite() ||
+                oriented_price <= 0.0 ||
+                (simple_ratio > 0.0 &&
+                    (oriented_price / simple_ratio > 10.0 || simple_ratio / oriented_price > 10.0))
+            {
                 if is_debug_pool_decoders_enabled() {
                     log(
                         LogTag::PoolDecoder,
                         "WARN",
                         &format!(
-                            "DAMM sqrt_price invalid ({}), falling back to vault ratio {:.12}",
+                            "DAMM sqrt_price gives unreasonable result ({:.12}), falling back to vault ratio {:.12}",
                             oriented_price,
                             simple_ratio
                         )
