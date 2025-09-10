@@ -74,16 +74,114 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
             pool_info.token_mint_a == SOL_MINT
         {
             // A is SOL, B is token
-            let sol_vault_account = accounts.get(&pool_info.token_vault_a)?;
-            let token_vault_account = accounts.get(&pool_info.token_vault_b)?;
+            if is_debug_pool_decoders_enabled() {
+                log(
+                    LogTag::PoolDecoder,
+                    "DEBUG",
+                    &format!(
+                        "Token A is SOL, Token B is target. Looking for vaults: A={}, B={}",
+                        pool_info.token_vault_a,
+                        pool_info.token_vault_b
+                    )
+                );
+                log(
+                    LogTag::PoolDecoder,
+                    "DEBUG",
+                    &format!("Available accounts: {:?}", accounts.keys().collect::<Vec<_>>())
+                );
+            }
+
+            let sol_vault_account = match accounts.get(&pool_info.token_vault_a) {
+                Some(account) => account,
+                None => {
+                    if is_debug_pool_decoders_enabled() {
+                        log(
+                            LogTag::PoolDecoder,
+                            "ERROR",
+                            &format!(
+                                "SOL vault account {} not found in fetched accounts",
+                                pool_info.token_vault_a
+                            )
+                        );
+                    }
+                    return None;
+                }
+            };
+
+            let token_vault_account = match accounts.get(&pool_info.token_vault_b) {
+                Some(account) => account,
+                None => {
+                    if is_debug_pool_decoders_enabled() {
+                        log(
+                            LogTag::PoolDecoder,
+                            "ERROR",
+                            &format!(
+                                "Token vault account {} not found in fetched accounts",
+                                pool_info.token_vault_b
+                            )
+                        );
+                    }
+                    return None;
+                }
+            };
+
             let sol_reserve = Self::extract_token_account_balance(&sol_vault_account.data)?;
             let token_reserve = Self::extract_token_account_balance(&token_vault_account.data)?;
 
             (pool_info.token_vault_a, pool_info.token_vault_b, sol_reserve, token_reserve, true)
         } else if pool_info.token_mint_b == SOL_MINT {
             // B is SOL, A is token
-            let sol_vault_account = accounts.get(&pool_info.token_vault_b)?;
-            let token_vault_account = accounts.get(&pool_info.token_vault_a)?;
+            if is_debug_pool_decoders_enabled() {
+                log(
+                    LogTag::PoolDecoder,
+                    "DEBUG",
+                    &format!(
+                        "Token B is SOL, Token A is target. Looking for vaults: A={}, B={}",
+                        pool_info.token_vault_a,
+                        pool_info.token_vault_b
+                    )
+                );
+                log(
+                    LogTag::PoolDecoder,
+                    "DEBUG",
+                    &format!("Available accounts: {:?}", accounts.keys().collect::<Vec<_>>())
+                );
+            }
+
+            let sol_vault_account = match accounts.get(&pool_info.token_vault_b) {
+                Some(account) => account,
+                None => {
+                    if is_debug_pool_decoders_enabled() {
+                        log(
+                            LogTag::PoolDecoder,
+                            "ERROR",
+                            &format!(
+                                "SOL vault account {} not found in fetched accounts",
+                                pool_info.token_vault_b
+                            )
+                        );
+                    }
+                    return None;
+                }
+            };
+
+            let token_vault_account = match accounts.get(&pool_info.token_vault_a) {
+                Some(account) => account,
+                None => {
+                    if is_debug_pool_decoders_enabled() {
+                        log(
+                            LogTag::PoolDecoder,
+                            "ERROR",
+                            &format!(
+                                "Token vault account {} not found in fetched accounts",
+                                pool_info.token_vault_a
+                            )
+                        );
+                    }
+                    return None;
+                }
+            };
+
             let sol_reserve = Self::extract_token_account_balance(&sol_vault_account.data)?;
             let token_reserve = Self::extract_token_account_balance(&token_vault_account.data)?;
 
@@ -131,46 +229,50 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         };
         let sol_decimals = SOL_DECIMALS;
 
-        // Calculate price using sqrt_price (more accurate for concentrated liquidity)
-        let price_sol = if pool_info.sqrt_price > 0 {
-            // Orca Whirlpool sqrt_price calculation
-            // The sqrt_price is stored as a Q64.64 fixed point number
-            // Price = (sqrt_price / 2^64)^2
-            let sqrt_price_scaled = (pool_info.sqrt_price as f64) / (2_f64).powi(64);
-            let raw_price = sqrt_price_scaled * sqrt_price_scaled;
-
-            // The price represents token_a/token_b ratio
-            let final_price = if is_token_a_sol {
-                // SOL is token_a, so raw_price = SOL/TOKEN, we want TOKEN/SOL
-                1.0 / raw_price
-            } else {
-                // TOKEN is token_a, so raw_price = TOKEN/SOL, which is what we want
-                raw_price
-            };
-
-            // Adjust for decimal differences
-            let decimal_adjustment =
-                (10_f64).powi(sol_decimals as i32) / (10_f64).powi(token_decimals as i32);
-            final_price * decimal_adjustment
+        // Calculate price using the CORRECT Orca sqrt_price formula from official repository
+        // https://github.com/orca-so/whirlpools/blob/main/rust-sdk/core/src/math/price.rs#L27-L45
+        // sqrt_price encodes sqrt(price), where price is token_b per token_a, adjusted by decimals.
+        // We must return SOL per target token (price_sol).
+        let price_sol = if is_token_a_sol {
+            // Token A is SOL, Token B is target token.
+            // First compute price_b_per_a (token B per token A):
+            // price_b_per_a = (sqrt_price / Q64)^2 * 10^(decimals_a - decimals_b)
+            let q64_resolution = 18446744073709551616.0; // 2^64
+            let sqrt_price_normalized = (pool_info.sqrt_price as f64) / q64_resolution;
+            let price_b_per_a =
+                sqrt_price_normalized.powi(2) *
+                (10_f64).powi((sol_decimals as i32) - (token_decimals as i32));
+            // We want SOL per token (A per B), so invert:
+            1.0 / price_b_per_a
         } else {
-            // Fallback to reserve ratio calculation
-            let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
-            let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals as i32);
-            sol_adjusted / token_adjusted
+            // Token B is SOL, Token A is target token.
+            // price_b_per_a = (sqrt_price / Q64)^2 * 10^(decimals_a - decimals_b)
+            // Here, b is SOL, a is target token; price_b_per_a is SOL per token already.
+            let q64_resolution = 18446744073709551616.0; // 2^64
+            let sqrt_price_normalized = (pool_info.sqrt_price as f64) / q64_resolution;
+            sqrt_price_normalized.powi(2) *
+                (10_f64).powi((token_decimals as i32) - (sol_decimals as i32))
         };
 
         if is_debug_pool_decoders_enabled() {
+            // Also calculate reserve ratio for comparison
+            let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
+            let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals as i32);
+            let reserve_ratio_price = sol_adjusted / token_adjusted; // SOL per token (for reference only)
+
             log(
                 LogTag::PoolDecoder,
                 "SUCCESS",
                 &format!(
-                    "Orca Whirlpool price calculated: {:.12} SOL\n  SOL reserves: {} ({})\n  Token reserves: {} ({})\n  sqrt_price: {}",
+                    "Orca Whirlpool price calculated: {:.12} SOL (sqrt_price method: SOL per token)\n  Reserve ratio (SOL per token): {:.12} SOL\n  SOL reserves: {} ({})\n  Token reserves: {} ({})\n  sqrt_price: {}\n  Token A is SOL: {}",
                     price_sol,
+                    reserve_ratio_price,
                     sol_reserve,
                     sol_vault,
                     token_reserve,
                     token_vault,
-                    pool_info.sqrt_price
+                    pool_info.sqrt_price,
+                    is_token_a_sol
                 )
             );
         }
@@ -197,18 +299,26 @@ impl OrcaWhirlpoolDecoder {
         }
 
         // Use the exact Orca Whirlpool structure offsets based on official source
-        // Skip discriminator (8), whirlpools_config (32), whirlpool_bump (1),
-        // tick_spacing (2), fee_tier_index_seed (2), fee_rate (2), protocol_fee_rate (2),
-        // liquidity (16), sqrt_price (16), tick_current_index (4),
-        // protocol_fee_owed_a (8), protocol_fee_owed_b (8)
-        // This brings us to token_mint_a at offset 99
+        // Discriminator: 8 bytes (offset 0)
+        // whirlpools_config: 32 bytes (offset 8)
+        // whirlpool_bump: 1 byte (offset 40)
+        // tick_spacing: 2 bytes (offset 41)
+        // fee_tier_index_seed: 2 bytes (offset 43)
+        // fee_rate: 2 bytes (offset 45)
+        // protocol_fee_rate: 2 bytes (offset 47)
+        // liquidity: 16 bytes (offset 49)
+        // sqrt_price: 16 bytes (offset 65)
+        // tick_current_index: 4 bytes (offset 81)
+        // protocol_fee_owed_a: 8 bytes (offset 85)
+        // protocol_fee_owed_b: 8 bytes (offset 93)
+        // token_mint_a: 32 bytes (offset 101)
+        // token_vault_a: 32 bytes (offset 133)
+        // fee_growth_global_a: 16 bytes (offset 165)
+        // token_mint_b: 32 bytes (offset 181)
+        // token_vault_b: 32 bytes (offset 213)
 
-        // token_vault_a at offset 131 (99 + 32)
-        let token_vault_a = Self::extract_pubkey_at_offset(pool_data, 131)?;
-
-        // token_vault_b at offset 211 (131 + 32 + 16 + 32)
-        // (vault_a + fee_growth_global_a + token_mint_b)
-        let token_vault_b = Self::extract_pubkey_at_offset(pool_data, 211)?;
+        let token_vault_a = Self::extract_pubkey_at_offset(pool_data, 133)?;
+        let token_vault_b = Self::extract_pubkey_at_offset(pool_data, 213)?;
 
         Some(vec![token_vault_a, token_vault_b])
     }
