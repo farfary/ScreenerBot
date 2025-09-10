@@ -870,6 +870,35 @@ impl TransactionsManager {
             );
         }
 
+        // CRITICAL FIX: Exclude obvious ATA closures from GMGN detection
+        // Check for closeAccount instructions with minimal token amounts
+        let has_close_account = transaction.instructions
+            .iter()
+            .any(|instruction| {
+                (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" ||
+                    instruction.program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") &&
+                instruction.instruction_type == "closeAccount"
+            }) || 
+            transaction.log_messages
+                .iter()
+                .any(|log| log.contains("Instruction: CloseAccount"));
+
+        if has_close_account {
+            // Check if this looks like an ATA closure (small SOL recovery, minimal tokens)
+            let rent_recovery = transaction.sol_balance_change;
+            let is_rent_like = rent_recovery > 0.0 && 
+                (rent_recovery >= 0.002 && rent_recovery <= 0.0025);
+                
+            let max_token_amount = transaction.token_transfers
+                .iter()
+                .map(|transfer| transfer.amount.abs())
+                .fold(0.0, f64::max);
+
+            if is_rent_like && max_token_amount < 100.0 {
+                return Err("Transaction appears to be ATA closure, not GMGN swap".to_string());
+            }
+        }
+
         // For GMGN swaps, we primarily rely on balance changes since program IDs may vary
         let has_token_operations =
             !transaction.token_transfers.is_empty() ||
@@ -900,6 +929,11 @@ impl TransactionsManager {
                     has_token_operations
                 )
             );
+        }
+
+        // Require significant token amount for real swaps (not just ATA operations)
+        if token_amount < 1.0 {
+            return Err("Token amount too small to be a real swap".to_string());
         }
 
         // Determine swap direction based on SOL balance change
@@ -1986,49 +2020,126 @@ impl TransactionsManager {
         &self,
         transaction: &Transaction
     ) -> Result<TransactionType, String> {
-        // Check for single closeAccount instruction
-        if transaction.instructions.len() != 1 {
-            return Err("Not a single instruction transaction".to_string());
+        // More robust ATA closure detection:
+        // 1. Look for closeAccount instructions in Token Programs
+        // 2. Check for characteristic rent recovery amounts
+        // 3. Verify no actual token trading occurred
+
+        let has_close_account = transaction.instructions
+            .iter()
+            .any(|instruction| {
+                (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" ||
+                    instruction.program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") &&
+                instruction.instruction_type == "closeAccount"
+            }) || 
+            // Also check logs for closeAccount patterns
+            transaction.log_messages
+                .iter()
+                .any(|log| log.contains("Instruction: CloseAccount"));
+
+        if !has_close_account {
+            return Err("No closeAccount instruction found".to_string());
         }
 
-        let instruction = &transaction.instructions[0];
+        // Check for characteristic ATA rent recovery
+        // Standard ATA rent is 0.00203928 SOL (2,039,280 lamports)
+        let rent_recovery = transaction.sol_balance_change;
+        let is_rent_like = rent_recovery > 0.0 && 
+            (rent_recovery >= 0.002 && rent_recovery <= 0.0025); // Allow some tolerance
 
-        // Check if it's a Token Program (original or Token-2022) closeAccount instruction
-        if
-            (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" ||
-                instruction.program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") &&
-            instruction.instruction_type == "closeAccount"
-        {
-            // Check if SOL balance increased (ATA rent recovery)
-            if transaction.sol_balance_change > 0.0 {
-                // Try to extract token mint from ATA closure
-                let token_mint = self
-                    .extract_token_mint_from_ata_close(transaction)
-                    .unwrap_or_else(|| "Unknown".to_string());
+        if !is_rent_like {
+            return Err("SOL change doesn't match ATA rent recovery pattern".to_string());
+        }
 
-                return Ok(TransactionType::AtaClose {
-                    recovered_sol: transaction.sol_balance_change,
+        // Additional verification: ensure no significant token trading occurred
+        // ATA closures should have minimal or zero token amounts
+        let has_significant_token_trading = transaction.token_transfers
+            .iter()
+            .any(|transfer| transfer.amount.abs() > 100.0); // More than 100 tokens indicates real trading
+
+        if has_significant_token_trading {
+            return Err("Transaction has significant token trading, not a simple ATA closure".to_string());
+        }
+
+        // Try to extract token mint from ATA closure
+        let token_mint = self
+            .extract_token_mint_from_ata_close(transaction)
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "ATA_CLOSE_DETECTED",
+                &format!(
+                    "{} - ATA closure detected: mint={}, recovered_sol={:.9}",
+                    &transaction.signature[..8],
                     token_mint,
-                });
-            }
+                    rent_recovery
+                )
+            );
         }
 
-        Err("No ATA close pattern found".to_string())
+        return Ok(TransactionType::AtaClose {
+            recovered_sol: rent_recovery,
+            token_mint,
+        });
     }
 
     /// Extract token mint from ATA close operation
     fn extract_token_mint_from_ata_close(&self, transaction: &Transaction) -> Option<String> {
-        // Look for token balance changes to identify the mint
+        // Method 1: Look for token balance changes to identify the mint
         if !transaction.token_balance_changes.is_empty() {
+            // Find the token balance change for our wallet (usually the one being closed)
+            for change in &transaction.token_balance_changes {
+                // Look for accounts that had tokens before closure
+                if change.change <= 0.0 { // Account was drained or closed
+                    return Some(change.mint.clone());
+                }
+            }
+            // Fallback to first token balance change
             return Some(transaction.token_balance_changes[0].mint.clone());
         }
 
-        // If no token balance changes, check log messages for mint information
+        // Method 2: Extract from raw transaction data (preTokenBalances)
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                if let Some(pre_token_balances) = meta.get("preTokenBalances").and_then(|v| v.as_array()) {
+                    for balance in pre_token_balances {
+                        if let Some(mint) = balance.get("mint").and_then(|v| v.as_str()) {
+                            if mint != "So11111111111111111111111111111111111111112" { // Exclude WSOL
+                                return Some(mint.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Method 3: Check log messages for mint information
         let log_text = transaction.log_messages.join(" ");
         if let Some(start) = log_text.find("mint: ") {
             let mint_start = start + 6;
             if let Some(end) = log_text[mint_start..].find(' ') {
                 return Some(log_text[mint_start..mint_start + end].to_string());
+            }
+        }
+
+        // Method 4: Look in instruction accounts for potential token mints
+        for instruction in &transaction.instructions {
+            if instruction.instruction_type == "closeAccount" {
+                // Token mint might be in the accounts of the closeAccount instruction
+                if instruction.accounts.len() >= 3 {
+                    // closeAccount typically has: [account, destination, owner, (mint)]
+                    // Try to identify which account might be the mint
+                    for account in &instruction.accounts {
+                        // Basic heuristic: if it looks like a mint address (not our wallet)
+                        if account.len() == 44 && account != &self.wallet_pubkey.to_string() {
+                            // This could be the mint, but we need better validation
+                            // For now, return it if it's not obviously our wallet
+                            return Some(account.clone());
+                        }
+                    }
+                }
             }
         }
 
@@ -2577,12 +2688,21 @@ impl TransactionsManager {
 
     /// Quick transaction type detection for filtering
     pub fn is_swap_transaction(&self, transaction: &Transaction) -> bool {
-        matches!(
-            transaction.transaction_type,
-            TransactionType::SwapSolToToken { .. } |
-                TransactionType::SwapTokenToSol { .. } |
-                TransactionType::SwapTokenToToken { .. }
-        )
+        match &transaction.transaction_type {
+            TransactionType::SwapSolToToken { token_amount, .. } => {
+                // Exclude swaps with zero or negligible token amounts (likely misclassified ATA closures)
+                *token_amount > 0.0001 // Must have meaningful token amount
+            }
+            TransactionType::SwapTokenToSol { token_amount, .. } => {
+                // Exclude swaps with zero or negligible token amounts (likely misclassified ATA closures)
+                *token_amount > 0.0001 // Must have meaningful token amount
+            }
+            TransactionType::SwapTokenToToken { from_amount, to_amount, .. } => {
+                // Both amounts must be meaningful for token-to-token swaps
+                *from_amount > 0.0001 && *to_amount > 0.0001
+            }
+            _ => false
+        }
     }
 
     /// Check if transaction involves specific token
