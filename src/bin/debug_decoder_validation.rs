@@ -315,7 +315,7 @@ async fn test_decoder_on_pool(
 
     // Get API price for comparison if not skipping validation
     let (api_price_sol, price_diff_percent, price_validation_passed) = if args.skip_price_validation {
-        (None, None, true)
+        (None, None, true) // Always pass validation when skipping
     } else {
         get_api_price_and_compare(pool, calculated_price_sol, args).await
     };
@@ -366,9 +366,10 @@ async fn test_raydium_cpmm_decoder(
                 &pool_info.token_1_vault[..8]
             );
 
-            // For now, we can't calculate the actual price without vault account data
-            // This would require fetching the vault accounts to get actual reserves
-            (true, None, true, Some(reserves_info), None)
+            // Try to calculate price by fetching vault account data
+            let calculated_price = calculate_raydium_cpmm_price(&pool_info, verbose).await;
+
+            (true, None, true, Some(reserves_info), calculated_price)
         }
         None => {
             let error = "Failed to decode Raydium CPMM pool data".to_string();
@@ -377,6 +378,145 @@ async fn test_raydium_cpmm_decoder(
             }
             (false, Some(error), false, None, None)
         }
+    }
+}
+
+/// Calculate price for Raydium CPMM pool by fetching vault balances
+async fn calculate_raydium_cpmm_price(
+    pool_info: &screenerbot::pools::decoders::raydium_cpmm::RaydiumCpmmPoolInfo,
+    verbose: bool,
+) -> Option<f64> {
+    use screenerbot::rpc::parse_pubkey;
+    use screenerbot::pools::types::SOL_MINT;
+    
+    let rpc_client = get_rpc_client();
+    
+    // Parse vault addresses
+    let vault_0_pubkey = match parse_pubkey(&pool_info.token_0_vault) {
+        Ok(pubkey) => pubkey,
+        Err(e) => {
+            if verbose {
+                log(LogTag::System, "CPMM_PRICE_ERROR", &format!("Invalid vault 0 address: {}", e));
+            }
+            return None;
+        }
+    };
+    
+    let vault_1_pubkey = match parse_pubkey(&pool_info.token_1_vault) {
+        Ok(pubkey) => pubkey,
+        Err(e) => {
+            if verbose {
+                log(LogTag::System, "CPMM_PRICE_ERROR", &format!("Invalid vault 1 address: {}", e));
+            }
+            return None;
+        }
+    };
+
+    // Fetch vault accounts to get token balances
+    let vault_0_account = match rpc_client.client().get_account(&vault_0_pubkey) {
+        Ok(account) => account,
+        Err(e) => {
+            if verbose {
+                log(LogTag::System, "CPMM_PRICE_ERROR", &format!("Failed to fetch vault 0: {}", e));
+            }
+            return None;
+        }
+    };
+
+    let vault_1_account = match rpc_client.client().get_account(&vault_1_pubkey) {
+        Ok(account) => account,
+        Err(e) => {
+            if verbose {
+                log(LogTag::System, "CPMM_PRICE_ERROR", &format!("Failed to fetch vault 1: {}", e));
+            }
+            return None;
+        }
+    };
+
+    // Parse token account data to get balances
+    use solana_program::program_pack::Pack;
+    use spl_token::state::Account as TokenAccount;
+
+    let vault_0_balance = match TokenAccount::unpack(&vault_0_account.data) {
+        Ok(token_account) => token_account.amount,
+        Err(e) => {
+            if verbose {
+                log(LogTag::System, "CPMM_PRICE_ERROR", &format!("Failed to parse vault 0 data: {}", e));
+            }
+            return None;
+        }
+    };
+
+    let vault_1_balance = match TokenAccount::unpack(&vault_1_account.data) {
+        Ok(token_account) => token_account.amount,
+        Err(e) => {
+            if verbose {
+                log(LogTag::System, "CPMM_PRICE_ERROR", &format!("Failed to parse vault 1 data: {}", e));
+            }
+            return None;
+        }
+    };
+
+    // Determine which token is SOL and calculate price
+    let sol_mint_str = SOL_MINT;
+    
+    if pool_info.token_0_mint == sol_mint_str {
+        // Token 0 is SOL, Token 1 is the target token
+        // Price = SOL_reserve / TOKEN_reserve (adjusted for decimals)
+        if vault_1_balance > 0 {
+            let sol_reserve = vault_0_balance as f64 / 10_f64.powi(pool_info.token_0_decimals as i32);
+            let token_reserve = vault_1_balance as f64 / 10_f64.powi(pool_info.token_1_decimals as i32);
+            let price = sol_reserve / token_reserve;
+            
+            if verbose {
+                log(
+                    LogTag::System,
+                    "CPMM_PRICE_CALC",
+                    &format!(
+                        "SOL/TOKEN pool: SOL_reserve={:.9}, TOKEN_reserve={:.6}, price={:.12} SOL",
+                        sol_reserve, token_reserve, price
+                    )
+                );
+            }
+            
+            Some(price)
+        } else {
+            if verbose {
+                log(LogTag::System, "CPMM_PRICE_ERROR", "Token reserve is zero");
+            }
+            None
+        }
+    } else if pool_info.token_1_mint == sol_mint_str {
+        // Token 1 is SOL, Token 0 is the target token  
+        // Price = SOL_reserve / TOKEN_reserve (adjusted for decimals)
+        if vault_0_balance > 0 {
+            let token_reserve = vault_0_balance as f64 / 10_f64.powi(pool_info.token_0_decimals as i32);
+            let sol_reserve = vault_1_balance as f64 / 10_f64.powi(pool_info.token_1_decimals as i32);
+            let price = sol_reserve / token_reserve;
+            
+            if verbose {
+                log(
+                    LogTag::System,
+                    "CPMM_PRICE_CALC",
+                    &format!(
+                        "TOKEN/SOL pool: TOKEN_reserve={:.6}, SOL_reserve={:.9}, price={:.12} SOL",
+                        token_reserve, sol_reserve, price
+                    )
+                );
+            }
+            
+            Some(price)
+        } else {
+            if verbose {
+                log(LogTag::System, "CPMM_PRICE_ERROR", "Token reserve is zero");
+            }
+            None
+        }
+    } else {
+        if verbose {
+            log(LogTag::System, "CPMM_PRICE_ERROR", "Neither token is SOL - not a SOL pair");
+        }
+        None
     }
 }
 
@@ -405,10 +545,12 @@ async fn get_api_price_and_compare(
             let passed = diff <= args.price_diff_threshold;
             (Some(diff), passed)
         } else {
-            (None, true)
+            (None, false) // Fail if API price is invalid
         }
     } else {
-        (None, calculated_price_sol.is_none()) // Pass if we couldn't calculate price
+        // Fail validation if we couldn't calculate a price (decoder not working properly)
+        // Only pass if we explicitly skip price validation
+        (None, false)
     };
 
     (api_price_sol, price_diff_percent, price_validation_passed)
