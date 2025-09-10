@@ -83,35 +83,24 @@ impl PoolDecoder for MeteoraDbcDecoder {
             return None;
         };
 
-        // For DBC, we need to read sqrt_price from the pool account data
-        // Price calculation should use sqrt_price (Q64.64 format), not virtual reserves
+        // For DBC, read sqrt_price from the pool account data at the known offset
+        // Layout (bytes) with Anchor discriminator (8 bytes) at start:
+        // 0..8    Anchor discriminator
+        // 8..72   VolatilityTracker
+        // 64..96  config (Pubkey)
+        // 96..128 creator (Pubkey)
+        // 128..160 base_mint (Pubkey)
+        // 160..192 base_vault (Pubkey)
+        // 192..224 quote_vault (Pubkey)
+        // 224..232 base_reserve (u64)
+        // 232..240 quote_reserve (u64)
+        // 240..248 protocol_base_fee (u64)
+        // 248..256 protocol_quote_fee (u64)
+        // 256..264 partner_base_fee (u64)
+        // 264..272 partner_quote_fee (u64)
+        // 272..288 sqrt_price (u128, Q64.64) — without discriminator
+        // With discriminator, sqrt_price sits at 280..296
         let sqrt_price = extract_sqrt_price_from_pool_data(&pool_acc.data)?;
-
-        if is_debug_pool_decoders_enabled() {
-            log(LogTag::Pool, "DBC_SQRT_PRICE", &format!("Found sqrt_price: {}", sqrt_price));
-        }
-
-        // Calculate price from sqrt_price (Q64.64 format)
-        // sqrt_price is stored as u128 in Q64.64 fixed-point format
-        // To get the actual price: price = (sqrt_price / 2^64)^2
-        let sqrt_price_f64 = (sqrt_price as f64) / ((1u128 << 64) as f64);
-        let price_per_token = sqrt_price_f64 * sqrt_price_f64;
-
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::Pool,
-                "DBC_PRICE_CALC",
-                &format!("sqrt_price_f64: {}, price_per_token: {}", sqrt_price_f64, price_per_token)
-            );
-        }
-
-        if price_per_token <= 0.0 {
-            return None;
-        }
-
-        // Get actual vault balances for liquidity calculation
-        let sol_balance = read_token_account_amount(&sol_vault.data)?;
-        let token_balance = read_token_account_amount(&token_vault.data)?;
 
         // Decimals
         let token_decimals = match get_token_decimals_sync(&token_mint) {
@@ -121,6 +110,37 @@ impl PoolDecoder for MeteoraDbcDecoder {
             }
         };
         let sol_decimals = SOL_DECIMALS;
+
+        // Calculate price from sqrt_price (Q64.64 format)
+        // sqrt_price is stored as u128 in Q64.64 fixed-point format
+        // Raw ratio (quote/base in raw units) = (sqrt_price / 2^64)^2
+        // Convert to human units: divide by 10^(quote_decimals - base_decimals)
+        let sqrt_price_f64 = (sqrt_price as f64) / ((1u128 << 64) as f64);
+        let raw_ratio = sqrt_price_f64 * sqrt_price_f64;
+        let decimals_scale = (10f64).powi((sol_decimals as i32) - (token_decimals as i32));
+        let price_per_token = raw_ratio / decimals_scale;
+
+        if is_debug_pool_decoders_enabled() {
+            log(
+                LogTag::Pool,
+                "DBC_PRICE_CALC",
+                &format!(
+                    "sqrt_price_f64: {}, raw_ratio: {}, decimals_scale: {}, price_per_token: {}",
+                    sqrt_price_f64,
+                    raw_ratio,
+                    decimals_scale,
+                    price_per_token
+                )
+            );
+        }
+
+        if price_per_token <= 0.0 || !price_per_token.is_finite() {
+            return None;
+        }
+
+        // Get actual vault balances for liquidity calculation
+        let sol_balance = read_token_account_amount(&sol_vault.data)?;
+        let token_balance = read_token_account_amount(&token_vault.data)?;
 
         // Convert raw balances to decimal amounts for liquidity display
         let sol = (sol_balance as f64) / (10f64).powi(sol_decimals as i32);
@@ -177,85 +197,38 @@ impl MeteoraDbcDecoder {
 }
 
 /// Extract sqrt_price from pool account data
-/// sqrt_price is stored as u128 in Q64.64 fixed-point format
+/// sqrt_price is stored as u128 in Q64.64 fixed-point format.
 fn extract_sqrt_price_from_pool_data(data: &[u8]) -> Option<u128> {
-    if data.len() < 424 {
-        return None;
-    }
-
-    // Based on the DexScreener price of 0.000000100400 SOL/token
-    // sqrt_price should be around sqrt(0.000000100400) * 2^64 ≈ 0.0003168 * 2^64 ≈ 5.85e15
-    // Let's look for a u128 value in that range
-
-    if is_debug_pool_decoders_enabled() {
-        log(LogTag::Pool, "DBC_SQRT_SEARCH", "Scanning for sqrt_price u128 value");
-    }
-
-    // Expected sqrt_price range based on DexScreener price
-    let expected_sqrt_price_approx = ((0.0000001004f64).sqrt() * ((1u128 << 64) as f64)) as u128;
-    let min_expected = expected_sqrt_price_approx / 10; // Allow 10x variance
-    let max_expected = expected_sqrt_price_approx * 10;
-
-    if is_debug_pool_decoders_enabled() {
-        log(
-            LogTag::Pool,
-            "DBC_SQRT_RANGE",
-            &format!(
-                "Expected sqrt_price range: {} to {} (center: {})",
-                min_expected,
-                max_expected,
-                expected_sqrt_price_approx
-            )
-        );
-    }
-
-    // Scan through possible u128 positions (16-byte aligned)
-    for offset in (0..data.len().saturating_sub(16)).step_by(8) {
-        if offset + 16 <= data.len() {
-            if let Ok(sqrt_price) = read_u128_le(&data[offset..offset + 16]) {
-                // Check if this could be a reasonable sqrt_price
-                if sqrt_price >= min_expected && sqrt_price <= max_expected {
-                    if is_debug_pool_decoders_enabled() {
-                        log(
-                            LogTag::Pool,
-                            "DBC_SQRT_FOUND",
-                            &format!(
-                                "Found sqrt_price candidate @ offset {}: {}",
-                                offset,
-                                sqrt_price
-                            )
-                        );
-                    }
-                    return Some(sqrt_price);
-                }
-
-                // Also check if we find a value that converts to the exact DexScreener price
-                let test_sqrt_f64 = (sqrt_price as f64) / ((1u128 << 64) as f64);
-                let test_price = test_sqrt_f64 * test_sqrt_f64;
-                if (test_price - 0.0000001004).abs() < 0.000000001 {
-                    if is_debug_pool_decoders_enabled() {
-                        log(
-                            LogTag::Pool,
-                            "DBC_SQRT_EXACT",
-                            &format!(
-                                "Found exact sqrt_price @ offset {}: {} (price: {})",
-                                offset,
-                                sqrt_price,
-                                test_price
-                            )
-                        );
-                    }
-                    return Some(sqrt_price);
-                }
+    // Primary: read from known offset (Anchor discriminator +8 bytes)
+    if data.len() >= 296 {
+        if let Ok(val) = read_u128_le(&data[280..296]) {
+            if is_debug_pool_decoders_enabled() {
+                log(LogTag::Pool, "DBC_SQRT_PRICE", &format!("Found sqrt_price: {}", val));
             }
+            return Some(val);
         }
     }
 
-    // If we can't find sqrt_price, calculate it from the expected DexScreener price
+    // Fallback: scan entire account for any plausible u128 (very permissive)
     if is_debug_pool_decoders_enabled() {
-        log(LogTag::Pool, "DBC_SQRT_FALLBACK", "Using calculated sqrt_price from expected price");
+        log(LogTag::Pool, "DBC_SQRT_SEARCH", "Scanning for sqrt_price u128 value (fallback)");
     }
-    Some(expected_sqrt_price_approx)
+    for offset in (0..data.len().saturating_sub(16)).step_by(8) {
+        if let Ok(val) = read_u128_le(&data[offset..offset + 16]) {
+            // Basic plausibility: value should be non-zero and < 2^80 (to avoid random big numbers)
+            if val > 0 && val < 1u128 << 80 {
+                if is_debug_pool_decoders_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "DBC_SQRT_FOUND",
+                        &format!("Candidate sqrt_price @{}: {}", offset, val)
+                    );
+                }
+                return Some(val);
+            }
+        }
+    }
+    None
 }
 
 /// Read u128 from little-endian bytes
