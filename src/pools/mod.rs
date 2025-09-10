@@ -38,8 +38,8 @@ pub use discovery::{
 // Internal modules (not exposed)
 pub mod discovery;
 mod analyzer;
-mod fetcher;
-mod calculator;
+pub mod fetcher; // Public for debug tooling
+pub mod calculator; // Public for debug tooling
 pub mod decoders; // Temporarily public for debug tooling (consider gating with feature flag)
 
 // Direct swap module - modular direct swap system

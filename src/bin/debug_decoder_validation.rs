@@ -1,12 +1,12 @@
 //! Debug tool for comprehensive decoder validation and testing
 //!
 //! This tool searches through all tokens in the database and finds pools for each supported
-//! program type to validate decoder implementations and price calculations.
+//! program type to validate decoder implementations and price calculations using the pools module.
 //!
 //! Features:
 //! - Scans all tokens in database for pools
 //! - Finds one TOKEN/SOL and one SOL/TOKEN pool for each supported program type
-//! - Tests all decoders with real pool data fetched from RPC
+//! - Tests all decoders using the pools module calculator (no duplicate logic)
 //! - Compares calculated prices with API prices (DexScreener)
 //! - Identifies price differences > 20% as suspicious/problematic
 //! - Provides detailed analysis of decoder accuracy and errors
@@ -19,7 +19,9 @@
 
 use clap::Parser;
 use screenerbot::logger::{log, LogTag};
+use screenerbot::pools::calculator::PriceCalculator;
 use screenerbot::pools::decoders::raydium_cpmm::RaydiumCpmmDecoder;
+use screenerbot::pools::fetcher::AccountData;
 use screenerbot::pools::types::{ProgramKind, SOL_MINT};
 use screenerbot::pools::utils::is_stablecoin_mint;
 use screenerbot::rpc::{get_rpc_client, parse_pubkey};
@@ -238,7 +240,7 @@ async fn find_pools_for_token(
     Ok(test_pools)
 }
 
-/// Test decoder on a specific pool
+/// Test decoder on a specific pool using the pools module calculator
 async fn test_decoder_on_pool(
     pool: &TestPool,
     args: &Args,
@@ -296,19 +298,121 @@ async fn test_decoder_on_pool(
         }
     };
 
-    // Test decoder based on program type
+    // Create the main pool account data
+    let mut pool_accounts = HashMap::new();
+    pool_accounts.insert(
+        pool_pubkey.to_string(),
+        AccountData {
+            pubkey: pool_pubkey,
+            data: pool_account.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: pool_account.lamports,
+            owner: pool_account.owner,
+        }
+    );
+
+    // For Raydium CPMM, we need to fetch vault accounts for proper price calculation
+    if pool.program_kind == ProgramKind::RaydiumCpmm {
+        // Try to decode the pool info to get vault addresses
+        if let Some(pool_info) = RaydiumCpmmDecoder::decode_raydium_cpmm_pool(&pool_account.data, &pool.pool_address) {
+            // Fetch vault accounts
+            if let Ok(vault_0_pubkey) = parse_pubkey(&pool_info.token_0_vault) {
+                if let Ok(vault_0_account) = rpc_client.client().get_account(&vault_0_pubkey) {
+                    pool_accounts.insert(
+                        vault_0_pubkey.to_string(),
+                        AccountData {
+                            pubkey: vault_0_pubkey,
+                            data: vault_0_account.data,
+                            slot: 0,
+                            fetched_at: std::time::Instant::now(),
+                            lamports: vault_0_account.lamports,
+                            owner: vault_0_account.owner,
+                        }
+                    );
+                }
+            }
+
+            if let Ok(vault_1_pubkey) = parse_pubkey(&pool_info.token_1_vault) {
+                if let Ok(vault_1_account) = rpc_client.client().get_account(&vault_1_pubkey) {
+                    pool_accounts.insert(
+                        vault_1_pubkey.to_string(),
+                        AccountData {
+                            pubkey: vault_1_pubkey,
+                            data: vault_1_account.data,
+                            slot: 0,
+                            fetched_at: std::time::Instant::now(),
+                            lamports: vault_1_account.lamports,
+                            owner: vault_1_account.owner,
+                        }
+                    );
+                }
+            }
+
+            if args.verbose {
+                log(
+                    LogTag::System,
+                    "CPMM_VAULTS",
+                    &format!(
+                        "Fetched vault accounts: {} and {} for CPMM pool",
+                        &pool_info.token_0_vault[..8],
+                        &pool_info.token_1_vault[..8]
+                    )
+                );
+            }
+        }
+    }
+
+    // Create calculator instance with empty pool directory (we don't need it for direct calculation)
+    use std::sync::{Arc, RwLock};
+    use std::collections::HashMap;
+    let pool_directory = Arc::new(RwLock::new(HashMap::new()));
+    let calculator = PriceCalculator::new(pool_directory);
+
+    // Determine base and quote mints based on pair type
+    let (base_mint, quote_mint) = match pool.pair_type {
+        PairType::TokenSol => (pool.get_target_token_mint(), SOL_MINT),
+        PairType::SolToken => (SOL_MINT, pool.get_target_token_mint()),
+    };
+
+    // Use the pools module calculator to get price
     let (decoder_success, decoder_error, pool_info_extracted, reserves_info, calculated_price_sol) = 
-        match pool.program_kind {
-            ProgramKind::RaydiumCpmm => test_raydium_cpmm_decoder(&pool_account.data, &pool.pool_address, args.verbose).await,
-            ProgramKind::RaydiumClmm => (false, Some("Raydium CLMM decoder not implemented".to_string()), false, None, None),
-            ProgramKind::RaydiumLegacyAmm => (false, Some("Raydium Legacy AMM decoder not implemented".to_string()), false, None, None),
-            ProgramKind::OrcaWhirlpool => (false, Some("Orca Whirlpool decoder not implemented".to_string()), false, None, None),
-            ProgramKind::MeteoraDamm => (false, Some("Meteora DAMM decoder not implemented".to_string()), false, None, None),
-            ProgramKind::MeteoraDlmm => (false, Some("Meteora DLMM decoder not implemented".to_string()), false, None, None),
-            ProgramKind::PumpFunAmm => (false, Some("PumpFun AMM decoder not implemented".to_string()), false, None, None),
-            ProgramKind::PumpFunLegacy => (false, Some("PumpFun Legacy decoder not implemented".to_string()), false, None, None),
-            ProgramKind::Moonit => (false, Some("Moonit decoder not implemented".to_string()), false, None, None),
-            _ => (false, Some("Unknown program type".to_string()), false, None, None),
+        match calculator.calculate_price_sync(
+            &pool_accounts,
+            pool.program_kind,
+            base_mint,
+            quote_mint,
+            &pool.pool_address
+        ) {
+            Some(price_result) => {
+                let reserves_info = format!(
+                    "SOL reserves: {:.9}, Token reserves: {:.6}, Price: {:.12} SOL",
+                    price_result.sol_reserves,
+                    price_result.token_reserves,
+                    price_result.price_sol
+                );
+
+                if args.verbose {
+                    log(
+                        LogTag::System,
+                        "CALC_SUCCESS",
+                        &format!(
+                            "{} calculation successful: {}",
+                            pool.program_kind.display_name(),
+                            reserves_info
+                        )
+                    );
+                }
+
+                (true, None, true, Some(reserves_info), Some(price_result.price_sol))
+            }
+            None => {
+                let error = format!("{} decoder failed or not implemented", pool.program_kind.display_name());
+                if args.verbose {
+                    log(LogTag::System, "CALC_ERROR", &error);
+                }
+                (false, Some(error), false, None, None)
+            }
         };
 
     let decode_time_ms = start_time.elapsed().as_millis() as u64;
@@ -331,192 +435,6 @@ async fn test_decoder_on_pool(
         price_validation_passed,
         pool_info_extracted,
         reserves_info,
-    }
-}
-
-/// Test Raydium CPMM decoder specifically
-async fn test_raydium_cpmm_decoder(
-    pool_data: &[u8],
-    pool_address: &str,
-    verbose: bool,
-) -> (bool, Option<String>, bool, Option<String>, Option<f64>) {
-    match RaydiumCpmmDecoder::decode_raydium_cpmm_pool(pool_data, pool_address) {
-        Some(pool_info) => {
-            if verbose {
-                log(
-                    LogTag::System,
-                    "CPMM_SUCCESS",
-                    &format!(
-                        "CPMM pool decoded: token0={}, token1={}, decimals={}/{}",
-                        &pool_info.token_0_mint[..8],
-                        &pool_info.token_1_mint[..8],
-                        pool_info.token_0_decimals,
-                        pool_info.token_1_decimals
-                    )
-                );
-            }
-
-            let reserves_info = format!(
-                "Token0: {} ({}d), Token1: {} ({}d), Vaults: {}/{}", 
-                &pool_info.token_0_mint[..8],
-                pool_info.token_0_decimals,
-                &pool_info.token_1_mint[..8], 
-                pool_info.token_1_decimals,
-                &pool_info.token_0_vault[..8],
-                &pool_info.token_1_vault[..8]
-            );
-
-            // Try to calculate price by fetching vault account data
-            let calculated_price = calculate_raydium_cpmm_price(&pool_info, verbose).await;
-
-            (true, None, true, Some(reserves_info), calculated_price)
-        }
-        None => {
-            let error = "Failed to decode Raydium CPMM pool data".to_string();
-            if verbose {
-                log(LogTag::System, "CPMM_ERROR", &error);
-            }
-            (false, Some(error), false, None, None)
-        }
-    }
-}
-
-/// Calculate price for Raydium CPMM pool by fetching vault balances
-async fn calculate_raydium_cpmm_price(
-    pool_info: &screenerbot::pools::decoders::raydium_cpmm::RaydiumCpmmPoolInfo,
-    verbose: bool,
-) -> Option<f64> {
-    use screenerbot::rpc::parse_pubkey;
-    use screenerbot::pools::types::SOL_MINT;
-    
-    let rpc_client = get_rpc_client();
-    
-    // Parse vault addresses
-    let vault_0_pubkey = match parse_pubkey(&pool_info.token_0_vault) {
-        Ok(pubkey) => pubkey,
-        Err(e) => {
-            if verbose {
-                log(LogTag::System, "CPMM_PRICE_ERROR", &format!("Invalid vault 0 address: {}", e));
-            }
-            return None;
-        }
-    };
-    
-    let vault_1_pubkey = match parse_pubkey(&pool_info.token_1_vault) {
-        Ok(pubkey) => pubkey,
-        Err(e) => {
-            if verbose {
-                log(LogTag::System, "CPMM_PRICE_ERROR", &format!("Invalid vault 1 address: {}", e));
-            }
-            return None;
-        }
-    };
-
-    // Fetch vault accounts to get token balances
-    let vault_0_account = match rpc_client.client().get_account(&vault_0_pubkey) {
-        Ok(account) => account,
-        Err(e) => {
-            if verbose {
-                log(LogTag::System, "CPMM_PRICE_ERROR", &format!("Failed to fetch vault 0: {}", e));
-            }
-            return None;
-        }
-    };
-
-    let vault_1_account = match rpc_client.client().get_account(&vault_1_pubkey) {
-        Ok(account) => account,
-        Err(e) => {
-            if verbose {
-                log(LogTag::System, "CPMM_PRICE_ERROR", &format!("Failed to fetch vault 1: {}", e));
-            }
-            return None;
-        }
-    };
-
-    // Parse token account data to get balances
-    use solana_program::program_pack::Pack;
-    use spl_token::state::Account as TokenAccount;
-
-    let vault_0_balance = match TokenAccount::unpack(&vault_0_account.data) {
-        Ok(token_account) => token_account.amount,
-        Err(e) => {
-            if verbose {
-                log(LogTag::System, "CPMM_PRICE_ERROR", &format!("Failed to parse vault 0 data: {}", e));
-            }
-            return None;
-        }
-    };
-
-    let vault_1_balance = match TokenAccount::unpack(&vault_1_account.data) {
-        Ok(token_account) => token_account.amount,
-        Err(e) => {
-            if verbose {
-                log(LogTag::System, "CPMM_PRICE_ERROR", &format!("Failed to parse vault 1 data: {}", e));
-            }
-            return None;
-        }
-    };
-
-    // Determine which token is SOL and calculate price
-    let sol_mint_str = SOL_MINT;
-    
-    if pool_info.token_0_mint == sol_mint_str {
-        // Token 0 is SOL, Token 1 is the target token
-        // Price = SOL_reserve / TOKEN_reserve (adjusted for decimals)
-        if vault_1_balance > 0 {
-            let sol_reserve = vault_0_balance as f64 / 10_f64.powi(pool_info.token_0_decimals as i32);
-            let token_reserve = vault_1_balance as f64 / 10_f64.powi(pool_info.token_1_decimals as i32);
-            let price = sol_reserve / token_reserve;
-            
-            if verbose {
-                log(
-                    LogTag::System,
-                    "CPMM_PRICE_CALC",
-                    &format!(
-                        "SOL/TOKEN pool: SOL_reserve={:.9}, TOKEN_reserve={:.6}, price={:.12} SOL",
-                        sol_reserve, token_reserve, price
-                    )
-                );
-            }
-            
-            Some(price)
-        } else {
-            if verbose {
-                log(LogTag::System, "CPMM_PRICE_ERROR", "Token reserve is zero");
-            }
-            None
-        }
-    } else if pool_info.token_1_mint == sol_mint_str {
-        // Token 1 is SOL, Token 0 is the target token  
-        // Price = SOL_reserve / TOKEN_reserve (adjusted for decimals)
-        if vault_0_balance > 0 {
-            let token_reserve = vault_0_balance as f64 / 10_f64.powi(pool_info.token_0_decimals as i32);
-            let sol_reserve = vault_1_balance as f64 / 10_f64.powi(pool_info.token_1_decimals as i32);
-            let price = sol_reserve / token_reserve;
-            
-            if verbose {
-                log(
-                    LogTag::System,
-                    "CPMM_PRICE_CALC",
-                    &format!(
-                        "TOKEN/SOL pool: TOKEN_reserve={:.6}, SOL_reserve={:.9}, price={:.12} SOL",
-                        token_reserve, sol_reserve, price
-                    )
-                );
-            }
-            
-            Some(price)
-        } else {
-            if verbose {
-                log(LogTag::System, "CPMM_PRICE_ERROR", "Token reserve is zero");
-            }
-            None
-        }
-    } else {
-        if verbose {
-            log(LogTag::System, "CPMM_PRICE_ERROR", "Neither token is SOL - not a SOL pair");
-        }
-        None
     }
 }
 
