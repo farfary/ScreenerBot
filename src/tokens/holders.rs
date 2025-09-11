@@ -9,6 +9,11 @@ use crate::{
     rpc::get_rpc_client,
     utils::safe_truncate,
 };
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
+use std::sync::Arc;
+use std::time::{ Duration, Instant };
+use tokio::sync::Mutex;
 
 /// Basic holder statistics
 #[derive(Debug)]
@@ -44,10 +49,56 @@ pub struct TopHoldersAnalysis {
 /// Maximum number of token accounts we'll analyze (to prevent RPC timeouts)
 const MAX_ANALYZABLE_ACCOUNTS: usize = 2000;
 
+// Per-mint in-flight lock map to dedupe concurrent estimations
+static INFLIGHT_LOCKS: Lazy<DashMap<String, Arc<Mutex<()>>>> = Lazy::new(|| DashMap::new());
+// Short-lived cache of recent estimates to avoid immediate repeats across cycles
+static ESTIMATE_CACHE: Lazy<DashMap<String, (Instant, usize)>> = Lazy::new(|| DashMap::new());
+// TTL for cache entries
+const ESTIMATE_TTL: Duration = Duration::from_secs(60);
+
 /// Estimate the number of token accounts for a mint without fetching full data
 /// This is used to determine if we should skip expensive holder analysis
 /// Uses dataSlice to efficiently count accounts without downloading account data
 pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usize, String> {
+    // Fast path: return cached value if fresh
+    if let Some((ts, value)) = ESTIMATE_CACHE.get(mint_address).map(|e| *e.value()) {
+        if ts.elapsed() < ESTIMATE_TTL {
+            log(
+                LogTag::Rpc,
+                "CACHE",
+                &format!(
+                    "Using cached account count estimate {} for mint {}",
+                    value,
+                    safe_truncate(mint_address, 8)
+                )
+            );
+            return Ok(value);
+        }
+    }
+
+    // Acquire per-mint lock to dedupe concurrent estimations
+    let lock = INFLIGHT_LOCKS.entry(mint_address.to_string())
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone();
+    let _guard = lock.lock().await;
+
+    // Re-check cache after acquiring the lock (another task may have filled it)
+    if let Some((ts, value)) = ESTIMATE_CACHE.get(mint_address).map(|e| *e.value()) {
+        if ts.elapsed() < ESTIMATE_TTL {
+            log(
+                LogTag::Rpc,
+                "CACHE",
+                &format!(
+                    "Using cached account count estimate {} for mint {}",
+                    value,
+                    safe_truncate(mint_address, 8)
+                )
+            );
+            return Ok(value);
+        }
+    }
+
+    // Only log when we actually perform the estimation (not for cache hits)
     log(
         LogTag::Security,
         "DEBUG",
@@ -195,6 +246,8 @@ pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usiz
                     safe_truncate(mint_address, 8)
                 )
             );
+            // Update cache
+            ESTIMATE_CACHE.insert(mint_address.to_string(), (Instant::now(), estimated_count));
             Ok(estimated_count)
         }
         Err(e) => {
