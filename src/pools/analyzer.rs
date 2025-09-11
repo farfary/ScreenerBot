@@ -26,6 +26,7 @@ use super::decoders::{
 use crate::pools::service; // access global fetcher
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::{ Arc, RwLock };
 use std::time::Instant;
@@ -57,6 +58,8 @@ pub struct PoolAnalyzer {
     analyzer_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<AnalyzerMessage>>>>,
     /// Channel sender for sending analysis requests
     analyzer_tx: mpsc::UnboundedSender<AnalyzerMessage>,
+    /// In-memory set of failed (pool_id, token_mint) pairs to avoid repeated re-analysis
+    failed_pairs: Arc<RwLock<HashSet<(Pubkey, Pubkey)>>>,
 }
 
 impl PoolAnalyzer {
@@ -72,6 +75,7 @@ impl PoolAnalyzer {
             rpc_client,
             analyzer_rx: Arc::new(RwLock::new(Some(analyzer_rx))),
             analyzer_tx,
+            failed_pairs: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 
@@ -93,6 +97,7 @@ impl PoolAnalyzer {
 
         let pool_directory = self.pool_directory.clone();
         let rpc_client = self.rpc_client.clone();
+        let failed_pairs = self.failed_pairs.clone();
 
         // Take the receiver from the Arc<RwLock>
         let mut analyzer_rx = {
@@ -114,110 +119,105 @@ impl PoolAnalyzer {
                         break;
                     }
                     
-                    message = analyzer_rx.recv() => {
-                        match message {
-                            Some(AnalyzerMessage::AnalyzePool { 
-                                pool_id, 
-                                program_id, 
-                                base_mint, 
-                                quote_mint, 
-                                liquidity_usd,
-                                volume_h24_usd
-                            }) => {
-                                // Check if this pool has failed analysis recently
-                                if super::failed_cache::is_pool_analysis_failed(&pool_id) {
-                                    if is_debug_pool_analyzer_enabled() {
-                                        let token_mint = if is_sol_mint(&base_mint.to_string()) { 
-                                            quote_mint 
-                                        } else { 
-                                            base_mint 
-                                        };
-                                        log(
-                                            LogTag::PoolAnalyzer,
-                                            "SKIP",
-                                            &format!("Skipping pool {} for token {} - recently failed analysis", pool_id, token_mint)
-                                        );
-                                    }
-                                    continue;
-                                }
-
-                                if let Some(descriptor) = Self::analyze_pool_static(
-                                    pool_id,
-                                    program_id,
-                                    base_mint,
-                                    quote_mint,
+                        message = analyzer_rx.recv() => {
+                            match message {
+                                Some(AnalyzerMessage::AnalyzePool { 
+                                    pool_id, 
+                                    program_id, 
+                                    base_mint, 
+                                    quote_mint, 
                                     liquidity_usd,
-                                    volume_h24_usd,
-                                    &rpc_client
-                                ).await {
-                                    // Store analyzed pool in directory
-                                    let mut directory = pool_directory.write().unwrap();
-                                    directory.insert(pool_id, descriptor.clone());
-                                    // Trigger account fetch for this pool's reserve accounts
-                                    if let Some(fetcher) = service::get_account_fetcher() {
-                                        let reserve_accounts = descriptor.reserve_accounts.clone();
-                                        if let Err(e) = fetcher.request_pool_fetch(pool_id, reserve_accounts) {
-                                            log(LogTag::PoolAnalyzer, "WARN", &format!("Failed to request fetch for analyzed pool {}: {}", pool_id, e));
+                                    volume_h24_usd
+                                }) => {
+                                    // Determine the token side we consider for failure tracking
+                                    let token_to_check = if is_sol_mint(&base_mint.to_string()) { quote_mint } else { base_mint };
+                                    let pair = (pool_id, token_to_check);
+
+                                    // Skip re-analysis if this (pool, token) already failed earlier in this run
+                                    let already_failed = {
+                                        let fp = failed_pairs.read().unwrap();
+                                        fp.contains(&pair)
+                                    };
+
+                                    if already_failed {
+                                        if is_debug_pool_analyzer_enabled() {
+                                            log(
+                                                LogTag::PoolAnalyzer,
+                                                "DEBUG",
+                                                &format!("Skipping re-analysis of pool {} for token {} (previously failed this run)", pool_id, token_to_check)
+                                            );
                                         }
+                                        continue;
                                     }
+
+                                    if let Some(descriptor) = Self::analyze_pool_static(
+                                        pool_id,
+                                        program_id,
+                                        base_mint,
+                                        quote_mint,
+                                        liquidity_usd,
+                                        volume_h24_usd,
+                                        &rpc_client
+                                    ).await {
+                                        // Store analyzed pool in directory
+                                        let mut directory = pool_directory.write().unwrap();
+                                        directory.insert(pool_id, descriptor.clone());
+                                        // Trigger account fetch for this pool's reserve accounts
+                                        if let Some(fetcher) = service::get_account_fetcher() {
+                                            let reserve_accounts = descriptor.reserve_accounts.clone();
+                                            if let Err(e) = fetcher.request_pool_fetch(pool_id, reserve_accounts) {
+                                                log(LogTag::PoolAnalyzer, "WARN", &format!("Failed to request fetch for analyzed pool {}: {}", pool_id, e));
+                                            }
+                                        }
                                     
-                                    if is_debug_pool_analyzer_enabled() {
+                                        if is_debug_pool_analyzer_enabled() {
+                                            log(
+                                                LogTag::PoolAnalyzer, 
+                                                "DEBUG", 
+                                                &format!(
+                                                    "Analyzed pool {} for token {} ({}) - {}/{}", 
+                                                    pool_id,
+                                                    if is_sol_mint(&descriptor.base_mint.to_string()) { 
+                                                        &descriptor.quote_mint.to_string() 
+                                                    } else { 
+                                                        &descriptor.base_mint.to_string() 
+                                                    },
+                                                    descriptor.program_kind.display_name(),
+                                                    base_mint,
+                                                    quote_mint
+                                                )
+                                            );
+                                        }
+                                    } else {
+                                        // Record failure in-memory to avoid repeated attempts this run
+                                        let mut fp = failed_pairs.write().unwrap();
+                                        fp.insert(pair);
+
                                         log(
                                             LogTag::PoolAnalyzer, 
-                                            "DEBUG", 
-                                            &format!(
-                                                "Analyzed pool {} for token {} ({}) - {}/{}", 
+                                            "WARN", 
+                                            &format!("Failed to analyze pool {} for token {} - will skip retries this run", 
                                                 pool_id,
-                                                if is_sol_mint(&descriptor.base_mint.to_string()) { 
-                                                    &descriptor.quote_mint.to_string() 
-                                                } else { 
-                                                    &descriptor.base_mint.to_string() 
-                                                },
-                                                descriptor.program_kind.display_name(),
-                                                base_mint,
-                                                quote_mint
-                                            )
+                                                token_to_check)
                                         );
                                     }
-                                } else {
-                                    // Record this pool analysis failure to prevent repeated attempts
-                                    super::failed_cache::record_failed_pool_analysis(
-                                        &pool_id,
-                                        &base_mint,
-                                        &quote_mint,
-                                        &program_id,
-                                        "Pool analysis failed - unable to extract pool metadata"
-                                    );
+                                }
 
-                                    log(
-                                        LogTag::PoolAnalyzer, 
-                                        "WARN", 
-                                        &format!("Failed to analyze pool {} for token {}", 
-                                            pool_id,
-                                            if is_sol_mint(&base_mint.to_string()) { 
-                                                quote_mint 
-                                            } else { 
-                                                base_mint 
-                                            })
-                                    );
+                                Some(AnalyzerMessage::Shutdown) => {
+                                    if is_debug_pool_analyzer_enabled() {
+                                        log(LogTag::PoolAnalyzer, "INFO", "Pool analyzer received shutdown signal");
+                                    }
+                                    break;
                                 }
-                            }
-                            
-                            Some(AnalyzerMessage::Shutdown) => {
-                                if is_debug_pool_analyzer_enabled() {
-                                    log(LogTag::PoolAnalyzer, "INFO", "Pool analyzer received shutdown signal");
+
+                                None => {
+                                    if is_debug_pool_analyzer_enabled() {
+                                        log(LogTag::PoolAnalyzer, "INFO", "Pool analyzer channel closed");
+                                    }
+                                    break;
                                 }
-                                break;
-                            }
-                            
-                            None => {
-                                if is_debug_pool_analyzer_enabled() {
-                                    log(LogTag::PoolAnalyzer, "INFO", "Pool analyzer channel closed");
-                                }
-                                break;
                             }
                         }
-                    }
                 }
             }
 
