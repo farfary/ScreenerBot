@@ -128,23 +128,6 @@ async fn cache_token_data(mint: &str, token: &ApiToken) {
     }
 }
 
-/// Force cache a token (useful for tokens with open positions to ensure cache exists)
-// (Removed force_cache_token_data – no special handling required now)
-
-/// Clear cache for a specific token (useful when position is closed)
-pub async fn clear_token_cache(mint: &str) {
-    let mut cache = TOKEN_CACHE.write().await;
-    if cache.remove(mint).is_some() {
-        if is_debug_api_enabled() {
-            log(
-                LogTag::Api,
-                "CACHE_CLEAR",
-                &format!("Cleared cache for token {} (position likely closed)", mint)
-            );
-        }
-    }
-}
-
 /// Get cache statistics
 pub async fn get_cache_stats() -> (usize, usize) {
     let cache = TOKEN_CACHE.read().await;

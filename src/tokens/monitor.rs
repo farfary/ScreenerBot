@@ -30,12 +30,6 @@ const TOKENS_PER_CYCLE: usize = 30;
 /// Batch size for API calls (DexScreener limit)
 const API_BATCH_SIZE: usize = 30;
 
-/// Near-zero liquidity threshold in USD (tokens below this will be removed)
-const NEAR_ZERO_LIQUIDITY_USD: f64 = 10.0;
-
-/// Cleanup cycle interval in monitoring cycles (run cleanup every N cycles)
-const CLEANUP_CYCLE_INTERVAL: u64 = 12; // Every 12 cycles = 1 minute (12 * 5 seconds)
-
 // =============================================================================
 // TOKEN MONITOR
 // =============================================================================
@@ -271,39 +265,6 @@ impl TokenMonitor {
         Ok(())
     }
 
-    /// Run periodic cleanup of near-zero liquidity tokens
-    async fn run_cleanup_cycle(&mut self) -> Result<(), String> {
-        if is_debug_monitor_enabled() {
-            log(
-                LogTag::Monitor,
-                "CLEANUP_START",
-                &format!(
-                    "Starting cleanup cycle for problematic tokens: blacklisted, decimal-failed, security issues, and low liquidity below ${:.1}",
-                    NEAR_ZERO_LIQUIDITY_USD
-                )
-            );
-        }
-
-        match self.database.cleanup_problematic_tokens(NEAR_ZERO_LIQUIDITY_USD).await {
-            Ok(deleted_count) => {
-                if deleted_count > 0 {
-                    log(
-                        LogTag::Monitor,
-                        "CLEANUP_SUCCESS",
-                        &format!("Cleanup cycle completed: {} tokens removed", deleted_count)
-                    );
-                } else if is_debug_monitor_enabled() {
-                    log(LogTag::Monitor, "CLEANUP_IDLE", "Cleanup cycle: No tokens removed");
-                }
-                Ok(())
-            }
-            Err(e) => {
-                log(LogTag::Monitor, "CLEANUP_ERROR", &format!("Cleanup cycle failed: {}", e));
-                Err(format!("Cleanup cycle failed: {}", e))
-            }
-        }
-    }
-
     /// Start continuous monitoring loop in background
     pub async fn start_monitoring_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
         log(LogTag::Monitor, "INIT", "Token monitoring loop started");
@@ -328,17 +289,6 @@ impl TokenMonitor {
                             "CYCLE_ERROR",
                             &format!("Monitoring cycle failed: {}", e)
                         );
-                    }
-
-                    // Run cleanup cycle periodically
-                    if self.cycle_counter % CLEANUP_CYCLE_INTERVAL == 0 {
-                        if let Err(e) = self.run_cleanup_cycle().await {
-                            log(
-                                LogTag::Monitor,
-                                "CLEANUP_CYCLE_ERROR",
-                                &format!("Cleanup cycle failed: {}", e)
-                            );
-                        }
                     }
                 }
             }

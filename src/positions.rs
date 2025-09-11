@@ -881,9 +881,6 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
             MINT_TO_POSITION_INDEX.write().await.insert(token.mint.clone(), position_index);
         }
 
-        // Add token to priority pool service for fast price updates
-        // Priority token management removed - no longer needed
-
         if is_debug_positions_enabled() {
             log(
                 LogTag::Positions,
@@ -2124,9 +2121,6 @@ pub async fn close_position_direct(
             &format!("🏊 Removing {} from priority pool service", token.symbol)
         );
     }
-
-    // Remove token from priority pool service (no longer need fast updates)
-    // Priority token management removed - no longer needed
 
     if is_debug_positions_enabled() {
         log(

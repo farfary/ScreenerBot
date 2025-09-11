@@ -231,18 +231,9 @@ impl OhlcvService {
                         }
                     }
                     _ = watch_cleanup_interval.tick() => {
+                        // Skip cleanup - tokens must not be removed
                         if is_debug_ohlcv_enabled() {
-                            log(LogTag::Ohlcv, "WATCH_CLEANUP_TICK", "🧹 Watch list cleanup tick starting");
-                        }
-                        let temp_service = Self {
-                            cache: cache.clone(),
-                            watch_list: watch_list.clone(),
-                            stats: stats.clone(),
-                            monitoring_active: Arc::new(RwLock::new(true)),
-                        };
-                        temp_service.cleanup_watch_list().await;
-                        if is_debug_ohlcv_enabled() {
-                            log(LogTag::Ohlcv, "WATCH_CLEANUP_TICK_DONE", "✅ Watch list cleanup tick completed");
+                            log(LogTag::Ohlcv, "CLEANUP_SKIPPED", "⏭️ Skipping watchlist cleanup - token removal disabled");
                         }
                     }
                     _ = shutdown.notified() => {
@@ -319,68 +310,6 @@ impl OhlcvService {
         {
             let mut stats = self.stats.write().await;
             stats.watched_tokens = watch_list.len();
-        }
-    }
-
-    /// Remove token from watch list
-    pub async fn remove_from_watch_list(&self, mint: &str) {
-        let mut watch_list = self.watch_list.write().await;
-        if watch_list.remove(mint).is_some() {
-            log(
-                LogTag::Ohlcv,
-                "WATCH_REMOVE",
-                &format!("📉 Removed {} from 1m OHLCV watch list", mint)
-            );
-
-            // Update stats
-            let mut stats = self.stats.write().await;
-            stats.watched_tokens = watch_list.len();
-        }
-    }
-
-    /// Clean up inactive watch list entries
-    pub async fn cleanup_watch_list(&self) {
-        let cutoff_time = Utc::now() - ChronoDuration::hours(24); // Remove entries older than 24h with no access
-        let mut removed_count = 0;
-
-        {
-            let mut watch_list = self.watch_list.write().await;
-            let initial_count = watch_list.len();
-
-            watch_list.retain(|mint, entry| {
-                // Keep if:
-                // 1. Open position (always keep)
-                // 2. Recently accessed (within 24h)
-                // 3. Recently added (within 1h, even if not accessed)
-                let keep =
-                    entry.is_open_position ||
-                    entry.last_accessed.map_or(false, |t| t > cutoff_time) ||
-                    Utc::now() - entry.added_at < ChronoDuration::hours(1);
-
-                if !keep && is_debug_ohlcv_enabled() {
-                    log(
-                        LogTag::Ohlcv,
-                        "WATCH_CLEANUP",
-                        &format!("🗑️ Removing inactive watch entry: {}", mint)
-                    );
-                }
-
-                keep
-            });
-
-            removed_count = initial_count - watch_list.len();
-
-            // Update stats
-            let mut stats = self.stats.write().await;
-            stats.watched_tokens = watch_list.len();
-        }
-
-        if removed_count > 0 {
-            log(
-                LogTag::Ohlcv,
-                "WATCH_CLEANUP_COMPLETE",
-                &format!("🧹 Cleaned up {} inactive watch list entries", removed_count)
-            );
         }
     }
 
