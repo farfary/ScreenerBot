@@ -128,7 +128,7 @@ impl PoolDiscovery {
         Self::log_source_config();
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
 
             loop {
                 tokio::select! {

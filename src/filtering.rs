@@ -50,7 +50,7 @@ const BLOCK_MINT_AUTHORITY: bool = true;
 /// Block tokens with freeze authority
 const BLOCK_FREEZE_AUTHORITY: bool = true;
 /// Minimum security score (0-100)
-const MIN_SECURITY_SCORE: u8 = 60;
+const MIN_SECURITY_SCORE: u8 = 0;
 
 // =============================================================================
 // MAIN FILTERING FUNCTION
@@ -121,14 +121,14 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         let token_obj = Token::from(token.clone());
 
         // Apply filtering criteria in order of efficiency
-        if let Some(reason) = apply_all_filters(&token_obj) {
+        if let Some(reason) = apply_all_filters(&token_obj, &mut filtering_stats) {
             filtering_stats.record_rejection(reason);
             continue;
         }
 
         // Token passed all filters
         filtered_tokens.push(token.mint.clone());
-        filtering_stats.passed += 1;
+        filtering_stats.passed_basic_filters += 1;
 
         // Stop when we have enough tokens
         if filtered_tokens.len() >= TARGET_FILTERED_TOKENS {
@@ -137,7 +137,12 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
     }
 
     // Step 3: Security filtering (cache-only for performance)
-    let security_filtered = apply_cached_security_filtering(filtered_tokens)?;
+    let (security_filtered, security_stats) =
+        apply_cached_security_filtering_with_stats(filtered_tokens)?;
+
+    // Update main stats with security filtering results
+    filtering_stats.passed_security_filters = security_stats.passed;
+    filtering_stats.final_passed = security_filtered.len();
 
     let elapsed = start_time.elapsed();
 
@@ -154,7 +159,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
     );
 
     if debug_enabled {
-        log_filtering_stats(&filtering_stats);
+        log_filtering_stats(&filtering_stats, &security_stats);
     }
 
     Ok(security_filtered)
@@ -166,31 +171,37 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
 
 /// Apply all filtering criteria to a token
 /// Returns Some(reason) if token should be rejected, None if it passes
-fn apply_all_filters(token: &Token) -> Option<FilterRejectionReason> {
+/// Also records which filtering stages were passed for statistics
+fn apply_all_filters(token: &Token, stats: &mut FilteringStats) -> Option<FilterRejectionReason> {
     // 1. Check decimals availability in database
     if !has_decimals_in_database(&token.mint) {
         return Some(FilterRejectionReason::NoDecimalsInDatabase);
     }
+    stats.record_stage_pass("decimals");
 
     // 2. Check basic token info completeness
     if let Some(reason) = check_basic_token_info(token) {
         return Some(reason);
     }
+    stats.record_stage_pass("basic_info");
 
     // 3. Check minimum transaction activity
     if let Some(reason) = check_transaction_activity(token) {
         return Some(reason);
     }
+    stats.record_stage_pass("transactions");
 
     // 4. Check minimum liquidity
     if let Some(reason) = check_liquidity_requirements(token) {
         return Some(reason);
     }
+    stats.record_stage_pass("liquidity");
 
     // 5. Check market cap range
     if let Some(reason) = check_market_cap_requirements(token) {
         return Some(reason);
     }
+    stats.record_stage_pass("market_cap");
 
     None // Token passed all filters
 }
@@ -290,9 +301,12 @@ fn check_market_cap_requirements(token: &Token) -> Option<FilterRejectionReason>
 }
 
 /// Apply security filtering using cached data only (no live blockchain analysis)
-fn apply_cached_security_filtering(token_mints: Vec<String>) -> Result<Vec<String>, String> {
+/// Returns both filtered tokens and detailed statistics
+fn apply_cached_security_filtering_with_stats(
+    token_mints: Vec<String>
+) -> Result<(Vec<String>, SecurityFilteringStats), String> {
     if token_mints.is_empty() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), SecurityFilteringStats::new()));
     }
 
     let debug_enabled = is_debug_filtering_enabled();
@@ -354,11 +368,13 @@ fn apply_cached_security_filtering(token_mints: Vec<String>) -> Result<Vec<Strin
         }
     }
 
-    if debug_enabled {
-        log_security_filtering_stats(&security_stats);
-    }
+    Ok((passed_tokens, security_stats))
+}
 
-    Ok(passed_tokens)
+/// Apply security filtering using cached data only (no live blockchain analysis)
+fn apply_cached_security_filtering(token_mints: Vec<String>) -> Result<Vec<String>, String> {
+    let (tokens, _) = apply_cached_security_filtering_with_stats(token_mints)?;
+    Ok(tokens)
 }
 
 /// Get cached security info without triggering live analysis
@@ -428,16 +444,31 @@ impl FilterRejectionReason {
 /// Filtering statistics tracker
 struct FilteringStats {
     total_processed: usize,
-    passed: usize,
+    passed_basic_filters: usize,
+    passed_security_filters: usize,
+    final_passed: usize,
     rejection_counts: HashMap<String, usize>,
+    // Detailed breakdown
+    decimals_check_passed: usize,
+    basic_info_check_passed: usize,
+    transaction_check_passed: usize,
+    liquidity_check_passed: usize,
+    market_cap_check_passed: usize,
 }
 
 impl FilteringStats {
     fn new() -> Self {
         Self {
             total_processed: 0,
-            passed: 0,
+            passed_basic_filters: 0,
+            passed_security_filters: 0,
+            final_passed: 0,
             rejection_counts: HashMap::new(),
+            decimals_check_passed: 0,
+            basic_info_check_passed: 0,
+            transaction_check_passed: 0,
+            liquidity_check_passed: 0,
+            market_cap_check_passed: 0,
         }
     }
 
@@ -445,28 +476,103 @@ impl FilteringStats {
         let key = reason.as_str().to_string();
         *self.rejection_counts.entry(key).or_insert(0) += 1;
     }
+
+    fn record_stage_pass(&mut self, stage: &str) {
+        match stage {
+            "decimals" => {
+                self.decimals_check_passed += 1;
+            }
+            "basic_info" => {
+                self.basic_info_check_passed += 1;
+            }
+            "transactions" => {
+                self.transaction_check_passed += 1;
+            }
+            "liquidity" => {
+                self.liquidity_check_passed += 1;
+            }
+            "market_cap" => {
+                self.market_cap_check_passed += 1;
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Log filtering statistics for debugging
-fn log_filtering_stats(stats: &FilteringStats) {
+fn log_filtering_stats(filtering_stats: &FilteringStats, security_stats: &SecurityFilteringStats) {
+    // Overall summary
+    log(LogTag::Filtering, "SUMMARY", &format!("FILTERING PIPELINE RESULTS:"));
+
     log(
         LogTag::Filtering,
-        "STATS",
+        "PIPELINE",
         &format!(
-            "Processed: {}, Passed: {}, Rejected: {}",
-            stats.total_processed,
-            stats.passed,
-            stats.total_processed - stats.passed
+            "Total processed: {} → Basic filters passed: {} → Security filters passed: {} → Final tokens: {}",
+            filtering_stats.total_processed,
+            filtering_stats.passed_basic_filters,
+            security_stats.passed,
+            filtering_stats.final_passed
+        )
+    );
+
+    // Detailed stage breakdown
+    log(
+        LogTag::Filtering,
+        "STAGES",
+        &format!(
+            "Stage passes - Decimals: {}, Info: {}, Transactions: {}, Liquidity: {}, Market Cap: {}",
+            filtering_stats.decimals_check_passed,
+            filtering_stats.basic_info_check_passed,
+            filtering_stats.transaction_check_passed,
+            filtering_stats.liquidity_check_passed,
+            filtering_stats.market_cap_check_passed
+        )
+    );
+
+    // Basic filter rejection reasons
+    log(
+        LogTag::Filtering,
+        "BASIC_REJECTS",
+        &format!(
+            "Total basic rejections: {}",
+            filtering_stats.total_processed - filtering_stats.passed_basic_filters
         )
     );
 
     // Log top rejection reasons
-    let mut rejection_vec: Vec<_> = stats.rejection_counts.iter().collect();
+    let mut rejection_vec: Vec<_> = filtering_stats.rejection_counts.iter().collect();
     rejection_vec.sort_by(|a, b| b.1.cmp(a.1));
 
-    for (reason, count) in rejection_vec.iter().take(5) {
-        log(LogTag::Filtering, "REJECT", &format!("{}: {}", reason, count));
+    for (reason, count) in rejection_vec.iter() {
+        log(LogTag::Filtering, "REJECT_REASON", &format!("{}: {}", reason, count));
     }
+
+    // Security filter details
+    log(
+        LogTag::Filtering,
+        "SECURITY_SUMMARY",
+        &format!(
+            "Security checked: {}, Passed: {}, Total security rejections: {}",
+            security_stats.total_checked,
+            security_stats.passed,
+            security_stats.total_checked - security_stats.passed
+        )
+    );
+
+    log(
+        LogTag::Filtering,
+        "SECURITY_REJECTS",
+        &format!(
+            "Low score: {}, High risk: {}, LP not locked: {}, Mint auth: {}, Freeze auth: {}, No cache: {}",
+            security_stats.rejected_low_score,
+            security_stats.rejected_high_risk,
+            security_stats.rejected_lp_not_locked,
+            security_stats.rejected_mint_authority,
+            security_stats.rejected_freeze_authority,
+            security_stats.rejected_no_cache
+        )
+    );
 }
 
 /// Security filtering statistics tracker
