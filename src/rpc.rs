@@ -2598,6 +2598,130 @@ impl RpcClient {
         )
     }
 
+    /// Sign, send, and confirm a transaction using Solana SDK's RpcClient::send_and_confirm_transaction
+    ///
+    /// This uses the current round-robin RPC URL to build a blocking SolanaRpcClient, then
+    /// calls send_and_confirm_transaction in a blocking thread to avoid stalling the async runtime.
+    pub async fn sign_send_and_confirm_transaction(
+        &self,
+        swap_transaction_base64: &str
+    ) -> Result<String, ScreenerBotError> {
+        let configs = read_configs().map_err(|e| {
+            ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
+                message: format!("Failed to read configs: {}", e),
+            })
+        })?;
+
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Rpc,
+                "TX_DEBUG_START",
+                &format!(
+                    "🚀 Starting sign_send_and_confirm_transaction with {} byte transaction",
+                    swap_transaction_base64.len()
+                )
+            );
+        }
+
+        // Decode base64 transaction
+        let original_tx_bytes = base64::engine::general_purpose::STANDARD
+            .decode(swap_transaction_base64)
+            .map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::ParseError {
+                    data_type: "base64_transaction".to_string(),
+                    error: format!("Failed to decode transaction: {}", e),
+                })
+            })?;
+
+        // Deserialize the VersionedTransaction
+        let mut transaction: VersionedTransaction = bincode
+            ::deserialize(&original_tx_bytes)
+            .map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::ParseError {
+                    data_type: "VersionedTransaction".to_string(),
+                    error: format!("Failed to deserialize transaction: {}", e),
+                })
+            })?;
+
+        // Create keypair from private key
+        let private_key_bytes = bs58
+            ::decode(&configs.main_wallet_private)
+            .into_vec()
+            .map_err(|e| {
+                ScreenerBotError::Configuration(
+                    crate::errors::ConfigurationError::InvalidPrivateKey {
+                        error: format!("Invalid private key format: {}", e),
+                    }
+                )
+            })?;
+
+        let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e| {
+            ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
+                error: format!("Failed to create keypair: {}", e),
+            })
+        })?;
+
+        // Sign the transaction (first signature index assumed to be wallet)
+        let sig = keypair.sign_message(&transaction.message.serialize());
+        if transaction.signatures.is_empty() {
+            transaction.signatures.push(sig);
+        } else {
+            transaction.signatures[0] = sig;
+        }
+
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Rpc,
+                "TX_DEBUG_SIGNED",
+                &format!("Transaction signed, wallet={}, sig={}", keypair.pubkey(), sig)
+            );
+        }
+
+        // Use current round-robin URL
+        let url = self.url();
+        let commitment = CommitmentConfig::confirmed();
+
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Rpc,
+                "TX_DEBUG_CLIENT",
+                &format!("Creating blocking RpcClient for send_and_confirm at {}", url)
+            );
+        }
+
+        // Build blocking client and send+confirm in blocking thread
+        let join_res = tokio::task
+            ::spawn_blocking(move || {
+                let client = SolanaRpcClient::new_with_commitment(url, commitment);
+                client.send_and_confirm_transaction(&transaction)
+            }).await
+            .map_err(|e| {
+                ScreenerBotError::Network(crate::errors::NetworkError::Generic {
+                    message: format!("Join error in send_and_confirm: {}", e),
+                })
+            })?;
+
+        match join_res {
+            Ok(signature) => {
+                log(LogTag::Rpc, "CONFIRMED", &format!("Transaction confirmed: {}", signature));
+                Ok(signature.to_string())
+            }
+            Err(client_err) => {
+                log(LogTag::Rpc, "ERROR", &format!("send_and_confirm failed: {}", client_err));
+                Err(
+                    ScreenerBotError::Blockchain(
+                        crate::errors::BlockchainError::TransactionDropped {
+                            signature: "unknown".to_string(),
+                            reason: format!("send_and_confirm_transaction failed: {}", client_err),
+                            fee_paid: None,
+                            attempts: 1,
+                        }
+                    )
+                )
+            }
+        }
+    }
+
     /// Gets all token accounts for a wallet (both SPL Token and Token-2022)
     pub async fn get_all_token_accounts(
         &self,

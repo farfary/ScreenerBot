@@ -95,7 +95,7 @@ pub const JUPITER_SWAP_API: &str = "https://lite-api.jup.ag/swap/v1/swap";
 pub const JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT: bool = false;
 
 /// Jupiter default priority fee (lamports) - Used in transaction execution, not quotes
-pub const JUPITER_DEFAULT_PRIORITY_FEE: u64 = 10_000;
+pub const JUPITER_DEFAULT_PRIORITY_FEE: u64 = 1_000;
 
 /// Jupiter default swap mode - "ExactIn" or "ExactOut"
 /// ExactIn: Specify exact input amount, output amount is calculated

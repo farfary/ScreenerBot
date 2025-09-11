@@ -793,13 +793,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
                     {
                         let mint_clone = token.mint.clone();
                         tokio::spawn(async move {
-                            if
-                                let Err(e) = save_position_token_snapshot(
-                                    id,
-                                    &mint_clone,
-                                    "opening"
-                                ).await
-                            {
+                            if let Err(e) = save_position_token_snapshot(id, &mint_clone, "opening").await {
                                 log(
                                     LogTag::Positions,
                                     "SNAPSHOT_WARN",
@@ -827,14 +821,18 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
                         )
                     );
                     if attempt >= MAX_DB_RETRIES {
-                        // Abort opening to avoid inconsistent in-memory only position
-                        return Err(
-                            format!(
-                                "Failed to persist new position after {} attempts: {}",
-                                MAX_DB_RETRIES,
-                                e
+                        // Do NOT abort: keep in-memory position and enqueue verification to avoid lost positions.
+                        // We'll spawn a background retry to persist to DB.
+                        log(
+                            LogTag::Positions,
+                            "DB_DEFERRED",
+                            &format!(
+                                "⚠️ Deferring DB persistence for new position (mint: {}, symbol: {}). Will retry in background.",
+                                new_position.mint,
+                                new_position.symbol
                             )
                         );
+                        break; // exit retry loop with position_id still -1
                     }
                     // small backoff
                     sleep(Duration::from_millis(150 * (attempt as u64))).await;
@@ -843,8 +841,8 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         }
 
         // Update position with database ID if successful
-        let mut position_with_id = new_position.clone();
-        if position_id > 0 {
+    let mut position_with_id = new_position.clone();
+    if position_id > 0 {
             position_with_id.id = Some(position_id);
 
             // Enqueue entry transaction for verification now that we have position_id
@@ -865,15 +863,15 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
             }
         }
 
-        // Add position to in-memory list with correct ID
-        let position_index = {
+    // Add position to in-memory list with current state (ID may be None if DB deferred)
+    let position_index = {
             let mut positions = POSITIONS.write().await;
             positions.push(position_with_id.clone());
             positions.len() - 1
         };
 
         // Update indexes for constant-time lookups
-        {
+    {
             SIG_TO_MINT_INDEX.write().await.insert(
                 transaction_signature.clone(),
                 token.mint.clone()
@@ -894,6 +892,48 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
                     profit_max
                 )
             );
+        }
+
+        // If DB persistence failed, enqueue the entry verification anyway and start a background DB insert retry
+        if position_id <= 0 {
+            // Enqueue for verification with position_id 0 (safe default); verification flow doesn't require DB ID
+            let _ = enqueue_for_verification(
+                transaction_signature.clone(),
+                token.mint.clone(),
+                0,
+                true,
+                last_valid_block_height
+            ).await;
+
+            // Background DB insert retry: attempt to save and update in-memory position ID when successful
+            let pos_clone = new_position.clone();
+            tokio::spawn(async move {
+                for retry in 1..=10 { // retry up to ~10 times with backoff
+                    match save_position(&pos_clone).await {
+                        Ok(new_id) => {
+                            // Update in-memory position with new ID
+                            let mut positions = POSITIONS.write().await;
+                            if let Some(p) = positions.iter_mut().find(|p| p.mint == pos_clone.mint && p.entry_transaction_signature.as_deref() == pos_clone.entry_transaction_signature.as_deref()) {
+                                p.id = Some(new_id);
+                            }
+                            log(
+                                LogTag::Positions,
+                                "DB_RETRY_SUCCESS",
+                                &format!("✅ Background DB insert succeeded for {} with ID {} (retry {})", safe_truncate(&pos_clone.mint, 8), new_id, retry)
+                            );
+                            break;
+                        }
+                        Err(err) => {
+                            log(
+                                LogTag::Positions,
+                                "DB_RETRY_WARN",
+                                &format!("⚠️ Background DB insert retry {} failed for {}: {}", retry, safe_truncate(&pos_clone.mint, 8), err)
+                            );
+                            sleep(Duration::from_millis(500 * retry as u64)).await;
+                        }
+                    }
+                }
+            });
         }
 
         position_id
@@ -1061,7 +1101,28 @@ pub async fn close_position_direct(
         let mut positions = POSITIONS.write().await;
         if let Some(position) = positions.iter_mut().find(|p| p.mint == *mint) {
             if position.exit_transaction_signature.is_some() && !position.transaction_exit_verified {
-                let sig = position.exit_transaction_signature.as_ref().unwrap();
+                let Some(sig) = position.exit_transaction_signature.as_ref() else {
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "WARN",
+                            &format!(
+                                "Exit signature missing unexpectedly for {} during retry clear",
+                                position.symbol
+                            )
+                        );
+                    }
+                    // Clear stale flags safely and return early from this inner block
+                    position.exit_price = None;
+                    position.exit_time = None;
+                    position.transaction_exit_verified = false;
+                    position.sol_received = None;
+                    position.effective_exit_price = None;
+                    position.exit_fee_lamports = None;
+                    return Err(
+                        "Exit signature unexpectedly missing during retry clear".to_string()
+                    );
+                };
 
                 // Check if transaction actually exists on blockchain
                 let transaction_exists = get_transaction(sig).await
@@ -1633,9 +1694,7 @@ pub async fn close_position_direct(
             );
         }
 
-        if position.id.is_some() {
-            let position_id = position.id.unwrap();
-
+        if let Some(position_id) = position.id {
             if is_debug_positions_enabled() {
                 log(
                     LogTag::Positions,
@@ -2870,7 +2929,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                     }
 
                     // Store position for database update (after releasing lock)
-                    if position.id.is_some() {
+                    if let Some(_) = position.id {
                         position_for_db_update = Some(position.clone());
                         log(
                             LogTag::Positions,
@@ -2878,7 +2937,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                             &format!(
                                 "🔄 Position {} (ID: {}) prepared for database update with entry_verified={}",
                                 position.symbol,
-                                position.id.unwrap(),
+                                position.id.unwrap_or(-1),
                                 position.transaction_entry_verified
                             )
                         );
@@ -2981,7 +3040,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                     );
 
                     // Store position for database update (after releasing lock)
-                    if position.id.is_some() {
+                    if let Some(_) = position.id {
                         position_for_db_update = Some(position.clone());
                         if is_debug_positions_enabled() {
                             log(
@@ -2990,7 +3049,7 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                                 &format!(
                                     "🔄 Exit position {} (ID: {}) prepared for database update",
                                     position.symbol,
-                                    position.id.unwrap()
+                                    position.id.unwrap_or(-1)
                                 )
                             );
                         }
@@ -3250,28 +3309,38 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
                 }
 
                 // Save closing token snapshot if this is an exit transaction verification
-                if position.transaction_exit_verified && position.id.is_some() {
-                    let position_id = position.id.unwrap();
-                    let mint_clone = position.mint.clone();
-                    tokio::spawn(async move {
-                        if
-                            let Err(e) = save_position_token_snapshot(
-                                position_id,
-                                &mint_clone,
-                                "closing"
-                            ).await
-                        {
-                            log(
-                                LogTag::Positions,
-                                "SNAPSHOT_WARN",
-                                &format!(
-                                    "Failed to save closing snapshot for {}: {}",
-                                    safe_truncate(&mint_clone, 8),
-                                    e
-                                )
-                            );
-                        }
-                    });
+                if position.transaction_exit_verified {
+                    if let Some(position_id) = position.id {
+                        let mint_clone = position.mint.clone();
+                        tokio::spawn(async move {
+                            if
+                                let Err(e) = save_position_token_snapshot(
+                                    position_id,
+                                    &mint_clone,
+                                    "closing"
+                                ).await
+                            {
+                                log(
+                                    LogTag::Positions,
+                                    "SNAPSHOT_WARN",
+                                    &format!(
+                                        "Failed to save closing snapshot for {}: {}",
+                                        safe_truncate(&mint_clone, 8),
+                                        e
+                                    )
+                                );
+                            }
+                        });
+                    } else if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "SNAPSHOT_SKIP",
+                            &format!(
+                                "Skipping closing snapshot for {} due to missing position ID",
+                                position.symbol
+                            )
+                        );
+                    }
                 }
 
                 // Only remove from pending verifications AFTER successful database update
@@ -3300,20 +3369,10 @@ pub async fn verify_position_transaction(signature: &str) -> Result<bool, String
         }
     }
 
-    // CRITICAL: Always ensure pending verification cleanup and critical operation cleanup
-    // regardless of verification outcome or any earlier failures
-    {
-        let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
-        let was_pending = pending_verifications.remove(signature);
-
-        if was_pending.is_some() && is_debug_positions_enabled() {
-            log(
-                LogTag::Positions,
-                "CLEANUP",
-                &format!("🗑️ Final cleanup: Removed {} from pending verifications", signature)
-            );
-        }
-    }
+    // IMPORTANT: Do NOT remove from pending verifications here on failure.
+    // The verification queue manager is responsible for removing signatures
+    // after successful verification or explicit cleanup/timeouts. Removing here
+    // caused entries to silently drop from the queue on transient errors.
 
     // Always cleanup critical operation marking for any discovered mint
     if let Some(ref mint) = position_mint {
@@ -3508,25 +3567,32 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                 // GUARD: Re-enqueue any exit signatures that are set but not yet verified and missing from pending queue
                 {
                     // Collect missing exit sigs with their position metadata
-                    let mut to_enqueue: Vec<(String, String, i64)> = Vec::new(); // (signature, mint, position_id)
+                    let mut to_enqueue: Vec<(String, String, i64, bool)> = Vec::new(); // (signature, mint, position_id, is_entry)
                     {
                         let positions = POSITIONS.read().await;
                         let pending_verifications = PENDING_VERIFICATIONS.read().await;
                         for p in &*positions {
+                            // Exit guard
                             if let Some(sig) = &p.exit_transaction_signature {
                                 if !p.transaction_exit_verified && !pending_verifications.contains_key(sig) {
-                                    to_enqueue.push((sig.clone(), p.mint.clone(), p.id.unwrap_or(0)));
+                                    to_enqueue.push((sig.clone(), p.mint.clone(), p.id.unwrap_or(0), false));
+                                }
+                            }
+                            // Entry guard (new): if entry exists and not verified and missing from queue, re-enqueue
+                            if let Some(sig) = &p.entry_transaction_signature {
+                                if !p.transaction_entry_verified && !pending_verifications.contains_key(sig) {
+                                    to_enqueue.push((sig.clone(), p.mint.clone(), p.id.unwrap_or(0), true));
                                 }
                             }
                         }
                     }
                     if !to_enqueue.is_empty() {
-                        for (sig, mint, position_id) in &to_enqueue {
+                        for (sig, mint, position_id, is_entry) in &to_enqueue {
                             enqueue_for_verification(
                                 sig.clone(),
                                 mint.clone(),
                                 *position_id,
-                                false, // is_entry: false for exit
+                                *is_entry, // true for entry, false for exit
                                 None, // No block height available for guard re-enqueue
                             ).await;
                         }
@@ -3534,31 +3600,39 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                             LogTag::Positions,
                             "VERIFICATION_GUARD_REQUEUE",
                             &format!(
-                                "🛡️ Re-enqueued {} missing exit verifications using new system: {}",
+                                "🛡️ Re-enqueued {} missing verifications (entry+exit) using new system: {}",
                                 to_enqueue.len(),
-                                to_enqueue.iter().map(|(sig, _, _)| sig.as_str()).collect::<Vec<_>>().join(", ")
+                                to_enqueue.iter().map(|(sig, _, _, _)| sig.as_str()).collect::<Vec<_>>().join(", ")
                             )
                         );
                     }
                 }
                 // First, cleanup stale pending verifications using block height expiration
-                let expired_sigs: Vec<String> = {
-                    let mut to_remove = Vec::new();
+                // Also remove orphan positions for expired ENTRY transactions
+                let (expired_sigs, expired_entry_sigs): (Vec<String>, Vec<String>) = {
+                    let mut to_remove: Vec<String> = Vec::new();
+                    let mut to_cleanup_positions: Vec<String> = Vec::new();
                     let pending_verifications = PENDING_VERIFICATIONS.read().await;
-                    
-                    for (sig, (mint, position_id, is_entry, verification_data)) in pending_verifications.iter() {
+
+                    for (sig, (_mint, _position_id, is_entry, verification_data)) in pending_verifications.iter() {
                         if is_transaction_expired(verification_data).await.unwrap_or(false) {
                             to_remove.push(sig.clone());
+                            if *is_entry {
+                                to_cleanup_positions.push(sig.clone());
+                            }
                         }
                     }
-                    to_remove
+                    (to_remove, to_cleanup_positions)
                 };
 
                 if !expired_sigs.is_empty() {
-                    let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
-                    for sig in &expired_sigs {
-                        pending_verifications.remove(sig);
+                    {
+                        let mut pending_verifications = PENDING_VERIFICATIONS.write().await;
+                        for sig in &expired_sigs {
+                            pending_verifications.remove(sig);
+                        }
                     }
+
                     log(
                         LogTag::Positions,
                         "CLEANUP",
@@ -3572,6 +3646,31 @@ async fn verify_pending_transactions_parallel(shutdown: Arc<Notify>) {
                             &format!("🗑️ Expired signatures removed: {}",
                                 expired_sigs.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
                         );
+                    }
+
+                    // For expired ENTRY transactions, remove the orphan positions to prevent UNVERIFIED stuck entries
+                    if !expired_entry_sigs.is_empty() {
+                        log(
+                            LogTag::Positions,
+                            "ENTRY_EXPIRED_CLEANUP",
+                            &format!(
+                                "🧹 Cleaning up {} orphan positions for expired ENTRY transactions: {}",
+                                expired_entry_sigs.len(),
+                                expired_entry_sigs.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                            )
+                        );
+
+                        for sig in expired_entry_sigs {
+                            tokio::spawn(async move {
+                                if let Err(e) = crate::positions_lib::remove_position_by_signature(&sig).await {
+                                    log(
+                                        LogTag::Positions,
+                                        "ENTRY_EXPIRED_CLEANUP_ERROR",
+                                        &format!("Failed to remove position for expired entry {}: {}", sig, e)
+                                    );
+                                }
+                            });
+                        }
                     }
                 }
 
