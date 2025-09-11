@@ -38,7 +38,7 @@ use tokio::time::timeout;
 // =============================================================================
 
 /// DexScreener API rate limit (requests per minute)
-pub const DEXSCREENER_RATE_LIMIT_PER_MINUTE: usize = 300;
+pub const DEXSCREENER_RATE_LIMIT_PER_MINUTE: usize = 100;
 
 /// DexScreener discovery API rate limit (requests per minute)
 pub const DEXSCREENER_DISCOVERY_RATE_LIMIT: usize = 60;
@@ -47,7 +47,7 @@ pub const DEXSCREENER_DISCOVERY_RATE_LIMIT: usize = 60;
 pub const MAX_TOKENS_PER_API_CALL: usize = 30;
 
 /// API calls per monitoring cycle (based on rate limits)
-pub const API_CALLS_PER_MONITORING_CYCLE: usize = 30;
+pub const API_CALLS_PER_MONITORING_CYCLE: usize = 90;
 
 // =============================================================================
 // SIMPLE CACHING SYSTEM (GLOBAL 60s TTL)

@@ -202,7 +202,6 @@ use crate::tokens::{ cache::TokenDatabase, get_all_tokens_by_liquidity, Token };
 use crate::utils::{ check_shutdown_or_delay, safe_read_lock, safe_write_lock, debug_trader_log };
 
 use crate::entry::get_profit_target;
-use crate::filtering::log_filtering_summary;
 
 // =============================================================================
 // IMPORTS AND DEPENDENCIES

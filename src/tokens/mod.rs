@@ -319,10 +319,8 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
 /// Synchronous cache-only decimal access (for P&L calculations)
 /// **Use this in sync contexts where you can't await**
 pub fn get_token_decimals_sync(mint: &str) -> Option<u8> {
-    // Use a blocking runtime to call the unified get_token_decimals function
-    tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(async { get_token_decimals(mint).await })
-    })
+    // IMPORTANT: Cache-only by design. Never trigger RPC fetches in sync/runtime paths.
+    decimals::get_cached_decimals(mint)
 }
 
 /// Async blockchain-enabled decimal access with Result return type

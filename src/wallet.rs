@@ -770,7 +770,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
         }
 
         let balance_ui = if
-            let Some(decimals) = crate::tokens::get_token_decimals_sync(&account_info.mint)
+            let Some(decimals) = crate::tokens::decimals::get_cached_decimals(&account_info.mint)
         {
             (account_info.balance as f64) / (10_f64).powi(decimals as i32)
         } else {
@@ -783,7 +783,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
             mint: account_info.mint.clone(),
             balance: account_info.balance,
             balance_ui,
-            decimals: crate::tokens::get_token_decimals_sync(&account_info.mint),
+            decimals: crate::tokens::decimals::get_cached_decimals(&account_info.mint),
             is_token_2022: account_info.is_token_2022,
         });
     }
