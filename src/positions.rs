@@ -793,7 +793,13 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
                     {
                         let mint_clone = token.mint.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = save_position_token_snapshot(id, &mint_clone, "opening").await {
+                            if
+                                let Err(e) = save_position_token_snapshot(
+                                    id,
+                                    &mint_clone,
+                                    "opening"
+                                ).await
+                            {
                                 log(
                                     LogTag::Positions,
                                     "SNAPSHOT_WARN",
@@ -841,8 +847,8 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         }
 
         // Update position with database ID if successful
-    let mut position_with_id = new_position.clone();
-    if position_id > 0 {
+        let mut position_with_id = new_position.clone();
+        if position_id > 0 {
             position_with_id.id = Some(position_id);
 
             // Enqueue entry transaction for verification now that we have position_id
@@ -863,15 +869,15 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
             }
         }
 
-    // Add position to in-memory list with current state (ID may be None if DB deferred)
-    let position_index = {
+        // Add position to in-memory list with current state (ID may be None if DB deferred)
+        let position_index = {
             let mut positions = POSITIONS.write().await;
             positions.push(position_with_id.clone());
             positions.len() - 1
         };
 
         // Update indexes for constant-time lookups
-    {
+        {
             SIG_TO_MINT_INDEX.write().await.insert(
                 transaction_signature.clone(),
                 token.mint.clone()
@@ -908,18 +914,33 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
             // Background DB insert retry: attempt to save and update in-memory position ID when successful
             let pos_clone = new_position.clone();
             tokio::spawn(async move {
-                for retry in 1..=10 { // retry up to ~10 times with backoff
+                for retry in 1..=10 {
+                    // retry up to ~10 times with backoff
                     match save_position(&pos_clone).await {
                         Ok(new_id) => {
                             // Update in-memory position with new ID
                             let mut positions = POSITIONS.write().await;
-                            if let Some(p) = positions.iter_mut().find(|p| p.mint == pos_clone.mint && p.entry_transaction_signature.as_deref() == pos_clone.entry_transaction_signature.as_deref()) {
+                            if
+                                let Some(p) = positions
+                                    .iter_mut()
+                                    .find(
+                                        |p|
+                                            p.mint == pos_clone.mint &&
+                                            p.entry_transaction_signature.as_deref() ==
+                                                pos_clone.entry_transaction_signature.as_deref()
+                                    )
+                            {
                                 p.id = Some(new_id);
                             }
                             log(
                                 LogTag::Positions,
                                 "DB_RETRY_SUCCESS",
-                                &format!("✅ Background DB insert succeeded for {} with ID {} (retry {})", safe_truncate(&pos_clone.mint, 8), new_id, retry)
+                                &format!(
+                                    "✅ Background DB insert succeeded for {} with ID {} (retry {})",
+                                    safe_truncate(&pos_clone.mint, 8),
+                                    new_id,
+                                    retry
+                                )
                             );
                             break;
                         }
@@ -927,9 +948,14 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
                             log(
                                 LogTag::Positions,
                                 "DB_RETRY_WARN",
-                                &format!("⚠️ Background DB insert retry {} failed for {}: {}", retry, safe_truncate(&pos_clone.mint, 8), err)
+                                &format!(
+                                    "⚠️ Background DB insert retry {} failed for {}: {}",
+                                    retry,
+                                    safe_truncate(&pos_clone.mint, 8),
+                                    err
+                                )
                             );
-                            sleep(Duration::from_millis(500 * retry as u64)).await;
+                            sleep(Duration::from_millis(500 * (retry as u64))).await;
                         }
                     }
                 }
