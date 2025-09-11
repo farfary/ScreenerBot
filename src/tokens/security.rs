@@ -179,10 +179,8 @@ pub struct SecurityFlags {
 pub enum UpdateStrategy {
     /// Full analysis with all checks
     Full,
-    /// Update only dynamic properties (holders)
-    DynamicOnly,
-    /// Update only static properties (authority, LP lock)
-    StaticOnly,
+    /// Partial update (some properties updated)
+    Partial,
     /// Cached data, no updates needed
     Cached,
 }
@@ -783,25 +781,13 @@ impl TokenSecurityAnalyzer {
 
             // Check database
             if let Some(db_info) = self.database.get_security_info(mint)? {
-                // Determine if we need to update based on age and strategy
-                let update_needed = self.should_update_security_info(&db_info);
-
-                if !update_needed {
-                    log(
-                        LogTag::Security,
-                        "DEBUG",
-                        &format!("Using database security info for {}", safe_truncate(mint, 8))
-                    );
-                    self.cache.set(db_info.clone());
-                    return Ok(db_info);
-                } else {
-                    log(
-                        LogTag::Security,
-                        "DEBUG",
-                        &format!("Security info needs update for {}", safe_truncate(mint, 8))
-                    );
-                    return self.update_security_info(db_info).await;
-                }
+                // Always try to update existing info - let update_security_info decide if update is needed
+                log(
+                    LogTag::Security,
+                    "DEBUG",
+                    &format!("Checking for updates needed for {}", safe_truncate(mint, 8))
+                );
+                return self.update_security_info(db_info).await;
             }
         } else {
             log(
@@ -847,12 +833,8 @@ impl TokenSecurityAnalyzer {
             if let Some(cached_info) = self.cache.get(mint) {
                 results.insert(mint.clone(), cached_info);
             } else if let Some(db_info) = self.database.get_security_info(mint)? {
-                if self.should_update_security_info(&db_info) {
-                    needs_update.push((mint.clone(), db_info));
-                } else {
-                    self.cache.set(db_info.clone());
-                    results.insert(mint.clone(), db_info);
-                }
+                // Always try to update existing info - let update_security_info decide if update is needed
+                needs_update.push((mint.clone(), db_info));
             } else {
                 needs_analysis.push(mint.clone());
             }
@@ -891,40 +873,13 @@ impl TokenSecurityAnalyzer {
         Ok(results)
     }
 
-    /// Determine if security info needs updating
-    fn should_update_security_info(&self, info: &TokenSecurityInfo) -> bool {
-        let now = Utc::now();
-
-        // Static properties (authority, LP lock) - check every 6 hours
-        let static_age = now.signed_duration_since(info.timestamps.authority_last_checked);
-        let static_needs_update = static_age > ChronoDuration::hours(6);
-
-        // Dynamic properties (holders) - check every 5 minutes if we have holder data
-        let dynamic_needs_update = if
-            let Some(holder_last_checked) = info.timestamps.holder_last_checked
-        {
-            let dynamic_age = now.signed_duration_since(holder_last_checked);
-            dynamic_age > ChronoDuration::minutes(5)
-        } else {
-            true // No holder data, we should get it
-        };
-
-        static_needs_update || dynamic_needs_update
-    }
-
     /// Update existing security info
     async fn update_security_info(
         &self,
         mut old_info: TokenSecurityInfo
     ) -> Result<TokenSecurityInfo, ScreenerBotError> {
         let now = Utc::now();
-        let mint = old_info.mint.clone(); // Clone mint to avoid borrowing issues
-
-        log(
-            LogTag::Security,
-            "UPDATE",
-            &format!("Updating security info for {}", safe_truncate(&mint, 8))
-        );
+        let mint = old_info.mint.clone();
 
         // Check what needs updating
         let static_age = now.signed_duration_since(old_info.timestamps.authority_last_checked);
@@ -936,8 +891,25 @@ impl TokenSecurityAnalyzer {
             let dynamic_age = now.signed_duration_since(holder_last_checked);
             dynamic_age > ChronoDuration::minutes(5)
         } else {
-            true
+            true // No holder data, we should get it
         };
+
+        // If no update is needed, cache and return existing info
+        if !static_needs_update && !dynamic_needs_update {
+            log(
+                LogTag::Security,
+                "DEBUG",
+                &format!("No update needed for {}", safe_truncate(&mint, 8))
+            );
+            self.cache.set(old_info.clone());
+            return Ok(old_info);
+        }
+
+        log(
+            LogTag::Security,
+            "UPDATE",
+            &format!("Updating security info for {}", safe_truncate(&mint, 8))
+        );
 
         // Update static properties if needed
         if static_needs_update {
@@ -984,12 +956,10 @@ impl TokenSecurityAnalyzer {
 
         // Update timestamps
         old_info.timestamps.last_updated = now;
-        old_info.update_strategy = if static_needs_update && dynamic_needs_update {
-            UpdateStrategy::Full
-        } else if dynamic_needs_update {
-            UpdateStrategy::DynamicOnly
+        old_info.update_strategy = if static_needs_update || dynamic_needs_update {
+            UpdateStrategy::Partial
         } else {
-            UpdateStrategy::StaticOnly
+            UpdateStrategy::Cached
         };
 
         // Save to database and cache
@@ -1297,14 +1267,6 @@ impl TokenSecurityAnalyzer {
                     error_msg.contains("deprioritized") ||
                     error_msg.contains("Request too large")
                 {
-                    log(
-                        LogTag::Security,
-                        "HOLDER_SKIP",
-                        &format!(
-                            "Skipping holder analysis for {} - too many holders",
-                            safe_truncate(mint, 8)
-                        )
-                    );
                     // Return minimal holder info indicating high holder count
                     return Ok(HolderSecurityInfo {
                         total_holders: u32::MAX, // Indicates unknown/high count
@@ -1316,7 +1278,6 @@ impl TokenSecurityAnalyzer {
                         distribution_score: 30, // Conservative score for unknown distribution
                     });
                 }
-
                 return Err(
                     ScreenerBotError::Data(crate::errors::DataError::Generic {
                         message: format!("Failed to get holder stats: {}", e),
@@ -1336,14 +1297,6 @@ impl TokenSecurityAnalyzer {
                     error_msg.contains("deprioritized") ||
                     error_msg.contains("Request too large")
                 {
-                    log(
-                        LogTag::Security,
-                        "HOLDER_SKIP",
-                        &format!(
-                            "Skipping top holders analysis for {} - too many holders",
-                            safe_truncate(mint, 8)
-                        )
-                    );
                     // Use the basic stats we already have
                     return Ok(HolderSecurityInfo {
                         total_holders: holder_stats.total_holders,
@@ -1355,7 +1308,6 @@ impl TokenSecurityAnalyzer {
                         distribution_score: 40, // Conservative score
                     });
                 }
-
                 return Err(
                     ScreenerBotError::Data(crate::errors::DataError::Generic {
                         message: format!("Failed to get top holders: {}", e),
@@ -1647,7 +1599,6 @@ const SECURITY_SUMMARY_INTERVAL_SECONDS: u64 = 30;
 const SECURITY_TOKENS_PER_CYCLE: usize = 10;
 
 /// Security monitoring constants for update intervals
-const MAX_SECURITY_UPDATE_AGE_HOURS: i64 = 24; // Force update after 24 hours
 const SECURITY_STATIC_UPDATE_AGE_HOURS: i64 = 168; // Static properties: weekly
 const SECURITY_DYNAMIC_UPDATE_AGE_HOURS: i64 = 12; // Dynamic properties: twice daily
 
@@ -1669,8 +1620,10 @@ impl SecurityMonitor {
         })
     }
 
-    /// Get tokens that are missing security information completely
-    async fn get_tokens_missing_security_info(&self) -> Result<Vec<String>, String> {
+    /// Get tokens that need security updates (missing or stale)
+    async fn get_tokens_needing_security_updates(
+        &self
+    ) -> Result<(Vec<String>, Vec<String>), String> {
         let database = TokenDatabase::new().map_err(|e|
             format!("Failed to create token database: {}", e)
         )?;
@@ -1681,12 +1634,30 @@ impl SecurityMonitor {
 
         let security_analyzer = get_security_analyzer();
         let mut tokens_missing_security = Vec::new();
+        let mut tokens_with_stale_security = Vec::new();
+        let now = Utc::now();
 
         for (mint, _, _, _) in all_tokens {
-            // Check if security info exists in database
             match security_analyzer.database.get_security_info(&mint) {
                 Ok(None) => tokens_missing_security.push(mint),
-                Ok(Some(_)) => {} // Has security info
+                Ok(Some(security_info)) => {
+                    // Check if security info is stale
+                    let static_age = now.signed_duration_since(
+                        security_info.timestamps.authority_last_checked
+                    );
+                    let dynamic_age = security_info.timestamps.holder_last_checked
+                        .map(|t| now.signed_duration_since(t))
+                        .unwrap_or_else(||
+                            chrono::Duration::hours(SECURITY_DYNAMIC_UPDATE_AGE_HOURS + 1)
+                        );
+
+                    if
+                        static_age.num_hours() > SECURITY_STATIC_UPDATE_AGE_HOURS ||
+                        dynamic_age.num_hours() > SECURITY_DYNAMIC_UPDATE_AGE_HOURS
+                    {
+                        tokens_with_stale_security.push(mint);
+                    }
+                }
                 Err(_) => tokens_missing_security.push(mint), // Error = treat as missing
             }
         }
@@ -1702,44 +1673,6 @@ impl SecurityMonitor {
             );
         }
 
-        Ok(tokens_missing_security)
-    }
-
-    /// Get tokens with stale security information that need updates
-    async fn get_tokens_with_stale_security_info(&self) -> Result<Vec<String>, String> {
-        let database = TokenDatabase::new().map_err(|e|
-            format!("Failed to create token database: {}", e)
-        )?;
-
-        let all_tokens = database
-            .get_all_tokens_with_update_time().await
-            .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
-
-        let security_analyzer = get_security_analyzer();
-        let mut tokens_with_stale_security = Vec::new();
-        let now = Utc::now();
-
-        for (mint, _, _, _) in all_tokens {
-            if let Ok(Some(security_info)) = security_analyzer.database.get_security_info(&mint) {
-                // Check if static security info is stale (authority, LP lock)
-                let static_age = now.signed_duration_since(
-                    security_info.timestamps.authority_last_checked
-                );
-                let dynamic_age = security_info.timestamps.holder_last_checked
-                    .map(|t| now.signed_duration_since(t))
-                    .unwrap_or_else(||
-                        chrono::Duration::hours(SECURITY_DYNAMIC_UPDATE_AGE_HOURS + 1)
-                    );
-
-                if
-                    static_age.num_hours() > SECURITY_STATIC_UPDATE_AGE_HOURS ||
-                    dynamic_age.num_hours() > SECURITY_DYNAMIC_UPDATE_AGE_HOURS
-                {
-                    tokens_with_stale_security.push(mint);
-                }
-            }
-        }
-
         if !tokens_with_stale_security.is_empty() {
             log(
                 LogTag::Security,
@@ -1751,7 +1684,7 @@ impl SecurityMonitor {
             );
         }
 
-        Ok(tokens_with_stale_security)
+        Ok((tokens_missing_security, tokens_with_stale_security))
     }
 
     /// Update security information for a batch of tokens
@@ -1815,8 +1748,11 @@ impl SecurityMonitor {
     async fn run_security_monitoring_cycle(&mut self) -> Result<(), String> {
         log(LogTag::Security, "DEBUG", "Starting security monitoring cycle");
 
+        // Get tokens that need security updates (single database call)
+        let (missing_security_tokens, stale_security_tokens) =
+            self.get_tokens_needing_security_updates().await?;
+
         // Priority 1: Tokens missing security info completely
-        let missing_security_tokens = self.get_tokens_missing_security_info().await?;
         let mut tokens_to_process = missing_security_tokens
             .into_iter()
             .take(SECURITY_TOKENS_PER_CYCLE)
@@ -1825,7 +1761,6 @@ impl SecurityMonitor {
         // Priority 2: Fill remaining capacity with stale security tokens
         if tokens_to_process.len() < SECURITY_TOKENS_PER_CYCLE {
             let remaining_capacity = SECURITY_TOKENS_PER_CYCLE - tokens_to_process.len();
-            let stale_security_tokens = self.get_tokens_with_stale_security_info().await?;
 
             // Randomize to ensure fair distribution
             let mut stale_tokens = stale_security_tokens;
@@ -1879,7 +1814,7 @@ impl SecurityMonitor {
                 SUM(CASE WHEN security_score >= 40 AND security_score < 60 THEN 1 ELSE 0 END) as medium_risk_count,
                 SUM(CASE WHEN security_score < 40 THEN 1 ELSE 0 END) as high_risk_count,
                 AVG(security_score) as avg_score
-            FROM security_info
+            FROM token_security
         "#;
 
         let stats = conn
@@ -1901,8 +1836,8 @@ impl SecurityMonitor {
         // Query fresh security data (last 24 hours)
         let fresh_query =
             r#"
-            SELECT COUNT(*) FROM security_info 
-            WHERE (julianday('now') - julianday(last_updated)) * 24 <= 24
+            SELECT COUNT(*) FROM token_security 
+            WHERE (julianday('now') - julianday(updated_at)) * 24 <= 24
         "#;
 
         let fresh_count: i64 = conn
@@ -1916,7 +1851,7 @@ impl SecurityMonitor {
                 COUNT(*) as total_with_authority,
                 SUM(CASE WHEN authority_info LIKE '%"mint_authority":null%' THEN 1 ELSE 0 END) as mint_disabled,
                 SUM(CASE WHEN authority_info LIKE '%"freeze_authority":null%' THEN 1 ELSE 0 END) as freeze_disabled
-            FROM security_info
+            FROM token_security
             WHERE authority_info IS NOT NULL
         "#;
 
