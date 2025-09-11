@@ -180,6 +180,7 @@ pub enum UpdateStrategy {
     /// Full analysis with all checks
     Full,
     /// Partial update (some properties updated)
+    #[serde(alias = "DynamicOnly")]
     Partial,
     /// Cached data, no updates needed
     Cached,
