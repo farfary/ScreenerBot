@@ -124,6 +124,23 @@ impl PoolAnalyzer {
                                 liquidity_usd,
                                 volume_h24_usd
                             }) => {
+                                // Check if this pool has failed analysis recently
+                                if super::failed_cache::is_pool_analysis_failed(&pool_id) {
+                                    if is_debug_pool_analyzer_enabled() {
+                                        let token_mint = if is_sol_mint(&base_mint.to_string()) { 
+                                            quote_mint 
+                                        } else { 
+                                            base_mint 
+                                        };
+                                        log(
+                                            LogTag::PoolAnalyzer,
+                                            "SKIP",
+                                            &format!("Skipping pool {} for token {} - recently failed analysis", pool_id, token_mint)
+                                        );
+                                    }
+                                    continue;
+                                }
+
                                 if let Some(descriptor) = Self::analyze_pool_static(
                                     pool_id,
                                     program_id,
@@ -163,6 +180,15 @@ impl PoolAnalyzer {
                                         );
                                     }
                                 } else {
+                                    // Record this pool analysis failure to prevent repeated attempts
+                                    super::failed_cache::record_failed_pool_analysis(
+                                        &pool_id,
+                                        &base_mint,
+                                        &quote_mint,
+                                        &program_id,
+                                        "Pool analysis failed - unable to extract pool metadata"
+                                    );
+
                                     log(
                                         LogTag::PoolAnalyzer, 
                                         "WARN", 

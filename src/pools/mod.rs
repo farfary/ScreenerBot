@@ -41,6 +41,7 @@ mod analyzer;
 pub mod fetcher; // Public for debug tooling
 pub mod calculator; // Public for debug tooling
 pub mod decoders; // Temporarily public for debug tooling (consider gating with feature flag)
+mod failed_cache; // Failed pool analysis tracking
 
 // Direct swap module - modular direct swap system
 pub mod swap;

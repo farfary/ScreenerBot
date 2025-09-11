@@ -71,6 +71,13 @@ pub async fn start_pool_service() -> Result<(), PoolError> {
     // Initialize cache system first
     cache::initialize_cache().await;
 
+    // Initialize failed pool analysis cache
+    if let Err(e) = super::failed_cache::initialize_failed_pool_cache() {
+        log(LogTag::PoolService, "ERROR", &format!("Failed to initialize failed pool cache: {}", e));
+        SERVICE_RUNNING.store(false, Ordering::Relaxed);
+        return Err(PoolError::InitializationFailed(format!("Failed pool cache init: {}", e)));
+    }
+
     // Create shutdown notification
     let shutdown = Arc::new(Notify::new());
 
@@ -292,6 +299,12 @@ async fn start_background_tasks(shutdown: Arc<Notify>) {
         run_service_health_monitor(shutdown_monitor).await;
     });
 
+    // Start failed pool cache cleanup task
+    let shutdown_cleanup = shutdown.clone();
+    tokio::spawn(async move {
+        run_failed_pool_cleanup_task(shutdown_cleanup).await;
+    });
+
     if is_debug_pool_service_enabled() {
         log(LogTag::PoolService, "DEBUG", "Background tasks started");
     }
@@ -402,4 +415,32 @@ async fn emit_service_health_stats() {
             cache_stats.history_entries
         )
     );
+}
+
+/// Run periodic failed pool cache cleanup task
+async fn run_failed_pool_cleanup_task(shutdown: Arc<Notify>) {
+    if is_debug_pool_service_enabled() {
+        log(LogTag::PoolService, "INFO", "Starting failed pool cache cleanup task");
+    }
+
+    // Start cleanup after 5 minutes to allow system to stabilize
+    tokio::time::sleep(Duration::from_secs(300)).await;
+
+    let mut interval = tokio::time::interval(Duration::from_secs(3600)); // Cleanup every hour
+
+    loop {
+        tokio::select! {
+            _ = shutdown.notified() => {
+                if is_debug_pool_service_enabled() {
+                    log(LogTag::PoolService, "INFO", "Failed pool cache cleanup task shutting down");
+                }
+                break;
+            }
+            _ = interval.tick() => {
+                if let Err(e) = super::failed_cache::cleanup_failed_pool_cache() {
+                    log(LogTag::PoolService, "ERROR", &format!("Failed pool cache cleanup error: {}", e));
+                }
+            }
+        }
+    }
 }
