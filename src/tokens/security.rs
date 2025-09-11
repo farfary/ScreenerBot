@@ -254,6 +254,34 @@ impl SecurityDatabase {
                 })
             })?;
 
+        // Create failed_tokens table for permanently failed security analysis
+        conn
+            .execute(
+                r#"
+            CREATE TABLE IF NOT EXISTS failed_tokens (
+                mint TEXT PRIMARY KEY,
+                failed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                failure_reason TEXT NOT NULL,
+                failure_count INTEGER DEFAULT 1
+            )
+            "#,
+                []
+            )
+            .map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::Generic {
+                    message: format!("Failed to create failed_tokens table: {}", e),
+                })
+            })?;
+
+        // Create index for failed_tokens table
+        conn
+            .execute("CREATE INDEX IF NOT EXISTS idx_failed_at ON failed_tokens(failed_at)", [])
+            .map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::Generic {
+                    message: format!("Failed to create failed_tokens index: {}", e),
+                })
+            })?;
+
         log(LogTag::Security, "INIT", "Security database initialized successfully");
         Ok(())
     }
@@ -643,6 +671,89 @@ impl SecurityDatabase {
         log(LogTag::Security, "CLEANUP", &format!("Cleaned {} old security records", deleted));
         Ok(deleted)
     }
+
+    /// Check if a token is in the failed tokens table (permanently blacklisted)
+    pub fn is_token_failed(&self, mint: &str) -> Result<bool, ScreenerBotError> {
+        let conn = Connection::open(&self.db_path).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to open security database: {}", e),
+            })
+        })?;
+
+        let mut stmt = conn.prepare("SELECT 1 FROM failed_tokens WHERE mint = ?1").map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to prepare failed token check: {}", e),
+            })
+        })?;
+
+        let result = stmt.query_row(params![mint], |_| Ok(()));
+        Ok(result.is_ok())
+    }
+
+    /// Add a token to the failed tokens table (permanent blacklist)
+    pub fn add_failed_token(
+        &self,
+        mint: &str,
+        failure_reason: &str
+    ) -> Result<(), ScreenerBotError> {
+        let conn = Connection::open(&self.db_path).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to open security database: {}", e),
+            })
+        })?;
+
+        // Try to update existing record first (increment failure count)
+        let updated = conn
+            .execute(
+                "UPDATE failed_tokens SET failure_count = failure_count + 1, failed_at = CURRENT_TIMESTAMP, failure_reason = ?2 WHERE mint = ?1",
+                params![mint, failure_reason]
+            )
+            .map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::Generic {
+                    message: format!("Failed to update failed token: {}", e),
+                })
+            })?;
+
+        // If no record was updated, insert new record
+        if updated == 0 {
+            conn
+                .execute(
+                    "INSERT INTO failed_tokens (mint, failure_reason) VALUES (?1, ?2)",
+                    params![mint, failure_reason]
+                )
+                .map_err(|e| {
+                    ScreenerBotError::Data(crate::errors::DataError::Generic {
+                        message: format!("Failed to insert failed token: {}", e),
+                    })
+                })?;
+        }
+
+        log(
+            LogTag::Security,
+            "FAILED_TOKEN",
+            &format!("Added {} to failed tokens: {}", safe_truncate(mint, 8), failure_reason)
+        );
+        Ok(())
+    }
+
+    /// Get failed tokens count for statistics
+    pub fn get_failed_tokens_count(&self) -> Result<usize, ScreenerBotError> {
+        let conn = Connection::open(&self.db_path).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to open security database: {}", e),
+            })
+        })?;
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM failed_tokens", [], |row| row.get(0))
+            .map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::Generic {
+                    message: format!("Failed to count failed tokens: {}", e),
+                })
+            })?;
+
+        Ok(count as usize)
+    }
 }
 
 /// In-memory cache for security information
@@ -768,6 +879,23 @@ impl TokenSecurityAnalyzer {
             )
         );
 
+        // First check if token is permanently failed (blacklisted)
+        if self.database.is_token_failed(mint)? {
+            log(
+                LogTag::Security,
+                "SKIPPED",
+                &format!(
+                    "Token {} is permanently failed - skipping analysis",
+                    safe_truncate(mint, 8)
+                )
+            );
+            return Err(
+                ScreenerBotError::Data(crate::errors::DataError::Generic {
+                    message: format!("Token {} is permanently failed and will not be analyzed", mint),
+                })
+            );
+        }
+
         // Skip cache and database checks if force refresh is requested
         if !force_refresh {
             // Check cache first
@@ -828,9 +956,16 @@ impl TokenSecurityAnalyzer {
         let mut results = HashMap::new();
         let mut needs_analysis = Vec::new();
         let mut needs_update = Vec::new();
+        let mut failed_count = 0;
 
-        // Check cache and database for existing data
+        // Check cache, database, and failed tokens for existing data
         for mint in mints {
+            // Skip permanently failed tokens
+            if self.database.is_token_failed(mint).unwrap_or(false) {
+                failed_count += 1;
+                continue;
+            }
+
             if let Some(cached_info) = self.cache.get(mint) {
                 results.insert(mint.clone(), cached_info);
             } else if let Some(db_info) = self.database.get_security_info(mint)? {
@@ -839,6 +974,14 @@ impl TokenSecurityAnalyzer {
             } else {
                 needs_analysis.push(mint.clone());
             }
+        }
+
+        if failed_count > 0 {
+            log(
+                LogTag::Security,
+                "BATCH_SKIPPED",
+                &format!("Skipped {} permanently failed tokens", failed_count)
+            );
         }
 
         // Batch process tokens that need full analysis
@@ -994,7 +1137,30 @@ impl TokenSecurityAnalyzer {
         );
 
         // Get authority information
-        let authority_info = get_token_authorities(mint).await?;
+        let authority_info = match get_token_authorities(mint).await {
+            Ok(info) => info,
+            Err(e) => {
+                let error_msg = format!("Authority analysis failed: {}", e);
+                log(
+                    LogTag::Security,
+                    "AUTHORITY_FAIL",
+                    &format!("Failed to get authority info for {}: {}", safe_truncate(mint, 8), e)
+                );
+                // Add to failed tokens table - authority analysis is critical
+                if let Err(db_err) = self.database.add_failed_token(mint, &error_msg) {
+                    log(
+                        LogTag::Security,
+                        "DB_ERROR",
+                        &format!(
+                            "Failed to add {} to failed tokens: {}",
+                            safe_truncate(mint, 8),
+                            db_err
+                        )
+                    );
+                }
+                return Err(e);
+            }
+        };
 
         // Get LP lock information (optional)
         let lp_lock_info = match check_lp_lock_status(mint).await {
@@ -1115,8 +1281,34 @@ impl TokenSecurityAnalyzer {
             );
             // Fallback to individual calls
             for mint in mints {
-                if let Ok(auth) = get_token_authorities(mint).await {
-                    authorities_map.insert(mint.clone(), auth);
+                match get_token_authorities(mint).await {
+                    Ok(auth) => {
+                        authorities_map.insert(mint.clone(), auth);
+                    }
+                    Err(e) => {
+                        let error_msg = format!("Individual authority analysis failed: {}", e);
+                        log(
+                            LogTag::Security,
+                            "BATCH_AUTH_INDIVIDUAL_FAIL",
+                            &format!(
+                                "Failed to get authority for {}: {}",
+                                safe_truncate(mint, 8),
+                                e
+                            )
+                        );
+                        // Add to failed tokens table
+                        if let Err(db_err) = self.database.add_failed_token(mint, &error_msg) {
+                            log(
+                                LogTag::Security,
+                                "DB_ERROR",
+                                &format!(
+                                    "Failed to add {} to failed tokens: {}",
+                                    safe_truncate(mint, 8),
+                                    db_err
+                                )
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -1205,6 +1397,19 @@ impl TokenSecurityAnalyzer {
                     "NO_AUTH",
                     &format!("No authority info available for {}", safe_truncate(mint, 8))
                 );
+                // Add to failed tokens table - no authority info means we can't analyze safely
+                let error_msg = "No authority information available";
+                if let Err(db_err) = self.database.add_failed_token(mint, error_msg) {
+                    log(
+                        LogTag::Security,
+                        "DB_ERROR",
+                        &format!(
+                            "Failed to add {} to failed tokens: {}",
+                            safe_truncate(mint, 8),
+                            db_err
+                        )
+                    );
+                }
             }
         }
 
@@ -1636,9 +1841,16 @@ impl SecurityMonitor {
         let security_analyzer = get_security_analyzer();
         let mut tokens_missing_security = Vec::new();
         let mut tokens_with_stale_security = Vec::new();
+        let mut failed_tokens_count = 0;
         let now = Utc::now();
 
         for (mint, _, _, _) in all_tokens {
+            // Skip permanently failed tokens
+            if security_analyzer.database.is_token_failed(&mint).unwrap_or(false) {
+                failed_tokens_count += 1;
+                continue;
+            }
+
             match security_analyzer.database.get_security_info(&mint) {
                 Ok(None) => tokens_missing_security.push(mint),
                 Ok(Some(security_info)) => {
@@ -1661,6 +1873,14 @@ impl SecurityMonitor {
                 }
                 Err(_) => tokens_missing_security.push(mint), // Error = treat as missing
             }
+        }
+
+        if failed_tokens_count > 0 {
+            log(
+                LogTag::Security,
+                "FAILED_SKIPPED",
+                &format!("Skipped {} permanently failed tokens from security updates", failed_tokens_count)
+            );
         }
 
         if !tokens_missing_security.is_empty() {
@@ -1868,6 +2088,9 @@ impl SecurityMonitor {
 
         let (total_with_authority, mint_disabled, freeze_disabled) = authority_stats;
 
+        // Get failed tokens count
+        let failed_count = security_analyzer.database.get_failed_tokens_count().unwrap_or(0);
+
         // Cache statistics
         let (cache_total, cache_static, cache_dynamic) = security_analyzer.cache.stats();
 
@@ -1876,13 +2099,14 @@ impl SecurityMonitor {
             LogTag::Security,
             "SUMMARY",
             &format!(
-                "Security Analysis Summary: {} tokens | Avg Score: {:.1} | Safe: {} | Low Risk: {} | Medium Risk: {} | High Risk: {} | Fresh Data: {}/{} | Mint Disabled: {}/{} | Freeze Disabled: {}/{} | Cache: {} entries ({} static, {} dynamic)",
+                "Security Analysis Summary: {} tokens | Avg Score: {:.1} | Safe: {} | Low Risk: {} | Medium Risk: {} | High Risk: {} | Failed: {} | Fresh Data: {}/{} | Mint Disabled: {}/{} | Freeze Disabled: {}/{} | Cache: {} entries ({} static, {} dynamic)",
                 total,
                 avg_score,
                 safe_count,
                 low_risk_count,
                 medium_risk_count,
                 high_risk_count,
+                failed_count,
                 fresh_count,
                 total,
                 mint_disabled,

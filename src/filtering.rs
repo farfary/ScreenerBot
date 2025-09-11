@@ -23,8 +23,12 @@ const TARGET_FILTERED_TOKENS: usize = 1000;
 const MAX_TOKENS_TO_PROCESS: usize = 5000;
 
 // ===== BASIC TOKEN INFO REQUIREMENTS =====
-/// Token must have name, symbol, and logo
-const REQUIRE_COMPLETE_TOKEN_INFO: bool = true;
+/// Token must have name and symbol (always required)
+const REQUIRE_NAME_AND_SYMBOL: bool = true;
+/// Token must have logo URL
+const REQUIRE_LOGO_URL: bool = false;
+/// Token must have website URL
+const REQUIRE_WEBSITE_URL: bool = false;
 
 // ===== TRANSACTION ACTIVITY REQUIREMENTS =====
 /// Minimum transactions in 5 minutes (only minimum, no maximum)
@@ -159,7 +163,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
     );
 
     if debug_enabled {
-        log_filtering_stats(&filtering_stats, &security_stats);
+        log_filtering_stats(&filtering_stats, &security_stats, all_tokens.len());
     }
 
     Ok(security_filtered)
@@ -219,23 +223,31 @@ fn has_decimals_in_database(mint: &str) -> bool {
 
 /// Check basic token information completeness
 fn check_basic_token_info(token: &Token) -> Option<FilterRejectionReason> {
-    if !REQUIRE_COMPLETE_TOKEN_INFO {
-        return None;
+    // Always check name and symbol if required
+    if REQUIRE_NAME_AND_SYMBOL {
+        // Check name
+        if token.name.trim().is_empty() {
+            return Some(FilterRejectionReason::EmptyName);
+        }
+
+        // Check symbol
+        if token.symbol.trim().is_empty() {
+            return Some(FilterRejectionReason::EmptySymbol);
+        }
     }
 
-    // Check name
-    if token.name.trim().is_empty() {
-        return Some(FilterRejectionReason::EmptyName);
+    // Check logo URL if required
+    if REQUIRE_LOGO_URL {
+        if token.logo_url.as_ref().map_or(true, |url| url.trim().is_empty()) {
+            return Some(FilterRejectionReason::EmptyLogoUrl);
+        }
     }
 
-    // Check symbol
-    if token.symbol.trim().is_empty() {
-        return Some(FilterRejectionReason::EmptySymbol);
-    }
-
-    // Check logo URL
-    if token.logo_url.as_ref().map_or(true, |url| url.trim().is_empty()) {
-        return Some(FilterRejectionReason::EmptyLogoUrl);
+    // Check website URL if required
+    if REQUIRE_WEBSITE_URL {
+        if token.website.as_ref().map_or(true, |url| url.trim().is_empty()) {
+            return Some(FilterRejectionReason::EmptyWebsiteUrl);
+        }
     }
 
     None
@@ -414,6 +426,7 @@ enum FilterRejectionReason {
     EmptyName,
     EmptySymbol,
     EmptyLogoUrl,
+    EmptyWebsiteUrl,
     NoTransactionData,
     InsufficientTransactions5Min,
     InsufficientTransactions1H,
@@ -430,6 +443,7 @@ impl FilterRejectionReason {
             Self::EmptyName => "empty_name",
             Self::EmptySymbol => "empty_symbol",
             Self::EmptyLogoUrl => "empty_logo",
+            Self::EmptyWebsiteUrl => "empty_website",
             Self::NoTransactionData => "no_txn_data",
             Self::InsufficientTransactions5Min => "low_txn_5m",
             Self::InsufficientTransactions1H => "low_txn_1h",
@@ -500,79 +514,186 @@ impl FilteringStats {
 }
 
 /// Log filtering statistics for debugging
-fn log_filtering_stats(filtering_stats: &FilteringStats, security_stats: &SecurityFilteringStats) {
-    // Overall summary
-    log(LogTag::Filtering, "SUMMARY", &format!("FILTERING PIPELINE RESULTS:"));
+fn log_filtering_stats(
+    filtering_stats: &FilteringStats,
+    security_stats: &SecurityFilteringStats,
+    total_in_db: usize
+) {
+    use colored::*;
 
-    log(
-        LogTag::Filtering,
-        "PIPELINE",
+    // Build comprehensive summary in a single message
+    let mut summary = String::new();
+
+    // Header with bright cyan color
+    summary.push_str(&format!("{}\n", "🔍 FILTERING PIPELINE RESULTS".bright_cyan().bold()));
+
+    // Database overview with total tokens context
+    summary.push_str(
         &format!(
-            "Total processed: {} → Basic filters passed: {} → Security filters passed: {} → Final tokens: {}",
-            filtering_stats.total_processed,
-            filtering_stats.passed_basic_filters,
-            security_stats.passed,
-            filtering_stats.final_passed
+            "{} {} tokens in database, {} processed {}\n",
+            "💾 Database:".bright_white().bold(),
+            format!("{}", total_in_db).bright_cyan().bold(),
+            format!("{}", filtering_stats.total_processed).bright_yellow().bold(),
+            if total_in_db > MAX_TOKENS_TO_PROCESS {
+                format!("(limited to {})", MAX_TOKENS_TO_PROCESS).dimmed().to_string()
+            } else {
+                "(all processed)".dimmed().to_string()
+            }
         )
     );
 
-    // Detailed stage breakdown
-    log(
-        LogTag::Filtering,
-        "STAGES",
+    // Pipeline flow with colorized numbers and percentages
+    let basic_pass_rate = if filtering_stats.total_processed > 0 {
+        ((filtering_stats.passed_basic_filters as f64) / (filtering_stats.total_processed as f64)) *
+            100.0
+    } else {
+        0.0
+    };
+
+    let security_pass_rate = if security_stats.total_checked > 0 {
+        ((security_stats.passed as f64) / (security_stats.total_checked as f64)) * 100.0
+    } else {
+        0.0
+    };
+
+    summary.push_str(
         &format!(
-            "Stage passes - Decimals: {}, Info: {}, Transactions: {}, Liquidity: {}, Market Cap: {}",
-            filtering_stats.decimals_check_passed,
-            filtering_stats.basic_info_check_passed,
-            filtering_stats.transaction_check_passed,
-            filtering_stats.liquidity_check_passed,
-            filtering_stats.market_cap_check_passed
+            "{} {} {} → {} {} ({:.1}%) → {} {} ({:.1}%) → {} {}\n",
+            "📊 Pipeline Flow:".bright_white().bold(),
+            format!("{}", filtering_stats.total_processed).bright_yellow().bold(),
+            "processed".dimmed(),
+            format!("{}", filtering_stats.passed_basic_filters).bright_green().bold(),
+            "basic passed".dimmed(),
+            format!("{:.1}", basic_pass_rate).bright_green().bold(),
+            format!("{}", security_stats.passed).bright_blue().bold(),
+            "security passed".dimmed(),
+            format!("{:.1}", security_pass_rate).bright_blue().bold(),
+            format!("{}", filtering_stats.final_passed).bright_magenta().bold(),
+            "final tokens".dimmed()
         )
     );
 
-    // Basic filter rejection reasons
-    log(
-        LogTag::Filtering,
-        "BASIC_REJECTS",
+    // Detailed stage breakdown showing losses at each step
+    summary.push_str(
         &format!(
-            "Total basic rejections: {}",
-            filtering_stats.total_processed - filtering_stats.passed_basic_filters
+            "{} Decimals: {} → {} (lost {}), Info: {} → {} (lost {}), Transactions: {} → {} (lost {}), Liquidity: {} → {} (lost {}), MarketCap: {} → {} (lost {})\n",
+            "📈 Stage Details:".bright_white().bold(),
+            format!("{}", filtering_stats.total_processed).bright_yellow().bold(),
+            format!("{}", filtering_stats.decimals_check_passed).bright_cyan().bold(),
+            format!("{}", filtering_stats.total_processed - filtering_stats.decimals_check_passed)
+                .bright_red()
+                .bold(),
+            format!("{}", filtering_stats.decimals_check_passed).bright_cyan().bold(),
+            format!("{}", filtering_stats.basic_info_check_passed).bright_green().bold(),
+            format!(
+                "{}",
+                filtering_stats.decimals_check_passed - filtering_stats.basic_info_check_passed
+            )
+                .bright_red()
+                .bold(),
+            format!("{}", filtering_stats.basic_info_check_passed).bright_green().bold(),
+            format!("{}", filtering_stats.transaction_check_passed).bright_blue().bold(),
+            format!(
+                "{}",
+                filtering_stats.basic_info_check_passed - filtering_stats.transaction_check_passed
+            )
+                .bright_red()
+                .bold(),
+            format!("{}", filtering_stats.transaction_check_passed).bright_blue().bold(),
+            format!("{}", filtering_stats.liquidity_check_passed).bright_yellow().bold(),
+            format!(
+                "{}",
+                filtering_stats.transaction_check_passed - filtering_stats.liquidity_check_passed
+            )
+                .bright_red()
+                .bold(),
+            format!("{}", filtering_stats.liquidity_check_passed).bright_yellow().bold(),
+            format!("{}", filtering_stats.market_cap_check_passed).bright_magenta().bold(),
+            format!(
+                "{}",
+                filtering_stats.liquidity_check_passed - filtering_stats.market_cap_check_passed
+            )
+                .bright_red()
+                .bold()
         )
     );
 
-    // Log top rejection reasons
+    // Basic rejections summary with top causes highlighted
+    let total_basic_rejections =
+        filtering_stats.total_processed - filtering_stats.passed_basic_filters;
+    summary.push_str(
+        &format!(
+            "{} {} total ({:.1}% of processed)\n",
+            "❌ Basic Rejections:".bright_white().bold(),
+            format!("{}", total_basic_rejections).bright_red().bold(),
+            if filtering_stats.total_processed > 0 {
+                ((total_basic_rejections as f64) / (filtering_stats.total_processed as f64)) * 100.0
+            } else {
+                0.0
+            }
+        )
+    );
+
+    // Top rejection reasons with colorized counts and percentages
     let mut rejection_vec: Vec<_> = filtering_stats.rejection_counts.iter().collect();
     rejection_vec.sort_by(|a, b| b.1.cmp(a.1));
 
-    for (reason, count) in rejection_vec.iter() {
-        log(LogTag::Filtering, "REJECT_REASON", &format!("{}: {}", reason, count));
+    if !rejection_vec.is_empty() {
+        summary.push_str(&format!("{} ", "📋 Rejection Breakdown:".bright_white().bold()));
+        let rejection_details: Vec<String> = rejection_vec
+            .iter()
+            .take(5) // Show top 5 rejection reasons
+            .map(|(reason, count)| {
+                let percentage = if filtering_stats.total_processed > 0 {
+                    ((**count as f64) / (filtering_stats.total_processed as f64)) * 100.0
+                } else {
+                    0.0
+                };
+                format!(
+                    "{}={} ({:.1}%)",
+                    reason.bright_white(),
+                    format!("{}", count).bright_red().bold(),
+                    format!("{:.1}", percentage).bright_red().bold()
+                )
+            })
+            .collect();
+        summary.push_str(&rejection_details.join(", "));
+        summary.push('\n');
     }
 
-    // Security filter details
-    log(
-        LogTag::Filtering,
-        "SECURITY_SUMMARY",
+    // Security summary with colorized numbers and pass rate
+    let total_security_rejections = security_stats.total_checked - security_stats.passed;
+    summary.push_str(
         &format!(
-            "Security checked: {}, Passed: {}, Total security rejections: {}",
-            security_stats.total_checked,
-            security_stats.passed,
-            security_stats.total_checked - security_stats.passed
+            "{} {} checked, {} passed ({:.1}%), {} rejected\n",
+            "🔒 Security Filtering:".bright_white().bold(),
+            format!("{}", security_stats.total_checked).bright_cyan().bold(),
+            format!("{}", security_stats.passed).bright_green().bold(),
+            if security_stats.total_checked > 0 {
+                ((security_stats.passed as f64) / (security_stats.total_checked as f64)) * 100.0
+            } else {
+                0.0
+            },
+            format!("{}", total_security_rejections).bright_red().bold()
         )
     );
 
-    log(
-        LogTag::Filtering,
-        "SECURITY_REJECTS",
+    // Security rejection breakdown with colorized counts
+    summary.push_str(
         &format!(
-            "Low score: {}, High risk: {}, LP not locked: {}, Mint auth: {}, Freeze auth: {}, No cache: {}",
-            security_stats.rejected_low_score,
-            security_stats.rejected_high_risk,
-            security_stats.rejected_lp_not_locked,
-            security_stats.rejected_mint_authority,
-            security_stats.rejected_freeze_authority,
-            security_stats.rejected_no_cache
+            "{} LowScore={}, HighRisk={}, LPNotLocked={}, MintAuth={}, FreezeAuth={}, NoCache={}",
+            "🚫 Security Rejects:".bright_white().bold(),
+            format!("{}", security_stats.rejected_low_score).bright_red().bold(),
+            format!("{}", security_stats.rejected_high_risk).bright_red().bold(),
+            format!("{}", security_stats.rejected_lp_not_locked).bright_red().bold(),
+            format!("{}", security_stats.rejected_mint_authority).bright_red().bold(),
+            format!("{}", security_stats.rejected_freeze_authority).bright_red().bold(),
+            format!("{}", security_stats.rejected_no_cache).bright_red().bold()
         )
     );
+
+    // Log the entire summary in one call
+    log(LogTag::Filtering, "SUMMARY", &summary);
 }
 
 /// Security filtering statistics tracker
