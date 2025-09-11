@@ -10,6 +10,7 @@
 /// 3. Burn validation - verifies LP tokens are actually burned
 /// 4. Time-based locks - detects time-locked LP positions
 
+use crate::arguments::is_debug_pool_discovery_enabled;
 use crate::errors::ScreenerBotError;
 use crate::logger::{ log, LogTag };
 use crate::rpc::get_rpc_client;
@@ -673,15 +674,17 @@ async fn search_dex_pool(
 ) -> Result<Option<(String, String, String)>, ScreenerBotError> {
     let rpc_client = get_rpc_client();
 
-    log(
-        LogTag::Rpc,
-        "DEX_SEARCH",
-        &format!(
-            "Searching {} pools for token {}",
-            config.pool_name,
-            truncate_address(token_mint, 8)
-        )
-    );
+    if is_debug_pool_discovery_enabled() {
+        log(
+            LogTag::Rpc,
+            "DEX_SEARCH",
+            &format!(
+                "Searching {} pools for token {}",
+                config.pool_name,
+                truncate_address(token_mint, 8)
+            )
+        );
+    }
 
     // Try both token positions (A and B)
     let positions = [
@@ -702,11 +705,13 @@ async fn search_dex_pool(
 
         let accounts = if needs_pagination {
             // Use getProgramAccountsV2 for large programs
-            log(
-                LogTag::Rpc,
-                "DEBUG",
-                &format!("Using paginated search for {} (large program)", config.pool_name)
-            );
+            if is_debug_pool_discovery_enabled() {
+                log(
+                    LogTag::Rpc,
+                    "DEBUG",
+                    &format!("Using paginated search for {} (large program)", config.pool_name)
+                );
+            }
 
             match
                 rpc_client.get_all_program_accounts_v2(
