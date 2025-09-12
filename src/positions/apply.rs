@@ -6,7 +6,13 @@ use crate::{
     arguments::is_debug_positions_enabled,
 };
 use super::{
-    state::{ update_position_state, remove_position, release_global_position_permit, POSITIONS, remove_signature_from_index },
+    state::{
+        update_position_state,
+        remove_position,
+        release_global_position_permit,
+        POSITIONS,
+        remove_signature_from_index,
+    },
     transitions::PositionTransition,
     loss_detection::process_position_loss_detection,
 };
@@ -123,17 +129,18 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             let mint = find_mint_by_position_id(position_id).await?;
             // Capture old signature to purge index entry (prevent stale sig->mint mapping)
             let mut old_sig: Option<String> = None;
-            let updated = update_position_state(
-                &mint,
-                |pos| {
-                    if let Some(sig) = pos.exit_transaction_signature.clone() { old_sig = Some(sig); }
-                    pos.exit_transaction_signature = None;
-                    pos.transaction_exit_verified = false;
-                    pos.closed_reason = Some("exit_retry_pending".to_string());
+            let updated = update_position_state(&mint, |pos| {
+                if let Some(sig) = pos.exit_transaction_signature.clone() {
+                    old_sig = Some(sig);
                 }
-            ).await;
+                pos.exit_transaction_signature = None;
+                pos.transaction_exit_verified = false;
+                pos.closed_reason = Some("exit_retry_pending".to_string());
+            }).await;
 
-            if let Some(sig) = old_sig { remove_signature_from_index(&sig).await; }
+            if let Some(sig) = old_sig {
+                remove_signature_from_index(&sig).await;
+            }
 
             if updated && transition.requires_db_update() {
                 if let Some(position) = get_position_by_id(position_id).await {

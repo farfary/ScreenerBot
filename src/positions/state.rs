@@ -289,7 +289,7 @@ pub async fn remove_signature_from_index(signature: &str) {
 /// permit per open position (up to capacity). If there are more open positions than
 /// MAX_OPEN_POSITIONS we log a warning and consume all available permits.
 pub async fn reconcile_global_position_semaphore(max_open: usize) {
-    use crate::logger::{log, LogTag};
+    use crate::logger::{ log, LogTag };
     use crate::arguments::is_debug_positions_enabled;
 
     let open_positions = get_open_positions().await; // clones but infrequent (startup)
@@ -310,7 +310,9 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
                 permit.forget(); // keep slot consumed for lifetime of position
                 consumed += 1;
             }
-            Err(_) => break,
+            Err(_) => {
+                break;
+            }
         }
     }
 
@@ -321,7 +323,10 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
             "WARNING",
             &format!(
                 "Semaphore reconcile: {} open positions exceed capacity (consumed {} of {}, available after {})",
-                open_count, consumed, max_open, available_after
+                open_count,
+                consumed,
+                max_open,
+                available_after
             )
         );
     } else if is_debug_positions_enabled() {
@@ -330,7 +335,10 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
             "DEBUG",
             &format!(
                 "Semaphore reconcile: consumed {} permits for {} open positions (avail {} -> {})",
-                consumed, open_count, available_before, available_after
+                consumed,
+                open_count,
+                available_before,
+                available_after
             )
         );
     }

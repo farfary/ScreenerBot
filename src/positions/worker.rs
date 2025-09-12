@@ -5,7 +5,12 @@ use crate::{
     arguments::is_debug_positions_enabled,
 };
 use super::{
-    state::{ POSITIONS, SIG_TO_MINT_INDEX, MINT_TO_POSITION_INDEX, reconcile_global_position_semaphore },
+    state::{
+        POSITIONS,
+        SIG_TO_MINT_INDEX,
+        MINT_TO_POSITION_INDEX,
+        reconcile_global_position_semaphore,
+    },
     queue::{
         poll_verification_batch,
         requeue_verification,
