@@ -8,6 +8,7 @@ use crate::{
 use super::{
     state::{ update_position_state, remove_position, release_global_position_permit, POSITIONS },
     transitions::PositionTransition,
+    loss_detection::process_position_loss_detection,
 };
 use chrono::Utc;
 
@@ -81,6 +82,19 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
             if updated && transition.requires_db_update() {
                 if let Some(position) = get_position_by_id(position_id).await {
+                    // Process loss detection and potential blacklisting
+                    if let Err(e) = process_position_loss_detection(&position).await {
+                        log(
+                            LogTag::Positions,
+                            "ERROR",
+                            &format!(
+                                "Failed to process loss detection for {}: {}",
+                                position.symbol,
+                                e
+                            )
+                        );
+                    }
+
                     match update_position(&position).await {
                         Ok(_) => {
                             effects.db_updated = true;

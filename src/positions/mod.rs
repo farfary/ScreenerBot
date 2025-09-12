@@ -8,6 +8,7 @@ pub mod operations;
 pub mod tracking;
 pub mod metrics;
 pub mod worker;
+pub mod loss_detection;
 
 // Public API exports
 pub use operations::{ open_position_direct, close_position_direct };
@@ -31,6 +32,12 @@ pub use tracking::update_position_tracking;
 pub use metrics::get_proceeds_metrics_snapshot;
 
 pub use worker::{ start_positions_manager_service, initialize_positions_system };
+
+pub use loss_detection::{
+    process_position_loss_detection,
+    get_loss_thresholds,
+    is_loss_blacklisting_enabled,
+};
 
 // Core types re-exports
 pub use crate::positions_types::Position;

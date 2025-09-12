@@ -44,7 +44,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 3;
+pub const MAX_OPEN_POSITIONS: usize = 20;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
@@ -97,6 +97,7 @@ pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 45.0;
 
 /// Debug mode: Force buy tokens when they have a simple price drop (for testing)
 pub const DEBUG_FORCE_BUY_MODE: bool = false;
+
 
 /// Debug mode: Price drop threshold percentage to trigger force buy (e.g., 3.0 for 3% drop)
 pub const DEBUG_FORCE_BUY_DROP_THRESHOLD_PERCENT: f64 = 0.5;
