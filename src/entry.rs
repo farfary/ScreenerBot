@@ -9,6 +9,7 @@
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::{ get_pool_price, get_price_history, PriceResult };
+use crate::tokens::security::get_security_analyzer; // for optional cached holder count
 use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock as AsyncRwLock; // switched from StdRwLock
@@ -118,6 +119,61 @@ const MAX_DATA_AGE_MIN: i64 = 5; // Keep tight data freshness requirement
 const WINDOWS_SEC: [i64; 6] = [10, 20, 40, 80, 160, 320]; // 30s to 10min windows
 const MIN_DROP_PERCENT: f64 = 3.0; // Higher minimum for quality entries
 const MAX_DROP_PERCENT: f64 = 75.0; // Allow larger drops for volatile tokens
+
+// ============================= MICRO-LIQUIDITY CAPITULATION =============================
+// Goal: Auto-approve high-upside entries when a token has near-zero real SOL liquidity and
+// has experienced an extreme (>95-99%) capitulation from its recent local high while having
+// a reasonable holder distribution (>= MICRO_LIQ_MIN_HOLDERS) to reduce pure honeypot risk.
+// We rely ONLY on cached security data for holder counts (no fresh RPC in the hot loop).
+// If holder count is unavailable we proceed (optimistic) but tag the reason accordingly.
+const MICRO_LIQ_SOL_RESERVE_MAX: f64 = 0.01; // < 0.01 SOL reserves considered micro-liq
+const MICRO_LIQ_MIN_DROP_PERCENT: f64 = 95.0; // At least 95% drop from recent high
+const MICRO_LIQ_PREFERRED_DROP_PERCENT: f64 = 97.0; // Stronger confidence above this
+const MICRO_LIQ_MIN_HOLDERS: u32 = 50; // Require >= 50 holders when info cached
+const MICRO_LIQ_LOOKBACK_SECS: i64 = 900; // 15 min lookback window to find recent high
+const MICRO_LIQ_CONF_BASE: f64 = 82.0; // Base confidence when triggered
+const MICRO_LIQ_CONF_BONUS: f64 = 8.0; // Bonus if drop >= preferred threshold
+
+fn get_cached_holder_count_fast(mint: &str) -> Option<u32> {
+    // Uses security analyzer in-memory cache only; never triggers fresh analysis.
+    // Safe (no panics) – returns None if analyzer not yet initialized or holder info missing.
+    let analyzer = get_security_analyzer();
+    if let Some(info) = analyzer.cache.get(mint) {
+        if let Some(holder) = info.holder_info.as_ref() {
+            return Some(holder.total_holders);
+        }
+    }
+    None
+}
+
+fn detect_micro_liquidity_capitulation(
+    price_info: &PriceResult,
+    history: &[(DateTime<Utc>, f64)]
+) -> Option<(f64, f64, Option<u32>)> {
+    if price_info.sol_reserves > 0.0 && price_info.sol_reserves <= MICRO_LIQ_SOL_RESERVE_MAX {
+        // Determine recent high within lookback
+        let now = Utc::now();
+        let mut recent_high = 0.0f64;
+        for (ts, p) in history.iter() {
+            if (now - *ts).num_seconds() <= MICRO_LIQ_LOOKBACK_SECS && *p > 0.0 && p.is_finite() {
+                if *p > recent_high {
+                    recent_high = *p;
+                }
+            }
+        }
+        if recent_high > 0.0 && price_info.price_sol > 0.0 && recent_high > price_info.price_sol {
+            let drop_percent = ((recent_high - price_info.price_sol) / recent_high) * 100.0;
+            if drop_percent >= MICRO_LIQ_MIN_DROP_PERCENT {
+                let holder_count = get_cached_holder_count_fast(&price_info.mint);
+                // If holder count known, enforce threshold; else allow optimistic proceed.
+                if holder_count.map(|c| c >= MICRO_LIQ_MIN_HOLDERS).unwrap_or(true) {
+                    return Some((drop_percent, recent_high, holder_count));
+                }
+            }
+        }
+    }
+    None
+}
 
 // ATH Prevention parameters for scalping
 const ATH_LOOKBACK_15MIN: i64 = 900; // 15 minutes
@@ -255,6 +311,59 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         ))
         .collect();
     converted_history.retain(|(_, p)| *p > 0.0 && p.is_finite());
+
+    // Micro-liquidity capitulation fast-path (before standard insufficient/history gates)
+    if converted_history.len() >= 5 {
+        // need minimal structure
+        if
+            let Some((drop_percent, recent_high, holder_opt)) = detect_micro_liquidity_capitulation(
+                price_info,
+                &converted_history
+            )
+        {
+            let mut confidence = MICRO_LIQ_CONF_BASE;
+            if drop_percent >= MICRO_LIQ_PREFERRED_DROP_PERCENT {
+                confidence += MICRO_LIQ_CONF_BONUS;
+            }
+            // Slight penalty if holder count unknown (riskier) – keeps below max cap
+            if holder_opt.is_none() {
+                confidence -= 6.0;
+            }
+            confidence = confidence.clamp(60.0, 95.0);
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "MICRO_LIQ_CAPITULATION",
+                    &format!(
+                        "🚀 {} micro-liq capitulation detected: reserves {:.5} SOL, drop -{:.2}%, recent_high {:.9} holders {:?} → conf {:.1}% AUTO-ENTER",
+                        price_info.mint,
+                        price_info.sol_reserves,
+                        drop_percent,
+                        recent_high,
+                        holder_opt,
+                        confidence
+                    )
+                );
+            }
+            let reason = if let Some(hc) = holder_opt {
+                format!(
+                    "Micro-liq capitulation entry: -{:.1}% from high, {:.5} SOL reserves, holders {} (conf {:.1}%)",
+                    drop_percent,
+                    price_info.sol_reserves,
+                    hc,
+                    confidence
+                )
+            } else {
+                format!(
+                    "Micro-liq capitulation entry: -{:.1}% from high, {:.5} SOL reserves (holders unknown, conf {:.1}%)",
+                    drop_percent,
+                    price_info.sol_reserves,
+                    confidence
+                )
+            };
+            return (true, confidence, reason);
+        }
+    }
 
     // Quick insufficient history check - avoid expensive refresh for performance
     if converted_history.len() < MIN_PRICE_POINTS {
@@ -815,14 +924,56 @@ pub async fn get_profit_target(
         }
     }
 
-    // Ensure conservative profit thresholds
-    min_profit = min_profit.clamp(12.0, 40.0); // 12-40% minimum range (increased from 5-30%)
-    max_profit = max_profit.clamp(25.0, 100.0); // 25-100% maximum range (increased from 15-80%)
+    // Micro-liquidity capitulation profit expansion (re-detect cheaply)
+    let mut micro_mode = false;
+    if let Some(hist) = price_history_opt {
+        if
+            let Some((drop_percent, _recent_high, _holders)) = detect_micro_liquidity_capitulation(
+                price_info,
+                hist
+            )
+        {
+            micro_mode = true;
+            // Elevate targets aggressively for high-upside rebound plays
+            // Keep base min profit at least 40%, max 120%+ (subject to clamps below)
+            min_profit = min_profit.max(40.0).min(80.0);
+            // Scale max by severity
+            let severity_factor = ((drop_percent - MICRO_LIQ_MIN_DROP_PERCENT) / 5.0).clamp(
+                0.0,
+                1.0
+            );
+            let desired_max = 110.0 + severity_factor * 40.0; // 110% .. 150%
+            max_profit = max_profit.max(desired_max).min(200.0);
+        }
+    }
+
+    // Ensure conservative (or expanded) profit thresholds
+    if micro_mode {
+        min_profit = min_profit.clamp(35.0, 85.0);
+        max_profit = max_profit.clamp(60.0, 200.0);
+    } else {
+        min_profit = min_profit.clamp(12.0, 40.0); // 12-40% minimum range (increased from 5-30%)
+        max_profit = max_profit.clamp(25.0, 100.0); // 25-100% maximum range (increased from 15-80%)
+    }
 
     // Ensure proper spread for conservative trading
     if max_profit - min_profit < 10.0 {
-        // Increased minimum spread from 6.0 to 10.0
-        max_profit = (min_profit + 10.0).min(100.0);
+        // Maintain adequate spread (wider ceiling for micro mode)
+        let ceiling = if micro_mode { 200.0 } else { 100.0 };
+        max_profit = (min_profit + 10.0).min(ceiling);
+    }
+
+    if micro_mode && is_debug_entry_enabled() {
+        log(
+            LogTag::Entry,
+            "MICRO_LIQ_TARGETS",
+            &format!(
+                "🎯 Micro-liq profit targets set: min {:.1}% max {:.1}% (sol_reserves {:.5})",
+                min_profit,
+                max_profit,
+                price_info.sol_reserves
+            )
+        );
     }
 
     (min_profit, max_profit)
