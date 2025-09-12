@@ -267,11 +267,13 @@ pub async fn check_lp_lock_status_with_cache(
     token_mint: &str,
     use_cache: bool
 ) -> Result<LpLockAnalysis, ScreenerBotError> {
-    log(
-        LogTag::Security,
-        "DEBUG",
-        &format!("Checking LP lock status for token {}", truncate_address(token_mint, 8))
-    );
+    if is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "DEBUG",
+            &format!("Checking LP lock status for token {}", truncate_address(token_mint, 8))
+        );
+    }
 
     // SAFETY CHECK: Pre-check token holder count using dataSlice to prevent hanging
     // Large tokens with millions of holders will cause RPC timeouts

@@ -5,7 +5,7 @@ use crate::{
     arguments::is_debug_positions_enabled,
 };
 use super::{
-    state::{ POSITIONS, SIG_TO_MINT_INDEX, MINT_TO_POSITION_INDEX },
+    state::{ POSITIONS, SIG_TO_MINT_INDEX, MINT_TO_POSITION_INDEX, reconcile_global_position_semaphore },
     queue::{
         poll_verification_batch,
         requeue_verification,
@@ -111,6 +111,12 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                 &format!("Failed to load positions from database: {}", e)
             );
         }
+    }
+
+    // Reconcile semaphore capacity with existing open positions AFTER loading state
+    {
+        use crate::trader::MAX_OPEN_POSITIONS;
+        reconcile_global_position_semaphore(MAX_OPEN_POSITIONS).await;
     }
 
     log(LogTag::Positions, "STARTUP", "✅ Positions system initialized");

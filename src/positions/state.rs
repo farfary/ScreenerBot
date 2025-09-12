@@ -278,6 +278,64 @@ pub async fn add_signature_to_index(signature: &str, mint: &str) {
     SIG_TO_MINT_INDEX.write().await.insert(signature.to_string(), mint.to_string());
 }
 
+/// Remove signature from index (used when clearing failed exit for retry)
+pub async fn remove_signature_from_index(signature: &str) {
+    SIG_TO_MINT_INDEX.write().await.remove(signature);
+}
+
+/// Reconcile global semaphore capacity with currently open positions at startup.
+/// This is CRITICAL to prevent exceeding MAX_OPEN_POSITIONS after a process restart.
+/// Existing open positions did not re-acquire permits; we retroactively consume one
+/// permit per open position (up to capacity). If there are more open positions than
+/// MAX_OPEN_POSITIONS we log a warning and consume all available permits.
+pub async fn reconcile_global_position_semaphore(max_open: usize) {
+    use crate::logger::{log, LogTag};
+    use crate::arguments::is_debug_positions_enabled;
+
+    let open_positions = get_open_positions().await; // clones but infrequent (startup)
+    let open_count = open_positions.len();
+    let available_before = GLOBAL_POSITION_SEMAPHORE.available_permits();
+
+    if open_count == 0 {
+        if is_debug_positions_enabled() {
+            log(LogTag::Positions, "DEBUG", "Semaphore reconcile: no open positions");
+        }
+        return;
+    }
+
+    let mut consumed = 0usize;
+    for _ in 0..open_count {
+        match GLOBAL_POSITION_SEMAPHORE.try_acquire() {
+            Ok(permit) => {
+                permit.forget(); // keep slot consumed for lifetime of position
+                consumed += 1;
+            }
+            Err(_) => break,
+        }
+    }
+
+    let available_after = GLOBAL_POSITION_SEMAPHORE.available_permits();
+    if consumed < open_count {
+        log(
+            LogTag::Positions,
+            "WARNING",
+            &format!(
+                "Semaphore reconcile: {} open positions exceed capacity (consumed {} of {}, available after {})",
+                open_count, consumed, max_open, available_after
+            )
+        );
+    } else if is_debug_positions_enabled() {
+        log(
+            LogTag::Positions,
+            "DEBUG",
+            &format!(
+                "Semaphore reconcile: consumed {} permits for {} open positions (avail {} -> {})",
+                consumed, open_count, available_before, available_after
+            )
+        );
+    }
+}
+
 /// Get active frozen cooldowns - stub implementation
 pub async fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
     // Placeholder - no cooldown functionality in new module yet
