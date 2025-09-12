@@ -31,7 +31,7 @@
 //! This tool will attempt to sell ALL tokens in your wallet AND delete specific bot data files. Use with caution!
 
 use futures::stream::{ self, StreamExt };
-use screenerbot::arguments::{ is_debug_ata_enabled, is_debug_swaps_enabled };
+use screenerbot::arguments::{ is_debug_ata_enabled, is_debug_swaps_enabled, set_cmd_args };
 use screenerbot::errors::ScreenerBotError;
 use screenerbot::logger::{ log, LogTag };
 use screenerbot::rpc::{ get_rpc_client, init_rpc_client, TokenAccountInfo };
@@ -165,6 +165,34 @@ const RETRY_DELAY_MS: u64 = 2000;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
+
+    // ---------------------------------------------------------------------
+    // AUTO-ENABLE DEBUG MODES FOR THIS MAINTENANCE TOOL
+    // This tool benefits from verbose diagnostics (swap quote parsing, ATA
+    // verification, wallet + rpc operations). Instead of requiring manual
+    // flags, we inject the most relevant debug flags if the user did not
+    // explicitly supply any of them. This helps quickly surface issues like
+    // malformed GMGN / Jupiter responses during liquidation.
+    // ---------------------------------------------------------------------
+    let mut effective_args = args.clone();
+    let debug_flags = [
+        "--debug-swaps",   // Detailed swap + quote lifecycle
+        "--debug-ata",     // ATA close + balance checks
+        "--debug-wallet",  // Wallet balance + token account fetches
+        "--debug-rpc",     // Underlying RPC client rotation + errors
+        "--debug-system",  // System-level debug summaries
+    ];
+
+    let any_user_debug = effective_args.iter().any(|a| a.starts_with("--debug-"));
+    if !any_user_debug { // Only auto-inject if user did not request other debug modes
+        for flag in debug_flags.iter() {
+            if !effective_args.contains(&flag.to_string()) {
+                effective_args.push(flag.to_string());
+            }
+        }
+    }
+    // Persist augmented args so is_debug_* helpers pick them up globally
+    set_cmd_args(effective_args);
 
     // Check for help flag
     if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
