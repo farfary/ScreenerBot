@@ -1129,7 +1129,41 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                                     &format!("🆕 Processing WebSocket transaction: {}", &signature)
                                 );
 
-                                // Process using global manager
+                                // OPTIMIZATION: Immediately enqueue verification when WebSocket detects transaction
+                                // This decouples verification from RPC indexing delays
+                                let sig_clone = signature.clone();
+                                tokio::spawn(async move {
+                                    if let Some(mint) = crate::positions::SIG_TO_MINT_INDEX.read().await.get(&sig_clone).cloned() {
+                                        if let Some(position) = crate::positions::get_position_by_mint(&mint).await {
+                                            let kind = if position.entry_transaction_signature.as_deref() == Some(&sig_clone) {
+                                                crate::positions::queue::VerificationKind::Entry
+                                            } else if position.exit_transaction_signature.as_deref() == Some(&sig_clone) {
+                                                crate::positions::queue::VerificationKind::Exit
+                                            } else {
+                                                return; // No matching transaction
+                                            };
+                                            
+                                            let item = crate::positions::queue::VerificationItem::new(
+                                                sig_clone.clone(),
+                                                mint,
+                                                position.id,
+                                                kind,
+                                                None,
+                                            );
+                                            crate::positions::queue::enqueue_verification(item).await;
+                                            
+                                            if crate::arguments::is_debug_positions_enabled() {
+                                                log(
+                                                    LogTag::Transactions,
+                                                    "WEBSOCKET_IMMEDIATE_VERIFY",
+                                                    &format!("🚀 Immediately enqueued verification for WebSocket transaction {}", &sig_clone)
+                                                );
+                                            }
+                                        }
+                                    }
+                                });
+
+                                // Process using global manager (for transaction data storage)
                                 let mut manager_guard = global_manager.lock().await;
                                 if let Some(ref mut manager) = manager_guard.as_mut() {
 
@@ -1142,7 +1176,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                                 );
                             }
 
-                            // Process the transaction
+                            // Process the transaction (for data storage, not verification dependency)
                             match manager.process_transaction(&signature).await {
                                 Ok(tx) => {
                                     // Check transaction status
@@ -1167,40 +1201,8 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                                                 );
                                             }
                                             
-                                            // CRITICAL: Trigger position verification for confirmed/finalized transactions
-                                            // This ensures positions are properly updated when WebSocket detects sell/buy transactions
-                                            let sig_clone = signature.clone();
-                                            tokio::spawn(async move {
-                                                // Use the new verification system - enqueue for verification
-                                                if let Some(mint) = crate::positions::SIG_TO_MINT_INDEX.read().await.get(&sig_clone).cloned() {
-                                                    if let Some(position) = crate::positions::get_position_by_mint(&mint).await {
-                                                        let kind = if position.entry_transaction_signature.as_deref() == Some(&sig_clone) {
-                                                            crate::positions::queue::VerificationKind::Entry
-                                                        } else if position.exit_transaction_signature.as_deref() == Some(&sig_clone) {
-                                                            crate::positions::queue::VerificationKind::Exit
-                                                        } else {
-                                                            return; // No matching transaction
-                                                        };
-                                                        
-                                                        let item = crate::positions::queue::VerificationItem::new(
-                                                            sig_clone.clone(),
-                                                            mint,
-                                                            position.id,
-                                                            kind,
-                                                            None,
-                                                        );
-                                                        crate::positions::queue::enqueue_verification(item).await;
-                                                        
-                                                        if crate::arguments::is_debug_positions_enabled() {
-                                                            log(
-                                                                LogTag::Transactions,
-                                                                "WEBSOCKET_POSITION_VERIFY",
-                                                                &format!("Enqueued position verification for WebSocket transaction {}", &sig_clone)
-                                                            );
-                                                        }
-                                                    }
-                                                }
-                                            });
+                                            // NOTE: Verification already enqueued immediately when WebSocket detected transaction
+                                            // No need to duplicate verification queueing here
                                         }
                                         TransactionStatus::Failed(_) => {
                                             // Transaction failed, but we still count it as processed
@@ -1434,7 +1436,52 @@ async fn do_websocket_fallback_check(manager: &mut TransactionsManager) -> Resul
                 );
             }
 
-            // Process the transaction
+            // OPTIMIZATION: Immediately enqueue verification for fallback transactions too
+            let sig_clone = signature.clone();
+            tokio::spawn(async move {
+                if
+                    let Some(mint) = crate::positions::SIG_TO_MINT_INDEX
+                        .read().await
+                        .get(&sig_clone)
+                        .cloned()
+                {
+                    if let Some(position) = crate::positions::get_position_by_mint(&mint).await {
+                        let kind = if
+                            position.entry_transaction_signature.as_deref() == Some(&sig_clone)
+                        {
+                            crate::positions::queue::VerificationKind::Entry
+                        } else if
+                            position.exit_transaction_signature.as_deref() == Some(&sig_clone)
+                        {
+                            crate::positions::queue::VerificationKind::Exit
+                        } else {
+                            return; // No matching transaction
+                        };
+
+                        let item = crate::positions::queue::VerificationItem::new(
+                            sig_clone.clone(),
+                            mint,
+                            position.id,
+                            kind,
+                            None
+                        );
+                        crate::positions::queue::enqueue_verification(item).await;
+
+                        if crate::arguments::is_debug_positions_enabled() {
+                            log(
+                                LogTag::Transactions,
+                                "FALLBACK_IMMEDIATE_VERIFY",
+                                &format!(
+                                    "🚀 Immediately enqueued verification for fallback transaction {}",
+                                    &sig_clone
+                                )
+                            );
+                        }
+                    }
+                }
+            });
+
+            // Process the transaction (for data storage)
             match manager.process_transaction(&signature).await {
                 Ok(tx) => {
                     // Handle transaction status like WebSocket processing
@@ -1453,57 +1500,8 @@ async fn do_websocket_fallback_check(manager: &mut TransactionsManager) -> Resul
                         TransactionStatus::Confirmed | TransactionStatus::Finalized => {
                             manager.new_transactions_count += 1;
 
-                            // CRITICAL: Trigger position verification for confirmed/finalized fallback transactions too
-                            let sig_clone = signature.clone();
-                            tokio::spawn(async move {
-                                // Use the new verification system - enqueue for verification
-                                if
-                                    let Some(mint) = crate::positions::SIG_TO_MINT_INDEX
-                                        .read().await
-                                        .get(&sig_clone)
-                                        .cloned()
-                                {
-                                    if
-                                        let Some(position) = crate::positions::get_position_by_mint(
-                                            &mint
-                                        ).await
-                                    {
-                                        let kind = if
-                                            position.entry_transaction_signature.as_deref() ==
-                                            Some(&sig_clone)
-                                        {
-                                            crate::positions::queue::VerificationKind::Entry
-                                        } else if
-                                            position.exit_transaction_signature.as_deref() ==
-                                            Some(&sig_clone)
-                                        {
-                                            crate::positions::queue::VerificationKind::Exit
-                                        } else {
-                                            return; // No matching transaction
-                                        };
-
-                                        let item = crate::positions::queue::VerificationItem::new(
-                                            sig_clone.clone(),
-                                            mint,
-                                            position.id,
-                                            kind,
-                                            None
-                                        );
-                                        crate::positions::queue::enqueue_verification(item).await;
-
-                                        if crate::arguments::is_debug_positions_enabled() {
-                                            log(
-                                                LogTag::Transactions,
-                                                "FALLBACK_POSITION_VERIFY",
-                                                &format!(
-                                                    "Enqueued position verification for fallback transaction {}",
-                                                    &sig_clone
-                                                )
-                                            );
-                                        }
-                                    }
-                                }
-                            });
+                            // NOTE: Verification already enqueued immediately when fallback detected transaction
+                            // No need to duplicate verification queueing here
                         }
                         TransactionStatus::Failed(_) => {
                             manager.new_transactions_count += 1;

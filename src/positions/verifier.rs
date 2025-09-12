@@ -26,7 +26,14 @@ fn is_transient_verification_error(msg: &str) -> bool {
         m.contains("error getting transaction") ||
         m.contains("transaction manager not available") ||
         m.contains("transaction manager not initialized") ||
-        m.contains("transaction not found (propagation)")
+        m.contains("transaction not found (propagation)") ||
+        // Enhanced: More specific RPC indexing delay patterns
+        m.contains("not yet indexed") ||
+        m.contains("transaction not found") ||
+        m.contains("failed to fetch transaction details") ||
+        m.contains("rpc error") ||
+        m.contains("transaction not available") ||
+        m.contains("blockchain transaction not found")
 }
 
 #[derive(Debug)]
@@ -200,6 +207,25 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
         }
         Err(e) => {
             let error_msg = format!("Error getting transaction: {}", e);
+
+            // Enhanced error classification for immediate verification optimization
+            if
+                error_msg.to_lowercase().contains("not found") ||
+                error_msg.to_lowercase().contains("not yet indexed") ||
+                error_msg.to_lowercase().contains("rpc error")
+            {
+                if is_debug_positions_enabled() {
+                    log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!("🔄 RPC indexing delay for {}: {}", item.signature, error_msg)
+                    );
+                }
+                return VerificationOutcome::RetryTransient(
+                    format!("RPC indexing delay: {}", error_msg)
+                );
+            }
+
             if is_transient_verification_error(&error_msg) {
                 return VerificationOutcome::RetryTransient(error_msg);
             } else {
