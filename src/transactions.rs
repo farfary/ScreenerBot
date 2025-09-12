@@ -1171,21 +1171,34 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                                             // This ensures positions are properly updated when WebSocket detects sell/buy transactions
                                             let sig_clone = signature.clone();
                                             tokio::spawn(async move {
-                                                if let Err(e) = crate::positions::verify_position_transaction(&sig_clone).await {
-                                                    // Only log verification attempts if debug is enabled - normal "no matching position" is expected
-                                                    if crate::arguments::is_debug_positions_enabled() && !e.contains("No matching position found") {
-                                                        log(
-                                                            LogTag::Transactions,
-                                                            "WEBSOCKET_POSITION_VERIFY",
-                                                            &format!("Position verification for WebSocket transaction {} result: {}", &sig_clone, e)
+                                                // Use the new verification system - enqueue for verification
+                                                if let Some(mint) = crate::positions::SIG_TO_MINT_INDEX.read().await.get(&sig_clone).cloned() {
+                                                    if let Some(position) = crate::positions::get_position_by_mint(&mint).await {
+                                                        let kind = if position.entry_transaction_signature.as_deref() == Some(&sig_clone) {
+                                                            crate::positions::queue::VerificationKind::Entry
+                                                        } else if position.exit_transaction_signature.as_deref() == Some(&sig_clone) {
+                                                            crate::positions::queue::VerificationKind::Exit
+                                                        } else {
+                                                            return; // No matching transaction
+                                                        };
+                                                        
+                                                        let item = crate::positions::queue::VerificationItem::new(
+                                                            sig_clone.clone(),
+                                                            mint,
+                                                            position.id,
+                                                            kind,
+                                                            None,
                                                         );
+                                                        crate::positions::queue::enqueue_verification(item).await;
+                                                        
+                                                        if crate::arguments::is_debug_positions_enabled() {
+                                                            log(
+                                                                LogTag::Transactions,
+                                                                "WEBSOCKET_POSITION_VERIFY",
+                                                                &format!("Enqueued position verification for WebSocket transaction {}", &sig_clone)
+                                                            );
+                                                        }
                                                     }
-                                                } else {
-                                                    log(
-                                                        LogTag::Transactions,
-                                                        "WEBSOCKET_POSITION_SUCCESS",
-                                                        &format!("✅ Position verification successful for WebSocket transaction {}", &sig_clone)
-                                                    );
                                                 }
                                             });
                                         }
@@ -1443,35 +1456,34 @@ async fn do_websocket_fallback_check(manager: &mut TransactionsManager) -> Resul
                             // CRITICAL: Trigger position verification for confirmed/finalized fallback transactions too
                             let sig_clone = signature.clone();
                             tokio::spawn(async move {
-                                if
-                                    let Err(e) = crate::positions::verify_position_transaction(
-                                        &sig_clone
-                                    ).await
-                                {
-                                    // Only log verification attempts if debug is enabled - normal "no matching position" is expected
-                                    if
-                                        crate::arguments::is_debug_positions_enabled() &&
-                                        !e.contains("No matching position found")
-                                    {
-                                        log(
-                                            LogTag::Transactions,
-                                            "FALLBACK_POSITION_VERIFY",
-                                            &format!(
-                                                "Position verification for fallback transaction {} result: {}",
-                                                &sig_clone,
-                                                e
-                                            )
+                                // Use the new verification system - enqueue for verification
+                                if let Some(mint) = crate::positions::SIG_TO_MINT_INDEX.read().await.get(&sig_clone).cloned() {
+                                    if let Some(position) = crate::positions::get_position_by_mint(&mint).await {
+                                        let kind = if position.entry_transaction_signature.as_deref() == Some(&sig_clone) {
+                                            crate::positions::queue::VerificationKind::Entry
+                                        } else if position.exit_transaction_signature.as_deref() == Some(&sig_clone) {
+                                            crate::positions::queue::VerificationKind::Exit
+                                        } else {
+                                            return; // No matching transaction
+                                        };
+                                        
+                                        let item = crate::positions::queue::VerificationItem::new(
+                                            sig_clone.clone(),
+                                            mint,
+                                            position.id,
+                                            kind,
+                                            None,
                                         );
+                                        crate::positions::queue::enqueue_verification(item).await;
+                                        
+                                        if crate::arguments::is_debug_positions_enabled() {
+                                            log(
+                                                LogTag::Transactions,
+                                                "FALLBACK_POSITION_VERIFY",
+                                                &format!("Enqueued position verification for fallback transaction {}", &sig_clone)
+                                            );
+                                        }
                                     }
-                                } else {
-                                    log(
-                                        LogTag::Transactions,
-                                        "FALLBACK_POSITION_SUCCESS",
-                                        &format!(
-                                            "✅ Position verification successful for fallback transaction {}",
-                                            &sig_clone
-                                        )
-                                    );
                                 }
                             });
                         }
