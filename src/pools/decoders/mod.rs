@@ -13,6 +13,7 @@ pub mod meteora_damm;
 pub mod meteora_dbc;
 pub mod orca_whirlpool;
 pub mod moonit_amm;
+pub mod fluxbeam_amm;
 
 // Re-export commonly used types for external access
 pub use raydium_cpmm::{ RaydiumCpmmDecoder, RaydiumCpmmPoolInfo };
@@ -75,6 +76,8 @@ pub fn decode_pool(
             ),
         ProgramKind::Moonit =>
             moonit_amm::MoonitAmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
+        ProgramKind::FluxbeamAmm =>
+            fluxbeam_amm::FluxbeamAmmDecoder::decode_and_calculate(accounts, base_mint, quote_mint),
         _ => {
             // TODO: Add other decoders as needed
             None

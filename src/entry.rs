@@ -117,8 +117,8 @@ const MAX_DATA_AGE_MIN: i64 = 5; // Keep tight data freshness requirement
 
 // CONSERVATIVE entry windows - more balanced approach
 const WINDOWS_SEC: [i64; 6] = [10, 20, 40, 80, 160, 320]; // 30s to 10min windows
-const MIN_DROP_PERCENT: f64 = 3.0; // Higher minimum for quality entries
-const MAX_DROP_PERCENT: f64 = 75.0; // Allow larger drops for volatile tokens
+const MIN_DROP_PERCENT: f64 = 8.0; // Higher minimum for quality entries
+const MAX_DROP_PERCENT: f64 = 90.0; // Allow larger drops for volatile tokens
 
 // ============================= MICRO-LIQUIDITY CAPITULATION =============================
 // Goal: Auto-approve high-upside entries when a token has near-zero real SOL liquidity and

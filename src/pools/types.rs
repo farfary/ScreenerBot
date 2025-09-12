@@ -137,6 +137,7 @@ pub enum ProgramKind {
     PumpFunAmm,
     PumpFunLegacy,
     Moonit,
+    FluxbeamAmm,
     Unknown,
 }
 
@@ -154,6 +155,7 @@ impl ProgramKind {
             ProgramKind::PumpFunAmm => PUMP_FUN_AMM_PROGRAM_ID,
             ProgramKind::PumpFunLegacy => PUMP_FUN_LEGACY_PROGRAM_ID,
             ProgramKind::Moonit => MOONIT_AMM_PROGRAM_ID,
+            ProgramKind::FluxbeamAmm => FLUXBEAM_AMM_PROGRAM_ID,
             ProgramKind::Unknown => "",
         }
     }
@@ -171,6 +173,7 @@ impl ProgramKind {
             ProgramKind::PumpFunAmm => "PUMP.FUN AMM",
             ProgramKind::PumpFunLegacy => "PUMP.FUN",
             ProgramKind::Moonit => "MOONIT AMM",
+            ProgramKind::FluxbeamAmm => "FLUXBEAM AMM",
             ProgramKind::Unknown => "UNKNOWN",
         }
     }
@@ -188,6 +191,7 @@ impl ProgramKind {
             PUMP_FUN_AMM_PROGRAM_ID => ProgramKind::PumpFunAmm,
             PUMP_FUN_LEGACY_PROGRAM_ID => ProgramKind::PumpFunLegacy,
             MOONIT_AMM_PROGRAM_ID => ProgramKind::Moonit,
+            FLUXBEAM_AMM_PROGRAM_ID => ProgramKind::FluxbeamAmm,
             _ => ProgramKind::Unknown,
         }
     }
@@ -268,3 +272,4 @@ pub const METEORA_DBC_PROGRAM_ID: &str = "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4Du
 pub const PUMP_FUN_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
 pub const PUMP_FUN_LEGACY_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 pub const MOONIT_AMM_PROGRAM_ID: &str = "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG";
+pub const FLUXBEAM_AMM_PROGRAM_ID: &str = "FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X";

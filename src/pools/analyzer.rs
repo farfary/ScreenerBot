@@ -471,6 +471,10 @@ impl PoolAnalyzer {
                 Self::extract_moonit_accounts(pool_id, base_mint, quote_mint, rpc_client).await
             }
 
+            ProgramKind::FluxbeamAmm => {
+                Self::extract_fluxbeam_accounts(pool_id, base_mint, quote_mint, rpc_client).await
+            }
+
             ProgramKind::Unknown => {
                 if is_debug_pool_analyzer_enabled() {
                     log(
@@ -866,6 +870,63 @@ impl PoolAnalyzer {
                 &format!(
                     "Extracted Moonit accounts: curve={}, total_accounts={}",
                     pool_id,
+                    accounts.len()
+                )
+            );
+        }
+
+        Some(accounts)
+    }
+
+    async fn extract_fluxbeam_accounts(
+        pool_id: &Pubkey,
+        base_mint: &Pubkey,
+        quote_mint: &Pubkey,
+        rpc_client: &RpcClient
+    ) -> Option<Vec<Pubkey>> {
+        // Fetch the pool account to extract vault addresses using decoder function
+        let pool_account = match rpc_client.get_account(pool_id).await {
+            Ok(account) => account,
+            Err(e) => {
+                if is_debug_pool_analyzer_enabled() {
+                    log(
+                        LogTag::PoolAnalyzer,
+                        "ERROR",
+                        &format!("Failed to fetch pool account {}: {}", pool_id, e)
+                    );
+                }
+                return None;
+            }
+        };
+
+        // Parse the pool data to extract vault addresses using decoder function
+        let vault_addresses =
+            super::decoders::fluxbeam_amm::FluxbeamAmmDecoder::extract_reserve_accounts(
+                &pool_account.data
+            )?;
+
+        let mut accounts = vec![*pool_id];
+        let vault_count = vault_addresses.len();
+
+        // Add vault addresses to accounts list
+        for vault_str in vault_addresses {
+            if let Ok(vault_pubkey) = Pubkey::from_str(&vault_str) {
+                accounts.push(vault_pubkey);
+            }
+        }
+
+        // Add the mints for reference
+        accounts.push(*base_mint);
+        accounts.push(*quote_mint);
+
+        if is_debug_pool_analyzer_enabled() {
+            log(
+                LogTag::PoolAnalyzer,
+                "DEBUG",
+                &format!(
+                    "Extracted FluxBeam accounts: pool={}, vaults={}, total_accounts={}",
+                    pool_id,
+                    vault_count,
                     accounts.len()
                 )
             );

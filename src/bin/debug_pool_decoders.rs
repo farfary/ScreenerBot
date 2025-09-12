@@ -18,10 +18,11 @@
 //! cargo run --bin debug_pool_decoders -- --pool <POOL_ADDRESS> --show-raw-data
 
 use clap::Parser;
-use screenerbot::pools::decoders::raydium_cpmm::{RaydiumCpmmDecoder, RaydiumCpmmPoolInfo};
-use screenerbot::pools::types::{ProgramKind, PriceResult, SOL_MINT};
-use screenerbot::rpc::{get_rpc_client, parse_pubkey};
-use screenerbot::logger::{log, LogTag};
+use screenerbot::pools::decoders::raydium_cpmm::{ RaydiumCpmmDecoder, RaydiumCpmmPoolInfo };
+use screenerbot::pools::decoders::fluxbeam_amm::{ FluxbeamAmmDecoder, FluxbeamPoolInfo };
+use screenerbot::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
+use screenerbot::rpc::{ get_rpc_client, parse_pubkey };
+use screenerbot::logger::{ log, LogTag };
 use screenerbot::tokens::decimals::SOL_DECIMALS;
 use solana_sdk::account::Account;
 use std::collections::HashMap;
@@ -134,8 +135,9 @@ impl PoolAccountData {
 
 /// Fetch pool account data directly from RPC
 async fn fetch_pool_account_data(pool_address: &str) -> Result<PoolAccountData, String> {
-    let pool_pubkey = parse_pubkey(pool_address)
-        .map_err(|e| format!("Invalid pool address: {}", e))?;
+    let pool_pubkey = parse_pubkey(pool_address).map_err(|e|
+        format!("Invalid pool address: {}", e)
+    )?;
 
     log(
         LogTag::PoolService,
@@ -177,15 +179,11 @@ async fn test_decoder(
     decoder_name: &str,
     program_kind: ProgramKind,
     pool_data: &PoolAccountData,
-    verbose: bool,
+    verbose: bool
 ) -> DecoderTestResult {
     let start_time = std::time::Instant::now();
 
-    log(
-        LogTag::PoolService,
-        "DECODER_TEST",
-        &format!("Testing {} decoder", decoder_name)
-    );
+    log(LogTag::PoolService, "DECODER_TEST", &format!("Testing {} decoder", decoder_name));
 
     let (success, price_result, error, reserves_info) = match decoder_name {
         "raydium-cpmm" => test_raydium_cpmm_decoder(pool_data, verbose).await,
@@ -197,6 +195,7 @@ async fn test_decoder(
         "pumpfun-amm" => test_pumpfun_amm_decoder(pool_data, verbose).await,
         "pumpfun-legacy" => test_pumpfun_legacy_decoder(pool_data, verbose).await,
         "moonit-amm" => test_moonit_amm_decoder(pool_data, verbose).await,
+        "fluxbeam-amm" => test_fluxbeam_amm_decoder(pool_data, verbose).await,
         _ => (false, None, Some("Unknown decoder".to_string()), None),
     };
 
@@ -216,7 +215,7 @@ async fn test_decoder(
 /// Test Raydium CPMM decoder
 async fn test_raydium_cpmm_decoder(
     pool_data: &PoolAccountData,
-    verbose: bool,
+    verbose: bool
 ) -> (bool, Option<PriceResult>, Option<String>, Option<ReservesInfo>) {
     if verbose {
         log(LogTag::PoolService, "DECODER_DETAIL", "Testing Raydium CPMM decoder");
@@ -256,7 +255,12 @@ async fn test_raydium_cpmm_decoder(
                 }
             }
 
-            (true, None, Some("Price calculation requires vault account data".to_string()), reserves_info)
+            (
+                true,
+                None,
+                Some("Price calculation requires vault account data".to_string()),
+                reserves_info,
+            )
         }
         None => {
             let error_msg = "Raydium CPMM decode failed: could not parse pool data".to_string();
@@ -271,7 +275,7 @@ async fn test_raydium_cpmm_decoder(
 /// Test Raydium CLMM decoder
 async fn test_raydium_clmm_decoder(
     _pool_data: &PoolAccountData,
-    verbose: bool,
+    verbose: bool
 ) -> (bool, Option<PriceResult>, Option<String>, Option<ReservesInfo>) {
     if verbose {
         log(LogTag::PoolService, "DECODER_DETAIL", "Testing Raydium CLMM decoder");
@@ -288,7 +292,7 @@ async fn test_raydium_clmm_decoder(
 /// Test Raydium Legacy AMM decoder
 async fn test_raydium_legacy_decoder(
     _pool_data: &PoolAccountData,
-    verbose: bool,
+    verbose: bool
 ) -> (bool, Option<PriceResult>, Option<String>, Option<ReservesInfo>) {
     if verbose {
         log(LogTag::PoolService, "DECODER_DETAIL", "Testing Raydium Legacy AMM decoder");
@@ -305,7 +309,7 @@ async fn test_raydium_legacy_decoder(
 /// Test Orca Whirlpool decoder
 async fn test_orca_whirlpool_decoder(
     _pool_data: &PoolAccountData,
-    verbose: bool,
+    verbose: bool
 ) -> (bool, Option<PriceResult>, Option<String>, Option<ReservesInfo>) {
     if verbose {
         log(LogTag::PoolService, "DECODER_DETAIL", "Testing Orca Whirlpool decoder");
@@ -322,7 +326,7 @@ async fn test_orca_whirlpool_decoder(
 /// Test Meteora DAMM decoder
 async fn test_meteora_damm_decoder(
     _pool_data: &PoolAccountData,
-    verbose: bool,
+    verbose: bool
 ) -> (bool, Option<PriceResult>, Option<String>, Option<ReservesInfo>) {
     if verbose {
         log(LogTag::PoolService, "DECODER_DETAIL", "Testing Meteora DAMM decoder");
@@ -339,7 +343,7 @@ async fn test_meteora_damm_decoder(
 /// Test Meteora DLMM decoder
 async fn test_meteora_dlmm_decoder(
     _pool_data: &PoolAccountData,
-    verbose: bool,
+    verbose: bool
 ) -> (bool, Option<PriceResult>, Option<String>, Option<ReservesInfo>) {
     if verbose {
         log(LogTag::PoolService, "DECODER_DETAIL", "Testing Meteora DLMM decoder");
@@ -356,7 +360,7 @@ async fn test_meteora_dlmm_decoder(
 /// Test PumpFun AMM decoder
 async fn test_pumpfun_amm_decoder(
     _pool_data: &PoolAccountData,
-    verbose: bool,
+    verbose: bool
 ) -> (bool, Option<PriceResult>, Option<String>, Option<ReservesInfo>) {
     if verbose {
         log(LogTag::PoolService, "DECODER_DETAIL", "Testing PumpFun AMM decoder");
@@ -373,7 +377,7 @@ async fn test_pumpfun_amm_decoder(
 /// Test PumpFun Legacy decoder
 async fn test_pumpfun_legacy_decoder(
     _pool_data: &PoolAccountData,
-    verbose: bool,
+    verbose: bool
 ) -> (bool, Option<PriceResult>, Option<String>, Option<ReservesInfo>) {
     if verbose {
         log(LogTag::PoolService, "DECODER_DETAIL", "Testing PumpFun Legacy decoder");
@@ -390,7 +394,7 @@ async fn test_pumpfun_legacy_decoder(
 /// Test Moonit AMM decoder
 async fn test_moonit_amm_decoder(
     _pool_data: &PoolAccountData,
-    verbose: bool,
+    verbose: bool
 ) -> (bool, Option<PriceResult>, Option<String>, Option<ReservesInfo>) {
     if verbose {
         log(LogTag::PoolService, "DECODER_DETAIL", "Testing Moonit AMM decoder");
@@ -404,10 +408,133 @@ async fn test_moonit_amm_decoder(
     (false, None, Some(error_msg), None)
 }
 
+/// Test FluxBeam AMM decoder
+async fn test_fluxbeam_amm_decoder(
+    pool_data: &PoolAccountData,
+    verbose: bool
+) -> (bool, Option<PriceResult>, Option<String>, Option<ReservesInfo>) {
+    if verbose {
+        log(LogTag::PoolService, "DECODER_DETAIL", "Testing FluxBeam AMM decoder");
+    }
+
+    match FluxbeamAmmDecoder::parse_fluxbeam_pool(&pool_data.data) {
+        Some(pool_info) => {
+            if verbose {
+                log(
+                    LogTag::PoolService,
+                    "DECODE_SUCCESS",
+                    &format!(
+                        "FluxBeam AMM decoded successfully: tokenA={}, tokenB={}",
+                        &pool_info.token_a_mint[..8],
+                        &pool_info.token_b_mint[..8]
+                    )
+                );
+            }
+
+            // Extract reserve information - FluxBeam pools store vault addresses directly
+            let reserves_info = extract_fluxbeam_reserves_from_info(&pool_info, verbose).await;
+
+            // For actual price calculation, we would need vault account data
+            if let Some(ref reserves) = reserves_info {
+                if verbose {
+                    log(
+                        LogTag::PoolService,
+                        "RESERVES_INFO",
+                        &format!(
+                            "Reserves extracted: SOL vault={}, Token vault={}, Token mint={}",
+                            &reserves.sol_reserve,
+                            &reserves.token_reserve,
+                            &reserves.token_mint[..8]
+                        )
+                    );
+                }
+            }
+
+            (
+                true,
+                None,
+                Some(
+                    "Pool decoded successfully - price calculation requires vault account data".to_string()
+                ),
+                reserves_info,
+            )
+        }
+        None => {
+            let error_msg = "FluxBeam AMM decode failed: could not parse pool data".to_string();
+            if verbose {
+                log(LogTag::PoolService, "DECODE_ERROR", &error_msg);
+            }
+            (false, None, Some(error_msg), None)
+        }
+    }
+}
+
+/// Extract reserves information from FluxbeamPoolInfo
+async fn extract_fluxbeam_reserves_from_info(
+    pool_info: &FluxbeamPoolInfo,
+    verbose: bool
+) -> Option<ReservesInfo> {
+    if verbose {
+        log(
+            LogTag::PoolService,
+            "EXTRACT_RESERVES",
+            &format!(
+                "Extracting reserves from FluxBeam pool: tokenA={}, tokenB={}",
+                &pool_info.token_a_mint[..8],
+                &pool_info.token_b_mint[..8]
+            )
+        );
+    }
+
+    // Determine which token is SOL
+    let sol_mint_str = SOL_MINT;
+
+    if pool_info.token_a_mint == sol_mint_str {
+        // Token A is SOL, Token B is the target token
+        Some(ReservesInfo {
+            token_a_mint: pool_info.token_a_mint.clone(),
+            token_b_mint: pool_info.token_b_mint.clone(),
+            token_a_reserve: 0, // Would need vault account data
+            token_b_reserve: 0, // Would need vault account data
+            token_a_decimals: 9, // SOL decimals
+            token_b_decimals: 9, // Default, would need to fetch from mint
+            sol_reserve: 0, // Would need vault account data
+            token_reserve: 0, // Would need vault account data
+            sol_decimals: SOL_DECIMALS,
+            token_decimals: 9, // Default, would need to fetch from mint
+            token_mint: pool_info.token_b_mint.clone(),
+        })
+    } else if pool_info.token_b_mint == sol_mint_str {
+        // Token B is SOL, Token A is the target token
+        Some(ReservesInfo {
+            token_a_mint: pool_info.token_a_mint.clone(),
+            token_b_mint: pool_info.token_b_mint.clone(),
+            token_a_reserve: 0, // Would need vault account data
+            token_b_reserve: 0, // Would need vault account data
+            token_a_decimals: 9, // Default, would need to fetch from mint
+            token_b_decimals: 9, // SOL decimals
+            sol_reserve: 0, // Would need vault account data
+            token_reserve: 0, // Would need vault account data
+            sol_decimals: SOL_DECIMALS,
+            token_decimals: 9, // Default, would need to fetch from mint
+            token_mint: pool_info.token_a_mint.clone(),
+        })
+    } else {
+        if verbose {
+            log(
+                LogTag::PoolService,
+                "NO_SOL_PAIR",
+                "Pool does not contain SOL - cannot extract SOL reserves"
+            );
+        }
+        None
+    }
+}
+
 /// Extract reserves information from RaydiumCpmmPoolInfo
 async fn extract_raydium_cpmm_reserves_from_info(
     pool_info: &RaydiumCpmmPoolInfo,
-    verbose: bool,
+    verbose: bool
 ) -> Option<ReservesInfo> {
     if verbose {
         log(
@@ -423,7 +550,7 @@ async fn extract_raydium_cpmm_reserves_from_info(
 
     // Determine which token is SOL
     let sol_mint_str = SOL_MINT;
-    
+
     if pool_info.token_0_mint == sol_mint_str {
         // Token 0 is SOL, Token 1 is the target token
         Some(ReservesInfo {
@@ -466,14 +593,12 @@ async fn extract_raydium_cpmm_reserves_from_info(
     }
 }
 
-
-
 /// Print account information
 fn print_account_info(pool_data: &PoolAccountData, show_raw_data: bool) {
     println!("🏦 Account Information:");
     println!("   Address: {}", pool_data.address);
     println!("   Owner: {}", pool_data.owner);
-    println!("   Lamports: {} ({:.9} SOL)", pool_data.lamports, pool_data.lamports as f64 / 1e9);
+    println!("   Lamports: {} ({:.9} SOL)", pool_data.lamports, (pool_data.lamports as f64) / 1e9);
     println!("   Data Size: {} bytes", pool_data.data_size());
     println!("   Executable: {}", pool_data.executable);
     println!("   Rent Epoch: {}", pool_data.rent_epoch);
@@ -504,7 +629,11 @@ fn print_decoder_results(results: &[DecoderTestResult]) {
         if let Some(ref reserves) = result.reserves_info {
             println!("      📊 Reserves:");
             println!("         SOL: {} ({} decimals)", reserves.sol_reserve, reserves.sol_decimals);
-            println!("         Token: {} ({} decimals)", reserves.token_reserve, reserves.token_decimals);
+            println!(
+                "         Token: {} ({} decimals)",
+                reserves.token_reserve,
+                reserves.token_decimals
+            );
             println!("         Token Mint: {}", &reserves.token_mint[..8]);
         }
 
@@ -518,10 +647,18 @@ fn print_decoder_results(results: &[DecoderTestResult]) {
 
 /// Print summary statistics
 fn print_summary(results: &[DecoderTestResult]) {
-    let successful = results.iter().filter(|r| r.success).count();
+    let successful = results
+        .iter()
+        .filter(|r| r.success)
+        .count();
     let total = results.len();
     let avg_decode_time = if total > 0 {
-        results.iter().map(|r| r.decode_time_ms).sum::<u64>() as f64 / total as f64
+        (
+            results
+                .iter()
+                .map(|r| r.decode_time_ms)
+                .sum::<u64>() as f64
+        ) / (total as f64)
     } else {
         0.0
     };
@@ -530,7 +667,10 @@ fn print_summary(results: &[DecoderTestResult]) {
     println!("   Successful Decoders: {}/{}", successful, total);
     println!("   Average Decode Time: {:.1}ms", avg_decode_time);
 
-    let with_prices = results.iter().filter(|r| r.price_result.is_some()).count();
+    let with_prices = results
+        .iter()
+        .filter(|r| r.price_result.is_some())
+        .count();
     if with_prices > 0 {
         println!("   Decoders with Valid Prices: {}", with_prices);
     }
@@ -582,6 +722,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "pumpfun-amm".to_string(),
             "pumpfun-legacy".to_string(),
             "moonit-amm".to_string(),
+            "fluxbeam-amm".to_string()
         ]
     };
 
@@ -613,13 +754,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   - Pool is not a standard AMM");
     } else {
         println!("✅ Successful decoders: {}", successful_decoders.join(", "));
-        
+
         let with_valid_prices: Vec<_> = results
             .iter()
             .filter(|r| r.price_result.is_some())
             .map(|r| r.decoder_name.as_str())
             .collect();
-        
+
         if !with_valid_prices.is_empty() {
             println!("💰 Decoders with valid prices: {}", with_valid_prices.join(", "));
         }
