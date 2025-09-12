@@ -10,10 +10,7 @@ pub mod metrics;
 pub mod worker;
 
 // Public API exports
-pub use operations::{
-    open_position_direct,
-    close_position_direct,
-};
+pub use operations::{ open_position_direct, close_position_direct };
 
 pub use state::{
     get_open_positions,
@@ -33,14 +30,11 @@ pub use tracking::update_position_tracking;
 
 pub use metrics::get_proceeds_metrics_snapshot;
 
-pub use worker::{
-    start_positions_manager_service,
-    initialize_positions_system,
-};
+pub use worker::{ start_positions_manager_service, initialize_positions_system };
 
 // Core types re-exports
 pub use crate::positions_types::Position;
 pub use state::PositionLockGuard;
 pub use transitions::PositionTransition;
-pub use queue::{VerificationItem, VerificationKind, enqueue_verification};
+pub use queue::{ VerificationItem, VerificationKind, enqueue_verification };
 pub use metrics::ProceedsMetricsSnapshot;

@@ -1,29 +1,29 @@
 use crate::{
     positions_types::Position,
     utils::safe_truncate,
-    logger::{log, LogTag},
+    logger::{ log, LogTag },
     arguments::is_debug_positions_enabled,
 };
-use chrono::{DateTime, Utc};
-use std::{
-    collections::HashMap,
-    sync::{Arc, LazyLock},
-};
-use tokio::sync::{Mutex, OwnedMutexGuard, RwLock};
+use chrono::{ DateTime, Utc };
+use std::{ collections::HashMap, sync::{ Arc, LazyLock } };
+use tokio::sync::{ Mutex, OwnedMutexGuard, RwLock };
 
 // Global state containers
 pub static POSITIONS: LazyLock<RwLock<Vec<Position>>> = LazyLock::new(|| RwLock::new(Vec::new()));
 
 // Constant-time indexes
-pub static SIG_TO_MINT_INDEX: LazyLock<RwLock<HashMap<String, String>>> = 
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+pub static SIG_TO_MINT_INDEX: LazyLock<RwLock<HashMap<String, String>>> = LazyLock::new(||
+    RwLock::new(HashMap::new())
+);
 
-pub static MINT_TO_POSITION_INDEX: LazyLock<RwLock<HashMap<String, usize>>> = 
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+pub static MINT_TO_POSITION_INDEX: LazyLock<RwLock<HashMap<String, usize>>> = LazyLock::new(||
+    RwLock::new(HashMap::new())
+);
 
 // Per-position locks
-static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> = 
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> = LazyLock::new(||
+    RwLock::new(HashMap::new())
+);
 
 // Position lock guard
 #[derive(Debug)]
@@ -113,10 +113,10 @@ pub async fn update_position_state(mint: &str, updater: impl FnOnce(&mut Positio
 /// Remove position from state
 pub async fn remove_position(mint: &str) -> Option<Position> {
     let mut positions = POSITIONS.write().await;
-    
+
     if let Some(index) = positions.iter().position(|p| p.mint == mint) {
         let removed = positions.remove(index);
-        
+
         // Update indexes
         if let Some(ref sig) = removed.entry_transaction_signature {
             SIG_TO_MINT_INDEX.write().await.remove(sig);
@@ -125,10 +125,10 @@ pub async fn remove_position(mint: &str) -> Option<Position> {
             SIG_TO_MINT_INDEX.write().await.remove(sig);
         }
         MINT_TO_POSITION_INDEX.write().await.remove(&removed.mint);
-        
+
         // Rebuild position indexes for remaining positions
         rebuild_position_indexes(&positions).await;
-        
+
         Some(removed)
     } else {
         None
@@ -139,7 +139,7 @@ pub async fn remove_position(mint: &str) -> Option<Position> {
 async fn rebuild_position_indexes(positions: &[Position]) {
     let mut mint_to_index = MINT_TO_POSITION_INDEX.write().await;
     mint_to_index.clear();
-    
+
     for (index, position) in positions.iter().enumerate() {
         mint_to_index.insert(position.mint.clone(), index);
     }
@@ -148,7 +148,10 @@ async fn rebuild_position_indexes(positions: &[Position]) {
 /// Get position by mint
 pub async fn get_position_by_mint(mint: &str) -> Option<Position> {
     let positions = POSITIONS.read().await;
-    positions.iter().find(|p| p.mint == mint).cloned()
+    positions
+        .iter()
+        .find(|p| p.mint == mint)
+        .cloned()
 }
 
 /// Get all open positions
@@ -158,8 +161,8 @@ pub async fn get_open_positions() -> Vec<Position> {
         .iter()
         .filter(|p| {
             p.position_type == "buy" &&
-            p.exit_time.is_none() &&
-            (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
+                p.exit_time.is_none() &&
+                (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
         })
         .cloned()
         .collect()
@@ -183,12 +186,14 @@ pub async fn get_open_positions_count() -> usize {
 /// Check if position is open for given mint
 pub async fn is_open_position(mint: &str) -> bool {
     let positions = POSITIONS.read().await;
-    positions.iter().any(|p| {
-        p.mint == mint &&
-        p.position_type == "buy" &&
-        p.exit_time.is_none() &&
-        (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
-    })
+    positions
+        .iter()
+        .any(|p| {
+            p.mint == mint &&
+                p.position_type == "buy" &&
+                p.exit_time.is_none() &&
+                (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
+        })
 }
 
 /// Get list of open position mints

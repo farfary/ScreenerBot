@@ -1,12 +1,12 @@
 use crate::{
-    positions_db::{update_position, force_database_sync},
+    positions_db::{ update_position, force_database_sync },
     positions_types::Position,
-    logger::{log, LogTag},
+    logger::{ log, LogTag },
     arguments::is_debug_positions_enabled,
 };
 use super::{
     transitions::PositionTransition,
-    state::{update_position_state, remove_position, POSITIONS},
+    state::{ update_position_state, remove_position, POSITIONS },
 };
 use chrono::Utc;
 
@@ -33,13 +33,16 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_lamports,
             sol_size,
         } => {
-            let updated = update_position_state(&find_mint_by_position_id(position_id).await?, |pos| {
-                pos.transaction_entry_verified = true;
-                pos.effective_entry_price = Some(effective_entry_price);
-                pos.total_size_sol = sol_size;
-                pos.token_amount = Some(token_amount_units);
-                pos.entry_fee_lamports = Some(fee_lamports);
-            }).await;
+            let updated = update_position_state(
+                &find_mint_by_position_id(position_id).await?,
+                |pos| {
+                    pos.transaction_entry_verified = true;
+                    pos.effective_entry_price = Some(effective_entry_price);
+                    pos.total_size_sol = sol_size;
+                    pos.token_amount = Some(token_amount_units);
+                    pos.entry_fee_lamports = Some(fee_lamports);
+                }
+            ).await;
 
             if updated && transition.requires_db_update() {
                 if let Some(position) = get_position_by_id(position_id).await {
@@ -63,14 +66,17 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_lamports,
             exit_time,
         } => {
-            let updated = update_position_state(&find_mint_by_position_id(position_id).await?, |pos| {
-                pos.transaction_exit_verified = true;
-                pos.effective_exit_price = Some(effective_exit_price);
-                pos.sol_received = Some(sol_received);
-                pos.exit_fee_lamports = Some(fee_lamports);
-                pos.exit_time = Some(exit_time);
-                pos.exit_price = Some(effective_exit_price);
-            }).await;
+            let updated = update_position_state(
+                &find_mint_by_position_id(position_id).await?,
+                |pos| {
+                    pos.transaction_exit_verified = true;
+                    pos.effective_exit_price = Some(effective_exit_price);
+                    pos.sol_received = Some(sol_received);
+                    pos.exit_fee_lamports = Some(fee_lamports);
+                    pos.exit_time = Some(exit_time);
+                    pos.exit_price = Some(effective_exit_price);
+                }
+            ).await;
 
             if updated && transition.requires_db_update() {
                 if let Some(position) = get_position_by_id(position_id).await {
@@ -89,11 +95,14 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         }
 
         PositionTransition::ExitFailedClearForRetry { position_id } => {
-            let updated = update_position_state(&find_mint_by_position_id(position_id).await?, |pos| {
-                pos.exit_transaction_signature = None;
-                pos.transaction_exit_verified = false;
-                pos.closed_reason = Some("exit_retry_pending".to_string());
-            }).await;
+            let updated = update_position_state(
+                &find_mint_by_position_id(position_id).await?,
+                |pos| {
+                    pos.exit_transaction_signature = None;
+                    pos.transaction_exit_verified = false;
+                    pos.closed_reason = Some("exit_retry_pending".to_string());
+                }
+            ).await;
 
             if updated && transition.requires_db_update() {
                 if let Some(position) = get_position_by_id(position_id).await {
@@ -110,12 +119,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         }
 
         PositionTransition::ExitPermanentFailureSynthetic { position_id, exit_time } => {
-            let updated = update_position_state(&find_mint_by_position_id(position_id).await?, |pos| {
-                pos.synthetic_exit = true;
-                pos.transaction_exit_verified = true;
-                pos.exit_time = Some(exit_time);
-                pos.closed_reason = Some("synthetic_exit_permanent_failure".to_string());
-            }).await;
+            let updated = update_position_state(
+                &find_mint_by_position_id(position_id).await?,
+                |pos| {
+                    pos.synthetic_exit = true;
+                    pos.transaction_exit_verified = true;
+                    pos.exit_time = Some(exit_time);
+                    pos.closed_reason = Some("synthetic_exit_permanent_failure".to_string());
+                }
+            ).await;
 
             if updated && transition.requires_db_update() {
                 if let Some(position) = get_position_by_id(position_id).await {
@@ -136,7 +148,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             if let Ok(mint) = find_mint_by_position_id(position_id).await {
                 if let Some(_) = remove_position(&mint).await {
                     effects.position_removed = true;
-                    
+
                     if is_debug_positions_enabled() {
                         log(
                             LogTag::Positions,
@@ -176,5 +188,8 @@ async fn find_mint_by_position_id(position_id: i64) -> Result<String, String> {
 
 async fn get_position_by_id(position_id: i64) -> Option<Position> {
     let positions = POSITIONS.read().await;
-    positions.iter().find(|p| p.id == Some(position_id)).cloned()
+    positions
+        .iter()
+        .find(|p| p.id == Some(position_id))
+        .cloned()
 }

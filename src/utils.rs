@@ -224,7 +224,7 @@ pub async fn get_sol_balance(wallet_address: &str) -> Result<f64, ScreenerBotErr
     rpc_client.get_sol_balance(wallet_address).await
 }
 
-/// Checks wallet balance for a specific token
+/// Checks wallet balance for a specific token (SINGLE ACCOUNT ONLY - use get_total_token_balance for exits)
 pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, ScreenerBotError> {
     use crate::arguments::is_debug_ata_enabled;
     use crate::logger::{ log, LogTag };
@@ -306,6 +306,84 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
             Err(e)
         }
     }
+}
+
+/// Get TOTAL token balance across ALL token accounts for a mint (USE FOR EXITS TO SELL ALL)
+pub async fn get_total_token_balance(
+    wallet_address: &str,
+    mint: &str
+) -> Result<u64, ScreenerBotError> {
+    use crate::arguments::is_debug_ata_enabled;
+    use crate::logger::{ log, LogTag };
+
+    if is_debug_ata_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!(
+                "🔍 TOTAL_TOKEN_BALANCE_START: wallet={}, mint={}",
+                safe_truncate(wallet_address, 8),
+                safe_truncate(mint, 8)
+            )
+        );
+    }
+
+    // Get all token accounts for this wallet
+    let all_accounts = get_all_token_accounts(wallet_address).await?;
+
+    // Filter accounts for the specific mint and sum balances
+    let mut total_balance = 0u64;
+    let mut account_count = 0usize;
+
+    for account in all_accounts {
+        if account.mint == mint {
+            total_balance = total_balance.saturating_add(account.balance);
+            account_count += 1;
+
+            if is_debug_ata_enabled() {
+                log(
+                    LogTag::Wallet,
+                    "DEBUG",
+                    &format!(
+                        "📊 Found account {} with {} tokens ({})",
+                        safe_truncate(&account.account, 12),
+                        account.balance,
+                        if account.is_token_2022 {
+                            "Token-2022"
+                        } else {
+                            "SPL Token"
+                        }
+                    )
+                );
+            }
+        }
+    }
+
+    log(
+        LogTag::Wallet,
+        "TOTAL_BALANCE",
+        &format!(
+            "✅ Total balance for mint {}: {} tokens across {} accounts",
+            safe_truncate(mint, 8),
+            total_balance,
+            account_count
+        )
+    );
+
+    if account_count > 1 {
+        log(
+            LogTag::Wallet,
+            "MULTI_ACCOUNT",
+            &format!(
+                "⚠️ MULTIPLE ACCOUNTS DETECTED for mint {}: {} accounts with total {} tokens",
+                safe_truncate(mint, 8),
+                account_count,
+                total_balance
+            )
+        );
+    }
+
+    Ok(total_balance)
 }
 
 /// Gets all token accounts for a wallet

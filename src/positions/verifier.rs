@@ -1,15 +1,15 @@
 use crate::{
-    transactions::{get_transaction, get_global_transaction_manager},
-    transactions_types::{Transaction, TransactionStatus},
+    transactions::{ get_transaction, get_global_transaction_manager },
+    transactions_types::{ Transaction, TransactionStatus },
     tokens::get_token_decimals,
     rpc::sol_to_lamports,
     arguments::is_debug_positions_enabled,
-    logger::{log, LogTag},
-    utils::{get_token_balance, get_wallet_address},
+    logger::{ log, LogTag },
+    utils::{ get_token_balance, get_wallet_address, get_total_token_balance },
 };
 use super::{
     transitions::PositionTransition,
-    queue::{VerificationItem, VerificationKind},
+    queue::{ VerificationItem, VerificationKind },
     state::get_mint_by_signature,
 };
 use chrono::Utc;
@@ -18,15 +18,15 @@ use chrono::Utc;
 fn is_transient_verification_error(msg: &str) -> bool {
     let m = msg.to_lowercase();
     m.contains("within propagation grace") ||
-    m.contains("still pending") ||
-    m.contains("within propagation") ||
-    m.contains("not found in system") ||
-    m.contains("will retry") ||
-    m.contains("no valid swap analysis") ||
-    m.contains("error getting transaction") ||
-    m.contains("transaction manager not available") ||
-    m.contains("transaction manager not initialized") ||
-    m.contains("transaction not found (propagation)")
+        m.contains("still pending") ||
+        m.contains("within propagation") ||
+        m.contains("not found in system") ||
+        m.contains("will retry") ||
+        m.contains("no valid swap analysis") ||
+        m.contains("error getting transaction") ||
+        m.contains("transaction manager not available") ||
+        m.contains("transaction manager not initialized") ||
+        m.contains("transaction not found (propagation)")
 }
 
 #[derive(Debug)]
@@ -39,11 +39,7 @@ pub enum VerificationOutcome {
 /// Verify a transaction and produce the appropriate transition
 pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome {
     if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "DEBUG",
-            &format!("🔍 Verifying transaction: {}", item.signature)
-        );
+        log(LogTag::Positions, "DEBUG", &format!("🔍 Verifying transaction: {}", item.signature));
     }
 
     // Get transaction
@@ -62,13 +58,20 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         }
                         VerificationKind::Exit => {
                             // For exit permanent failures, check wallet balance
-                            if let (Ok(wallet_address), Some(position_id)) = (get_wallet_address(), item.position_id) {
-                                match get_token_balance(&wallet_address, &item.mint).await {
+                            if
+                                let (Ok(wallet_address), Some(position_id)) = (
+                                    get_wallet_address(),
+                                    item.position_id,
+                                )
+                            {
+                                match get_total_token_balance(&wallet_address, &item.mint).await {
                                     Ok(balance) => {
                                         if balance > 0 {
                                             // Clear exit signature for retry
                                             VerificationOutcome::Transition(
-                                                PositionTransition::ExitFailedClearForRetry { position_id }
+                                                PositionTransition::ExitFailedClearForRetry {
+                                                    position_id,
+                                                }
                                             )
                                         } else {
                                             // Synthetic exit
@@ -108,40 +111,57 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     }
                 }
             }
-            
+
             match tx.status {
                 TransactionStatus::Finalized | TransactionStatus::Confirmed => tx,
                 TransactionStatus::Pending => {
-                    return VerificationOutcome::RetryTransient("Transaction still pending".to_string());
+                    return VerificationOutcome::RetryTransient(
+                        "Transaction still pending".to_string()
+                    );
                 }
                 TransactionStatus::Failed(err) => {
-                    return VerificationOutcome::RetryTransient(format!("Transaction failed: {}", err));
+                    return VerificationOutcome::RetryTransient(
+                        format!("Transaction failed: {}", err)
+                    );
                 }
             }
         }
         Ok(None) => {
             // Progressive timeout logic - different timeouts for entry vs exit
             let timeout_threshold = match item.kind {
-                VerificationKind::Exit => 60,  // 1 minute for exit transactions
-                VerificationKind::Entry => 90, // 1.5 minutes for entry transactions  
+                VerificationKind::Exit => 60, // 1 minute for exit transactions
+                VerificationKind::Entry => 90, // 1.5 minutes for entry transactions
             };
-            
+
             if item.age_seconds() > timeout_threshold {
                 // Handle timeout based on transaction type
                 match item.kind {
                     VerificationKind::Exit => {
                         // For exit timeouts, check wallet balance before giving up
-                        if let (Ok(wallet_address), Some(position_id)) = (get_wallet_address(), item.position_id) {
-                            match get_token_balance(&wallet_address, &item.mint).await {
+                        if
+                            let (Ok(wallet_address), Some(position_id)) = (
+                                get_wallet_address(),
+                                item.position_id,
+                            )
+                        {
+                            match get_total_token_balance(&wallet_address, &item.mint).await {
                                 Ok(balance) => {
                                     if balance > 0 {
                                         // Tokens still in wallet - clear exit signature for retry
                                         if is_debug_positions_enabled() {
-                                            log(LogTag::Positions, "DEBUG", 
-                                                &format!("🔄 Exit timeout but tokens remain, clearing for retry: {}", item.signature));
+                                            log(
+                                                LogTag::Positions,
+                                                "DEBUG",
+                                                &format!(
+                                                    "🔄 Exit timeout but tokens remain, clearing for retry: {}",
+                                                    item.signature
+                                                )
+                                            );
                                         }
                                         return VerificationOutcome::Transition(
-                                            PositionTransition::ExitFailedClearForRetry { position_id }
+                                            PositionTransition::ExitFailedClearForRetry {
+                                                position_id,
+                                            }
                                         );
                                     } else {
                                         // No tokens - treat as synthetic exit
@@ -161,15 +181,21 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 }
                             }
                         } else {
-                            return VerificationOutcome::RetryTransient("Exit timeout but cannot check balance".to_string());
+                            return VerificationOutcome::RetryTransient(
+                                "Exit timeout but cannot check balance".to_string()
+                            );
                         }
                     }
                     VerificationKind::Entry => {
-                        return VerificationOutcome::RetryTransient("Entry transaction not found (timeout)".to_string());
+                        return VerificationOutcome::RetryTransient(
+                            "Entry transaction not found (timeout)".to_string()
+                        );
                     }
                 }
             } else {
-                return VerificationOutcome::RetryTransient("Transaction not found (propagation)".to_string());
+                return VerificationOutcome::RetryTransient(
+                    "Transaction not found (propagation)".to_string()
+                );
             }
         }
         Err(e) => {
@@ -190,11 +216,15 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 let empty_cache = std::collections::HashMap::new();
                 manager.convert_to_swap_pnl_info(&transaction, &empty_cache, false)
             } else {
-                return VerificationOutcome::RetryTransient("Transaction manager not initialized".to_string());
+                return VerificationOutcome::RetryTransient(
+                    "Transaction manager not initialized".to_string()
+                );
             }
         }
         None => {
-            return VerificationOutcome::RetryTransient("Transaction manager not available".to_string());
+            return VerificationOutcome::RetryTransient(
+                "Transaction manager not available".to_string()
+            );
         }
     };
 
@@ -219,7 +249,10 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             }
 
             // Calculate effective entry price
-            let effective_price = if swap_info.token_amount.abs() > 0.0 && swap_info.effective_sol_spent > 0.0 {
+            let effective_price = if
+                swap_info.token_amount.abs() > 0.0 &&
+                swap_info.effective_sol_spent > 0.0
+            {
                 swap_info.effective_sol_spent / swap_info.token_amount.abs()
             } else {
                 swap_info.calculated_price_sol
@@ -250,6 +283,44 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             } else {
                 Utc::now()
             };
+
+            // CRITICAL: Check if any tokens remain after exit verification
+            if let Ok(wallet_address) = get_wallet_address() {
+                match get_total_token_balance(&wallet_address, &item.mint).await {
+                    Ok(remaining_balance) => {
+                        if remaining_balance > 0 {
+                            log(
+                                LogTag::Positions,
+                                "RESIDUAL_DETECTED",
+                                &format!(
+                                    "⚠️ Exit verified but {} tokens remain for mint {} - position not fully liquidated",
+                                    remaining_balance,
+                                    &item.mint[..8]
+                                )
+                            );
+
+                            // For now, we'll still mark as verified but log the issue
+                            // TODO: Add residual cleanup mechanism
+                        } else {
+                            log(
+                                LogTag::Positions,
+                                "COMPLETE_EXIT",
+                                &format!(
+                                    "✅ Exit verified with zero residual for mint {}",
+                                    &item.mint[..8]
+                                )
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Positions,
+                            "RESIDUAL_CHECK_FAILED",
+                            &format!("⚠️ Could not verify residual balance after exit: {}", e)
+                        );
+                    }
+                }
+            }
 
             VerificationOutcome::Transition(PositionTransition::ExitVerified {
                 position_id,

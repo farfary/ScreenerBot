@@ -1,20 +1,25 @@
 use crate::{
     positions_db::initialize_positions_database,
-    logger::{log, LogTag},
+    logger::{ log, LogTag },
     rpc::get_rpc_client,
     arguments::is_debug_positions_enabled,
 };
 use super::{
-    state::{POSITIONS, SIG_TO_MINT_INDEX, MINT_TO_POSITION_INDEX},
+    state::{ POSITIONS, SIG_TO_MINT_INDEX, MINT_TO_POSITION_INDEX },
     queue::{
-        poll_verification_batch, requeue_verification, remove_verification, 
-        gc_expired_verifications, enqueue_verification, VerificationItem, VerificationKind,
+        poll_verification_batch,
+        requeue_verification,
+        remove_verification,
+        gc_expired_verifications,
+        enqueue_verification,
+        VerificationItem,
+        VerificationKind,
     },
-    verifier::{verify_transaction, VerificationOutcome},
+    verifier::{ verify_transaction, VerificationOutcome },
     apply::apply_transition,
 };
 use std::sync::Arc;
-use tokio::{sync::Notify, time::{sleep, Duration}};
+use tokio::{ sync::Notify, time::{ sleep, Duration } };
 
 const VERIFICATION_BATCH_SIZE: usize = 10;
 
@@ -23,8 +28,9 @@ pub async fn initialize_positions_system() -> Result<(), String> {
     log(LogTag::Positions, "STARTUP", "🚀 Initializing positions system");
 
     // Initialize database
-    initialize_positions_database().await
-        .map_err(|e| format!("Failed to initialize positions database: {}", e))?;
+    initialize_positions_database().await.map_err(|e|
+        format!("Failed to initialize positions database: {}", e)
+    )?;
 
     // Load existing positions from database
     match crate::positions_db::load_all_positions().await {
@@ -45,7 +51,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                             position.mint.clone(),
                             position.id,
                             VerificationKind::Entry,
-                            None,
+                            None
                         );
                         enqueue_verification(item).await;
                         unverified_count += 1;
@@ -60,7 +66,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                             position.mint.clone(),
                             position.id,
                             VerificationKind::Exit,
-                            None,
+                            None
                         );
                         enqueue_verification(item).await;
                         unverified_count += 1;
@@ -83,7 +89,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                 if let Some(ref exit_sig) = position.exit_transaction_signature {
                     sig_to_mint_index.insert(exit_sig.clone(), position.mint.clone());
                 }
-                
+
                 // Position index
                 mint_to_position_index.insert(position.mint.clone(), index);
             }
@@ -91,7 +97,11 @@ pub async fn initialize_positions_system() -> Result<(), String> {
             log(
                 LogTag::Positions,
                 "STARTUP",
-                &format!("✅ Loaded {} positions, {} pending verification", global_positions.len(), unverified_count)
+                &format!(
+                    "✅ Loaded {} positions, {} pending verification",
+                    global_positions.len(),
+                    unverified_count
+                )
             );
         }
         Err(e) => {
@@ -124,11 +134,11 @@ async fn verification_worker(shutdown: Arc<Notify>) {
     log(LogTag::Positions, "STARTUP", "🔍 Starting verification worker");
 
     let mut cycle_count = 0;
-    
+
     loop {
         cycle_count += 1;
         let is_first_cycle = cycle_count == 1;
-        
+
         tokio::select! {
             _ = shutdown.notified() => {
                 log(LogTag::Positions, "SHUTDOWN", "🛑 Stopping verification worker");

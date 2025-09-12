@@ -1,5 +1,5 @@
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::{ DateTime, Utc };
+use serde::{ Deserialize, Serialize };
 use std::collections::VecDeque;
 use tokio::sync::RwLock;
 use std::sync::LazyLock;
@@ -28,7 +28,7 @@ impl VerificationItem {
         mint: String,
         position_id: Option<i64>,
         kind: VerificationKind,
-        expiry_height: Option<u64>,
+        expiry_height: Option<u64>
     ) -> Self {
         Self {
             signature,
@@ -90,12 +90,12 @@ impl VerificationQueue {
 
     pub fn poll_batch(&mut self, limit: usize) -> Vec<VerificationItem> {
         let mut batch = Vec::new();
-        
+
         // Sort by priority: recent items first (within 60s), then by age
         self.items.make_contiguous().sort_by(|a, b| {
             let a_recent = a.age_seconds() <= 60;
             let b_recent = b.age_seconds() <= 60;
-            
+
             match (a_recent, b_recent) {
                 (true, false) => std::cmp::Ordering::Less,
                 (false, true) => std::cmp::Ordering::Greater,
@@ -130,7 +130,7 @@ impl VerificationQueue {
     pub fn gc_expired(&mut self, current_height: Option<u64>) -> Vec<VerificationItem> {
         let mut expired = Vec::new();
         let mut i = 0;
-        
+
         while i < self.items.len() {
             if self.items[i].is_expired(current_height) {
                 if let Some(item) = self.items.remove(i) {
@@ -140,7 +140,7 @@ impl VerificationQueue {
                 i += 1;
             }
         }
-        
+
         expired
     }
 
@@ -154,8 +154,9 @@ impl VerificationQueue {
 }
 
 /// Global verification queue
-static VERIFICATION_QUEUE: LazyLock<RwLock<VerificationQueue>> = 
-    LazyLock::new(|| RwLock::new(VerificationQueue::new()));
+static VERIFICATION_QUEUE: LazyLock<RwLock<VerificationQueue>> = LazyLock::new(||
+    RwLock::new(VerificationQueue::new())
+);
 
 /// Enqueue verification item
 pub async fn enqueue_verification(item: VerificationItem) {
@@ -191,7 +192,8 @@ pub async fn gc_expired_verifications(current_height: Option<u64>) -> Vec<Verifi
 pub async fn get_queue_status() -> (usize, Vec<String>) {
     let queue = VERIFICATION_QUEUE.read().await;
     let size = queue.len();
-    let signatures: Vec<String> = queue.items.iter()
+    let signatures: Vec<String> = queue.items
+        .iter()
         .map(|i| i.signature.clone())
         .collect();
     (size, signatures)

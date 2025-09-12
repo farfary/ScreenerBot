@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{ DateTime, Utc };
 
 #[derive(Debug, Clone)]
 pub enum PositionTransition {
@@ -37,11 +37,11 @@ pub enum PositionTransition {
 impl PositionTransition {
     pub fn position_id(&self) -> Option<i64> {
         match self {
-            Self::EntryVerified { position_id, .. } |
-            Self::ExitVerified { position_id, .. } |
-            Self::ExitFailedClearForRetry { position_id } |
-            Self::ExitPermanentFailureSynthetic { position_id, .. } |
-            Self::RemoveOrphanEntry { position_id } => Some(*position_id),
+            | Self::EntryVerified { position_id, .. }
+            | Self::ExitVerified { position_id, .. }
+            | Self::ExitFailedClearForRetry { position_id }
+            | Self::ExitPermanentFailureSynthetic { position_id, .. }
+            | Self::RemoveOrphanEntry { position_id } => Some(*position_id),
             Self::UpdatePriceTracking { .. } => None,
         }
     }
@@ -50,8 +50,8 @@ impl PositionTransition {
         matches!(
             self,
             Self::ExitVerified { .. } |
-            Self::ExitPermanentFailureSynthetic { .. } |
-            Self::RemoveOrphanEntry { .. }
+                Self::ExitPermanentFailureSynthetic { .. } |
+                Self::RemoveOrphanEntry { .. }
         )
     }
 

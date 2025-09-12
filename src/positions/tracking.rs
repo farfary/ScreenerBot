@@ -1,7 +1,4 @@
-use crate::{
-    tokens::PriceResult,
-    arguments::is_debug_positions_enabled,
-};
+use crate::{ tokens::PriceResult, arguments::is_debug_positions_enabled };
 use super::{
     state::update_position_state,
     transitions::PositionTransition,
@@ -13,7 +10,7 @@ use tokio::time::Duration;
 pub async fn update_position_tracking(
     mint: &str,
     current_price: f64,
-    _price_result: &PriceResult,
+    _price_result: &PriceResult
 ) -> bool {
     if current_price <= 0.0 || !current_price.is_finite() {
         return false;
@@ -27,7 +24,9 @@ pub async fn update_position_tracking(
 
     let _lock = match lock_result {
         Ok(lock) => lock,
-        Err(_) => return false, // Don't block tracking updates
+        Err(_) => {
+            return false;
+        } // Don't block tracking updates
     };
 
     let mut needs_update = false;
