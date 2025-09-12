@@ -98,7 +98,6 @@ pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 45.0;
 /// Debug mode: Force buy tokens when they have a simple price drop (for testing)
 pub const DEBUG_FORCE_BUY_MODE: bool = false;
 
-
 /// Debug mode: Price drop threshold percentage to trigger force buy (e.g., 3.0 for 3% drop)
 pub const DEBUG_FORCE_BUY_DROP_THRESHOLD_PERCENT: f64 = 0.5;
 
@@ -198,6 +197,7 @@ pub const ENTRY_CHECK_CONCURRENCY: usize = 4; // Reduced from 24 to fix performa
 use crate::global::is_debug_trader_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::{ get_pool_price, PriceResult };
+use crate::positions::{ is_open_position };
 use crate::positions_lib::calculate_position_pnl;
 use crate::tokens::{ cache::TokenDatabase, get_all_tokens_by_liquidity, Token };
 use crate::utils::{ check_shutdown_or_delay, safe_read_lock, safe_write_lock, debug_trader_log };
@@ -1376,6 +1376,28 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     TRADE_SIZE_SOL
                                 )
                             );
+                        }
+
+                        // Check if position already exists (open or pending unverified) before attempting to buy
+                        if is_open_position(&price_info.mint).await {
+                            log(
+                                LogTag::Trader,
+                                "POSITION_BLOCKED",
+                                &format!(
+                                    "🚫 POSITION BLOCKED: {} already has open or pending unverified position - skipping buy attempt",
+                                    price_info.mint
+                                )
+                            );
+
+                            // Update token tracking for blocked entry
+                            update_token_check_info(
+                                &price_info.mint,
+                                Some(current_price),
+                                false,
+                                true,
+                                Some(current_price)
+                            );
+                            return;
                         }
 
                         let position_start = std::time::Instant::now();
