@@ -18,7 +18,7 @@ use tokio::sync::{ mpsc, Notify };
 
 /// Constants for batch processing
 const ACCOUNT_BATCH_SIZE: usize = 50; // Optimal batch size for RPC calls
-const FETCH_INTERVAL_MS: u64 = 1000; // Fetch every 1 second
+const FETCH_INTERVAL_MS: u64 = 500; // Fetch every 1 second
 const ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 30; // Default stale threshold for inactive tokens
 // Faster refresh threshold for pools backing currently open positions (tighter P&L responsiveness)
 const OPEN_POSITION_ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 5;
