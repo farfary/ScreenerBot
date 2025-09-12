@@ -44,7 +44,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 1;
+pub const MAX_OPEN_POSITIONS: usize = 3;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.005;
@@ -90,7 +90,7 @@ pub const MAX_LOSS_EXIT_SLIPPAGE_PCT: f64 = SLIPPAGE_EXIT_LOSS_SHORTFALL_PCT;
 // -----------------------------------------------------------------------------
 
 /// Debug mode: Force sell all positions after a timeout (for testing)
-pub const DEBUG_FORCE_SELL_MODE: bool = true;
+pub const DEBUG_FORCE_SELL_MODE: bool = false;
 
 /// Debug mode: Force sell timeout in seconds
 pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 45.0;
@@ -1317,13 +1317,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 }
                             };
 
-                            // Check if we have available position slots
-                            let open_positions_count =
-                                crate::positions::get_open_positions_count().await;
-                            let has_position_space = open_positions_count < MAX_OPEN_POSITIONS;
-
+                            // Note: Position availability check now handled atomically by global semaphore in open_position_direct
                             if
-                                has_position_space &&
                                 should_debug_force_buy(
                                     current_price,
                                     previous_price,
@@ -1335,10 +1330,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     LogTag::Trader,
                                     "DEBUG_FORCE_BUY_TRIGGERED",
                                     &format!(
-                                        "🚨 DEBUG FORCE BUY: Overriding normal entry logic for {} (positions: {}/{})",
-                                        price_info.mint,
-                                        open_positions_count,
-                                        MAX_OPEN_POSITIONS
+                                        "🚨 DEBUG FORCE BUY: Overriding normal entry logic for {} (limit enforced by semaphore)",
+                                        price_info.mint
                                     )
                                 );
                             }

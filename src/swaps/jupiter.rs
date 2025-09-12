@@ -226,20 +226,24 @@ pub async fn get_jupiter_quote(
     }
 
     if !response.status().is_success() {
+        let status = response.status();
+        let body_snippet = match response.text().await {
+            Ok(t) => t.chars().take(300).collect::<String>(),
+            Err(_) => "<failed to read body>".to_string(),
+        };
         if is_debug_swaps_enabled() {
             log(
                 LogTag::Swap,
                 "JUPITER_HTTP_ERROR",
                 &format!(
-                    "❌ Jupiter HTTP Error: {} - {}",
-                    response.status(),
-                    response.status().canonical_reason().unwrap_or("Unknown")
+                    "❌ Jupiter HTTP Error: {} - {} | Body: {}",
+                    status,
+                    status.canonical_reason().unwrap_or("Unknown"),
+                    body_snippet.replace('\n', " ")
                 )
             );
         }
-        return Err(
-            ScreenerBotError::api_error(format!("Jupiter API error: {}", response.status()))
-        );
+        return Err(ScreenerBotError::api_error(format!("Jupiter API error: {}", status)));
     }
 
     // Parse response

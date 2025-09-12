@@ -843,12 +843,19 @@ impl TransactionsManager {
         }
 
         if self.debug_enabled {
+            let status_info = if !transaction.success {
+                " (FAILED - expected for failed swaps)"
+            } else {
+                " (WARNING - unexpected for successful swaps)"
+            };
+
             log(
                 LogTag::Transactions,
                 "JUPITER_TOKEN_WARN",
                 &format!(
-                    "⚠️ No token amount found for Jupiter transaction {}",
-                    &transaction.signature[..8]
+                    "⚠️ No token amount found for Jupiter transaction {}{}",
+                    &transaction.signature[..8],
+                    status_info
                 )
             );
         }

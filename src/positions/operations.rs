@@ -13,6 +13,8 @@ use crate::{
 use super::{
     state::{
         acquire_position_lock,
+        acquire_global_position_permit,
+        release_global_position_permit,
         add_position,
         add_signature_to_index,
         LAST_OPEN_TIME,
@@ -43,7 +45,11 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         }
     };
 
-    // Acquire per-mint lock FIRST to serialize opens for same token
+    // CRITICAL: Acquire global position permit FIRST to enforce MAX_OPEN_POSITIONS atomically
+    // This prevents the race condition where multiple tasks check position count simultaneously
+    let _global_permit = acquire_global_position_permit().await?;
+
+    // Acquire per-mint lock SECOND to serialize opens for same token
     let _lock = acquire_position_lock(&token.mint).await;
 
     // Re-check no existing open position for this mint (prevents duplicate concurrent entries)
@@ -51,13 +57,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         return Err("Already have open position for this token".to_string());
     }
 
-    // Enforce global max open positions (lightweight count)
-    let open_count = super::state::get_open_positions_count().await;
-    if open_count >= MAX_OPEN_POSITIONS {
-        return Err(
-            format!("Maximum open positions reached ({}/{})", open_count, MAX_OPEN_POSITIONS)
-        );
-    }
+    // Note: No need to check MAX_OPEN_POSITIONS here anymore - the semaphore enforces it atomically
 
     // Lightweight global cooldown (prevents rapid duplicate openings across different tokens)
     {

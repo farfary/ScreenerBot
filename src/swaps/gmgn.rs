@@ -20,6 +20,7 @@ use crate::rpc::lamports_to_sol;
 use crate::tokens::Token;
 
 use reqwest;
+use serde_json::Value;
 
 /// GMGN swap result structure
 #[derive(Debug)]
@@ -232,14 +233,18 @@ pub async fn get_gmgn_quote(
                 }
 
                 if response.status().is_success() {
-                    // First get the raw response text for debugging
-                    let response_text = response
-                        .text().await
-                        .map_err(|e| {
-                            ScreenerBotError::invalid_response(
-                                format!("Failed to get response text: {}", e)
-                            )
-                        })?;
+                    // Capture raw response text
+                    let response_text = match response.text().await {
+                        Ok(t) => t,
+                        Err(e) => {
+                            last_error = Some(
+                                ScreenerBotError::invalid_response(
+                                    format!("Failed to get response text: {}", e)
+                                )
+                            );
+                            continue;
+                        }
+                    };
 
                     if is_debug_swaps_enabled() {
                         log(
@@ -252,6 +257,59 @@ pub async fn get_gmgn_quote(
                         );
                     }
 
+                    // First parse into generic JSON to inspect error code quickly
+                    if let Ok(value) = serde_json::from_str::<Value>(&response_text) {
+                        let code_opt = value.get("code").and_then(|c| c.as_i64());
+                        let msg_opt = value
+                            .get("msg")
+                            .and_then(|m| m.as_str())
+                            .unwrap_or("");
+
+                        if let Some(code) = code_opt {
+                            if code != 0 {
+                                // Terminal error: no route (40000402) or other API code
+                                if code == 40000402 || msg_opt.contains("no route") {
+                                    if is_debug_swaps_enabled() {
+                                        log(
+                                            LogTag::Swap,
+                                            "GMGN_NO_ROUTE",
+                                            &format!(
+                                                "🛑 GMGN No route for pair (code {}): {} -- treating as terminal (no further retries)",
+                                                code,
+                                                msg_opt
+                                            )
+                                        );
+                                    }
+                                    return Err(
+                                        ScreenerBotError::api_error(
+                                            format!("GMGN no route: {} (code {})", msg_opt, code)
+                                        )
+                                    );
+                                } else {
+                                    if is_debug_swaps_enabled() {
+                                        log(
+                                            LogTag::Swap,
+                                            "GMGN_API_ERROR",
+                                            &format!(
+                                                "❌ GMGN API Error pre-parse - Code: {}, Message: {}",
+                                                code,
+                                                msg_opt
+                                            )
+                                        );
+                                    }
+                                    last_error = Some(
+                                        ScreenerBotError::api_error(
+                                            format!("GMGN API error: {} - {}", code, msg_opt)
+                                        )
+                                    );
+                                    // Continue to next attempt (may be transient)
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
+                    // Fall back to full structured parse (success path)
                     match serde_json::from_str::<GMGNApiResponse>(&response_text) {
                         Ok(api_response) => {
                             if is_debug_swaps_enabled() {

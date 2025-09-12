@@ -25,6 +25,12 @@ static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> = LazyL
     RwLock::new(HashMap::new())
 );
 
+// Global position creation semaphore to enforce MAX_OPEN_POSITIONS atomically
+static GLOBAL_POSITION_SEMAPHORE: LazyLock<tokio::sync::Semaphore> = LazyLock::new(|| {
+    use crate::trader::MAX_OPEN_POSITIONS;
+    tokio::sync::Semaphore::new(MAX_OPEN_POSITIONS)
+});
+
 // Optional: global last open timestamp (cooldown)
 pub static LAST_OPEN_TIME: LazyLock<RwLock<Option<DateTime<Utc>>>> = LazyLock::new(||
     RwLock::new(None)
@@ -86,6 +92,49 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
     PositionLockGuard {
         mint: mint_key,
         _owned_guard: Some(owned_guard),
+    }
+}
+
+/// Acquire a global position creation permit to enforce MAX_OPEN_POSITIONS atomically
+/// This must be called BEFORE any position creation to prevent race conditions
+pub async fn acquire_global_position_permit() -> Result<
+    tokio::sync::SemaphorePermit<'static>,
+    String
+> {
+    match GLOBAL_POSITION_SEMAPHORE.try_acquire() {
+        Ok(permit) => {
+            if is_debug_positions_enabled() {
+                log(
+                    LogTag::Positions,
+                    "DEBUG",
+                    &format!(
+                        "🟢 Acquired global position permit (available: {})",
+                        GLOBAL_POSITION_SEMAPHORE.available_permits()
+                    )
+                );
+            }
+            Ok(permit)
+        }
+        Err(_) => {
+            let available = GLOBAL_POSITION_SEMAPHORE.available_permits();
+            Err(format!("No position slots available (permits: {})", available))
+        }
+    }
+}
+
+/// Release a global position permit when a position is closed
+/// This should be called after a position is successfully closed and verified
+pub fn release_global_position_permit() {
+    GLOBAL_POSITION_SEMAPHORE.add_permits(1);
+    if is_debug_positions_enabled() {
+        log(
+            LogTag::Positions,
+            "DEBUG",
+            &format!(
+                "🔴 Released global position permit (available: {})",
+                GLOBAL_POSITION_SEMAPHORE.available_permits()
+            )
+        );
     }
 }
 

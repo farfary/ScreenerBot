@@ -1,12 +1,13 @@
 use crate::{
-    positions_db::{ update_position, force_database_sync },
     positions_types::Position,
+    positions_db::{ update_position, force_database_sync },
+    utils::safe_truncate,
     logger::{ log, LogTag },
     arguments::is_debug_positions_enabled,
 };
 use super::{
+    state::{ update_position_state, remove_position, release_global_position_permit, POSITIONS },
     transitions::PositionTransition,
-    state::{ update_position_state, remove_position, POSITIONS },
 };
 use chrono::Utc;
 
@@ -85,6 +86,16 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             effects.db_updated = true;
                             effects.position_closed = true;
                             let _ = force_database_sync().await;
+
+                            // CRITICAL: Release global position permit when position is verified closed
+                            // This allows new positions to be opened, fixing the MAX_OPEN_POSITIONS limit
+                            release_global_position_permit();
+
+                            log(
+                                LogTag::Positions,
+                                "SUCCESS",
+                                &format!("🔓 Released position slot for verified exit (ID: {})", position_id)
+                            );
                         }
                         Err(e) => {
                             return Err(format!("Failed to update database: {}", e));

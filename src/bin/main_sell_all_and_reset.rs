@@ -160,6 +160,8 @@ const DATA_FILES_TO_REMOVE: &[&str] = &[
 const MAX_SELL_RETRIES: u32 = 3;
 const MAX_ATA_CLOSE_RETRIES: u32 = 3;
 const RETRY_DELAY_MS: u64 = 2000;
+/// Minimum raw token units to attempt a swap (avoid wasting quote calls on dust)
+const DUST_THRESHOLD_RAW_UNITS: u64 = 25; // configurable heuristic
 
 /// Main function to sell all tokens, close all ATAs, and reset bot data
 #[tokio::main]
@@ -176,15 +178,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ---------------------------------------------------------------------
     let mut effective_args = args.clone();
     let debug_flags = [
-        "--debug-swaps",   // Detailed swap + quote lifecycle
-        "--debug-ata",     // ATA close + balance checks
-        "--debug-wallet",  // Wallet balance + token account fetches
-        "--debug-rpc",     // Underlying RPC client rotation + errors
-        "--debug-system",  // System-level debug summaries
+        "--debug-swaps", // Detailed swap + quote lifecycle
+        "--debug-ata", // ATA close + balance checks
+        "--debug-wallet", // Wallet balance + token account fetches
+        "--debug-rpc", // Underlying RPC client rotation + errors
+        "--debug-system", // System-level debug summaries
     ];
 
     let any_user_debug = effective_args.iter().any(|a| a.starts_with("--debug-"));
-    if !any_user_debug { // Only auto-inject if user did not request other debug modes
+    if !any_user_debug {
+        // Only auto-inject if user did not request other debug modes
         for flag in debug_flags.iter() {
             if !effective_args.contains(&flag.to_string()) {
                 effective_args.push(flag.to_string());
@@ -756,6 +759,20 @@ async fn sell_all_tokens_with_retry(
                 return false;
             }
 
+            if account.balance < DUST_THRESHOLD_RAW_UNITS {
+                log(
+                    LogTag::System,
+                    "SKIP_DUST",
+                    &format!(
+                        "Skipping dust balance (<{} raw units) token: {} ({} units)",
+                        DUST_THRESHOLD_RAW_UNITS,
+                        safe_truncate(&account.mint, 8),
+                        account.balance
+                    )
+                );
+                return false;
+            }
+
             if account.mint == SOL_MINT {
                 log(LogTag::System, "SKIP_SOL", "Skipping SOL (native token)");
                 return false;
@@ -769,9 +786,10 @@ async fn sell_all_tokens_with_retry(
         LogTag::System,
         "SELL_FILTER",
         &format!(
-            "Filtered {} sellable accounts from {} total",
+            "Filtered {} sellable accounts from {} total (dust threshold: {} units)",
             sellable_accounts.len(),
-            token_accounts.len()
+            token_accounts.len(),
+            DUST_THRESHOLD_RAW_UNITS
         )
     );
 
@@ -876,6 +894,24 @@ async fn sell_single_token_with_retry(
                         error_msg
                     )
                 );
+
+                // Detect terminal no-route / no-liquidity conditions to avoid useless retries
+                let lower_err = error_msg.to_lowercase();
+                let is_terminal_no_route =
+                    lower_err.contains("no route") ||
+                    lower_err.contains("no routers available for quote") ||
+                    lower_err.contains("could not find any route");
+                if is_terminal_no_route {
+                    log(
+                        LogTag::System,
+                        "SELL_TERMINAL_NO_ROUTE",
+                        &format!(
+                            "Detected terminal no-route condition for {} – aborting further retries",
+                            safe_truncate(&account.mint, 8)
+                        )
+                    );
+                    return (account.mint.clone(), false, Some(error_msg));
+                }
 
                 if attempt < MAX_SELL_RETRIES {
                     let delay = Duration::from_millis(RETRY_DELAY_MS * (attempt as u64));
