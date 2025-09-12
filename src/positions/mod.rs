@@ -22,6 +22,7 @@ pub use state::{
     get_position_by_mint,
     acquire_position_lock,
     get_active_frozen_cooldowns,
+    is_token_in_cooldown,
     POSITIONS,
     SIG_TO_MINT_INDEX,
     MINT_TO_POSITION_INDEX,

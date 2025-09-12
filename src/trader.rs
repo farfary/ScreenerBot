@@ -1289,6 +1289,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
                         price_available_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
+                        // Check cooldown period for recently closed positions
+                        if crate::positions::is_token_in_cooldown(&price_info.mint).await {
+                            return; // Skip this token due to cooldown
+                        }
+
                         // Call should_buy with PriceResult (price history fetched internally)
                         let (approved, confidence, reason) = crate::entry::should_buy(
                             &price_info

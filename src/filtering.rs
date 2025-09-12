@@ -125,7 +125,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         let token_obj = Token::from(token.clone());
 
         // Apply filtering criteria in order of efficiency
-        if let Some(reason) = apply_all_filters(&token_obj, &mut filtering_stats) {
+        if let Some(reason) = apply_all_filters(&token_obj, &mut filtering_stats).await {
             filtering_stats.record_rejection(reason);
             continue;
         }
@@ -176,38 +176,51 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
 /// Apply all filtering criteria to a token
 /// Returns Some(reason) if token should be rejected, None if it passes
 /// Also records which filtering stages were passed for statistics
-fn apply_all_filters(token: &Token, stats: &mut FilteringStats) -> Option<FilterRejectionReason> {
+async fn apply_all_filters(
+    token: &Token,
+    stats: &mut FilteringStats
+) -> Option<FilterRejectionReason> {
     // 1. Check decimals availability in database
     if !has_decimals_in_database(&token.mint) {
         return Some(FilterRejectionReason::NoDecimalsInDatabase);
     }
     stats.record_stage_pass("decimals");
 
-    // 2. Check basic token info completeness
+    // 2. Check cooldown period for recently closed positions
+    if check_cooldown_filter(&token.mint).await {
+        return Some(FilterRejectionReason::CooldownFiltered);
+    }
+
+    // 3. Check basic token info completeness
     if let Some(reason) = check_basic_token_info(token) {
         return Some(reason);
     }
     stats.record_stage_pass("basic_info");
 
-    // 3. Check minimum transaction activity
+    // 4. Check minimum transaction activity
     if let Some(reason) = check_transaction_activity(token) {
         return Some(reason);
     }
     stats.record_stage_pass("transactions");
 
-    // 4. Check minimum liquidity
+    // 5. Check minimum liquidity
     if let Some(reason) = check_liquidity_requirements(token) {
         return Some(reason);
     }
     stats.record_stage_pass("liquidity");
 
-    // 5. Check market cap range
+    // 6. Check market cap range
     if let Some(reason) = check_market_cap_requirements(token) {
         return Some(reason);
     }
     stats.record_stage_pass("market_cap");
 
     None // Token passed all filters
+}
+
+/// Check if token is in cooldown period after recent position closure
+async fn check_cooldown_filter(mint: &str) -> bool {
+    crate::positions::is_token_in_cooldown(mint).await
 }
 
 /// Check if token has decimals in database
@@ -434,6 +447,7 @@ enum FilterRejectionReason {
     InsufficientLiquidity,
     MarketCapTooLow,
     MarketCapTooHigh,
+    CooldownFiltered,
 }
 
 impl FilterRejectionReason {
@@ -451,6 +465,7 @@ impl FilterRejectionReason {
             Self::InsufficientLiquidity => "low_liquidity",
             Self::MarketCapTooLow => "mcap_too_low",
             Self::MarketCapTooHigh => "mcap_too_high",
+            Self::CooldownFiltered => "cooldown_filtered",
         }
     }
 }

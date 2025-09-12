@@ -349,3 +349,22 @@ pub async fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
     // Placeholder - no cooldown functionality in new module yet
     Vec::new()
 }
+
+/// Check if a token was recently closed and is in cooldown period
+/// Returns true if the token should be blocked from re-entry
+pub async fn is_token_in_cooldown(mint: &str) -> bool {
+    use chrono::{ Utc, Duration as ChronoDuration };
+    use crate::trader::POSITION_CLOSE_COOLDOWN_MINUTES;
+
+    let now = Utc::now();
+    let cutoff = now - ChronoDuration::minutes(POSITION_CLOSE_COOLDOWN_MINUTES);
+
+    let positions = POSITIONS.read().await;
+    positions
+        .iter()
+        .any(|p| {
+            p.mint == mint &&
+                p.transaction_exit_verified &&
+                p.exit_time.map_or(false, |exit_time| exit_time > cutoff)
+        })
+}
