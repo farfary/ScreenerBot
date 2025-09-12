@@ -59,11 +59,13 @@ const ESTIMATE_TTL: Duration = Duration::from_secs(60);
 /// Clear the cached estimate for a specific token
 pub fn clear_account_count_cache(mint_address: &str) {
     ESTIMATE_CACHE.remove(mint_address);
-    log(
-        LogTag::Security,
-        "CACHE_CLEAR",
-        &format!("Cleared cached account count for mint {}", safe_truncate(mint_address, 8))
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "CACHE_CLEAR",
+            &format!("Cleared cached account count for mint {}", safe_truncate(mint_address, 8))
+        );
+    }
 }
 
 /// Estimate the number of token accounts for a mint without fetching full data
@@ -82,29 +84,33 @@ pub async fn get_token_account_count_estimate_with_cache(
     if use_cache {
         if let Some((ts, value)) = ESTIMATE_CACHE.get(mint_address).map(|e| *e.value()) {
             if ts.elapsed() < ESTIMATE_TTL {
-                log(
-                    LogTag::Rpc,
-                    "CACHE",
-                    &format!(
-                        "Using cached account count estimate {} for mint {}",
-                        value,
-                        safe_truncate(mint_address, 8)
-                    )
-                );
+                if crate::arguments::is_debug_security_enabled() {
+                    log(
+                        LogTag::Security,
+                        "CACHE",
+                        &format!(
+                            "Using cached account count estimate {} for mint {}",
+                            value,
+                            safe_truncate(mint_address, 8)
+                        )
+                    );
+                }
                 return Ok(value);
             }
         }
     } else {
         // Clear cache if bypass requested
         ESTIMATE_CACHE.remove(mint_address);
-        log(
-            LogTag::Security,
-            "CACHE_BYPASS",
-            &format!(
-                "Bypassing cache for account count estimate of mint {}",
-                safe_truncate(mint_address, 8)
-            )
-        );
+        if crate::arguments::is_debug_security_enabled() {
+            log(
+                LogTag::Security,
+                "CACHE_BYPASS",
+                &format!(
+                    "Bypassing cache for account count estimate of mint {}",
+                    safe_truncate(mint_address, 8)
+                )
+            );
+        }
     }
 
     // Acquire per-mint lock to dedupe concurrent estimations
@@ -117,15 +123,17 @@ pub async fn get_token_account_count_estimate_with_cache(
     if use_cache {
         if let Some((ts, value)) = ESTIMATE_CACHE.get(mint_address).map(|e| *e.value()) {
             if ts.elapsed() < ESTIMATE_TTL {
-                log(
-                    LogTag::Rpc,
-                    "CACHE",
-                    &format!(
-                        "Using cached account count estimate {} for mint {}",
-                        value,
-                        safe_truncate(mint_address, 8)
-                    )
-                );
+                if crate::arguments::is_debug_security_enabled() {
+                    log(
+                        LogTag::Security,
+                        "CACHE",
+                        &format!(
+                            "Using cached account count estimate {} for mint {}",
+                            value,
+                            safe_truncate(mint_address, 8)
+                        )
+                    );
+                }
                 return Ok(value);
             }
         }
@@ -343,16 +351,18 @@ pub async fn should_skip_holder_analysis(mint_address: &str) -> Result<bool, Str
     let should_skip = account_count > MAX_ANALYZABLE_ACCOUNTS;
 
     if should_skip {
-        log(
-            LogTag::Rpc,
-            "SKIP_ANALYSIS",
-            &format!(
-                "Skipping holder analysis for {} - {} accounts exceeds maximum {}",
-                safe_truncate(mint_address, 8),
-                account_count,
-                MAX_ANALYZABLE_ACCOUNTS
-            )
-        );
+        if crate::arguments::is_debug_security_enabled() {
+            log(
+                LogTag::Security,
+                "SKIP_ANALYSIS",
+                &format!(
+                    "Skipping holder analysis for {} - {} accounts exceeds maximum {}",
+                    safe_truncate(mint_address, 8),
+                    account_count,
+                    MAX_ANALYZABLE_ACCOUNTS
+                )
+            );
+        }
     }
 
     Ok(should_skip)
@@ -366,16 +376,18 @@ pub async fn should_skip_holder_analysis_with_count(
     let should_skip = account_count > MAX_ANALYZABLE_ACCOUNTS;
 
     if should_skip {
-        log(
-            LogTag::Rpc,
-            "SKIP_ANALYSIS",
-            &format!(
-                "Skipping holder analysis for {} - {} accounts exceeds maximum {}",
-                safe_truncate(mint_address, 8),
-                account_count,
-                MAX_ANALYZABLE_ACCOUNTS
-            )
-        );
+        if crate::arguments::is_debug_security_enabled() {
+            log(
+                LogTag::Security,
+                "SKIP_ANALYSIS",
+                &format!(
+                    "Skipping holder analysis for {} - {} accounts exceeds maximum {}",
+                    safe_truncate(mint_address, 8),
+                    account_count,
+                    MAX_ANALYZABLE_ACCOUNTS
+                )
+            );
+        }
     }
 
     Ok((should_skip, account_count))
@@ -386,11 +398,13 @@ pub async fn should_skip_holder_analysis_with_count(
 async fn fetch_token_accounts(
     mint_address: &str
 ) -> Result<(Vec<serde_json::Value>, bool), String> {
-    log(
-        LogTag::Rpc,
-        "FETCH_ACCOUNTS",
-        &format!("Fetching token accounts for mint {}", safe_truncate(mint_address, 8))
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "FETCH_ACCOUNTS",
+            &format!("Fetching token accounts for mint {}", safe_truncate(mint_address, 8))
+        );
+    }
 
     let rpc_client = get_rpc_client();
 
@@ -444,34 +458,38 @@ async fn fetch_token_accounts(
         ])
     };
 
-    log(
-        LogTag::Rpc,
-        "FETCH_ACCOUNTS",
-        &format!(
-            "Querying {} accounts for mint {} (60s timeout)",
-            if is_token_2022 {
-                "Token-2022"
-            } else {
-                "SPL Token"
-            },
-            safe_truncate(mint_address, 8)
-        )
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "FETCH_ACCOUNTS",
+            &format!(
+                "Querying {} accounts for mint {} (60s timeout)",
+                if is_token_2022 {
+                    "Token-2022"
+                } else {
+                    "SPL Token"
+                },
+                safe_truncate(mint_address, 8)
+            )
+        );
+    }
 
-    log(
-        LogTag::Rpc,
-        "FETCH_ACCOUNTS",
-        &format!(
-            "Using getProgramAccountsV2 with LIMITED fetching for {} accounts for mint {} (max {} accounts for security analysis)",
-            if is_token_2022 {
-                "Token-2022"
-            } else {
-                "SPL Token"
-            },
-            safe_truncate(mint_address, 8),
-            MAX_ANALYZABLE_ACCOUNTS
-        )
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "FETCH_ACCOUNTS",
+            &format!(
+                "Using getProgramAccountsV2 with LIMITED fetching for {} accounts for mint {} (max {} accounts for security analysis)",
+                if is_token_2022 {
+                    "Token-2022"
+                } else {
+                    "SPL Token"
+                },
+                safe_truncate(mint_address, 8),
+                MAX_ANALYZABLE_ACCOUNTS
+            )
+        );
+    }
 
     // For security analysis, we only need enough accounts to analyze top holders
     // Don't fetch ALL accounts - just enough for security assessment
@@ -498,17 +516,19 @@ async fn fetch_token_accounts(
                 all_accounts.extend(response.accounts);
                 page_count += 1;
 
-                log(
-                    LogTag::Rpc,
-                    "FETCH_ACCOUNTS",
-                    &format!(
-                        "Fetched page {} with {} accounts (total: {}) for mint {}",
-                        page_count,
-                        page_accounts_count,
-                        all_accounts.len(),
-                        safe_truncate(mint_address, 8)
-                    )
-                );
+                if crate::arguments::is_debug_security_enabled() {
+                    log(
+                        LogTag::Security,
+                        "FETCH_ACCOUNTS",
+                        &format!(
+                            "Fetched page {} with {} accounts (total: {}) for mint {}",
+                            page_count,
+                            page_accounts_count,
+                            all_accounts.len(),
+                            safe_truncate(mint_address, 8)
+                        )
+                    );
+                }
 
                 // Stop if we have enough accounts for security analysis OR reached max pages
                 if
@@ -520,15 +540,17 @@ async fn fetch_token_accounts(
                         response.pagination_key.is_some() &&
                         all_accounts.len() >= MAX_ANALYZABLE_ACCOUNTS
                     {
-                        log(
-                            LogTag::Rpc,
-                            "FETCH_ACCOUNTS",
-                            &format!(
-                                "Stopping fetch at {} accounts (sufficient for security analysis) for mint {}",
-                                all_accounts.len(),
-                                safe_truncate(mint_address, 8)
-                            )
-                        );
+                        if crate::arguments::is_debug_security_enabled() {
+                            log(
+                                LogTag::Security,
+                                "FETCH_ACCOUNTS",
+                                &format!(
+                                    "Stopping fetch at {} accounts (sufficient for security analysis) for mint {}",
+                                    all_accounts.len(),
+                                    safe_truncate(mint_address, 8)
+                                )
+                            );
+                        }
                     }
                     break;
                 }
@@ -599,16 +621,18 @@ async fn fetch_token_accounts(
         }
     }
 
-    log(
-        LogTag::Rpc,
-        "FETCH_ACCOUNTS",
-        &format!(
-            "Successfully fetched {} total accounts from {} pages for mint {} (limited for security analysis)",
-            all_accounts.len(),
-            page_count,
-            safe_truncate(mint_address, 8)
-        )
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "FETCH_ACCOUNTS",
+            &format!(
+                "Successfully fetched {} total accounts from {} pages for mint {} (limited for security analysis)",
+                all_accounts.len(),
+                page_count,
+                safe_truncate(mint_address, 8)
+            )
+        );
+    }
 
     Ok((all_accounts, is_token_2022))
 }
@@ -763,11 +787,13 @@ pub async fn get_top_holders_analysis(
 
 /// Get basic holder statistics
 pub async fn get_holder_stats(mint_address: &str) -> Result<HolderStats, String> {
-    log(
-        LogTag::Rpc,
-        "HOLDER_STATS",
-        &format!("Getting holder statistics for mint {}", safe_truncate(mint_address, 8))
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "HOLDER_STATS",
+            &format!("Getting holder statistics for mint {}", safe_truncate(mint_address, 8))
+        );
+    }
 
     // Pre-check if token has too many accounts for efficient analysis
     if should_skip_holder_analysis(mint_address).await? {

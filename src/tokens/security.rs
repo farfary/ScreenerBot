@@ -1442,14 +1442,16 @@ impl TokenSecurityAnalyzer {
         match should_skip_holder_analysis_with_count(mint).await {
             Ok((should_skip, estimated_count)) => {
                 if should_skip {
-                    log(
-                        LogTag::Security,
-                        "HOLDER_SKIP_PRECHECK",
-                        &format!(
-                            "Skipping holder analysis for {} - pre-check indicates too many holders",
-                            safe_truncate(mint, 8)
-                        )
-                    );
+                    if crate::arguments::is_debug_security_enabled() {
+                        log(
+                            LogTag::Security,
+                            "HOLDER_SKIP_PRECHECK",
+                            &format!(
+                                "Skipping holder analysis for {} - pre-check indicates too many holders",
+                                safe_truncate(mint, 8)
+                            )
+                        );
+                    }
                     // Return conservative holder info with actual estimated count
                     return Ok(HolderSecurityInfo {
                         total_holders: estimated_count.min(u32::MAX as usize) as u32, // Use actual estimate, capped at u32::MAX

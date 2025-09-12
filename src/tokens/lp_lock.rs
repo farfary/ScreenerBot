@@ -1016,11 +1016,13 @@ async fn analyze_lp_distribution(
     let rpc_client = get_rpc_client();
 
     // FIRST: Pre-check the number of LP token accounts to prevent RPC timeouts
-    log(
-        LogTag::Rpc,
-        "LP_PRECHECK",
-        &format!("Pre-checking LP token account count for {}", truncate_address(lp_mint, 8))
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "LP_PRECHECK",
+            &format!("Pre-checking LP token account count for {}", truncate_address(lp_mint, 8))
+        );
+    }
 
     // Use dataSlice to efficiently count LP token accounts without downloading data
     let count_filters =
@@ -1053,11 +1055,17 @@ async fn analyze_lp_distribution(
     {
         Ok(accounts) => accounts.len(),
         Err(e) => {
-            log(
-                LogTag::Rpc,
-                "LP_PRECHECK_ERROR",
-                &format!("Failed to count LP accounts for {}: {}", truncate_address(lp_mint, 8), e)
-            );
+            if crate::arguments::is_debug_security_enabled() {
+                log(
+                    LogTag::Security,
+                    "LP_PRECHECK_ERROR",
+                    &format!(
+                        "Failed to count LP accounts for {}: {}",
+                        truncate_address(lp_mint, 8),
+                        e
+                    )
+                );
+            }
             // Return safe defaults if count fails
             return Ok(LpDistributionAnalysis {
                 total_holders: 0,
@@ -1069,26 +1077,30 @@ async fn analyze_lp_distribution(
         }
     };
 
-    log(
-        LogTag::Rpc,
-        "LP_PRECHECK",
-        &format!("LP token {} has {} accounts", truncate_address(lp_mint, 8), account_count)
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "LP_PRECHECK",
+            &format!("LP token {} has {} accounts", truncate_address(lp_mint, 8), account_count)
+        );
+    }
 
     // SAFETY CHECK: Skip analysis for tokens with too many LP holders (>1000)
     // Large tokens like RAY, SOL have thousands of LP holders and will timeout
     const MAX_LP_ACCOUNTS: usize = 1000;
     if account_count > MAX_LP_ACCOUNTS {
-        log(
-            LogTag::Rpc,
-            "LP_SKIP_LARGE",
-            &format!(
-                "Skipping LP analysis for {} - {} accounts exceeds maximum {} (prevents hanging)",
-                truncate_address(lp_mint, 8),
-                account_count,
-                MAX_LP_ACCOUNTS
-            )
-        );
+        if crate::arguments::is_debug_security_enabled() {
+            log(
+                LogTag::Security,
+                "LP_SKIP_LARGE",
+                &format!(
+                    "Skipping LP analysis for {} - {} accounts exceeds maximum {} (prevents hanging)",
+                    truncate_address(lp_mint, 8),
+                    account_count,
+                    MAX_LP_ACCOUNTS
+                )
+            );
+        }
 
         // Return safe analysis for large tokens - assume they're liquid and not locked
         return Ok(LpDistributionAnalysis {
@@ -1101,15 +1113,17 @@ async fn analyze_lp_distribution(
     }
 
     // PROCEED: Safe to analyze - fetch full account data
-    log(
-        LogTag::Rpc,
-        "LP_ANALYZE",
-        &format!(
-            "Analyzing LP distribution for {} ({} accounts)",
-            truncate_address(lp_mint, 8),
-            account_count
-        )
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "LP_ANALYZE",
+            &format!(
+                "Analyzing LP distribution for {} ({} accounts)",
+                truncate_address(lp_mint, 8),
+                account_count
+            )
+        );
+    }
 
     let accounts = rpc_client.get_program_accounts(
         "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
@@ -1460,11 +1474,13 @@ pub async fn check_multiple_lp_locks(
         return Ok(Vec::new());
     }
 
-    log(
-        LogTag::Rpc,
-        "LP_LOCK_BATCH",
-        &format!("Checking LP lock status for {} tokens", token_mints.len())
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "LP_LOCK_BATCH",
+            &format!("Checking LP lock status for {} tokens", token_mints.len())
+        );
+    }
 
     let mut results = Vec::with_capacity(token_mints.len());
     let mut successful_checks = 0;
@@ -1490,15 +1506,17 @@ pub async fn check_multiple_lp_locks(
                 }
                 Err(e) => {
                     failed_checks += 1;
-                    log(
-                        LogTag::Rpc,
-                        "LP_LOCK_ERROR",
-                        &format!(
-                            "Failed to check LP lock for {}: {}",
-                            truncate_address(&chunk[i], 8),
-                            e
-                        )
-                    );
+                    if crate::arguments::is_debug_security_enabled() {
+                        log(
+                            LogTag::Security,
+                            "LP_LOCK_ERROR",
+                            &format!(
+                                "Failed to check LP lock for {}: {}",
+                                truncate_address(&chunk[i], 8),
+                                e
+                            )
+                        );
+                    }
                 }
             }
         }
@@ -1509,15 +1527,17 @@ pub async fn check_multiple_lp_locks(
         }
     }
 
-    log(
-        LogTag::Rpc,
-        "LP_LOCK_BATCH_COMPLETE",
-        &format!(
-            "LP lock batch check complete: {}/{} successful",
-            successful_checks,
-            successful_checks + failed_checks
-        )
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "LP_LOCK_BATCH_COMPLETE",
+            &format!(
+                "LP lock batch check complete: {}/{} successful",
+                successful_checks,
+                successful_checks + failed_checks
+            )
+        );
+    }
 
     Ok(results)
 }
