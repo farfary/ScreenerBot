@@ -183,6 +183,31 @@ impl PoolDiscovery {
             }
         };
 
+        // CRITICAL FIX: Always include tokens with open positions for price monitoring
+        // Position tokens must be monitored regardless of whether they still meet filtering criteria
+        let open_position_mints: Vec<String> = crate::positions::get_open_mints().await;
+        let initial_count = tokens.len();
+
+        // Use HashSet for efficient duplicate checking
+        let mut token_set: std::collections::HashSet<String> = tokens.iter().cloned().collect();
+
+        for mint in open_position_mints.iter() {
+            // Skip stablecoins and tokens already in the set
+            if !is_stablecoin_mint(mint) && !token_set.contains(mint) {
+                token_set.insert(mint.clone());
+                tokens.push(mint.clone());
+            }
+        }
+
+        let added_count = tokens.len() - initial_count;
+        if added_count > 0 && is_debug_pool_discovery_enabled() {
+            log(
+                LogTag::PoolDiscovery,
+                "POSITIONS_ADDED",
+                &format!("Added {} open position tokens to monitoring set", added_count)
+            );
+        }
+
         if tokens.is_empty() {
             if is_debug_pool_discovery_enabled() {
                 log(LogTag::PoolDiscovery, "DEBUG", "No tokens to discover this tick");
@@ -190,10 +215,41 @@ impl PoolDiscovery {
             return;
         }
 
-        // Early stablecoin filtering and cap to MAX_WATCHED_TOKENS
+        // Early stablecoin filtering - position tokens already filtered above
         tokens.retain(|m| !is_stablecoin_mint(m));
+
+        // Cap to MAX_WATCHED_TOKENS but prioritize position tokens
         if tokens.len() > MAX_WATCHED_TOKENS {
-            tokens.truncate(MAX_WATCHED_TOKENS);
+            // Ensure position tokens are preserved when truncating
+            let open_position_mints: std::collections::HashSet<String> = crate::positions
+                ::get_open_mints().await
+                .into_iter()
+                .collect();
+
+            // Separate position tokens from others
+            let (mut position_tokens, mut other_tokens): (Vec<String>, Vec<String>) = tokens
+                .into_iter()
+                .partition(|mint| open_position_mints.contains(mint));
+
+            // Always include all position tokens, then fill remaining slots with other tokens
+            let remaining_slots = MAX_WATCHED_TOKENS.saturating_sub(position_tokens.len());
+            other_tokens.truncate(remaining_slots);
+
+            // Combine back: position tokens first, then others
+            position_tokens.extend(other_tokens);
+            tokens = position_tokens;
+
+            if is_debug_pool_discovery_enabled() {
+                log(
+                    LogTag::PoolDiscovery,
+                    "TRUNCATED",
+                    &format!(
+                        "Truncated to {} tokens (prioritized {} position tokens)",
+                        tokens.len(),
+                        open_position_mints.len()
+                    )
+                );
+            }
         }
 
         if is_debug_pool_discovery_enabled() {
