@@ -26,6 +26,9 @@ pub const MAX_LOW_LIQUIDITY_COUNT: u32 = 5;
 /// Maximum retry attempts before blacklisting permanently failed decimal tokens
 pub const MAX_DECIMAL_RETRY_ATTEMPTS: i32 = 3;
 
+/// Maximum no-route failures before blacklisting
+pub const MAX_NO_ROUTE_FAILURES: u32 = 5;
+
 /// System and stable tokens that should always be excluded from trading
 pub const SYSTEM_STABLE_TOKENS: &[&str] = &[
     "So11111111111111111111111111111111111111112", // SOL
@@ -75,6 +78,19 @@ fn init_blacklist_database() -> SqliteResult<()> {
         []
     )?;
 
+    // Create route failure tracking table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS route_failure_tracking (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mint TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            error_type TEXT NOT NULL,
+            timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (mint) REFERENCES tokens(mint)
+        )",
+        []
+    )?;
+
     // Create indices for performance
     conn.execute("CREATE INDEX IF NOT EXISTS idx_blacklist_reason ON blacklist(reason)", [])?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_blacklist_updated ON blacklist(updated_at)", [])?;
@@ -84,6 +100,14 @@ fn init_blacklist_database() -> SqliteResult<()> {
     )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_liquidity_tracking_timestamp ON liquidity_tracking(timestamp)",
+        []
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_route_failure_tracking_mint ON route_failure_tracking(mint)",
+        []
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_route_failure_tracking_timestamp ON route_failure_tracking(timestamp)",
         []
     )?;
 
@@ -115,6 +139,7 @@ pub enum BlacklistReason {
     SystemToken, // System/program tokens
     StableToken, // Stable coins and major tokens
     ApiError, // Tokens that return API errors (502, etc.)
+    NoRoute, // Tokens that consistently fail due to no routing available
 }
 
 /// Individual liquidity check record
@@ -192,6 +217,7 @@ pub fn add_to_blacklist_db(mint: &str, symbol: &str, reason: BlacklistReason) ->
         BlacklistReason::SystemToken => "SystemToken",
         BlacklistReason::StableToken => "StableToken",
         BlacklistReason::ApiError => "ApiError",
+        BlacklistReason::NoRoute => "NoRoute",
     };
 
     let result = conn.execute(
@@ -211,6 +237,8 @@ pub fn add_to_blacklist_db(mint: &str, symbol: &str, reason: BlacklistReason) ->
                 "ADDED",
                 &format!("Blacklisted {} ({}) - {}", symbol, mint, reason_str)
             );
+            // Refresh cache after adding to blacklist
+            refresh_blacklist_cache();
             true
         }
         Err(e) => {
@@ -303,6 +331,93 @@ pub fn track_liquidity_db(
             add_to_blacklist_db(mint, symbol, BlacklistReason::LowLiquidity);
             return false; // Don't allow processing
         }
+    }
+
+    true
+}
+
+/// Track route failure for a token in database
+pub fn track_route_failure_db(mint: &str, symbol: &str, error_type: &str) -> bool {
+    if let Err(e) = init_blacklist_database() {
+        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        return true; // Allow processing if we can't track
+    }
+
+    let conn = match Connection::open(TOKENS_DATABASE) {
+        Ok(conn) => conn,
+        Err(e) => {
+            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            return true; // Allow processing if we can't track
+        }
+    };
+
+    // Add route failure tracking record
+    let now = Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
+    if
+        let Err(e) = conn.execute(
+            "INSERT INTO route_failure_tracking (mint, symbol, error_type, timestamp) 
+         VALUES (?1, ?2, ?3, ?4)",
+            [mint, symbol, error_type, &now]
+        )
+    {
+        log(
+            LogTag::Blacklist,
+            "ERROR",
+            &format!("Failed to track route failure for {}: {}", mint, e)
+        );
+        return true; // Allow processing if we can't track
+    }
+
+    // Count no route failures in the last 7 days
+    let mut stmt = match
+        conn.prepare(
+            "SELECT COUNT(*) FROM route_failure_tracking 
+         WHERE mint = ?1 AND timestamp > datetime('now', '-7 days')"
+        )
+    {
+        Ok(stmt) => stmt,
+        Err(e) => {
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to prepare route failure count query: {}", e)
+            );
+            return true;
+        }
+    };
+
+    let failure_count: i64 = match stmt.query_row([mint], |row| row.get(0)) {
+        Ok(count) => count,
+        Err(e) => {
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to count route failures for {}: {}", mint, e)
+            );
+            return true;
+        }
+    };
+
+    log(
+        LogTag::Blacklist,
+        "TRACK",
+        &format!(
+            "Route failure for {} ({}): {} (count: {})",
+            symbol,
+            mint,
+            error_type,
+            failure_count
+        )
+    );
+
+    if failure_count >= (MAX_NO_ROUTE_FAILURES as i64) {
+        log(
+            LogTag::Blacklist,
+            "BLACKLIST",
+            &format!("Blacklisting {} ({}) after {} route failures", symbol, mint, failure_count)
+        );
+        add_to_blacklist_db(mint, symbol, BlacklistReason::NoRoute);
+        return false; // Don't allow processing
     }
 
     true
@@ -415,10 +530,39 @@ pub fn cleanup_old_blacklist_data() -> bool {
                     &format!("Cleaned {} old liquidity tracking records", deleted)
                 );
             }
+        }
+        Err(e) => {
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to cleanup old liquidity tracking data: {}", e)
+            );
+        }
+    }
+
+    // Clean up old route failure tracking data
+    match
+        conn.execute(
+            "DELETE FROM route_failure_tracking WHERE datetime(timestamp) < datetime('now', '-7 days')",
+            []
+        )
+    {
+        Ok(deleted) => {
+            if deleted > 0 {
+                log(
+                    LogTag::Blacklist,
+                    "CLEANUP",
+                    &format!("Cleaned {} old route failure tracking records", deleted)
+                );
+            }
             true
         }
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to cleanup old tracking data: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to cleanup old route failure data: {}", e)
+            );
             false
         }
     }

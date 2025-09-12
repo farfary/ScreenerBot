@@ -1,12 +1,17 @@
 use crate::{
     tokens::{ get_token_from_db, PriceResult },
     pools::get_pool_price,
-    swaps::{ execute_best_swap, get_best_quote, config::SOL_MINT },
+    swaps::{ execute_best_swap, get_best_quote, get_best_quote_for_opening, config::SOL_MINT },
     rpc::{ get_rpc_client, sol_to_lamports },
     utils::{ get_wallet_address, get_token_balance, get_total_token_balance },
     arguments::{ is_dry_run_enabled, is_debug_positions_enabled },
     logger::{ log, LogTag },
-    trader::{ TRADE_SIZE_SOL, MAX_OPEN_POSITIONS },
+    trader::{
+        TRADE_SIZE_SOL,
+        MAX_OPEN_POSITIONS,
+        SLIPPAGE_QUOTE_DEFAULT_PCT,
+        SLIPPAGE_EXIT_RETRY_STEPS_PCT,
+    },
     positions_db::save_position,
     positions_types::Position,
 };
@@ -98,12 +103,13 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         format!("Failed to get wallet address: {}", e)
     )?;
 
-    let quote = get_best_quote(
+    let quote = get_best_quote_for_opening(
         SOL_MINT,
         &token.mint,
         sol_to_lamports(TRADE_SIZE_SOL),
         &wallet_address,
-        2.0 // 2% slippage
+        SLIPPAGE_QUOTE_DEFAULT_PCT, // Use configured slippage for opening
+        &token.symbol
     ).await.map_err(|e| format!("Quote failed: {}", e))?;
 
     let swap_result = execute_best_swap(
@@ -307,7 +313,7 @@ pub async fn close_position_direct(
         SOL_MINT,
         sell_amount,
         &wallet_address,
-        5.0 // 5% slippage for exits
+        SLIPPAGE_EXIT_RETRY_STEPS_PCT[0] // Use first step (3.0%) for initial exit attempt
     ).await.map_err(|e| format!("Quote failed: {}", e))?;
 
     let swap_result = execute_best_swap(
