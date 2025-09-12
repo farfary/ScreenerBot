@@ -10,7 +10,7 @@
 /// 3. Burn validation - verifies LP tokens are actually burned
 /// 4. Time-based locks - detects time-locked LP positions
 
-use crate::arguments::is_debug_pool_discovery_enabled;
+use crate::arguments::{ is_debug_pool_discovery_enabled, is_debug_security_enabled };
 use crate::errors::ScreenerBotError;
 use crate::logger::{ log, LogTag };
 use crate::rpc::get_rpc_client;
@@ -822,21 +822,23 @@ async fn search_dex_pool(
                         config.program_id
                     ).await
                 {
-                    log(
-                        LogTag::Rpc,
-                        "POOL_FOUND",
-                        &format!(
-                            "Found {} pool at {} ({}) {}",
-                            config.pool_name,
-                            truncate_address(pool_address, 8),
-                            position_name,
-                            if needs_pagination {
-                                "(paginated)"
-                            } else {
-                                ""
-                            }
-                        )
-                    );
+                    if is_debug_security_enabled() {
+                        log(
+                            LogTag::Rpc,
+                            "POOL_FOUND",
+                            &format!(
+                                "Found {} pool at {} ({}) {}",
+                                config.pool_name,
+                                truncate_address(pool_address, 8),
+                                position_name,
+                                if needs_pagination {
+                                    "(paginated)"
+                                } else {
+                                    ""
+                                }
+                            )
+                        );
+                    }
                     return Ok(
                         Some((pool_address.to_string(), lp_mint, config.pool_name.to_string()))
                     );
