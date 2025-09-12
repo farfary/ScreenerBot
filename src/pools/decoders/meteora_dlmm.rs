@@ -211,11 +211,6 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         let token_reserves_display = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
 
         if is_debug_pool_decoders_enabled() {
-            let vault_price =
-                (sol_balance as f64) /
-                (10_f64).powi(sol_decimals as i32) /
-                ((token_balance as f64) / (10_f64).powi(token_decimals as i32));
-
             log(
                 LogTag::PoolDecoder,
                 "CALC",
@@ -224,16 +219,6 @@ impl PoolDecoder for MeteoraDlmmDecoder {
                     price_sol,
                     dlmm_info.active_id,
                     dlmm_info.bin_step
-                )
-            );
-            log(
-                LogTag::PoolDecoder,
-                "DEBUG",
-                &format!(
-                    "DLMM vault price (reference): {:.12} SOL per token (sol_bal={} token_bal={})",
-                    vault_price,
-                    sol_balance,
-                    token_balance
                 )
             );
         }

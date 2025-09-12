@@ -255,21 +255,13 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         };
 
         if is_debug_pool_decoders_enabled() {
-            // Also calculate reserve ratio for comparison
-            let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
-            let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals as i32);
-            let reserve_ratio_price = sol_adjusted / token_adjusted; // SOL per token (for reference only)
-
             log(
                 LogTag::PoolDecoder,
                 "SUCCESS",
                 &format!(
-                    "Orca Whirlpool price calculated: {:.12} SOL (sqrt_price method: SOL per token)\n  Reserve ratio (SOL per token): {:.12} SOL\n  SOL reserves: {} ({})\n  Token reserves: {} ({})\n  sqrt_price: {}\n  Token A is SOL: {}",
+                    "Orca Whirlpool price calculated: {:.12} SOL per token\n  SOL vault: {}\n  Token vault: {}\n  sqrt_price: {}\n  Token A is SOL: {}",
                     price_sol,
-                    reserve_ratio_price,
-                    sol_reserve,
                     sol_vault,
-                    token_reserve,
                     token_vault,
                     pool_info.sqrt_price,
                     is_token_a_sol
