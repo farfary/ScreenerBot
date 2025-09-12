@@ -19,7 +19,9 @@ use tokio::sync::{ mpsc, Notify };
 /// Constants for batch processing
 const ACCOUNT_BATCH_SIZE: usize = 50; // Optimal batch size for RPC calls
 const FETCH_INTERVAL_MS: u64 = 1000; // Fetch every 1 second
-const ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 30; // Consider accounts stale after 30 seconds
+const ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 30; // Default stale threshold for inactive tokens
+// Faster refresh threshold for pools backing currently open positions (tighter P&L responsiveness)
+const OPEN_POSITION_ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 5;
 
 /// Message types for fetcher communication
 #[derive(Debug, Clone)]
@@ -275,21 +277,40 @@ impl AccountFetcher {
         account_last_fetch: &Arc<RwLock<HashMap<Pubkey, Instant>>>,
         pending_accounts: &mut HashSet<Pubkey>
     ) {
-        let pools = {
+        // Snapshot pools & last fetch times under locks (minimize lock duration)
+        let (pools, last_fetch_map) = {
             let directory = pool_directory.read().unwrap();
-            directory.values().cloned().collect::<Vec<_>>()
+            let pools_vec = directory.values().cloned().collect::<Vec<_>>();
+            let last = account_last_fetch.read().unwrap();
+            (pools_vec, last.clone())
         };
 
-        let last_fetch = account_last_fetch.read().unwrap();
+        // Collect open position mints once (async call) to avoid per-pool await cost
+        let open_mints: std::collections::HashSet<String> = crate::positions::state
+            ::get_open_mints().await
+            .into_iter()
+            .collect();
 
         for pool in pools {
+            // Determine the tracked (non-SOL) token mint for this pool
+            let target_mint = if super::utils::is_sol_mint(&pool.base_mint.to_string()) {
+                pool.quote_mint.to_string()
+            } else {
+                pool.base_mint.to_string()
+            };
+
+            // Choose threshold – accelerate if this token has an open position
+            let threshold = if open_mints.contains(&target_mint) {
+                OPEN_POSITION_ACCOUNT_STALE_THRESHOLD_SECONDS
+            } else {
+                ACCOUNT_STALE_THRESHOLD_SECONDS
+            };
+
             for account in &pool.reserve_accounts {
-                let needs_fetch = match last_fetch.get(account) {
-                    Some(last_time) =>
-                        last_time.elapsed().as_secs() > ACCOUNT_STALE_THRESHOLD_SECONDS,
+                let needs_fetch = match last_fetch_map.get(account) {
+                    Some(last_time) => last_time.elapsed().as_secs() > threshold,
                     None => true, // Never fetched
                 };
-
                 if needs_fetch {
                     pending_accounts.insert(*account);
                 }
