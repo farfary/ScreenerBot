@@ -99,11 +99,13 @@ pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usiz
     }
 
     // Only log when we actually perform the estimation (not for cache hits)
-    log(
-        LogTag::Security,
-        "DEBUG",
-        &format!("Estimating token account count for mint {}", safe_truncate(mint_address, 8))
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "DEBUG",
+            &format!("Estimating token account count for mint {}", safe_truncate(mint_address, 8))
+        );
+    }
 
     let rpc_client = get_rpc_client();
 
@@ -163,14 +165,16 @@ pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usiz
         "length": 0
     });
 
-    log(
-        LogTag::Rpc,
-        "DEBUG",
-        &format!(
-            "Using getProgramAccountsV2 with smart estimation for account counting for mint {}",
-            safe_truncate(mint_address, 8)
-        )
-    );
+    if crate::arguments::is_debug_rpc_enabled() {
+        log(
+            LogTag::Rpc,
+            "DEBUG",
+            &format!(
+                "Using getProgramAccountsV2 with smart estimation for account counting for mint {}",
+                safe_truncate(mint_address, 8)
+            )
+        );
+    }
 
     // Use V2 method with LIMITED pagination for quick estimation
     // We don't need exact count, just need to know if it's a large token
@@ -193,15 +197,17 @@ pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usiz
             let estimated_count = if response.pagination_key.is_some() && first_page_count >= 2000 {
                 // If there's pagination and first page is full, estimate it's much larger
                 // For security purposes, we just need to know it's >5000
-                log(
-                    LogTag::Rpc,
-                    "ACCOUNT_COUNT",
-                    &format!(
-                        "Large token detected: {} accounts in first page with more pages - estimating >10000 total for mint {}",
-                        first_page_count,
-                        safe_truncate(mint_address, 8)
-                    )
-                );
+                if crate::arguments::is_debug_security_enabled() {
+                    log(
+                        LogTag::Security,
+                        "DEBUG",
+                        &format!(
+                            "Large token detected: {} accounts in first page with more pages - estimating >10000 total for mint {}",
+                            first_page_count,
+                            safe_truncate(mint_address, 8)
+                        )
+                    );
+                }
                 first_page_count * 5 // Conservative estimate for large tokens
             } else if response.pagination_key.is_some() {
                 // If there's pagination but first page isn't full, fetch one more page for better estimate
@@ -237,15 +243,17 @@ pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usiz
                 first_page_count
             };
 
-            log(
-                LogTag::Rpc,
-                "ACCOUNT_COUNT",
-                &format!(
-                    "Estimated {} token accounts for mint {} (smart estimation with getProgramAccountsV2)",
-                    estimated_count,
-                    safe_truncate(mint_address, 8)
-                )
-            );
+            if crate::arguments::is_debug_security_enabled() {
+                log(
+                    LogTag::Security,
+                    "DEBUG",
+                    &format!(
+                        "Estimated {} token accounts for mint {} (smart estimation with getProgramAccountsV2)",
+                        estimated_count,
+                        safe_truncate(mint_address, 8)
+                    )
+                );
+            }
             // Update cache
             ESTIMATE_CACHE.insert(mint_address.to_string(), (Instant::now(), estimated_count));
             Ok(estimated_count)

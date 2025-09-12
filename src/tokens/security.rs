@@ -1967,7 +1967,9 @@ impl SecurityMonitor {
 
     /// Run security monitoring cycle
     async fn run_security_monitoring_cycle(&mut self) -> Result<(), String> {
-        log(LogTag::Security, "DEBUG", "Starting security monitoring cycle");
+        if crate::arguments::is_debug_security_enabled() {
+            log(LogTag::Security, "DEBUG", "Starting security monitoring cycle");
+        }
 
         // Get tokens that need security updates (single database call)
         let (missing_security_tokens, stale_security_tokens) =
@@ -1995,7 +1997,9 @@ impl SecurityMonitor {
         }
 
         if tokens_to_process.is_empty() {
-            log(LogTag::Security, "DEBUG", "No tokens need security updates");
+            if crate::arguments::is_debug_security_enabled() {
+                log(LogTag::Security, "DEBUG", "No tokens need security updates");
+            }
             return Ok(());
         }
 
@@ -2148,7 +2152,9 @@ impl SecurityMonitor {
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(SECURITY_MONITOR_CYCLE_SECONDS)) => {
                     self.cycle_counter += 1;
 
-                    log(LogTag::Security, "DEBUG", &format!("Starting security monitoring cycle #{}", self.cycle_counter));
+                    if crate::arguments::is_debug_security_enabled() {
+                        log(LogTag::Security, "DEBUG", &format!("Starting security monitoring cycle #{}", self.cycle_counter));
+                    }
 
                     // Run security monitoring cycle
                     if let Err(e) = self.run_security_monitoring_cycle().await {

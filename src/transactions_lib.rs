@@ -872,23 +872,22 @@ impl TransactionsManager {
 
         // CRITICAL FIX: Exclude obvious ATA closures from GMGN detection
         // Check for closeAccount instructions with minimal token amounts
-        let has_close_account = transaction.instructions
-            .iter()
-            .any(|instruction| {
-                (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" ||
-                    instruction.program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") &&
-                instruction.instruction_type == "closeAccount"
-            }) || 
-            transaction.log_messages
+        let has_close_account =
+            transaction.instructions
                 .iter()
-                .any(|log| log.contains("Instruction: CloseAccount"));
+                .any(|instruction| {
+                    (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" ||
+                        instruction.program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") &&
+                        instruction.instruction_type == "closeAccount"
+                }) ||
+            transaction.log_messages.iter().any(|log| log.contains("Instruction: CloseAccount"));
 
         if has_close_account {
             // Check if this looks like an ATA closure (small SOL recovery, minimal tokens)
             let rent_recovery = transaction.sol_balance_change;
-            let is_rent_like = rent_recovery > 0.0 && 
-                (rent_recovery >= 0.002 && rent_recovery <= 0.0025);
-                
+            let is_rent_like =
+                rent_recovery > 0.0 && rent_recovery >= 0.002 && rent_recovery <= 0.0025;
+
             let max_token_amount = transaction.token_transfers
                 .iter()
                 .map(|transfer| transfer.amount.abs())
@@ -1772,7 +1771,7 @@ impl TransactionsManager {
         &self,
         transaction: &Transaction
     ) -> Option<String> {
-        // Look for token account creation or transfer instructions for non-WSOL tokens
+        // Prefer inner instructions parsed mint (non-WSOL)
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
                 if
@@ -1794,10 +1793,7 @@ impl TransactionsManager {
                                                 .get("mint")
                                                 .and_then(|v| v.as_str())
                                         {
-                                            if
-                                                mint !=
-                                                "So11111111111111111111111111111111111111112"
-                                            {
+                                            if mint != WSOL_MINT {
                                                 return Some(mint.to_string());
                                             }
                                         }
@@ -1809,6 +1805,151 @@ impl TransactionsManager {
                 }
             }
         }
+
+        // Fallback 1: Use computed token_balance_changes (prefer largest negative change, non-WSOL)
+        if !transaction.token_balance_changes.is_empty() {
+            let mut best: Option<(String, f64)> = None; // (mint, abs_change)
+            for change in &transaction.token_balance_changes {
+                if change.mint == WSOL_MINT {
+                    continue;
+                }
+                let abs = change.change.abs();
+                // Prefer sells (negative change) first
+                if change.change < 0.0 {
+                    match &best {
+                        Some((_m, best_abs)) => {
+                            if abs > *best_abs {
+                                best = Some((change.mint.clone(), abs));
+                            }
+                        }
+                        None => {
+                            best = Some((change.mint.clone(), abs));
+                        }
+                    }
+                }
+            }
+            // If no negative changes, pick the largest absolute non-WSOL change
+            if best.is_none() {
+                for change in &transaction.token_balance_changes {
+                    if change.mint == WSOL_MINT {
+                        continue;
+                    }
+                    let abs = change.change.abs();
+                    match &best {
+                        Some((_m, best_abs)) => {
+                            if abs > *best_abs {
+                                best = Some((change.mint.clone(), abs));
+                            }
+                        }
+                        None => {
+                            best = Some((change.mint.clone(), abs));
+                        }
+                    }
+                }
+            }
+            if let Some((mint, _)) = best {
+                return Some(mint);
+            }
+        }
+
+        // Fallback 2: Inspect raw pre/post token balances for our wallet owner
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                let owner = self.wallet_pubkey.to_string();
+                if
+                    let (Some(pre), Some(post)) = (
+                        meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                        meta.get("postTokenBalances").and_then(|v| v.as_array()),
+                    )
+                {
+                    // Build map of mint -> (pre, post) for our owner only
+                    use std::collections::HashMap;
+                    let mut agg: HashMap<String, (f64, f64)> = HashMap::new();
+
+                    for b in pre {
+                        if
+                            let (Some(mint), Some(o)) = (
+                                b.get("mint").and_then(|v| v.as_str()),
+                                b.get("owner").and_then(|v| v.as_str()),
+                            )
+                        {
+                            if o == owner && mint != WSOL_MINT {
+                                let ui = b
+                                    .get("uiTokenAmount")
+                                    .and_then(|v| v.get("uiAmount"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+                                agg.insert(mint.to_string(), (ui, 0.0));
+                            }
+                        }
+                    }
+                    for b in post {
+                        if
+                            let (Some(mint), Some(o)) = (
+                                b.get("mint").and_then(|v| v.as_str()),
+                                b.get("owner").and_then(|v| v.as_str()),
+                            )
+                        {
+                            if o == owner && mint != WSOL_MINT {
+                                let ui = b
+                                    .get("uiTokenAmount")
+                                    .and_then(|v| v.get("uiAmount"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+                                let entry = agg.entry(mint.to_string()).or_insert((0.0, 0.0));
+                                entry.1 = ui;
+                            }
+                        }
+                    }
+                    // Choose mint with largest decrease
+                    let mut best_mint: Option<(String, f64)> = None; // (mint, decrease)
+                    for (mint, (pre_ui, post_ui)) in agg.into_iter() {
+                        let delta = post_ui - pre_ui; // negative when tokens decreased (sell)
+                        let dec = (-delta).max(0.0);
+                        if dec > 0.0 {
+                            match &best_mint {
+                                Some((_m, best_dec)) => {
+                                    if dec > *best_dec {
+                                        best_mint = Some((mint, dec));
+                                    }
+                                }
+                                None => {
+                                    best_mint = Some((mint, dec));
+                                }
+                            }
+                        }
+                    }
+                    if let Some((mint, _)) = best_mint {
+                        return Some(mint);
+                    }
+                }
+            }
+        }
+
+        // Fallback 3: As a last resort, check token_transfers list and pick non-WSOL with largest abs amount
+        if !transaction.token_transfers.is_empty() {
+            let mut best: Option<(String, f64)> = None;
+            for t in &transaction.token_transfers {
+                if t.mint == WSOL_MINT {
+                    continue;
+                }
+                let abs = t.amount.abs();
+                match &best {
+                    Some((_m, best_abs)) => {
+                        if abs > *best_abs {
+                            best = Some((t.mint.clone(), abs));
+                        }
+                    }
+                    None => {
+                        best = Some((t.mint.clone(), abs));
+                    }
+                }
+            }
+            if let Some((mint, _)) = best {
+                return Some(mint);
+            }
+        }
+
         None
     }
 
@@ -1890,7 +2031,7 @@ impl TransactionsManager {
 
     /// Extract token amount from Pump.fun transaction
     async fn extract_token_amount_from_pumpfun(&self, transaction: &Transaction) -> f64 {
-        // Look for token transfer amounts in inner instructions
+        // Look for token transfer amounts in inner instructions (non-WSOL only)
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
                 if
@@ -1907,6 +2048,12 @@ impl TransactionsManager {
                             for instruction in instructions {
                                 if let Some(parsed) = instruction.get("parsed") {
                                     if let Some(info) = parsed.get("info") {
+                                        let mint = info.get("mint").and_then(|v| v.as_str());
+                                        if let Some(m) = mint {
+                                            if m == WSOL_MINT {
+                                                continue;
+                                            }
+                                        }
                                         if let Some(token_amount) = info.get("tokenAmount") {
                                             if
                                                 let Some(ui_amount) = token_amount
@@ -1927,10 +2074,40 @@ impl TransactionsManager {
             }
         }
 
-        // Fallback to token_transfers if available
+        // Fallback to the largest absolute non-WSOL token transfer amount
         if !transaction.token_transfers.is_empty() {
-            return transaction.token_transfers[0].amount;
+            if
+                let Some(best) = transaction.token_transfers
+                    .iter()
+                    .filter(|t| t.mint != WSOL_MINT)
+                    .max_by(|a, b|
+                        a.amount
+                            .abs()
+                            .partial_cmp(&b.amount.abs())
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    )
+            {
+                return best.amount.abs();
+            }
         }
+
+        // Fallback to token_balance_changes
+        if !transaction.token_balance_changes.is_empty() {
+            if
+                let Some(best) = transaction.token_balance_changes
+                    .iter()
+                    .filter(|c| c.mint != WSOL_MINT)
+                    .max_by(|a, b|
+                        a.change
+                            .abs()
+                            .partial_cmp(&b.change.abs())
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    )
+            {
+                return best.change.abs();
+            }
+        }
+
         0.0
     }
 
@@ -2025,17 +2202,16 @@ impl TransactionsManager {
         // 2. Check for characteristic rent recovery amounts
         // 3. Verify no actual token trading occurred
 
-        let has_close_account = transaction.instructions
-            .iter()
-            .any(|instruction| {
-                (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" ||
-                    instruction.program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") &&
-                instruction.instruction_type == "closeAccount"
-            }) || 
-            // Also check logs for closeAccount patterns
-            transaction.log_messages
+        let has_close_account =
+            transaction.instructions
                 .iter()
-                .any(|log| log.contains("Instruction: CloseAccount"));
+                .any(|instruction| {
+                    (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" ||
+                        instruction.program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") &&
+                        instruction.instruction_type == "closeAccount"
+                }) ||
+            // Also check logs for closeAccount patterns
+            transaction.log_messages.iter().any(|log| log.contains("Instruction: CloseAccount"));
 
         if !has_close_account {
             return Err("No closeAccount instruction found".to_string());
@@ -2044,8 +2220,7 @@ impl TransactionsManager {
         // Check for characteristic ATA rent recovery
         // Standard ATA rent is 0.00203928 SOL (2,039,280 lamports)
         let rent_recovery = transaction.sol_balance_change;
-        let is_rent_like = rent_recovery > 0.0 && 
-            (rent_recovery >= 0.002 && rent_recovery <= 0.0025); // Allow some tolerance
+        let is_rent_like = rent_recovery > 0.0 && rent_recovery >= 0.002 && rent_recovery <= 0.0025; // Allow some tolerance
 
         if !is_rent_like {
             return Err("SOL change doesn't match ATA rent recovery pattern".to_string());
@@ -2058,7 +2233,9 @@ impl TransactionsManager {
             .any(|transfer| transfer.amount.abs() > 100.0); // More than 100 tokens indicates real trading
 
         if has_significant_token_trading {
-            return Err("Transaction has significant token trading, not a simple ATA closure".to_string());
+            return Err(
+                "Transaction has significant token trading, not a simple ATA closure".to_string()
+            );
         }
 
         // Try to extract token mint from ATA closure
@@ -2092,7 +2269,8 @@ impl TransactionsManager {
             // Find the token balance change for our wallet (usually the one being closed)
             for change in &transaction.token_balance_changes {
                 // Look for accounts that had tokens before closure
-                if change.change <= 0.0 { // Account was drained or closed
+                if change.change <= 0.0 {
+                    // Account was drained or closed
                     return Some(change.mint.clone());
                 }
             }
@@ -2103,10 +2281,15 @@ impl TransactionsManager {
         // Method 2: Extract from raw transaction data (preTokenBalances)
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
-                if let Some(pre_token_balances) = meta.get("preTokenBalances").and_then(|v| v.as_array()) {
+                if
+                    let Some(pre_token_balances) = meta
+                        .get("preTokenBalances")
+                        .and_then(|v| v.as_array())
+                {
                     for balance in pre_token_balances {
                         if let Some(mint) = balance.get("mint").and_then(|v| v.as_str()) {
-                            if mint != "So11111111111111111111111111111111111111112" { // Exclude WSOL
+                            if mint != "So11111111111111111111111111111111111111112" {
+                                // Exclude WSOL
                                 return Some(mint.to_string());
                             }
                         }
@@ -2701,7 +2884,7 @@ impl TransactionsManager {
                 // Both amounts must be meaningful for token-to-token swaps
                 *from_amount > 0.0001 && *to_amount > 0.0001
             }
-            _ => false
+            _ => false,
         }
     }
 
@@ -2951,6 +3134,103 @@ impl TransactionsManager {
                     }
                 }
 
+                // NEW: Handle fully-drained accounts that were CLOSED in this tx
+                // If a wallet-owned token account appears in preTokenBalances but NOT in postTokenBalances,
+                // we treat it as a negative change equal to its entire pre balance. This captures full sells
+                // where the ATA is closed and avoids token_amount=0.0 in swap classification.
+                if
+                    let (Some(pre_token_balances), Some(post_token_balances)) = (
+                        meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                        meta.get("postTokenBalances").and_then(|v| v.as_array()),
+                    )
+                {
+                    let wallet_str = self.wallet_pubkey.to_string();
+                    let post_indices: std::collections::HashSet<u64> = post_token_balances
+                        .iter()
+                        .filter_map(|post| post.get("accountIndex").and_then(|v| v.as_u64()))
+                        .collect();
+
+                    for pre in pre_token_balances {
+                        // Only consider wallet-owned accounts
+                        if let Some(owner) = pre.get("owner").and_then(|v| v.as_str()) {
+                            if owner != wallet_str {
+                                continue;
+                            }
+                        } else {
+                            continue;
+                        }
+
+                        let account_index = match pre.get("accountIndex").and_then(|v| v.as_u64()) {
+                            Some(idx) => idx,
+                            None => {
+                                continue;
+                            }
+                        };
+
+                        // Skip if this account still exists in post (already handled above)
+                        if post_indices.contains(&account_index) {
+                            continue;
+                        }
+
+                        let mint = match pre.get("mint").and_then(|v| v.as_str()) {
+                            Some(m) => m.to_string(),
+                            None => {
+                                continue;
+                            }
+                        };
+
+                        // Extract pre balance details
+                        let (decimals, pre_amount) = if let Some(ui) = pre.get("uiTokenAmount") {
+                            let dec = ui
+                                .get("decimals")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(9) as u8;
+                            let amt = ui
+                                .get("uiAmount")
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+                            (dec, amt)
+                        } else {
+                            (9u8, 0.0)
+                        };
+
+                        if pre_amount.abs() > 1e-12 {
+                            // Record a negative change equal to full pre balance (account drained to zero and closed)
+                            transaction.token_balance_changes.push(TokenBalanceChange {
+                                mint: mint.clone(),
+                                decimals,
+                                pre_balance: Some(pre_amount),
+                                post_balance: Some(0.0),
+                                change: -pre_amount,
+                                usd_value: None,
+                            });
+
+                            // Also add a corresponding TokenTransfer for compatibility
+                            transaction.token_transfers.push(TokenTransfer {
+                                mint: mint.clone(),
+                                amount: pre_amount, // absolute amount moved out
+                                from: wallet_str.clone(),
+                                to: "external".to_string(),
+                                program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
+                            });
+
+                            if self.debug_enabled {
+                                log(
+                                    LogTag::Transactions,
+                                    "TOKEN_BALANCE",
+                                    &format!(
+                                        "Closed ATA detected for {}: pre {:.9} -> post 0.0, change -{:.9} (mint: {})",
+                                        &transaction.signature[..8],
+                                        pre_amount,
+                                        pre_amount,
+                                        mint
+                                    )
+                                );
+                            }
+                        }
+                    }
+                }
+
                 // Extract instruction information for program ID detection
                 if let Some(transaction_data) = raw_data.get("transaction") {
                     if let Some(message) = transaction_data.get("message") {
@@ -3147,6 +3427,8 @@ impl TransactionsManager {
                             );
                         }
                     }
+
+                    // (duplicate closed-ATA handling block removed)
                 }
             }
         }

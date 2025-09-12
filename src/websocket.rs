@@ -153,7 +153,7 @@ impl SolanaWebSocketClient {
             .map_err(|e| format!("Failed to send subscription: {}", e))?;
 
         // Create heartbeat timer (ping every 30 seconds to prevent server timeout)
-        let mut heartbeat_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+        let mut heartbeat_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
         heartbeat_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         if is_debug_websocket_enabled() {

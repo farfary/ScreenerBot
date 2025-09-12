@@ -308,26 +308,30 @@ pub async fn check_lp_lock_status(token_mint: &str) -> Result<LpLockAnalysis, Sc
                 });
             }
 
-            log(
-                LogTag::Rpc,
-                "LP_TOKEN_PRECHECK",
-                &format!(
-                    "Token {} has {} holders - safe to analyze",
-                    truncate_address(token_mint, 8),
-                    holder_count
-                )
-            );
+            if crate::arguments::is_debug_security_enabled() {
+                log(
+                    LogTag::Security,
+                    "DEBUG",
+                    &format!(
+                        "Token {} has {} holders - safe to analyze",
+                        truncate_address(token_mint, 8),
+                        holder_count
+                    )
+                );
+            }
         }
         Err(e) => {
-            log(
-                LogTag::Rpc,
-                "LP_TOKEN_PRECHECK_ERROR",
-                &format!(
-                    "Failed to get holder count for {}: {} - proceeding with caution",
-                    truncate_address(token_mint, 8),
-                    e
-                )
-            );
+            if crate::arguments::is_debug_security_enabled() {
+                log(
+                    LogTag::Security,
+                    "DEBUG",
+                    &format!(
+                        "Failed to get holder count for {}: {} - proceeding with caution",
+                        truncate_address(token_mint, 8),
+                        e
+                    )
+                );
+            }
         }
     }
 
@@ -337,11 +341,13 @@ pub async fn check_lp_lock_status(token_mint: &str) -> Result<LpLockAnalysis, Sc
     let pool_info = find_liquidity_pool(token_mint).await?;
 
     if pool_info.is_none() {
-        log(
-            LogTag::Rpc,
-            "LP_LOCK_CHECK",
-            &format!("No liquidity pool found for token {}", truncate_address(token_mint, 8))
-        );
+        if crate::arguments::is_debug_security_enabled() {
+            log(
+                LogTag::Security,
+                "DEBUG",
+                &format!("No liquidity pool found for token {}", truncate_address(token_mint, 8))
+            );
+        }
 
         return Ok(LpLockAnalysis {
             token_mint: token_mint.to_string(),
@@ -369,17 +375,19 @@ pub async fn check_lp_lock_status(token_mint: &str) -> Result<LpLockAnalysis, Sc
 
     let (pool_address, lp_mint, pool_type) = pool_info.unwrap();
 
-    log(
-        LogTag::Rpc,
-        "LP_LOCK_CHECK",
-        &format!(
-            "Found {} pool {} with LP mint {} for token {}",
-            pool_type,
-            truncate_address(&pool_address, 8),
-            truncate_address(&lp_mint, 8),
-            truncate_address(token_mint, 8)
-        )
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "DEBUG",
+            &format!(
+                "Found {} pool {} with LP mint {} for token {}",
+                pool_type,
+                truncate_address(&pool_address, 8),
+                truncate_address(&lp_mint, 8),
+                truncate_address(token_mint, 8)
+            )
+        );
+    }
 
     // Step 2: Analyze LP mint authority (skip for special cases)
     let lp_mint_analysis = if pool_type.contains("Pump.fun") {
@@ -425,16 +433,18 @@ pub async fn check_lp_lock_status(token_mint: &str) -> Result<LpLockAnalysis, Sc
         locked_liquidity_usd: None, // TODO: Calculate based on pool data
     };
 
-    log(
-        LogTag::Rpc,
-        "LP_LOCK_RESULT",
-        &format!(
-            "LP lock analysis for {}: {} - {}",
-            truncate_address(token_mint, 8),
-            analysis.status.risk_level(),
-            analysis.status.description()
-        )
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "DEBUG",
+            &format!(
+                "LP lock analysis for {}: {} - {}",
+                truncate_address(token_mint, 8),
+                analysis.status.risk_level(),
+                analysis.status.description()
+            )
+        );
+    }
 
     Ok(analysis)
 }
@@ -443,22 +453,29 @@ pub async fn check_lp_lock_status(token_mint: &str) -> Result<LpLockAnalysis, Sc
 async fn find_liquidity_pool(
     token_mint: &str
 ) -> Result<Option<(String, String, String)>, ScreenerBotError> {
-    log(
-        LogTag::Rpc,
-        "POOL_SEARCH",
-        &format!("Starting comprehensive pool search for token {}", truncate_address(token_mint, 8))
-    );
-
-    // Check if this might be a Pump.fun token based on the mint address pattern
-    if token_mint.ends_with("pump") {
+    if crate::arguments::is_debug_security_enabled() {
         log(
-            LogTag::Rpc,
-            "PUMPFUN_DETECTED",
+            LogTag::Security,
+            "DEBUG",
             &format!(
-                "Token {} appears to be a Pump.fun token based on mint pattern",
+                "Starting comprehensive pool search for token {}",
                 truncate_address(token_mint, 8)
             )
         );
+    }
+
+    // Check if this might be a Pump.fun token based on the mint address pattern
+    if token_mint.ends_with("pump") {
+        if crate::arguments::is_debug_security_enabled() {
+            log(
+                LogTag::Security,
+                "DEBUG",
+                &format!(
+                    "Token {} appears to be a Pump.fun token based on mint pattern",
+                    truncate_address(token_mint, 8)
+                )
+            );
+        }
 
         // For Pump.fun tokens, use a different approach
         // The "pool" is the bonding curve mechanism, not a traditional pool
@@ -473,7 +490,9 @@ async fn find_liquidity_pool(
 
     // First try to find Raydium V4 pool
     if let Ok(Some(pool_info)) = search_dex_pool(token_mint, &PoolSearchConfig::raydium_v4()).await {
-        log(LogTag::Rpc, "POOL_FOUND", "Found Raydium V4 pool");
+        if crate::arguments::is_debug_security_enabled() {
+            log(LogTag::Security, "DEBUG", "Found Raydium V4 pool");
+        }
         return Ok(Some(pool_info));
     }
 
@@ -484,7 +503,9 @@ async fn find_liquidity_pool(
             &PoolSearchConfig::raydium_cpmm()
         ).await
     {
-        log(LogTag::Rpc, "POOL_FOUND", "Found Raydium CPMM pool");
+        if crate::arguments::is_debug_security_enabled() {
+            log(LogTag::Security, "DEBUG", "Found Raydium CPMM pool");
+        }
         return Ok(Some(pool_info));
     }
 
@@ -495,7 +516,9 @@ async fn find_liquidity_pool(
             &PoolSearchConfig::orca_whirlpool()
         ).await
     {
-        log(LogTag::Rpc, "POOL_FOUND", "Found Orca Whirlpool");
+        if crate::arguments::is_debug_security_enabled() {
+            log(LogTag::Security, "DEBUG", "Found Orca Whirlpool");
+        }
         return Ok(Some(pool_info));
     }
 
@@ -506,7 +529,9 @@ async fn find_liquidity_pool(
             &PoolSearchConfig::meteora_dlmm()
         ).await
     {
-        log(LogTag::Rpc, "POOL_FOUND", "Found Meteora DLMM pool");
+        if crate::arguments::is_debug_security_enabled() {
+            log(LogTag::Security, "DEBUG", "Found Meteora DLMM pool");
+        }
         return Ok(Some(pool_info));
     }
 
@@ -517,7 +542,9 @@ async fn find_liquidity_pool(
             &PoolSearchConfig::meteora_damm_v2()
         ).await
     {
-        log(LogTag::Rpc, "POOL_FOUND", "Found Meteora DAMM v2 pool");
+        if crate::arguments::is_debug_security_enabled() {
+            log(LogTag::Security, "DEBUG", "Found Meteora DAMM v2 pool");
+        }
         return Ok(Some(pool_info));
     }
 
@@ -528,7 +555,9 @@ async fn find_liquidity_pool(
             &PoolSearchConfig::meteora_pools()
         ).await
     {
-        log(LogTag::Rpc, "POOL_FOUND", "Found Meteora legacy pool");
+        if crate::arguments::is_debug_security_enabled() {
+            log(LogTag::Security, "DEBUG", "Found Meteora legacy pool");
+        }
         return Ok(Some(pool_info));
     }
 
@@ -539,18 +568,22 @@ async fn find_liquidity_pool(
             &PoolSearchConfig::pumpfun_amm()
         ).await
     {
-        log(LogTag::Rpc, "POOL_FOUND", "Found Pump.fun AMM pool");
+        if crate::arguments::is_debug_security_enabled() {
+            log(LogTag::Security, "DEBUG", "Found Pump.fun AMM pool");
+        }
         return Ok(Some(pool_info));
     }
 
-    log(
-        LogTag::Rpc,
-        "POOL_NOT_FOUND",
-        &format!(
-            "No liquidity pool found for token {} across all supported DEXs",
-            truncate_address(token_mint, 8)
-        )
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "DEBUG",
+            &format!(
+                "No liquidity pool found for token {} across all supported DEXs",
+                truncate_address(token_mint, 8)
+            )
+        );
+    }
 
     Ok(None)
 }

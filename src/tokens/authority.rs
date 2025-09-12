@@ -126,11 +126,13 @@ impl TokenRiskLevel {
 /// Get token authorities information for a given mint address
 /// This function handles both SPL tokens and Token-2022 tokens
 pub async fn get_token_authorities(mint: &str) -> Result<TokenAuthorities, ScreenerBotError> {
-    log(
-        LogTag::Security,
-        "DEBUG",
-        &format!("Checking authorities for mint: {}", crate::utils::safe_truncate(mint, 12))
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "DEBUG",
+            &format!("Checking authorities for mint: {}", crate::utils::safe_truncate(mint, 12))
+        );
+    }
 
     let rpc_client = get_rpc_client();
 
@@ -140,32 +142,36 @@ pub async fn get_token_authorities(mint: &str) -> Result<TokenAuthorities, Scree
     // Check if this is a Token-2022 mint first
     let is_token_2022 = rpc_client.is_token_2022_mint(mint).await.unwrap_or(false);
 
-    log(
-        LogTag::Security,
-        "DEBUG",
-        &format!(
-            "Token type detected: {} for mint: {}",
-            if is_token_2022 {
-                "Token-2022"
-            } else {
-                "SPL Token"
-            },
-            crate::utils::safe_truncate(mint, 12)
-        )
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "DEBUG",
+            &format!(
+                "Token type detected: {} for mint: {}",
+                if is_token_2022 {
+                    "Token-2022"
+                } else {
+                    "SPL Token"
+                },
+                crate::utils::safe_truncate(mint, 12)
+            )
+        );
+    }
 
     // Parse authorities from account data
     let authorities = parse_mint_authorities(&account_data, mint, is_token_2022)?;
 
-    log(
-        LogTag::Security,
-        "DEBUG",
-        &format!(
-            "Authority check complete for {}: {}",
-            crate::utils::safe_truncate(mint, 12),
-            authorities.get_authority_summary()
-        )
-    );
+    if crate::arguments::is_debug_security_enabled() {
+        log(
+            LogTag::Security,
+            "DEBUG",
+            &format!(
+                "Authority check complete for {}: {}",
+                crate::utils::safe_truncate(mint, 12),
+                authorities.get_authority_summary()
+            )
+        );
+    }
 
     Ok(authorities)
 }
@@ -250,7 +256,9 @@ pub async fn get_multiple_token_authorities(
         return Ok(Vec::new());
     }
 
-    log(LogTag::Security, "DEBUG", &format!("Checking authorities for {} tokens", mints.len()));
+    if crate::arguments::is_debug_security_enabled() {
+        log(LogTag::Security, "DEBUG", &format!("Checking authorities for {} tokens", mints.len()));
+    }
 
     let mut results = Vec::with_capacity(mints.len());
     let mut successful_checks = 0;

@@ -384,38 +384,6 @@ impl std::fmt::Display for LogTag {
     }
 }
 
-/// Check if console debug mode should force console output for pool modules
-fn should_force_console_debug(tag: &LogTag, log_type: &str) -> bool {
-    use crate::arguments::{
-        is_debug_pool_service_enabled,
-        is_debug_pool_calculator_enabled,
-        is_debug_pool_discovery_enabled,
-        is_debug_pool_analyzer_enabled,
-        is_debug_pool_cache_enabled,
-        is_debug_pool_fetcher_enabled,
-        is_debug_pool_decoders_enabled,
-        is_debug_blacklist_enabled,
-        is_debug_security_enabled,
-    };
-
-    if log_type.to_uppercase() != "DEBUG" {
-        return false;
-    }
-
-    match tag {
-        LogTag::PoolService => is_debug_pool_service_enabled(),
-        LogTag::PoolCalculator => is_debug_pool_calculator_enabled(),
-        LogTag::PoolDiscovery => is_debug_pool_discovery_enabled(),
-        LogTag::PoolAnalyzer => is_debug_pool_analyzer_enabled(),
-        LogTag::PoolCache => is_debug_pool_cache_enabled(),
-        LogTag::PoolFetcher => is_debug_pool_fetcher_enabled(),
-        LogTag::PoolDecoder => is_debug_pool_decoders_enabled(),
-        LogTag::Blacklist => is_debug_blacklist_enabled(),
-        LogTag::Security => is_debug_security_enabled(),
-        _ => false,
-    }
-}
-
 /// Print to stdout but ignore broken pipe errors (when head, grep, etc. close the pipe)
 fn print_stdout_safe(message: &str) {
     if let Err(e) = writeln!(stdout(), "{}", message) {
@@ -621,7 +589,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
 
     // Print first line with full prefix (console output)
     let console_line = format!("{}{}", base_line, message_color);
-    if !is_dashboard_enabled() || should_force_console_debug(&tag, log_type) {
+    if !is_dashboard_enabled() {
         print_stdout_safe(&console_line);
     }
 
@@ -682,7 +650,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             let chunk_color = chunk.to_string();
 
             let console_continuation = format!("{}{}", continuation_prefix, chunk_color);
-            if !is_dashboard_enabled() || should_force_console_debug(&tag, log_type) {
+            if !is_dashboard_enabled() {
                 print_stdout_safe(&console_continuation);
             }
 
