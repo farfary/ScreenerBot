@@ -25,6 +25,14 @@ static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> = LazyL
     RwLock::new(HashMap::new())
 );
 
+// Optional: global last open timestamp (cooldown)
+pub static LAST_OPEN_TIME: LazyLock<RwLock<Option<DateTime<Utc>>>> = LazyLock::new(||
+    RwLock::new(None)
+);
+
+// Cooldown seconds (small to mitigate duplicate bursts; align with previous backup constant 5s)
+pub const POSITION_OPEN_COOLDOWN_SECS: i64 = 5;
+
 // Position lock guard
 #[derive(Debug)]
 pub struct PositionLockGuard {

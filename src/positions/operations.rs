@@ -6,12 +6,18 @@ use crate::{
     utils::{ get_wallet_address, get_token_balance, get_total_token_balance },
     arguments::{ is_dry_run_enabled, is_debug_positions_enabled },
     logger::{ log, LogTag },
-    trader::TRADE_SIZE_SOL,
+    trader::{ TRADE_SIZE_SOL, MAX_OPEN_POSITIONS },
     positions_db::save_position,
     positions_types::Position,
 };
 use super::{
-    state::{ acquire_position_lock, add_position, add_signature_to_index },
+    state::{
+        acquire_position_lock,
+        add_position,
+        add_signature_to_index,
+        LAST_OPEN_TIME,
+        POSITION_OPEN_COOLDOWN_SECS,
+    },
     queue::{ enqueue_verification, VerificationItem, VerificationKind },
     transitions::PositionTransition,
     apply::apply_transition,
@@ -37,7 +43,37 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         }
     };
 
+    // Acquire per-mint lock FIRST to serialize opens for same token
     let _lock = acquire_position_lock(&token.mint).await;
+
+    // Re-check no existing open position for this mint (prevents duplicate concurrent entries)
+    if super::state::is_open_position(&token.mint).await {
+        return Err("Already have open position for this token".to_string());
+    }
+
+    // Enforce global max open positions (lightweight count)
+    let open_count = super::state::get_open_positions_count().await;
+    if open_count >= MAX_OPEN_POSITIONS {
+        return Err(
+            format!("Maximum open positions reached ({}/{})", open_count, MAX_OPEN_POSITIONS)
+        );
+    }
+
+    // Lightweight global cooldown (prevents rapid duplicate openings across different tokens)
+    {
+        let last_open_opt = LAST_OPEN_TIME.read().await.clone();
+        if let Some(last_open) = last_open_opt {
+            let elapsed = Utc::now().signed_duration_since(last_open).num_seconds();
+            if elapsed < POSITION_OPEN_COOLDOWN_SECS {
+                return Err(
+                    format!(
+                        "Opening positions cooldown active: wait {}s",
+                        POSITION_OPEN_COOLDOWN_SECS - elapsed
+                    )
+                );
+            }
+        }
+    }
 
     if is_dry_run_enabled() {
         log(
@@ -153,6 +189,12 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
             transaction_signature
         )
     );
+
+    // Update global last open time
+    {
+        let mut last = LAST_OPEN_TIME.write().await;
+        *last = Some(Utc::now());
+    }
 
     Ok(transaction_signature)
 }
