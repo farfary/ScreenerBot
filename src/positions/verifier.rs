@@ -295,7 +295,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 &format!(
                                     "⚠️ Exit verified but {} tokens remain for mint {} - position not fully liquidated",
                                     remaining_balance,
-                                    &item.mint[..8]
+                                    crate::utils::safe_truncate(&item.mint, 8)
                                 )
                             );
 
@@ -307,7 +307,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 "COMPLETE_EXIT",
                                 &format!(
                                     "✅ Exit verified with zero residual for mint {}",
-                                    &item.mint[..8]
+                                    crate::utils::safe_truncate(&item.mint, 8)
                                 )
                             );
                         }

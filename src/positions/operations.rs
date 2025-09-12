@@ -45,9 +45,14 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         }
     };
 
-    // CRITICAL: Acquire global position permit FIRST to enforce MAX_OPEN_POSITIONS atomically
-    // This prevents the race condition where multiple tasks check position count simultaneously
-    let _global_permit = acquire_global_position_permit().await?;
+    // CRITICAL: Acquire global position permit FIRST to enforce MAX_OPEN_POSITIONS atomically.
+    // IMPORTANT: We will "forget" this permit ONLY after the position is successfully
+    // created & added to in‑memory state so that the semaphore capacity remains reduced
+    // for the lifetime of the open position. All terminal close paths MUST call
+    // release_global_position_permit() (verified exit, synthetic exit, orphan removal).
+    // Any early error returns (before we forget the permit) will automatically drop it
+    // and thus NOT consume a slot.
+    let mut _global_permit = acquire_global_position_permit().await?;
 
     // Acquire per-mint lock SECOND to serialize opens for same token
     let _lock = acquire_position_lock(&token.mint).await;
@@ -160,6 +165,11 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
 
     // Add to state
     add_position(position_with_id).await;
+
+    // We intentionally keep the global slot occupied for the lifecycle of this position by
+    // calling forget() so the permit is NOT returned on drop. Terminal transitions will
+    // explicitly release it.
+    _global_permit.forget();
     add_signature_to_index(&transaction_signature, &token.mint).await;
 
     // Get block height for expiration
@@ -235,11 +245,41 @@ pub async fn close_position_direct(
         format!("Failed to get wallet address: {}", e)
     )?;
 
-    let token_balance = get_total_token_balance(&wallet_address, token_mint).await.map_err(|e|
+    let total_token_balance = get_total_token_balance(&wallet_address, token_mint).await.map_err(|e|
         format!("Failed to get total token balance: {}", e)
     )?;
 
-    if token_balance == 0 {
+    // Fetch primary (associated) token account balance separately. This is the balance most
+    // swap routes will actually spend from. When multiple token accounts exist, passing the
+    // aggregated total to a router that only sources a single ATA causes an "insufficient funds"
+    // simulation failure (observed in logs). We therefore cap the sell amount to the primary
+    // balance when it is lower than the aggregate, and log the discrepancy.
+    let primary_token_balance = get_token_balance(&wallet_address, token_mint).await.unwrap_or(0);
+
+    let (sell_amount, multi_account_note) = if
+        primary_token_balance == 0 &&
+        total_token_balance > 0
+    {
+        // We have tokens but not in the primary ATA (likely split or token-2022 alt). Use total but
+        // expect potential router failure; still attempt but log.
+        (total_token_balance, Some("primary_ata_empty_using_total".to_string()))
+    } else if total_token_balance > primary_token_balance && primary_token_balance > 0 {
+        (
+            primary_token_balance,
+            Some(
+                format!(
+                    "multi_account_total={} primary={} shortfall={}, limiting_to_primary",
+                    total_token_balance,
+                    primary_token_balance,
+                    total_token_balance - primary_token_balance
+                )
+            ),
+        )
+    } else {
+        (total_token_balance, None)
+    };
+
+    if sell_amount == 0 {
         return Err("No tokens to sell".to_string());
     }
 
@@ -249,15 +289,23 @@ pub async fn close_position_direct(
         &format!(
             "🔄 Selling ALL tokens for {}: {} total units across all accounts",
             token.symbol,
-            token_balance
+            total_token_balance
         )
     );
+
+    if let Some(note) = &multi_account_note {
+        log(
+            LogTag::Positions,
+            "MULTI_ACCOUNT_SELL_ADJUSTMENT",
+            &format!("⚠️ Sell amount adjusted due to account distribution: {}", note)
+        );
+    }
 
     // Execute swap
     let quote = get_best_quote(
         token_mint,
         SOL_MINT,
-        token_balance,
+        sell_amount,
         &wallet_address,
         5.0 // 5% slippage for exits
     ).await.map_err(|e| format!("Quote failed: {}", e))?;
@@ -266,9 +314,22 @@ pub async fn close_position_direct(
         &token,
         token_mint,
         SOL_MINT,
-        token_balance,
+        sell_amount,
         quote
-    ).await.map_err(|e| format!("Swap failed: {}", e))?;
+    ).await.map_err(|e| {
+        // If we attempted to sell the aggregated total and failed with insufficient funds,
+        // hint at likely multi-account cause for easier diagnosis.
+        let msg = e.to_string();
+        if
+            msg.to_lowercase().contains("insufficient funds") &&
+            multi_account_note.is_none() &&
+            total_token_balance > sell_amount
+        {
+            format!("Swap failed (insufficient funds) - aggregated balance mismatch; consider consolidating ATAs: {}", msg)
+        } else {
+            format!("Swap failed: {}", msg)
+        }
+    })?;
 
     let transaction_signature = swap_result.transaction_signature.ok_or(
         "No transaction signature"
@@ -276,16 +337,16 @@ pub async fn close_position_direct(
 
     // CRITICAL: Log execution vs requested amounts to detect partial execution
     if let Ok(executed_amount) = swap_result.input_amount.parse::<u64>() {
-        if executed_amount < token_balance {
+        if executed_amount < sell_amount {
             log(
                 LogTag::Positions,
                 "PARTIAL_EXECUTION",
                 &format!(
                     "⚠️ PARTIAL SWAP DETECTED for {}: Requested {} tokens, executed {} tokens, shortfall: {}",
                     token.symbol,
-                    token_balance,
+                    sell_amount,
                     executed_amount,
-                    token_balance - executed_amount
+                    sell_amount - executed_amount
                 )
             );
         } else {

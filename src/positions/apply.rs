@@ -160,6 +160,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         Ok(_) => {
                             effects.db_updated = true;
                             effects.position_closed = true;
+                            // Release global slot for synthetic exits as well
+                            release_global_position_permit();
+                            if is_debug_positions_enabled() {
+                                log(
+                                    LogTag::Positions,
+                                    "DEBUG",
+                                    &format!("🔓 Released position slot for synthetic exit (ID: {})", position_id)
+                                );
+                            }
                         }
                         Err(e) => {
                             return Err(format!("Failed to update database: {}", e));
@@ -179,6 +188,16 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             LogTag::Positions,
                             "DEBUG",
                             &format!("🗑️ Removed orphan entry position {}", position_id)
+                        );
+                    }
+
+                    // Orphan entries also occupied a slot originally; free it now
+                    release_global_position_permit();
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG",
+                            &format!("🔓 Released position slot after orphan removal (ID: {})", position_id)
                         );
                     }
                 }
