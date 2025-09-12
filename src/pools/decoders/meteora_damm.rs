@@ -230,26 +230,6 @@ impl PoolDecoder for MeteoraDammDecoder {
         // Based on Uniswap v3 / concentrated liquidity math principles:
         // price = (sqrt_price / 2^64)^2, and price represents token_b/token_a ratio
 
-        // For debugging: calculate simple vault ratio first
-        let simple_ratio = if token_balance > 0 {
-            let sol_f64 = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
-            let token_f64 = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
-            sol_f64 / token_f64
-        } else {
-            0.0
-        };
-
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "DAMM simple vault ratio: {:.12} SOL per token (for comparison)",
-                    simple_ratio
-                )
-            );
-        }
-
         // Use sqrt_price from parsed pool data
         let price_sol = if damm_info.sqrt_price > 0 {
             // sqrt_price calculation using Q64.64 fixed point arithmetic
@@ -271,7 +251,7 @@ impl PoolDecoder for MeteoraDammDecoder {
             let decimal_adj_factor = (10_f64).powi((token_decimals as i32) - (sol_decimals as i32));
             let decimal_adjusted_price = raw_price * decimal_adj_factor;
 
-            let mut oriented_price = if is_sol_mint(&damm_info.token_b_mint) {
+            let oriented_price = if is_sol_mint(&damm_info.token_b_mint) {
                 // token_b is SOL, token_a is target
                 // If sqrt_price = sqrt(token_b/token_a) = sqrt(SOL/target), then price = SOL/target
                 // This is what we want: SOL per target token
@@ -289,27 +269,6 @@ impl PoolDecoder for MeteoraDammDecoder {
                 // Shouldn't happen: not a SOL pair; use decimal_adjusted_price as-is
                 decimal_adjusted_price
             };
-
-            // Sanity fallback - if sqrt_price result differs significantly from vault ratio, use vault ratio
-            if
-                !oriented_price.is_finite() ||
-                oriented_price <= 0.0 ||
-                (simple_ratio > 0.0 &&
-                    (oriented_price / simple_ratio > 10.0 || simple_ratio / oriented_price > 10.0))
-            {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "WARN",
-                        &format!(
-                            "DAMM sqrt_price gives unreasonable result ({:.12}), falling back to vault ratio {:.12}",
-                            oriented_price,
-                            simple_ratio
-                        )
-                    );
-                }
-                oriented_price = simple_ratio;
-            }
 
             if is_debug_pool_decoders_enabled() {
                 log(
@@ -330,15 +289,14 @@ impl PoolDecoder for MeteoraDammDecoder {
 
             oriented_price
         } else {
-            // Fallback to vault ratio if sqrt_price is zero or invalid
             if is_debug_pool_decoders_enabled() {
                 log(
                     LogTag::PoolDecoder,
-                    "WARN",
-                    "DAMM: sqrt_price is zero, using vault ratio as fallback"
+                    "ERROR",
+                    "DAMM: sqrt_price is zero, cannot calculate price"
                 );
             }
-            simple_ratio
+            return None;
         };
 
         if is_debug_pool_decoders_enabled() {
@@ -346,9 +304,8 @@ impl PoolDecoder for MeteoraDammDecoder {
                 LogTag::PoolDecoder,
                 "INFO",
                 &format!(
-                    "DAMM sqrt_price calculation: raw={}, simple_vault_ratio={:.12}, final_price={:.12}",
+                    "DAMM sqrt_price calculation: raw={}, final_price={:.12}",
                     damm_info.sqrt_price,
-                    simple_ratio,
                     price_sol
                 )
             );
@@ -366,28 +323,13 @@ impl PoolDecoder for MeteoraDammDecoder {
             return None;
         }
 
-        // For display purposes, calculate effective reserves from vault balances
-        // (These are not used for price calculation, only for informational display)
+        // Calculate reserves for display purposes
         let sol_reserves_display = ((sol_balance as f64) / (10_f64).powi(sol_decimals as i32)).max(
             0.0
         );
         let token_reserves_display = (
             (token_balance as f64) / (10_f64).powi(token_decimals as i32)
         ).max(0.0);
-
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "DAMM final calculation: sqrt_price_method={:.12}, vault_ratio={:.12} (reserves: sol={:.6}, token={:.6})",
-                    price_sol,
-                    simple_ratio,
-                    sol_reserves_display,
-                    token_reserves_display
-                )
-            );
-        }
 
         Some(PriceResult {
             mint: token_mint,
