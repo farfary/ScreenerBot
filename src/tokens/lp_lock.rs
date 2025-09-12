@@ -14,7 +14,10 @@ use crate::arguments::is_debug_pool_discovery_enabled;
 use crate::errors::ScreenerBotError;
 use crate::logger::{ log, LogTag };
 use crate::rpc::get_rpc_client;
-use crate::tokens::holders::get_token_account_count_estimate;
+use crate::tokens::holders::{
+    get_token_account_count_estimate,
+    get_token_account_count_estimate_with_cache,
+};
 use base64::Engine;
 use chrono::{ DateTime, Utc };
 use rusqlite::{ Connection, OptionalExtension };
@@ -74,9 +77,11 @@ impl LpLockStatus {
             LpLockStatus::Burned => true,
             LpLockStatus::TimeLocked { .. } => true,
             LpLockStatus::ProgramLocked { program, .. } => {
-                // Pump.fun bonding curves are considered relatively safe
+                // These programs are considered relatively safe
                 // as the liquidity is protocol-controlled
                 program.contains("Pump.fun") ||
+                    program.contains("Meteora") ||
+                    program.contains("Orca") ||
                     program.contains("Team Finance") ||
                     program.contains("Streamflow") ||
                     program.contains("Unvest")
@@ -253,6 +258,15 @@ impl LockPrograms {
 /// Check if a token's liquidity pool is locked
 /// This is the main function that should be used everywhere
 pub async fn check_lp_lock_status(token_mint: &str) -> Result<LpLockAnalysis, ScreenerBotError> {
+    check_lp_lock_status_with_cache(token_mint, true).await
+}
+
+/// Check if a token's liquidity pool is locked with cache control
+/// Set bypass_cache to false to force fresh data
+pub async fn check_lp_lock_status_with_cache(
+    token_mint: &str,
+    use_cache: bool
+) -> Result<LpLockAnalysis, ScreenerBotError> {
     log(
         LogTag::Security,
         "DEBUG",
@@ -267,7 +281,7 @@ pub async fn check_lp_lock_status(token_mint: &str) -> Result<LpLockAnalysis, Sc
         &format!("Pre-checking token holder count for {}", truncate_address(token_mint, 8))
     );
 
-    match get_token_account_count_estimate(token_mint).await {
+    match get_token_account_count_estimate_with_cache(token_mint, use_cache).await {
         Ok(holder_count) => {
             const MAX_SAFE_HOLDERS: usize = 5000;
             if holder_count > MAX_SAFE_HOLDERS {
@@ -1193,7 +1207,17 @@ fn determine_lock_status(
         };
     }
 
-    // Traditional LP token analysis for Raydium, Meteora, etc.
+    // Special handling for Meteora pools (DLMM, DAMM v2, etc.)
+    if pool_type.contains("Meteora") {
+        // Meteora pools may not use traditional LP tokens or may have different mechanics
+        // For DAMM v2 and DLMM, liquidity is often managed programmatically
+        return LpLockStatus::ProgramLocked {
+            program: format!("Meteora Protocol ({})", pool_type),
+            amount: 0, // Meteora-specific liquidity management
+        };
+    }
+
+    // Traditional LP token analysis for Raydium, etc.
 
     // Priority 1: If mint authority is burned AND supply is zero, it's permanently locked
     if mint_analysis.is_burned {

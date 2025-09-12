@@ -56,24 +56,55 @@ static ESTIMATE_CACHE: Lazy<DashMap<String, (Instant, usize)>> = Lazy::new(|| Da
 // TTL for cache entries
 const ESTIMATE_TTL: Duration = Duration::from_secs(60);
 
+/// Clear the cached estimate for a specific token
+pub fn clear_account_count_cache(mint_address: &str) {
+    ESTIMATE_CACHE.remove(mint_address);
+    log(
+        LogTag::Security,
+        "CACHE_CLEAR",
+        &format!("Cleared cached account count for mint {}", safe_truncate(mint_address, 8))
+    );
+}
+
 /// Estimate the number of token accounts for a mint without fetching full data
 /// This is used to determine if we should skip expensive holder analysis
 /// Uses dataSlice to efficiently count accounts without downloading account data
 pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usize, String> {
-    // Fast path: return cached value if fresh
-    if let Some((ts, value)) = ESTIMATE_CACHE.get(mint_address).map(|e| *e.value()) {
-        if ts.elapsed() < ESTIMATE_TTL {
-            log(
-                LogTag::Rpc,
-                "CACHE",
-                &format!(
-                    "Using cached account count estimate {} for mint {}",
-                    value,
-                    safe_truncate(mint_address, 8)
-                )
-            );
-            return Ok(value);
+    get_token_account_count_estimate_with_cache(mint_address, true).await
+}
+
+/// Get token account count estimate with optional cache bypass
+pub async fn get_token_account_count_estimate_with_cache(
+    mint_address: &str,
+    use_cache: bool
+) -> Result<usize, String> {
+    // Fast path: return cached value if fresh and cache is enabled
+    if use_cache {
+        if let Some((ts, value)) = ESTIMATE_CACHE.get(mint_address).map(|e| *e.value()) {
+            if ts.elapsed() < ESTIMATE_TTL {
+                log(
+                    LogTag::Rpc,
+                    "CACHE",
+                    &format!(
+                        "Using cached account count estimate {} for mint {}",
+                        value,
+                        safe_truncate(mint_address, 8)
+                    )
+                );
+                return Ok(value);
+            }
         }
+    } else {
+        // Clear cache if bypass requested
+        ESTIMATE_CACHE.remove(mint_address);
+        log(
+            LogTag::Security,
+            "CACHE_BYPASS",
+            &format!(
+                "Bypassing cache for account count estimate of mint {}",
+                safe_truncate(mint_address, 8)
+            )
+        );
     }
 
     // Acquire per-mint lock to dedupe concurrent estimations
@@ -83,18 +114,20 @@ pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usiz
     let _guard = lock.lock().await;
 
     // Re-check cache after acquiring the lock (another task may have filled it)
-    if let Some((ts, value)) = ESTIMATE_CACHE.get(mint_address).map(|e| *e.value()) {
-        if ts.elapsed() < ESTIMATE_TTL {
-            log(
-                LogTag::Rpc,
-                "CACHE",
-                &format!(
-                    "Using cached account count estimate {} for mint {}",
-                    value,
-                    safe_truncate(mint_address, 8)
-                )
-            );
-            return Ok(value);
+    if use_cache {
+        if let Some((ts, value)) = ESTIMATE_CACHE.get(mint_address).map(|e| *e.value()) {
+            if ts.elapsed() < ESTIMATE_TTL {
+                log(
+                    LogTag::Rpc,
+                    "CACHE",
+                    &format!(
+                        "Using cached account count estimate {} for mint {}",
+                        value,
+                        safe_truncate(mint_address, 8)
+                    )
+                );
+                return Ok(value);
+            }
         }
     }
 
@@ -193,22 +226,51 @@ pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usiz
         Ok(response) => {
             let first_page_count = response.accounts.len();
 
-            // Smart estimation: if first page is full and there's more, it's a large token
+            // Smart estimation: if first page is full and there's more, get better estimate
             let estimated_count = if response.pagination_key.is_some() && first_page_count >= 2000 {
-                // If there's pagination and first page is full, estimate it's much larger
-                // For security purposes, we just need to know it's >5000
-                if crate::arguments::is_debug_security_enabled() {
-                    log(
-                        LogTag::Security,
-                        "DEBUG",
-                        &format!(
-                            "Large token detected: {} accounts in first page with more pages - estimating >10000 total for mint {}",
-                            first_page_count,
-                            safe_truncate(mint_address, 8)
-                        )
-                    );
+                // Don't multiply by 5 immediately - try to get a second page for better estimate
+                match
+                    rpc_client.get_program_accounts_v2(
+                        program_id,
+                        Some(filters.clone()),
+                        Some("base64"),
+                        Some(data_slice.clone()),
+                        Some(2000),
+                        response.pagination_key.clone(),
+                        None,
+                        Some(30)
+                    ).await
+                {
+                    Ok(second_page) => {
+                        let total_from_two_pages = first_page_count + second_page.accounts.len();
+                        if second_page.pagination_key.is_some() {
+                            // Still more pages, but be more conservative with estimation
+                            // If we got 4000+ accounts in two pages, it's likely large
+                            if total_from_two_pages >= 4000 {
+                                total_from_two_pages * 2 // More conservative estimate
+                            } else {
+                                total_from_two_pages + 1000 // Add buffer for remaining pages
+                            }
+                        } else {
+                            // No more pages, exact count
+                            total_from_two_pages
+                        }
+                    }
+                    Err(_) => {
+                        // Failed to get second page, use conservative estimate
+                        if crate::arguments::is_debug_security_enabled() {
+                            log(
+                                LogTag::Security,
+                                "DEBUG",
+                                &format!(
+                                    "Failed to get second page for better estimate, using conservative estimate for mint {}",
+                                    safe_truncate(mint_address, 8)
+                                )
+                            );
+                        }
+                        first_page_count * 2 // More conservative than *5
+                    }
                 }
-                first_page_count * 5 // Conservative estimate for large tokens
             } else if response.pagination_key.is_some() {
                 // If there's pagination but first page isn't full, fetch one more page for better estimate
                 match
@@ -254,8 +316,10 @@ pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usiz
                     )
                 );
             }
-            // Update cache
-            ESTIMATE_CACHE.insert(mint_address.to_string(), (Instant::now(), estimated_count));
+            // Update cache only if we're not bypassing cache
+            if use_cache {
+                ESTIMATE_CACHE.insert(mint_address.to_string(), (Instant::now(), estimated_count));
+            }
             Ok(estimated_count)
         }
         Err(e) => {
@@ -292,6 +356,29 @@ pub async fn should_skip_holder_analysis(mint_address: &str) -> Result<bool, Str
     }
 
     Ok(should_skip)
+}
+
+/// Check if holder analysis should be skipped, returning both decision and estimated count
+pub async fn should_skip_holder_analysis_with_count(
+    mint_address: &str
+) -> Result<(bool, usize), String> {
+    let account_count = get_token_account_count_estimate(mint_address).await?;
+    let should_skip = account_count > MAX_ANALYZABLE_ACCOUNTS;
+
+    if should_skip {
+        log(
+            LogTag::Rpc,
+            "SKIP_ANALYSIS",
+            &format!(
+                "Skipping holder analysis for {} - {} accounts exceeds maximum {}",
+                safe_truncate(mint_address, 8),
+                account_count,
+                MAX_ANALYZABLE_ACCOUNTS
+            )
+        );
+    }
+
+    Ok((should_skip, account_count))
 }
 
 /// Core function to fetch all token accounts for a mint

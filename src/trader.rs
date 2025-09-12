@@ -96,7 +96,7 @@ pub const DEBUG_FORCE_SELL_MODE: bool = true;
 pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 45.0;
 
 /// Debug mode: Force buy tokens when they have a simple price drop (for testing)
-pub const DEBUG_FORCE_BUY_MODE: bool = true;
+pub const DEBUG_FORCE_BUY_MODE: bool = false;
 
 /// Debug mode: Price drop threshold percentage to trigger force buy (e.g., 3.0 for 3% drop)
 pub const DEBUG_FORCE_BUY_DROP_THRESHOLD_PERCENT: f64 = 0.5;

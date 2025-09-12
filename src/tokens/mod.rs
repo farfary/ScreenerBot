@@ -54,6 +54,7 @@ pub use dexscreener::{
 };
 pub use discovery::{ discover_tokens_once, start_token_discovery, TokenDiscovery };
 pub use holders::{
+    clear_account_count_cache,
     get_count_holders,
     get_holder_stats,
     get_top_holders_analysis,
@@ -63,6 +64,7 @@ pub use holders::{
 };
 pub use lp_lock::{
     check_lp_lock_status,
+    check_lp_lock_status_with_cache,
     check_multiple_lp_locks,
     is_lp_safe,
     LockPrograms,

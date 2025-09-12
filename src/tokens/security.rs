@@ -22,14 +22,22 @@ use crate::{
             TokenRiskLevel,
         },
         holders::{
+            clear_account_count_cache,
             get_holder_stats,
             get_top_holders_analysis,
             should_skip_holder_analysis,
+            should_skip_holder_analysis_with_count,
             get_token_account_count_estimate,
             HolderStats,
             TopHoldersAnalysis,
         },
-        lp_lock::{ check_lp_lock_status, check_multiple_lp_locks, LpLockAnalysis, LpLockStatus },
+        lp_lock::{
+            check_lp_lock_status,
+            check_lp_lock_status_with_cache,
+            check_multiple_lp_locks,
+            LpLockAnalysis,
+            LpLockStatus,
+        },
     },
     utils::safe_truncate,
 };
@@ -919,6 +927,8 @@ impl TokenSecurityAnalyzer {
                 return self.update_security_info(db_info).await;
             }
         } else {
+            // Force refresh requested - clear holder count cache to get fresh estimate
+            clear_account_count_cache(mint);
             log(
                 LogTag::Security,
                 "DEBUG",
@@ -935,7 +945,7 @@ impl TokenSecurityAnalyzer {
             "DEBUG",
             &format!("Performing full security analysis for {}", safe_truncate(mint, 8))
         );
-        self.perform_full_security_analysis(mint).await
+        self.perform_full_security_analysis(mint, force_refresh).await
     }
 
     /// Batch analyze multiple tokens efficiently
@@ -1126,7 +1136,8 @@ impl TokenSecurityAnalyzer {
     /// Perform full security analysis for a single token
     async fn perform_full_security_analysis(
         &self,
-        mint: &str
+        mint: &str,
+        force_refresh: bool
     ) -> Result<TokenSecurityInfo, ScreenerBotError> {
         let now = Utc::now();
 
@@ -1163,7 +1174,7 @@ impl TokenSecurityAnalyzer {
         };
 
         // Get LP lock information (optional)
-        let lp_lock_info = match check_lp_lock_status(mint).await {
+        let lp_lock_info = match check_lp_lock_status_with_cache(mint, !force_refresh).await {
             Ok(info) => Some(info),
             Err(e) => {
                 log(
@@ -1428,8 +1439,8 @@ impl TokenSecurityAnalyzer {
         mint: &str
     ) -> Result<HolderSecurityInfo, ScreenerBotError> {
         // Pre-check if token has too many accounts before attempting analysis
-        match should_skip_holder_analysis(mint).await {
-            Ok(should_skip) => {
+        match should_skip_holder_analysis_with_count(mint).await {
+            Ok((should_skip, estimated_count)) => {
                 if should_skip {
                     log(
                         LogTag::Security,
@@ -1439,9 +1450,9 @@ impl TokenSecurityAnalyzer {
                             safe_truncate(mint, 8)
                         )
                     );
-                    // Return conservative holder info for tokens with many holders
+                    // Return conservative holder info with actual estimated count
                     return Ok(HolderSecurityInfo {
-                        total_holders: u32::MAX, // Indicates very high count
+                        total_holders: estimated_count.min(u32::MAX as usize) as u32, // Use actual estimate, capped at u32::MAX
                         top_10_concentration: 0.0, // Unknown
                         top_5_concentration: 0.0, // Unknown
                         largest_holder_percentage: 0.0, // Unknown
@@ -1473,9 +1484,15 @@ impl TokenSecurityAnalyzer {
                     error_msg.contains("deprioritized") ||
                     error_msg.contains("Request too large")
                 {
+                    // Try to get estimated count for display
+                    let estimated_count = match get_token_account_count_estimate(mint).await {
+                        Ok(count) => count.min(u32::MAX as usize) as u32,
+                        Err(_) => u32::MAX, // Fallback to max if estimate fails
+                    };
+
                     // Return minimal holder info indicating high holder count
                     return Ok(HolderSecurityInfo {
-                        total_holders: u32::MAX, // Indicates unknown/high count
+                        total_holders: estimated_count,
                         top_10_concentration: 0.0,
                         top_5_concentration: 0.0,
                         largest_holder_percentage: 0.0,
