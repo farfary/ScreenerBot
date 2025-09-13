@@ -95,7 +95,7 @@ pub async fn get_holder_count(mint_address: &str) -> Result<u32, String> {
                 LogTag::Rpc,
                 "HOLDER_COUNT",
                 &format!(
-                    "Found {} holders for mint {} via getProgramAccounts",
+                    "Found {} holders with non-zero balance for mint {} via getProgramAccounts",
                     count,
                     safe_truncate(mint_address, 8)
                 )
@@ -171,76 +171,61 @@ async fn get_token_accounts_by_mint(mint_address: &str) -> Result<HashMap<String
     };
 
     let mut results = HashMap::new();
-    let mut pagination_key: Option<String> = None;
-    let mut total_fetched = 0;
-    const MAX_ACCOUNTS: u32 = 10000; // Reasonable limit to avoid long waits
 
-    loop {
-        let response = match
-            client.get_program_accounts_v2(
-                program_id,
-                Some(filters.clone()),
-                Some("jsonParsed"), // Use jsonParsed for compatibility
-                None, // Get full account data
-                Some(1000), // Batch size
-                pagination_key.clone(),
-                None, // No changed_since_slot
-                Some(30) // 30 second timeout
-            ).await
-        {
-            Ok(response) => response,
-            Err(e) => {
-                log(
-                    LogTag::Rpc,
-                    "ERROR",
-                    &format!(
-                        "RPC request failed for mint {}: {}",
-                        safe_truncate(mint_address, 8),
-                        e
-                    )
-                );
-                return Err(format!("RPC request failed: {}", e));
-            }
-        };
+    // Single call only - no pagination, limit to 1000 accounts max
+    let response = match
+        client.get_program_accounts_v2(
+            program_id,
+            Some(filters.clone()),
+            Some("jsonParsed"), // Use jsonParsed for compatibility
+            None, // Get full account data
+            Some(1000), // Limit to 1000 accounts max
+            None, // No pagination - single call only
+            None, // No changed_since_slot
+            Some(30) // 30 second timeout
+        ).await
+    {
+        Ok(response) => response,
+        Err(e) => {
+            log(
+                LogTag::Rpc,
+                "ERROR",
+                &format!("RPC request failed for mint {}: {}", safe_truncate(mint_address, 8), e)
+            );
+            return Err(format!("RPC request failed: {}", e));
+        }
+    };
 
-        log(
-            LogTag::Rpc,
-            "PROGRAM_ACCOUNTS",
-            &format!(
-                "getProgramAccountsV2 returned {} accounts for mint {} (total: {})",
-                response.accounts.len(),
-                safe_truncate(mint_address, 8),
-                total_fetched + response.accounts.len()
-            )
-        );
+    log(
+        LogTag::Rpc,
+        "PROGRAM_ACCOUNTS",
+        &format!(
+            "getProgramAccountsV2 returned {} accounts for mint {}",
+            response.accounts.len(),
+            safe_truncate(mint_address, 8)
+        )
+    );
 
-        // Process accounts from this batch using jsonParsed data
-        for account in &response.accounts {
-            match parse_json_parsed_account(account, mint_address) {
-                Ok((owner, amount)) => {
+    // Process accounts - only count non-zero balances
+    for account in &response.accounts {
+        match parse_json_parsed_account(account, mint_address) {
+            Ok((owner, amount)) => {
+                // Only include accounts with non-zero balance
+                if amount > 0 {
                     results.insert(owner, amount);
                 }
-                Err(e) => {
-                    // Only log first few errors to avoid spam
-                    if results.is_empty() {
-                        log(
-                            LogTag::Rpc,
-                            "PARSE_ERROR",
-                            &format!("Failed to parse account (first error): {}", e)
-                        );
-                    }
+            }
+            Err(e) => {
+                // Only log first few errors to avoid spam
+                if results.is_empty() {
+                    log(
+                        LogTag::Rpc,
+                        "PARSE_ERROR",
+                        &format!("Failed to parse account (first error): {}", e)
+                    );
                 }
             }
         }
-
-        total_fetched += response.accounts.len();
-
-        // Check if we should continue
-        if response.pagination_key.is_none() || total_fetched >= (MAX_ACCOUNTS as usize) {
-            break;
-        }
-
-        pagination_key = response.pagination_key;
     }
 
     if results.is_empty() {
