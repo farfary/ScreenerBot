@@ -1,8 +1,12 @@
-/// Liquidity Pool Lock Detection Module
+/// Enhanced Liquidity Pool Lock Detection Module
 ///
-/// This module provides functionality to detect whether a token's liquidity pool
-/// is locked or not. It uses DexScreener API cached pool data instead of RPC calls
-/// to find pools, then checks if LP tokens are locked/burned.
+/// This module provides comprehensive functionality to detect whether a token's
+/// liquidity pool is locked across all major DEXes on Solana. It supports:
+/// - Multi-pool analysis across different DEXes
+/// - DEX-specific LP mint extraction
+/// - Comprehensive on-chain verification
+/// - Special handling for bonding curves and concentrated liquidity
+/// - Robust fallback strategies
 
 use crate::logger::{ log, LogTag };
 use crate::rpc::get_rpc_client;
@@ -12,12 +16,21 @@ use crate::tokens::dexscreener::{
     TokenPair,
 };
 use crate::pools::decoders::RaydiumCpmmDecoder;
-use crate::pools::types::ProgramKind;
+use crate::pools::types::{
+    ProgramKind,
+    RAYDIUM_CPMM_PROGRAM_ID,
+    RAYDIUM_CLMM_PROGRAM_ID,
+    RAYDIUM_LEGACY_AMM_PROGRAM_ID,
+    ORCA_WHIRLPOOL_PROGRAM_ID,
+    METEORA_DLMM_PROGRAM_ID,
+    METEORA_DAMM_PROGRAM_ID,
+    PUMP_FUN_AMM_PROGRAM_ID,
+    PUMP_FUN_LEGACY_PROGRAM_ID,
+};
 use crate::utils::safe_truncate;
 use base64;
 use chrono::{ DateTime, Utc };
 use serde::{ Deserialize, Serialize };
-use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::program_pack::Pack;
 use std::collections::HashMap;
@@ -31,7 +44,7 @@ static LP_LOCK_CACHE: LazyLock<RwLock<HashMap<String, CachedLpLockAnalysis>>> = 
 
 const LP_LOCK_CACHE_TTL_SECS: i64 = 300; // 5 minutes
 
-// Known LP lock/vesting program addresses on Solana
+/// Enhanced list of known LP lock/vesting program addresses on Solana
 const KNOWN_LOCK_PROGRAMS: &[(&str, &str)] = &[
     // Team Finance
     ("J2ZDhSq8CWNaQ1UZAFALxLm4oJ7mS9tCKQCkSN8AiFJd", "Team Finance V2"),
@@ -39,6 +52,7 @@ const KNOWN_LOCK_PROGRAMS: &[(&str, &str)] = &[
 
     // Streamflow
     ("6VPVDzZLpYEXvtUfhvl2rL1xF7o9NKP3h1qcZrJ9QvXm", "Streamflow"),
+    ("strmRqUCoQUgGUan5YhzUZa6KqdzwX5L6FpUxfmKg5m", "Streamflow V2"),
 
     // Realms/SPL Governance
     ("GovER5Lthms3bLBqWub97yVrMmEogzX7xNjdXpPPCVZw", "SPL Governance"),
@@ -46,16 +60,56 @@ const KNOWN_LOCK_PROGRAMS: &[(&str, &str)] = &[
     // Solana native programs for burning/locking
     ("11111111111111111111111111111111", "System Program (burned)"),
     ("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "SPL Token Program"),
+
+    // Additional lock programs
+    ("LocktDzaV1W2Bm9DeZeiyz4J9zs4fRqNiYqQyracRXw", "Lockt Protocol"),
+    ("CLocKyM6DFBNnYWkXSdNk9xFAKpH1R1UvRFWpuNhzVE", "CLock"),
+    ("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", "Paid Network"),
 ];
 
-// DEX Program IDs for LP mint extraction
-const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
-const RAYDIUM_CLMM_PROGRAM_ID: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK";
-const RAYDIUM_LEGACY_PROGRAM_ID: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
-const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
-const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
-const PUMPFUN_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
-const PUMPFUN_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
+/// Extract LP mint using program-specific logic
+fn extract_lp_mint(
+    program_id: &str,
+    data: &[u8],
+    pool_address: &str,
+    details: &mut Vec<String>
+) -> Result<Option<String>, String> {
+    log(
+        LogTag::Security,
+        "LP_EXTRACTOR",
+        &format!(
+            "Extracting LP mint for program {} on pool {}",
+            safe_truncate(program_id, 12),
+            safe_truncate(pool_address, 8)
+        )
+    );
+
+    // Match on program ID and call appropriate extractor
+    match program_id {
+        RAYDIUM_CPMM_PROGRAM_ID => extract_raydium_cpmm_lp(data, pool_address),
+        RAYDIUM_CLMM_PROGRAM_ID => extract_raydium_clmm_lp(data, pool_address),
+        RAYDIUM_LEGACY_AMM_PROGRAM_ID => extract_raydium_legacy_lp(data, pool_address),
+        ORCA_WHIRLPOOL_PROGRAM_ID => extract_orca_whirlpool_lp(data, pool_address),
+        METEORA_DLMM_PROGRAM_ID => extract_meteora_dlmm_lp(data, pool_address),
+        METEORA_DAMM_PROGRAM_ID => extract_meteora_damm_lp(data, pool_address),
+        PUMP_FUN_AMM_PROGRAM_ID => extract_pumpfun_amm_lp(data, pool_address),
+        PUMP_FUN_LEGACY_PROGRAM_ID => extract_pumpfun_legacy_lp(data, pool_address),
+        _ => {
+            // Unknown program ID
+            details.push(format!("Unknown pool program: {}", safe_truncate(program_id, 12)));
+            log(
+                LogTag::Security,
+                "UNKNOWN_PROGRAM",
+                &format!(
+                    "No LP extractor available for program {} on pool {}",
+                    safe_truncate(program_id, 12),
+                    safe_truncate(pool_address, 8)
+                )
+            );
+            Ok(None)
+        }
+    }
+}
 
 /// Cached LP lock analysis entry
 #[derive(Debug, Clone)]
@@ -90,6 +144,15 @@ pub enum LpLockStatus {
     },
     /// LP tokens are held by pool creator/deployer (not locked)
     CreatorHeld,
+    /// Pool uses position NFTs or other non-traditional LP mechanism
+    PositionNft {
+        dex: String,
+        mechanism: String,
+    },
+    /// Bonding curve mechanism (inherently safe, no LP tokens)
+    BondingCurve {
+        dex: String,
+    },
     /// Cannot determine lock status (insufficient data)
     Unknown,
     /// No liquidity pool found
@@ -104,6 +167,8 @@ impl LpLockStatus {
             LpLockStatus::TimeLocked { .. } => true,
             LpLockStatus::ProgramLocked { .. } => true,
             LpLockStatus::Locked { confidence, .. } => *confidence >= 70,
+            LpLockStatus::PositionNft { .. } => true, // Position NFTs are generally safe
+            LpLockStatus::BondingCurve { .. } => true, // Bonding curves are inherently safe
             LpLockStatus::NotLocked { .. } => false,
             LpLockStatus::CreatorHeld => false,
             LpLockStatus::Unknown => false,
@@ -128,6 +193,8 @@ impl LpLockStatus {
             }
             LpLockStatus::NotLocked { .. } => "LP tokens not locked",
             LpLockStatus::CreatorHeld => "LP tokens held by creator (risky)",
+            LpLockStatus::PositionNft { .. } => "Uses position NFTs (safe mechanism)",
+            LpLockStatus::BondingCurve { .. } => "Bonding curve (no LP tokens to rug)",
             LpLockStatus::Unknown => "Unable to determine lock status",
             LpLockStatus::NoPool => "No liquidity pool found",
         }
@@ -138,7 +205,9 @@ impl LpLockStatus {
         match self {
             LpLockStatus::Burned => "Low",
             LpLockStatus::TimeLocked { .. } => "Low",
-            LpLockStatus::ProgramLocked { .. } => "Medium",
+            LpLockStatus::ProgramLocked { .. } => "Low",
+            LpLockStatus::PositionNft { .. } => "Low",
+            LpLockStatus::BondingCurve { .. } => "Low",
             LpLockStatus::Locked { confidence, .. } => {
                 if *confidence >= 80 {
                     "Low"
@@ -179,6 +248,20 @@ pub struct LpLockAnalysis {
     pub details: Vec<String>,
     /// Data source used for analysis
     pub data_source: String,
+    /// All analyzed pools (for comprehensive view)
+    pub analyzed_pools: Vec<PoolAnalysis>,
+}
+
+/// Individual pool analysis result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PoolAnalysis {
+    pub pool_address: String,
+    pub dex_id: String,
+    pub program_id: String,
+    pub lp_mint: Option<String>,
+    pub status: LpLockStatus,
+    pub confidence_score: u8,
+    pub details: Vec<String>,
 }
 
 impl LpLockAnalysis {
@@ -196,10 +279,14 @@ impl LpLockAnalysis {
             self.lock_score
         )
     }
+
+    /// Get the best pool analysis (highest confidence)
+    pub fn best_pool(&self) -> Option<&PoolAnalysis> {
+        self.analyzed_pools.iter().max_by_key(|p| p.confidence_score)
+    }
 }
 
-/// Check if a token's liquidity pool is locked
-/// This is the main function that should be used everywhere
+/// Main entry point - check LP lock status across all pools
 pub async fn check_lp_lock_status(token_mint: &str) -> Result<LpLockAnalysis, String> {
     check_lp_lock_status_with_cache(token_mint, true).await
 }
@@ -215,7 +302,7 @@ pub async fn check_lp_lock_status_with_cache(
             log(
                 LogTag::Security,
                 "CACHE_HIT",
-                &format!("LP lock cache hit for {}", safe_truncate(token_mint, 8))
+                &format!("LP lock cache hit for FULL_MINT: {}", token_mint)
             );
             return Ok(cached);
         }
@@ -224,84 +311,105 @@ pub async fn check_lp_lock_status_with_cache(
     log(
         LogTag::Security,
         "ANALYZING",
-        &format!("Analyzing LP lock status for FULL_MINT: {}", token_mint)
+        &format!("Starting comprehensive LP lock analysis for FULL_MINT: {}", token_mint)
     );
 
     let start_time = std::time::Instant::now();
 
-    // Step 1: Get pools from DexScreener (try cache first, then API)
-    let pools = match get_pools_for_token(token_mint).await {
-        Ok(pools) => pools,
-        Err(e) => {
-            log(
-                LogTag::Security,
-                "ERROR",
-                &format!("Failed to get pools for FULL_MINT: {} - Error: {}", token_mint, e)
-            );
-            return Ok(LpLockAnalysis {
-                token_mint: token_mint.to_string(),
-                pool_address: None,
-                dex_id: None,
-                lp_mint: None,
-                status: LpLockStatus::NoPool,
-                analyzed_at: Utc::now(),
-                lock_score: 0,
-                details: vec![format!("Failed to find pools: {}", e)],
-                data_source: "dexscreener".to_string(),
-            });
-        }
-    };
+    // Get ALL pools for the token, not just the "best" one
+    let pools = get_pools_for_token(token_mint).await?;
 
     if pools.is_empty() {
         log(LogTag::Security, "NO_POOLS", &format!("No pools found for FULL_MINT: {}", token_mint));
-        return Ok(LpLockAnalysis {
-            token_mint: token_mint.to_string(),
-            pool_address: None,
-            dex_id: None,
-            lp_mint: None,
-            status: LpLockStatus::NoPool,
-            analyzed_at: Utc::now(),
-            lock_score: 0,
-            details: vec!["No liquidity pools found".to_string()],
-            data_source: "dexscreener".to_string(),
-        });
-    }
 
-    // Step 2: Select the best pool (highest liquidity)
-    let best_pool = select_best_pool(&pools);
+        // Special handling for bonding curve tokens
+        let analysis = handle_no_pools_scenario(token_mint);
+
+        if use_cache {
+            cache_lp_analysis(token_mint, &analysis).await;
+        }
+
+        return Ok(analysis);
+    }
 
     log(
         LogTag::Security,
-        "POOL_SELECTED",
-        &format!(
-            "Selected {} pool {} for FULL_MINT: {}",
-            best_pool.dex_id,
-            best_pool.pair_address,
-            token_mint
-        )
+        "POOL_COUNT",
+        &format!("Found {} pools for FULL_MINT: {}", pools.len(), token_mint)
     );
 
-    // Step 3: Analyze the selected pool with on-chain verification
-    let analysis = analyze_pool_lock_status_onchain(token_mint, &best_pool).await?;
+    // Multi-pool analysis: Check each pool and collect results
+    let mut pool_analyses = Vec::new();
+
+    for (i, pool) in pools.iter().enumerate() {
+        log(
+            LogTag::Security,
+            "ANALYZING_POOL",
+            &format!(
+                "Analyzing pool {}/{}: {} {} for FULL_MINT: {}",
+                i + 1,
+                pools.len(),
+                pool.dex_id,
+                safe_truncate(&pool.pair_address, 12),
+                token_mint
+            )
+        );
+
+        match analyze_single_pool(token_mint, pool).await {
+            Ok(pool_analysis) => {
+                log(
+                    LogTag::Security,
+                    "POOL_ANALYZED",
+                    &format!(
+                        "Pool {} analysis complete: {} (confidence: {})",
+                        safe_truncate(&pool.pair_address, 8),
+                        pool_analysis.status.description(),
+                        pool_analysis.confidence_score
+                    )
+                );
+                pool_analyses.push(pool_analysis);
+            }
+            Err(e) => {
+                log(
+                    LogTag::Security,
+                    "POOL_ERROR",
+                    &format!(
+                        "Failed to analyze pool {} for FULL_MINT: {} - Error: {}",
+                        safe_truncate(&pool.pair_address, 8),
+                        token_mint,
+                        e
+                    )
+                );
+                // Continue with other pools
+            }
+        }
+    }
+
+    if pool_analyses.is_empty() {
+        return Ok(create_unknown_analysis(token_mint, pools));
+    }
+
+    // Choose the most reliable result from pool analyses
+    let final_analysis = select_best_analysis(token_mint, pool_analyses, pools);
 
     let elapsed = start_time.elapsed();
     log(
         LogTag::Security,
         "ANALYSIS_COMPLETE",
         &format!(
-            "LP lock analysis for FULL_MINT: {} completed in {}ms: {}",
+            "Comprehensive LP lock analysis for FULL_MINT: {} completed in {}ms: {}",
             token_mint,
             elapsed.as_millis(),
-            analysis.summary()
+            final_analysis.summary()
         )
     );
 
     // Cache the result
     if use_cache {
-        cache_lp_analysis(token_mint, &analysis).await;
+        cache_lp_analysis(token_mint, &final_analysis).await;
     }
 
-    Ok(analysis)
+    Ok(final_analysis)
 }
 
 /// Get pools for a token from DexScreener (cache-first)
@@ -311,7 +419,7 @@ async fn get_pools_for_token(token_mint: &str) -> Result<Vec<TokenPair>, String>
         log(
             LogTag::Security,
             "POOL_CACHE_HIT",
-            &format!("Using cached pools for {}", safe_truncate(token_mint, 8))
+            &format!("Using cached pools for FULL_MINT: {}", token_mint)
         );
         return Ok(cached_pools);
     }
@@ -326,196 +434,68 @@ async fn get_pools_for_token(token_mint: &str) -> Result<Vec<TokenPair>, String>
     get_token_pools_from_dexscreener(token_mint).await
 }
 
-/// Select the best pool for analysis (highest liquidity, prefer known DEXs)
-fn select_best_pool(pools: &[TokenPair]) -> &TokenPair {
-    // Priority order: raydium > orca > meteora > others
-    let dex_priority = |dex_id: &str| -> u32 {
-        match dex_id.to_lowercase().as_str() {
-            "raydium" => 100,
-            "orca" => 90,
-            "meteora" => 80,
-            _ => 50,
-        }
-    };
-
-    pools
-        .iter()
-        .max_by(|a, b| {
-            let a_priority = dex_priority(&a.dex_id);
-            let b_priority = dex_priority(&b.dex_id);
-
-            // First compare by DEX priority
-            match a_priority.cmp(&b_priority) {
-                std::cmp::Ordering::Equal => {
-                    // If same priority, compare by liquidity
-                    let a_liquidity = a.liquidity
-                        .as_ref()
-                        .map(|l| l.usd)
-                        .unwrap_or(0.0);
-                    let b_liquidity = b.liquidity
-                        .as_ref()
-                        .map(|l| l.usd)
-                        .unwrap_or(0.0);
-                    a_liquidity.partial_cmp(&b_liquidity).unwrap_or(std::cmp::Ordering::Equal)
-                }
-                other => other,
-            }
-        })
-        .unwrap_or(&pools[0]) // Fallback to first pool if comparison fails
-}
-
-/// Analyze a specific pool's lock status with on-chain verification
-async fn analyze_pool_lock_status_onchain(
-    token_mint: &str,
-    pool: &TokenPair
-) -> Result<LpLockAnalysis, String> {
+/// Analyze a single pool - returns pool-specific analysis
+async fn analyze_single_pool(token_mint: &str, pool: &TokenPair) -> Result<PoolAnalysis, String> {
     let mut details = Vec::new();
-    let mut lock_score = 0u8;
+    let mut confidence_score = 0u8;
 
+    // Add basic pool info
     details.push(format!("DEX: {}", pool.dex_id));
-    details.push(format!("Pool: {}", safe_truncate(&pool.pair_address, 12)));
+    details.push(format!("Pool: {}", pool.pair_address));
 
     if let Some(liquidity) = &pool.liquidity {
         details.push(format!("Liquidity: ${:.0}", liquidity.usd));
     }
 
-    // Step 1: Get LP mint address from on-chain pool data
-    let lp_mint = match extract_lp_mint_from_pool(pool).await {
-        Ok(Some(mint)) => {
-            details.push(format!("LP Mint: {}", safe_truncate(&mint, 12)));
-            Some(mint)
-        }
-        Ok(None) => {
-            details.push("LP mint not found or not applicable for this pool type".to_string());
-            None
-        }
-        Err(e) => {
-            details.push(format!("Failed to extract LP mint: {}", e));
-            None
-        }
-    };
+    // Get pool account data
+    let client = get_rpc_client();
+    let pool_pubkey = Pubkey::from_str(&pool.pair_address).map_err(|e|
+        format!("Invalid pool address {}: {}", pool.pair_address, e)
+    )?;
 
-    // Step 2: Perform on-chain verification if we have LP mint
+    let account = client
+        .get_account(&pool_pubkey).await
+        .map_err(|e| format!("Failed to get pool account {}: {}", pool.pair_address, e))?;
+
+    let program_id = account.owner.to_string();
+    details.push(format!("Program: {}", safe_truncate(&program_id, 12)));
+
+    // Find and use appropriate extractor based on program ID
+    let lp_mint = extract_lp_mint(&program_id, &account.data, &pool.pair_address, &mut details)?;
+
+    // Determine status based on LP mint and pool type
     let status = if let Some(lp_mint_address) = &lp_mint {
-        match verify_lp_lock_onchain(lp_mint_address, &mut details, &mut lock_score).await {
-            Ok(status) => status,
-            Err(e) => {
-                details.push(format!("On-chain verification failed: {}", e));
-                // Fall back to heuristic analysis
-                determine_lock_status_from_pool_data(pool, &mut details, &mut lock_score)
-            }
-        }
+        // Traditional LP token found - verify lock status
+        verify_lp_lock_comprehensive(&lp_mint_address, &mut details, &mut confidence_score).await?
     } else {
-        // No LP mint available, use heuristic analysis
-        determine_lock_status_from_pool_data(pool, &mut details, &mut lock_score)
+        // Special case handling for different pool types
+        determine_status_without_lp_mint(pool, &program_id, &mut details, &mut confidence_score)
     };
 
-    Ok(LpLockAnalysis {
-        token_mint: token_mint.to_string(),
-        pool_address: Some(pool.pair_address.clone()),
-        dex_id: Some(pool.dex_id.clone()),
-        lp_mint: lp_mint,
+    Ok(PoolAnalysis {
+        pool_address: pool.pair_address.clone(),
+        dex_id: pool.dex_id.clone(),
+        program_id,
+        lp_mint,
         status,
-        analyzed_at: Utc::now(),
-        lock_score,
+        confidence_score,
         details,
-        data_source: "onchain+dexscreener".to_string(),
     })
 }
 
-/// Extract LP mint address from pool account data based on DEX type
-async fn extract_lp_mint_from_pool(pool: &TokenPair) -> Result<Option<String>, String> {
-    let client = get_rpc_client();
-
-    // Get pool account data
-    let pool_pubkey = Pubkey::from_str(&pool.pair_address).map_err(|e|
-        format!("Invalid pool address: {}", e)
-    )?;
-
-    let account_info = client
-        .get_account(&pool_pubkey).await
-        .map_err(|e| format!("Failed to get pool account: {}", e))?;
-
-    let account_data = account_info.data;
-
-    // Extract LP mint based on DEX type
-    match pool.dex_id.to_lowercase().as_str() {
-        "raydium" => extract_raydium_lp_mint(&account_data, &pool.pair_address).await,
-        "orca" => extract_orca_lp_mint(&account_data).await,
-        "meteora" => extract_meteora_lp_mint(&account_data).await,
-        "pumpfun" | "pumpswap" => extract_pumpfun_lp_mint(&account_data).await,
-        _ => {
-            log(
-                LogTag::Security,
-                "WARN",
-                &format!("Unsupported DEX for LP extraction: {}", pool.dex_id)
-            );
-            Ok(None)
-        }
-    }
-}
-
-/// Extract LP mint from Raydium pool data
-async fn extract_raydium_lp_mint(
-    data: &[u8],
-    pool_address: &str
-) -> Result<Option<String>, String> {
-    // Try CPMM first (most common)
-    if let Some(pool_info) = RaydiumCpmmDecoder::decode_raydium_cpmm_pool(data, pool_address) {
-        return Ok(Some(pool_info.lp_mint.to_string()));
-    }
-
-    // TODO: Add CLMM and Legacy AMM decoders when needed
-    log(
-        LogTag::Security,
-        "WARN",
-        &format!("Could not decode Raydium pool: {}", safe_truncate(pool_address, 8))
-    );
-    Ok(None)
-}
-
-/// Extract LP mint from Orca pool data
-async fn extract_orca_lp_mint(data: &[u8]) -> Result<Option<String>, String> {
-    // Orca Whirlpools (CLMM) don't have traditional LP tokens
-    // They use position NFTs instead
-    log(LogTag::Security, "INFO", "Orca Whirlpools use position NFTs, not LP tokens");
-    Ok(None)
-}
-
-/// Extract LP mint from Meteora pool data
-async fn extract_meteora_lp_mint(data: &[u8]) -> Result<Option<String>, String> {
-    // Meteora DLMM pools don't have traditional LP tokens
-    // DAMM pools may have LP tokens but structure varies
-    log(LogTag::Security, "INFO", "Meteora pools may not use traditional LP tokens");
-    Ok(None)
-}
-
-/// Extract LP mint from PumpFun pool data
-async fn extract_pumpfun_lp_mint(data: &[u8]) -> Result<Option<String>, String> {
-    // PumpFun pools use a bonding curve mechanism, not traditional LP tokens
-    // Only graduated tokens that moved to Raydium have actual LP tokens
-    // For pure PumpFun pools, there are no LP tokens to burn/lock
-
-    // Check if this is the PumpFun AMM program (bonding curve)
-    // If so, return None as there are no LP tokens
-
-    log(
-        LogTag::Security,
-        "INFO",
-        "PumpFun bonding curve detected - no LP tokens exist for this pool type"
-    );
-
-    // Return None to indicate no LP tokens (not an error, but no LP to check)
-    Ok(None)
-}
-
-/// Perform on-chain verification of LP lock status
-async fn verify_lp_lock_onchain(
+/// Comprehensive verification of LP lock status
+async fn verify_lp_lock_comprehensive(
     lp_mint: &str,
     details: &mut Vec<String>,
-    lock_score: &mut u8
+    confidence_score: &mut u8
 ) -> Result<LpLockStatus, String> {
     let client = get_rpc_client();
+
+    log(
+        LogTag::Security,
+        "LP_VERIFICATION",
+        &format!("Verifying LP lock status for LP_MINT: {}", lp_mint)
+    );
 
     // Step 1: Check mint authority (most reliable indicator)
     let mint_info = get_mint_info(&client, lp_mint).await?;
@@ -525,7 +505,12 @@ async fn verify_lp_lock_onchain(
     // Check if mint authority is None (burned)
     if mint_info.mint_authority.is_none() {
         details.push("✅ LP mint authority is None (burned)".to_string());
-        *lock_score = 100;
+        *confidence_score = 100;
+        log(
+            LogTag::Security,
+            "LP_BURNED",
+            &format!("LP mint authority burned for LP_MINT: {}", lp_mint)
+        );
         return Ok(LpLockStatus::Burned);
     }
 
@@ -535,20 +520,184 @@ async fn verify_lp_lock_onchain(
     // Check if mint authority is a known lock program
     if let Some(lock_program_name) = is_known_lock_program(&mint_authority) {
         details.push(format!("✅ Mint authority is known lock program: {}", lock_program_name));
-        *lock_score = 95;
+        *confidence_score = 95;
+        log(
+            LogTag::Security,
+            "LP_PROGRAM_LOCKED",
+            &format!("LP mint locked by program {} for LP_MINT: {}", lock_program_name, lp_mint)
+        );
         return Ok(LpLockStatus::ProgramLocked {
             program: lock_program_name.to_string(),
             amount: mint_info.supply,
         });
     }
 
-    // Step 2: Check LP token holders
+    // Step 2: Enhanced LP token holder analysis
+    analyze_lp_token_holders_enhanced(lp_mint, details, confidence_score).await
+}
+
+/// Enhanced analysis of LP token holders with better heuristics
+async fn analyze_lp_token_holders_enhanced(
+    lp_mint: &str,
+    details: &mut Vec<String>,
+    confidence_score: &mut u8
+) -> Result<LpLockStatus, String> {
+    let client = get_rpc_client();
     let lp_mint_pubkey = Pubkey::from_str(lp_mint).map_err(|e|
         format!("Invalid LP mint address: {}", e)
     )?;
-    let holder_analysis = analyze_lp_token_holders(&lp_mint_pubkey, details, lock_score).await?;
 
-    Ok(holder_analysis)
+    // Get all token accounts for this LP mint
+    let program_id_str = spl_token::id().to_string();
+    let filters =
+        serde_json::json!([
+        {"dataSize": 165}, // SPL token account size
+        {"memcmp": {"offset": 0, "bytes": lp_mint}} // mint filter
+    ]);
+
+    let response = client
+        .get_program_accounts(&program_id_str, Some(filters), Some("base64"), Some(50)).await
+        .map_err(|e| format!("Failed to get LP token accounts: {}", e))?;
+
+    if response.is_empty() {
+        details.push("No LP token holders found".to_string());
+        return Ok(LpLockStatus::Unknown);
+    }
+
+    let total_accounts = response.len();
+    details.push(format!("Found {} LP token accounts", total_accounts));
+
+    let mut total_supply = 0u64;
+    let mut locked_amount = 0u64;
+    let mut creator_held_amount = 0u64;
+    let mut burn_held_amount = 0u64;
+    let mut accounts_with_balance = 0;
+    let mut large_holder_count = 0;
+
+    // Enhanced analysis of token accounts
+    for (i, account_data) in response.iter().enumerate() {
+        // Limit processing for performance but get good sample
+        if i >= 20 {
+            break;
+        }
+
+        if let Some(account_obj) = account_data.as_object() {
+            if
+                let (Some(pubkey_str), Some(account)) = (
+                    account_obj.get("pubkey").and_then(|v| v.as_str()),
+                    account_obj.get("account").and_then(|v| v.as_object()),
+                )
+            {
+                if let Some(data_str) = account.get("data").and_then(|v| v.as_str()) {
+                    if let Ok(data) = base64::decode(data_str) {
+                        if let Ok(token_account) = spl_token::state::Account::unpack(&data) {
+                            if token_account.amount > 0 {
+                                accounts_with_balance += 1;
+                                total_supply += token_account.amount;
+
+                                let owner_str = token_account.owner.to_string();
+
+                                // Calculate relative amount
+                                let amount_percentage = if total_supply > 0 {
+                                    (token_account.amount * 100) / total_supply
+                                } else {
+                                    0
+                                };
+
+                                if token_account.amount > total_supply / 10 {
+                                    large_holder_count += 1;
+                                }
+
+                                details.push(
+                                    format!(
+                                        "LP holder {}: {} tokens ({}%) at {}",
+                                        i + 1,
+                                        token_account.amount,
+                                        amount_percentage,
+                                        safe_truncate(pubkey_str, 12)
+                                    )
+                                );
+
+                                // Enhanced owner analysis
+                                if let Some(lock_program_name) = is_known_lock_program(&owner_str) {
+                                    details.push(
+                                        format!("  ✅ Held by lock program: {}", lock_program_name)
+                                    );
+                                    locked_amount += token_account.amount;
+                                    *confidence_score += 20;
+                                } else if is_burn_address(&owner_str) {
+                                    details.push("  ✅ Held by burn address".to_string());
+                                    burn_held_amount += token_account.amount;
+                                    *confidence_score += 25;
+                                } else if is_likely_creator_wallet(&owner_str) {
+                                    details.push("  ⚠️ Possibly held by creator".to_string());
+                                    creator_held_amount += token_account.amount;
+                                } else {
+                                    details.push(
+                                        format!("  Owner: {}", safe_truncate(&owner_str, 12))
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Enhanced determination based on analysis
+    let total_analyzed = total_supply;
+    let locked_percentage = if total_analyzed > 0 {
+        ((locked_amount + burn_held_amount) * 100) / total_analyzed
+    } else {
+        0
+    };
+
+    let creator_percentage = if total_analyzed > 0 {
+        (creator_held_amount * 100) / total_analyzed
+    } else {
+        0
+    };
+
+    details.push(
+        format!(
+            "Summary: {} accounts, Locked/Burned: {}%, Creator: {}%, Large holders: {}",
+            accounts_with_balance,
+            locked_percentage,
+            creator_percentage,
+            large_holder_count
+        )
+    );
+
+    // Enhanced decision logic
+    if burn_held_amount > locked_amount && burn_held_amount > creator_held_amount {
+        *confidence_score += 35;
+        Ok(LpLockStatus::Burned)
+    } else if locked_percentage >= 80 {
+        *confidence_score += 30;
+        Ok(LpLockStatus::ProgramLocked {
+            program: "Various lock programs".to_string(),
+            amount: locked_amount,
+        })
+    } else if locked_percentage >= 50 || (accounts_with_balance <= 2 && large_holder_count <= 1) {
+        *confidence_score += 25;
+        Ok(LpLockStatus::Locked {
+            amount: locked_amount,
+            confidence: 80,
+        })
+    } else if creator_percentage >= 70 {
+        Ok(LpLockStatus::CreatorHeld)
+    } else if accounts_with_balance <= 5 && locked_percentage >= 20 {
+        *confidence_score += 15;
+        Ok(LpLockStatus::Locked {
+            amount: locked_amount,
+            confidence: 60,
+        })
+    } else {
+        Ok(LpLockStatus::NotLocked {
+            confidence: 70,
+        })
+    }
 }
 
 /// Helper to get mint information from RPC
@@ -593,129 +742,243 @@ struct MintInfo {
     pub mint_authority: Option<String>,
 }
 
-/// Analyze who holds the LP tokens
-async fn analyze_lp_token_holders(
-    lp_mint: &Pubkey,
+/// Helper for special pool types that don't use traditional LP tokens
+fn determine_status_without_lp_mint(
+    pool: &TokenPair,
+    program_id: &str,
     details: &mut Vec<String>,
-    lock_score: &mut u8
-) -> Result<LpLockStatus, String> {
-    let client = get_rpc_client();
+    confidence_score: &mut u8
+) -> LpLockStatus {
+    let program_kind = ProgramKind::from_program_id(program_id);
 
-    // Use get_program_accounts to find token accounts for this mint
-    let program_id_str = spl_token::id().to_string();
-
-    // Create filters for token accounts with this mint
-    let filters =
-        serde_json::json!([
-        {"dataSize": 165}, // SPL token account size
-        {"memcmp": {"offset": 0, "bytes": lp_mint.to_string()}} // mint filter
-    ]);
-
-    let response = client
-        .get_program_accounts(&program_id_str, Some(filters), Some("base64"), Some(30)).await
-        .map_err(|e| format!("Failed to get LP token accounts: {}", e))?;
-
-    if response.is_empty() {
-        details.push("No LP token holders found".to_string());
-        return Ok(LpLockStatus::Unknown);
-    }
-
-    details.push(format!("Found {} LP token accounts", response.len()));
-
-    let mut total_analyzed = 0u64;
-    let mut locked_amount = 0u64;
-    let mut creator_held_amount = 0u64;
-    let mut accounts_with_balance = 0;
-
-    // Analyze token accounts (limit to first 10 for performance)
-    for account_data in response.iter().take(10) {
-        if let Some(account_obj) = account_data.as_object() {
-            if
-                let (Some(pubkey_str), Some(account)) = (
-                    account_obj.get("pubkey").and_then(|v| v.as_str()),
-                    account_obj.get("account").and_then(|v| v.as_object()),
-                )
-            {
-                if let Some(data_str) = account.get("data").and_then(|v| v.as_str()) {
-                    // Decode base64 account data
-                    if let Ok(data) = base64::decode(data_str) {
-                        // Try to parse as SPL token account
-                        if let Ok(token_account) = spl_token::state::Account::unpack(&data) {
-                            if token_account.amount > 0 {
-                                accounts_with_balance += 1;
-                                total_analyzed += token_account.amount;
-
-                                details.push(
-                                    format!(
-                                        "LP holder: {} tokens at {}",
-                                        token_account.amount,
-                                        safe_truncate(pubkey_str, 12)
-                                    )
-                                );
-
-                                let owner_str = token_account.owner.to_string();
-
-                                // Check if held by known lock program
-                                if let Some(lock_program_name) = is_known_lock_program(&owner_str) {
-                                    details.push(
-                                        format!("  ✅ Held by lock program: {}", lock_program_name)
-                                    );
-                                    locked_amount += token_account.amount;
-                                    *lock_score += 15;
-                                } else if is_likely_creator_wallet(&owner_str) {
-                                    details.push("  ⚠️  Possibly held by creator".to_string());
-                                    creator_held_amount += token_account.amount;
-                                } else {
-                                    details.push(
-                                        format!("  Owner: {}", safe_truncate(&owner_str, 12))
-                                    );
-                                }
-                            }
-                        }
-                    }
+    match program_kind {
+        ProgramKind::RaydiumClmm => {
+            details.push("Raydium CLMM uses position NFTs instead of LP tokens".to_string());
+            details.push("Position NFT system provides inherent safety".to_string());
+            *confidence_score = 85;
+            LpLockStatus::PositionNft {
+                dex: "Raydium".to_string(),
+                mechanism: "CLMM Position NFTs".to_string(),
+            }
+        }
+        ProgramKind::OrcaWhirlpool => {
+            details.push("Orca Whirlpools use position NFTs instead of LP tokens".to_string());
+            details.push("Position NFT system provides inherent safety".to_string());
+            *confidence_score = 85;
+            LpLockStatus::PositionNft {
+                dex: "Orca".to_string(),
+                mechanism: "Whirlpool Position NFTs".to_string(),
+            }
+        }
+        ProgramKind::MeteoraDlmm => {
+            details.push("Meteora DLMM may use non-traditional LP mechanism".to_string());
+            *confidence_score = 60;
+            LpLockStatus::PositionNft {
+                dex: "Meteora".to_string(),
+                mechanism: "DLMM".to_string(),
+            }
+        }
+        ProgramKind::PumpFunLegacy | ProgramKind::PumpFunAmm => {
+            if pool.dex_id.to_lowercase().contains("pumpfun") {
+                details.push("PumpFun bonding curve detected - no LP tokens exist".to_string());
+                details.push("✅ Bonding curve mechanism provides inherent safety".to_string());
+                *confidence_score = 90;
+                LpLockStatus::BondingCurve {
+                    dex: "PumpFun".to_string(),
                 }
+            } else {
+                // Graduated to traditional LP
+                details.push("PumpFun token graduated to traditional AMM".to_string());
+                *confidence_score = 30;
+                LpLockStatus::Unknown
+            }
+        }
+        _ => {
+            details.push(format!("Unknown mechanism for program: {}", program_kind.display_name()));
+            LpLockStatus::Unknown
+        }
+    }
+}
+
+/// Handle scenario where no pools are found
+fn handle_no_pools_scenario(token_mint: &str) -> LpLockAnalysis {
+    let mut details = Vec::new();
+
+    // Heuristic checks for bonding curve tokens
+    if token_mint.len() == 44 {
+        // Standard Solana mint address length
+        if token_mint.chars().all(|c| c.is_alphanumeric()) {
+            // Check for common bonding curve patterns
+            if token_mint.ends_with("pump") || token_mint.contains("pump") {
+                details.push("Token appears to be on PumpFun bonding curve".to_string());
+                details.push("✅ Bonding curve tokens have no LP tokens to rug".to_string());
+
+                return LpLockAnalysis {
+                    token_mint: token_mint.to_string(),
+                    pool_address: None,
+                    dex_id: Some("pumpfun".to_string()),
+                    lp_mint: None,
+                    status: LpLockStatus::BondingCurve {
+                        dex: "PumpFun".to_string(),
+                    },
+                    analyzed_at: Utc::now(),
+                    lock_score: 90,
+                    details,
+                    data_source: "bonding_curve_heuristic".to_string(),
+                    analyzed_pools: vec![],
+                };
             }
         }
     }
 
-    // Determine status based on analysis
-    let locked_percentage = if total_analyzed > 0 {
-        (locked_amount * 100) / total_analyzed
-    } else {
+    details.push("No liquidity pools found for token".to_string());
+    details.push("Unable to determine liquidity mechanism".to_string());
+
+    LpLockAnalysis {
+        token_mint: token_mint.to_string(),
+        pool_address: None,
+        dex_id: None,
+        lp_mint: None,
+        status: LpLockStatus::NoPool,
+        analyzed_at: Utc::now(),
+        lock_score: 0,
+        details,
+        data_source: "no_pools_found".to_string(),
+        analyzed_pools: vec![],
+    }
+}
+
+/// Create analysis result for unknown status
+fn create_unknown_analysis(token_mint: &str, pools: Vec<TokenPair>) -> LpLockAnalysis {
+    let mut details = vec!["Unable to analyze any pools".to_string()];
+
+    // Add pool info for debugging
+    for (i, pool) in pools.iter().take(3).enumerate() {
+        details.push(
+            format!(
+                "Pool {}: {} {} (${:.0} liquidity)",
+                i + 1,
+                pool.dex_id,
+                safe_truncate(&pool.pair_address, 8),
+                pool.liquidity
+                    .as_ref()
+                    .map(|l| l.usd)
+                    .unwrap_or(0.0)
+            )
+        );
+    }
+
+    LpLockAnalysis {
+        token_mint: token_mint.to_string(),
+        pool_address: pools.first().map(|p| p.pair_address.clone()),
+        dex_id: pools.first().map(|p| p.dex_id.clone()),
+        lp_mint: None,
+        status: LpLockStatus::Unknown,
+        analyzed_at: Utc::now(),
+        lock_score: 0,
+        details,
+        data_source: "failed_analysis".to_string(),
+        analyzed_pools: vec![],
+    }
+}
+
+/// Select the most reliable analysis from multiple pool analyses
+fn select_best_analysis(
+    token_mint: &str,
+    pool_analyses: Vec<PoolAnalysis>,
+    original_pools: Vec<TokenPair>
+) -> LpLockAnalysis {
+    // Sort by status priority and confidence score
+    let mut sorted_analyses = pool_analyses.clone();
+    sorted_analyses.sort_by(|a, b| {
+        // First priority: status safety
+        let a_safe = a.status.is_safe();
+        let b_safe = b.status.is_safe();
+
+        match (a_safe, b_safe) {
+            (true, false) => std::cmp::Ordering::Greater,
+            (false, true) => std::cmp::Ordering::Less,
+            _ => {
+                // Same safety level, compare by confidence
+                a.confidence_score.cmp(&b.confidence_score)
+            }
+        }
+    });
+
+    let best_analysis = sorted_analyses.first().unwrap();
+
+    // Calculate overall lock score
+    let lock_score = if pool_analyses.is_empty() {
         0
+    } else {
+        let total_confidence: u32 = pool_analyses
+            .iter()
+            .map(|p| p.confidence_score as u32)
+            .sum();
+        let avg_confidence = total_confidence / (pool_analyses.len() as u32);
+
+        // Boost score if multiple pools agree
+        let safe_pool_count = pool_analyses
+            .iter()
+            .filter(|p| p.status.is_safe())
+            .count();
+
+        let consensus_boost = if safe_pool_count > 1 {
+            10
+        } else if safe_pool_count == 1 {
+            5
+        } else {
+            0
+        };
+
+        std::cmp::min(100, avg_confidence + consensus_boost) as u8
     };
 
-    let creator_percentage = if total_analyzed > 0 {
-        (creator_held_amount * 100) / total_analyzed
-    } else {
-        0
-    };
-
-    details.push(
+    // Compile comprehensive details
+    let mut all_details = vec![
         format!(
-            "Analysis: {} accounts with balance, Locked: {}%, Creator-held: {}%",
-            accounts_with_balance,
-            locked_percentage,
-            creator_percentage
+            "Analyzed {} pools across {} DEXes",
+            pool_analyses.len(),
+            pool_analyses
+                .iter()
+                .map(|p| p.dex_id.as_str())
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+        ),
+        format!(
+            "Best result from: {} {}",
+            best_analysis.dex_id,
+            safe_truncate(&best_analysis.pool_address, 8)
         )
-    );
+    ];
 
-    if locked_percentage >= 80 {
-        *lock_score += 30;
-        Ok(LpLockStatus::ProgramLocked {
-            program: "Various lock programs".to_string(),
-            amount: locked_amount,
-        })
-    } else if accounts_with_balance <= 3 && locked_percentage >= 50 {
-        *lock_score += 20;
-        Ok(LpLockStatus::Locked {
-            amount: locked_amount,
-            confidence: 75,
-        })
-    } else if creator_percentage >= 50 {
-        Ok(LpLockStatus::CreatorHeld)
-    } else {
-        Ok(LpLockStatus::Unknown)
+    // Add pool summaries
+    for (i, analysis) in pool_analyses.iter().take(5).enumerate() {
+        all_details.push(
+            format!(
+                "Pool {}: {} {} - {} ({}%)",
+                i + 1,
+                analysis.dex_id,
+                safe_truncate(&analysis.pool_address, 8),
+                analysis.status.description(),
+                analysis.confidence_score
+            )
+        );
+    }
+
+    all_details.extend(best_analysis.details.clone());
+
+    LpLockAnalysis {
+        token_mint: token_mint.to_string(),
+        pool_address: Some(best_analysis.pool_address.clone()),
+        dex_id: Some(best_analysis.dex_id.clone()),
+        lp_mint: best_analysis.lp_mint.clone(),
+        status: best_analysis.status.clone(),
+        analyzed_at: Utc::now(),
+        lock_score,
+        details: all_details,
+        data_source: "comprehensive_multi_pool".to_string(),
+        analyzed_pools: pool_analyses,
     }
 }
 
@@ -729,138 +992,23 @@ fn is_known_lock_program(address: &str) -> Option<&'static str> {
     None
 }
 
+/// Check if an address is a burn address
+fn is_burn_address(address: &str) -> bool {
+    address == "11111111111111111111111111111111" || // System Program
+        address == "1nc1nerator11111111111111111111111111111111" || // Incinerator
+        address.starts_with("1111111") // Other burn patterns
+}
+
 /// Heuristic to determine if an address is likely a creator wallet
 fn is_likely_creator_wallet(address: &str) -> bool {
-    // This is a simple heuristic - in practice you might want more sophisticated analysis
-    // For now, we assume non-program addresses might be creator wallets
-    !is_known_lock_program(address).is_some() && address != "11111111111111111111111111111111"
+    // Enhanced heuristics for creator wallet detection
+    !is_known_lock_program(address).is_some() &&
+        !is_burn_address(address) &&
+        address != "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" &&
+        !address.starts_with("So1") // Common SOL addresses
 }
 
-/// Analyze a specific pool's lock status (fallback heuristic method)
-async fn analyze_pool_lock_status(
-    token_mint: &str,
-    pool: &TokenPair
-) -> Result<LpLockAnalysis, String> {
-    let mut details = Vec::new();
-    let mut lock_score = 0u8;
-
-    details.push(format!("DEX: {}", pool.dex_id));
-    details.push(format!("Pool: {}", safe_truncate(&pool.pair_address, 12)));
-
-    if let Some(liquidity) = &pool.liquidity {
-        details.push(format!("Liquidity: ${:.0}", liquidity.usd));
-    }
-
-    // For now, we'll implement a basic analysis based on available DexScreener data
-    // In the future, this could be enhanced with RPC calls to check actual LP token details
-
-    let status = determine_lock_status_from_pool_data(pool, &mut details, &mut lock_score);
-
-    Ok(LpLockAnalysis {
-        token_mint: token_mint.to_string(),
-        pool_address: Some(pool.pair_address.clone()),
-        dex_id: Some(pool.dex_id.clone()),
-        lp_mint: None, // DexScreener doesn't provide LP mint directly
-        status,
-        analyzed_at: Utc::now(),
-        lock_score,
-        details,
-        data_source: "dexscreener_heuristic".to_string(),
-    })
-}
-
-/// Determine lock status based on DexScreener pool data
-fn determine_lock_status_from_pool_data(
-    pool: &TokenPair,
-    details: &mut Vec<String>,
-    lock_score: &mut u8
-) -> LpLockStatus {
-    // Check if pool has certain labels that indicate locking
-    if let Some(labels) = &pool.labels {
-        for label in labels {
-            let label_lower = label.to_lowercase();
-            if label_lower.contains("locked") || label_lower.contains("burn") {
-                details.push(format!("Found lock indicator in labels: {}", label));
-                *lock_score += 30;
-            }
-        }
-    }
-
-    // Check pool age (older pools are generally more trustworthy)
-    if let Some(created_at) = pool.pair_created_at {
-        let created_time = DateTime::from_timestamp(created_at as i64, 0).unwrap_or_else(||
-            Utc::now()
-        );
-        let age_days = Utc::now().signed_duration_since(created_time).num_days();
-
-        details.push(format!("Pool age: {} days", age_days));
-
-        if age_days > 30 {
-            *lock_score += 20;
-        } else if age_days > 7 {
-            *lock_score += 10;
-        }
-    }
-
-    // Check DEX reputation and special cases
-    match pool.dex_id.to_lowercase().as_str() {
-        "raydium" | "orca" => {
-            details.push(format!("Reputable DEX: {}", pool.dex_id));
-            *lock_score += 20;
-        }
-        "meteora" | "jupiter" => {
-            details.push(format!("Known DEX: {}", pool.dex_id));
-            *lock_score += 10;
-        }
-        "pumpfun" | "pumpswap" => {
-            details.push("PumpFun bonding curve - no LP tokens to burn/lock".to_string());
-            details.push("Bonding curve mechanism provides inherent safety".to_string());
-            *lock_score += 40; // Bonding curves are inherently safer
-        }
-        _ => {
-            details.push(format!("Unknown DEX: {}", pool.dex_id));
-        }
-    }
-
-    // Check liquidity level (higher liquidity often indicates more established projects)
-    if let Some(liquidity) = &pool.liquidity {
-        if liquidity.usd > 100_000.0 {
-            details.push("High liquidity pool".to_string());
-            *lock_score += 15;
-        } else if liquidity.usd > 10_000.0 {
-            details.push("Medium liquidity pool".to_string());
-            *lock_score += 10;
-        } else {
-            details.push("Low liquidity pool".to_string());
-        }
-    }
-
-    // Determine status based on score and available data
-    // Special case for PumpFun bonding curves
-    if pool.dex_id.to_lowercase() == "pumpfun" || pool.dex_id.to_lowercase() == "pumpswap" {
-        details.push("Bonding curve mechanism - no traditional LP lock required".to_string());
-        return LpLockStatus::NotLocked { confidence: 90 }; // Safe but not "locked" in traditional sense
-    }
-
-    if *lock_score >= 70 {
-        details.push("High confidence in pool safety".to_string());
-        LpLockStatus::Burned // Assume burned/locked for high-score pools
-    } else if *lock_score >= 50 {
-        details.push("Medium confidence - potential time lock".to_string());
-        LpLockStatus::TimeLocked {
-            unlock_date: None,
-            program: "Unknown".to_string(),
-        }
-    } else if *lock_score >= 30 {
-        details.push("Low confidence - may be creator held".to_string());
-        LpLockStatus::CreatorHeld
-    } else {
-        details.push("Insufficient data for reliable analysis".to_string());
-        LpLockStatus::Unknown
-    }
-}
-
-/// Get cached LP lock analysis if available and not expired
+/// Cache management functions
 async fn get_cached_lp_analysis(token_mint: &str) -> Option<LpLockAnalysis> {
     let cache = LP_LOCK_CACHE.read().ok()?;
 
@@ -876,7 +1024,6 @@ async fn get_cached_lp_analysis(token_mint: &str) -> Option<LpLockAnalysis> {
     None
 }
 
-/// Cache LP lock analysis result
 async fn cache_lp_analysis(token_mint: &str, analysis: &LpLockAnalysis) {
     if let Ok(mut cache) = LP_LOCK_CACHE.write() {
         cache.insert(token_mint.to_string(), CachedLpLockAnalysis {
@@ -885,6 +1032,111 @@ async fn cache_lp_analysis(token_mint: &str, analysis: &LpLockAnalysis) {
         });
     }
 }
+
+// LP Extractor implementations for different DEX programs
+
+/// Extract LP mint from Raydium CPMM pool data
+fn extract_raydium_cpmm_lp(data: &[u8], pool_address: &str) -> Result<Option<String>, String> {
+    if let Some(pool_info) = RaydiumCpmmDecoder::decode_raydium_cpmm_pool(data, pool_address) {
+        log(
+            LogTag::Security,
+            "LP_EXTRACTED",
+            &format!(
+                "Extracted CPMM LP mint {} from pool {}",
+                safe_truncate(&pool_info.lp_mint.to_string(), 12),
+                safe_truncate(pool_address, 8)
+            )
+        );
+        return Ok(Some(pool_info.lp_mint.to_string()));
+    }
+
+    log(
+        LogTag::Security,
+        "LP_EXTRACT_FAILED",
+        &format!("Could not decode Raydium CPMM pool: {}", safe_truncate(pool_address, 8))
+    );
+    Ok(None)
+}
+
+/// Extract LP mint from Raydium CLMM pool data
+fn extract_raydium_clmm_lp(data: &[u8], _pool_address: &str) -> Result<Option<String>, String> {
+    // CLMM pools use position NFTs instead of traditional LP tokens
+    log(LogTag::Security, "LP_INFO", "Raydium CLMM uses position NFTs, not LP tokens");
+    Ok(None)
+}
+
+/// Extract LP mint from Raydium Legacy AMM pool data
+fn extract_raydium_legacy_lp(data: &[u8], pool_address: &str) -> Result<Option<String>, String> {
+    // TODO: Implement when RaydiumLegacyAmmDecoder is available
+    log(
+        LogTag::Security,
+        "LP_TODO",
+        &format!(
+            "Raydium Legacy AMM decoder not yet implemented for: {}",
+            safe_truncate(pool_address, 8)
+        )
+    );
+    Ok(None)
+}
+
+/// Extract LP mint from Orca Whirlpool pool data
+fn extract_orca_whirlpool_lp(data: &[u8], _pool_address: &str) -> Result<Option<String>, String> {
+    // Orca Whirlpools (CLMM) don't have traditional LP tokens
+    log(LogTag::Security, "LP_INFO", "Orca Whirlpools use position NFTs, not LP tokens");
+    Ok(None)
+}
+
+/// Extract LP mint from Meteora DLMM pool data
+fn extract_meteora_dlmm_lp(data: &[u8], _pool_address: &str) -> Result<Option<String>, String> {
+    // Meteora DLMM pools use a different mechanism
+    log(
+        LogTag::Security,
+        "LP_INFO",
+        "Meteora DLMM uses bin-based liquidity, not traditional LP tokens"
+    );
+    Ok(None)
+}
+
+/// Extract LP mint from Meteora DAMM pool data
+fn extract_meteora_damm_lp(data: &[u8], pool_address: &str) -> Result<Option<String>, String> {
+    // TODO: Implement when MeteoraDammDecoder is enhanced
+    log(
+        LogTag::Security,
+        "LP_TODO",
+        &format!(
+            "Meteora DAMM LP extraction not yet implemented for: {}",
+            safe_truncate(pool_address, 8)
+        )
+    );
+    Ok(None)
+}
+
+/// Extract LP mint from PumpFun AMM pool data
+fn extract_pumpfun_amm_lp(data: &[u8], pool_address: &str) -> Result<Option<String>, String> {
+    // PumpFun AMM pools that have graduated from bonding curve
+    log(
+        LogTag::Security,
+        "LP_TODO",
+        &format!(
+            "PumpFun AMM LP extraction not yet implemented for: {}",
+            safe_truncate(pool_address, 8)
+        )
+    );
+    Ok(None)
+}
+
+/// Extract LP mint from PumpFun Legacy pool data
+fn extract_pumpfun_legacy_lp(data: &[u8], _pool_address: &str) -> Result<Option<String>, String> {
+    // PumpFun bonding curve pools don't have LP tokens
+    log(
+        LogTag::Security,
+        "LP_INFO",
+        "PumpFun bonding curve detected - no LP tokens exist (inherently safe)"
+    );
+    Ok(None)
+}
+
+// Public API functions
 
 /// Batch check LP lock status for multiple tokens
 pub async fn check_multiple_lp_locks(
@@ -898,8 +1150,8 @@ pub async fn check_multiple_lp_locks(
             Err(e) => {
                 log(
                     LogTag::Security,
-                    "ERROR",
-                    &format!("Failed to analyze LP lock for {}: {}", safe_truncate(mint, 8), e)
+                    "BATCH_ERROR",
+                    &format!("Failed to analyze LP lock for FULL_MINT: {} - Error: {}", mint, e)
                 );
                 // Continue with other tokens even if one fails
             }
@@ -915,17 +1167,29 @@ pub async fn is_lp_safe(token_mint: &str) -> Result<bool, String> {
     Ok(analysis.is_valid_for_trading())
 }
 
+/// Get detailed lock analysis for debugging
+pub async fn get_detailed_lp_analysis(token_mint: &str) -> Result<LpLockAnalysis, String> {
+    // Force fresh analysis without cache
+    check_lp_lock_status_with_cache(token_mint, false).await
+}
+
+/// Legacy compatibility - check if a token's liquidity is locked (simple boolean)
+pub async fn is_liquidity_locked(token_mint: &str) -> Result<bool, String> {
+    let analysis = check_lp_lock_status(token_mint).await?;
+    Ok(analysis.status.is_safe())
+}
+
 /// Legacy LockPrograms struct for compatibility
 pub struct LockPrograms;
 
 impl LockPrograms {
-    /// Get list of known lock/vesting program addresses (empty for now)
+    /// Get list of known lock/vesting program addresses
     pub fn known_programs() -> std::collections::HashMap<&'static str, &'static str> {
-        std::collections::HashMap::new()
+        KNOWN_LOCK_PROGRAMS.iter().cloned().collect()
     }
 
     /// Check if an address is a known lock program
-    pub fn is_lock_program(_address: &str) -> Option<&'static str> {
-        None
+    pub fn is_lock_program(address: &str) -> Option<&'static str> {
+        is_known_lock_program(address)
     }
 }

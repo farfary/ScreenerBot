@@ -287,6 +287,8 @@ fn generate_test_report(
                 LpLockStatus::Locked { .. } => "🔐",
                 LpLockStatus::NotLocked { .. } => "🔓",
                 LpLockStatus::CreatorHeld => "👤",
+                LpLockStatus::PositionNft { .. } => "🎫",
+                LpLockStatus::BondingCurve { .. } => "📈",
                 LpLockStatus::Unknown => "❓",
                 LpLockStatus::NoPool => "🚫",
             };

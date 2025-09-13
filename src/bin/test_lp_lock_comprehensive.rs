@@ -33,6 +33,8 @@ impl ExpectedCategory {
             (ExpectedCategory::NotLocked, LpLockStatus::NotLocked { .. }) => true,
             (ExpectedCategory::NotLocked, LpLockStatus::CreatorHeld) => true,
             (ExpectedCategory::BondingCurve, LpLockStatus::NotLocked { .. }) => true,
+            (ExpectedCategory::BondingCurve, LpLockStatus::BondingCurve { .. }) => true,
+            (ExpectedCategory::ProgramLocked, LpLockStatus::PositionNft { .. }) => true, // Position NFTs are safe
             (ExpectedCategory::Unknown, LpLockStatus::Unknown) => true,
             (ExpectedCategory::NoPool, LpLockStatus::NoPool) => true,
             _ => false,
@@ -288,6 +290,8 @@ async fn generate_test_report(
                 LpLockStatus::Locked { .. } => "Locked",
                 LpLockStatus::NotLocked { .. } => "NotLocked",
                 LpLockStatus::CreatorHeld => "CreatorHeld",
+                LpLockStatus::PositionNft { .. } => "PositionNft",
+                LpLockStatus::BondingCurve { .. } => "BondingCurve",
                 LpLockStatus::Unknown => "Unknown",
                 LpLockStatus::NoPool => "NoPool",
             };

@@ -234,6 +234,8 @@ fn print_detailed_result(token: &TestToken, status: &LpLockStatus, score: u32, d
         LpLockStatus::Locked { .. } => "🔒",
         LpLockStatus::NotLocked { .. } => "🔓",
         LpLockStatus::CreatorHeld => "👤",
+        LpLockStatus::PositionNft { .. } => "🎫",
+        LpLockStatus::BondingCurve { .. } => "📈",
         LpLockStatus::Unknown => "❓",
         LpLockStatus::NoPool => "🚫",
     };
@@ -276,6 +278,10 @@ fn get_status_description(status: &LpLockStatus) -> String {
         LpLockStatus::NotLocked { confidence } =>
             format!("LP tokens not locked (confidence: {}%)", confidence),
         LpLockStatus::CreatorHeld => "LP tokens held by creator (risky)".to_string(),
+        LpLockStatus::PositionNft { dex, mechanism } =>
+            format!("Uses {} {} mechanism (safe)", dex, mechanism),
+        LpLockStatus::BondingCurve { dex } =>
+            format!("Uses {} bonding curve (no LP tokens to rug)", dex),
         LpLockStatus::Unknown => "Unable to determine lock status".to_string(),
         LpLockStatus::NoPool => "No liquidity pool found".to_string(),
     }
