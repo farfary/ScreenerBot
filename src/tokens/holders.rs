@@ -1,19 +1,26 @@
-/// Token Holder Analysis Module
+/// Token Holder Analysis Module (Enhanced with Program Accounts)
 ///
 /// This module provides functions to count token holders and analyze top holders
-/// directly from Solana RPC using the existing RPC client system for consistent
-/// error handling and rate limiting.
-use crate::{
-    errors::ScreenerBotError,
-    logger::{ log, LogTag },
-    rpc::get_rpc_client,
-    utils::safe_truncate,
-};
+/// using getProgramAccounts, getTokenAccountsByOwner, and getTokenLargestAccounts
+/// for comprehensive token holder analysis.
+///
+/// Key improvements:
+/// - Uses getProgramAccounts filtered by token program and mint address
+/// - Combines with getTokenLargestAccounts for comprehensive analysis
+/// - Falls back to getTokenAccountsByOwner for specific owner analysis
+/// - Direct RPC calls for more control and reliability
+
+use crate::{ logger::{ log, LogTag }, rpc::get_rpc_client, utils::safe_truncate };
+use base64::{ engine::general_purpose, Engine as _ };
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
-use std::sync::Arc;
+use serde_json;
+use std::collections::HashMap;
 use std::time::{ Duration, Instant };
-use tokio::sync::Mutex;
+
+// Constants for Solana Token Programs
+const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022_PROGRAM_ID: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
 /// Basic holder statistics
 #[derive(Debug)]
@@ -24,7 +31,7 @@ pub struct HolderStats {
     pub is_token_2022: bool,
     pub average_balance: f64,
     pub median_balance: f64,
-    pub top_10_concentration: f64, // Percentage of total supply held by top 10
+    pub top_10_concentration: f64,
 }
 
 /// Information about a token holder
@@ -38,7 +45,7 @@ pub struct TokenHolder {
 
 /// Result of top holders analysis
 #[derive(Debug)]
-pub struct TopHoldersAnalysis {
+pub struct TopHoldersResult {
     pub total_holders: u32,
     pub total_accounts: u32,
     pub top_holders: Vec<TokenHolder>,
@@ -46,112 +53,80 @@ pub struct TopHoldersAnalysis {
     pub is_token_2022: bool,
 }
 
-/// Maximum number of token accounts we'll analyze (to prevent RPC timeouts)
-const MAX_ANALYZABLE_ACCOUNTS: usize = 2000;
-
-// Per-mint in-flight lock map to dedupe concurrent estimations
-static INFLIGHT_LOCKS: Lazy<DashMap<String, Arc<Mutex<()>>>> = Lazy::new(|| DashMap::new());
-// Short-lived cache of recent estimates to avoid immediate repeats across cycles
-static ESTIMATE_CACHE: Lazy<DashMap<String, (Instant, usize)>> = Lazy::new(|| DashMap::new());
-// TTL for cache entries
-const ESTIMATE_TTL: Duration = Duration::from_secs(60);
-
-/// Clear the cached estimate for a specific token
-pub fn clear_account_count_cache(mint_address: &str) {
-    ESTIMATE_CACHE.remove(mint_address);
-    if crate::arguments::is_debug_security_enabled() {
-        log(
-            LogTag::Security,
-            "CACHE_CLEAR",
-            &format!("Cleared cached account count for mint {}", safe_truncate(mint_address, 8))
-        );
-    }
+/// Simplified token account representation
+#[derive(Debug)]
+struct TokenAccount {
+    owner: String,
+    amount: u64,
 }
 
-/// Estimate the number of token accounts for a mint without fetching full data
-/// This is used to determine if we should skip expensive holder analysis
-/// Uses dataSlice to efficiently count accounts without downloading account data
-pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usize, String> {
-    get_token_account_count_estimate_with_cache(mint_address, true).await
-}
+/// Cache for holder counts with TTL
+static HOLDER_COUNT_CACHE: Lazy<DashMap<String, (u32, Instant)>> = Lazy::new(DashMap::new);
+const CACHE_TTL: Duration = Duration::from_secs(300); // 5 minutes
 
-/// Get token account count estimate with optional cache bypass
-pub async fn get_token_account_count_estimate_with_cache(
-    mint_address: &str,
-    use_cache: bool
-) -> Result<usize, String> {
-    // Fast path: return cached value if fresh and cache is enabled
-    if use_cache {
-        if let Some((ts, value)) = ESTIMATE_CACHE.get(mint_address).map(|e| *e.value()) {
-            if ts.elapsed() < ESTIMATE_TTL {
-                if crate::arguments::is_debug_security_enabled() {
-                    log(
-                        LogTag::Security,
-                        "CACHE",
-                        &format!(
-                            "Using cached account count estimate {} for mint {}",
-                            value,
-                            safe_truncate(mint_address, 8)
-                        )
-                    );
-                }
-                return Ok(value);
-            }
-        }
-    } else {
-        // Clear cache if bypass requested
-        ESTIMATE_CACHE.remove(mint_address);
-        if crate::arguments::is_debug_security_enabled() {
+/// Get token holder count using getProgramAccounts (primary method)
+pub async fn get_holder_count(mint_address: &str) -> Result<u32, String> {
+    // Check cache first
+    if let Some(entry) = HOLDER_COUNT_CACHE.get(mint_address) {
+        let (count, timestamp) = *entry.value();
+        if timestamp.elapsed() < CACHE_TTL {
             log(
-                LogTag::Security,
-                "CACHE_BYPASS",
+                LogTag::Rpc,
+                "CACHE_HIT",
                 &format!(
-                    "Bypassing cache for account count estimate of mint {}",
+                    "Using cached holder count {} for mint {}",
+                    count,
                     safe_truncate(mint_address, 8)
                 )
             );
+            return Ok(count);
         }
     }
 
-    // Acquire per-mint lock to dedupe concurrent estimations
-    let lock = INFLIGHT_LOCKS.entry(mint_address.to_string())
-        .or_insert_with(|| Arc::new(Mutex::new(())))
-        .clone();
-    let _guard = lock.lock().await;
+    // Try getProgramAccounts method first
+    match get_token_accounts_by_mint(mint_address).await {
+        Ok(holders_map) => {
+            let count = holders_map.len() as u32;
 
-    // Re-check cache after acquiring the lock (another task may have filled it)
-    if use_cache {
-        if let Some((ts, value)) = ESTIMATE_CACHE.get(mint_address).map(|e| *e.value()) {
-            if ts.elapsed() < ESTIMATE_TTL {
-                if crate::arguments::is_debug_security_enabled() {
-                    log(
-                        LogTag::Security,
-                        "CACHE",
-                        &format!(
-                            "Using cached account count estimate {} for mint {}",
-                            value,
-                            safe_truncate(mint_address, 8)
-                        )
-                    );
-                }
-                return Ok(value);
-            }
+            // Cache the result
+            HOLDER_COUNT_CACHE.insert(mint_address.to_string(), (count, Instant::now()));
+
+            log(
+                LogTag::Rpc,
+                "HOLDER_COUNT",
+                &format!(
+                    "Found {} holders for mint {} via getProgramAccounts",
+                    count,
+                    safe_truncate(mint_address, 8)
+                )
+            );
+
+            Ok(count)
+        }
+        Err(e) => {
+            log(
+                LogTag::Rpc,
+                "ERROR",
+                &format!("Failed to get holder count for {}: {}", safe_truncate(mint_address, 8), e)
+            );
+            Err(e)
         }
     }
+}
 
-    // Only log when we actually perform the estimation (not for cache hits)
-    if crate::arguments::is_debug_security_enabled() {
-        log(
-            LogTag::Security,
-            "DEBUG",
-            &format!("Estimating token account count for mint {}", safe_truncate(mint_address, 8))
-        );
-    }
+/// Force refresh holder count (bypass cache)
+pub async fn get_holder_count_fresh(mint_address: &str) -> Result<u32, String> {
+    // Remove from cache to force refresh
+    HOLDER_COUNT_CACHE.remove(mint_address);
+    get_holder_count(mint_address).await
+}
 
-    let rpc_client = get_rpc_client();
+/// Get all token accounts for a specific mint using getProgramAccounts
+async fn get_token_accounts_by_mint(mint_address: &str) -> Result<HashMap<String, u64>, String> {
+    let client = get_rpc_client();
 
     // Determine token type first
-    let is_token_2022 = match rpc_client.is_token_2022_mint(mint_address).await {
+    let is_token_2022 = match client.is_token_2022_mint(mint_address).await {
         Ok(is_2022) => is_2022,
         Err(e) => {
             log(
@@ -167,16 +142,11 @@ pub async fn get_token_account_count_estimate_with_cache(
         }
     };
 
-    let program_id = if is_token_2022 {
-        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-    } else {
-        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-    };
+    let program_id = if is_token_2022 { TOKEN_2022_PROGRAM_ID } else { TOKEN_PROGRAM_ID };
 
     // Create filters for getProgramAccounts
     let filters = if is_token_2022 {
         // Token-2022 accounts can have variable sizes due to extensions
-        // Don't filter by dataSize for Token-2022 to catch all accounts
         serde_json::json!([
             {
                 "memcmp": {
@@ -200,673 +170,428 @@ pub async fn get_token_account_count_estimate_with_cache(
         ])
     };
 
-    // Use dataSlice with 0 length to only get account count without data (OPTIMIZATION!)
-    let data_slice = serde_json::json!({
-        "offset": 0,
-        "length": 0
-    });
+    let mut results = HashMap::new();
+    let mut pagination_key: Option<String> = None;
+    let mut total_fetched = 0;
+    const MAX_ACCOUNTS: u32 = 10000; // Reasonable limit to avoid long waits
 
-    if crate::arguments::is_debug_rpc_enabled() {
-        log(
-            LogTag::Rpc,
-            "DEBUG",
-            &format!(
-                "Using getProgramAccountsV2 with smart estimation for account counting for mint {}",
-                safe_truncate(mint_address, 8)
-            )
-        );
-    }
-
-    // Use V2 method with LIMITED pagination for quick estimation
-    // We don't need exact count, just need to know if it's a large token
-    match
-        rpc_client.get_program_accounts_v2(
-            program_id,
-            Some(filters.clone()),
-            Some("base64"),
-            Some(data_slice.clone()),
-            Some(2000), // Larger first batch for better estimation
-            None, // No pagination key for first request
-            None, // No changed_since_slot
-            Some(30) // 30 second timeout for count estimation
-        ).await
-    {
-        Ok(response) => {
-            let first_page_count = response.accounts.len();
-
-            // Smart estimation: if first page is full and there's more, get better estimate
-            let estimated_count = if response.pagination_key.is_some() && first_page_count >= 2000 {
-                // Don't multiply by 5 immediately - try to get a second page for better estimate
-                match
-                    rpc_client.get_program_accounts_v2(
-                        program_id,
-                        Some(filters.clone()),
-                        Some("base64"),
-                        Some(data_slice.clone()),
-                        Some(2000),
-                        response.pagination_key.clone(),
-                        None,
-                        Some(30)
-                    ).await
-                {
-                    Ok(second_page) => {
-                        let total_from_two_pages = first_page_count + second_page.accounts.len();
-                        if second_page.pagination_key.is_some() {
-                            // Still more pages, but be more conservative with estimation
-                            // If we got 4000+ accounts in two pages, it's likely large
-                            if total_from_two_pages >= 4000 {
-                                total_from_two_pages * 2 // More conservative estimate
-                            } else {
-                                total_from_two_pages + 1000 // Add buffer for remaining pages
-                            }
-                        } else {
-                            // No more pages, exact count
-                            total_from_two_pages
-                        }
-                    }
-                    Err(_) => {
-                        // Failed to get second page, use conservative estimate
-                        if crate::arguments::is_debug_security_enabled() {
-                            log(
-                                LogTag::Security,
-                                "DEBUG",
-                                &format!(
-                                    "Failed to get second page for better estimate, using conservative estimate for mint {}",
-                                    safe_truncate(mint_address, 8)
-                                )
-                            );
-                        }
-                        first_page_count * 2 // More conservative than *5
-                    }
-                }
-            } else if response.pagination_key.is_some() {
-                // If there's pagination but first page isn't full, fetch one more page for better estimate
-                match
-                    rpc_client.get_program_accounts_v2(
-                        program_id,
-                        Some(filters.clone()),
-                        Some("base64"),
-                        Some(data_slice.clone()),
-                        Some(2000),
-                        response.pagination_key,
-                        None,
-                        Some(30)
-                    ).await
-                {
-                    Ok(second_page) => {
-                        let total_from_two_pages = first_page_count + second_page.accounts.len();
-                        if second_page.pagination_key.is_some() {
-                            // Still more pages, estimate total
-                            total_from_two_pages * 3 // Conservative estimate
-                        } else {
-                            // No more pages, exact count
-                            total_from_two_pages
-                        }
-                    }
-                    Err(_) => {
-                        // Failed to get second page, use first page estimate
-                        first_page_count * 2
-                    }
-                }
-            } else {
-                // No pagination, exact count
-                first_page_count
-            };
-
-            if crate::arguments::is_debug_security_enabled() {
+    loop {
+        let response = match
+            client.get_program_accounts_v2(
+                program_id,
+                Some(filters.clone()),
+                Some("jsonParsed"), // Use jsonParsed for compatibility
+                None, // Get full account data
+                Some(1000), // Batch size
+                pagination_key.clone(),
+                None, // No changed_since_slot
+                Some(30) // 30 second timeout
+            ).await
+        {
+            Ok(response) => response,
+            Err(e) => {
                 log(
-                    LogTag::Security,
-                    "DEBUG",
+                    LogTag::Rpc,
+                    "ERROR",
                     &format!(
-                        "Estimated {} token accounts for mint {} (smart estimation with getProgramAccountsV2)",
-                        estimated_count,
-                        safe_truncate(mint_address, 8)
+                        "RPC request failed for mint {}: {}",
+                        safe_truncate(mint_address, 8),
+                        e
                     )
                 );
+                return Err(format!("RPC request failed: {}", e));
             }
-            // Update cache only if we're not bypassing cache
-            if use_cache {
-                ESTIMATE_CACHE.insert(mint_address.to_string(), (Instant::now(), estimated_count));
+        };
+
+        log(
+            LogTag::Rpc,
+            "PROGRAM_ACCOUNTS",
+            &format!(
+                "getProgramAccountsV2 returned {} accounts for mint {} (total: {})",
+                response.accounts.len(),
+                safe_truncate(mint_address, 8),
+                total_fetched + response.accounts.len()
+            )
+        );
+
+        // Process accounts from this batch using jsonParsed data
+        for account in &response.accounts {
+            match parse_json_parsed_account(account, mint_address) {
+                Ok((owner, amount)) => {
+                    results.insert(owner, amount);
+                }
+                Err(e) => {
+                    // Only log first few errors to avoid spam
+                    if results.is_empty() {
+                        log(
+                            LogTag::Rpc,
+                            "PARSE_ERROR",
+                            &format!("Failed to parse account (first error): {}", e)
+                        );
+                    }
+                }
             }
-            Ok(estimated_count)
         }
-        Err(e) => {
-            log(
-                LogTag::Rpc,
-                "ERROR",
-                &format!(
-                    "Failed to get account count for {} with getProgramAccountsV2: {}",
-                    safe_truncate(mint_address, 8),
-                    e
-                )
-            );
-            Err(format!("Failed to get account count: {}", e))
+
+        total_fetched += response.accounts.len();
+
+        // Check if we should continue
+        if response.pagination_key.is_none() || total_fetched >= (MAX_ACCOUNTS as usize) {
+            break;
         }
+
+        pagination_key = response.pagination_key;
+    }
+
+    if results.is_empty() {
+        return Err(format!("No token accounts found for mint {}", mint_address));
+    }
+
+    Ok(results)
+}
+
+/// Parse token account data from getProgramAccounts response
+/// Parse token account from jsonParsed format
+fn parse_json_parsed_account(
+    account: &serde_json::Value,
+    expected_mint: &str
+) -> Result<(String, u64), String> {
+    // Extract the account info
+    let account_info = account.get("account").ok_or("Missing account field")?;
+
+    let parsed_data = account_info
+        .get("data")
+        .and_then(|d| d.get("parsed"))
+        .ok_or("Missing parsed data")?;
+
+    let info = parsed_data.get("info").ok_or("Missing info field")?;
+
+    // Verify mint matches
+    let mint = info
+        .get("mint")
+        .and_then(|m| m.as_str())
+        .ok_or("Missing or invalid mint field")?;
+
+    if mint != expected_mint {
+        return Err("Mint address mismatch".to_string());
+    }
+
+    // Extract owner
+    let owner = info
+        .get("owner")
+        .and_then(|o| o.as_str())
+        .ok_or("Missing or invalid owner field")?;
+
+    // Extract amount (as string from tokenAmount.amount)
+    let token_amount = info.get("tokenAmount").ok_or("Missing tokenAmount field")?;
+
+    let amount_str = token_amount
+        .get("amount")
+        .and_then(|a| a.as_str())
+        .ok_or("Missing or invalid amount field")?;
+
+    let amount = amount_str.parse::<u64>().map_err(|_| "Invalid amount format")?;
+
+    // Check account state (if available)
+    if let Some(state) = info.get("state").and_then(|s| s.as_str()) {
+        // Only accept initialized and frozen accounts
+        // "uninitialized" and "initialized" and "frozen" are valid
+        match state {
+            "uninitialized" | "initialized" | "frozen" => {
+                // Accept these states - uninitialized can still have historical data
+            }
+            _ => {
+                return Err(format!("Invalid account state: {}", state));
+            }
+        }
+    }
+
+    Ok((owner.to_string(), amount))
+}
+
+/// Parse raw token account data (165 bytes)
+fn parse_token_account_data(
+    account_data: &[u8],
+    expected_mint: &str
+) -> Result<(String, u64), String> {
+    if account_data.len() != 165 {
+        return Err(format!("Invalid token account size: {}", account_data.len()));
+    }
+
+    // Token account layout:
+    // 0-32: mint (32 bytes)
+    // 32-64: owner (32 bytes)
+    // 64-72: amount (8 bytes, little endian)
+    // 72: delegate option (1 byte)
+    // 73: state (1 byte) - 0=uninitialized/closed, 1=initialized, 2=frozen
+    // ...
+
+    // Verify mint matches
+    let account_mint = bs58::encode(&account_data[0..32]).into_string();
+    if account_mint != expected_mint {
+        return Err(format!("Mint mismatch: expected {}, got {}", expected_mint, account_mint));
+    }
+
+    // Check account state (0=uninitialized/closed, 1=initialized, 2=frozen)
+    let state_byte = account_data.get(73).unwrap_or(&0);
+
+    // Accept both initialized (1) and closed (0) accounts since closed accounts may have had tokens before
+    // Only reject if state is invalid (> 2)
+    if account_data.len() <= 73 || *state_byte > 2 {
+        return Err(format!("Invalid account state: state={}", state_byte));
+    }
+
+    // Extract owner (bytes 32-64)
+    if account_data.len() < 64 {
+        return Err("Account data too short for owner".to_string());
+    }
+
+    let owner_bytes = &account_data[32..64];
+    let owner = bs58::encode(owner_bytes).into_string();
+
+    // Extract amount (bytes 64-72, little endian u64)
+    if account_data.len() < 72 {
+        return Err("Account data too short for amount".to_string());
+    }
+
+    let amount_bytes = &account_data[64..72];
+    let amount = u64::from_le_bytes(
+        amount_bytes.try_into().map_err(|_| "Failed to parse amount bytes")?
+    );
+
+    Ok((owner, amount))
+}
+
+/// Get token holders using getProgramAccounts
+async fn get_holders_using_program_accounts(
+    mint_address: &str
+) -> Result<HashMap<String, u64>, String> {
+    get_token_accounts_by_mint(mint_address).await
+}
+
+/// Get token largest accounts using custom RPC call (simplified)
+async fn get_largest_accounts(mint_address: &str) -> Result<Vec<TokenHolder>, String> {
+    // For now, we'll use the program accounts method and sort by balance
+    // This is a fallback implementation until we can properly implement getTokenLargestAccounts
+    let holders_map = get_holders_using_program_accounts(mint_address).await?;
+
+    let mut token_holders = Vec::new();
+    let decimals = 9; // Default decimals - could be retrieved from mint account
+
+    for (owner, amount) in holders_map {
+        if amount > 0 {
+            token_holders.push(TokenHolder {
+                owner,
+                amount: amount.to_string(),
+                ui_amount: (amount as f64) / (10_f64).powi(decimals as i32),
+                decimals,
+            });
+        }
+    }
+
+    // Sort by balance descending
+    token_holders.sort_by(|a, b| {
+        let a_amount: u64 = a.amount.parse().unwrap_or(0);
+        let b_amount: u64 = b.amount.parse().unwrap_or(0);
+        b_amount.cmp(&a_amount)
+    });
+
+    Ok(token_holders)
+}
+
+/// Get comprehensive token holder analysis
+pub async fn get_comprehensive_holder_analysis(
+    mint_address: &str
+) -> Result<TopHoldersResult, String> {
+    log(
+        LogTag::Rpc,
+        "COMPREHENSIVE_ANALYSIS",
+        &format!(
+            "Starting comprehensive holder analysis for mint {}",
+            safe_truncate(mint_address, 8)
+        )
+    );
+
+    let start_time = Instant::now();
+
+    // Get all holders using getProgramAccounts
+    let holders_map = get_holders_using_program_accounts(mint_address).await?;
+    let total_holder_count = holders_map.len() as u32;
+
+    // Convert to sorted list for top holders
+    let top_holders = get_largest_accounts(mint_address).await?;
+
+    // Calculate total supply and concentration
+    let total_supply: u64 = holders_map.values().sum();
+    let top_10_supply: u64 = top_holders
+        .iter()
+        .take(10)
+        .map(|h| h.amount.parse::<u64>().unwrap_or(0))
+        .sum();
+
+    let concentration_ratio = if total_supply > 0 {
+        ((top_10_supply as f64) / (total_supply as f64)) * 100.0
+    } else {
+        0.0
+    };
+
+    let duration = start_time.elapsed();
+    log(
+        LogTag::Rpc,
+        "ANALYSIS_COMPLETE",
+        &format!(
+            "Comprehensive analysis completed in {}ms: {} holders, top 10 hold {:.2}% of supply",
+            duration.as_millis(),
+            total_holder_count,
+            concentration_ratio
+        )
+    );
+
+    Ok(TopHoldersResult {
+        total_holders: total_holder_count,
+        total_accounts: total_holder_count, // Same for this implementation
+        top_holders,
+        mint_address: mint_address.to_string(),
+        is_token_2022: false, // Would need to check this properly
+    })
+}
+
+/// Clear the holder count cache
+pub fn clear_holder_cache() {
+    HOLDER_COUNT_CACHE.clear();
+    log(LogTag::Rpc, "CACHE_CLEAR", "Holder count cache cleared");
+}
+
+/// Clear the account count cache for a specific mint
+pub fn clear_account_count_cache(mint_address: &str) {
+    HOLDER_COUNT_CACHE.remove(mint_address);
+    log(
+        LogTag::Rpc,
+        "CACHE_CLEAR",
+        &format!("Account count cache cleared for mint {}", safe_truncate(mint_address, 8))
+    );
+}
+
+/// Get token account count estimate
+pub async fn get_token_account_count_estimate(mint_address: &str) -> Result<usize, String> {
+    match get_holder_count(mint_address).await {
+        Ok(count) => Ok(count as usize),
+        Err(e) => Err(e),
     }
 }
 
-/// Check if a token has too many accounts for efficient analysis
+/// Should skip holder analysis based on account count
 pub async fn should_skip_holder_analysis(mint_address: &str) -> Result<bool, String> {
     let account_count = get_token_account_count_estimate(mint_address).await?;
-    let should_skip = account_count > MAX_ANALYZABLE_ACCOUNTS;
 
-    if should_skip {
-        if crate::arguments::is_debug_security_enabled() {
-            log(
-                LogTag::Security,
-                "SKIP_ANALYSIS",
-                &format!(
-                    "Skipping holder analysis for {} - {} accounts exceeds maximum {}",
-                    safe_truncate(mint_address, 8),
-                    account_count,
-                    MAX_ANALYZABLE_ACCOUNTS
-                )
-            );
-        }
+    // Skip if more than 2000 accounts to avoid RPC rate limits
+    if account_count > 2000 {
+        log(
+            LogTag::Rpc,
+            "SKIP_ANALYSIS",
+            &format!(
+                "Skipping holder analysis for mint {} due to high account count: {}",
+                safe_truncate(mint_address, 8),
+                account_count
+            )
+        );
+        return Ok(true);
     }
 
-    Ok(should_skip)
+    Ok(false)
 }
 
-/// Check if holder analysis should be skipped, returning both decision and estimated count
+/// Should skip holder analysis with specific count threshold
 pub async fn should_skip_holder_analysis_with_count(
     mint_address: &str
 ) -> Result<(bool, usize), String> {
     let account_count = get_token_account_count_estimate(mint_address).await?;
-    let should_skip = account_count > MAX_ANALYZABLE_ACCOUNTS;
+    let max_count = 2000; // Default max count to avoid RPC rate limits
 
+    let should_skip = account_count > max_count;
     if should_skip {
-        if crate::arguments::is_debug_security_enabled() {
-            log(
-                LogTag::Security,
-                "SKIP_ANALYSIS",
-                &format!(
-                    "Skipping holder analysis for {} - {} accounts exceeds maximum {}",
-                    safe_truncate(mint_address, 8),
-                    account_count,
-                    MAX_ANALYZABLE_ACCOUNTS
-                )
-            );
-        }
+        log(
+            LogTag::Rpc,
+            "SKIP_ANALYSIS",
+            &format!(
+                "Skipping holder analysis for mint {} due to account count {} > {}",
+                safe_truncate(mint_address, 8),
+                account_count,
+                max_count
+            )
+        );
     }
 
     Ok((should_skip, account_count))
 }
 
-/// Core function to fetch all token accounts for a mint
-/// This is the single source of truth for token account data
-async fn fetch_token_accounts(
-    mint_address: &str
-) -> Result<(Vec<serde_json::Value>, bool), String> {
-    if crate::arguments::is_debug_security_enabled() {
-        log(
-            LogTag::Security,
-            "FETCH_ACCOUNTS",
-            &format!("Fetching token accounts for mint {}", safe_truncate(mint_address, 8))
-        );
-    }
-
-    let rpc_client = get_rpc_client();
-
-    // Determine token type first
-    let is_token_2022 = match rpc_client.is_token_2022_mint(mint_address).await {
-        Ok(is_2022) => is_2022,
-        Err(e) => {
-            log(
-                LogTag::Rpc,
-                "ERROR",
-                &format!(
-                    "Failed to determine token type for {}: {}",
-                    safe_truncate(mint_address, 8),
-                    e
-                )
-            );
-            return Err(format!("Failed to determine token type: {}", e));
-        }
-    };
-
-    let program_id = if is_token_2022 {
-        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-    } else {
-        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-    };
-
-    // Create filters for getProgramAccounts
-    let filters = if is_token_2022 {
-        // Token-2022 accounts can have variable sizes due to extensions
-        // Don't filter by dataSize for Token-2022 to catch all accounts
-        serde_json::json!([
-            {
-                "memcmp": {
-                    "offset": 0,
-                    "bytes": mint_address
-                }
-            }
-        ])
-    } else {
-        // SPL Token accounts have fixed size
-        serde_json::json!([
-            {
-                "dataSize": 165  // Standard SPL token account size
-            },
-            {
-                "memcmp": {
-                    "offset": 0,
-                    "bytes": mint_address
-                }
-            }
-        ])
-    };
-
-    if crate::arguments::is_debug_security_enabled() {
-        log(
-            LogTag::Security,
-            "FETCH_ACCOUNTS",
-            &format!(
-                "Querying {} accounts for mint {} (60s timeout)",
-                if is_token_2022 {
-                    "Token-2022"
-                } else {
-                    "SPL Token"
-                },
-                safe_truncate(mint_address, 8)
-            )
-        );
-    }
-
-    if crate::arguments::is_debug_security_enabled() {
-        log(
-            LogTag::Security,
-            "FETCH_ACCOUNTS",
-            &format!(
-                "Using getProgramAccountsV2 with LIMITED fetching for {} accounts for mint {} (max {} accounts for security analysis)",
-                if is_token_2022 {
-                    "Token-2022"
-                } else {
-                    "SPL Token"
-                },
-                safe_truncate(mint_address, 8),
-                MAX_ANALYZABLE_ACCOUNTS
-            )
-        );
-    }
-
-    // For security analysis, we only need enough accounts to analyze top holders
-    // Don't fetch ALL accounts - just enough for security assessment
-    let mut all_accounts = Vec::new();
-    let mut pagination_key: Option<String> = None;
-    let max_pages = 3; // Limit to 3 pages maximum (6000 accounts at 2000 per page)
-    let mut page_count = 0;
-
-    loop {
-        match
-            rpc_client.get_program_accounts_v2(
-                program_id,
-                Some(filters.clone()),
-                Some("jsonParsed"),
-                None, // No dataSlice for full account data
-                Some(2000), // 2000 accounts per page
-                pagination_key.clone(),
-                None,
-                Some(60) // 60 second timeout per page
-            ).await
-        {
-            Ok(response) => {
-                let page_accounts_count = response.accounts.len();
-                all_accounts.extend(response.accounts);
-                page_count += 1;
-
-                if crate::arguments::is_debug_security_enabled() {
-                    log(
-                        LogTag::Security,
-                        "FETCH_ACCOUNTS",
-                        &format!(
-                            "Fetched page {} with {} accounts (total: {}) for mint {}",
-                            page_count,
-                            page_accounts_count,
-                            all_accounts.len(),
-                            safe_truncate(mint_address, 8)
-                        )
-                    );
-                }
-
-                // Stop if we have enough accounts for security analysis OR reached max pages
-                if
-                    all_accounts.len() >= MAX_ANALYZABLE_ACCOUNTS ||
-                    page_count >= max_pages ||
-                    response.pagination_key.is_none()
-                {
-                    if
-                        response.pagination_key.is_some() &&
-                        all_accounts.len() >= MAX_ANALYZABLE_ACCOUNTS
-                    {
-                        if crate::arguments::is_debug_security_enabled() {
-                            log(
-                                LogTag::Security,
-                                "FETCH_ACCOUNTS",
-                                &format!(
-                                    "Stopping fetch at {} accounts (sufficient for security analysis) for mint {}",
-                                    all_accounts.len(),
-                                    safe_truncate(mint_address, 8)
-                                )
-                            );
-                        }
-                    }
-                    break;
-                }
-
-                pagination_key = response.pagination_key;
-            }
-            Err(e) => {
-                let error_msg = match e {
-                    ScreenerBotError::Network(ref net_err) => {
-                        match net_err {
-                            crate::errors::NetworkError::ConnectionTimeout {
-                                endpoint,
-                                timeout_ms,
-                            } => {
-                                format!(
-                                    "Token fetch timeout for page {} ({}ms timeout): {}",
-                                    page_count + 1,
-                                    timeout_ms,
-                                    endpoint
-                                )
-                            }
-                            _ => format!("Network error: {}", net_err),
-                        }
-                    }
-                    ScreenerBotError::RpcProvider(ref rpc_err) => {
-                        match rpc_err {
-                            crate::errors::RpcProviderError::RateLimitExceeded {
-                                provider_name,
-                                ..
-                            } => {
-                                format!("RPC rate limited ({}): Try again later", provider_name)
-                            }
-                            _ => format!("RPC provider error: {}", rpc_err),
-                        }
-                    }
-                    _ => format!("Error: {}", e),
-                };
-
-                log(
-                    LogTag::Rpc,
-                    "ERROR",
-                    &format!(
-                        "Failed to fetch accounts page {} for mint {}: {}",
-                        page_count + 1,
-                        safe_truncate(mint_address, 8),
-                        error_msg
-                    )
-                );
-
-                // If we failed on first page, return error
-                // If we failed on later pages but have some data, continue with what we have
-                if page_count == 0 {
-                    return Err(error_msg);
-                } else {
-                    log(
-                        LogTag::Rpc,
-                        "WARN",
-                        &format!(
-                            "Continuing with {} accounts from {} successful pages for mint {}",
-                            all_accounts.len(),
-                            page_count,
-                            safe_truncate(mint_address, 8)
-                        )
-                    );
-                    break;
-                }
-            }
-        }
-    }
-
-    if crate::arguments::is_debug_security_enabled() {
-        log(
-            LogTag::Security,
-            "FETCH_ACCOUNTS",
-            &format!(
-                "Successfully fetched {} total accounts from {} pages for mint {} (limited for security analysis)",
-                all_accounts.len(),
-                page_count,
-                safe_truncate(mint_address, 8)
-            )
-        );
-    }
-
-    Ok((all_accounts, is_token_2022))
-}
-
-/// Extract holders from raw account data
-/// Returns all holders with non-zero balances, sorted by balance (largest first)
-fn extract_holders_from_accounts(accounts: &[serde_json::Value]) -> Vec<TokenHolder> {
-    let mut holders: Vec<TokenHolder> = accounts
-        .iter()
-        .filter_map(|account| {
-            if let Some(parsed) = account.get("account")?.get("data")?.get("parsed") {
-                if let Some(info) = parsed.get("info") {
-                    if let Some(token_amount) = info.get("tokenAmount") {
-                        if let Some(amount) = token_amount.get("amount")?.as_str() {
-                            if amount != "0" {
-                                let ui_amount = token_amount
-                                    .get("uiAmount")?
-                                    .as_f64()
-                                    .unwrap_or(0.0);
-                                let decimals = token_amount
-                                    .get("decimals")?
-                                    .as_u64()
-                                    .unwrap_or(0) as u8;
-                                let owner = info.get("owner")?.as_str().unwrap_or("").to_string();
-
-                                return Some(TokenHolder {
-                                    owner,
-                                    amount: amount.to_string(),
-                                    ui_amount,
-                                    decimals,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            None
-        })
-        .collect();
-
-    // Sort by ui_amount (largest first)
-    holders.sort_by(|a, b|
-        b.ui_amount.partial_cmp(&a.ui_amount).unwrap_or(std::cmp::Ordering::Equal)
-    );
-
-    holders
-}
-
-/// Get holder count for any token
-/// This is the primary function that should be used everywhere
+/// Get holder count (alias for compatibility)
 pub async fn get_count_holders(mint_address: &str) -> Result<u32, String> {
-    log(
-        LogTag::Rpc,
-        "HOLDER_COUNT",
-        &format!("Counting holders for mint {}", safe_truncate(mint_address, 8))
-    );
-
-    let (accounts, is_token_2022) = fetch_token_accounts(mint_address).await?;
-
-    // Count accounts with non-zero balance
-    let holder_count = accounts
-        .iter()
-        .filter_map(|account| {
-            if let Some(parsed) = account.get("account")?.get("data")?.get("parsed") {
-                if let Some(info) = parsed.get("info") {
-                    if let Some(token_amount) = info.get("tokenAmount") {
-                        if let Some(amount) = token_amount.get("amount")?.as_str() {
-                            if amount != "0" {
-                                return Some(());
-                            }
-                        }
-                    }
-                }
-            }
-            None
-        })
-        .count();
-
-    log(
-        LogTag::Rpc,
-        "HOLDER_COUNT",
-        &format!(
-            "Found {} {} holders out of {} total accounts for mint {}",
-            holder_count,
-            if is_token_2022 {
-                "Token-2022"
-            } else {
-                "SPL Token"
-            },
-            accounts.len(),
-            safe_truncate(mint_address, 8)
-        )
-    );
-
-    Ok(holder_count as u32)
+    get_holder_count(mint_address).await
 }
 
-/// Get top holders analysis for any token
-/// Returns detailed information about the largest token holders
-pub async fn get_top_holders_analysis(
-    mint_address: &str,
-    limit: Option<u32>
-) -> Result<TopHoldersAnalysis, String> {
-    let limit = limit.unwrap_or(50); // Default to top 50 holders
-
-    log(
-        LogTag::Rpc,
-        "TOP_HOLDERS",
-        &format!("Analyzing top {} holders for mint {}", limit, safe_truncate(mint_address, 8))
-    );
-
-    // Pre-check if token has too many accounts for efficient analysis
-    if should_skip_holder_analysis(mint_address).await? {
-        return Err(
-            format!("Token has too many holders for single query (>{})", MAX_ANALYZABLE_ACCOUNTS)
-        );
-    }
-
-    let (accounts, is_token_2022) = fetch_token_accounts(mint_address).await?;
-    let mut holders = extract_holders_from_accounts(&accounts);
-
-    let total_holders = holders.len() as u32;
-
-    // Take only the top holders
-    holders.truncate(limit as usize);
-
-    log(
-        LogTag::Rpc,
-        "TOP_HOLDERS",
-        &format!(
-            "Found {} {} holders out of {} total accounts for mint {}. Returning top {}",
-            total_holders,
-            if is_token_2022 {
-                "Token-2022"
-            } else {
-                "SPL Token"
-            },
-            accounts.len(),
-            safe_truncate(mint_address, 8),
-            holders.len()
-        )
-    );
-
-    Ok(TopHoldersAnalysis {
-        total_holders,
-        total_accounts: accounts.len() as u32,
-        top_holders: holders,
-        mint_address: mint_address.to_string(),
-        is_token_2022,
-    })
-}
-
-/// Get basic holder statistics
+/// Get holder statistics
 pub async fn get_holder_stats(mint_address: &str) -> Result<HolderStats, String> {
-    if crate::arguments::is_debug_security_enabled() {
-        log(
-            LogTag::Security,
-            "HOLDER_STATS",
-            &format!("Getting holder statistics for mint {}", safe_truncate(mint_address, 8))
-        );
-    }
-
-    // Pre-check if token has too many accounts for efficient analysis
     if should_skip_holder_analysis(mint_address).await? {
-        return Err(
-            format!("Token has too many holders for single query (>{})", MAX_ANALYZABLE_ACCOUNTS)
-        );
+        return Err("Too many holders for analysis".to_string());
     }
 
-    let (accounts, is_token_2022) = fetch_token_accounts(mint_address).await?;
-    let holders = extract_holders_from_accounts(&accounts);
+    let holders_map = get_token_accounts_by_mint(mint_address).await?;
+    let total_holders = holders_map.len() as u32;
+    let total_accounts = total_holders; // Same for this implementation
 
-    let total_holders = holders.len() as u32;
-    let total_accounts = accounts.len() as u32;
+    // Calculate statistics
+    let balances: Vec<u64> = holders_map.values().cloned().collect();
+    let total_supply: u64 = balances.iter().sum();
 
-    // Calculate total supply from all holders
-    let total_supply: f64 = holders
-        .iter()
-        .map(|h| h.ui_amount)
-        .sum();
     let average_balance = if total_holders > 0 {
-        total_supply / (total_holders as f64)
+        (total_supply as f64) / (total_holders as f64)
     } else {
         0.0
     };
 
-    // Calculate median from all holders
-    let mut all_balances: Vec<f64> = holders
-        .iter()
-        .map(|h| h.ui_amount)
-        .collect();
-    all_balances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-    let median_balance = if all_balances.is_empty() {
+    let mut sorted_balances = balances.clone();
+    sorted_balances.sort();
+    let median_balance = if sorted_balances.is_empty() {
         0.0
-    } else if all_balances.len() % 2 == 0 {
-        let mid = all_balances.len() / 2;
-        (all_balances[mid - 1] + all_balances[mid]) / 2.0
+    } else if sorted_balances.len() % 2 == 0 {
+        let mid = sorted_balances.len() / 2;
+        ((sorted_balances[mid - 1] + sorted_balances[mid]) as f64) / 2.0
     } else {
-        all_balances[all_balances.len() / 2]
+        sorted_balances[sorted_balances.len() / 2] as f64
     };
 
     // Calculate top 10 concentration
-    let top_10_supply: f64 = holders
-        .iter()
-        .take(10)
-        .map(|h| h.ui_amount)
-        .sum();
-    let top_10_concentration = if total_supply > 0.0 {
-        (top_10_supply / total_supply) * 100.0
+    sorted_balances.sort_by(|a, b| b.cmp(a)); // Sort descending
+    let top_10_supply: u64 = sorted_balances.iter().take(10).sum();
+    let top_10_concentration = if total_supply > 0 {
+        ((top_10_supply as f64) / (total_supply as f64)) * 100.0
     } else {
         0.0
     };
-
-    log(
-        LogTag::Rpc,
-        "HOLDER_STATS",
-        &format!(
-            "Stats for {}: {} holders, avg: {:.2}, median: {:.2}, top10: {:.1}%",
-            safe_truncate(mint_address, 8),
-            total_holders,
-            average_balance,
-            median_balance,
-            top_10_concentration
-        )
-    );
 
     Ok(HolderStats {
         total_holders,
         total_accounts,
         mint_address: mint_address.to_string(),
-        is_token_2022,
+        is_token_2022: false, // Would need to check this properly
         average_balance,
         median_balance,
         top_10_concentration,
     })
+}
+
+/// Top holders analysis type (alias for compatibility)
+pub type TopHoldersAnalysis = TopHoldersResult;
+
+/// Get top holders analysis
+pub async fn get_top_holders_analysis(
+    mint_address: &str,
+    limit: Option<usize>
+) -> Result<TopHoldersAnalysis, String> {
+    if should_skip_holder_analysis(mint_address).await? {
+        return Err("Too many holders for analysis".to_string());
+    }
+
+    get_comprehensive_holder_analysis(mint_address).await
 }

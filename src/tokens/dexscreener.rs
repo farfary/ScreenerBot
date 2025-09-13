@@ -68,6 +68,25 @@ static TOKEN_CACHE: LazyLock<RwLock<HashMap<String, CachedTokenData>>> = LazyLoc
 /// Cache TTL in seconds (1 minute maximum for price data)
 const PRICE_CACHE_TTL_SECS: i64 = 60; // 1 minute TTL for all token data
 
+/// Pool cache TTL in seconds (5 minutes for pool data)
+const POOL_CACHE_TTL_SECS: i64 = 300; // 5 minutes TTL for pool data
+
+// =============================================================================
+// POOL CACHING SYSTEM (5 MINUTE TTL)
+// =============================================================================
+
+/// Cache entry for storing pool data with timestamp
+#[derive(Debug, Clone)]
+pub struct CachedPoolData {
+    pub pools: Vec<TokenPair>,
+    pub cached_at: DateTime<Utc>,
+}
+
+/// Global cache for pool data (5 minute TTL)
+static POOL_CACHE: LazyLock<RwLock<HashMap<String, CachedPoolData>>> = LazyLock::new(||
+    RwLock::new(HashMap::new())
+);
+
 // (Removed has_open_position – no position-aware logic)
 
 /// Get cached token data if available and not expired
@@ -113,6 +132,101 @@ async fn get_cached_token_data(mint: &str) -> Option<ApiToken> {
     }
 
     None
+}
+
+/// Get cached pool data if available and not expired
+async fn get_cached_pool_data(mint: &str) -> Option<Vec<TokenPair>> {
+    let cache = POOL_CACHE.read().await;
+
+    if let Some(cached_data) = cache.get(mint) {
+        let now = Utc::now();
+        let cache_age = now.signed_duration_since(cached_data.cached_at).num_seconds();
+
+        if cache_age < POOL_CACHE_TTL_SECS {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "POOL_CACHE_HIT",
+                    &format!(
+                        "🎯 Pool cache hit for {} ({} pools, {}s old)",
+                        &mint[..8],
+                        cached_data.pools.len(),
+                        cache_age
+                    )
+                );
+            }
+            return Some(cached_data.pools.clone());
+        } else {
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "POOL_CACHE_EXPIRED",
+                    &format!("⏰ Pool cache expired for {} ({}s old)", &mint[..8], cache_age)
+                );
+            }
+        }
+    }
+
+    None
+}
+
+/// Store pool data in cache
+async fn cache_pool_data(mint: &str, pools: &[TokenPair]) {
+    let mut cache = POOL_CACHE.write().await;
+    cache.insert(mint.to_string(), CachedPoolData {
+        pools: pools.to_vec(),
+        cached_at: Utc::now(),
+    });
+
+    if is_debug_api_enabled() {
+        log(
+            LogTag::Api,
+            "POOL_CACHE_STORE",
+            &format!("💾 Cached {} pools for {}", pools.len(), &mint[..8])
+        );
+    }
+}
+
+/// Get pool cache statistics
+pub async fn get_pool_cache_stats() -> (usize, usize) {
+    let cache = POOL_CACHE.read().await;
+    let total_entries = cache.len();
+    let now = Utc::now();
+
+    let valid_entries = cache
+        .values()
+        .filter(|entry| {
+            let cache_age = now.signed_duration_since(entry.cached_at).num_seconds();
+            cache_age < POOL_CACHE_TTL_SECS
+        })
+        .count();
+
+    (total_entries, valid_entries)
+}
+
+/// Clean up expired pool cache entries
+pub async fn cleanup_expired_pool_cache_entries() {
+    let mut cache = POOL_CACHE.write().await;
+    let now = Utc::now();
+    let mut removed_count = 0;
+
+    // Remove entries older than 5 minutes
+    cache.retain(|_mint, entry| {
+        let cache_age = now.signed_duration_since(entry.cached_at).num_seconds();
+        let should_keep = cache_age < POOL_CACHE_TTL_SECS;
+        if !should_keep {
+            removed_count += 1;
+        }
+        should_keep
+    });
+
+    if removed_count > 0 && is_debug_api_enabled() {
+        log(
+            LogTag::Api,
+            "POOL_CACHE_CLEANUP",
+            &format!("🧹 Cleaned up {} expired pool cache entries", removed_count)
+        );
+    }
 }
 
 /// Store token data in cache
@@ -1241,12 +1355,24 @@ impl DexScreenerApi {
 
 /// Standalone function to get token pairs from API (improved timeout handling)
 pub async fn get_token_pairs_from_api(token_address: &str) -> Result<Vec<TokenPair>, String> {
+    // Check cache first
+    if let Some(cached_pools) = get_cached_pool_data(token_address).await {
+        return Ok(cached_pools);
+    }
+
     let api = get_global_dexscreener_api().await?;
 
     // Use longer timeout to reduce timeout errors during system stress
     let result = timeout(Duration::from_secs(15), api.lock()).await;
     match result {
-        Ok(mut api_instance) => api_instance.get_solana_token_pairs(token_address).await,
+        Ok(mut api_instance) => {
+            let pools = api_instance.get_solana_token_pairs(token_address).await?;
+
+            // Cache the result
+            cache_pool_data(token_address, &pools).await;
+
+            Ok(pools)
+        }
         Err(_) => {
             // Reduce log level to INFO since timeouts can be normal during shutdown
             if is_debug_api_enabled() {
@@ -1266,6 +1392,12 @@ pub async fn get_token_pools_from_dexscreener(
     token_address: &str
 ) -> Result<Vec<TokenPair>, String> {
     get_token_pairs_from_api(token_address).await
+}
+
+/// Get cached pools for a token (returns None if not cached or expired)
+/// This is useful for other modules that want to use cached data without triggering API calls
+pub async fn get_cached_pools_for_token(token_address: &str) -> Option<Vec<TokenPair>> {
+    get_cached_pool_data(token_address).await
 }
 
 /// Get token pairs for multiple tokens using the batch API endpoint

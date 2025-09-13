@@ -4857,6 +4857,236 @@ impl RpcClient {
         Ok(all_accounts)
     }
 
+    /// Get token holder count using Helius DAS API
+    /// Uses the configured Helius RPC URLs with API keys from configs.json
+    pub async fn get_token_holder_count(&self, mint_address: &str) -> Result<u32, String> {
+        // Build DAS API request for getAssetOwners
+        let request_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getAssetOwners",
+            "params": {
+                "assetId": mint_address,
+                "limit": 1, // Minimal limit to get total count
+                "sortBy": "amount"
+            }
+        });
+
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "HELIUS_DAS",
+                &format!("Requesting holder count for mint {}", safe_truncate(mint_address, 8))
+            );
+        }
+
+        // Use round-robin RPC rotation to get the current Helius URL
+        let current_url = self.rotate_to_next_url();
+
+        // Apply rate limiting
+        self.wait_for_rate_limit().await;
+
+        // Create HTTP client for DAS API call
+        let client = reqwest::Client
+            ::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+        // Make the request to Helius DAS API
+        let response = client
+            .post(&current_url)
+            .json(&request_payload)
+            .send().await
+            .map_err(|e| format!("Failed to send DAS request to {}: {}", current_url, e))?;
+
+        if !response.status().is_success() {
+            return Err(
+                format!(
+                    "Helius DAS API returned error status: {} from {}",
+                    response.status(),
+                    current_url
+                )
+            );
+        }
+
+        // Parse the response
+        let response_json: serde_json::Value = response
+            .json().await
+            .map_err(|e| format!("Failed to parse DAS response from {}: {}", current_url, e))?;
+
+        // Extract the total count from the response
+        if let Some(result) = response_json.get("result") {
+            // If total is provided, use it directly
+            if let Some(total) = result.get("total").and_then(|t| t.as_u64()) {
+                if is_debug_rpc_enabled() {
+                    log(
+                        LogTag::Rpc,
+                        "HELIUS_DAS",
+                        &format!(
+                            "Helius DAS returned total holder count: {} for mint {}",
+                            total,
+                            safe_truncate(mint_address, 8)
+                        )
+                    );
+                }
+                return Ok(total as u32);
+            }
+
+            // If no total, count the owners in the first response
+            if let Some(owners) = result.get("owners").and_then(|o| o.as_array()) {
+                let initial_count = owners.len() as u32;
+
+                // If there's a cursor, we need to paginate to get the full count
+                if result.get("cursor").is_some() {
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        &format!(
+                            "DAS API returned cursor but no total count for mint {}, using initial count: {}",
+                            safe_truncate(mint_address, 8),
+                            initial_count
+                        )
+                    );
+                }
+
+                if is_debug_rpc_enabled() {
+                    log(
+                        LogTag::Rpc,
+                        "HELIUS_DAS",
+                        &format!(
+                            "Helius DAS counted {} holders for mint {}",
+                            initial_count,
+                            safe_truncate(mint_address, 8)
+                        )
+                    );
+                }
+                return Ok(initial_count);
+            }
+        }
+
+        Err(format!("Invalid DAS response format from {}", current_url))
+    }
+
+    /// Get detailed token holders using Helius DAS API with pagination support
+    /// Returns up to 'limit' holders sorted by balance (largest first)
+    pub async fn get_token_holders_detailed(
+        &self,
+        mint_address: &str,
+        limit: u32
+    ) -> Result<Vec<serde_json::Value>, String> {
+        let mut all_holders = Vec::new();
+        let mut cursor: Option<String> = None;
+        let mut remaining_limit = limit;
+
+        while remaining_limit > 0 {
+            let page_limit = std::cmp::min(remaining_limit, 1000); // Max 1000 per request
+
+            let request_payload =
+                serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "getAssetOwners",
+                "params": {
+                    "assetId": mint_address,
+                    "limit": page_limit,
+                    "cursor": cursor,
+                    "sortBy": "amount"
+                }
+            });
+
+            if is_debug_rpc_enabled() {
+                log(
+                    LogTag::Rpc,
+                    "HELIUS_DAS",
+                    &format!(
+                        "Requesting {} holders from Helius DAS for mint {}",
+                        page_limit,
+                        safe_truncate(mint_address, 8)
+                    )
+                );
+            }
+
+            // Use round-robin RPC rotation
+            let current_url = self.rotate_to_next_url();
+
+            // Apply rate limiting
+            self.wait_for_rate_limit().await;
+
+            // Create HTTP client
+            let client = reqwest::Client
+                ::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+            // Make the request
+            let response = client
+                .post(&current_url)
+                .json(&request_payload)
+                .send().await
+                .map_err(|e| format!("Failed to send DAS request to {}: {}", current_url, e))?;
+
+            if !response.status().is_success() {
+                return Err(
+                    format!(
+                        "Helius DAS API returned error status: {} from {}",
+                        response.status(),
+                        current_url
+                    )
+                );
+            }
+
+            // Parse response
+            let response_json: serde_json::Value = response
+                .json().await
+                .map_err(|e| format!("Failed to parse DAS response from {}: {}", current_url, e))?;
+
+            // Extract owners and cursor
+            if let Some(result) = response_json.get("result") {
+                if let Some(owners) = result.get("owners").and_then(|o| o.as_array()) {
+                    // Add non-zero balance holders
+                    for owner in owners {
+                        if let Some(amount) = owner.get("amount").and_then(|a| a.as_str()) {
+                            if amount != "0" {
+                                all_holders.push(owner.clone());
+                            }
+                        }
+                    }
+                }
+
+                // Update pagination cursor
+                cursor = result
+                    .get("cursor")
+                    .and_then(|c| c.as_str())
+                    .map(|s| s.to_string());
+                remaining_limit = remaining_limit.saturating_sub(page_limit);
+
+                // Break if no more pages
+                if cursor.is_none() {
+                    break;
+                }
+            } else {
+                return Err(format!("Invalid DAS response format from {}", current_url));
+            }
+        }
+
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "HELIUS_DAS",
+                &format!(
+                    "Retrieved {} holders from Helius DAS for mint {}",
+                    all_holders.len(),
+                    safe_truncate(mint_address, 8)
+                )
+            );
+        }
+
+        Ok(all_holders)
+    }
+
     /// Get mint account data to check authorities (minting, freeze, update metadata)
     /// Returns the raw mint account data for authority parsing using round-robin RPC rotation
     pub async fn get_mint_account(

@@ -477,15 +477,14 @@ fn print_security_info(mint: &str, info: &TokenSecurityInfo) {
     println!("\n🔒 Liquidity Pool Lock:");
     if let Some(ref lp) = info.lp_lock_info {
         println!("  • Status: {:?}", lp.status);
-        println!(
-            "  • Pool Type: {}",
-            lp.details.pool_type.as_ref().unwrap_or(&"Unknown".to_string())
-        );
+        if let Some(dex_id) = &lp.dex_id {
+            println!("  • DEX: {}", dex_id);
+        }
         if let Some(ref pool_addr) = lp.pool_address {
             println!("  • Pool Address: {}", pool_addr);
         }
-        if !lp.details.lock_programs.is_empty() {
-            println!("  • Lock Programs: {}", lp.details.lock_programs.join(", "));
+        if !lp.details.is_empty() {
+            println!("  • Details: {}", lp.details.join("; "));
         }
     } else {
         println!("  ❌ LP lock data not available");

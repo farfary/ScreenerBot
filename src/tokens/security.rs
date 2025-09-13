@@ -1815,13 +1815,13 @@ pub async fn get_security_summary(mint: &str) -> Result<String, ScreenerBotError
 // =============================================================================
 
 /// Security monitoring cycle duration in seconds
-const SECURITY_MONITOR_CYCLE_SECONDS: u64 = 3;
+const SECURITY_MONITOR_CYCLE_SECONDS: u64 = 30;
 
 /// Security summary report interval in seconds (every 30 seconds)
 const SECURITY_SUMMARY_INTERVAL_SECONDS: u64 = 30;
 
 /// Number of tokens to analyze per cycle (not more)
-const SECURITY_TOKENS_PER_CYCLE: usize = 10;
+const SECURITY_TOKENS_PER_CYCLE: usize = 5;
 
 /// Security monitoring constants for update intervals
 const SECURITY_STATIC_UPDATE_AGE_HOURS: i64 = 168; // Static properties: weekly
