@@ -732,6 +732,26 @@ async fn get_mint_info(client: &crate::rpc::RpcClient, mint: &str) -> Result<Min
         }
     }
 
+    // Fallback: attempt to parse raw data if jsonParsed path missing
+    if let Some(value) = mint_data.get("value") {
+        if let Some(data_arr) = value.get("data").and_then(|d| d.as_array()) {
+            if let Some(base64_str) = data_arr.get(0).and_then(|v| v.as_str()) {
+                if let Ok(raw) = base64::decode(base64_str) {
+                    // Standard SPL mint layout is 82 bytes minimum
+                    if raw.len() >= 82 {
+                        // Offset 36..68 = mint authority option+pubkey? Simpler: use spl_token::state::Mint unpack
+                        if let Ok(mint_state) = spl_token::state::Mint::unpack(&raw) {
+                            let mint_authority: Option<String> = mint_state.mint_authority
+                                .map(|k| k.to_string())
+                                .into();
+                            return Ok(MintInfo { supply: mint_state.supply, mint_authority });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Err("Failed to parse mint account data".to_string())
 }
 
@@ -795,17 +815,21 @@ fn determine_status_without_lp_mint(
             }
         }
         ProgramKind::PumpFunLegacy | ProgramKind::PumpFunAmm => {
-            if pool.dex_id.to_lowercase().contains("pumpfun") {
-                details.push("PumpFun bonding curve detected - no LP tokens exist".to_string());
-                details.push("✅ Bonding curve mechanism provides inherent safety".to_string());
+            let dex_lower = pool.dex_id.to_lowercase();
+            if dex_lower.contains("pumpfun") || dex_lower.contains("pumpswap") {
+                details.push(
+                    "PumpFun bonding-curve style / pumpswap pool (no traditional LP mint)".to_string()
+                );
+                details.push(
+                    "✅ Bonding curve / virtual liquidity mechanism provides inherent safety".to_string()
+                );
                 *confidence_score = 90;
-                LpLockStatus::BondingCurve {
-                    dex: "PumpFun".to_string(),
-                }
+                LpLockStatus::BondingCurve { dex: "PumpFun".to_string() }
             } else {
-                // Graduated to traditional LP
-                details.push("PumpFun token graduated to traditional AMM".to_string());
-                *confidence_score = 30;
+                details.push(
+                    "PumpFun token on unidentified derivative DEX without lp_mint".to_string()
+                );
+                *confidence_score = 40;
                 LpLockStatus::Unknown
             }
         }
@@ -984,15 +1008,49 @@ fn select_best_analysis(
 
     all_details.extend(best_analysis.details.clone());
 
+    let mut final_status = best_analysis.status.clone();
+    let mut final_details = all_details;
+    let mut final_lock_score = lock_score;
+
+    // Augment: if best status is BondingCurve or PositionNft, check base token mint burn to boost confidence
+    match final_status {
+        LpLockStatus::BondingCurve { .. } | LpLockStatus::PositionNft { .. } => {
+            if let Ok(client) = std::panic::catch_unwind(|| get_rpc_client()) {
+                if
+                    let Ok(mint_info) = futures::executor::block_on(async {
+                        get_mint_info(&client, token_mint).await
+                    })
+                {
+                    if mint_info.mint_authority.is_none() {
+                        final_details.push(
+                            "Base token mint authority burned (✅ additional safety)".to_string()
+                        );
+                        final_lock_score = std::cmp::min(100, final_lock_score.saturating_add(8));
+                    } else if let Some(auth) = mint_info.mint_authority.as_ref() {
+                        final_details.push(
+                            format!(
+                                "Base token mint authority present: {}",
+                                safe_truncate(auth, 12)
+                            )
+                        );
+                    }
+                } else {
+                    final_details.push("Base token mint authority check failed".to_string());
+                }
+            }
+        }
+        _ => {}
+    }
+
     LpLockAnalysis {
         token_mint: token_mint.to_string(),
         pool_address: Some(best_analysis.pool_address.clone()),
         dex_id: Some(best_analysis.dex_id.clone()),
         lp_mint: best_analysis.lp_mint.clone(),
-        status: best_analysis.status.clone(),
+        status: final_status,
         analyzed_at: Utc::now(),
-        lock_score,
-        details: all_details,
+        lock_score: final_lock_score,
+        details: final_details,
         data_source: "comprehensive_multi_pool".to_string(),
         analyzed_pools: pool_analyses,
     }
@@ -1179,55 +1237,14 @@ fn extract_meteora_damm_lp(data: &[u8], pool_address: &str) -> Result<Option<Str
 
 /// Extract LP mint from PumpFun AMM pool data
 fn extract_pumpfun_amm_lp(data: &[u8], pool_address: &str) -> Result<Option<String>, String> {
-    // PumpFun AMM pools are graduated bonding curves that now trade on Raydium/other AMMs
-    // They should have LP tokens, but the structure is not well documented
-    if data.len() < 200 {
-        log(
-            LogTag::Security,
-            "LP_ERROR",
-            &format!(
-                "PumpFun AMM pool data too short: {} bytes for {}",
-                data.len(),
-                safe_truncate(pool_address, 8)
-            )
-        );
-        return Ok(None);
-    }
-
-    // Try common offsets for LP mint in AMM pools
-    let potential_offsets = [136, 168, 104, 72]; // Common positions for lp_mint in AMM structures
-
-    for offset in potential_offsets {
-        if data.len() > offset + 32 {
-            if let Some(potential_lp_mint_str) = read_pubkey_str(data, offset) {
-                // Parse back to Pubkey for validation
-                if let Ok(potential_lp_mint) = potential_lp_mint_str.parse::<Pubkey>() {
-                    // Validate it's not a zero key or system program
-                    if
-                        potential_lp_mint != Pubkey::default() &&
-                        potential_lp_mint.to_string() != "11111111111111111111111111111111"
-                    {
-                        log(
-                            LogTag::Security,
-                            "LP_INFO",
-                            &format!(
-                                "Found potential PumpFun AMM LP mint at offset {}: {}",
-                                offset,
-                                potential_lp_mint
-                            )
-                        );
-                        return Ok(Some(potential_lp_mint.to_string()));
-                    }
-                }
-            }
-        }
-    }
-
+    // PumpFun AMM: prior heuristic offsets produced random 32-byte slices misclassified as LP mints.
+    // There is no reliably documented dedicated lp_mint; liquidity typically lives on external AMMs (Raydium) AFTER migration.
+    // We deliberately skip extraction to avoid false Unknown due to mint parse failures.
     log(
         LogTag::Security,
-        "LP_WARNING",
+        "LP_INFO",
         &format!(
-            "PumpFun AMM LP mint not found at common offsets for: {}",
+            "PumpFun AMM pool {}: skipping lp_mint heuristic extraction (treat as bonding curve style if no traditional LP)",
             safe_truncate(pool_address, 8)
         )
     );
