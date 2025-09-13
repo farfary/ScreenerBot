@@ -782,8 +782,12 @@ fn determine_status_without_lp_mint(
             // DAMM v2 pools do not expose a traditional lp_mint – liquidity is managed via dynamic virtual bins / position constructs.
             // Previous heuristic offsets (136/104/72/40) produced false-positive random 32-byte segments that failed mint parsing.
             // We classify as a non-traditional position-based mechanism (safe) unless a *validated* lp_mint field is ever formally documented.
-            details.push("Meteora DAMM v2 uses dynamic liquidity positions (no standard LP mint)".to_string());
-            details.push("Treating as position-style mechanism – rug via mint inflation not possible".to_string());
+            details.push(
+                "Meteora DAMM v2 uses dynamic liquidity positions (no standard LP mint)".to_string()
+            );
+            details.push(
+                "Treating as position-style mechanism – rug via mint inflation not possible".to_string()
+            );
             *confidence_score = 85;
             LpLockStatus::PositionNft {
                 dex: "Meteora".to_string(),
