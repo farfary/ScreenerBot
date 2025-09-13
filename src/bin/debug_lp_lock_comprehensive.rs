@@ -35,19 +35,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 COMPREHENSIVE LP LOCK DEBUG TEST WITH FULL LOGGING");
     println!("{}", "=".repeat(80));
 
-    // Check if specific tokens are provided via command line
+    // Check if specific tokens are provided via command line (skip any flags starting with --)
     let tokens = if args.len() > 1 {
-        // Use provided token addresses
-        println!("🎯 Testing {} specific token addresses from command line...", args.len() - 1);
+        let provided: Vec<String> = args.iter().skip(1).cloned().collect();
+        let mut mints: Vec<String> = Vec::new();
+        let mut flags: Vec<String> = Vec::new();
+        for a in provided {
+            if a.starts_with("--") { flags.push(a); } else { mints.push(a); }
+        }
+        println!("🎯 Testing {} specific token addresses from command line...", mints.len());
+        if !flags.is_empty() {
+            println!("⚙️  Detected flags: {}", flags.join(", "));
+        }
+
+        // Attempt to enrich each mint using DexScreener cached pools (single call per mint)
         let mut specific_tokens = Vec::new();
-        for (i, mint_address) in args.iter().skip(1).enumerate() {
+        for (i, mint_address) in mints.iter().enumerate() {
+            let (symbol, name, dex_id, liq, mc) = match screenerbot::tokens::dexscreener::get_token_pools_from_dexscreener(mint_address).await {
+                Ok(pools) if !pools.is_empty() => {
+                    // Prefer pool whose baseToken matches the mint
+                    let primary = pools.iter().find(|p| p.base_token.address == *mint_address).unwrap_or(&pools[0]);
+                    let sym = primary.base_token.symbol.clone();
+                    let nm = primary.base_token.name.clone();
+                    let dex = primary.dex_id.clone();
+                    let liq_usd = primary.liquidity.as_ref().map(|l| l.usd);
+                    let mc_v = primary.market_cap;
+                    (sym, nm, dex, liq_usd, mc_v)
+                }
+                _ => (format!("TOKEN{}", i + 1), format!("Token {}", i + 1), "unknown".to_string(), None, None)
+            };
             specific_tokens.push(TestToken {
                 mint: mint_address.clone(),
-                symbol: format!("TOKEN{}", i + 1),
-                name: format!("Token {}", i + 1),
-                dex_id: "unknown".to_string(),
-                liquidity_usd: None,
-                market_cap: None,
+                symbol,
+                name,
+                dex_id,
+                liquidity_usd: liq,
+                market_cap: mc,
             });
         }
         specific_tokens

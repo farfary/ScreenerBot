@@ -778,6 +778,18 @@ fn determine_status_without_lp_mint(
                 mechanism: "DLMM".to_string(),
             }
         }
+        ProgramKind::MeteoraDamm => {
+            // DAMM v2 pools do not expose a traditional lp_mint – liquidity is managed via dynamic virtual bins / position constructs.
+            // Previous heuristic offsets (136/104/72/40) produced false-positive random 32-byte segments that failed mint parsing.
+            // We classify as a non-traditional position-based mechanism (safe) unless a *validated* lp_mint field is ever formally documented.
+            details.push("Meteora DAMM v2 uses dynamic liquidity positions (no standard LP mint)".to_string());
+            details.push("Treating as position-style mechanism – rug via mint inflation not possible".to_string());
+            *confidence_score = 85;
+            LpLockStatus::PositionNft {
+                dex: "Meteora".to_string(),
+                mechanism: "DAMM v2 dynamic positions".to_string(),
+            }
+        }
         ProgramKind::PumpFunLegacy | ProgramKind::PumpFunAmm => {
             if pool.dex_id.to_lowercase().contains("pumpfun") {
                 details.push("PumpFun bonding curve detected - no LP tokens exist".to_string());
@@ -1148,57 +1160,13 @@ fn extract_meteora_dlmm_lp(data: &[u8], _pool_address: &str) -> Result<Option<St
 
 /// Extract LP mint from Meteora DAMM pool data
 fn extract_meteora_damm_lp(data: &[u8], pool_address: &str) -> Result<Option<String>, String> {
-    // Meteora DAMM v2 uses position NFTs instead of traditional LP tokens
-    // The pools can still have LP tokens for certain operations, but the primary
-    // liquidity mechanism is through position NFTs which are inherently safe
-    if data.len() < 300 {
-        log(
-            LogTag::Security,
-            "LP_ERROR",
-            &format!(
-                "Meteora DAMM pool data too short: {} bytes for {}",
-                data.len(),
-                safe_truncate(pool_address, 8)
-            )
-        );
-        return Ok(None);
-    }
-
-    // Check for LP mint at common Anchor account offsets
-    // Based on research, Meteora pools may still have lp_mint field even if they primarily use position NFTs
-    let potential_offsets = [136, 104, 72, 40]; // Common Anchor Pubkey field positions
-
-    for offset in potential_offsets {
-        if data.len() > offset + 32 {
-            if let Some(potential_lp_mint_str) = read_pubkey_str(data, offset) {
-                // Parse back to Pubkey for validation
-                if let Ok(potential_lp_mint) = potential_lp_mint_str.parse::<Pubkey>() {
-                    // Validate it's not a zero key or system program
-                    if
-                        potential_lp_mint != Pubkey::default() &&
-                        potential_lp_mint.to_string() != "11111111111111111111111111111111"
-                    {
-                        log(
-                            LogTag::Security,
-                            "LP_INFO",
-                            &format!(
-                                "Found potential Meteora DAMM LP mint at offset {}: {}",
-                                offset,
-                                potential_lp_mint
-                            )
-                        );
-                        return Ok(Some(potential_lp_mint.to_string()));
-                    }
-                }
-            }
-        }
-    }
-
+    // Meteora DAMM v2: no standard lp_mint field; prior heuristics produced random bytes misclassified as pubkeys.
+    // We explicitly skip extraction to avoid false-positive mint verification failures.
     log(
         LogTag::Security,
         "LP_INFO",
         &format!(
-            "Meteora DAMM uses position NFTs - no traditional LP tokens for: {}",
+            "Meteora DAMM v2 pool {}: skipping lp_mint extraction (dynamic position mechanism)",
             safe_truncate(pool_address, 8)
         )
     );
