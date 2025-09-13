@@ -16,6 +16,9 @@ struct TestToken {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Get command line arguments
+    let args: Vec<String> = std::env::args().collect();
+
     // Initialize logger manually since we just need basic logging
     println!("📝 Logger initialized");
 
@@ -31,14 +34,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("🔍 COMPREHENSIVE LP LOCK DEBUG TEST WITH FULL LOGGING");
     println!("{}", "=".repeat(80));
-    println!("🎯 Loading comprehensive token sample from database...");
 
-    // Load tokens from different categories
-    let tokens = load_comprehensive_token_sample().await?;
-    println!("📊 Loaded {} tokens for comprehensive testing", tokens.len());
+    // Check if specific tokens are provided via command line
+    let tokens = if args.len() > 1 {
+        // Use provided token addresses
+        println!("🎯 Testing {} specific token addresses from command line...", args.len() - 1);
+        let mut specific_tokens = Vec::new();
+        for (i, mint_address) in args.iter().skip(1).enumerate() {
+            specific_tokens.push(TestToken {
+                mint: mint_address.clone(),
+                symbol: format!("TOKEN{}", i + 1),
+                name: format!("Token {}", i + 1),
+                dex_id: "unknown".to_string(),
+                liquidity_usd: None,
+                market_cap: None,
+            });
+        }
+        specific_tokens
+    } else {
+        // Fall back to database sample
+        println!("🎯 Loading comprehensive token sample from database...");
+        load_comprehensive_token_sample().await?
+    };
 
-    // Analyze token distribution
-    analyze_token_distribution(&tokens);
+    println!("📊 Testing {} tokens", tokens.len());
+
+    // Analyze token distribution only if loaded from database
+    if args.len() <= 1 {
+        analyze_token_distribution(&tokens);
+    }
 
     println!("\n🧪 STARTING COMPREHENSIVE LP LOCK VERIFICATION TEST");
     println!("{}", "=".repeat(80));
