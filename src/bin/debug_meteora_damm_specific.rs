@@ -70,33 +70,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Parse key fields via correct empirical offsets (verified against JSON)
+    // Parse key fields via fixed offsets (empirically shifted -8 bytes from theoretical layout)
     let token_a_mint = read_pubkey(&pool_acc.data, 168).ok_or("parse token_a_mint")?;
     let token_b_mint = read_pubkey(&pool_acc.data, 200).ok_or("parse token_b_mint")?;
     let token_a_vault = read_pubkey(&pool_acc.data, 232).ok_or("parse token_a_vault")?;
     let token_b_vault = read_pubkey(&pool_acc.data, 264).ok_or("parse token_b_vault")?;
-    let liquidity = read_u128(&pool_acc.data, 304).unwrap_or(0);
     let protocol_a_fee = read_u64(&pool_acc.data, 392).unwrap_or(0);
     let protocol_b_fee = read_u64(&pool_acc.data, 400).unwrap_or(0);
     let partner_a_fee = read_u64(&pool_acc.data, 408).unwrap_or(0);
     let partner_b_fee = read_u64(&pool_acc.data, 416).unwrap_or(0);
-    let sqrt_min_price = read_u128(&pool_acc.data, 424).unwrap_or(0);
-    let sqrt_max_price = read_u128(&pool_acc.data, 440).unwrap_or(0);
     let sqrt_456 = read_u128(&pool_acc.data, 456).unwrap_or(0);
     let sqrt_464 = read_u128(&pool_acc.data, 464).unwrap_or(0);
-
-    // Try alternative liquidity offset (JSON shows large value, may be at different position)
-    let liquidity_alt1 = read_u128(&pool_acc.data, 320).unwrap_or(0);
-    let liquidity_alt2 = read_u128(&pool_acc.data, 336).unwrap_or(0);
 
     println!("\n🔧 PARSED FIELDS\n================");
     println!("token_a_mint: {}", token_a_mint);
     println!("token_b_mint: {}", token_b_mint);
     println!("token_a_vault: {}", token_a_vault);
     println!("token_b_vault: {}", token_b_vault);
-    println!("liquidity@304: {}", liquidity);
-    println!("liquidity@320: {} (alt1)", liquidity_alt1);
-    println!("liquidity@336: {} (alt2)", liquidity_alt2);
     println!(
         "fees: protocol_a={} protocol_b={} partner_a={} partner_b={}",
         protocol_a_fee,
@@ -104,36 +94,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         partner_a_fee,
         partner_b_fee
     );
-    println!("sqrt_min_price: {}", sqrt_min_price);
-    println!("sqrt_max_price: {}", sqrt_max_price);
     println!("sqrt_price@456: {}", sqrt_456);
     println!("sqrt_price@464: {}", sqrt_464);
-
-    // JSON verification - the liquidity value from JSON is 670203503310646500374104774470
-    let json_liquidity = 670203503310646500374104774470u128;
-    let selected_liquidity = if liquidity_alt1 == json_liquidity {
-        println!("✅ Found JSON liquidity match at offset 320");
-        liquidity_alt1
-    } else if liquidity_alt2 == json_liquidity {
-        println!("✅ Found JSON liquidity match at offset 336");
-        liquidity_alt2
-    } else {
-        println!(
-            "⚠️  No liquidity match found. JSON={}, read values: {}@304, {}@320, {}@336",
-            json_liquidity,
-            liquidity,
-            liquidity_alt1,
-            liquidity_alt2
-        );
-        // Use the largest non-zero value as likely correct
-        let max_liquidity = [liquidity, liquidity_alt1, liquidity_alt2]
-            .iter()
-            .max()
-            .copied()
-            .unwrap_or(0);
-        println!("🔍 Using largest liquidity value: {}", max_liquidity);
-        max_liquidity
-    };
 
     // Fetch vault accounts
     let a_vault_pk = parse_pubkey(&token_a_vault)?;
@@ -195,8 +157,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Token effective reserve zero; vault ratio skipped");
     }
 
-    // Enhanced sqrt-based price with detailed analysis
-    let (sqrt_sel, sqrt_based_price, sqrt_details) = select_sqrt_and_price_detailed(
+    // Sqrt-based price (try both offsets; pick reasonable)
+    let (sqrt_sel, sqrt_based_price) = select_sqrt_and_price(
         sqrt_456,
         sqrt_464,
         tok_dec,
@@ -206,43 +168,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("sqrt selected offset: {}", sqrt_sel);
     println!("Sqrt-based price: {:.12} SOL/token", sqrt_based_price);
-    if !sqrt_details.is_empty() {
-        println!("Sqrt calculation details:\n{}", sqrt_details);
-    }
-
-    // DAMM liquidity-based price (Uniswap v3 style)
-    if selected_liquidity > 0 {
-        println!("\n🔬 DAMM LIQUIDITY ANALYSIS\n=========================");
-        let sqrt_current = if sqrt_456 > 0 { sqrt_456 } else { sqrt_464 };
-        if sqrt_current > 0 && sqrt_min_price > 0 && sqrt_max_price > 0 {
-            // Calculate theoretical amounts from liquidity formula
-            let liq_price = calculate_damm_liquidity_price(
-                selected_liquidity,
-                sqrt_current,
-                sqrt_min_price,
-                sqrt_max_price,
-                tok_dec,
-                sol_dec,
-                &token_a_mint
-            );
-            println!("Liquidity-based price: {:.12} SOL/token", liq_price);
-
-            // Compare with vault ratio
-            if tok > 0.0 {
-                let vault_ratio = sol / tok;
-                let diff_pct = if vault_ratio > 0.0 {
-                    ((liq_price - vault_ratio).abs() / vault_ratio) * 100.0
-                } else {
-                    0.0
-                };
-                println!("Diff vs vault ratio: {:.4}%", diff_pct);
-            }
-        } else {
-            println!("Missing sqrt price or price bounds for liquidity calculation");
-        }
-    } else {
-        println!("No liquidity data for enhanced analysis");
-    }
 
     // Build accounts map and run decoder (both orientations)
     let mut accounts = HashMap::new();
@@ -364,122 +289,32 @@ fn decode_token_amount(data: &[u8]) -> Option<u64> {
     Some(amt)
 }
 
-fn select_sqrt_and_price_detailed(
+fn select_sqrt_and_price(
     sqrt_456: u128,
     sqrt_464: u128,
     token_decimals: u8,
     sol_decimals: u8,
     token_a_mint: &str,
     _token_b_mint: &str
-) -> (&'static str, f64, String) {
-    let mut details = String::new();
+) -> (&'static str, f64) {
     let cands = [
         ("456", sqrt_456),
         ("464", sqrt_464),
     ];
     for (lab, val) in cands {
         if val == 0 {
-            details.push_str(&format!("  {} = 0 (skipped)\n", lab));
             continue;
         }
         let sqrt_f64 = val as f64;
-        let normalized_sqrt = sqrt_f64 / (2f64).powi(64);
-        let base_price = normalized_sqrt.powi(2);
-        let dec_adj_factor = (10f64).powi((sol_decimals as i32) - (token_decimals as i32));
-        let mut price = base_price * dec_adj_factor;
+        let base = (sqrt_f64 / (2f64).powi(64)).powi(2);
+        let dec_adj = (10f64).powi((token_decimals as i32) - (sol_decimals as i32));
+        let mut price = base * dec_adj;
         if token_a_mint == SOL_MINT {
             price = if price > 0.0 { 1.0 / price } else { 0.0 };
         }
-
-        details.push_str(
-            &format!(
-                "  {}: raw={} sqrt_f64={:.6e} norm={:.12e} base={:.12e} dec_adj={:.6e} final={:.12e}\n",
-                lab,
-                val,
-                sqrt_f64,
-                normalized_sqrt,
-                base_price,
-                dec_adj_factor,
-                price
-            )
-        );
-
         if price.is_finite() && price > 0.0 && price < 1e6 {
-            return (lab, price, details);
+            return (lab, price);
         }
     }
-    ("none", 0.0, details)
-}
-
-fn calculate_damm_liquidity_price(
-    liquidity: u128,
-    sqrt_current: u128,
-    sqrt_min: u128,
-    sqrt_max: u128,
-    token_decimals: u8,
-    sol_decimals: u8,
-    token_a_mint: &str
-) -> f64 {
-    // DAMM uses Uniswap v3 style concentrated liquidity formulas
-    // Calculate theoretical amounts from liquidity and price bounds
-
-    let sqrt_curr_f64 = (sqrt_current as f64) / (2f64).powi(64);
-    let sqrt_min_f64 = (sqrt_min as f64) / (2f64).powi(64);
-    let sqrt_max_f64 = (sqrt_max as f64) / (2f64).powi(64);
-    let liq_f64 = liquidity as f64;
-
-    // Calculate amounts based on current position within price range
-    // For DAMM: amount_a = L * (sqrt_max - sqrt_curr) / (sqrt_max * sqrt_curr)
-    // amount_b = L * (sqrt_curr - sqrt_min)
-
-    let amount_a = if sqrt_curr_f64 < sqrt_max_f64 {
-        (liq_f64 * (sqrt_max_f64 - sqrt_curr_f64)) / (sqrt_max_f64 * sqrt_curr_f64)
-    } else {
-        0.0
-    };
-
-    let amount_b = if sqrt_curr_f64 > sqrt_min_f64 {
-        (liq_f64 * (sqrt_curr_f64 - sqrt_min_f64)) / (2f64).powi(128)
-    } else {
-        0.0
-    };
-
-    println!(
-        "  L={:.0} sqrt_curr={:.12e} sqrt_min={:.12e} sqrt_max={:.12e}",
-        liq_f64,
-        sqrt_curr_f64,
-        sqrt_min_f64,
-        sqrt_max_f64
-    );
-    println!("  Theoretical: amount_a={:.6e} amount_b={:.6e}", amount_a, amount_b);
-
-    // Convert to human readable units and calculate price
-    if amount_a > 0.0 && amount_b > 0.0 {
-        let human_a = amount_a / (10f64).powi(token_decimals as i32);
-        let human_b = amount_b / (10f64).powi(sol_decimals as i32);
-
-        let price = if token_a_mint == SOL_MINT {
-            human_a / human_b // SOL per token
-        } else {
-            human_b / human_a // SOL per token
-        };
-
-        println!(
-            "  Human readable: token={:.6e} sol={:.6e} price={:.12e}",
-            human_a,
-            human_b,
-            price
-        );
-        price
-    } else {
-        // Fallback to sqrt price calculation
-        let base_price = sqrt_curr_f64.powi(2);
-        let dec_adj_factor = (10f64).powi((sol_decimals as i32) - (token_decimals as i32));
-        let mut price = base_price * dec_adj_factor;
-        if token_a_mint == SOL_MINT {
-            price = if price > 0.0 { 1.0 / price } else { 0.0 };
-        }
-        println!("  Fallback to sqrt: {:.12e}", price);
-        price
-    }
+    ("none", 0.0)
 }
