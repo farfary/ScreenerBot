@@ -1,6 +1,6 @@
 use screenerbot::{
-    logger::{init_file_logging, log, LogTag},
-    tokens::security::{start_security_monitoring, get_security_analyzer},
+    logger::{ init_file_logging, log, LogTag },
+    tokens::security::{ start_security_monitoring, get_security_analyzer },
 };
 
 use std::sync::Arc;
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n🚀 Starting security monitoring service (will run for 15 seconds)...");
-    
+
     // Create shutdown notification
     let shutdown = Arc::new(Notify::new());
 
