@@ -17,7 +17,7 @@ use reqwest;
 use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
 use std::time::Duration;
-use std::sync::{ Arc, OnceLock };
+use std::sync::Arc;
 use tokio::sync::Notify;
 
 /// Security risk levels (backward compatibility)
@@ -211,8 +211,8 @@ impl TokenSecurityInfo {
 
         self.security_score = score.min(100);
 
-        // Base risk level from score
-        let mut derived = if self.is_safe {
+        // Calculate risk level
+        self.risk_level = if self.is_safe {
             SecurityRiskLevel::Safe
         } else if self.security_score >= 70 {
             SecurityRiskLevel::Low
@@ -223,31 +223,6 @@ impl TokenSecurityInfo {
         } else {
             SecurityRiskLevel::Critical
         };
-
-        // Clamp: any core unsafe dimension promotes minimum severity
-        if !self.lp_is_safe || !self.mint_authority_disabled || !self.freeze_authority_disabled {
-            // If base was Safe -> downgrade to Medium (can't be safe with any core vector active)
-            derived = match derived {
-                SecurityRiskLevel::Safe => SecurityRiskLevel::Medium,
-                SecurityRiskLevel::Low => SecurityRiskLevel::Medium,
-                other => other,
-            };
-            // If mint + freeze both enabled OR LP unsafe + an authority enabled -> at least High
-            if
-                (!self.mint_authority_disabled && !self.freeze_authority_disabled) ||
-                (!self.lp_is_safe && !self.mint_authority_disabled)
-            {
-                if matches!(derived, SecurityRiskLevel::Medium | SecurityRiskLevel::Low) {
-                    derived = SecurityRiskLevel::High;
-                }
-            }
-            // If all three unsafe -> Critical
-            if !self.lp_is_safe && !self.mint_authority_disabled && !self.freeze_authority_disabled {
-                derived = SecurityRiskLevel::Critical;
-            }
-        }
-
-        self.risk_level = derived;
 
         // Set security flags
         self.security_flags = SecurityFlags {
@@ -367,22 +342,27 @@ struct RiskInfo {
 }
 
 /// HTTP client for API calls
-static HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+static mut HTTP_CLIENT: Option<reqwest::Client> = None;
+static CLIENT_INIT: std::sync::Once = std::sync::Once::new();
 
-/// Initialize and return a reference to the shared HTTP client (thread-safe)
+/// Initialize HTTP client
 fn get_http_client() -> &'static reqwest::Client {
-    HTTP_CLIENT.get_or_init(|| {
-        reqwest::Client
-            ::builder()
-            .timeout(Duration::from_secs(30))
-            .user_agent("ScreenerBot/1.0 (+github.com/farfary/ScreenerBot)")
-            .build()
-            .expect("Failed to create HTTP client")
-    })
+    unsafe {
+        CLIENT_INIT.call_once(|| {
+            let client = reqwest::Client
+                ::builder()
+                .timeout(Duration::from_secs(30))
+                .user_agent("ScreenerBot/1.0")
+                .build()
+                .expect("Failed to create HTTP client");
+            HTTP_CLIENT = Some(client);
+        });
+        HTTP_CLIENT.as_ref().unwrap()
+    }
 }
 
 /// Check if Rugcheck API is operational
-pub async fn check_api_status() -> Result<bool, ScreenerBotError> {
+pub async fn check_api_status() -> Result<bool, String> {
     let client = get_http_client();
     let url = "https://api.rugcheck.xyz/v1/maintenance";
 
@@ -410,9 +390,8 @@ pub async fn check_api_status() -> Result<bool, ScreenerBotError> {
             Ok(status_ok)
         }
         Err(e) => {
-            let msg = format!("Failed to check API status: {}", e);
-            log(LogTag::Security, "API_ERROR", &msg);
-            Err(ScreenerBotError::Network(crate::errors::NetworkError::Generic { message: msg }))
+            log(LogTag::Security, "API_ERROR", &format!("Failed to check API status: {}", e));
+            Err(format!("API check failed: {}", e))
         }
     }
 }
@@ -428,49 +407,18 @@ pub async fn analyze_token_security(mint: &str) -> Result<TokenSecurityInfo, Scr
     let client = get_http_client();
     let url = format!("https://api.rugcheck.xyz/v1/tokens/{}/report", mint);
 
-    // Make API request with simple retry & backoff
-    let mut attempt: u8 = 0;
-    let max_attempts = 3u8;
-    let mut last_err: Option<reqwest::Error> = None;
-    let mut response_opt: Option<reqwest::Response> = None;
-    while attempt < max_attempts {
-        attempt += 1;
-        match client.get(&url).send().await {
-            Ok(resp) => {
-                response_opt = Some(resp);
-                break;
-            }
-            Err(e) => {
-                last_err = Some(e);
-                if attempt < max_attempts {
-                    let backoff_ms = if attempt == 1 { 150 } else { 400 };
-                    log(
-                        LogTag::Security,
-                        "API_RETRY",
-                        &format!(
-                            "Attempt {} failed for {} – backing off {}ms",
-                            attempt,
-                            safe_truncate(mint, 12),
-                            backoff_ms
-                        )
-                    );
-                    tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
-                }
-            }
+    // Make API request
+    let response = match client.get(&url).send().await {
+        Ok(response) => response,
+        Err(e) => {
+            let error_msg = format!("Failed to fetch token report: {}", e);
+            log(LogTag::Security, "API_ERROR", &error_msg);
+            return Err(
+                ScreenerBotError::Network(crate::errors::NetworkError::Generic {
+                    message: error_msg,
+                })
+            );
         }
-    }
-    let response = if let Some(r) = response_opt {
-        r
-    } else {
-        let error_msg = format!(
-            "Failed to fetch token report after {} attempts: {}",
-            attempt,
-            last_err.map(|e| e.to_string()).unwrap_or_else(|| "unknown error".to_string())
-        );
-        log(LogTag::Security, "API_ERROR", &error_msg);
-        return Err(
-            ScreenerBotError::Network(crate::errors::NetworkError::Generic { message: error_msg })
-        );
     };
 
     // Check response status
@@ -557,37 +505,24 @@ fn extract_security_info(
 
 /// Check if LP is considered safe based on markets and risks
 fn check_lp_safety(markets: &[MarketInfo], risks: &[RiskInfo]) -> bool {
-    if markets.is_empty() {
-        log(LogTag::Security, "LP_HEURISTIC", "No markets present -> LP unsafe");
+    // Check if there are any high-risk LP-related issues
+    let has_lp_unlock_risk = risks
+        .iter()
+        .any(|risk| { risk.name.contains("LP Unlocked") && risk.level == "danger" });
+
+    if has_lp_unlock_risk {
         return false;
     }
 
-    // Normalize and look for any unlock danger patterns
-    let has_unlock = risks.iter().any(|risk| {
-        let name_lc = risk.name.to_lowercase();
-        let level_lc = risk.level.to_lowercase();
-        name_lc.contains("lp") &&
-            name_lc.contains("unlock") &&
-            (level_lc == "danger" || level_lc == "high")
-    });
-    if has_unlock {
-        return false;
-    }
+    // Check LP lock percentage across all markets
+    let total_lp_locked_pct = markets
+        .iter()
+        .map(|market| market.lp.lp_locked_pct)
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap_or(0.0);
 
-    // Use WORST (minimum) locked pct to avoid picking a tiny safe pool
-    let mut min_locked_pct = f64::INFINITY;
-    for market in markets.iter() {
-        let pct = market.lp.lp_locked_pct;
-        if pct < min_locked_pct {
-            min_locked_pct = pct;
-        }
-    }
-    if !min_locked_pct.is_finite() {
-        return false;
-    }
-
-    // Require >= 90% locked across worst pool
-    min_locked_pct >= 90.0
+    // Consider LP safe if at least 90% is locked
+    total_lp_locked_pct >= 90.0
 }
 
 /// Batch analyze multiple tokens
