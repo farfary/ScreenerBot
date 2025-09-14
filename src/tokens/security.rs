@@ -934,6 +934,89 @@ impl SecurityDatabase {
 
         Ok(())
     }
+
+    /// Get all tokens that don't have security info cached
+    pub fn get_tokens_without_security(&self) -> Result<Vec<String>, ScreenerBotError> {
+        let conn = self.connection.lock().map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to lock database: {}", e),
+            })
+        })?;
+
+        // Set a busy timeout to avoid blocking indefinitely
+        conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to set busy timeout: {}", e),
+            })
+        })?;
+
+        let mut stmt = conn
+            .prepare("SELECT mint FROM tokens WHERE security_is_safe IS NULL ORDER BY mint")
+            .map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::Generic {
+                    message: format!("Failed to prepare query: {}", e),
+                })
+            })?;
+
+        let rows = stmt.query_map([], |row| {
+            let mint: String = row.get(0)?;
+            Ok(mint)
+        }).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to execute query: {}", e),
+            })
+        })?;
+
+        let mut mints = Vec::new();
+        for row in rows {
+            match row {
+                Ok(mint) => mints.push(mint),
+                Err(e) => {
+                    log(
+                        LogTag::Security,
+                        "DB_ERROR",
+                        &format!("Failed to read token mint from database: {}", e)
+                    );
+                }
+            }
+        }
+
+        log(
+            LogTag::Security,
+            "UNCACHED_QUERY",
+            &format!("Found {} tokens without security info", mints.len())
+        );
+
+        Ok(mints)
+    }
+
+    /// Get count of tokens without security info
+    pub fn count_tokens_without_security(&self) -> Result<i64, ScreenerBotError> {
+        let conn = self.connection.lock().map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to lock database: {}", e),
+            })
+        })?;
+
+        // Set a busy timeout to avoid blocking indefinitely  
+        conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to set busy timeout: {}", e),
+            })
+        })?;
+
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM tokens WHERE security_is_safe IS NULL",
+            [],
+            |row| row.get(0)
+        ).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to count uncached tokens: {}", e),
+            })
+        })?;
+
+        Ok(count)
+    }
 }
 
 impl TokenSecurityAnalyzer {
@@ -1090,21 +1173,175 @@ pub fn get_security_analyzer() -> TokenSecurityAnalyzer {
     }
 }
 
-/// Start security monitoring background task (stub for backward compatibility)
+/// Start security monitoring background task (proactive security checking)
 pub async fn start_security_monitoring(
     shutdown: Arc<Notify>
 ) -> Result<tokio::task::JoinHandle<()>, String> {
     log(
         LogTag::Security,
-        "MONITOR_STUB",
-        "Security monitoring started as stub - background monitoring disabled in simplified version"
+        "MONITOR_START",
+        "Security monitoring service started - proactive token security analysis enabled"
     );
 
-    // Return a dummy task that just waits for shutdown
+    // Get security analyzer instance
+    let analyzer = get_security_analyzer();
+
     let handle = tokio::spawn(async move {
-        shutdown.notified().await;
-        log(LogTag::Security, "MONITOR_STOP", "Security monitoring stopped");
+        let mut check_interval = tokio::time::interval(std::time::Duration::from_secs(1800)); // 30 minutes
+        check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        
+        // Initial startup scan
+        log(LogTag::Security, "STARTUP_SCAN", "Starting initial security scan for uncached tokens");
+        
+        match run_security_scan(&analyzer).await {
+            Ok(stats) => {
+                log(
+                    LogTag::Security,
+                    "STARTUP_COMPLETE", 
+                    &format!("Initial scan complete: {} processed, {} successful, {} failed", 
+                            stats.processed, stats.successful, stats.failed)
+                );
+            }
+            Err(e) => {
+                log(LogTag::Security, "STARTUP_ERROR", &format!("Initial security scan failed: {}", e));
+            }
+        }
+
+        // Periodic scanning loop
+        loop {
+            tokio::select! {
+                _ = shutdown.notified() => {
+                    log(LogTag::Security, "MONITOR_STOP", "Security monitoring service stopping");
+                    break;
+                }
+                _ = check_interval.tick() => {
+                    log(LogTag::Security, "PERIODIC_SCAN", "Starting periodic security scan");
+                    
+                    match run_security_scan(&analyzer).await {
+                        Ok(stats) => {
+                            if stats.processed > 0 {
+                                log(
+                                    LogTag::Security,
+                                    "PERIODIC_COMPLETE",
+                                    &format!("Periodic scan complete: {} processed, {} successful, {} failed", 
+                                            stats.processed, stats.successful, stats.failed)
+                                );
+                            } else {
+                                log(LogTag::Security, "PERIODIC_SKIP", "No new tokens to analyze");
+                            }
+                        }
+                        Err(e) => {
+                            log(LogTag::Security, "PERIODIC_ERROR", &format!("Periodic security scan failed: {}", e));
+                        }
+                    }
+                }
+            }
+        }
+        
+        log(LogTag::Security, "MONITOR_STOP", "Security monitoring service stopped");
     });
 
     Ok(handle)
+}
+
+#[derive(Debug)]
+struct ScanStats {
+    processed: usize,
+    successful: usize,
+    failed: usize,
+}
+
+/// Run a security scan for all tokens without cached security info
+async fn run_security_scan(analyzer: &TokenSecurityAnalyzer) -> Result<ScanStats, ScreenerBotError> {
+    // Check API status first
+    if !check_api_status().await? {
+        return Err(ScreenerBotError::Network(crate::errors::NetworkError::Generic {
+            message: "Rugcheck API is not operational".to_string(),
+        }));
+    }
+
+    // Get count first for logging
+    let total_uncached = analyzer.database.count_tokens_without_security()?;
+    
+    if total_uncached == 0 {
+        return Ok(ScanStats { processed: 0, successful: 0, failed: 0 });
+    }
+
+    log(
+        LogTag::Security,
+        "SCAN_START",
+        &format!("Found {} tokens without security info - starting batch analysis", total_uncached)
+    );
+
+    // Get tokens to process
+    let tokens_to_check = analyzer.database.get_tokens_without_security()?;
+    
+    if tokens_to_check.is_empty() {
+        return Ok(ScanStats { processed: 0, successful: 0, failed: 0 });
+    }
+
+    let mut stats = ScanStats {
+        processed: 0,
+        successful: 0, 
+        failed: 0,
+    };
+
+    // Process in batches to respect rate limits
+    const BATCH_SIZE: usize = 10;
+    const BATCH_DELAY_MS: u64 = 2000; // 2 seconds between batches
+    const REQUEST_DELAY_MS: u64 = 300; // 300ms between individual requests
+
+    for (batch_idx, batch) in tokens_to_check.chunks(BATCH_SIZE).enumerate() {
+        log(
+            LogTag::Security,
+            "BATCH_START",
+            &format!("Processing batch {}/{} ({} tokens)", 
+                    batch_idx + 1, 
+                    (tokens_to_check.len() + BATCH_SIZE - 1) / BATCH_SIZE,
+                    batch.len())
+        );
+
+        for (token_idx, mint) in batch.iter().enumerate() {
+            // Add delay between requests to be respectful to API
+            if token_idx > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(REQUEST_DELAY_MS)).await;
+            }
+
+            match analyzer.analyze_token_security_with_cache(mint, false).await {
+                Ok(security_info) => {
+                    stats.successful += 1;
+                    log(
+                        LogTag::Security,
+                        "PROCESS_SUCCESS",
+                        &format!("✅ {} - {}", safe_truncate(mint, 12), security_info.summary())
+                    );
+                }
+                Err(e) => {
+                    stats.failed += 1;
+                    log(
+                        LogTag::Security,
+                        "PROCESS_FAILED",
+                        &format!("❌ {} - Error: {}", safe_truncate(mint, 12), e)
+                    );
+                }
+            }
+
+            stats.processed += 1;
+        }
+
+        // Add delay between batches (except for last batch)
+        if batch_idx < (tokens_to_check.len() + BATCH_SIZE - 1) / BATCH_SIZE - 1 {
+            tokio::time::sleep(std::time::Duration::from_millis(BATCH_DELAY_MS)).await;
+        }
+    }
+
+    log(
+        LogTag::Security,
+        "SCAN_COMPLETE",
+        &format!("Security scan finished: {}/{} successful ({:.1}% success rate)", 
+                stats.successful, stats.processed,
+                if stats.processed > 0 { (stats.successful as f64 / stats.processed as f64) * 100.0 } else { 0.0 })
+    );
+
+    Ok(stats)
 }
