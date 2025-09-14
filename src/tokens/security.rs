@@ -549,9 +549,11 @@ pub async fn analyze_token_security(mint: &str) -> Result<TokenSecurityInfo, Scr
     }
 
     // This should never be reached due to loop logic, but return error instead of panic
-    Err(ScreenerBotError::Data(crate::errors::DataError::Generic {
-        message: "Retry loop completed without returning result".to_string(),
-    }))
+    Err(
+        ScreenerBotError::Data(crate::errors::DataError::Generic {
+            message: "Retry loop completed without returning result".to_string(),
+        })
+    )
 }
 
 /// Extract essential security information from Rugcheck report
@@ -769,19 +771,20 @@ impl SecurityDatabase {
             "ALTER TABLE tokens ADD COLUMN security_mint_authority_disabled INTEGER",
             "ALTER TABLE tokens ADD COLUMN security_freeze_authority_disabled INTEGER",
             "ALTER TABLE tokens ADD COLUMN security_lp_is_safe INTEGER",
-            "ALTER TABLE tokens ADD COLUMN security_holder_count INTEGER", 
+            "ALTER TABLE tokens ADD COLUMN security_holder_count INTEGER",
             "ALTER TABLE tokens ADD COLUMN security_is_safe INTEGER",
             "ALTER TABLE tokens ADD COLUMN security_analyzed_at TEXT",
-            "ALTER TABLE tokens ADD COLUMN security_risk_level TEXT",
+            "ALTER TABLE tokens ADD COLUMN security_risk_level TEXT"
         ];
 
         for stmt in alter_statements {
             match conn.execute(stmt, []) {
-                Ok(_) => {}, // Column added successfully
-                Err(rusqlite::Error::SqliteFailure(code, Some(msg))) 
-                    if msg.contains("duplicate column name") => {
+                Ok(_) => {} // Column added successfully
+                Err(rusqlite::Error::SqliteFailure(code, Some(msg))) if
+                    msg.contains("duplicate column name")
+                => {
                     // Column already exists, this is fine
-                },
+                }
                 Err(e) => {
                     log(LogTag::Security, "DB_WARNING", &format!("Failed to add column: {}", e));
                     // Don't fail initialization for column issues
@@ -1063,12 +1066,18 @@ static SECURITY_DATABASE: OnceLock<SecurityDatabase> = OnceLock::new();
 pub fn get_security_analyzer() -> TokenSecurityAnalyzer {
     let database = SECURITY_DATABASE.get_or_init(|| {
         SecurityDatabase::new().unwrap_or_else(|e| {
-            log(LogTag::Security, "DB_ERROR", &format!("Failed to create security database: {}", e));
+            log(
+                LogTag::Security,
+                "DB_ERROR",
+                &format!("Failed to create security database: {}", e)
+            );
             // Fallback to dummy database for compatibility
             SecurityDatabase {
                 connection: std::sync::Arc::new(
                     std::sync::Mutex::new(
-                        rusqlite::Connection::open_in_memory().expect("Failed to create fallback DB")
+                        rusqlite::Connection
+                            ::open_in_memory()
+                            .expect("Failed to create fallback DB")
                     )
                 ),
             }
