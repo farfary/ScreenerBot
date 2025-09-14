@@ -14,6 +14,7 @@ use crate::{ errors::ScreenerBotError, logger::{ log, LogTag }, utils::safe_trun
 
 use chrono::{ DateTime, Utc };
 use reqwest;
+use rusqlite;
 use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -579,7 +580,7 @@ fn extract_security_info(
             holder_count,
             is_safe,
             Utc::now(),
-            "OK".to_string()
+            "API".to_string()  // Mark as fresh API data
         )
     )
 }
@@ -717,26 +718,199 @@ impl SecurityCache {
     }
 }
 
-/// Dummy database for backward compatibility
-pub struct SecurityDatabase;
+/// Security database for persistent storage
+pub struct SecurityDatabase {
+    connection: std::sync::Arc<std::sync::Mutex<rusqlite::Connection>>,
+}
 
 impl SecurityDatabase {
+    /// Create new security database instance (uses tokens.db)
+    pub fn new() -> Result<Self, ScreenerBotError> {
+        use rusqlite::Connection;
+        
+        let conn = Connection::open("data/tokens.db")
+            .map_err(|e| ScreenerBotError::Data(crate::errors::DataError::Generic { 
+                message: format!("Failed to open tokens.db: {}", e)
+            }))?;
+
+        // Add security columns if they don't exist
+        let _ = conn.execute(
+            "ALTER TABLE tokens ADD COLUMN security_mint_authority_disabled INTEGER",
+            []
+        );
+        let _ = conn.execute(
+            "ALTER TABLE tokens ADD COLUMN security_freeze_authority_disabled INTEGER", 
+            []
+        );
+        let _ = conn.execute(
+            "ALTER TABLE tokens ADD COLUMN security_lp_is_safe INTEGER",
+            []
+        );
+        let _ = conn.execute(
+            "ALTER TABLE tokens ADD COLUMN security_holder_count INTEGER",
+            []
+        );
+        let _ = conn.execute(
+            "ALTER TABLE tokens ADD COLUMN security_is_safe INTEGER",
+            []
+        );
+        let _ = conn.execute(
+            "ALTER TABLE tokens ADD COLUMN security_analyzed_at TEXT",
+            []
+        );
+        let _ = conn.execute(
+            "ALTER TABLE tokens ADD COLUMN security_risk_level TEXT",
+            []
+        );
+
+        Ok(SecurityDatabase {
+            connection: std::sync::Arc::new(std::sync::Mutex::new(conn)),
+        })
+    }
+
+    /// Get security info from database
     pub fn get_security_info(
         &self,
-        _mint: &str
+        mint: &str
     ) -> Result<Option<TokenSecurityInfo>, ScreenerBotError> {
-        // No database caching in simplified version
-        Ok(None)
+        let conn = self.connection.lock().map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic { 
+                message: format!("Failed to lock database: {}", e)
+            })
+        })?;
+
+        let mut stmt = conn.prepare(
+            "SELECT security_mint_authority_disabled, security_freeze_authority_disabled, 
+                    security_lp_is_safe, security_holder_count, security_is_safe, 
+                    security_analyzed_at, security_risk_level 
+             FROM tokens WHERE mint = ?1 AND security_analyzed_at IS NOT NULL"
+        ).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic { 
+                message: format!("Failed to prepare select statement: {}", e)
+            })
+        })?;
+
+        let result = stmt.query_row([mint], |row| {
+            let analyzed_at_str: String = row.get(5)?;
+            let analyzed_at = chrono::DateTime::parse_from_rfc3339(&analyzed_at_str)
+                .map_err(|_| rusqlite::Error::InvalidColumnType(5, "security_analyzed_at".to_string(), rusqlite::types::Type::Text))?
+                .with_timezone(&chrono::Utc);
+
+            Ok(TokenSecurityInfo::new(
+                mint.to_string(),
+                row.get::<_, i32>(0)? == 1,  // mint_authority_disabled
+                row.get::<_, i32>(1)? == 1,  // freeze_authority_disabled  
+                row.get::<_, i32>(2)? == 1,  // lp_is_safe
+                row.get::<_, u32>(3)?,       // holder_count
+                row.get::<_, i32>(4)? == 1,  // is_safe
+                analyzed_at,
+                "CACHED".to_string()
+            ))
+        });
+
+        match result {
+            Ok(info) => Ok(Some(info)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(ScreenerBotError::Data(crate::errors::DataError::Generic { 
+                message: format!("Failed to query security info: {}", e)
+            }))
+        }
+    }
+
+    /// Store security info in database
+    pub fn store_security_info(
+        &self,
+        info: &TokenSecurityInfo
+    ) -> Result<(), ScreenerBotError> {
+        let conn = self.connection.lock().map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic { 
+                message: format!("Failed to lock database: {}", e)
+            })
+        })?;
+
+        conn.execute(
+            "UPDATE tokens SET 
+                security_mint_authority_disabled = ?2,
+                security_freeze_authority_disabled = ?3,
+                security_lp_is_safe = ?4,
+                security_holder_count = ?5,
+                security_is_safe = ?6,
+                security_analyzed_at = ?7,
+                security_risk_level = ?8
+             WHERE mint = ?1",
+            rusqlite::params![
+                info.mint,
+                if info.mint_authority_disabled { 1 } else { 0 },
+                if info.freeze_authority_disabled { 1 } else { 0 },
+                if info.lp_is_safe { 1 } else { 0 },
+                info.holder_count,
+                if info.is_safe { 1 } else { 0 },
+                info.analyzed_at.to_rfc3339(),
+                info.risk_level.as_str(),
+            ]
+        ).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic { 
+                message: format!("Failed to update security info: {}", e)
+            })
+        })?;
+
+        log(
+            LogTag::Security,
+            "STORE",
+            &format!("Stored security info for {}", safe_truncate(&info.mint, 12))
+        );
+
+        Ok(())
     }
 }
 
 impl TokenSecurityAnalyzer {
-    /// Analyze token security (compatibility wrapper)
+    /// Analyze token security (compatibility wrapper with caching)
     pub async fn analyze_token_security(
         &self,
         mint: &str
     ) -> Result<TokenSecurityInfo, ScreenerBotError> {
-        analyze_token_security(mint).await
+        self.analyze_token_security_with_cache(mint, false).await
+    }
+
+    /// Analyze token security with optional force refresh
+    pub async fn analyze_token_security_with_cache(
+        &self,
+        mint: &str,
+        force_refresh: bool
+    ) -> Result<TokenSecurityInfo, ScreenerBotError> {
+        // Check database cache first (unless forcing refresh)
+        if !force_refresh {
+            if let Ok(Some(cached_info)) = self.database.get_security_info(mint) {
+                // Check if cached data is fresh (less than 24 hours old)
+                let age_hours = (chrono::Utc::now() - cached_info.analyzed_at).num_hours();
+                if age_hours < 24 {
+                    log(
+                        LogTag::Security,
+                        "CACHE_HIT",
+                        &format!("Using cached security info for {} (age: {}h)", safe_truncate(mint, 12), age_hours)
+                    );
+                    return Ok(cached_info);
+                }
+            }
+        }
+
+        // Cache miss or stale data - fetch from API
+        log(
+            LogTag::Security,
+            "CACHE_MISS", 
+            &format!("Fetching fresh security data for {}", safe_truncate(mint, 12))
+        );
+
+        let security_info = analyze_token_security(mint).await?;
+        
+        // Store in database for future use
+        if let Err(e) = self.database.store_security_info(&security_info) {
+            log(LogTag::Security, "STORE_ERROR", &format!("Failed to cache security info: {}", e));
+            // Continue anyway - don't fail the whole operation
+        }
+
+        Ok(security_info)
     }
 
     /// Analyze multiple tokens (compatibility wrapper)
@@ -744,15 +918,74 @@ impl TokenSecurityAnalyzer {
         &self,
         mints: &[String]
     ) -> Result<HashMap<String, TokenSecurityInfo>, ScreenerBotError> {
-        analyze_multiple_tokens(mints).await
+        if mints.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        log(
+            LogTag::Security,
+            "BATCH_START",
+            &format!("Starting cached batch security analysis for {} tokens", mints.len())
+        );
+
+        let mut results = HashMap::new();
+        let mut cache_hits = 0;
+        let mut api_calls = 0;
+        let mut errors = 0;
+
+        // Process tokens with caching
+        for (i, mint) in mints.iter().enumerate() {
+            match self.analyze_token_security_with_cache(mint, false).await {
+                Ok(security_info) => {
+                    if security_info.api_status == "CACHED" {
+                        cache_hits += 1;
+                    } else {
+                        api_calls += 1;
+                    }
+                    results.insert(mint.clone(), security_info);
+                }
+                Err(e) => {
+                    errors += 1;
+                    log(
+                        LogTag::Security,
+                        "BATCH_ERROR",
+                        &format!("Failed to analyze token {}: {}", safe_truncate(mint, 12), e)
+                    );
+                }
+            }
+
+            // Add delay only for API calls (not cached results)
+            if i < mints.len() - 1 && api_calls > 0 && results.get(mint).map(|info| info.api_status != "CACHED").unwrap_or(false) {
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            }
+        }
+
+        log(
+            LogTag::Security,
+            "BATCH_COMPLETE",
+            &format!("Batch complete: {} success ({} cached, {} API calls), {} errors", 
+                     results.len(), cache_hits, api_calls, errors)
+        );
+
+        Ok(results)
     }
 }
 
 /// Get global security analyzer (backward compatibility)
 pub fn get_security_analyzer() -> TokenSecurityAnalyzer {
+    let database = SecurityDatabase::new().unwrap_or_else(|e| {
+        log(LogTag::Security, "DB_ERROR", &format!("Failed to create security database: {}", e));
+        // Fallback to dummy database for compatibility
+        SecurityDatabase {
+            connection: std::sync::Arc::new(std::sync::Mutex::new(
+                rusqlite::Connection::open_in_memory().expect("Failed to create fallback DB")
+            )),
+        }
+    });
+
     TokenSecurityAnalyzer {
         cache: SecurityCache,
-        database: SecurityDatabase,
+        database,
     }
 }
 
