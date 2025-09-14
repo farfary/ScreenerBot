@@ -17,7 +17,7 @@ use reqwest;
 use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
 use std::time::Duration;
-use std::sync::Arc;
+use std::sync::{ Arc, OnceLock };
 use tokio::sync::Notify;
 
 /// Security risk levels (backward compatibility)
@@ -211,8 +211,21 @@ impl TokenSecurityInfo {
 
         self.security_score = score.min(100);
 
-        // Calculate risk level
-        self.risk_level = if self.is_safe {
+        // Calculate risk level - downgrade if any core safety vector fails
+        self.risk_level = if
+            !self.mint_authority_disabled ||
+            !self.freeze_authority_disabled ||
+            !self.lp_is_safe
+        {
+            // Any core failure means at least Medium risk
+            if self.security_score >= 50 {
+                SecurityRiskLevel::Medium
+            } else if self.security_score >= 25 {
+                SecurityRiskLevel::High
+            } else {
+                SecurityRiskLevel::Critical
+            }
+        } else if self.is_safe {
             SecurityRiskLevel::Safe
         } else if self.security_score >= 70 {
             SecurityRiskLevel::Low
@@ -236,30 +249,31 @@ impl TokenSecurityInfo {
             analysis_incomplete: false,
         };
 
-        // Set holder info for backward compatibility
+        // Set holder info for backward compatibility (NOTE: Contains estimated/synthetic data)
         self.holder_info = Some(HolderSecurityInfo {
             total_holders: self.holder_count,
+            // SYNTHETIC: Estimates based on holder count - not real distribution analysis
             top_10_concentration: if self.holder_count < 10 {
-                95.0
+                95.0 // Estimate: very concentrated if few holders
             } else {
-                50.0
-            }, // Estimated
+                50.0 // Estimate: moderate concentration otherwise
+            },
             largest_holder_percentage: if self.holder_count < 5 {
-                80.0
+                80.0 // Estimate: high concentration with very few holders
             } else {
-                20.0
-            }, // Estimated
+                20.0 // Estimate: lower concentration with more holders
+            },
             whale_count: if self.holder_count < 10 {
-                self.holder_count
+                self.holder_count // Estimate: all holders might be whales if very few
             } else {
-                5
-            }, // Estimated
+                5 // Estimate: assume some whales exist
+            },
             distribution_score: if self.holder_count >= 100 {
-                85
+                85 // Good distribution
             } else if self.holder_count >= 50 {
-                70
+                70 // Moderate distribution
             } else {
-                40
+                40 // Poor distribution
             },
         });
     }
@@ -342,27 +356,22 @@ struct RiskInfo {
 }
 
 /// HTTP client for API calls
-static mut HTTP_CLIENT: Option<reqwest::Client> = None;
-static CLIENT_INIT: std::sync::Once = std::sync::Once::new();
+static HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
 /// Initialize HTTP client
 fn get_http_client() -> &'static reqwest::Client {
-    unsafe {
-        CLIENT_INIT.call_once(|| {
-            let client = reqwest::Client
-                ::builder()
-                .timeout(Duration::from_secs(30))
-                .user_agent("ScreenerBot/1.0")
-                .build()
-                .expect("Failed to create HTTP client");
-            HTTP_CLIENT = Some(client);
-        });
-        HTTP_CLIENT.as_ref().unwrap()
-    }
+    HTTP_CLIENT.get_or_init(|| {
+        reqwest::Client
+            ::builder()
+            .timeout(Duration::from_secs(30))
+            .user_agent("ScreenerBot/1.0")
+            .build()
+            .expect("Failed to create HTTP client")
+    })
 }
 
 /// Check if Rugcheck API is operational
-pub async fn check_api_status() -> Result<bool, String> {
+pub async fn check_api_status() -> Result<bool, ScreenerBotError> {
     let client = get_http_client();
     let url = "https://api.rugcheck.xyz/v1/maintenance";
 
@@ -391,7 +400,11 @@ pub async fn check_api_status() -> Result<bool, String> {
         }
         Err(e) => {
             log(LogTag::Security, "API_ERROR", &format!("Failed to check API status: {}", e));
-            Err(format!("API check failed: {}", e))
+            Err(
+                ScreenerBotError::Network(crate::errors::NetworkError::Generic {
+                    message: format!("API check failed: {}", e),
+                })
+            )
         }
     }
 }
@@ -407,67 +420,135 @@ pub async fn analyze_token_security(mint: &str) -> Result<TokenSecurityInfo, Scr
     let client = get_http_client();
     let url = format!("https://api.rugcheck.xyz/v1/tokens/{}/report", mint);
 
-    // Make API request
-    let response = match client.get(&url).send().await {
-        Ok(response) => response,
-        Err(e) => {
-            let error_msg = format!("Failed to fetch token report: {}", e);
+    // Retry with exponential backoff (max 3 attempts)
+    let mut last_error = None;
+    for attempt in 1..=3 {
+        // Make API request
+        let response = match client.get(&url).send().await {
+            Ok(response) => response,
+            Err(e) => {
+                last_error = Some(e);
+                if attempt < 3 {
+                    let delay_ms = match attempt {
+                        1 => 150,
+                        2 => 400,
+                        _ => 1000,
+                    };
+                    log(
+                        LogTag::Security,
+                        "API_RETRY",
+                        &format!(
+                            "API request failed (attempt {}), retrying in {}ms",
+                            attempt,
+                            delay_ms
+                        )
+                    );
+                    tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                    continue;
+                }
+                let error_msg = format!(
+                    "Failed to fetch token report after {} attempts: {}",
+                    attempt,
+                    last_error.as_ref().unwrap()
+                );
+                log(LogTag::Security, "API_ERROR", &error_msg);
+                return Err(
+                    ScreenerBotError::Network(crate::errors::NetworkError::Generic {
+                        message: error_msg,
+                    })
+                );
+            }
+        };
+
+        // Check response status
+        if !response.status().is_success() {
+            let status_code = response.status().as_u16();
+            if attempt < 3 && (status_code >= 500 || status_code == 429) {
+                let delay_ms = match attempt {
+                    1 => 150,
+                    2 => 400,
+                    _ => 1000,
+                };
+                log(
+                    LogTag::Security,
+                    "API_RETRY",
+                    &format!(
+                        "API returned {} (attempt {}), retrying in {}ms",
+                        status_code,
+                        attempt,
+                        delay_ms
+                    )
+                );
+                tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                continue;
+            }
+
+            let error_msg = format!("API returned error status: {}", status_code);
             log(LogTag::Security, "API_ERROR", &error_msg);
             return Err(
-                ScreenerBotError::Network(crate::errors::NetworkError::Generic {
-                    message: error_msg,
+                ScreenerBotError::Network(crate::errors::NetworkError::HttpStatusError {
+                    endpoint: url.clone(),
+                    status: status_code,
+                    body: None,
                 })
             );
         }
-    };
 
-    // Check response status
-    if !response.status().is_success() {
-        let status_code = response.status().as_u16();
-        let error_msg = format!("API returned error status: {}", status_code);
-        log(LogTag::Security, "API_ERROR", &error_msg);
-        return Err(
-            ScreenerBotError::Network(crate::errors::NetworkError::HttpStatusError {
-                endpoint: url.clone(),
-                status: status_code,
-                body: None,
-            })
+        // Parse response
+        let report: RugcheckTokenReport = match response.json().await {
+            Ok(report) => report,
+            Err(e) => {
+                if attempt < 3 {
+                    let delay_ms = match attempt {
+                        1 => 150,
+                        2 => 400,
+                        _ => 1000,
+                    };
+                    log(
+                        LogTag::Security,
+                        "PARSE_RETRY",
+                        &format!(
+                            "JSON parse failed (attempt {}), retrying in {}ms",
+                            attempt,
+                            delay_ms
+                        )
+                    );
+                    tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                    continue;
+                }
+                let error_msg = format!("Failed to parse API response: {}", e);
+                log(LogTag::Security, "PARSE_ERROR", &error_msg);
+                return Err(
+                    ScreenerBotError::Data(crate::errors::DataError::ParseError {
+                        data_type: "rugcheck_report".to_string(),
+                        error: error_msg,
+                    })
+                );
+            }
+        };
+
+        // Success - extract security information and return
+        let security_info = extract_security_info(report)?;
+
+        log(
+            LogTag::Security,
+            "ANALYZE_COMPLETE",
+            &format!(
+                "Security analysis complete for {}: Safe={}, MintAuth={}, FreezeAuth={}, LP={}, Holders={}",
+                safe_truncate(mint, 12),
+                security_info.is_safe,
+                security_info.mint_authority_disabled,
+                security_info.freeze_authority_disabled,
+                security_info.lp_is_safe,
+                security_info.holder_count
+            )
         );
+
+        return Ok(security_info);
     }
 
-    // Parse response
-    let report: RugcheckTokenReport = match response.json().await {
-        Ok(report) => report,
-        Err(e) => {
-            let error_msg = format!("Failed to parse API response: {}", e);
-            log(LogTag::Security, "PARSE_ERROR", &error_msg);
-            return Err(
-                ScreenerBotError::Data(crate::errors::DataError::ParseError {
-                    data_type: "rugcheck_report".to_string(),
-                    error: error_msg,
-                })
-            );
-        }
-    };
-
-    // Extract security information
-    let security_info = extract_security_info(report)?;
-
-    log(
-        LogTag::Security,
-        "ANALYZE_COMPLETE",
-        &format!(
-            "Security analysis complete for {}: Safe={}, MintAuth={}, FreezeAuth={}, LP={}, Holders={}",
-            safe_truncate(mint, 12),
-            security_info.is_safe,
-            security_info.mint_authority_disabled,
-            security_info.freeze_authority_disabled,
-            security_info.lp_is_safe,
-            security_info.holder_count
-        )
-    );
-
-    Ok(security_info)
+    // Should never reach here due to loop structure, but for safety
+    unreachable!("Retry loop should always return or break")
 }
 
 /// Extract essential security information from Rugcheck report
@@ -508,21 +589,26 @@ fn check_lp_safety(markets: &[MarketInfo], risks: &[RiskInfo]) -> bool {
     // Check if there are any high-risk LP-related issues
     let has_lp_unlock_risk = risks
         .iter()
-        .any(|risk| { risk.name.contains("LP Unlocked") && risk.level == "danger" });
+        .any(|risk| risk.name.to_lowercase().contains("lp unlocked") && risk.level == "danger");
 
     if has_lp_unlock_risk {
         return false;
     }
 
-    // Check LP lock percentage across all markets
-    let total_lp_locked_pct = markets
+    // If no markets, consider unsafe
+    if markets.is_empty() {
+        return false;
+    }
+
+    // Check LP lock percentage across all markets - use minimum (worst case)
+    let min_lp_locked_pct = markets
         .iter()
         .map(|market| market.lp.lp_locked_pct)
-        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap_or(0.0);
 
-    // Consider LP safe if at least 90% is locked
-    total_lp_locked_pct >= 90.0
+    // Consider LP safe if at least 90% is locked in ALL pools
+    min_lp_locked_pct >= 90.0
 }
 
 /// Batch analyze multiple tokens
