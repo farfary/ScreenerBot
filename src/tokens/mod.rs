@@ -5,15 +5,12 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::sync::Notify;
 
-pub mod authority;
 pub mod blacklist;
 pub mod cache;
 pub mod decimals;
 pub mod dexscreener;
 pub mod discovery;
 pub mod geckoterminal;
-pub mod holders;
-pub mod lp_lock;
 pub mod monitor;
 pub mod ohlcv_db;
 pub mod ohlcvs;
@@ -22,14 +19,6 @@ pub mod security;
 pub mod types;
 
 // Re-export main types and functions
-pub use authority::{
-    get_authority_summary,
-    get_multiple_token_authorities,
-    get_token_authorities,
-    is_token_safe,
-    TokenAuthorities,
-    TokenRiskLevel,
-};
 pub use blacklist::{
     get_blacklist_stats_db,
     initialize_system_stable_blacklist,
@@ -53,24 +42,6 @@ pub use dexscreener::{
     MAX_TOKENS_PER_API_CALL,
 };
 pub use discovery::{ discover_tokens_once, start_token_discovery, TokenDiscovery };
-pub use holders::{
-    clear_account_count_cache,
-    get_count_holders,
-    get_holder_stats,
-    get_top_holders_analysis,
-    HolderStats,
-    TokenHolder,
-    TopHoldersAnalysis,
-};
-pub use lp_lock::{
-    check_lp_lock_status,
-    check_lp_lock_status_with_cache,
-    check_multiple_lp_locks,
-    is_lp_safe,
-    LockPrograms,
-    LpLockAnalysis,
-    LpLockStatus,
-};
 pub use geckoterminal::{ OhlcvDataPoint };
 pub use ohlcvs::{
     get_latest_ohlcv,
@@ -80,6 +51,19 @@ pub use ohlcvs::{
     start_ohlcv_monitoring,
     DataAvailability,
     OhlcvService,
+};
+pub use security::{
+    analyze_multiple_tokens,
+    analyze_token_security,
+    check_api_status,
+    get_security_analyzer,
+    get_security_summary,
+    is_token_safe,
+    start_security_monitoring,
+    SecurityFlags,
+    SecurityRiskLevel,
+    TokenSecurityAnalyzer,
+    TokenSecurityInfo,
 };
 pub use types::*;
 
