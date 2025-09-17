@@ -27,7 +27,6 @@ fn is_transient_verification_error(msg: &str) -> bool {
         m.contains("transaction manager not available") ||
         m.contains("transaction manager not initialized") ||
         m.contains("transaction not found (propagation)") ||
-        // Enhanced: More specific RPC indexing delay patterns
         m.contains("not yet indexed") ||
         m.contains("transaction not found") ||
         m.contains("failed to fetch transaction details") ||
