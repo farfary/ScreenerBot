@@ -191,7 +191,7 @@ static BLOCK_HEIGHT_CACHE: Lazy<AsyncMutex<BlockHeightCache>> = Lazy::new(|| {
 });
 
 // TTL for cached block height (seconds)
-const BLOCK_HEIGHT_CACHE_TTL_SECS: u64 = 5;
+const BLOCK_HEIGHT_CACHE_TTL_SECS: u64 = 15;
 
 /// Check if premium RPC only mode is active
 fn is_premium_rpc_only() -> bool {
