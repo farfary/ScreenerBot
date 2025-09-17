@@ -68,6 +68,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::{ Arc as StdArc, Mutex as StdMutex };
 use std::time::{ Duration, Instant };
+use tokio::sync::Mutex as AsyncMutex;
 use url::Url;
 
 /// Structure to hold token account information
@@ -178,6 +179,19 @@ pub struct AtaRentInfo {
 static ATA_RENT_CACHE: Lazy<StdArc<StdMutex<Option<AtaRentInfo>>>> = Lazy::new(||
     StdArc::new(StdMutex::new(None))
 );
+
+// Short-lived cache for block height to avoid frequent getBlockHeight RPC calls.
+struct BlockHeightCache {
+    height: Option<u64>,
+    fetched_at: Option<Instant>,
+}
+
+static BLOCK_HEIGHT_CACHE: Lazy<AsyncMutex<BlockHeightCache>> = Lazy::new(|| {
+    AsyncMutex::new(BlockHeightCache { height: None, fetched_at: None })
+});
+
+// TTL for cached block height (seconds)
+const BLOCK_HEIGHT_CACHE_TTL_SECS: u64 = 5;
 
 /// Check if premium RPC only mode is active
 fn is_premium_rpc_only() -> bool {
@@ -1974,6 +1988,27 @@ impl RpcClient {
 
     /// Get current block height for transaction expiration checking
     pub async fn get_block_height(&self) -> Result<u64, ScreenerBotError> {
+        // Try cached block height first (short TTL)
+        {
+            let cache_guard = BLOCK_HEIGHT_CACHE.lock().await;
+            if let (Some(height), Some(fetched_at)) = (cache_guard.height, cache_guard.fetched_at) {
+                if fetched_at.elapsed().as_secs() < BLOCK_HEIGHT_CACHE_TTL_SECS {
+                    if is_debug_rpc_enabled() {
+                        log(
+                            LogTag::Rpc,
+                            "BLOCK_HEIGHT",
+                            &format!(
+                                "Using cached block height {} (age {:.3}s)",
+                                height,
+                                fetched_at.elapsed().as_secs_f32()
+                            )
+                        );
+                    }
+                    return Ok(height);
+                }
+            }
+        }
+
         let rpc_payload =
             serde_json::json!({
             "jsonrpc": "2.0",
@@ -2026,6 +2061,13 @@ impl RpcClient {
 
                             if let Some(result) = rpc_response.get("result") {
                                 if let Some(block_height) = result.as_u64() {
+                                    // Update cache before returning
+                                    {
+                                        let mut cache_guard = BLOCK_HEIGHT_CACHE.lock().await;
+                                        cache_guard.height = Some(block_height);
+                                        cache_guard.fetched_at = Some(Instant::now());
+                                    }
+
                                     if is_debug_rpc_enabled() {
                                         log(
                                             LogTag::Rpc,
@@ -2037,6 +2079,7 @@ impl RpcClient {
                                             )
                                         );
                                     }
+
                                     return Ok(block_height);
                                 }
                             }
