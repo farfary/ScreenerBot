@@ -12,9 +12,8 @@ use crate::{
         SLIPPAGE_QUOTE_DEFAULT_PCT,
         SLIPPAGE_EXIT_RETRY_STEPS_PCT,
     },
-    positions_db::save_position,
-    positions_types::Position,
 };
+use super::{ db::save_position, types::Position };
 use super::{
     state::{
         acquire_position_lock,

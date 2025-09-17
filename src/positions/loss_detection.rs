@@ -1,10 +1,9 @@
 use crate::{
-    positions_types::Position,
-    positions_lib::calculate_position_pnl,
     utils::safe_truncate,
     logger::{ log, LogTag },
     tokens::blacklist::{ add_to_blacklist_db, BlacklistReason },
 };
+use super::{ types::Position, lib::calculate_position_pnl };
 
 // =============================================================================
 // LOSS DETECTION CONFIGURATION

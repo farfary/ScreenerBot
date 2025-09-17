@@ -2,8 +2,8 @@ use clap::{ Arg, Command };
 use screenerbot::{
     arguments::set_cmd_args,
     logger::{ log, LogTag },
-    positions_db::{ get_open_positions, get_closed_positions },
-    positions_types::Position,
+    positions::{ get_db_open_positions, get_db_closed_positions },
+    positions::Position,
     tokens::get_token_decimals,
     transactions::{ get_transaction, get_global_transaction_manager },
     utils::safe_truncate,
@@ -177,8 +177,8 @@ async fn verify_single_transaction(
 
     // Check if this transaction is associated with any positions
     println!("\n🎯 POSITION ASSOCIATIONS:");
-    let open_positions = get_open_positions().await.unwrap_or_default();
-    let closed_positions = get_closed_positions().await.unwrap_or_default();
+    let open_positions = get_db_open_positions().await.unwrap_or_default();
+    let closed_positions = get_db_closed_positions().await.unwrap_or_default();
 
     let mut found_positions = false;
 
@@ -222,8 +222,8 @@ async fn verify_positions_for_mint(
         &format!("🔍 Verifying positions for mint: {}", safe_truncate(mint, 12))
     );
 
-    let open_positions = get_open_positions().await.unwrap_or_default();
-    let closed_positions = get_closed_positions().await.unwrap_or_default();
+    let open_positions = get_db_open_positions().await.unwrap_or_default();
+    let closed_positions = get_db_closed_positions().await.unwrap_or_default();
 
     let mut found_positions = false;
 
@@ -256,8 +256,8 @@ async fn verify_positions_for_mint(
 async fn verify_all_positions(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::System, "INFO", "🔍 Verifying all positions for token amount accuracy");
 
-    let open_positions = get_open_positions().await.unwrap_or_default();
-    let closed_positions = get_closed_positions().await.unwrap_or_default();
+    let open_positions = get_db_open_positions().await.unwrap_or_default();
+    let closed_positions = get_db_closed_positions().await.unwrap_or_default();
 
     let mut total_positions = 0;
     let mut verified_positions = 0;

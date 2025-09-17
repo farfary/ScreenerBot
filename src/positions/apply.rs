@@ -1,10 +1,9 @@
 use crate::{
-    positions_types::Position,
-    positions_db::{ update_position, force_database_sync },
     utils::safe_truncate,
     logger::{ log, LogTag },
     arguments::is_debug_positions_enabled,
 };
+use super::{ types::Position, db::{ update_position, force_database_sync } };
 use super::{
     state::{
         update_position_state,

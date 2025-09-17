@@ -1,44 +1,43 @@
-use crate::{
-    positions_db::initialize_positions_database,
-    logger::{ log, LogTag },
-    rpc::get_rpc_client,
-    arguments::is_debug_positions_enabled,
-};
+use super::db::initialize_positions_database;
 use super::{
-    state::{
-        POSITIONS,
-        SIG_TO_MINT_INDEX,
-        MINT_TO_POSITION_INDEX,
-        reconcile_global_position_semaphore,
-    },
-    queue::{
-        poll_verification_batch,
-        requeue_verification,
-        remove_verification,
-        gc_expired_verifications,
-        enqueue_verification,
-        VerificationItem,
-        VerificationKind,
-    },
-    verifier::{ verify_transaction, VerificationOutcome },
     apply::apply_transition,
+    queue::{
+        enqueue_verification, gc_expired_verifications, poll_verification_batch,
+        remove_verification, requeue_verification, VerificationItem, VerificationKind,
+    },
+    state::{
+        reconcile_global_position_semaphore, MINT_TO_POSITION_INDEX, POSITIONS, SIG_TO_MINT_INDEX,
+    },
+    verifier::{verify_transaction, VerificationOutcome},
+};
+use crate::{
+    arguments::is_debug_positions_enabled,
+    logger::{log, LogTag},
+    rpc::get_rpc_client,
 };
 use std::sync::Arc;
-use tokio::{ sync::Notify, time::{ sleep, Duration } };
+use tokio::{
+    sync::Notify,
+    time::{sleep, Duration},
+};
 
 const VERIFICATION_BATCH_SIZE: usize = 10;
 
 /// Initialize positions system
 pub async fn initialize_positions_system() -> Result<(), String> {
-    log(LogTag::Positions, "STARTUP", "🚀 Initializing positions system");
+    log(
+        LogTag::Positions,
+        "STARTUP",
+        "🚀 Initializing positions system",
+    );
 
     // Initialize database
-    initialize_positions_database().await.map_err(|e|
-        format!("Failed to initialize positions database: {}", e)
-    )?;
+    initialize_positions_database()
+        .await
+        .map_err(|e| format!("Failed to initialize positions database: {}", e))?;
 
     // Load existing positions from database
-    match crate::positions_db::load_all_positions().await {
+    match crate::positions::load_all_positions().await {
         Ok(positions) => {
             let mut global_positions = POSITIONS.write().await;
             let mut sig_to_mint_index = SIG_TO_MINT_INDEX.write().await;
@@ -56,7 +55,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                             position.mint.clone(),
                             position.id,
                             VerificationKind::Entry,
-                            None
+                            None,
                         );
                         enqueue_verification(item).await;
                         unverified_count += 1;
@@ -71,7 +70,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                             position.mint.clone(),
                             position.id,
                             VerificationKind::Exit,
-                            None
+                            None,
                         );
                         enqueue_verification(item).await;
                         unverified_count += 1;
@@ -106,14 +105,14 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                     "✅ Loaded {} positions, {} pending verification",
                     global_positions.len(),
                     unverified_count
-                )
+                ),
             );
         }
         Err(e) => {
             log(
                 LogTag::Positions,
                 "WARNING",
-                &format!("Failed to load positions from database: {}", e)
+                &format!("Failed to load positions from database: {}", e),
             );
         }
     }
@@ -124,13 +123,21 @@ pub async fn initialize_positions_system() -> Result<(), String> {
         reconcile_global_position_semaphore(MAX_OPEN_POSITIONS).await;
     }
 
-    log(LogTag::Positions, "STARTUP", "✅ Positions system initialized");
+    log(
+        LogTag::Positions,
+        "STARTUP",
+        "✅ Positions system initialized",
+    );
     Ok(())
 }
 
 /// Start positions manager service
 pub async fn start_positions_manager_service(shutdown: Arc<Notify>) -> Result<(), String> {
-    log(LogTag::Positions, "STARTUP", "🚀 Starting positions manager service");
+    log(
+        LogTag::Positions,
+        "STARTUP",
+        "🚀 Starting positions manager service",
+    );
 
     initialize_positions_system().await?;
 
@@ -142,7 +149,11 @@ pub async fn start_positions_manager_service(shutdown: Arc<Notify>) -> Result<()
 
 /// Verification worker loop
 async fn verification_worker(shutdown: Arc<Notify>) {
-    log(LogTag::Positions, "STARTUP", "🔍 Starting verification worker");
+    log(
+        LogTag::Positions,
+        "STARTUP",
+        "🔍 Starting verification worker",
+    );
 
     let mut cycle_count = 0;
 
@@ -179,7 +190,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                 }
                             }
                         }
-                        
+
                         // Check for missing exit verifications
                         if !position.transaction_exit_verified {
                             if let Some(exit_sig) = &position.exit_transaction_signature {
@@ -200,7 +211,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                         }
                     }
                 }
-                
+
                 if requeued_count > 0 {
                     log(
                         LogTag::Positions,
@@ -208,11 +219,11 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                         &format!("🛡️ Re-enqueued {} missing verifications", requeued_count)
                     );
                 }
-                
+
                 // Clean up expired items
                 let current_height = get_rpc_client().get_block_height().await.ok();
                 let expired_items = gc_expired_verifications(current_height).await;
-                
+
                 if !expired_items.is_empty() {
                     log(
                         LogTag::Positions,
@@ -235,7 +246,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
 
                 // Process verification batch
                 let batch = poll_verification_batch(VERIFICATION_BATCH_SIZE).await;
-                
+
                 if !batch.is_empty() {
                     if is_debug_positions_enabled() {
                         log(
@@ -251,12 +262,12 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                 match apply_transition(transition).await {
                                     Ok(effects) => {
                                         remove_verification(&item.signature).await;
-                                        
+
                                         if is_debug_positions_enabled() {
                                             log(
                                                 LogTag::Positions,
                                                 "DEBUG",
-                                                &format!("✅ Applied transition for {}: db_updated={}, position_closed={}", 
+                                                &format!("✅ Applied transition for {}: db_updated={}, position_closed={}",
                                                     item.signature, effects.db_updated, effects.position_closed)
                                             );
                                         }
@@ -287,7 +298,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                     "WARNING",
                                     &format!("🚫 Permanent failure for {}, applying cleanup", item.signature)
                                 );
-                                
+
                                 let _ = apply_transition(transition).await;
                                 remove_verification(&item.signature).await;
                             }

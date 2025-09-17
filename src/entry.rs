@@ -39,7 +39,7 @@ async fn get_cached_recent_exit_prices_fast(mint: &str) -> Vec<f64> {
 
 // Batch preload exit prices for multiple tokens (call before token processing)
 pub async fn preload_exit_prices_batch(mints: &[String]) -> Result<(), String> {
-    use crate::positions_db::get_positions_database;
+    use crate::positions::get_positions_database;
 
     // Only load for mints not in cache or expired
     let mut mints_to_load = Vec::new();
@@ -112,7 +112,7 @@ pub async fn preload_exit_prices_batch(mints: &[String]) -> Result<(), String> {
 // =============================================================================
 
 // Balanced windows for stable entries (30s to 10min)
-const MIN_PRICE_POINTS: usize = 10; // Increased from 3 for better analysis
+const MIN_PRICE_POINTS: usize = 3; // Increased from 3 for better analysis
 const MAX_DATA_AGE_MIN: i64 = 5; // Keep tight data freshness requirement
 
 // CONSERVATIVE entry windows - more balanced approach

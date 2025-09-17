@@ -7,8 +7,6 @@ use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::global::{ is_debug_summary_enabled, STARTUP_TIME };
 use crate::logger::{ log, LogTag };
 use crate::positions::*;
-use crate::positions_lib::{ calculate_position_pnl, calculate_position_total_fees };
-use crate::positions_types::Position;
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::get_token_from_db;
 use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
@@ -1884,7 +1882,7 @@ impl RecentTransactionDisplay {
 }
 
 /// Generate position status based on position state
-fn format_position_status(position: &crate::positions_types::Position) -> String {
+fn format_position_status(position: &crate::positions::Position) -> String {
     // Check if position is verified
     let entry_verified = position.transaction_entry_verified;
     let exit_verified = position.transaction_exit_verified;

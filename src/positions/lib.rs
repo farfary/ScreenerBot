@@ -1,15 +1,15 @@
 use crate::{
     arguments::is_debug_positions_enabled,
     logger::{ log, LogTag },
-    positions::{ acquire_position_lock, MINT_TO_POSITION_INDEX, POSITIONS, SIG_TO_MINT_INDEX },
-    positions_db::{
+    positions::{ 
+        acquire_position_lock, MINT_TO_POSITION_INDEX, POSITIONS, SIG_TO_MINT_INDEX,
         delete_position_by_id,
         save_position,
         save_token_snapshot,
         update_position,
         TokenSnapshot,
+        Position,
     },
-    positions_types::Position,
     rpc::lamports_to_sol,
     // Pool priority functions removed - no longer needed
     tokens::{ get_token_decimals, get_global_dexscreener_api },
@@ -587,7 +587,7 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
     };
 
     let mint_for_lock = match mint_for_lock {
-        Some(mint) => mint,
+        Some(mint) => mint.clone(),
         None => {
             log(
                 LogTag::Positions,
@@ -659,7 +659,7 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
     // Remove from database if position had an ID
     if let Some(position) = position_to_remove {
         if let Some(position_id) = position.id {
-            match crate::positions_db::delete_position_by_id(position_id).await {
+            match delete_position_by_id(position_id).await {
                 Ok(_) => {
                     log(
                         LogTag::Positions,

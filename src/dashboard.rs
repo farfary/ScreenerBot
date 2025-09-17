@@ -42,7 +42,7 @@ use unicode_width::{ UnicodeWidthChar, UnicodeWidthStr };
 
 use crate::logger::LogTag;
 use crate::positions::{ get_closed_positions, get_open_positions };
-use crate::positions_lib::calculate_position_pnl;
+use crate::positions::calculate_position_pnl;
 use crate::rpc::get_global_rpc_stats;
 use crate::pools::{ get_pool_price, get_cache_stats };
 use crate::transactions::TransactionsManager;

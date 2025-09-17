@@ -1,9 +1,9 @@
 use crate::{
-    positions_types::Position,
     utils::safe_truncate,
     logger::{ log, LogTag },
     arguments::is_debug_positions_enabled,
 };
+use super::types::Position;
 use chrono::{ DateTime, Utc };
 use std::{ collections::HashMap, sync::{ Arc, LazyLock } };
 use tokio::sync::{ Mutex, OwnedMutexGuard, RwLock };

@@ -15,8 +15,7 @@
 
 use crate::global::*;
 use crate::logger::{ log, LogTag };
-use crate::positions_lib::calculate_position_pnl;
-use crate::positions_types::Position;
+use crate::positions::{ calculate_position_pnl, Position };
 use chrono::Utc;
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock as AsyncRwLock; // replaced StdRwLock
@@ -300,7 +299,7 @@ fn clamp01(v: f64) -> f64 {
 /// 6. Clamp to [REENTRY_MIN_PROFIT_OVERRIDE_PCT, REENTRY_MAX_CAP_PCT].
 /// 7. Cache per (mint + entry_time) to avoid repeated DB hits.
 async fn get_reentry_cap_percent(position: &Position) -> Option<f64> {
-    use crate::positions_db::get_positions_database;
+    use crate::positions::get_positions_database;
     // Build cache key
     let key = format!("{}:{}", position.mint, position.entry_time.timestamp());
     {

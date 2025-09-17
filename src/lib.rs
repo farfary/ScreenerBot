@@ -11,9 +11,6 @@ pub mod global;
 pub mod logger;
 pub mod pools; // New modular pool system
 pub mod positions;
-pub mod positions_db; // Positions database module
-pub mod positions_lib; // Position management library
-pub mod positions_types; // Position type definitions
 pub mod profit;
 pub mod rpc;
 pub mod run;
