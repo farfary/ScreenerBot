@@ -32,7 +32,7 @@ const REQUIRE_WEBSITE_URL: bool = false;
 
 // ===== TRANSACTION ACTIVITY REQUIREMENTS =====
 /// Minimum transactions in 5 minutes (only minimum, no maximum)
-const MIN_TRANSACTIONS_5MIN: i64 = 10;
+const MIN_TRANSACTIONS_5MIN: i64 = 5;
 /// Minimum transactions in 1 hour (only minimum, no maximum)
 const MIN_TRANSACTIONS_1H: i64 = 10;
 
