@@ -312,7 +312,8 @@ pub async fn close_position_direct(
         SOL_MINT,
         sell_amount,
         &wallet_address,
-        SLIPPAGE_EXIT_RETRY_STEPS_PCT[0] // Use first step (3.0%) for initial exit attempt
+        SLIPPAGE_EXIT_RETRY_STEPS_PCT[0], // Use first step (3.0%) for initial exit attempt
+        "ExactOut" // Use ExactOut for selling to avoid dust tokens
     ).await.map_err(|e| format!("Quote failed: {}", e))?;
 
     let swap_result = execute_best_swap(

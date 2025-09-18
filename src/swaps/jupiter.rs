@@ -95,7 +95,8 @@ pub async fn get_jupiter_quote(
     input_mint: &str,
     output_mint: &str,
     input_amount: u64,
-    slippage: f64
+    slippage: f64,
+    swap_mode: &str
 ) -> Result<SwapData, ScreenerBotError> {
     if is_debug_swaps_enabled() {
         log(
@@ -129,7 +130,7 @@ pub async fn get_jupiter_quote(
         ("outputMint".to_string(), output_mint.to_string()),
         ("amount".to_string(), input_amount.to_string()),
         ("slippageBps".to_string(), slippage_bps.to_string()),
-        ("swapMode".to_string(), JUPITER_DEFAULT_SWAP_MODE.to_string())
+        ("swapMode".to_string(), swap_mode.to_string())
     ];
 
     let url = format!(
@@ -194,7 +195,7 @@ pub async fn get_jupiter_quote(
                 input_amount,
                 slippage,
                 slippage_bps,
-                JUPITER_DEFAULT_SWAP_MODE
+                swap_mode
             )
         );
     }

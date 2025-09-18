@@ -91,7 +91,8 @@ pub async fn get_gmgn_quote(
     output_mint: &str,
     input_amount: u64,
     from_address: &str,
-    slippage: f64
+    slippage: f64,
+    swap_mode: &str
 ) -> Result<SwapData, ScreenerBotError> {
     if is_debug_swaps_enabled() {
         log(
@@ -119,7 +120,7 @@ pub async fn get_gmgn_quote(
                 },
                 &from_address[..8],
                 slippage,
-                GMGN_DEFAULT_SWAP_MODE,
+                swap_mode,
                 GMGN_FEE_SOL,
                 GMGN_ANTI_MEV
             )
@@ -134,7 +135,7 @@ pub async fn get_gmgn_quote(
         input_amount,
         from_address,
         slippage,
-        GMGN_DEFAULT_SWAP_MODE,
+        swap_mode,
         GMGN_FEE_SOL,
         GMGN_ANTI_MEV,
         GMGN_PARTNER

@@ -95,6 +95,7 @@ pub struct UnifiedQuote {
     pub slippage_bps: u16,
     pub route_plan: String,
     pub execution_data: QuoteExecutionData,
+    pub swap_mode: String,
 }
 
 /// Router-specific execution data
@@ -114,7 +115,8 @@ pub async fn get_best_quote(
     output_mint: &str,
     input_amount: u64,
     from_address: &str,
-    slippage: f64
+    slippage: f64,
+    swap_mode: &str
 ) -> Result<UnifiedQuote, ScreenerBotError> {
     log(
         LogTag::Swap,
@@ -149,7 +151,8 @@ pub async fn get_best_quote(
                     output_mint,
                     input_amount,
                     from_address,
-                    slippage
+                    slippage,
+                    swap_mode
                 ).await
             {
                 Ok(gmgn_data) => {
@@ -167,6 +170,7 @@ pub async fn get_best_quote(
                             serde_json::to_string(&gmgn_data.quote.route_plan).unwrap_or_default()
                         ),
                         execution_data: QuoteExecutionData::GMGN(gmgn_data),
+                        swap_mode: swap_mode.to_string(),
                     };
 
                     log(
@@ -197,7 +201,15 @@ pub async fn get_best_quote(
     if JUPITER_ENABLED {
         log(LogTag::Swap, "QUOTE_JUPITER_START", "🟡 Starting Jupiter quote request...");
         let jupiter_future = async {
-            match jupiter::get_jupiter_quote(input_mint, output_mint, input_amount, slippage).await {
+            match
+                jupiter::get_jupiter_quote(
+                    input_mint,
+                    output_mint,
+                    input_amount,
+                    slippage,
+                    swap_mode
+                ).await
+            {
                 Ok(jupiter_data) => {
                     let unified_quote = UnifiedQuote {
                         router: RouterType::Jupiter,
@@ -217,6 +229,7 @@ pub async fn get_best_quote(
                                 .unwrap_or_default()
                         ),
                         execution_data: QuoteExecutionData::Jupiter(jupiter_data),
+                        swap_mode: swap_mode.to_string(),
                     };
 
                     log(
@@ -475,7 +488,8 @@ pub async fn execute_best_swap(
                                 output_mint,
                                 input_amount,
                                 &wallet_address,
-                                (quote.slippage_bps as f64) / 100.0 // Convert bps to percentage
+                                (quote.slippage_bps as f64) / 100.0, // Convert bps to percentage
+                                &quote.swap_mode
                             ).await
                         {
                             Ok(gmgn_data) => {
@@ -524,7 +538,8 @@ pub async fn execute_best_swap(
                                 input_mint,
                                 output_mint,
                                 input_amount,
-                                (quote.slippage_bps as f64) / 100.0 // Convert bps to percentage
+                                (quote.slippage_bps as f64) / 100.0, // Convert bps to percentage
+                                &quote.swap_mode
                             ).await
                         {
                             Ok(jupiter_data) => {
@@ -669,7 +684,16 @@ pub async fn get_best_quote_for_opening(
     token_symbol: &str
 ) -> Result<UnifiedQuote, ScreenerBotError> {
     // Call the regular quote function
-    match get_best_quote(input_mint, output_mint, input_amount, from_address, slippage).await {
+    match
+        get_best_quote(
+            input_mint,
+            output_mint,
+            input_amount,
+            from_address,
+            slippage,
+            "ExactIn"
+        ).await
+    {
         Ok(quote) => Ok(quote),
         Err(e) => {
             // Check if this is a "no route" error

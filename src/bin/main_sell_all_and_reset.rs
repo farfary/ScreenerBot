@@ -1006,7 +1006,8 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
         SOL_MINT,
         actual_balance,
         &wallet_address,
-        QUOTE_SLIPPAGE_PERCENT
+        QUOTE_SLIPPAGE_PERCENT,
+        "ExactOut" // Use ExactOut for selling to completely liquidate tokens
     ).await.map_err(|e| format!("Failed to get quote: {}", e))?;
 
     let swap_result = execute_best_swap(
