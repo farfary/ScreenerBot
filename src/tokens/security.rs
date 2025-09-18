@@ -26,17 +26,8 @@ use tokio::sync::{ Notify, RwLock };
 // SECURITY SCANNING CONFIGURATION
 // =============================================================================
 
-/// Number of tokens to analyze per security scan cycle (similar to monitor service)
-const SECURITY_TOKENS_PER_CYCLE: usize = 15;
-
-/// Batch size for API calls within a cycle (RugCheck rate limiting) - max 3 to avoid overwhelming API
-const SECURITY_BATCH_SIZE: usize = 3;
-
-/// Delay between batches within a cycle (milliseconds)
-const SECURITY_BATCH_DELAY_MS: u64 = 1000;
-
-/// Delay between individual requests within a batch (milliseconds)
-const SECURITY_REQUEST_DELAY_MS: u64 = 300;
+/// Security scan heartbeat: perform at most one Rugcheck call per tick
+const SECURITY_SCAN_TICK_SECS: u64 = 1; // strict 1 call/sec pacing
 
 /// Security risk levels (backward compatibility)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -66,97 +57,55 @@ impl SecurityRiskLevel {
             SecurityRiskLevel::Unknown => "UNKNOWN",
         }
     }
-
-    pub fn color_emoji(&self) -> &'static str {
-        match self {
-            SecurityRiskLevel::Safe => "🟢",
-            SecurityRiskLevel::Low => "🟡",
-            SecurityRiskLevel::Medium => "🟠",
-            SecurityRiskLevel::High => "🔴",
-            SecurityRiskLevel::Critical => "💀",
-            SecurityRiskLevel::Unknown => "❓",
-        }
-    }
 }
 
-/// Security flags (backward compatibility)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct SecurityFlags {
-    /// Can mint new tokens (opposite of mint_authority_disabled)
     pub can_mint: bool,
-    /// Can freeze accounts (opposite of freeze_authority_disabled)
     pub can_freeze: bool,
-    /// Has update authority
     pub has_update_authority: bool,
-    /// LP is locked/burned (same as lp_is_safe)
     pub lp_locked: bool,
-    /// High holder concentration
     pub high_concentration: bool,
-    /// Very few holders
     pub few_holders: bool,
-    /// Potential whale manipulation
     pub whale_risk: bool,
-    /// Unknown or failed to analyze
     pub analysis_incomplete: bool,
 }
 
-/// Holder security info (backward compatibility)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct HolderSecurityInfo {
     pub total_holders: u32,
     pub top_10_concentration: f64,
     pub largest_holder_percentage: f64,
     pub whale_count: u32,
-    pub distribution_score: u8,
+    pub distribution_score: u32,
 }
 
-/// Security timestamps (backward compatibility)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SecurityTimestamps {
-    pub first_analyzed: DateTime<Utc>,
-    pub last_updated: DateTime<Utc>,
-    pub authority_last_checked: DateTime<Utc>,
-    pub holder_last_checked: Option<DateTime<Utc>>,
-    pub lp_lock_last_checked: Option<DateTime<Utc>>,
-}
-
-/// Essential security information for a token (with backward compatibility)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TokenSecurityInfo {
-    /// Token mint address
     pub mint: String,
-    /// Whether mint authority is disabled (None = safe)
     pub mint_authority_disabled: bool,
-    /// Whether freeze authority is disabled (None = safe)
     pub freeze_authority_disabled: bool,
-    /// Whether LP is considered locked/safe
     pub lp_is_safe: bool,
-    /// Total holder count
     pub holder_count: u32,
-    /// Overall safety status
     pub is_safe: bool,
-    /// Analysis timestamp
     pub analyzed_at: DateTime<Utc>,
-    /// Source API status
     pub api_status: String,
-
-    // Backward compatibility fields
-    /// Overall security score (0-100, higher is safer) - computed from safety
-    pub security_score: u8,
-    /// Risk level based on combined analysis
-    pub risk_level: SecurityRiskLevel,
-    /// Security flags and warnings
-    pub security_flags: SecurityFlags,
-
-    // Additional backward compatibility fields
-    /// Holder security information
-    pub holder_info: Option<HolderSecurityInfo>,
-    /// Analysis timestamps
+    // Backward compatibility timestamps structure
     pub timestamps: SecurityTimestamps,
+
+    // Computed/derived fields
+    pub risk_level: SecurityRiskLevel,
+    pub security_score: u8,
+    pub security_flags: SecurityFlags,
+    pub holder_info: Option<HolderSecurityInfo>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SecurityTimestamps {
+    pub last_updated: DateTime<Utc>,
 }
 
 impl TokenSecurityInfo {
-    /// Create a new TokenSecurityInfo with computed compatibility fields
     pub fn new(
         mint: String,
         mint_authority_disabled: bool,
@@ -174,33 +123,14 @@ impl TokenSecurityInfo {
             lp_is_safe,
             holder_count,
             is_safe,
-            analyzed_at: analyzed_at.clone(),
+            analyzed_at,
             api_status,
-            // Initialize computed fields
-            security_score: 0,
+            timestamps: SecurityTimestamps { last_updated: analyzed_at },
             risk_level: SecurityRiskLevel::Unknown,
-            security_flags: SecurityFlags {
-                can_mint: false,
-                can_freeze: false,
-                has_update_authority: false,
-                lp_locked: false,
-                high_concentration: false,
-                few_holders: false,
-                whale_risk: false,
-                analysis_incomplete: false,
-            },
-            // Backward compatibility fields
-            holder_info: None, // Will be populated if needed
-            timestamps: SecurityTimestamps {
-                first_analyzed: analyzed_at.clone(),
-                last_updated: analyzed_at.clone(),
-                authority_last_checked: analyzed_at.clone(),
-                holder_last_checked: Some(analyzed_at.clone()),
-                lp_lock_last_checked: Some(analyzed_at),
-            },
+            security_score: 0,
+            security_flags: SecurityFlags::default(),
+            holder_info: None,
         };
-
-        // Update computed fields
         info.update_computed_fields();
         info
     }
@@ -282,16 +212,16 @@ impl TokenSecurityInfo {
                 20.0 // Estimate: lower concentration with more holders
             },
             whale_count: if self.holder_count < 10 {
-                self.holder_count // Estimate: all holders might be whales if very few
+                self.holder_count
             } else {
-                5 // Estimate: assume some whales exist
+                5
             },
             distribution_score: if self.holder_count >= 100 {
-                85 // Good distribution
+                85
             } else if self.holder_count >= 50 {
-                70 // Moderate distribution
+                70
             } else {
-                40 // Poor distribution
+                40
             },
         });
     }
@@ -1755,7 +1685,7 @@ async fn print_security_interval_summary() {
 
     let header_line = "════════════════════════════════════════════════════════════";
     let title = format!("{} SECURITY SUMMARY (last ~30s)", emoji);
-    let cycles_line = format!("  • Cycles    🔁  {}", stats.interval_cycles);
+    let cycles_line = format!("  • Calls     🔁  {}", stats.interval_cycles);
     let analyzed_line = format!(
         "  • Analyzed  🔍  {}  |  Safe 🟢  {}  |  Unsafe 🔴  {}  |  Errors ❌  {}",
         stats.interval_analyzed,
@@ -1817,8 +1747,11 @@ pub async fn start_security_monitoring(
     let analyzer = get_security_analyzer();
 
     let handle = tokio::spawn(async move {
-        let mut check_interval = tokio::time::interval(std::time::Duration::from_secs(1800)); // 30 minutes
-        check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        // Strict 1-call-per-second scanning model
+        let mut scan_interval = tokio::time::interval(
+            std::time::Duration::from_secs(SECURITY_SCAN_TICK_SECS)
+        );
+        scan_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
         // Initialize stats tracking
         {
@@ -1828,90 +1761,7 @@ pub async fn start_security_monitoring(
             stats.api_status = "UNKNOWN".to_string();
         }
 
-        // Initial startup scan
-        log(LogTag::Security, "STARTUP_SCAN", "Starting initial security scan for uncached tokens");
-
-        let cycle_start = std::time::Instant::now();
-        match run_security_scan(&analyzer).await {
-            Ok(scan_stats) => {
-                let cycle_duration_ms = cycle_start.elapsed().as_millis();
-
-                // Update stats
-                {
-                    let stats_handle = get_security_stats_handle();
-                    let mut stats = stats_handle.write().await;
-                    stats.total_cycles = stats.total_cycles.saturating_add(1);
-                    stats.total_analyzed = stats.total_analyzed.saturating_add(
-                        scan_stats.successful as u64
-                    );
-                    stats.total_safe = stats.total_safe.saturating_add(
-                        scan_stats.safe_count as u64
-                    );
-                    stats.total_unsafe = stats.total_unsafe.saturating_add(
-                        scan_stats.unsafe_count as u64
-                    );
-                    stats.last_cycle_started = Some(Utc::now());
-                    stats.last_cycle_completed = Some(Utc::now());
-                    stats.last_cycle_analyzed = scan_stats.successful;
-                    stats.last_cycle_safe = scan_stats.safe_count;
-                    stats.last_cycle_unsafe = scan_stats.unsafe_count;
-                    stats.last_cycle_errors = scan_stats.failed;
-
-                    // Interval tracking
-                    stats.interval_cycles = stats.interval_cycles.saturating_add(1);
-                    stats.interval_analyzed = stats.interval_analyzed.saturating_add(
-                        scan_stats.successful
-                    );
-                    stats.interval_safe = stats.interval_safe.saturating_add(scan_stats.safe_count);
-                    stats.interval_unsafe = stats.interval_unsafe.saturating_add(
-                        scan_stats.unsafe_count
-                    );
-                    stats.interval_errors = stats.interval_errors.saturating_add(scan_stats.failed);
-                    stats.interval_duration_ms_sum =
-                        stats.interval_duration_ms_sum.saturating_add(cycle_duration_ms);
-
-                    // Update database counts
-                    if let Ok(with_security) = analyzer.database.count_tokens_with_security() {
-                        stats.tokens_with_security = with_security as usize;
-                    }
-                    if let Ok(without_security) = analyzer.database.count_tokens_without_security() {
-                        stats.tokens_without_security = without_security as usize;
-                    }
-                    if let Ok(safe_count) = analyzer.database.count_safe_tokens() {
-                        stats.safe_tokens_count = safe_count as usize;
-                    }
-                    if let Ok(unsafe_count) = analyzer.database.count_unsafe_tokens() {
-                        stats.unsafe_tokens_count = unsafe_count as usize;
-                    }
-                }
-
-                log(
-                    LogTag::Security,
-                    "STARTUP_COMPLETE",
-                    &format!(
-                        "Initial scan complete: {} processed, {} successful, {} failed",
-                        scan_stats.processed,
-                        scan_stats.successful,
-                        scan_stats.failed
-                    )
-                );
-            }
-            Err(e) => {
-                // Update error in stats
-                {
-                    let stats_handle = get_security_stats_handle();
-                    let mut stats = stats_handle.write().await;
-                    stats.last_error = Some(format!("Startup scan failed: {}", e));
-                    stats.interval_errors = stats.interval_errors.saturating_add(1);
-                }
-
-                log(
-                    LogTag::Security,
-                    "STARTUP_ERROR",
-                    &format!("Initial security scan failed: {}", e)
-                );
-            }
-        }
+        // No startup burst scan; begin steady 1/sec scanning ticks
 
         // Periodic scanning and summary loop
         let mut summary_interval = tokio::time::interval(std::time::Duration::from_secs(30));
@@ -1923,74 +1773,49 @@ pub async fn start_security_monitoring(
                     log(LogTag::Security, "MONITOR_STOP", "Security monitoring service stopping");
                     break;
                 }
-                _ = check_interval.tick() => {
-                    let cycle_start = std::time::Instant::now();
-                    
-                    log(LogTag::Security, "PERIODIC_SCAN", "Starting periodic security scan");
-                    
-                    match run_security_scan(&analyzer).await {
-                        Ok(scan_stats) => {
-                            let cycle_duration_ms = cycle_start.elapsed().as_millis();
-                            
-                            // Update stats
-                            {
-                                let stats_handle = get_security_stats_handle();
-                                let mut stats = stats_handle.write().await;
-                                stats.total_cycles = stats.total_cycles.saturating_add(1);
-                                stats.total_analyzed = stats.total_analyzed.saturating_add(scan_stats.successful as u64);
-                                stats.total_safe = stats.total_safe.saturating_add(scan_stats.safe_count as u64);
-                                stats.total_unsafe = stats.total_unsafe.saturating_add(scan_stats.unsafe_count as u64);
-                                stats.last_cycle_started = Some(Utc::now());
-                                stats.last_cycle_completed = Some(Utc::now());
-                                stats.last_cycle_analyzed = scan_stats.successful;
-                                stats.last_cycle_safe = scan_stats.safe_count;
-                                stats.last_cycle_unsafe = scan_stats.unsafe_count;
-                                stats.last_cycle_errors = scan_stats.failed;
-                                
-                                // Interval tracking
-                                stats.interval_cycles = stats.interval_cycles.saturating_add(1);
-                                stats.interval_analyzed = stats.interval_analyzed.saturating_add(scan_stats.successful);
-                                stats.interval_safe = stats.interval_safe.saturating_add(scan_stats.safe_count);
-                                stats.interval_unsafe = stats.interval_unsafe.saturating_add(scan_stats.unsafe_count);
-                                stats.interval_errors = stats.interval_errors.saturating_add(scan_stats.failed);
-                                stats.interval_duration_ms_sum = stats.interval_duration_ms_sum.saturating_add(cycle_duration_ms);
-                                
-                                // Update database counts periodically
-                                if let Ok(with_security) = analyzer.database.count_tokens_with_security() {
-                                    stats.tokens_with_security = with_security as usize;
-                                }
-                                if let Ok(without_security) = analyzer.database.count_tokens_without_security() {
-                                    stats.tokens_without_security = without_security as usize;
-                                }
-                                if let Ok(safe_count) = analyzer.database.count_safe_tokens() {
-                                    stats.safe_tokens_count = safe_count as usize;
-                                }
-                                if let Ok(unsafe_count) = analyzer.database.count_unsafe_tokens() {
-                                    stats.unsafe_tokens_count = unsafe_count as usize;
-                                }
-                            }
-                            
-                            if scan_stats.processed > 0 {
-                                log(
-                                    LogTag::Security,
-                                    "PERIODIC_COMPLETE",
-                                    &format!("Periodic scan complete: {} processed, {} successful, {} failed", 
-                                            scan_stats.processed, scan_stats.successful, scan_stats.failed)
-                                );
-                            } else {
-                                log(LogTag::Security, "PERIODIC_SKIP", "No new tokens to analyze");
-                            }
-                        }
+                _ = scan_interval.tick() => {
+                    // One token per second
+                    let next_mint = match analyzer.database.get_tokens_for_security_scan(1) {
+                        Ok(mut v) => v.pop(),
                         Err(e) => {
-                            // Update error in stats
-                            {
+                            let stats_handle = get_security_stats_handle();
+                            let mut stats = stats_handle.write().await;
+                            stats.last_error = Some(format!("Token selection error: {}", e));
+                            stats.interval_errors = stats.interval_errors.saturating_add(1);
+                            None
+                        }
+                    };
+
+                    if let Some(mint) = next_mint {
+                        let started = std::time::Instant::now();
+                        match analyzer.analyze_token_security_with_cache(&mint, false).await {
+                            Ok(info) => {
+                                let dur_ms = started.elapsed().as_millis();
                                 let stats_handle = get_security_stats_handle();
                                 let mut stats = stats_handle.write().await;
-                                stats.last_error = Some(format!("Periodic scan failed: {}", e));
-                                stats.interval_errors = stats.interval_errors.saturating_add(1);
+                                stats.total_analyzed = stats.total_analyzed.saturating_add(1);
+                                stats.interval_cycles = stats.interval_cycles.saturating_add(1); // now "calls"
+                                stats.interval_analyzed = stats.interval_analyzed.saturating_add(1);
+                                if info.is_safe { stats.total_safe = stats.total_safe.saturating_add(1); stats.interval_safe = stats.interval_safe.saturating_add(1); } else { stats.total_unsafe = stats.total_unsafe.saturating_add(1); stats.interval_unsafe = stats.interval_unsafe.saturating_add(1); }
+                                stats.interval_duration_ms_sum = stats.interval_duration_ms_sum.saturating_add(dur_ms);
+
+                                log(LogTag::Security, "PROCESS_SUCCESS", &format!("✅ {} - {}", mint, info.summary()));
+
+                                // Refresh DB counts every ~30 calls (about 30s)
+                                if stats.interval_cycles % 30 == 0 {
+                                    if let Ok(with_security) = analyzer.database.count_tokens_with_security() { stats.tokens_with_security = with_security as usize; }
+                                    if let Ok(without_security) = analyzer.database.count_tokens_without_security() { stats.tokens_without_security = without_security as usize; }
+                                    if let Ok(safe_count) = analyzer.database.count_safe_tokens() { stats.safe_tokens_count = safe_count as usize; }
+                                    if let Ok(unsafe_count) = analyzer.database.count_unsafe_tokens() { stats.unsafe_tokens_count = unsafe_count as usize; }
+                                }
                             }
-                            
-                            log(LogTag::Security, "PERIODIC_ERROR", &format!("Periodic security scan failed: {}", e));
+                            Err(e) => {
+                                let stats_handle = get_security_stats_handle();
+                                let mut stats = stats_handle.write().await;
+                                stats.interval_errors = stats.interval_errors.saturating_add(1);
+                                stats.last_error = Some(format!("{} - Error: {}", mint, e));
+                                log(LogTag::Security, "PROCESS_FAILED", &format!("❌ {} - Error: {}", mint, e));
+                            }
                         }
                     }
                 }
@@ -2040,160 +1865,4 @@ pub async fn start_security_monitoring(
     Ok(handle)
 }
 
-#[derive(Debug)]
-struct ScanStats {
-    processed: usize,
-    successful: usize,
-    failed: usize,
-    safe_count: usize,
-    unsafe_count: usize,
-}
-
-/// Run a security scan cycle for a limited number of tokens (similar to monitor service)
-async fn run_security_scan(
-    analyzer: &TokenSecurityAnalyzer
-) -> Result<ScanStats, ScreenerBotError> {
-    // Acquire global scan mutex to prevent overlapping scans (drop before awaits)
-    {
-        let scan_mutex = SECURITY_SCAN_MUTEX.get_or_init(|| Arc::new(StdMutex::new(()))).clone();
-        if scan_mutex.try_lock().is_err() {
-            log(
-                LogTag::Security,
-                "SCAN_SKIP_LOCK",
-                "Another security scan is already running; skipping this invocation"
-            );
-            return Ok(ScanStats {
-                processed: 0,
-                successful: 0,
-                failed: 0,
-                safe_count: 0,
-                unsafe_count: 0,
-            });
-        }
-        // guard dropped here at end of block
-    }
-
-    // Check API status first
-    if !check_api_status().await? {
-        return Err(
-            ScreenerBotError::Network(crate::errors::NetworkError::Generic {
-                message: "Rugcheck API is not operational".to_string(),
-            })
-        );
-    }
-
-    // Get limited number of tokens for this cycle (not all tokens)
-    let tokens_to_check =
-        analyzer.database.get_tokens_for_security_scan(SECURITY_TOKENS_PER_CYCLE)?;
-
-    if tokens_to_check.is_empty() {
-        // Also log total backlog for context
-        if let Ok(total_uncached) = analyzer.database.count_tokens_without_security() {
-            if total_uncached > 0 {
-                log(
-                    LogTag::Security,
-                    "CYCLE_SKIP",
-                    &format!("No tokens selected for this cycle (total backlog: {})", total_uncached)
-                );
-            } else {
-                log(LogTag::Security, "CYCLE_SKIP", "All tokens have security info cached");
-            }
-        }
-        return Ok(ScanStats {
-            processed: 0,
-            successful: 0,
-            failed: 0,
-            safe_count: 0,
-            unsafe_count: 0,
-        });
-    }
-
-    // Log cycle start with backlog context
-    let total_uncached = analyzer.database.count_tokens_without_security().unwrap_or(0);
-    log(
-        LogTag::Security,
-        "CYCLE_START",
-        &format!(
-            "Starting security scan cycle: {} tokens selected (total backlog: {})",
-            tokens_to_check.len(),
-            total_uncached
-        )
-    );
-
-    let mut stats = ScanStats {
-        processed: 0,
-        successful: 0,
-        failed: 0,
-        safe_count: 0,
-        unsafe_count: 0,
-    };
-
-    // Process tokens in batches to respect rate limits
-    for (batch_idx, batch) in tokens_to_check.chunks(SECURITY_BATCH_SIZE).enumerate() {
-        log(
-            LogTag::Security,
-            "BATCH_START",
-            &format!(
-                "Processing batch {}/{} ({} tokens in this cycle)",
-                batch_idx + 1,
-                (tokens_to_check.len() + SECURITY_BATCH_SIZE - 1) / SECURITY_BATCH_SIZE,
-                batch.len()
-            )
-        );
-
-        for (token_idx, mint) in batch.iter().enumerate() {
-            // Add delay between requests to be respectful to API
-            if token_idx > 0 {
-                tokio::time::sleep(
-                    std::time::Duration::from_millis(SECURITY_REQUEST_DELAY_MS)
-                ).await;
-            }
-
-            match analyzer.analyze_token_security_with_cache(mint, false).await {
-                Ok(security_info) => {
-                    stats.successful += 1;
-                    if security_info.is_safe {
-                        stats.safe_count += 1;
-                    } else {
-                        stats.unsafe_count += 1;
-                    }
-                    log(
-                        LogTag::Security,
-                        "PROCESS_SUCCESS",
-                        &format!("✅ {} - {}", mint, security_info.summary())
-                    );
-                }
-                Err(e) => {
-                    stats.failed += 1;
-                    log(LogTag::Security, "PROCESS_FAILED", &format!("❌ {} - Error: {}", mint, e));
-                }
-            }
-
-            stats.processed += 1;
-        }
-
-        // Add delay between batches (except for last batch)
-        if batch_idx < (tokens_to_check.len() + SECURITY_BATCH_SIZE - 1) / SECURITY_BATCH_SIZE - 1 {
-            tokio::time::sleep(std::time::Duration::from_millis(SECURITY_BATCH_DELAY_MS)).await;
-        }
-    }
-
-    log(
-        LogTag::Security,
-        "CYCLE_COMPLETE",
-        &format!(
-            "Security scan cycle finished: {}/{} successful ({:.1}% success rate) | Safe: {} | Unsafe: {}",
-            stats.successful,
-            stats.processed,
-            if stats.processed > 0 {
-                ((stats.successful as f64) / (stats.processed as f64)) * 100.0
-            } else {
-                0.0
-            },
-            stats.safe_count,
-            stats.unsafe_count
-        )
-    );
-
-    Ok(stats)
-}
+// Legacy batch/cycle implementation removed in favor of steady 1-call/sec loop.
