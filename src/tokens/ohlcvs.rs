@@ -30,11 +30,10 @@ use crate::tokens::ohlcv_db::{ get_ohlcv_database, init_ohlcv_database };
 use crate::logger::{ log, LogTag };
 use crate::tokens::geckoterminal::{ get_ohlcv_data_from_geckoterminal, OhlcvDataPoint };
 use chrono::{ DateTime, Duration as ChronoDuration, Utc };
-use reqwest::Client;
 use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{ Duration, Instant };
+use std::time::Duration;
 use tokio::sync::{ Notify, RwLock };
 
 // =============================================================================
@@ -77,7 +76,7 @@ pub struct CachedOhlcvData {
 }
 
 impl CachedOhlcvData {
-    /// Check if cache is expired (older than 2 minutes for 1m data)
+    /// Check if cache is expired (older than 5 minutes for 1m data)
     pub fn is_expired(&self) -> bool {
         let age = Utc::now() - self.last_updated;
         age.num_minutes() > CACHE_EXPIRY_MINUTES
@@ -554,7 +553,7 @@ impl OhlcvService {
                                             LogTag::Ohlcv,
                                             "DB_CACHE_HIT",
                                             &format!(
-                                                "�️ Database cache hit for {}: {} points",
+                                                "🗄️ Database cache hit for {}: {} points",
                                                 mint,
                                                 data_points.len()
                                             )
@@ -718,7 +717,7 @@ impl OhlcvService {
                 // Update stats
                 {
                     let mut stats = self.stats.write().await;
-                    stats.successful_fetches += 1;
+                    // successful_fetches is already incremented inside fetch_ohlcv_from_api
                     stats.data_points_cached += data_points.len();
                 }
 
@@ -822,7 +821,7 @@ impl OhlcvService {
                 "API_DELEGATE",
                 &format!(
                     "🔄 Delegating 1m OHLCV API call to GeckoTerminal module for pool {} (limit: {})",
-                    &pool_address[..8],
+                    pool_address,
                     limit
                 )
             );
@@ -1122,6 +1121,26 @@ impl OhlcvService {
                         // Update memory cache
                         {
                             let mut cache = cache.write().await;
+
+                            // Enforce cache size limit with eviction of oldest entry if needed
+                            if cache.len() >= MAX_MEMORY_CACHE_ENTRIES {
+                                if
+                                    let Some(oldest_key) = cache
+                                        .iter()
+                                        .min_by_key(|(_, data)| data.last_updated)
+                                        .map(|(k, _)| k.clone())
+                                {
+                                    cache.remove(&oldest_key);
+                                    if is_debug_ohlcv_enabled() {
+                                        log(
+                                            LogTag::Ohlcv,
+                                            "CACHE_EVICT",
+                                            &format!("🗑️ Evicted oldest cache entry: {}", oldest_key)
+                                        );
+                                    }
+                                }
+                            }
+
                             cache.insert(entry.mint.clone(), cached_data.clone());
                         }
 
@@ -1145,7 +1164,7 @@ impl OhlcvService {
                         // Update stats
                         {
                             let mut stats = stats.write().await;
-                            stats.successful_fetches += 1;
+                            // successful_fetches is already incremented inside fetch_ohlcv_from_api
                             stats.data_points_cached += data_points.len();
                         }
 
