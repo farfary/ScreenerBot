@@ -151,6 +151,10 @@ impl VerificationQueue {
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
+
+    pub fn has_items_with_expiry(&self) -> bool {
+        self.items.iter().any(|item| item.expiry_height.is_some())
+    }
 }
 
 /// Global verification queue
@@ -197,4 +201,10 @@ pub async fn get_queue_status() -> (usize, Vec<String>) {
         .map(|i| i.signature.clone())
         .collect();
     (size, signatures)
+}
+
+/// Check if queue has items with expiry height
+pub async fn queue_has_items_with_expiry() -> bool {
+    let queue = VERIFICATION_QUEUE.read().await;
+    queue.has_items_with_expiry()
 }
