@@ -1693,7 +1693,7 @@ async fn print_security_interval_summary() {
         stats.interval_unsafe,
         stats.interval_errors
     );
-    let timing_line = format!("  • Avg cycle 🕒  {} ms", avg_ms);
+    let timing_line = format!("  • Avg call  🕒  {} ms", avg_ms);
 
     let database_line = format!(
         "  • Database  📊  Total: {}  |  With security: {} ({:.1}%)  |  Without: {}",
@@ -1759,6 +1759,11 @@ pub async fn start_security_monitoring(
             let mut stats = stats_handle.write().await;
             stats.interval_started = Some(Utc::now());
             stats.api_status = "UNKNOWN".to_string();
+            // Initialize DB snapshot counts at startup
+            if let Ok(with_security) = analyzer.database.count_tokens_with_security() { stats.tokens_with_security = with_security as usize; }
+            if let Ok(without_security) = analyzer.database.count_tokens_without_security() { stats.tokens_without_security = without_security as usize; }
+            if let Ok(safe_count) = analyzer.database.count_safe_tokens() { stats.safe_tokens_count = safe_count as usize; }
+            if let Ok(unsafe_count) = analyzer.database.count_unsafe_tokens() { stats.unsafe_tokens_count = unsafe_count as usize; }
         }
 
         // No startup burst scan; begin steady 1/sec scanning ticks
@@ -1839,6 +1844,28 @@ pub async fn start_security_monitoring(
                                 stats.last_api_check = Some(Utc::now());
                             }
                         }
+                    }
+
+                    // Refresh DB snapshot counts on every summary tick to ensure accurate totals
+                    if let Ok(with_security) = analyzer.database.count_tokens_with_security() {
+                        let stats_handle = get_security_stats_handle();
+                        let mut stats = stats_handle.write().await;
+                        stats.tokens_with_security = with_security as usize;
+                    }
+                    if let Ok(without_security) = analyzer.database.count_tokens_without_security() {
+                        let stats_handle = get_security_stats_handle();
+                        let mut stats = stats_handle.write().await;
+                        stats.tokens_without_security = without_security as usize;
+                    }
+                    if let Ok(safe_count) = analyzer.database.count_safe_tokens() {
+                        let stats_handle = get_security_stats_handle();
+                        let mut stats = stats_handle.write().await;
+                        stats.safe_tokens_count = safe_count as usize;
+                    }
+                    if let Ok(unsafe_count) = analyzer.database.count_unsafe_tokens() {
+                        let stats_handle = get_security_stats_handle();
+                        let mut stats = stats_handle.write().await;
+                        stats.unsafe_tokens_count = unsafe_count as usize;
                     }
 
                     print_security_interval_summary().await;
