@@ -158,6 +158,7 @@ impl TokenDatabase {
     }
 
     /// Delete tokens from database by mint addresses
+    /// This also deletes related records to handle foreign key constraints
     pub async fn delete_tokens(&self, mints: &[String]) -> Result<usize, String> {
         if mints.is_empty() {
             return Ok(0);
@@ -168,7 +169,6 @@ impl TokenDatabase {
             .map(|_| "?")
             .collect::<Vec<_>>()
             .join(",");
-        let query = format!("DELETE FROM tokens WHERE mint IN ({})", placeholders);
 
         let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
@@ -177,11 +177,55 @@ impl TokenDatabase {
             params.push(mint);
         }
 
-        let deleted_count = connection
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare delete query: {}", e))?
+        // Start transaction to ensure atomicity
+        connection
+            .execute("BEGIN TRANSACTION", [])
+            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+
+        // First delete from tables that have foreign key references to tokens
+        // Delete from liquidity_tracking
+        let liquidity_query =
+            format!("DELETE FROM liquidity_tracking WHERE mint IN ({})", placeholders);
+        let liquidity_deleted = connection
+            .prepare(&liquidity_query)
+            .map_err(|e| format!("Failed to prepare liquidity_tracking delete: {}", e))?
             .execute(&params[..])
-            .map_err(|e| format!("Failed to execute delete query: {}", e))?;
+            .map_err(|e| format!("Failed to delete from liquidity_tracking: {}", e))?;
+
+        // Delete from route_failure_tracking
+        let route_query =
+            format!("DELETE FROM route_failure_tracking WHERE mint IN ({})", placeholders);
+        let route_deleted = connection
+            .prepare(&route_query)
+            .map_err(|e| format!("Failed to prepare route_failure_tracking delete: {}", e))?
+            .execute(&params[..])
+            .map_err(|e| format!("Failed to delete from route_failure_tracking: {}", e))?;
+
+        // Finally delete from tokens table
+        let token_query = format!("DELETE FROM tokens WHERE mint IN ({})", placeholders);
+        let deleted_count = connection
+            .prepare(&token_query)
+            .map_err(|e| format!("Failed to prepare tokens delete: {}", e))?
+            .execute(&params[..])
+            .map_err(|e| format!("Failed to delete from tokens: {}", e))?;
+
+        // Commit transaction
+        connection
+            .execute("COMMIT", [])
+            .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+
+        if is_debug_monitor_enabled() && (liquidity_deleted > 0 || route_deleted > 0) {
+            log(
+                LogTag::Monitor,
+                "CLEANUP",
+                &format!(
+                    "Deleted {} liquidity_tracking + {} route_failure_tracking records for {} tokens",
+                    liquidity_deleted,
+                    route_deleted,
+                    deleted_count
+                )
+            );
+        }
 
         if deleted_count > 0 {
             log(
