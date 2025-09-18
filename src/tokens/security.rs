@@ -701,8 +701,7 @@ fn check_lp_safety(markets: &Option<Vec<MarketInfo>>, risks: &Option<Vec<RiskInf
     let mut best_score: f64 = -1.0;
     for (idx, m) in list.iter().enumerate() {
         // Determine if this is a SOL pair
-        let is_sol_pair = m
-            .lp
+        let is_sol_pair = m.lp
             .as_ref()
             .and_then(|lp| lp.quote_mint.clone())
             .map(|qm| qm == SOL_MINT)
@@ -710,11 +709,12 @@ fn check_lp_safety(markets: &Option<Vec<MarketInfo>>, risks: &Option<Vec<RiskInf
                 // Fallback: check mintA/mintB
                 m.mint_a.as_deref() == Some(SOL_MINT) || m.mint_b.as_deref() == Some(SOL_MINT)
             });
-        if !is_sol_pair { continue; }
+        if !is_sol_pair {
+            continue;
+        }
 
         // Score by USD sum if available, else 0 (still allows selection if nothing else has USD)
-        let score = m
-            .lp
+        let score = m.lp
             .as_ref()
             .map(|lp| lp.base_usd.unwrap_or(0.0) + lp.quote_usd.unwrap_or(0.0))
             .unwrap_or(0.0);
@@ -738,8 +738,7 @@ fn check_lp_safety(markets: &Option<Vec<MarketInfo>>, risks: &Option<Vec<RiskInf
     // If LP info exists, classify pool archetype
     if let Some(lp) = &canonical.lp {
         // LP-token pool when lp_mint is Some and not burn address
-        let is_lp_token_pool = lp
-            .lp_mint
+        let is_lp_token_pool = lp.lp_mint
             .as_ref()
             .map(|mint| !is_burn_or_none(mint))
             .unwrap_or(false);
@@ -748,8 +747,8 @@ fn check_lp_safety(markets: &Option<Vec<MarketInfo>>, risks: &Option<Vec<RiskInf
             // Deterministic: LP immovable only if fully locked/burned
             let locked_pct = lp.lp_locked_pct;
             let unlocked = lp.lp_unlocked;
-            let fully_locked = locked_pct.is_finite() && (locked_pct == 100.0);
-            let no_unlocked = unlocked.is_finite() && (unlocked == 0.0);
+            let fully_locked = locked_pct.is_finite() && locked_pct == 100.0;
+            let no_unlocked = unlocked.is_finite() && unlocked == 0.0;
 
             if fully_locked || no_unlocked {
                 return true;
@@ -762,7 +761,7 @@ fn check_lp_safety(markets: &Option<Vec<MarketInfo>>, risks: &Option<Vec<RiskInf
                         lp.lp_mint,
                         locked_pct,
                         unlocked
-                    ),
+                    )
                 );
                 return false;
             }
@@ -770,14 +769,12 @@ fn check_lp_safety(markets: &Option<Vec<MarketInfo>>, risks: &Option<Vec<RiskInf
             // Position-based pool (no LP token). Verify non-custodial ownership by PDA.
             // Accept if liquidityA/B owners equal the pool pubkey (typical PDA custody) and market type is known.
             let pool_pubkey = canonical.pubkey.as_deref().unwrap_or("");
-            let owner_a_ok = canonical
-                .liquidity_a
+            let owner_a_ok = canonical.liquidity_a
                 .as_ref()
                 .and_then(|acc| acc.owner.as_deref())
                 .map(|o| !o.is_empty() && o == pool_pubkey)
                 .unwrap_or(false);
-            let owner_b_ok = canonical
-                .liquidity_b
+            let owner_b_ok = canonical.liquidity_b
                 .as_ref()
                 .and_then(|acc| acc.owner.as_deref())
                 .map(|o| !o.is_empty() && o == pool_pubkey)
@@ -799,7 +796,7 @@ fn check_lp_safety(markets: &Option<Vec<MarketInfo>>, risks: &Option<Vec<RiskInf
                         mt,
                         owner_a_ok,
                         owner_b_ok
-                    ),
+                    )
                 );
                 return false;
             }
@@ -924,17 +921,18 @@ pub struct SecurityDatabase {
 }
 
 impl SecurityDatabase {
-    /// Create new security database instance (uses tokens.db)
+    /// Create new security database instance (uses dedicated data/security.db)
     pub fn new() -> Result<Self, ScreenerBotError> {
         use rusqlite::Connection;
 
-        let conn = Connection::open("data/tokens.db").map_err(|e|
+        // Create/open dedicated security database
+        let conn = Connection::open("data/security.db").map_err(|e|
             ScreenerBotError::Data(crate::errors::DataError::Generic {
-                message: format!("Failed to open tokens.db: {}", e),
+                message: format!("Failed to open security.db: {}", e),
             })
         )?;
 
-        // Configure connection for optimal performance (same as token cache)
+        // Configure connection similarly to other DBs
         conn.pragma_update(None, "journal_mode", "WAL").map_err(|e|
             ScreenerBotError::Data(crate::errors::DataError::Generic {
                 message: format!("Failed to set journal mode: {}", e),
@@ -961,29 +959,114 @@ impl SecurityDatabase {
             })
         )?;
 
-        // Add security columns if they don't exist (ignore "column already exists" errors)
-        let alter_statements = vec![
-            "ALTER TABLE tokens ADD COLUMN security_mint_authority_disabled INTEGER",
-            "ALTER TABLE tokens ADD COLUMN security_freeze_authority_disabled INTEGER",
-            "ALTER TABLE tokens ADD COLUMN security_lp_is_safe INTEGER",
-            "ALTER TABLE tokens ADD COLUMN security_holder_count INTEGER",
-            "ALTER TABLE tokens ADD COLUMN security_is_safe INTEGER",
-            "ALTER TABLE tokens ADD COLUMN security_analyzed_at TEXT",
-            "ALTER TABLE tokens ADD COLUMN security_risk_level TEXT"
-        ];
+        // Create security table if not exists
+        conn
+            .execute(
+                "CREATE TABLE IF NOT EXISTS security (
+                mint TEXT PRIMARY KEY,
+                mint_authority_disabled INTEGER NOT NULL,
+                freeze_authority_disabled INTEGER NOT NULL,
+                lp_is_safe INTEGER NOT NULL,
+                holder_count INTEGER NOT NULL,
+                is_safe INTEGER NOT NULL,
+                analyzed_at TEXT NOT NULL,
+                risk_level TEXT NOT NULL
+            )",
+                []
+            )
+            .map_err(|e|
+                ScreenerBotError::Data(crate::errors::DataError::Generic {
+                    message: format!("Failed to create security table: {}", e),
+                })
+            )?;
 
-        for stmt in alter_statements {
-            match conn.execute(stmt, []) {
-                Ok(_) => {} // Column added successfully
-                Err(rusqlite::Error::SqliteFailure(code, Some(msg))) if
-                    msg.contains("duplicate column name")
-                => {
-                    // Column already exists, this is fine
+        // Optional migration: copy existing security_* columns from tokens.db if present
+        // This is read-only for tokens.db and idempotent (upserts into security table)
+        match rusqlite::Connection::open("data/tokens.db") {
+            Ok(tokens_conn) => {
+                // Best-effort busy timeout
+                let _ = tokens_conn.busy_timeout(std::time::Duration::from_secs(5));
+
+                // Try to prepare a statement that will only work if columns exist
+                let prep = tokens_conn.prepare(
+                    "SELECT mint,
+                            security_mint_authority_disabled,
+                            security_freeze_authority_disabled,
+                            security_lp_is_safe,
+                            security_holder_count,
+                            security_is_safe,
+                            security_analyzed_at,
+                            security_risk_level
+                     FROM tokens
+                     WHERE security_analyzed_at IS NOT NULL"
+                );
+
+                if let Ok(mut stmt) = prep {
+                    let mut migrated = 0usize;
+                    let rows = stmt.query_map([], |row| {
+                        // Extract row values with defaults
+                        let mint: String = row.get(0)?;
+                        let ma: Option<i32> = row.get(1).ok();
+                        let fa: Option<i32> = row.get(2).ok();
+                        let lp: Option<i32> = row.get(3).ok();
+                        let hc: Option<i64> = row.get(4).ok();
+                        let is: Option<i32> = row.get(5).ok();
+                        let ts: String = row.get(6)?;
+                        let rl: Option<String> = row.get(7).ok();
+
+                        Ok((mint, ma, fa, lp, hc, is, ts, rl))
+                    });
+
+                    if let Ok(iter) = rows {
+                        for r in iter.flatten() {
+                            let (mint, ma, fa, lp, hc, is, ts, rl) = r;
+                            // Parse timestamp; skip row if invalid
+                            let parsed_ts = chrono::DateTime
+                                ::parse_from_rfc3339(&ts)
+                                .map(|dt| dt.with_timezone(&chrono::Utc));
+                            if parsed_ts.is_err() {
+                                continue;
+                            }
+
+                            let _ = conn.execute(
+                                "INSERT INTO security (
+                                    mint, mint_authority_disabled, freeze_authority_disabled, lp_is_safe,
+                                    holder_count, is_safe, analyzed_at, risk_level
+                                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                                ON CONFLICT(mint) DO UPDATE SET
+                                    mint_authority_disabled = excluded.mint_authority_disabled,
+                                    freeze_authority_disabled = excluded.freeze_authority_disabled,
+                                    lp_is_safe = excluded.lp_is_safe,
+                                    holder_count = excluded.holder_count,
+                                    is_safe = excluded.is_safe,
+                                    analyzed_at = excluded.analyzed_at,
+                                    risk_level = excluded.risk_level",
+                                rusqlite::params![
+                                    mint,
+                                    ma.unwrap_or(0),
+                                    fa.unwrap_or(0),
+                                    lp.unwrap_or(0),
+                                    hc.unwrap_or(0) as i64,
+                                    is.unwrap_or(0),
+                                    parsed_ts.unwrap().to_rfc3339(),
+                                    rl.unwrap_or_else(|| "UNKNOWN".to_string())
+                                ]
+                            );
+                            migrated += 1;
+                        }
+
+                        if migrated > 0 {
+                            log(
+                                LogTag::Security,
+                                "MIGRATE",
+                                &format!("Migrated {} security rows from tokens.db to security.db", migrated)
+                            );
+                        }
+                    }
                 }
-                Err(e) => {
-                    log(LogTag::Security, "DB_WARNING", &format!("Failed to add column: {}", e));
-                    // Don't fail initialization for column issues
-                }
+            }
+            Err(_) => {
+                // tokens.db not present or cannot be opened; skip migration silently
             }
         }
 
@@ -1012,14 +1095,13 @@ impl SecurityDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT security_mint_authority_disabled, security_freeze_authority_disabled, 
-                    security_lp_is_safe, security_holder_count, security_is_safe, 
-                    security_analyzed_at, security_risk_level 
-             FROM tokens WHERE mint = ?1 AND security_analyzed_at IS NOT NULL"
+                "SELECT mint_authority_disabled, freeze_authority_disabled, 
+                        lp_is_safe, holder_count, is_safe, analyzed_at, risk_level
+                 FROM security WHERE mint = ?1"
             )
             .map_err(|e| {
                 ScreenerBotError::Data(crate::errors::DataError::Generic {
-                    message: format!("Failed to prepare select statement: {}", e),
+                    message: format!("Failed to prepare select statement (security): {}", e),
                 })
             })?;
 
@@ -1030,7 +1112,7 @@ impl SecurityDatabase {
                 .map_err(|_|
                     rusqlite::Error::InvalidColumnType(
                         5,
-                        "security_analyzed_at".to_string(),
+                        "analyzed_at".to_string(),
                         rusqlite::types::Type::Text
                     )
                 )?
@@ -1077,17 +1159,21 @@ impl SecurityDatabase {
             })
         })?;
 
-        let changed = conn
+        // Upsert into dedicated security table
+        conn
             .execute(
-                "UPDATE tokens SET 
-                security_mint_authority_disabled = ?2,
-                security_freeze_authority_disabled = ?3,
-                security_lp_is_safe = ?4,
-                security_holder_count = ?5,
-                security_is_safe = ?6,
-                security_analyzed_at = ?7,
-                security_risk_level = ?8
-             WHERE mint = ?1",
+                "INSERT INTO security (
+                mint, mint_authority_disabled, freeze_authority_disabled, lp_is_safe,
+                holder_count, is_safe, analyzed_at, risk_level
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(mint) DO UPDATE SET
+                mint_authority_disabled = excluded.mint_authority_disabled,
+                freeze_authority_disabled = excluded.freeze_authority_disabled,
+                lp_is_safe = excluded.lp_is_safe,
+                holder_count = excluded.holder_count,
+                is_safe = excluded.is_safe,
+                analyzed_at = excluded.analyzed_at,
+                risk_level = excluded.risk_level",
                 rusqlite::params![
                     info.mint,
                     if info.mint_authority_disabled {
@@ -1117,23 +1203,11 @@ impl SecurityDatabase {
             )
             .map_err(|e| {
                 ScreenerBotError::Data(crate::errors::DataError::Generic {
-                    message: format!("Failed to update security info: {}", e),
+                    message: format!("Failed to upsert security info: {}", e),
                 })
             })?;
 
-        if changed == 0 {
-            log(
-                LogTag::Security,
-                "STORE_WARN",
-                &format!("No token row updated for mint {} (row missing?)", info.mint)
-            );
-        } else {
-            log(
-                LogTag::Security,
-                "STORE",
-                &format!("Stored security info for {} (rows affected: {})", info.mint, changed)
-            );
-        }
+        log(LogTag::Security, "STORE", &format!("Stored security info for {}", info.mint));
 
         Ok(())
     }
@@ -1153,35 +1227,56 @@ impl SecurityDatabase {
             })
         })?;
 
-        let mut stmt = conn
-            .prepare("SELECT mint FROM tokens WHERE security_is_safe IS NULL ORDER BY mint")
-            .map_err(|e| {
-                ScreenerBotError::Data(crate::errors::DataError::Generic {
-                    message: format!("Failed to prepare query: {}", e),
-                })
-            })?;
-
-        let rows = stmt
-            .query_map([], |row| {
-                let mint: String = row.get(0)?;
-                Ok(mint)
+        // Read all token mints from tokens.db and return those not in security.db
+        let tokens_conn = rusqlite::Connection::open("data/tokens.db").map_err(|e|
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to open tokens.db for reading mints: {}", e),
             })
+        )?;
+        tokens_conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to set busy timeout (tokens.db): {}", e),
+            })
+        })?;
+
+        let mut stmt_tokens = tokens_conn
+            .prepare("SELECT mint FROM tokens ORDER BY mint")
             .map_err(|e| {
                 ScreenerBotError::Data(crate::errors::DataError::Generic {
-                    message: format!("Failed to execute query: {}", e),
+                    message: format!("Failed to prepare tokens query: {}", e),
                 })
             })?;
 
-        let mut mints = Vec::new();
-        for row in rows {
-            match row {
-                Ok(mint) => mints.push(mint),
-                Err(e) => {
-                    log(
-                        LogTag::Security,
-                        "DB_ERROR",
-                        &format!("Failed to read token mint from database: {}", e)
-                    );
+        let token_rows = stmt_tokens
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::Generic {
+                    message: format!("Failed to execute tokens query: {}", e),
+                })
+            })?;
+
+        let mut missing: Vec<String> = Vec::new();
+        let mut exists_stmt = conn
+            .prepare("SELECT 1 FROM security WHERE mint = ?1 LIMIT 1")
+            .map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::Generic {
+                    message: format!("Failed to prepare existence check: {}", e),
+                })
+            })?;
+
+        for r in token_rows {
+            if let Ok(mint) = r {
+                let mut has = false;
+                let mut q = exists_stmt.query([&mint]).map_err(|e|
+                    ScreenerBotError::Data(crate::errors::DataError::Generic {
+                        message: format!("Failed to query security existence: {}", e),
+                    })
+                )?;
+                if let Ok(Some(_row)) = q.next() {
+                    has = true;
+                }
+                if !has {
+                    missing.push(mint);
                 }
             }
         }
@@ -1189,10 +1284,10 @@ impl SecurityDatabase {
         log(
             LogTag::Security,
             "UNCACHED_QUERY",
-            &format!("Found {} tokens without security info", mints.len())
+            &format!("Found {} tokens without security info", missing.len())
         );
 
-        Ok(mints)
+        Ok(missing)
     }
 
     /// Get count of tokens without security info
@@ -1210,17 +1305,9 @@ impl SecurityDatabase {
             })
         })?;
 
-        let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM tokens WHERE security_is_safe IS NULL", [], |row|
-                row.get(0)
-            )
-            .map_err(|e| {
-                ScreenerBotError::Data(crate::errors::DataError::Generic {
-                    message: format!("Failed to count uncached tokens: {}", e),
-                })
-            })?;
-
-        Ok(count)
+        // Compute by listing; simplicity over performance
+        let list = self.get_tokens_without_security()?;
+        Ok(list.len() as i64)
     }
 }
 
