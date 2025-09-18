@@ -448,7 +448,8 @@ impl TokenMonitor {
                     .map(|v| v.len())
                     .unwrap_or(0);
                 let c = self.database
-                    .get_tokens_needing_update(168).await  // 7 days = 168 hours
+                    .get_tokens_needing_update(168)
+                    .await // 7 days = 168 hours
                     .ok()
                     .map(|v| v.len())
                     .unwrap_or(0);
@@ -578,7 +579,7 @@ struct MonitorStats {
     last_cycle_tiers: TierCounts,
     backlog_over_1h: usize,
     backlog_over_2h: usize,
-    backlog_over_7d: usize,  // Count tokens older than 7 days
+    backlog_over_7d: usize, // Count tokens older than 7 days
     last_error: Option<String>,
 
     // 30-second interval aggregation
@@ -661,8 +662,12 @@ async fn print_monitor_interval_summary() {
         stats.interval_batches_failed
     );
     let timing_line = format!("  • Avg cycle 🕒  {} ms", avg_ms);
-    
-    let backlog_info = if stats.backlog_over_1h > 0 || stats.backlog_over_2h > 0 || stats.backlog_over_7d > 0 {
+
+    let backlog_info = if
+        stats.backlog_over_1h > 0 ||
+        stats.backlog_over_2h > 0 ||
+        stats.backlog_over_7d > 0
+    {
         let mut parts = Vec::new();
         if stats.backlog_over_1h > 0 {
             parts.push(format!(">=1h: {}", stats.backlog_over_1h));
