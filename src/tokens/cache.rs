@@ -157,6 +157,43 @@ impl TokenDatabase {
         Ok(())
     }
 
+    /// Delete tokens from database by mint addresses
+    pub async fn delete_tokens(&self, mints: &[String]) -> Result<usize, String> {
+        if mints.is_empty() {
+            return Ok(0);
+        }
+
+        let placeholders = mints
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let query = format!("DELETE FROM tokens WHERE mint IN ({})", placeholders);
+
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
+
+        let mut params: Vec<&dyn rusqlite::ToSql> = Vec::new();
+        for mint in mints {
+            params.push(mint);
+        }
+
+        let deleted_count = connection
+            .prepare(&query)
+            .map_err(|e| format!("Failed to prepare delete query: {}", e))?
+            .execute(&params[..])
+            .map_err(|e| format!("Failed to execute delete query: {}", e))?;
+
+        if deleted_count > 0 {
+            log(
+                LogTag::Cache,
+                "DATABASE",
+                &format!("Deleted {} stale tokens from database", deleted_count)
+            );
+        }
+
+        Ok(deleted_count)
+    }
+
     /// Get all tokens from database
     pub async fn get_all_tokens(&self) -> Result<Vec<ApiToken>, String> {
         let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;

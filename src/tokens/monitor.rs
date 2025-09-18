@@ -7,7 +7,7 @@ use crate::tokens::dexscreener::get_global_dexscreener_api;
 use chrono::{ DateTime, Utc };
 use futures::TryFutureExt;
 use rand::seq::SliceRandom;
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
 use std::sync::{ Arc, OnceLock };
 use tokio::sync::RwLock;
 use tokio::time::{ sleep, Duration };
@@ -225,47 +225,94 @@ impl TokenMonitor {
 
         match tokens_result {
             Ok(tokens) => {
-                if tokens.is_empty() {
+                // Track which tokens were returned by the API
+                let returned_mints: std::collections::HashSet<String> = tokens
+                    .iter()
+                    .map(|t| t.mint.clone())
+                    .collect();
+
+                // Find tokens that were requested but not returned (no longer exist)
+                let missing_mints: Vec<String> = mints
+                    .iter()
+                    .filter(|mint| !returned_mints.contains(*mint))
+                    .cloned()
+                    .collect();
+
+                let mut total_updated = 0;
+
+                // Update tokens that were returned by the API
+                if !tokens.is_empty() {
                     if is_debug_monitor_enabled() {
-                        log(LogTag::Monitor, "WARN", "No token data returned from API for batch");
-                    }
-                    return Ok(0);
-                }
-
-                if is_debug_monitor_enabled() {
-                    log(
-                        LogTag::Monitor,
-                        "API_RESULT",
-                        &format!(
-                            "API returned {} tokens out of {} requested",
-                            tokens.len(),
-                            mints.len()
-                        )
-                    );
-                }
-
-                // Update tokens in database with fresh data
-                match self.database.update_tokens(&tokens).await {
-                    Ok(()) => {
-                        let updated_count = tokens.len();
-                        if is_debug_monitor_enabled() {
-                            log(
-                                LogTag::Monitor,
-                                "SUCCESS",
-                                &format!("Updated {} tokens in database", updated_count)
-                            );
-                        }
-                        Ok(updated_count)
-                    }
-                    Err(e) => {
                         log(
                             LogTag::Monitor,
-                            "ERROR",
-                            &format!("Failed to update tokens in database: {}", e)
+                            "API_RESULT",
+                            &format!(
+                                "API returned {} tokens out of {} requested",
+                                tokens.len(),
+                                mints.len()
+                            )
                         );
-                        Err(format!("Database update failed: {}", e))
+                    }
+
+                    match self.database.update_tokens(&tokens).await {
+                        Ok(()) => {
+                            total_updated += tokens.len();
+                            if is_debug_monitor_enabled() {
+                                log(
+                                    LogTag::Monitor,
+                                    "SUCCESS",
+                                    &format!("Updated {} tokens in database", tokens.len())
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Monitor,
+                                "ERROR",
+                                &format!("Failed to update tokens in database: {}", e)
+                            );
+                            return Err(format!("Database update failed: {}", e));
+                        }
                     }
                 }
+
+                // Delete tokens that were not returned by the API (no longer exist)
+                if !missing_mints.is_empty() {
+                    if is_debug_monitor_enabled() {
+                        log(
+                            LogTag::Monitor,
+                            "CLEANUP",
+                            &format!(
+                                "Removing {} stale tokens that no longer exist on DexScreener: {:?}",
+                                missing_mints.len(),
+                                missing_mints
+                            )
+                        );
+                    }
+
+                    match self.database.delete_tokens(&missing_mints).await {
+                        Ok(deleted_count) => {
+                            if is_debug_monitor_enabled() {
+                                log(
+                                    LogTag::Monitor,
+                                    "CLEANUP_SUCCESS",
+                                    &format!("Deleted {} stale tokens from database", deleted_count)
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Monitor,
+                                "ERROR",
+                                &format!("Failed to delete stale tokens: {}", e)
+                            );
+                            // Don't fail the entire operation if cleanup fails
+                        }
+                    }
+                }
+
+                // Return count of successfully updated tokens
+                Ok(total_updated)
             }
             Err(e) => {
                 log(LogTag::Monitor, "ERROR", &format!("Failed to get token info from API: {}", e));
