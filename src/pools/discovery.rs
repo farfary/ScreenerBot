@@ -220,16 +220,16 @@ impl PoolDiscovery {
 
         // Cap to MAX_WATCHED_TOKENS but prioritize position tokens
         if tokens.len() > MAX_WATCHED_TOKENS {
-            // Ensure position tokens are preserved when truncating
-            let open_position_mints: std::collections::HashSet<String> = crate::positions
-                ::get_open_mints().await
-                .into_iter()
+            // Ensure position tokens are preserved when truncating — reuse the set we already fetched
+            let open_position_mints_set: std::collections::HashSet<String> = open_position_mints
+                .iter()
+                .cloned()
                 .collect();
 
             // Separate position tokens from others
             let (mut position_tokens, mut other_tokens): (Vec<String>, Vec<String>) = tokens
                 .into_iter()
-                .partition(|mint| open_position_mints.contains(mint));
+                .partition(|mint| open_position_mints_set.contains(mint));
 
             // Always include all position tokens, then fill remaining slots with other tokens
             let remaining_slots = MAX_WATCHED_TOKENS.saturating_sub(position_tokens.len());
@@ -246,7 +246,7 @@ impl PoolDiscovery {
                     &format!(
                         "Truncated to {} tokens (prioritized {} position tokens)",
                         tokens.len(),
-                        open_position_mints.len()
+                        open_position_mints_set.len()
                     )
                 );
             }
@@ -308,20 +308,18 @@ impl PoolDiscovery {
         // Process DexScreener results only if enabled
         if ENABLE_DEXSCREENER_DISCOVERY {
             for (mint, pairs) in dexs_batch.pools.into_iter() {
+                let before = descriptors.len();
                 for pair in pairs {
                     if let Ok(desc) = Self::convert_dexscreener_pair_to_descriptor_static(&pair) {
                         descriptors.push(desc);
                     }
                 }
+                let added = descriptors.len().saturating_sub(before);
                 if is_debug_pool_discovery_enabled() {
                     log(
                         LogTag::PoolDiscovery,
                         "DEBUG",
-                        &format!(
-                            "DexScreener batched pools for {}: {}",
-                            &mint[..8],
-                            descriptors.len()
-                        )
+                        &format!("DexScreener batched pools for {mint}: added {added}")
                     );
                 }
             }
@@ -332,16 +330,18 @@ impl PoolDiscovery {
         // Process GeckoTerminal results only if enabled
         if ENABLE_GECKOTERMINAL_DISCOVERY {
             for (mint, pools) in gecko_batch.pools.into_iter() {
+                let before = descriptors.len();
                 for pool in pools {
                     if let Ok(desc) = Self::convert_gecko_pool_to_descriptor_static(&pool) {
                         descriptors.push(desc);
                     }
                 }
+                let added = descriptors.len().saturating_sub(before);
                 if is_debug_pool_discovery_enabled() {
                     log(
                         LogTag::PoolDiscovery,
                         "DEBUG",
-                        &format!("Gecko batched pools for {} appended", &mint[..8])
+                        &format!("GeckoTerminal batched pools for {mint}: added {added}")
                     );
                 }
             }
@@ -352,16 +352,18 @@ impl PoolDiscovery {
         // Process Raydium results only if enabled
         if ENABLE_RAYDIUM_DISCOVERY {
             for (mint, pools) in raydium_batch.pools.into_iter() {
+                let before = descriptors.len();
                 for pool in pools {
                     if let Ok(desc) = Self::convert_raydium_pool_to_descriptor_static(&pool) {
                         descriptors.push(desc);
                     }
                 }
+                let added = descriptors.len().saturating_sub(before);
                 if is_debug_pool_discovery_enabled() {
                     log(
                         LogTag::PoolDiscovery,
                         "DEBUG",
-                        &format!("Raydium batched pools for {} appended", &mint[..8])
+                        &format!("Raydium batched pools for {mint}: added {added}")
                     );
                 }
             }
@@ -430,7 +432,24 @@ impl PoolDiscovery {
 
     fn select_highest_liquidity_per_token(pools: Vec<PoolDescriptor>) -> Vec<PoolDescriptor> {
         // Group by non-SOL token
-        let sol = Pubkey::from_str(SOL_MINT).unwrap();
+        let sol = match Pubkey::from_str(SOL_MINT) {
+            Ok(v) => v,
+            Err(e) => {
+                // Respect project rule: no unwrap/panic; log and return input unchanged
+                if is_debug_pool_discovery_enabled() {
+                    log(
+                        LogTag::PoolDiscovery,
+                        "WARN",
+                        &format!(
+                            "Failed to parse SOL_MINT '{}': {} — returning pools unchanged",
+                            SOL_MINT,
+                            e
+                        )
+                    );
+                }
+                return pools;
+            }
+        };
         let mut best_by_token: HashMap<Pubkey, PoolDescriptor> = HashMap::new();
         for p in pools.into_iter() {
             let token = if p.base_mint == sol { p.quote_mint } else { p.base_mint };
@@ -460,7 +479,12 @@ impl PoolDiscovery {
                 }
             }
         }
-        best_by_token.into_values().collect()
+        // Return sorted for determinism (highest liquidity first)
+        let mut out: Vec<PoolDescriptor> = best_by_token.into_values().collect();
+        out.sort_by(|a, b| {
+            b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        out
     }
 
     fn convert_dexscreener_pair_to_descriptor_static(
@@ -544,7 +568,7 @@ impl PoolDiscovery {
             quote_mint,
             reserve_accounts: Vec::new(),
             liquidity_usd: pool.liquidity_usd,
-            volume_h24_usd: 0.0,
+            volume_h24_usd: pool.volume_24h,
             last_updated: std::time::Instant::now(),
         })
     }
@@ -555,7 +579,7 @@ impl PoolDiscovery {
             log(
                 LogTag::PoolDiscovery,
                 "INFO",
-                &format!("Starting pool discovery for token {}", &mint[..8])
+                &format!("Starting pool discovery for token {mint}")
             );
         }
 
@@ -599,17 +623,13 @@ impl PoolDiscovery {
                             log(
                                 LogTag::PoolDiscovery,
                                 "DEBUG",
-                                &format!(
-                                    "DexScreener: Filtered out {} non-SOL pools for {}",
-                                    filtered_count,
-                                    &mint[..8]
-                                )
+                                &format!("DexScreener: Filtered out {} non-SOL pools for {mint}", filtered_count)
                             );
                         }
                         log(
                             LogTag::PoolDiscovery,
                             "DEBUG",
-                            &format!("DexScreener found {} pools for {}", pools.len(), &mint[..8])
+                            &format!("DexScreener found {} pools for {mint}", pools.len())
                         );
                     }
                     discovered_pools.extend(pools);
@@ -619,7 +639,7 @@ impl PoolDiscovery {
                         log(
                             LogTag::PoolDiscovery,
                             "WARN",
-                            &format!("DexScreener discovery failed for {}: {}", &mint[..8], e)
+                            &format!("DexScreener discovery failed for {mint}: {}", e)
                         );
                     }
                 }
@@ -628,7 +648,7 @@ impl PoolDiscovery {
             log(
                 LogTag::PoolDiscovery,
                 "DEBUG",
-                &format!("DexScreener discovery disabled for {}", &mint[..8])
+                &format!("DexScreener discovery disabled for {mint}")
             );
         }
 
@@ -640,7 +660,7 @@ impl PoolDiscovery {
                         log(
                             LogTag::PoolDiscovery,
                             "DEBUG",
-                            &format!("GeckoTerminal found {} pools for {}", pools.len(), &mint[..8])
+                            &format!("GeckoTerminal found {} pools for {mint}", pools.len())
                         );
                     }
                     discovered_pools.append(&mut pools);
@@ -650,7 +670,7 @@ impl PoolDiscovery {
                         log(
                             LogTag::PoolDiscovery,
                             "WARN",
-                            &format!("GeckoTerminal discovery failed for {}: {}", &mint[..8], e)
+                            &format!("GeckoTerminal discovery failed for {mint}: {}", e)
                         );
                     }
                 }
@@ -659,7 +679,7 @@ impl PoolDiscovery {
             log(
                 LogTag::PoolDiscovery,
                 "DEBUG",
-                &format!("GeckoTerminal discovery disabled for {}", &mint[..8])
+                &format!("GeckoTerminal discovery disabled for {mint}")
             );
         }
 
@@ -671,7 +691,7 @@ impl PoolDiscovery {
                         log(
                             LogTag::PoolDiscovery,
                             "DEBUG",
-                            &format!("Raydium found {} pools for {}", pools.len(), &mint[..8])
+                            &format!("Raydium found {} pools for {mint}", pools.len())
                         );
                     }
                     discovered_pools.append(&mut pools);
@@ -681,17 +701,13 @@ impl PoolDiscovery {
                         log(
                             LogTag::PoolDiscovery,
                             "WARN",
-                            &format!("Raydium discovery failed for {}: {}", &mint[..8], e)
+                            &format!("Raydium discovery failed for {mint}: {}", e)
                         );
                     }
                 }
             }
         } else if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "DEBUG",
-                &format!("Raydium discovery disabled for {}", &mint[..8])
-            );
+            log(LogTag::PoolDiscovery, "DEBUG", &format!("Raydium discovery disabled for {mint}"));
         }
 
         // Deduplicate pools by pool address
@@ -709,7 +725,7 @@ impl PoolDiscovery {
         let mut filtered_count = 0;
 
         for pool in gecko_pools {
-            match self.convert_geckoterminal_pool_to_descriptor(&pool, mint) {
+            match self.convert_geckoterminal_pool_to_descriptor(&pool) {
                 Ok(pool_descriptor) => {
                     pools.push(pool_descriptor);
                 }
@@ -726,11 +742,7 @@ impl PoolDiscovery {
             log(
                 LogTag::PoolDiscovery,
                 "DEBUG",
-                &format!(
-                    "GeckoTerminal: Filtered out {} non-SOL pools for {}",
-                    filtered_count,
-                    &mint[..8]
-                )
+                &format!("GeckoTerminal: Filtered out {} non-SOL pools for {mint}", filtered_count)
             );
         }
 
@@ -745,7 +757,7 @@ impl PoolDiscovery {
         let mut filtered_count = 0;
 
         for pool in raydium_pools {
-            match self.convert_raydium_pool_to_descriptor(&pool, mint) {
+            match self.convert_raydium_pool_to_descriptor(&pool) {
                 Ok(pool_descriptor) => {
                     pools.push(pool_descriptor);
                 }
@@ -762,11 +774,7 @@ impl PoolDiscovery {
             log(
                 LogTag::PoolDiscovery,
                 "DEBUG",
-                &format!(
-                    "Raydium: Filtered out {} non-SOL pools for {}",
-                    filtered_count,
-                    &mint[..8]
-                )
+                &format!("Raydium: Filtered out {} non-SOL pools for {mint}", filtered_count)
             );
         }
 
@@ -776,8 +784,7 @@ impl PoolDiscovery {
     /// Convert GeckoTerminal pool to PoolDescriptor
     fn convert_geckoterminal_pool_to_descriptor(
         &self,
-        pool: &GeckoTerminalPool,
-        target_mint: &str
+        pool: &GeckoTerminalPool
     ) -> Result<PoolDescriptor, String> {
         let pool_id = Pubkey::from_str(&pool.pool_address).map_err(|_| "Invalid pool address")?;
 
@@ -810,8 +817,7 @@ impl PoolDiscovery {
     /// Convert Raydium pool to PoolDescriptor
     fn convert_raydium_pool_to_descriptor(
         &self,
-        pool: &RaydiumPool,
-        target_mint: &str
+        pool: &RaydiumPool
     ) -> Result<PoolDescriptor, String> {
         let pool_id = Pubkey::from_str(&pool.pool_address).map_err(|_| "Invalid pool address")?;
 

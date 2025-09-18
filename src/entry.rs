@@ -116,7 +116,7 @@ const MIN_PRICE_POINTS: usize = 3; // Increased from 3 for better analysis
 
 // CONSERVATIVE entry windows - more balanced approach
 const WINDOWS_SEC: [i64; 6] = [10, 20, 40, 80, 160, 320]; // 30s to 10min windows
-const MIN_DROP_PERCENT: f64 = 3.0; // Higher minimum for quality entries
+const MIN_DROP_PERCENT: f64 = 1.0; // Higher minimum for quality entries
 const MAX_DROP_PERCENT: f64 = 90.0; // Allow larger drops for volatile tokens
 
 // ============================= MICRO-LIQUIDITY CAPITULATION =============================
