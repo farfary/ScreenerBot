@@ -71,7 +71,7 @@ fn print_help() {
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "WARNING", "⚠️  WARNING: This tool will:");
     log(LogTag::System, "WARNING", "    • Sell ALL tokens in your wallet for SOL");
-    log(LogTag::System, "WARNING", "    • Close all Associated Token Accounts (ATAs)");
+    log(LogTag::System, "WARNING", "    • Close empty Associated Token Accounts (ATAs)");
     log(LogTag::System, "WARNING", "    • DELETE specific bot data files (irreversible)");
     log(
         LogTag::System,
@@ -101,7 +101,7 @@ fn print_help() {
     log(LogTag::System, "INFO", "    1. Scan wallet for all SPL Token and Token-2022 accounts");
     log(LogTag::System, "INFO", "    2. Identify tokens with non-zero balances");
     log(LogTag::System, "INFO", "    3. Sell all tokens for SOL using GMGN swap service");
-    log(LogTag::System, "INFO", "    4. Close all Associated Token Accounts (empty and non-empty)");
+    log(LogTag::System, "INFO", "    4. Close only EMPTY Associated Token Accounts (zero balance)");
     log(LogTag::System, "INFO", "    5. Reclaim rent SOL from closed ATAs (~0.00203928 SOL each)");
     log(LogTag::System, "INFO", "    6. Delete specific bot data files to reset the system");
     log(LogTag::System, "INFO", "    7. Clean up all bot log files from logs/ directory");
@@ -123,6 +123,11 @@ fn print_help() {
     log(LogTag::System, "INFO", "SAFETY FEATURES:");
     log(LogTag::System, "INFO", "    • Skips SOL (native token) - cannot sell SOL for SOL");
     log(LogTag::System, "INFO", "    • Validates token balances before attempting sales");
+    log(
+        LogTag::System,
+        "INFO",
+        "    • Only closes ATAs with zero balance (cannot close non-empty ATAs)"
+    );
     log(LogTag::System, "INFO", "    • Detailed progress reporting for each operation");
     log(LogTag::System, "INFO", "    • Graceful error handling for failed transactions");
     log(LogTag::System, "INFO", "    • Supports both SPL Token and Token-2022 programs");
@@ -223,13 +228,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log(
             LogTag::System,
             "INFO",
-            "  - Close all Associated Token Accounts (ATAs) with retry logic"
+            "  - Close empty Associated Token Accounts (ATAs) with retry logic"
         );
         log(LogTag::System, "INFO", "  - Reclaim rent SOL from closed ATAs");
         log(LogTag::System, "INFO", "  - Delete specific bot data files to reset the system");
     } else {
         log(LogTag::System, "INFO", "  - Show what tokens would be sold");
-        log(LogTag::System, "INFO", "  - Show what ATAs would be closed");
+        log(LogTag::System, "INFO", "  - Show what empty ATAs would be closed");
         log(LogTag::System, "INFO", "  - Estimate rent SOL that would be reclaimed");
         log(LogTag::System, "INFO", "  - Show what data files would be deleted");
     }
@@ -1007,7 +1012,7 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
         actual_balance,
         &wallet_address,
         QUOTE_SLIPPAGE_PERCENT,
-        "ExactOut" // Use ExactOut for selling to completely liquidate tokens
+        "ExactIn" // Use ExactOut for selling to completely liquidate tokens
     ).await.map_err(|e| format!("Failed to get quote: {}", e))?;
 
     let swap_result = execute_best_swap(
@@ -1053,12 +1058,24 @@ async fn close_all_atas_with_retry(
         })
     );
 
-    // Filter accounts for ATA closing (skip SOL)
+    // Filter accounts for ATA closing (skip SOL and non-zero balances)
     let closable_accounts: Vec<_> = token_accounts
         .iter()
         .filter(|account| {
             if account.mint == SOL_MINT {
                 log(LogTag::System, "SKIP_SOL_ATA", "Skipping SOL account for ATA closing");
+                return false;
+            }
+            if account.balance > 0 {
+                log(
+                    LogTag::System,
+                    "SKIP_NONZERO_ATA",
+                    &format!(
+                        "Skipping ATA close for {} - still has {} tokens (cannot close non-empty ATA)",
+                        safe_truncate(&account.mint, 8),
+                        account.balance
+                    )
+                );
                 return false;
             }
             true
@@ -1069,7 +1086,7 @@ async fn close_all_atas_with_retry(
         LogTag::System,
         "ATA_FILTER",
         &format!(
-            "Filtered {} closable accounts from {} total",
+            "Filtered {} closable accounts from {} total (only empty ATAs can be closed)",
             closable_accounts.len(),
             token_accounts.len()
         )

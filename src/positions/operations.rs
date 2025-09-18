@@ -246,6 +246,25 @@ pub async fn close_position_direct(
 
     let _lock = acquire_position_lock(token_mint).await;
 
+    // RACE CONDITION PREVENTION: Check if position already has pending exit
+    if let Some(existing_position) = super::state::get_position_by_mint(token_mint).await {
+        if existing_position.exit_transaction_signature.is_some() {
+            let pending_sig = existing_position.exit_transaction_signature.unwrap();
+            log(
+                LogTag::Positions,
+                "RACE_PREVENTION",
+                &format!(
+                    "🚫 Position {} already has pending exit transaction: {}",
+                    token.symbol,
+                    &pending_sig[..8]
+                )
+            );
+            return Err(
+                format!("Position already has pending exit transaction: {}", &pending_sig[..8])
+            );
+        }
+    }
+
     if is_dry_run_enabled() {
         log(
             LogTag::Positions,
@@ -317,13 +336,17 @@ pub async fn close_position_direct(
     }
 
     // Execute swap
+    // IMPORTANT: Use ExactIn here. For exits we want to spend the exact token amount we actually have
+    // (often restricted to a single ATA). Using ExactOut with `sell_amount` (token units) makes routers
+    // treat it as desired SOL out, causing them to require more tokens than reside in the spending ATA,
+    // which leads to SPL Token "insufficient funds" during Transfer. ExactIn avoids that.
     let quote = get_best_quote(
         token_mint,
         SOL_MINT,
         sell_amount,
         &wallet_address,
         SLIPPAGE_EXIT_RETRY_STEPS_PCT[0], // Use first step (3.0%) for initial exit attempt
-        "ExactOut" // Use ExactOut for selling to avoid dust tokens
+        "ExactIn" // Spend exactly the available input tokens; router computes SOL out
     ).await.map_err(|e| format!("Quote failed: {}", e))?;
 
     let swap_result = execute_best_swap(

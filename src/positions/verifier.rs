@@ -273,21 +273,57 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 return VerificationOutcome::RetryTransient("Expected Buy transaction".to_string());
             }
 
-            // Calculate effective entry price
-            let effective_price = if
-                swap_info.token_amount.abs() > 0.0 &&
-                swap_info.effective_sol_spent > 0.0
+            // Convert token amount to integer units with rounding
+            let (mut token_amount_units, decimals_opt) = if
+                let Some(decimals) = get_token_decimals(&item.mint).await
             {
-                swap_info.effective_sol_spent / swap_info.token_amount.abs()
+                let scale = (10_f64).powi(decimals as i32);
+                let units = (swap_info.token_amount.abs() * scale).round();
+                (units.max(0.0) as u64, Some(decimals))
             } else {
-                swap_info.calculated_price_sol
+                (0u64, None)
             };
 
-            // Convert token amount to units
-            let token_amount_units = if let Some(decimals) = get_token_decimals(&item.mint).await {
-                (swap_info.token_amount.abs() * (10_f64).powi(decimals as i32)) as u64
-            } else {
-                0
+            // Enforce decimals presence as per tokens system contract
+            if decimals_opt.is_none() {
+                return VerificationOutcome::RetryTransient("Token decimals not cached".to_string());
+            }
+
+            // Prefer authoritative on-chain balance immediately after entry finalization, if available.
+            // This avoids float rounding drift and accounts for token-2022 transfer fees or router nuances.
+            if let Ok(wallet_address) = get_wallet_address() {
+                if
+                    let Ok(actual_units) = get_total_token_balance(
+                        &wallet_address,
+                        &item.mint
+                    ).await
+                {
+                    if actual_units > 0 && actual_units != token_amount_units {
+                        if is_debug_positions_enabled() {
+                            log(
+                                LogTag::Positions,
+                                "ENTRY_UNITS_CORRECTED",
+                                &format!(
+                                    "Adjusted token units to on-chain balance for mint {}: tx-derived={} actual={}",
+                                    &item.mint,
+                                    token_amount_units,
+                                    actual_units
+                                )
+                            );
+                        }
+                        token_amount_units = actual_units;
+                    }
+                }
+            }
+
+            // Calculate effective entry price using authoritative units when possible
+            let effective_price = match (decimals_opt, token_amount_units) {
+                (Some(decimals), units) if units > 0 && swap_info.effective_sol_spent > 0.0 => {
+                    let scale = (10_f64).powi(decimals as i32);
+                    let token_amount_float = (units as f64) / scale;
+                    swap_info.effective_sol_spent / token_amount_float
+                }
+                _ => swap_info.calculated_price_sol,
             };
 
             VerificationOutcome::Transition(PositionTransition::EntryVerified {
@@ -309,7 +345,8 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 Utc::now()
             };
 
-            // CRITICAL: Check if any tokens remain after exit verification
+            // CRITICAL: Check if any tokens remain after exit. If so, clear for retry instead of
+            // marking exit verified. This ensures we re-attempt until ATA is zero and closable.
             if let Ok(wallet_address) = get_wallet_address() {
                 match get_total_token_balance(&wallet_address, &item.mint).await {
                     Ok(remaining_balance) => {
@@ -318,14 +355,15 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 LogTag::Positions,
                                 "RESIDUAL_DETECTED",
                                 &format!(
-                                    "⚠️ Exit verified but {} tokens remain for mint {} - position not fully liquidated",
+                                    "⚠️ Exit residual {} units for mint {} → will retry another close",
                                     remaining_balance,
                                     crate::utils::safe_truncate(&item.mint, 8)
                                 )
                             );
 
-                            // For now, we'll still mark as verified but log the issue
-                            // TODO: Add residual cleanup mechanism
+                            return VerificationOutcome::Transition(
+                                PositionTransition::ExitFailedClearForRetry { position_id }
+                            );
                         } else {
                             log(
                                 LogTag::Positions,
@@ -342,6 +380,10 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                             LogTag::Positions,
                             "RESIDUAL_CHECK_FAILED",
                             &format!("⚠️ Could not verify residual balance after exit: {}", e)
+                        );
+                        // Be conservative, retry later
+                        return VerificationOutcome::RetryTransient(
+                            "Residual check failed after exit".to_string()
                         );
                     }
                 }

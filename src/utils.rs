@@ -1234,16 +1234,16 @@ async fn build_and_send_close_instruction(
 
     log(LogTag::Wallet, "ATA", "Built and signed close transaction");
 
-    // Send transaction via RPC
+    // Send transaction via RPC with confirmation
     if is_debug_ata_enabled() {
         log(
             LogTag::Wallet,
             "DEBUG",
-            &format!("🚀 ATA_TRANSACTION_SEND: submitting transaction to network")
+            &format!("🚀 ATA_TRANSACTION_SEND: submitting transaction to network with confirmation")
         );
     }
 
-    let result = rpc_client.send_transaction(&transaction).await;
+    let result = rpc_client.send_and_confirm_signed_transaction(&transaction).await;
 
     if is_debug_ata_enabled() {
         match &result {
@@ -1252,7 +1252,7 @@ async fn build_and_send_close_instruction(
                     LogTag::Wallet,
                     "DEBUG",
                     &format!(
-                        "🎉 ATA_TRANSACTION_SUCCESS: submitted successfully, signature={}",
+                        "🎉 ATA_TRANSACTION_CONFIRMED: transaction confirmed, signature={}",
                         &signature[..8]
                     )
                 );

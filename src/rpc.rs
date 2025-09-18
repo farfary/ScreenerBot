@@ -2765,6 +2765,99 @@ impl RpcClient {
         }
     }
 
+    /// Send and confirm a signed transaction with robust confirmation logic
+    /// This method accepts an already-signed Transaction object and uses the same
+    /// confirmation approach as sign_send_and_confirm_transaction but for pre-signed transactions
+    pub async fn send_and_confirm_signed_transaction(
+        &self,
+        transaction: &Transaction
+    ) -> Result<String, ScreenerBotError> {
+        use crate::arguments::is_debug_ata_enabled;
+
+        if is_debug_ata_enabled() {
+            log(
+                LogTag::Rpc,
+                "TX_DEBUG_START",
+                &format!("🚀 Starting send_and_confirm_signed_transaction")
+            );
+        }
+
+        // Convert transaction to bytes for sending
+        let serialized_tx = bincode::serialize(transaction).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::ParseError {
+                data_type: "transaction".to_string(),
+                error: format!("Failed to serialize transaction: {}", e),
+            })
+        })?;
+
+        // Get current URL for blocking client
+        let url = {
+            let guard = self.current_url.lock().unwrap();
+            guard.clone()
+        };
+
+        if is_debug_ata_enabled() {
+            log(
+                LogTag::Rpc,
+                "TX_CONFIRM_PREP",
+                &format!("Creating blocking RpcClient for send_and_confirm at {}", &url[..50])
+            );
+        }
+
+        // Build blocking client and send+confirm in blocking thread
+        let signature = tokio::task::spawn_blocking(move || {
+            let client = SolanaRpcClient::new_with_commitment(url, CommitmentConfig::confirmed());
+
+            // Deserialize transaction for confirmation
+            let transaction: Transaction = bincode
+                ::deserialize(&serialized_tx)
+                .map_err(|e| format!("Failed to deserialize transaction: {}", e))?;
+
+            client.send_and_confirm_transaction(&transaction).map_err(|e| e.to_string())
+        }).await;
+
+        match signature {
+            Ok(Ok(sig_result)) => {
+                let signature_str = sig_result.to_string();
+
+                if is_debug_ata_enabled() {
+                    log(
+                        LogTag::Rpc,
+                        "TX_CONFIRM_SUCCESS",
+                        &format!("✅ Transaction confirmed: {}", &signature_str[..8])
+                    );
+                }
+
+                log(LogTag::Rpc, "SUCCESS", &format!("Transaction confirmed: {}", signature_str));
+
+                Ok(signature_str)
+            }
+            Ok(Err(client_err)) => {
+                if is_debug_ata_enabled() {
+                    log(LogTag::Rpc, "ERROR", &format!("send_and_confirm failed: {}", client_err));
+                }
+
+                Err(
+                    ScreenerBotError::Blockchain(
+                        crate::errors::BlockchainError::TransactionDropped {
+                            signature: "unknown".to_string(),
+                            reason: format!("send_and_confirm_transaction failed: {}", client_err),
+                            fee_paid: None,
+                            attempts: 1,
+                        }
+                    )
+                )
+            }
+            Err(e) => {
+                Err(
+                    ScreenerBotError::Network(crate::errors::NetworkError::Generic {
+                        message: format!("Join error in send_and_confirm: {}", e),
+                    })
+                )
+            }
+        }
+    }
+
     /// Gets all token accounts for a wallet (both SPL Token and Token-2022)
     pub async fn get_all_token_accounts(
         &self,

@@ -152,7 +152,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                 log(LogTag::Positions, "SHUTDOWN", "🛑 Stopping verification worker");
                 break;
             }
-            _ = sleep(if is_first_cycle { Duration::from_secs(5) } else { Duration::from_secs(15) }) => {
+            _ = sleep(if is_first_cycle { Duration::from_secs(5) } else { Duration::from_secs(5) }) => {
                 // GUARD: Re-enqueue any missing verifications that should be queued but aren't
                 let mut requeued_count = 0;
                 {
