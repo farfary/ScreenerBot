@@ -50,6 +50,16 @@ const QUOTA_LOW_PCT: usize = 20;
 const QUOTA_MICRO_PCT: usize = 10;
 
 // =============================================================================
+// BATCH UPDATE RESULT
+// =============================================================================
+
+#[derive(Debug, Clone, Default)]
+struct BatchUpdateResult {
+    updated: usize,
+    deleted: usize,
+}
+
+// =============================================================================
 // TOKEN MONITOR
 // =============================================================================
 
@@ -193,9 +203,9 @@ impl TokenMonitor {
     }
 
     /// Update a batch of tokens with fresh data from DexScreener
-    async fn update_token_batch(&mut self, mints: &[String]) -> Result<usize, String> {
+    async fn update_token_batch(&mut self, mints: &[String]) -> Result<BatchUpdateResult, String> {
         if mints.is_empty() {
-            return Ok(0);
+            return Ok(BatchUpdateResult::default());
         }
 
         if is_debug_monitor_enabled() {
@@ -277,6 +287,7 @@ impl TokenMonitor {
                 }
 
                 // Delete tokens that were not returned by the API (no longer exist)
+                let mut deleted_count = 0;
                 if !missing_mints.is_empty() {
                     if is_debug_monitor_enabled() {
                         log(
@@ -291,7 +302,8 @@ impl TokenMonitor {
                     }
 
                     match self.database.delete_tokens(&missing_mints).await {
-                        Ok(deleted_count) => {
+                        Ok(actual_deleted) => {
+                            deleted_count = actual_deleted;
                             if is_debug_monitor_enabled() {
                                 log(
                                     LogTag::Monitor,
@@ -311,8 +323,11 @@ impl TokenMonitor {
                     }
                 }
 
-                // Return count of successfully updated tokens
-                Ok(total_updated)
+                // Return counts of successfully updated and deleted tokens
+                Ok(BatchUpdateResult {
+                    updated: total_updated,
+                    deleted: deleted_count,
+                })
             }
             Err(e) => {
                 log(LogTag::Monitor, "ERROR", &format!("Failed to get token info from API: {}", e));
@@ -353,14 +368,16 @@ impl TokenMonitor {
         }
 
         let mut total_updated = 0;
+        let mut total_deleted = 0;
         let mut batches_ok = 0usize;
         let mut batches_failed = 0usize;
 
         // Process tokens in API-compatible batches
         for batch in tokens_to_update.chunks(API_BATCH_SIZE) {
             match self.update_token_batch(batch).await {
-                Ok(updated_count) => {
-                    total_updated += updated_count;
+                Ok(result) => {
+                    total_updated += result.updated;
+                    total_deleted += result.deleted;
                     batches_ok += 1;
                 }
                 Err(e) => {
@@ -382,10 +399,12 @@ impl TokenMonitor {
             let mut stats = stats_handle.write().await;
             stats.last_cycle_selected = tokens_to_update.len();
             stats.last_cycle_updated = total_updated;
+            stats.last_cycle_deleted = total_deleted;
             stats.last_cycle_batches_ok = batches_ok;
             stats.last_cycle_batches_failed = batches_failed;
             stats.last_cycle_tiers = selected_tiers.clone();
             stats.total_updated += total_updated as u64;
+            stats.total_deleted += total_deleted as u64;
             let cycle_completed = Utc::now();
             stats.last_cycle_completed = Some(cycle_completed);
 
@@ -393,6 +412,7 @@ impl TokenMonitor {
             stats.interval_cycles += 1;
             stats.interval_selected += tokens_to_update.len();
             stats.interval_updated += total_updated;
+            stats.interval_deleted += total_deleted;
             stats.interval_batches_ok += batches_ok;
             stats.interval_batches_failed += batches_failed;
             stats.interval_tiers.high += selected_tiers.high;
@@ -416,7 +436,7 @@ impl TokenMonitor {
 
         if should_print {
             // Compute backlog snapshot once per summary to keep overhead low
-            let (over1h, over2h) = if is_debug_monitor_enabled() {
+            let (over1h, over2h, over7d) = if is_debug_monitor_enabled() {
                 let a = self.database
                     .get_tokens_needing_update(1).await
                     .ok()
@@ -427,9 +447,14 @@ impl TokenMonitor {
                     .ok()
                     .map(|v| v.len())
                     .unwrap_or(0);
-                (a, b)
+                let c = self.database
+                    .get_tokens_needing_update(168).await  // 7 days = 168 hours
+                    .ok()
+                    .map(|v| v.len())
+                    .unwrap_or(0);
+                (a, b, c)
             } else {
-                (0, 0)
+                (0, 0, 0)
             };
 
             {
@@ -437,6 +462,7 @@ impl TokenMonitor {
                 let mut stats = stats_handle.write().await;
                 stats.backlog_over_1h = over1h;
                 stats.backlog_over_2h = over2h;
+                stats.backlog_over_7d = over7d;
             }
 
             print_monitor_interval_summary().await;
@@ -449,6 +475,7 @@ impl TokenMonitor {
                 stats.interval_cycles = 0;
                 stats.interval_selected = 0;
                 stats.interval_updated = 0;
+                stats.interval_deleted = 0;
                 stats.interval_batches_ok = 0;
                 stats.interval_batches_failed = 0;
                 stats.interval_tiers = TierCounts::default();
@@ -540,15 +567,18 @@ pub async fn run_monitoring_cycle_once() -> Result<(), String> {
 struct MonitorStats {
     total_cycles: u64,
     total_updated: u64,
+    total_deleted: u64,
     last_cycle_started: Option<DateTime<Utc>>,
     last_cycle_completed: Option<DateTime<Utc>>,
     last_cycle_selected: usize,
     last_cycle_updated: usize,
+    last_cycle_deleted: usize,
     last_cycle_batches_ok: usize,
     last_cycle_batches_failed: usize,
     last_cycle_tiers: TierCounts,
     backlog_over_1h: usize,
     backlog_over_2h: usize,
+    backlog_over_7d: usize,  // Count tokens older than 7 days
     last_error: Option<String>,
 
     // 30-second interval aggregation
@@ -556,6 +586,7 @@ struct MonitorStats {
     interval_cycles: u64,
     interval_selected: usize,
     interval_updated: usize,
+    interval_deleted: usize,
     interval_batches_ok: usize,
     interval_batches_failed: usize,
     interval_tiers: TierCounts,
@@ -623,18 +654,26 @@ async fn print_monitor_interval_summary() {
         stats.interval_tiers.micro
     );
     let updated_line = format!(
-        "  • Updated   🔄  {}  |  Batches ✅/❌  {} / {}",
+        "  • Updated   🔄  {}  |  Deleted 🗑️  {}  |  Batches ✅/❌  {} / {}",
         stats.interval_updated,
+        stats.interval_deleted,
         stats.interval_batches_ok,
         stats.interval_batches_failed
     );
     let timing_line = format!("  • Avg cycle 🕒  {} ms", avg_ms);
-    let backlog_info = if stats.backlog_over_1h > 0 || stats.backlog_over_2h > 0 {
-        format!(
-            "\n  • Backlog  ⏱️  >=1h: {}  |  >=2h: {}",
-            stats.backlog_over_1h,
-            stats.backlog_over_2h
-        )
+    
+    let backlog_info = if stats.backlog_over_1h > 0 || stats.backlog_over_2h > 0 || stats.backlog_over_7d > 0 {
+        let mut parts = Vec::new();
+        if stats.backlog_over_1h > 0 {
+            parts.push(format!(">=1h: {}", stats.backlog_over_1h));
+        }
+        if stats.backlog_over_2h > 0 {
+            parts.push(format!(">=2h: {}", stats.backlog_over_2h));
+        }
+        if stats.backlog_over_7d > 0 {
+            parts.push(format!(">=7d: {}", stats.backlog_over_7d));
+        }
+        format!("\n  • Backlog  ⏱️  {}", parts.join("  |  "))
     } else {
         String::new()
     };
