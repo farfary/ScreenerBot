@@ -328,6 +328,8 @@ struct RugcheckTokenReport {
     pub markets: Option<Vec<MarketInfo>>,
     #[serde(default)]
     pub risks: Option<Vec<RiskInfo>>,
+    // knownAccounts is a mapping of address -> { name, type }
+    // We don't need to model it fully for our current logic.
 }
 
 #[derive(Debug, Deserialize)]
@@ -340,18 +342,73 @@ struct TokenInfo {
 
 #[derive(Debug, Deserialize)]
 struct MarketInfo {
+    // Pool pubkey (owner PDA for liquidity accounts typically equals this)
+    #[serde(default)]
+    pub pubkey: Option<String>,
+    // AMM program type (e.g., "raydium", "orca", "meteoraDlmm")
+    #[serde(rename = "marketType")]
+    #[serde(default)]
+    pub market_type: Option<String>,
+    // Token mints involved
+    #[serde(rename = "mintA")]
+    #[serde(default)]
+    pub mint_a: Option<String>,
+    #[serde(rename = "mintB")]
+    #[serde(default)]
+    pub mint_b: Option<String>,
+    #[serde(rename = "mintLP")]
+    #[serde(default)]
+    pub mint_lp: Option<String>,
+    // Liquidity token accounts (owners should be pool PDA for non-LP pools)
+    #[serde(rename = "liquidityAAccount")]
+    #[serde(default)]
+    pub liquidity_a: Option<TokenAccountInfo>,
+    #[serde(rename = "liquidityBAccount")]
+    #[serde(default)]
+    pub liquidity_b: Option<TokenAccountInfo>,
+    // LP info summary
     #[serde(default)]
     pub lp: Option<LpInfo>,
 }
 
 #[derive(Debug, Deserialize)]
+struct TokenAccountInfo {
+    #[serde(default)]
+    pub mint: Option<String>,
+    #[serde(default)]
+    pub owner: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct LpInfo {
     #[serde(rename = "lpLocked")]
+    #[serde(default)]
     pub lp_locked: f64,
     #[serde(rename = "lpUnlocked")]
+    #[serde(default)]
     pub lp_unlocked: f64,
     #[serde(rename = "lpLockedPct")]
+    #[serde(default)]
     pub lp_locked_pct: f64,
+    // Extended fields used for pool classification/selection
+    #[serde(rename = "lpMint")]
+    #[serde(default)]
+    pub lp_mint: Option<String>,
+    #[serde(rename = "lpTotalSupply")]
+    #[serde(default)]
+    pub lp_total_supply: Option<f64>,
+    #[serde(rename = "baseMint")]
+    #[serde(default)]
+    pub base_mint: Option<String>,
+    #[serde(rename = "quoteMint")]
+    #[serde(default)]
+    pub quote_mint: Option<String>,
+    #[serde(rename = "baseUSD")]
+    #[serde(default)]
+    pub base_usd: Option<f64>,
+    #[serde(rename = "quoteUSD")]
+    #[serde(default)]
+    pub quote_usd: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -608,6 +665,16 @@ fn extract_security_info(
 
 /// Check if LP is considered safe based on markets and risks
 fn check_lp_safety(markets: &Option<Vec<MarketInfo>>, risks: &Option<Vec<RiskInfo>>) -> bool {
+    // LP SAFETY CONTRACT (no USD thresholds, deterministic):
+    // 1) We select the canonical SOL pool (highest-liquidity SOL pair) only for decision.
+    // 2) If pool has an LP token (lpMint != burn address): LP is safe ONLY if fully locked/burned
+    //    (lpUnlocked==0 OR lpLockedPct==100). Partial locks are unsafe.
+    // 3) If pool is position-based (no LP token): We accept as "not removable by creator"
+    //    when liquidity token accounts are owned by the pool PDA and the marketType matches
+    //    a known non-custodial AMM family (meteora, clmm, orca). Missing ownership info is unsafe.
+    // 4) If Rugcheck flags "LP unlocked" as DANGER, it's unsafe regardless.
+
+    // If Rugcheck explicitly flags LP unlocked as danger, fail fast
     if let Some(risks_vec) = risks {
         let has_lp_unlock_risk = risks_vec.iter().any(|risk| {
             let name_l = risk.name.to_ascii_lowercase();
@@ -625,23 +692,123 @@ fn check_lp_safety(markets: &Option<Vec<MarketInfo>>, risks: &Option<Vec<RiskInf
         return false;
     }
 
-    let mut any = false;
-    let mut min_pct = f64::INFINITY;
-    for m in list {
-        if let Some(lp) = &m.lp {
-            let v = lp.lp_locked_pct;
-            if v.is_finite() && v >= 0.0 {
-                any = true;
-                if v < min_pct {
-                    min_pct = v;
-                }
+    // Choose the canonical SOL pool (highest-liquidity SOL pair) without using thresholds.
+    // We only use USD values for sorting (allowed by project rules), not as a decision threshold.
+    const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+
+    // Score markets: prefer where quote/base equals SOL; compute liquidity score as baseUSD+quoteUSD if present
+    let mut best_idx: Option<usize> = None;
+    let mut best_score: f64 = -1.0;
+    for (idx, m) in list.iter().enumerate() {
+        // Determine if this is a SOL pair
+        let is_sol_pair = m
+            .lp
+            .as_ref()
+            .and_then(|lp| lp.quote_mint.clone())
+            .map(|qm| qm == SOL_MINT)
+            .unwrap_or_else(|| {
+                // Fallback: check mintA/mintB
+                m.mint_a.as_deref() == Some(SOL_MINT) || m.mint_b.as_deref() == Some(SOL_MINT)
+            });
+        if !is_sol_pair { continue; }
+
+        // Score by USD sum if available, else 0 (still allows selection if nothing else has USD)
+        let score = m
+            .lp
+            .as_ref()
+            .map(|lp| lp.base_usd.unwrap_or(0.0) + lp.quote_usd.unwrap_or(0.0))
+            .unwrap_or(0.0);
+        if score > best_score {
+            best_score = score;
+            best_idx = Some(idx);
+        }
+    }
+
+    let Some(canonical_idx) = best_idx else {
+        // No SOL pair found → treat as unsafe per single-pool SOL policy
+        return false;
+    };
+    let canonical = &list[canonical_idx];
+
+    // Helper to check if a string equals the burn/"no mint" address
+    fn is_burn_or_none(s: &str) -> bool {
+        s == "11111111111111111111111111111111"
+    }
+
+    // If LP info exists, classify pool archetype
+    if let Some(lp) = &canonical.lp {
+        // LP-token pool when lp_mint is Some and not burn address
+        let is_lp_token_pool = lp
+            .lp_mint
+            .as_ref()
+            .map(|mint| !is_burn_or_none(mint))
+            .unwrap_or(false);
+
+        if is_lp_token_pool {
+            // Deterministic: LP immovable only if fully locked/burned
+            let locked_pct = lp.lp_locked_pct;
+            let unlocked = lp.lp_unlocked;
+            let fully_locked = locked_pct.is_finite() && (locked_pct == 100.0);
+            let no_unlocked = unlocked.is_finite() && (unlocked == 0.0);
+
+            if fully_locked || no_unlocked {
+                return true;
+            } else {
+                log(
+                    LogTag::Security,
+                    "LP_CHECK",
+                    &format!(
+                        "LP-token pool not fully locked (mint={:?}, locked_pct={:.4}, unlocked={:.6})",
+                        lp.lp_mint,
+                        locked_pct,
+                        unlocked
+                    ),
+                );
+                return false;
+            }
+        } else {
+            // Position-based pool (no LP token). Verify non-custodial ownership by PDA.
+            // Accept if liquidityA/B owners equal the pool pubkey (typical PDA custody) and market type is known.
+            let pool_pubkey = canonical.pubkey.as_deref().unwrap_or("");
+            let owner_a_ok = canonical
+                .liquidity_a
+                .as_ref()
+                .and_then(|acc| acc.owner.as_deref())
+                .map(|o| !o.is_empty() && o == pool_pubkey)
+                .unwrap_or(false);
+            let owner_b_ok = canonical
+                .liquidity_b
+                .as_ref()
+                .and_then(|acc| acc.owner.as_deref())
+                .map(|o| !o.is_empty() && o == pool_pubkey)
+                .unwrap_or(false);
+
+            // Allowlist known non-custodial AMM families
+            let mt = canonical.market_type.as_deref().unwrap_or("").to_ascii_lowercase();
+            let known = mt.contains("meteora") || mt.contains("clmm") || mt.contains("orca");
+
+            if known && owner_a_ok && owner_b_ok {
+                return true;
+            } else {
+                log(
+                    LogTag::Security,
+                    "LP_CHECK",
+                    &format!(
+                        "Position-based pool ownership not verified (pool={}, mt={}, ownerAok={}, ownerBok={})",
+                        pool_pubkey,
+                        mt,
+                        owner_a_ok,
+                        owner_b_ok
+                    ),
+                );
+                return false;
             }
         }
     }
-    if !any || !min_pct.is_finite() {
-        return false;
-    }
-    min_pct >= 90.0
+
+    // If we cannot classify due to missing LP info, be conservative
+    log(LogTag::Security, "LP_CHECK", "Missing LP info for canonical SOL pool; marking unsafe");
+    false
 }
 
 /// Batch analyze multiple tokens
