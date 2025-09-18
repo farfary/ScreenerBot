@@ -113,11 +113,10 @@ pub async fn preload_exit_prices_batch(mints: &[String]) -> Result<(), String> {
 
 // Balanced windows for stable entries (30s to 10min)
 const MIN_PRICE_POINTS: usize = 3; // Increased from 3 for better analysis
-const MAX_DATA_AGE_MIN: i64 = 5; // Keep tight data freshness requirement
 
 // CONSERVATIVE entry windows - more balanced approach
 const WINDOWS_SEC: [i64; 6] = [10, 20, 40, 80, 160, 320]; // 30s to 10min windows
-const MIN_DROP_PERCENT: f64 = 5.0; // Higher minimum for quality entries
+const MIN_DROP_PERCENT: f64 = 3.0; // Higher minimum for quality entries
 const MAX_DROP_PERCENT: f64 = 90.0; // Allow larger drops for volatile tokens
 
 // ============================= MICRO-LIQUIDITY CAPITULATION =============================
