@@ -111,6 +111,12 @@ impl TokenDatabase {
             []
         )?;
 
+        // Helpful index for boost selection: pair_created_at recency
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tokens_pair_created_at ON tokens(pair_created_at)",
+            []
+        )?;
+
         // Only log on first initialization - reduce log spam
         static DATABASE_INITIALIZED: std::sync::Once = std::sync::Once::new();
         DATABASE_INITIALIZED.call_once(|| {
@@ -236,6 +242,54 @@ impl TokenDatabase {
         }
 
         Ok(deleted_count)
+    }
+
+    /// Small helper for monitor: get a few very new tokens that are stale enough for a quick recheck
+    /// Returns up to `limit` mint addresses for tokens whose pair_created_at is within `max_age_minutes`
+    /// and whose last_updated is at least `min_stale_minutes` ago.
+    pub async fn get_new_tokens_needing_boost(
+        &self,
+        max_age_minutes: i64,
+        min_stale_minutes: i64,
+        limit: usize
+    ) -> Result<Vec<String>, String> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
+
+        let now = chrono::Utc::now();
+        let min_created_at = now - chrono::Duration::minutes(max_age_minutes);
+        let max_last_updated = now - chrono::Duration::minutes(min_stale_minutes);
+
+        // pair_created_at is stored as INTEGER (epoch ms) in DexScreener data; some entries may be NULL
+        let min_created_ms = min_created_at.timestamp_millis();
+        let max_last_updated_str = max_last_updated.to_rfc3339();
+
+        let mut stmt = connection
+            .prepare(
+                "SELECT mint FROM tokens 
+                 WHERE pair_created_at IS NOT NULL 
+                   AND pair_created_at >= ?1
+                   AND last_updated <= ?2
+                 ORDER BY pair_created_at DESC
+                 LIMIT ?3"
+            )
+            .map_err(|e| format!("Failed to prepare boost query: {}", e))?;
+
+        let rows = stmt
+            .query_map(
+                rusqlite::params![min_created_ms, max_last_updated_str, limit as i64],
+                |row| { Ok(row.get::<_, String>("mint")?) }
+            )
+            .map_err(|e| format!("Failed to execute boost query: {}", e))?;
+
+        let mut mints = Vec::new();
+        for r in rows {
+            mints.push(r.map_err(|e| format!("Failed to parse mint: {}", e))?);
+        }
+        Ok(mints)
     }
 
     /// Get all tokens from database

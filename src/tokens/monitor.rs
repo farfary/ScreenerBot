@@ -19,8 +19,8 @@ use tokio::time::{ sleep, Duration };
 /// Monitoring cycle duration in seconds (currently runs every 1 second)
 const MONITOR_CYCLE_SECONDS: u64 = 1;
 
-/// Minimum time between updates for a token (1 hour)
-const MIN_UPDATE_INTERVAL_HOURS: i64 = 1;
+/// Minimum time between updates for a token (in minutes)
+const MIN_UPDATE_INTERVAL_MINUTES: i64 = 30; // lowered from 60 to 30 to keep data fresher
 
 /// Maximum time before forced update (2 hours)
 const MAX_UPDATE_INTERVAL_HOURS: i64 = 2;
@@ -30,6 +30,17 @@ const TOKENS_PER_CYCLE: usize = 30;
 
 /// Batch size for API calls (DexScreener limit)
 const API_BATCH_SIZE: usize = 30;
+
+// =============================================================================
+// NEW TOKEN BOOST (lightweight)
+// =============================================================================
+
+/// Consider tokens "new" for this many minutes from their pair creation time
+const NEW_TOKEN_BOOST_MAX_AGE_MINUTES: i64 = 60; // first hour of life
+/// Minimum staleness required to recheck a new token
+const NEW_TOKEN_BOOST_MIN_STALE_MINUTES: i64 = 12; // ~12 minutes between touches
+/// Hard cap of boosted tokens per cycle to avoid API pressure
+const NEW_TOKEN_BOOST_PER_CYCLE: usize = 2;
 
 // =============================================================================
 // FAIRNESS / TIERING CONFIG
@@ -92,19 +103,39 @@ impl TokenMonitor {
             return Ok(Vec::new());
         }
 
-        // Filter tokens that need updating (at least 1 hour old)
-        // Collect as (mint, liquidity, age_hours)
+        // Filter tokens that need updating (at least MIN_UPDATE_INTERVAL_MINUTES stale)
+        // Collect as (mint, liquidity, age_minutes)
         let mut needing_update: Vec<(String, f64, i64)> = Vec::new();
         for (mint, _symbol, last_updated, liquidity) in all_tokens {
-            let age_hours = now.signed_duration_since(last_updated).num_hours();
-            if age_hours >= MIN_UPDATE_INTERVAL_HOURS {
+            let age_minutes = now.signed_duration_since(last_updated).num_minutes();
+            if age_minutes >= MIN_UPDATE_INTERVAL_MINUTES {
                 let liq = liquidity;
-                needing_update.push((mint, liq, age_hours));
+                needing_update.push((mint, liq, age_minutes));
             }
         }
 
+        // Pre-select boosted "new" tokens with a hard per-cycle cap
+        let mut selected_tokens: Vec<String> = Vec::new();
+        let mut selected_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+        if NEW_TOKEN_BOOST_PER_CYCLE > 0 {
+            if
+                let Ok(boost_mints) = self.database.get_new_tokens_needing_boost(
+                    NEW_TOKEN_BOOST_MAX_AGE_MINUTES,
+                    NEW_TOKEN_BOOST_MIN_STALE_MINUTES,
+                    NEW_TOKEN_BOOST_PER_CYCLE
+                ).await
+            {
+                for mint in boost_mints.into_iter() {
+                    if selected_set.insert(mint.clone()) {
+                        selected_tokens.push(mint);
+                    }
+                }
+            }
+        }
+
+        // If no other tokens need update and boost is empty, we can early return
         if needing_update.is_empty() {
-            return Ok(Vec::new());
+            return Ok(selected_tokens);
         }
 
         // Bucket by liquidity tiers
@@ -139,8 +170,12 @@ impl TokenMonitor {
         low.sort_by(by_age_then_liq);
         micro.sort_by(by_age_then_liq);
 
-        // Compute quotas
-        let quota = |pct: usize| -> usize { (TOKENS_PER_CYCLE * pct) / 100 };
+        // Compute quotas based on remaining capacity after boost pre-selection
+        let capacity = TOKENS_PER_CYCLE.saturating_sub(selected_tokens.len());
+        if capacity == 0 {
+            return Ok(selected_tokens);
+        }
+        let quota = |pct: usize| -> usize { (capacity * pct) / 100 };
         let mut q_high = quota(QUOTA_HIGH_PCT).max(1);
         let mut q_mid = quota(QUOTA_MID_PCT).max(1);
         let mut q_low = quota(QUOTA_LOW_PCT).max(1);
@@ -162,8 +197,6 @@ impl TokenMonitor {
             total_q = q_high + q_mid + q_low + q_micro;
         }
 
-        let mut selected_tokens: Vec<String> = Vec::with_capacity(TOKENS_PER_CYCLE);
-
         // Helper to drain up to n mints from a bucket
         let mut take_from_bucket = |
             bucket: &mut Vec<(String, f64, i64)>,
@@ -172,7 +205,9 @@ impl TokenMonitor {
         | -> usize {
             let take_n = std::cmp::min(n, bucket.len());
             for (mint, _liq, _age) in bucket.drain(..take_n) {
-                out.push(mint);
+                if selected_set.insert(mint.clone()) {
+                    out.push(mint);
+                }
             }
             take_n
         };
@@ -195,7 +230,9 @@ impl TokenMonitor {
             all_remaining.sort_by(by_age_then_liq);
 
             for (mint, _liq, _age) in all_remaining.into_iter().take(remaining_capacity) {
-                selected_tokens.push(mint);
+                if selected_set.insert(mint.clone()) {
+                    selected_tokens.push(mint);
+                }
             }
         }
 
