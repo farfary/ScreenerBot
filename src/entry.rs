@@ -119,6 +119,19 @@ const WINDOWS_SEC: [i64; 6] = [10, 20, 40, 80, 160, 320]; // 30s to 10min window
 const MIN_DROP_PERCENT: f64 = 1.0; // Higher minimum for quality entries
 const MAX_DROP_PERCENT: f64 = 90.0; // Allow larger drops for volatile tokens
 
+// ============================= TREND ENTRY (Conservative) =============================
+// Lightweight, safe detectors to capture strong trends while avoiding noise.
+// These are designed to work with existing pool price history (no extra sources).
+const TREND_MIN_HISTORY_POINTS: usize = 6;
+const TREND_RANGE_SEC: i64 = 240; // 4m range for breakout context
+const RETEST_HOLD_SEC: i64 = 25; // time to hold reclaimed level
+const SMA_RECLAIM_SEC: i64 = 90; // ~EMA20 proxy over short horizon
+const HL_LOOKBACK_SEC: i64 = 180; // 3m lookback for HL structure (not yet used)
+const MOMENTUM_LOOKBACK_SEC: i64 = 120; // momentum check window
+const BREAKOUT_BUFFER_PCT: f64 = 1.8; // breakout must exceed range high by this buffer
+const RETEST_TOLERANCE_PCT: f64 = 1.2; // acceptable retest depth around breakout line
+const MICRO_PULLBACK_MAX_PCT: f64 = 3.5; // max pullback for momentum continuation validation
+
 // ============================= MICRO-LIQUIDITY CAPITULATION =============================
 // Goal: Auto-approve high-upside entries when a token has near-zero real SOL liquidity and
 // has experienced an extreme (>95-99%) capitulation from its recent local high while having
@@ -264,6 +277,141 @@ fn analyze_local_structure(
 // =============================================================================
 // MAIN ENTRY FUNCTION
 // =============================================================================
+
+// Simple average over last N seconds (SMA proxy for very short EMA)
+fn sma_over_window(price_history: &[(DateTime<Utc>, f64)], seconds: i64) -> Option<f64> {
+    let now = Utc::now();
+    let mut vals: Vec<f64> = price_history
+        .iter()
+        .filter(|(ts, _)| (now - *ts).num_seconds() <= seconds)
+        .map(|(_, p)| *p)
+        .filter(|p| *p > 0.0 && p.is_finite())
+        .collect();
+    if vals.len() < 3 {
+        return None;
+    }
+    let sum: f64 = vals.iter().sum();
+    let avg = sum / (vals.len() as f64);
+    if avg.is_finite() && avg > 0.0 {
+        Some(avg)
+    } else {
+        None
+    }
+}
+
+fn window_high(price_history: &[(DateTime<Utc>, f64)], seconds: i64) -> Option<f64> {
+    let now = Utc::now();
+    let mut high = 0.0f64;
+    let mut count = 0;
+    for (ts, p) in price_history.iter() {
+        if (now - *ts).num_seconds() <= seconds && *p > 0.0 && p.is_finite() {
+            if *p > high {
+                high = *p;
+            }
+            count += 1;
+        }
+    }
+    if count >= 3 && high.is_finite() && high > 0.0 {
+        Some(high)
+    } else {
+        None
+    }
+}
+
+// Detect breakout above recent range with a clean retest that holds.
+// Returns (approved, confidence_bonus, reason, ath_reclaim_ok)
+fn detect_breakout_retest(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64,
+    stabilization_score: f64,
+    intrarange_pct: f64
+) -> (bool, f64, &'static str, bool) {
+    if price_history.len() < TREND_MIN_HISTORY_POINTS || current_price <= 0.0 {
+        return (false, 0.0, "", false);
+    }
+    if intrarange_pct > REENTRY_LOCAL_MAX_VOLATILITY_PCT {
+        return (false, 0.0, "", false);
+    }
+
+    let Some(r_high) = window_high(price_history, TREND_RANGE_SEC) else {
+        return (false, 0.0, "", false);
+    };
+    if r_high <= 0.0 {
+        return (false, 0.0, "", false);
+    }
+
+    // Breakout must clear range high by buffer
+    if current_price < r_high * (1.0 + BREAKOUT_BUFFER_PCT / 100.0) {
+        return (false, 0.0, "", false);
+    }
+
+    // Retest: look for prices within tolerance below/around r_high in last RETEST_HOLD_SEC
+    let now = Utc::now();
+    let mut touched = false;
+    let mut held_count = 0usize;
+    for (ts, p) in price_history.iter() {
+        let age = (now - *ts).num_seconds();
+        if age <= RETEST_HOLD_SEC {
+            if *p > 0.0 && p.is_finite() {
+                let diff_pct = ((*p - r_high) / r_high) * 100.0;
+                if diff_pct.abs() <= RETEST_TOLERANCE_PCT {
+                    touched = true;
+                }
+                if *p >= r_high {
+                    held_count += 1;
+                }
+            }
+        }
+    }
+    if !touched || held_count < 3 {
+        return (false, 0.0, "", false);
+    }
+
+    // Stabilization minimum
+    if stabilization_score < 0.3 {
+        return (false, 0.0, "", false);
+    }
+
+    (true, 18.0, "TREND_BREAKOUT_RETEST", true)
+}
+
+// Detect reclaim above short SMA after a controlled pullback; favors continuation.
+fn detect_sma_reclaim(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64,
+    stabilization_score: f64
+) -> (bool, f64, &'static str) {
+    if price_history.len() < TREND_MIN_HISTORY_POINTS || current_price <= 0.0 {
+        return (false, 0.0, "");
+    }
+    let Some(sma) = sma_over_window(price_history, SMA_RECLAIM_SEC) else {
+        return (false, 0.0, "");
+    };
+    if sma <= 0.0 {
+        return (false, 0.0, "");
+    }
+
+    // Require momentum alignment on 120s window
+    let now = Utc::now();
+    let prices_120: Vec<f64> = price_history
+        .iter()
+        .filter(|(ts, _)| (now - *ts).num_seconds() <= MOMENTUM_LOOKBACK_SEC)
+        .map(|(_, p)| *p)
+        .collect();
+    if prices_120.len() < 3 {
+        return (false, 0.0, "");
+    }
+    let v120 = calculate_velocity(&prices_120, MOMENTUM_LOOKBACK_SEC);
+    if v120 < 8.0 {
+        return (false, 0.0, "");
+    }
+
+    // Reclaim condition and minimum stabilization
+    if current_price >= sma * 1.002 && stabilization_score >= 0.3 {
+        return (true, 14.0, "TREND_SMA_RECLAIM");
+    }
+    (false, 0.0, "")
+}
 
 /// Main entry point for determining if a token should be bought
 /// Returns (approved_for_entry, confidence_score, reason)
@@ -425,6 +573,119 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         &converted_history,
         REENTRY_LOCAL_STABILITY_SECS
     );
+
+    // ============================= Trend entries (conservative) =============================
+    // Try to catch high-quality trend setups before standard drop-based logic.
+    // 1) Breakout + Retest (enables ATH reclaim on success)
+    let (brk_ok, brk_conf, brk_tag, brk_ath_bypass) = detect_breakout_retest(
+        &converted_history,
+        current_price,
+        stabilization_score,
+        intrarange_pct
+    );
+    if brk_ok {
+        let mut confidence = 30.0 + brk_conf; // strong base for quality trend
+        // Activity boost (single use): conservative scaling
+        confidence += activity_score * 12.0;
+        confidence = confidence.clamp(0.0, 95.0);
+
+        // ATH risk check with optional bypass
+        let (ath_safe, max_ath_pct) = if brk_ath_bypass {
+            (true, 99.9)
+        } else {
+            check_ath_risk(&converted_history, current_price).await
+        };
+        if !ath_safe {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "TREND_ATH_BLOCK",
+                    &format!(
+                        "❌ {} {} blocked by ATH: {:.1}%",
+                        price_info.mint,
+                        brk_tag,
+                        max_ath_pct
+                    )
+                );
+            }
+        } else {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    brk_tag,
+                    &format!(
+                        "🎯 {} trend entry → conf {:.1}% (stab:{:.2} intrarange:{:.1}% ath_ok:{})",
+                        price_info.mint,
+                        confidence,
+                        stabilization_score,
+                        intrarange_pct,
+                        ath_safe
+                    )
+                );
+            }
+            let approved = confidence >= 43.0; // slightly lower than conservative dip threshold
+            return (
+                approved,
+                confidence,
+                if approved {
+                    "Trend breakout + retest entry".to_string()
+                } else {
+                    format!("{}: confidence {:.1}% < 43%", brk_tag, confidence)
+                },
+            );
+        }
+    }
+
+    // 2) SMA reclaim continuation
+    let (rec_ok, rec_conf, rec_tag) = detect_sma_reclaim(
+        &converted_history,
+        current_price,
+        stabilization_score
+    );
+    if rec_ok {
+        let mut confidence = 26.0 + rec_conf;
+        confidence += activity_score * 10.0;
+        confidence = confidence.clamp(0.0, 95.0);
+
+        let (ath_safe, max_ath_pct) = check_ath_risk(&converted_history, current_price).await;
+        if !ath_safe {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "SMA_RECLAIM_ATH_BLOCK",
+                    &format!(
+                        "❌ {} {} blocked by ATH: {:.1}%",
+                        price_info.mint,
+                        rec_tag,
+                        max_ath_pct
+                    )
+                );
+            }
+        } else {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    rec_tag,
+                    &format!(
+                        "🎯 {} trend SMA reclaim → conf {:.1}% (stab:{:.2})",
+                        price_info.mint,
+                        confidence,
+                        stabilization_score
+                    )
+                );
+            }
+            let approved = confidence >= 43.0;
+            return (
+                approved,
+                confidence,
+                if approved {
+                    "Trend SMA reclaim entry".to_string()
+                } else {
+                    format!("{}: confidence {:.1}% < 43%", rec_tag, confidence)
+                },
+            );
+        }
+    }
 
     // Adaptive extra drop requirement for re-entry scenarios
     let mut adaptive_min_drop = MIN_DROP_PERCENT;
