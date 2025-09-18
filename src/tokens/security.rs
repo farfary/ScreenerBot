@@ -27,13 +27,13 @@ use tokio::sync::{ Notify, RwLock };
 // =============================================================================
 
 /// Number of tokens to analyze per security scan cycle (similar to monitor service)
-const SECURITY_TOKENS_PER_CYCLE: usize = 50;
+const SECURITY_TOKENS_PER_CYCLE: usize = 15;
 
-/// Batch size for API calls within a cycle (RugCheck rate limiting)
-const SECURITY_BATCH_SIZE: usize = 10;
+/// Batch size for API calls within a cycle (RugCheck rate limiting) - max 3 to avoid overwhelming API
+const SECURITY_BATCH_SIZE: usize = 3;
 
 /// Delay between batches within a cycle (milliseconds)
-const SECURITY_BATCH_DELAY_MS: u64 = 2000;
+const SECURITY_BATCH_DELAY_MS: u64 = 1000;
 
 /// Delay between individual requests within a batch (milliseconds)
 const SECURITY_REQUEST_DELAY_MS: u64 = 300;
@@ -1311,20 +1311,7 @@ impl SecurityDatabase {
         &self,
         limit: usize
     ) -> Result<Vec<String>, ScreenerBotError> {
-        let conn = self.connection.lock().map_err(|e| {
-            ScreenerBotError::Data(crate::errors::DataError::Generic {
-                message: format!("Failed to lock database: {}", e),
-            })
-        })?;
-
-        // Set a busy timeout to avoid blocking indefinitely
-        conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(|e| {
-            ScreenerBotError::Data(crate::errors::DataError::Generic {
-                message: format!("Failed to set busy timeout: {}", e),
-            })
-        })?;
-
-        // Read token mints from tokens.db and return those not in security.db, limited by count
+        // Use direct LEFT JOIN query to efficiently find tokens without security info
         let tokens_conn = rusqlite::Connection::open("data/tokens.db").map_err(|e|
             ScreenerBotError::Data(crate::errors::DataError::Generic {
                 message: format!("Failed to open tokens.db for reading mints: {}", e),
@@ -1336,53 +1323,40 @@ impl SecurityDatabase {
             })
         })?;
 
-        // Order by creation time or mint to ensure consistent priority
-        let mut stmt_tokens = tokens_conn
-            .prepare("SELECT mint FROM tokens ORDER BY mint LIMIT ?1")
+        // Attach security database and use LEFT JOIN to find tokens without security info
+        tokens_conn.execute("ATTACH 'data/security.db' AS security_db", []).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to attach security database: {}", e),
+            })
+        })?;
+
+        // Direct query for tokens without security info - much more efficient
+        let mut stmt = tokens_conn
+            .prepare(
+                "SELECT t.mint FROM tokens t 
+             LEFT JOIN security_db.security s ON t.mint = s.mint 
+             WHERE s.mint IS NULL 
+             ORDER BY t.mint 
+             LIMIT ?1"
+            )
             .map_err(|e| {
                 ScreenerBotError::Data(crate::errors::DataError::Generic {
-                    message: format!("Failed to prepare tokens query: {}", e),
+                    message: format!("Failed to prepare tokens without security query: {}", e),
                 })
             })?;
 
-        // We query more than the limit to account for tokens that already have security info
-        let query_limit = (limit * 3).max(100); // Query 3x the limit or at least 100
-        let token_rows = stmt_tokens
-            .query_map([query_limit], |row| row.get::<_, String>(0))
+        let token_rows = stmt
+            .query_map([limit], |row| row.get::<_, String>(0))
             .map_err(|e| {
                 ScreenerBotError::Data(crate::errors::DataError::Generic {
-                    message: format!("Failed to execute tokens query: {}", e),
+                    message: format!("Failed to execute tokens without security query: {}", e),
                 })
             })?;
 
         let mut missing: Vec<String> = Vec::new();
-        let mut exists_stmt = conn
-            .prepare("SELECT 1 FROM security WHERE mint = ?1 LIMIT 1")
-            .map_err(|e| {
-                ScreenerBotError::Data(crate::errors::DataError::Generic {
-                    message: format!("Failed to prepare existence check: {}", e),
-                })
-            })?;
-
         for r in token_rows {
             if let Ok(mint) = r {
-                // Stop if we've reached our limit
-                if missing.len() >= limit {
-                    break;
-                }
-
-                let mut has = false;
-                let mut q = exists_stmt.query([&mint]).map_err(|e|
-                    ScreenerBotError::Data(crate::errors::DataError::Generic {
-                        message: format!("Failed to query security existence: {}", e),
-                    })
-                )?;
-                if let Ok(Some(_row)) = q.next() {
-                    has = true;
-                }
-                if !has {
-                    missing.push(mint);
-                }
+                missing.push(mint);
             }
         }
 
