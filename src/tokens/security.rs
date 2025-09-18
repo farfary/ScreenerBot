@@ -22,6 +22,22 @@ use std::sync::{ Arc, OnceLock };
 use std::sync::Mutex as StdMutex;
 use tokio::sync::{ Notify, RwLock };
 
+// =============================================================================
+// SECURITY SCANNING CONFIGURATION
+// =============================================================================
+
+/// Number of tokens to analyze per security scan cycle (similar to monitor service)
+const SECURITY_TOKENS_PER_CYCLE: usize = 50;
+
+/// Batch size for API calls within a cycle (RugCheck rate limiting)
+const SECURITY_BATCH_SIZE: usize = 10;
+
+/// Delay between batches within a cycle (milliseconds)
+const SECURITY_BATCH_DELAY_MS: u64 = 2000;
+
+/// Delay between individual requests within a batch (milliseconds)
+const SECURITY_REQUEST_DELAY_MS: u64 = 300;
+
 /// Security risk levels (backward compatibility)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SecurityRiskLevel {
@@ -1290,6 +1306,95 @@ impl SecurityDatabase {
         Ok(missing)
     }
 
+    /// Get limited number of tokens for security scan cycle (similar to monitor service)
+    pub fn get_tokens_for_security_scan(
+        &self,
+        limit: usize
+    ) -> Result<Vec<String>, ScreenerBotError> {
+        let conn = self.connection.lock().map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to lock database: {}", e),
+            })
+        })?;
+
+        // Set a busy timeout to avoid blocking indefinitely
+        conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to set busy timeout: {}", e),
+            })
+        })?;
+
+        // Read token mints from tokens.db and return those not in security.db, limited by count
+        let tokens_conn = rusqlite::Connection::open("data/tokens.db").map_err(|e|
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to open tokens.db for reading mints: {}", e),
+            })
+        )?;
+        tokens_conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(|e| {
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Failed to set busy timeout (tokens.db): {}", e),
+            })
+        })?;
+
+        // Order by creation time or mint to ensure consistent priority
+        let mut stmt_tokens = tokens_conn
+            .prepare("SELECT mint FROM tokens ORDER BY mint LIMIT ?1")
+            .map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::Generic {
+                    message: format!("Failed to prepare tokens query: {}", e),
+                })
+            })?;
+
+        // We query more than the limit to account for tokens that already have security info
+        let query_limit = (limit * 3).max(100); // Query 3x the limit or at least 100
+        let token_rows = stmt_tokens
+            .query_map([query_limit], |row| row.get::<_, String>(0))
+            .map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::Generic {
+                    message: format!("Failed to execute tokens query: {}", e),
+                })
+            })?;
+
+        let mut missing: Vec<String> = Vec::new();
+        let mut exists_stmt = conn
+            .prepare("SELECT 1 FROM security WHERE mint = ?1 LIMIT 1")
+            .map_err(|e| {
+                ScreenerBotError::Data(crate::errors::DataError::Generic {
+                    message: format!("Failed to prepare existence check: {}", e),
+                })
+            })?;
+
+        for r in token_rows {
+            if let Ok(mint) = r {
+                // Stop if we've reached our limit
+                if missing.len() >= limit {
+                    break;
+                }
+
+                let mut has = false;
+                let mut q = exists_stmt.query([&mint]).map_err(|e|
+                    ScreenerBotError::Data(crate::errors::DataError::Generic {
+                        message: format!("Failed to query security existence: {}", e),
+                    })
+                )?;
+                if let Ok(Some(_row)) = q.next() {
+                    has = true;
+                }
+                if !has {
+                    missing.push(mint);
+                }
+            }
+        }
+
+        log(
+            LogTag::Security,
+            "CYCLE_TOKENS",
+            &format!("Selected {} tokens for security scan cycle (limit: {})", missing.len(), limit)
+        );
+
+        Ok(missing)
+    }
+
     /// Get count of tokens without security info
     pub fn count_tokens_without_security(&self) -> Result<i64, ScreenerBotError> {
         // Don't hold the lock while calling get_tokens_without_security to avoid deadlock
@@ -1970,7 +2075,7 @@ struct ScanStats {
     unsafe_count: usize,
 }
 
-/// Run a security scan for all tokens without cached security info
+/// Run a security scan cycle for a limited number of tokens (similar to monitor service)
 async fn run_security_scan(
     analyzer: &TokenSecurityAnalyzer
 ) -> Result<ScanStats, ScreenerBotError> {
@@ -2003,29 +2108,23 @@ async fn run_security_scan(
         );
     }
 
-    // Get count first for logging
-    let total_uncached = analyzer.database.count_tokens_without_security()?;
-
-    if total_uncached == 0 {
-        return Ok(ScanStats {
-            processed: 0,
-            successful: 0,
-            failed: 0,
-            safe_count: 0,
-            unsafe_count: 0,
-        });
-    }
-
-    log(
-        LogTag::Security,
-        "SCAN_START",
-        &format!("Found {} tokens without security info - starting batch analysis", total_uncached)
-    );
-
-    // Get tokens to process
-    let tokens_to_check = analyzer.database.get_tokens_without_security()?;
+    // Get limited number of tokens for this cycle (not all tokens)
+    let tokens_to_check =
+        analyzer.database.get_tokens_for_security_scan(SECURITY_TOKENS_PER_CYCLE)?;
 
     if tokens_to_check.is_empty() {
+        // Also log total backlog for context
+        if let Ok(total_uncached) = analyzer.database.count_tokens_without_security() {
+            if total_uncached > 0 {
+                log(
+                    LogTag::Security,
+                    "CYCLE_SKIP",
+                    &format!("No tokens selected for this cycle (total backlog: {})", total_uncached)
+                );
+            } else {
+                log(LogTag::Security, "CYCLE_SKIP", "All tokens have security info cached");
+            }
+        }
         return Ok(ScanStats {
             processed: 0,
             successful: 0,
@@ -2034,6 +2133,18 @@ async fn run_security_scan(
             unsafe_count: 0,
         });
     }
+
+    // Log cycle start with backlog context
+    let total_uncached = analyzer.database.count_tokens_without_security().unwrap_or(0);
+    log(
+        LogTag::Security,
+        "CYCLE_START",
+        &format!(
+            "Starting security scan cycle: {} tokens selected (total backlog: {})",
+            tokens_to_check.len(),
+            total_uncached
+        )
+    );
 
     let mut stats = ScanStats {
         processed: 0,
@@ -2043,19 +2154,15 @@ async fn run_security_scan(
         unsafe_count: 0,
     };
 
-    // Process in batches to respect rate limits
-    const BATCH_SIZE: usize = 10;
-    const BATCH_DELAY_MS: u64 = 2000; // 2 seconds between batches
-    const REQUEST_DELAY_MS: u64 = 300; // 300ms between individual requests
-
-    for (batch_idx, batch) in tokens_to_check.chunks(BATCH_SIZE).enumerate() {
+    // Process tokens in batches to respect rate limits
+    for (batch_idx, batch) in tokens_to_check.chunks(SECURITY_BATCH_SIZE).enumerate() {
         log(
             LogTag::Security,
             "BATCH_START",
             &format!(
-                "Processing batch {}/{} ({} tokens)",
+                "Processing batch {}/{} ({} tokens in this cycle)",
                 batch_idx + 1,
-                (tokens_to_check.len() + BATCH_SIZE - 1) / BATCH_SIZE,
+                (tokens_to_check.len() + SECURITY_BATCH_SIZE - 1) / SECURITY_BATCH_SIZE,
                 batch.len()
             )
         );
@@ -2063,7 +2170,9 @@ async fn run_security_scan(
         for (token_idx, mint) in batch.iter().enumerate() {
             // Add delay between requests to be respectful to API
             if token_idx > 0 {
-                tokio::time::sleep(std::time::Duration::from_millis(REQUEST_DELAY_MS)).await;
+                tokio::time::sleep(
+                    std::time::Duration::from_millis(SECURITY_REQUEST_DELAY_MS)
+                ).await;
             }
 
             match analyzer.analyze_token_security_with_cache(mint, false).await {
@@ -2090,23 +2199,25 @@ async fn run_security_scan(
         }
 
         // Add delay between batches (except for last batch)
-        if batch_idx < (tokens_to_check.len() + BATCH_SIZE - 1) / BATCH_SIZE - 1 {
-            tokio::time::sleep(std::time::Duration::from_millis(BATCH_DELAY_MS)).await;
+        if batch_idx < (tokens_to_check.len() + SECURITY_BATCH_SIZE - 1) / SECURITY_BATCH_SIZE - 1 {
+            tokio::time::sleep(std::time::Duration::from_millis(SECURITY_BATCH_DELAY_MS)).await;
         }
     }
 
     log(
         LogTag::Security,
-        "SCAN_COMPLETE",
+        "CYCLE_COMPLETE",
         &format!(
-            "Security scan finished: {}/{} successful ({:.1}% success rate)",
+            "Security scan cycle finished: {}/{} successful ({:.1}% success rate) | Safe: {} | Unsafe: {}",
             stats.successful,
             stats.processed,
             if stats.processed > 0 {
                 ((stats.successful as f64) / (stats.processed as f64)) * 100.0
             } else {
                 0.0
-            }
+            },
+            stats.safe_count,
+            stats.unsafe_count
         )
     );
 
