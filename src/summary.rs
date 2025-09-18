@@ -38,15 +38,17 @@ pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 15;
 
 /// Safely batch-fetch token names from database for swap display
 /// This function is performance-optimized and error-safe
-async fn build_token_symbol_cache(transactions: &[Transaction]) -> std::collections::HashMap<String, String> {
+async fn build_token_symbol_cache(
+    transactions: &[Transaction]
+) -> std::collections::HashMap<String, String> {
     let mut token_cache = std::collections::HashMap::new();
-    
+
     // Extract unique token mints from all transactions
     let mut unique_mints = std::collections::HashSet::new();
     for tx in transactions {
         match &tx.transaction_type {
-            TransactionType::SwapSolToToken { token_mint, .. } |
-            TransactionType::SwapTokenToSol { token_mint, .. } => {
+            | TransactionType::SwapSolToToken { token_mint, .. }
+            | TransactionType::SwapTokenToSol { token_mint, .. } => {
                 if !token_mint.is_empty() && token_mint != "Unknown" {
                     unique_mints.insert(token_mint.clone());
                 }
@@ -62,11 +64,11 @@ async fn build_token_symbol_cache(transactions: &[Transaction]) -> std::collecti
             _ => {}
         }
     }
-    
+
     if unique_mints.is_empty() {
         return token_cache;
     }
-    
+
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
@@ -74,43 +76,52 @@ async fn build_token_symbol_cache(transactions: &[Transaction]) -> std::collecti
             &format!("Building token symbol cache for {} unique mints", unique_mints.len())
         );
     }
-    
+
     // Fetch token names from database with timeout protection
     let fetch_start = std::time::Instant::now();
     let mut successful_fetches = 0;
     let mut timeout_count = 0;
-    
+
     for mint in unique_mints {
         // Skip if we already have this token cached
         if token_cache.contains_key(&mint) {
             continue;
         }
-        
+
         // Handle SOL native token immediately
         if mint == "So11111111111111111111111111111111111111112" {
             token_cache.insert(mint.clone(), "SOL".to_string());
             continue;
         }
-        
+
         // Skip invalid mints
         if mint.len() < 32 {
-            token_cache.insert(mint.clone(), format!("INVALID_{}", &mint[..std::cmp::min(8, mint.len())]));
+            token_cache.insert(
+                mint.clone(),
+                format!("INVALID_{}", &mint[..std::cmp::min(8, mint.len())])
+            );
             continue;
         }
-        
+
         // Add timeout protection for each database query
-        match tokio::time::timeout(
-            std::time::Duration::from_millis(100), // 100ms timeout per token
-            get_token_from_db(&mint)
-        ).await {
+        match
+            tokio::time::timeout(
+                std::time::Duration::from_millis(100), // 100ms timeout per token
+                get_token_from_db(&mint)
+            ).await
+        {
             Ok(Some(token)) => {
-                let symbol = if !token.symbol.is_empty() && 
-                              token.symbol != "Unknown" && 
-                              token.symbol.len() <= 20 {
+                let symbol = if
+                    !token.symbol.is_empty() &&
+                    token.symbol != "Unknown" &&
+                    token.symbol.len() <= 20
+                {
                     token.symbol
-                } else if !token.name.is_empty() && 
-                          token.name != "Unknown" && 
-                          token.name.len() <= 30 {
+                } else if
+                    !token.name.is_empty() &&
+                    token.name != "Unknown" &&
+                    token.name.len() <= 30
+                {
                     // Fallback to name if symbol is empty/unknown
                     if token.name.len() > 12 {
                         format!("{}...", &token.name[..9])
@@ -121,7 +132,7 @@ async fn build_token_symbol_cache(transactions: &[Transaction]) -> std::collecti
                     // Final fallback to shortened mint
                     format!("TOKEN_{}", &mint[..8])
                 };
-                
+
                 token_cache.insert(mint.clone(), symbol);
                 successful_fetches += 1;
             }
@@ -135,7 +146,7 @@ async fn build_token_symbol_cache(transactions: &[Transaction]) -> std::collecti
                 timeout_count += 1;
             }
         }
-        
+
         // If fetching is taking too long overall, break early to avoid blocking
         if fetch_start.elapsed() > std::time::Duration::from_millis(2000) {
             if is_debug_summary_enabled() {
@@ -148,7 +159,7 @@ async fn build_token_symbol_cache(transactions: &[Transaction]) -> std::collecti
             break;
         }
     }
-    
+
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
@@ -162,7 +173,7 @@ async fn build_token_symbol_cache(transactions: &[Transaction]) -> std::collecti
             )
         );
     }
-    
+
     token_cache
 }
 
@@ -1115,7 +1126,7 @@ pub async fn build_summary_report(closed_positions: &[&Position]) -> String {
     if !active_cooldowns.is_empty() {
         summary_output.push_str("\n❄️ Frozen Account Cooldowns\n");
         for (mint, remaining_minutes) in active_cooldowns {
-            let short_mint = format!("{}...", crate::utils::safe_truncate(&mint, 8));
+            let short_mint = crate::utils::format_mint_for_log(&mint);
             summary_output.push_str(
                 &format!("  {} - {} minutes remaining\n", short_mint, remaining_minutes)
             );
@@ -1259,7 +1270,7 @@ async fn build_recent_swaps_section() -> Result<String, String> {
                     } else {
                         std::collections::HashMap::new()
                     };
-                    
+
                     swaps
                         .into_iter()
                         .filter_map(|tx| {

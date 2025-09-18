@@ -751,7 +751,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
         .get_sol_balance(&wallet_address).await
         .map_err(|e| format!("Failed to get SOL balance: {}", e))?;
 
-    let sol_balance_lamports = (sol_balance * 1_000_000_000.0) as u64;
+    let sol_balance_lamports = crate::utils::sol_to_lamports(sol_balance);
 
     // Add another small delay before token accounts fetch
     tokio::time::sleep(Duration::from_millis(500)).await;

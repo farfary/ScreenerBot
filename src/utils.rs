@@ -3,11 +3,12 @@ use crate::errors::parse_solana_error;
 use crate::errors::ScreenerBotError;
 use crate::logger::{ log, LogTag };
 use chrono::{ DateTime, Utc };
+use solana_sdk::pubkey::Pubkey;
 use std::fs;
-use std::time::Duration;
-use tokio::sync::Notify;
+use std::str::FromStr;
 use std::sync::RwLock;
-use std::time::Instant;
+use std::time::{ Duration, Instant };
+use tokio::sync::Notify;
 
 /// Safe string truncation helper to prevent panic on out-of-bounds slicing
 pub fn safe_truncate(s: &str, len: usize) -> &str {
@@ -41,6 +42,79 @@ pub fn safe_format_signature(s: &str) -> String {
     }
 }
 
+// =============================================================================
+// SOLANA-SPECIFIC UTILITIES (Consolidated from multiple files)
+// =============================================================================
+
+/// Standard pubkey parsing with consistent error message formatting
+/// Consolidates 20+ identical patterns across the codebase
+pub fn parse_pubkey_safe(address: &str) -> Result<Pubkey, String> {
+    Pubkey::from_str(address).map_err(|e| format!("Invalid pubkey '{}': {}", address, e))
+}
+
+/// Read a pubkey from byte data at specified offset with bounds checking
+/// Consolidates 17+ duplicate read_pubkey implementations from debug binaries
+pub fn read_pubkey_from_data(data: &[u8], offset: usize) -> Option<String> {
+    if offset + 32 > data.len() {
+        return None;
+    }
+
+    let pubkey_bytes = &data[offset..offset + 32];
+    match Pubkey::try_from(pubkey_bytes) {
+        Ok(pubkey) => {
+            // Basic sanity check - reject all-zeros or all-ones
+            if pubkey_bytes.iter().all(|&b| b == 0) || pubkey_bytes.iter().all(|&b| b == 255) {
+                None
+            } else {
+                Some(pubkey.to_string())
+            }
+        }
+        Err(_) => None,
+    }
+}
+
+/// Read a u64 from byte data at specified offset with little-endian byte order
+/// Consolidates 9+ duplicate read_u64 implementations from debug binaries
+pub fn read_u64_from_data(data: &[u8], offset: usize) -> Option<u64> {
+    if offset + 8 > data.len() {
+        return None;
+    }
+
+    let bytes: [u8; 8] = data[offset..offset + 8].try_into().ok()?;
+    Some(u64::from_le_bytes(bytes))
+}
+
+/// Read a u32 from byte data at specified offset with little-endian byte order
+pub fn read_u32_from_data(data: &[u8], offset: usize) -> Option<u32> {
+    if offset + 4 > data.len() {
+        return None;
+    }
+
+    let bytes: [u8; 4] = data[offset..offset + 4].try_into().ok()?;
+    Some(u32::from_le_bytes(bytes))
+}
+
+/// SOL lamports conversion functions
+/// Uses the existing LAMPORTS_PER_SOL constant from decimals.rs
+/// Consolidates 20+ hardcoded 1_000_000_000 values across the codebase
+use crate::tokens::decimals::LAMPORTS_PER_SOL;
+
+/// Convert lamports to SOL with consistent precision
+pub fn lamports_to_sol(lamports: u64) -> f64 {
+    (lamports as f64) / (LAMPORTS_PER_SOL as f64)
+}
+
+/// Convert SOL to lamports with proper rounding
+pub fn sol_to_lamports(sol: f64) -> u64 {
+    (sol * (LAMPORTS_PER_SOL as f64)).round() as u64
+}
+
+/// Format mint address consistently for logs (8 chars + "...")
+/// Consolidates multiple patterns using safe_truncate for mint addresses
+pub fn format_mint_for_log(mint: &str) -> String {
+    format!("{}...", safe_truncate(mint, 8))
+}
+
 // Wallet-related imports
 use crate::global::read_configs;
 // Re-export for backward compatibility
@@ -51,13 +125,11 @@ pub use crate::swaps::SwapResult;
 use bs58;
 use solana_sdk::{
     instruction::{ AccountMeta, Instruction },
-    pubkey::Pubkey,
     signature::Keypair,
     signer::Signer,
     transaction::Transaction,
 };
 use spl_token::instruction::close_account;
-use std::str::FromStr;
 
 /// Get the wallet address from the main wallet private key in configs
 /// This replaces the swaps::get_wallet_address dependency
@@ -266,7 +338,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
                     &format!(
                         "📊 TOKEN_BALANCE_RESULT: {} units for mint {}",
                         balance,
-                        safe_truncate(&mint, 8)
+                        format_mint_for_log(&mint)
                     )
                 );
             }
@@ -290,7 +362,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
                     &format!(
                         "❌ TOKEN_BALANCE_ERROR: {} for mint {}",
                         blockchain_error,
-                        safe_truncate(&mint, 8)
+                        format_mint_for_log(&mint)
                     )
                 );
             }
@@ -299,7 +371,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
                 "ERROR",
                 &format!(
                     "❌ Failed to fetch token balance for mint {}: {}",
-                    safe_truncate(&mint, 8),
+                    format_mint_for_log(&mint),
                     e
                 )
             );
@@ -403,7 +475,7 @@ pub async fn close_single_ata(
     log(
         LogTag::Wallet,
         "ATA",
-        &format!("Attempting to close single ATA for mint {}", safe_truncate(&mint, 8))
+        &format!("Attempting to close single ATA for mint {}", format_mint_for_log(&mint))
     );
 
     // Get all token accounts to find the specific one

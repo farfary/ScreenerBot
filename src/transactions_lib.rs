@@ -799,7 +799,7 @@ impl TransactionsManager {
                                             .get("lamports")
                                             .and_then(|v| v.as_u64())
                                     {
-                                        return (lamports as f64) / 1_000_000_000.0;
+                                        return crate::utils::lamports_to_sol(lamports);
                                         // Convert to SOL
                                     }
                                 }
@@ -2950,8 +2950,11 @@ impl TransactionsManager {
                         // Signed change in lamports and convert to SOL
                         let balance_change_lamports: i64 =
                             post_balance_lamports - pre_balance_lamports;
-                        transaction.sol_balance_change =
-                            (balance_change_lamports as f64) / 1_000_000_000.0;
+                        transaction.sol_balance_change = if balance_change_lamports >= 0 {
+                            crate::utils::lamports_to_sol(balance_change_lamports as u64)
+                        } else {
+                            -crate::utils::lamports_to_sol(-balance_change_lamports as u64)
+                        };
 
                         if self.debug_enabled {
                             log(
@@ -3891,8 +3894,9 @@ impl TransactionsManager {
                             // Heuristic band for ATA rent amounts
                             if delta.abs() >= 1_500_000 && delta.abs() <= 3_000_000 {
                                 // Use the actual lamport delta instead of a fixed constant
-                                let rent_amount_sol =
-                                    (delta.unsigned_abs() as f64) / 1_000_000_000.0;
+                                let rent_amount_sol = crate::utils::lamports_to_sol(
+                                    delta.unsigned_abs()
+                                );
                                 // Try infer the account pubkey from message accountKeys
                                 let account_pubkey = raw
                                     .get("transaction")

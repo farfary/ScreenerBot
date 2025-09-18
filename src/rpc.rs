@@ -5339,7 +5339,7 @@ pub async fn start_rpc_stats_auto_save_service(shutdown: Arc<tokio::sync::Notify
 
 /// Parse string to Pubkey
 pub fn parse_pubkey(address: &str) -> Result<Pubkey, String> {
-    Pubkey::from_str(address).map_err(|e| format!("Invalid pubkey '{}': {}", address, e))
+    crate::utils::parse_pubkey_safe(address)
 }
 
 /// Backward compatibility structure for old config access patterns

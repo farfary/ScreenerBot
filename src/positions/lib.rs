@@ -1,8 +1,11 @@
 use crate::{
     arguments::is_debug_positions_enabled,
     logger::{ log, LogTag },
-    positions::{ 
-        acquire_position_lock, MINT_TO_POSITION_INDEX, POSITIONS, SIG_TO_MINT_INDEX,
+    positions::{
+        acquire_position_lock,
+        MINT_TO_POSITION_INDEX,
+        POSITIONS,
+        SIG_TO_MINT_INDEX,
         delete_position_by_id,
         save_position,
         save_token_snapshot,
@@ -270,8 +273,8 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 /// Calculate total fees for a position
 pub fn calculate_position_total_fees(position: &Position) -> f64 {
     // Sum entry and exit fees in SOL (excluding ATA rent from trading costs)
-    let entry_fees_sol = (position.entry_fee_lamports.unwrap_or(0) as f64) / 1_000_000_000.0;
-    let exit_fees_sol = (position.exit_fee_lamports.unwrap_or(0) as f64) / 1_000_000_000.0;
+    let entry_fees_sol = crate::utils::lamports_to_sol(position.entry_fee_lamports.unwrap_or(0));
+    let exit_fees_sol = crate::utils::lamports_to_sol(position.exit_fee_lamports.unwrap_or(0));
     entry_fees_sol + exit_fees_sol
 }
 
