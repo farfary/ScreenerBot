@@ -1,8 +1,4 @@
-use crate::{
-    utils::safe_truncate,
-    logger::{ log, LogTag },
-    arguments::is_debug_positions_enabled,
-};
+use crate::{ utils::safe_truncate, logger::{ log, LogTag }, arguments::is_debug_positions_enabled };
 use super::types::Position;
 use chrono::{ DateTime, Utc };
 use std::{ collections::HashMap, sync::{ Arc, LazyLock } };
@@ -25,6 +21,12 @@ static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> = LazyL
     RwLock::new(HashMap::new())
 );
 
+// Pending open-swap registry: guards against duplicate opens when the first swap lands on-chain
+// but local flow fails before persisting a position. Keys are token mints; values are expiry times.
+static PENDING_OPEN_SWAPS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> = LazyLock::new(||
+    RwLock::new(HashMap::new())
+);
+
 // Global position creation semaphore to enforce MAX_OPEN_POSITIONS atomically
 static GLOBAL_POSITION_SEMAPHORE: LazyLock<tokio::sync::Semaphore> = LazyLock::new(|| {
     use crate::trader::MAX_OPEN_POSITIONS;
@@ -38,6 +40,9 @@ pub static LAST_OPEN_TIME: LazyLock<RwLock<Option<DateTime<Utc>>>> = LazyLock::n
 
 // Cooldown seconds (small to mitigate duplicate bursts; align with previous backup constant 5s)
 pub const POSITION_OPEN_COOLDOWN_SECS: i64 = 5;
+
+// Default TTL in seconds for pending open swaps. During this window we block new opens for the mint.
+pub const PENDING_OPEN_TTL_SECS: i64 = 120;
 
 // Position lock guard
 #[derive(Debug)]
@@ -153,6 +158,18 @@ pub async fn add_position(position: Position) -> usize {
     }
     MINT_TO_POSITION_INDEX.write().await.insert(position.mint.clone(), index);
 
+    // Clear any pending-open flag for this mint now that the position exists
+    {
+        let mut pending = PENDING_OPEN_SWAPS.write().await;
+        if pending.remove(&position.mint).is_some() && is_debug_positions_enabled() {
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                &format!("🧹 Cleared pending-open after position add for mint: {}", &position.mint)
+            );
+        }
+    }
+
     index
 }
 
@@ -182,6 +199,18 @@ pub async fn remove_position(mint: &str) -> Option<Position> {
             SIG_TO_MINT_INDEX.write().await.remove(sig);
         }
         MINT_TO_POSITION_INDEX.write().await.remove(&removed.mint);
+
+        // Also clear any pending-open state for this mint (safety)
+        {
+            let mut pending = PENDING_OPEN_SWAPS.write().await;
+            if pending.remove(&removed.mint).is_some() && is_debug_positions_enabled() {
+                log(
+                    LogTag::Positions,
+                    "DEBUG",
+                    &format!("🧹 Cleared pending-open on removal for mint: {}", &removed.mint)
+                );
+            }
+        }
 
         // Rebuild position indexes for remaining positions
         rebuild_position_indexes(&positions).await;
@@ -242,15 +271,64 @@ pub async fn get_open_positions_count() -> usize {
 
 /// Check if position is open for given mint
 pub async fn is_open_position(mint: &str) -> bool {
-    let positions = POSITIONS.read().await;
-    positions
-        .iter()
-        .any(|p| {
-            p.mint == mint &&
-                p.position_type == "buy" &&
-                p.exit_time.is_none() &&
-                (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
-        })
+    // Check existing open position first
+    {
+        let positions = POSITIONS.read().await;
+        if
+            positions
+                .iter()
+                .any(|p| {
+                    p.mint == mint &&
+                        p.position_type == "buy" &&
+                        p.exit_time.is_none() &&
+                        (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
+                })
+        {
+            return true;
+        }
+    }
+
+    // Then check pending-open window (lazily expire any stale entries)
+    {
+        let now = Utc::now();
+        let mut to_remove: Vec<String> = Vec::new();
+        let pending_read = PENDING_OPEN_SWAPS.read().await;
+        let is_pending = pending_read.get(mint).map_or(false, |exp| *exp > now);
+        drop(pending_read);
+
+        // Cleanup any expired entries opportunistically
+        {
+            let mut pending_write = PENDING_OPEN_SWAPS.write().await;
+            for (m, exp) in pending_write.iter() {
+                if *exp <= now {
+                    to_remove.push(m.clone());
+                }
+            }
+            for m in to_remove.drain(..) {
+                pending_write.remove(&m);
+                if is_debug_positions_enabled() {
+                    log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!("⏳ Pending-open expired for mint: {}", m)
+                    );
+                }
+            }
+        }
+
+        if is_pending {
+            if is_debug_positions_enabled() {
+                log(
+                    LogTag::Positions,
+                    "DEBUG",
+                    &format!("🚫 is_open_position pending-open lock active for mint: {}", mint)
+                );
+            }
+            return true;
+        }
+    }
+
+    false
 }
 
 /// Get list of open position mints
@@ -281,6 +359,33 @@ pub async fn add_signature_to_index(signature: &str, mint: &str) {
 /// Remove signature from index (used when clearing failed exit for retry)
 pub async fn remove_signature_from_index(signature: &str) {
     SIG_TO_MINT_INDEX.write().await.remove(signature);
+}
+
+/// Mark a mint as having a pending open swap for ttl_secs seconds
+pub async fn set_pending_open(mint: &str, ttl_secs: i64) {
+    let expires_at = Utc::now() + chrono::Duration::seconds(ttl_secs);
+    let mut pending = PENDING_OPEN_SWAPS.write().await;
+    pending.insert(mint.to_string(), expires_at);
+    if is_debug_positions_enabled() {
+        log(
+            LogTag::Positions,
+            "DEBUG",
+            &format!(
+                "⏳ Set pending-open for mint: {} (ttl {}s, until {})",
+                mint,
+                ttl_secs,
+                expires_at
+            )
+        );
+    }
+}
+
+/// Clear a mint's pending open swap state, if present
+pub async fn clear_pending_open(mint: &str) {
+    let mut pending = PENDING_OPEN_SWAPS.write().await;
+    if pending.remove(mint).is_some() && is_debug_positions_enabled() {
+        log(LogTag::Positions, "DEBUG", &format!("🧹 Cleared pending-open for mint: {}", mint));
+    }
 }
 
 /// Reconcile global semaphore capacity with currently open positions at startup.

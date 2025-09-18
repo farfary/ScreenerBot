@@ -102,6 +102,9 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         format!("Failed to get wallet address: {}", e)
     )?;
 
+    // Mark mint as pending-open BEFORE submitting the swap to avoid duplicate attempts
+    super::state::set_pending_open(&token.mint, super::state::PENDING_OPEN_TTL_SECS).await;
+
     let quote = get_best_quote_for_opening(
         SOL_MINT,
         &token.mint,
@@ -161,9 +164,13 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     };
 
     // Save to database and get ID
-    let position_id = save_position(&position).await.map_err(|e|
-        format!("Failed to save position: {}", e)
-    )?;
+    let position_id = match save_position(&position).await {
+        Ok(id) => id,
+        Err(e) => {
+            // Keep pending-open state for TTL so retries are blocked; propagate error
+            return Err(format!("Failed to save position: {}", e));
+        }
+    };
 
     let mut position_with_id = position;
     position_with_id.id = Some(position_id);
@@ -193,6 +200,9 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     );
 
     enqueue_verification(verification_item).await;
+
+    // We successfully created the position; clear pending-open now
+    super::state::clear_pending_open(&token.mint).await;
 
     log(
         LogTag::Positions,
