@@ -1760,10 +1760,18 @@ pub async fn start_security_monitoring(
             stats.interval_started = Some(Utc::now());
             stats.api_status = "UNKNOWN".to_string();
             // Initialize DB snapshot counts at startup
-            if let Ok(with_security) = analyzer.database.count_tokens_with_security() { stats.tokens_with_security = with_security as usize; }
-            if let Ok(without_security) = analyzer.database.count_tokens_without_security() { stats.tokens_without_security = without_security as usize; }
-            if let Ok(safe_count) = analyzer.database.count_safe_tokens() { stats.safe_tokens_count = safe_count as usize; }
-            if let Ok(unsafe_count) = analyzer.database.count_unsafe_tokens() { stats.unsafe_tokens_count = unsafe_count as usize; }
+            if let Ok(with_security) = analyzer.database.count_tokens_with_security() {
+                stats.tokens_with_security = with_security as usize;
+            }
+            if let Ok(without_security) = analyzer.database.count_tokens_without_security() {
+                stats.tokens_without_security = without_security as usize;
+            }
+            if let Ok(safe_count) = analyzer.database.count_safe_tokens() {
+                stats.safe_tokens_count = safe_count as usize;
+            }
+            if let Ok(unsafe_count) = analyzer.database.count_unsafe_tokens() {
+                stats.unsafe_tokens_count = unsafe_count as usize;
+            }
         }
 
         // No startup burst scan; begin steady 1/sec scanning ticks
