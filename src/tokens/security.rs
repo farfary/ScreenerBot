@@ -1292,20 +1292,7 @@ impl SecurityDatabase {
 
     /// Get count of tokens without security info
     pub fn count_tokens_without_security(&self) -> Result<i64, ScreenerBotError> {
-        let conn = self.connection.lock().map_err(|e| {
-            ScreenerBotError::Data(crate::errors::DataError::Generic {
-                message: format!("Failed to lock database: {}", e),
-            })
-        })?;
-
-        // Set a busy timeout to avoid blocking indefinitely
-        conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(|e| {
-            ScreenerBotError::Data(crate::errors::DataError::Generic {
-                message: format!("Failed to set busy timeout: {}", e),
-            })
-        })?;
-
-        // Compute by listing; simplicity over performance
+        // Don't hold the lock while calling get_tokens_without_security to avoid deadlock
         let list = self.get_tokens_without_security()?;
         Ok(list.len() as i64)
     }
