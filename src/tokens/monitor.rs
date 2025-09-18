@@ -276,12 +276,16 @@ impl TokenMonitor {
 
     /// Main monitoring cycle - update random tokens based on priority
     async fn run_monitoring_cycle(&mut self) -> Result<(), String> {
-        // Mark cycle start in stats
+        // Mark cycle start in stats and initialize 30s interval if needed
+        let cycle_started = Utc::now();
         {
             let stats_handle = get_monitor_stats_handle();
             let mut stats = stats_handle.write().await;
             stats.total_cycles += 1;
-            stats.last_cycle_started = Some(Utc::now());
+            stats.last_cycle_started = Some(cycle_started);
+            if stats.interval_started.is_none() {
+                stats.interval_started = Some(cycle_started);
+            }
         }
 
         // Get tokens that need updating (we will print a summary regardless of count)
@@ -325,7 +329,7 @@ impl TokenMonitor {
             }
         }
 
-        // Update stats and print a styled summary similar to discovery
+        // Update stats and aggregate interval (no per-cycle summary)
         {
             let stats_handle = get_monitor_stats_handle();
             let mut stats = stats_handle.write().await;
@@ -335,26 +339,75 @@ impl TokenMonitor {
             stats.last_cycle_batches_failed = batches_failed;
             stats.last_cycle_tiers = selected_tiers.clone();
             stats.total_updated += total_updated as u64;
-            stats.last_cycle_completed = Some(Utc::now());
+            let cycle_completed = Utc::now();
+            stats.last_cycle_completed = Some(cycle_completed);
 
-            // Optionally compute backlog snapshot (only in debug to avoid heavy queries each second)
-            if is_debug_monitor_enabled() {
-                match self.database.get_tokens_needing_update(1).await {
-                    Ok(v) => {
-                        stats.backlog_over_1h = v.len();
-                    }
-                    Err(_) => {}
-                }
-                match self.database.get_tokens_needing_update(2).await {
-                    Ok(v) => {
-                        stats.backlog_over_2h = v.len();
-                    }
-                    Err(_) => {}
-                }
-            }
+            // Aggregate into the current ~30s interval
+            stats.interval_cycles += 1;
+            stats.interval_selected += tokens_to_update.len();
+            stats.interval_updated += total_updated;
+            stats.interval_batches_ok += batches_ok;
+            stats.interval_batches_failed += batches_failed;
+            stats.interval_tiers.high += selected_tiers.high;
+            stats.interval_tiers.mid += selected_tiers.mid;
+            stats.interval_tiers.low += selected_tiers.low;
+            stats.interval_tiers.micro += selected_tiers.micro;
+            let dur_ms = (cycle_completed - cycle_started).num_milliseconds().max(0) as u128;
+            stats.interval_duration_ms_sum += dur_ms;
         }
 
-        print_monitor_cycle_summary().await;
+        // Print one styled summary at the end of each ~30s window and reset interval
+        let should_print = {
+            let stats_handle = get_monitor_stats_handle();
+            let stats = stats_handle.read().await;
+            if let Some(start) = stats.interval_started {
+                (Utc::now() - start).num_seconds() >= 30
+            } else {
+                false
+            }
+        };
+
+        if should_print {
+            // Compute backlog snapshot once per summary to keep overhead low
+            let (over1h, over2h) = if is_debug_monitor_enabled() {
+                let a = self.database
+                    .get_tokens_needing_update(1).await
+                    .ok()
+                    .map(|v| v.len())
+                    .unwrap_or(0);
+                let b = self.database
+                    .get_tokens_needing_update(2).await
+                    .ok()
+                    .map(|v| v.len())
+                    .unwrap_or(0);
+                (a, b)
+            } else {
+                (0, 0)
+            };
+
+            {
+                let stats_handle = get_monitor_stats_handle();
+                let mut stats = stats_handle.write().await;
+                stats.backlog_over_1h = over1h;
+                stats.backlog_over_2h = over2h;
+            }
+
+            print_monitor_interval_summary().await;
+
+            // Reset interval
+            {
+                let stats_handle = get_monitor_stats_handle();
+                let mut stats = stats_handle.write().await;
+                stats.interval_started = Some(Utc::now());
+                stats.interval_cycles = 0;
+                stats.interval_selected = 0;
+                stats.interval_updated = 0;
+                stats.interval_batches_ok = 0;
+                stats.interval_batches_failed = 0;
+                stats.interval_tiers = TierCounts::default();
+                stats.interval_duration_ms_sum = 0;
+            }
+        }
 
         Ok(())
     }
@@ -450,6 +503,16 @@ struct MonitorStats {
     backlog_over_1h: usize,
     backlog_over_2h: usize,
     last_error: Option<String>,
+
+    // 30-second interval aggregation
+    interval_started: Option<DateTime<Utc>>,
+    interval_cycles: u64,
+    interval_selected: usize,
+    interval_updated: usize,
+    interval_batches_ok: usize,
+    interval_batches_failed: usize,
+    interval_tiers: TierCounts,
+    interval_duration_ms_sum: u128,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -487,23 +550,38 @@ pub async fn get_monitor_stats() -> MonitorStats {
     guard.clone()
 }
 
-/// Single comprehensive summary log per monitor cycle
-async fn print_monitor_cycle_summary() {
+/// Single comprehensive summary log per ~30s interval
+async fn print_monitor_interval_summary() {
     let stats = get_monitor_stats().await;
 
-    // Duration if available
-    let duration_ms = if
-        let (Some(start), Some(end)) = (stats.last_cycle_started, stats.last_cycle_completed)
-    {
-        (end - start).num_milliseconds().max(0) as u128
+    // Emoji based on effectiveness
+    let emoji = if stats.interval_updated > 0 { "✅" } else { "⏸️" };
+
+    // Average duration per cycle
+    let avg_ms = if stats.interval_cycles > 0 {
+        stats.interval_duration_ms_sum / (stats.interval_cycles as u128)
     } else {
         0
     };
 
-    // Emoji based on effectiveness
-    let emoji = if stats.last_cycle_updated > 0 { "✅" } else { "⏸️" };
-
-    // Backlog line only when debug (we stored it only in debug cycles)
+    let header_line = "════════════════════════════════════════════════════════════";
+    let title = format!("{} MONITOR SUMMARY (last ~30s)", emoji);
+    let cycles_line = format!("  • Cycles    🔁  {}", stats.interval_cycles);
+    let selected_line = format!(
+        "  • Selected  🧩  {}  (H:{}  |  M:{}  |  L:{}  |  m:{})",
+        stats.interval_selected,
+        stats.interval_tiers.high,
+        stats.interval_tiers.mid,
+        stats.interval_tiers.low,
+        stats.interval_tiers.micro
+    );
+    let updated_line = format!(
+        "  • Updated   🔄  {}  |  Batches ✅/❌  {} / {}",
+        stats.interval_updated,
+        stats.interval_batches_ok,
+        stats.interval_batches_failed
+    );
+    let timing_line = format!("  • Avg cycle 🕒  {} ms", avg_ms);
     let backlog_info = if stats.backlog_over_1h > 0 || stats.backlog_over_2h > 0 {
         format!(
             "\n  • Backlog  ⏱️  >=1h: {}  |  >=2h: {}",
@@ -514,28 +592,11 @@ async fn print_monitor_cycle_summary() {
         String::new()
     };
 
-    let header_line = "════════════════════════════════════════════════════════════";
-    let title = format!("{} MONITOR CYCLE #{}", emoji, stats.total_cycles);
-    let selected_line = format!(
-        "  • Selected  🧩  {}  (H:{}  |  M:{}  |  L:{}  |  m:{})",
-        stats.last_cycle_selected,
-        stats.last_cycle_tiers.high,
-        stats.last_cycle_tiers.mid,
-        stats.last_cycle_tiers.low,
-        stats.last_cycle_tiers.micro
-    );
-    let updated_line = format!(
-        "  • Updated   🔄  {}  |  Batches ✅/❌  {} / {}",
-        stats.last_cycle_updated,
-        stats.last_cycle_batches_ok,
-        stats.last_cycle_batches_failed
-    );
-    let timing_line = format!("  • Duration  🕒  {} ms", duration_ms);
-
     let body = format!(
-        "\n{header}\n{title}\n{header}\n{selected}\n{updated}\n{timing}{backlog}\n{header}",
+        "\n{header}\n{title}\n{header}\n{cycles}\n{selected}\n{updated}\n{timing}{backlog}\n{header}",
         header = header_line,
         title = title,
+        cycles = cycles_line,
         selected = selected_line,
         updated = updated_line,
         timing = timing_line,
