@@ -1801,33 +1801,42 @@ pub async fn start_security_monitoring(
 
                     if let Some(mint) = next_mint {
                         let started = std::time::Instant::now();
-                        match analyzer.analyze_token_security_with_cache(&mint, false).await {
-                            Ok(info) => {
-                                let dur_ms = started.elapsed().as_millis();
-                                let stats_handle = get_security_stats_handle();
-                                let mut stats = stats_handle.write().await;
-                                stats.total_analyzed = stats.total_analyzed.saturating_add(1);
-                                stats.interval_cycles = stats.interval_cycles.saturating_add(1); // now "calls"
-                                stats.interval_analyzed = stats.interval_analyzed.saturating_add(1);
-                                if info.is_safe { stats.total_safe = stats.total_safe.saturating_add(1); stats.interval_safe = stats.interval_safe.saturating_add(1); } else { stats.total_unsafe = stats.total_unsafe.saturating_add(1); stats.interval_unsafe = stats.interval_unsafe.saturating_add(1); }
-                                stats.interval_duration_ms_sum = stats.interval_duration_ms_sum.saturating_add(dur_ms);
+                        
+                        tokio::select! {
+                            result = analyzer.analyze_token_security_with_cache(&mint, false) => {
+                                match result {
+                                    Ok(info) => {
+                                        let dur_ms = started.elapsed().as_millis();
+                                        let stats_handle = get_security_stats_handle();
+                                        let mut stats = stats_handle.write().await;
+                                        stats.total_analyzed = stats.total_analyzed.saturating_add(1);
+                                        stats.interval_cycles = stats.interval_cycles.saturating_add(1); // now "calls"
+                                        stats.interval_analyzed = stats.interval_analyzed.saturating_add(1);
+                                        if info.is_safe { stats.total_safe = stats.total_safe.saturating_add(1); stats.interval_safe = stats.interval_safe.saturating_add(1); } else { stats.total_unsafe = stats.total_unsafe.saturating_add(1); stats.interval_unsafe = stats.interval_unsafe.saturating_add(1); }
+                                        stats.interval_duration_ms_sum = stats.interval_duration_ms_sum.saturating_add(dur_ms);
 
-                                log(LogTag::Security, "PROCESS_SUCCESS", &format!("✅ {} - {}", mint, info.summary()));
+                                        log(LogTag::Security, "PROCESS_SUCCESS", &format!("✅ {} - {}", mint, info.summary()));
 
-                                // Refresh DB counts every ~30 calls (about 30s)
-                                if stats.interval_cycles % 30 == 0 {
-                                    if let Ok(with_security) = analyzer.database.count_tokens_with_security() { stats.tokens_with_security = with_security as usize; }
-                                    if let Ok(without_security) = analyzer.database.count_tokens_without_security() { stats.tokens_without_security = without_security as usize; }
-                                    if let Ok(safe_count) = analyzer.database.count_safe_tokens() { stats.safe_tokens_count = safe_count as usize; }
-                                    if let Ok(unsafe_count) = analyzer.database.count_unsafe_tokens() { stats.unsafe_tokens_count = unsafe_count as usize; }
+                                        // Refresh DB counts every ~30 calls (about 30s)
+                                        if stats.interval_cycles % 30 == 0 {
+                                            if let Ok(with_security) = analyzer.database.count_tokens_with_security() { stats.tokens_with_security = with_security as usize; }
+                                            if let Ok(without_security) = analyzer.database.count_tokens_without_security() { stats.tokens_without_security = without_security as usize; }
+                                            if let Ok(safe_count) = analyzer.database.count_safe_tokens() { stats.safe_tokens_count = safe_count as usize; }
+                                            if let Ok(unsafe_count) = analyzer.database.count_unsafe_tokens() { stats.unsafe_tokens_count = unsafe_count as usize; }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        let stats_handle = get_security_stats_handle();
+                                        let mut stats = stats_handle.write().await;
+                                        stats.interval_errors = stats.interval_errors.saturating_add(1);
+                                        stats.last_error = Some(format!("{} - Error: {}", mint, e));
+                                        log(LogTag::Security, "PROCESS_FAILED", &format!("❌ {} - Error: {}", mint, e));
+                                    }
                                 }
                             }
-                            Err(e) => {
-                                let stats_handle = get_security_stats_handle();
-                                let mut stats = stats_handle.write().await;
-                                stats.interval_errors = stats.interval_errors.saturating_add(1);
-                                stats.last_error = Some(format!("{} - Error: {}", mint, e));
-                                log(LogTag::Security, "PROCESS_FAILED", &format!("❌ {} - Error: {}", mint, e));
+                            _ = shutdown.notified() => {
+                                log(LogTag::Security, "MONITOR_STOP", "Security monitoring interrupted during analysis - shutting down immediately");
+                                break;
                             }
                         }
                     }
