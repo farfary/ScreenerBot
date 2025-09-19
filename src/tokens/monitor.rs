@@ -324,38 +324,65 @@ impl TokenMonitor {
                 }
 
                 // Delete tokens that were not returned by the API (no longer exist)
+                // SAFETY: Filter out tokens with open positions before deletion
                 let mut deleted_count = 0;
                 if !missing_mints.is_empty() {
-                    if is_debug_monitor_enabled() {
+                    // Check which tokens are safe to delete (no open positions)
+                    let mut safe_to_delete = Vec::new();
+                    let mut protected_tokens = Vec::new();
+
+                    for mint in &missing_mints {
+                        if crate::positions::is_open_position(mint).await {
+                            protected_tokens.push(mint.clone());
+                        } else {
+                            safe_to_delete.push(mint.clone());
+                        }
+                    }
+
+                    if !protected_tokens.is_empty() {
                         log(
                             LogTag::Monitor,
-                            "CLEANUP",
+                            "SAFETY_PROTECTION",
                             &format!(
-                                "Removing {} stale tokens that no longer exist on DexScreener: {:?}",
-                                missing_mints.len(),
-                                missing_mints
+                                "🛡️  Protected {} tokens from deletion due to open positions: {:?}",
+                                protected_tokens.len(),
+                                protected_tokens
                             )
                         );
                     }
 
-                    match self.database.delete_tokens(&missing_mints).await {
-                        Ok(actual_deleted) => {
-                            deleted_count = actual_deleted;
-                            if is_debug_monitor_enabled() {
-                                log(
-                                    LogTag::Monitor,
-                                    "CLEANUP_SUCCESS",
-                                    &format!("Deleted {} stale tokens from database", deleted_count)
-                                );
-                            }
-                        }
-                        Err(e) => {
+                    if !safe_to_delete.is_empty() {
+                        if is_debug_monitor_enabled() {
                             log(
                                 LogTag::Monitor,
-                                "ERROR",
-                                &format!("Failed to delete stale tokens: {}", e)
+                                "CLEANUP",
+                                &format!(
+                                    "Removing {} stale tokens that no longer exist on DexScreener: {:?}",
+                                    safe_to_delete.len(),
+                                    safe_to_delete
+                                )
                             );
-                            // Don't fail the entire operation if cleanup fails
+                        }
+
+                        match self.database.delete_tokens(&safe_to_delete).await {
+                            Ok(actual_deleted) => {
+                                deleted_count = actual_deleted;
+                                if is_debug_monitor_enabled() {
+                                    log(
+                                        LogTag::Monitor,
+                                        "CLEANUP_SUCCESS",
+                                        &format!("Deleted {} stale tokens from database", deleted_count)
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                log(
+                                    LogTag::Monitor,
+                                    "ERROR",
+                                    &format!("Failed to delete stale tokens: {}", e)
+                                );
+                                // Don't fail the entire operation if cleanup fails
+                            }
                         }
                     }
                 }

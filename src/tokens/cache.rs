@@ -165,9 +165,27 @@ impl TokenDatabase {
 
     /// Delete tokens from database by mint addresses
     /// This also deletes related records to handle foreign key constraints
+    /// SAFETY: Prevents deletion of tokens with open positions
     pub async fn delete_tokens(&self, mints: &[String]) -> Result<usize, String> {
         if mints.is_empty() {
             return Ok(0);
+        }
+
+        // CRITICAL SAFETY CHECK: Verify no open positions for these tokens
+        for mint in mints {
+            if crate::positions::is_open_position(mint).await {
+                return Err(
+                    format!("SAFETY: Cannot delete token {} - has open position. This prevents data corruption.", mint)
+                );
+            }
+        }
+
+        if is_debug_monitor_enabled() {
+            log(
+                LogTag::Monitor,
+                "SAFETY_CHECK",
+                &format!("✅ Verified {} tokens safe to delete (no open positions)", mints.len())
+            );
         }
 
         let placeholders = mints
