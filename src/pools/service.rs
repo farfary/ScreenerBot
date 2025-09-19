@@ -6,7 +6,7 @@
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_pool_service_enabled;
 use crate::rpc::{ get_rpc_client, RpcClient };
-use super::{ PoolError, cache };
+use super::{ PoolError, cache, db };
 use super::discovery::PoolDiscovery;
 use super::analyzer::PoolAnalyzer;
 use super::fetcher::AccountFetcher;
@@ -68,7 +68,16 @@ pub async fn start_pool_service() -> Result<(), PoolError> {
 
     log(LogTag::PoolService, "INFO", "Starting pool service...");
 
-    // Initialize cache system first
+    // Initialize database first
+    if let Err(e) = db::initialize_database().await {
+        log(LogTag::PoolService, "ERROR", &format!("Failed to initialize database: {}", e));
+        SERVICE_RUNNING.store(false, Ordering::Relaxed);
+        return Err(
+            PoolError::InitializationFailed(format!("Database initialization failed: {}", e))
+        );
+    }
+
+    // Initialize cache system after database
     cache::initialize_cache().await;
 
     // Create shutdown notification
@@ -292,6 +301,12 @@ async fn start_background_tasks(shutdown: Arc<Notify>) {
         run_service_health_monitor(shutdown_monitor).await;
     });
 
+    // Start database cleanup task
+    let shutdown_cleanup = shutdown.clone();
+    tokio::spawn(async move {
+        run_database_cleanup_task(shutdown_cleanup).await;
+    });
+
     if is_debug_pool_service_enabled() {
         log(LogTag::PoolService, "DEBUG", "Background tasks started");
     }
@@ -402,4 +417,32 @@ async fn emit_service_health_stats() {
             cache_stats.history_entries
         )
     );
+}
+
+/// Database cleanup task - runs periodically to clean old entries
+async fn run_database_cleanup_task(shutdown: Arc<Notify>) {
+    if is_debug_pool_service_enabled() {
+        log(LogTag::PoolService, "INFO", "Starting database cleanup task");
+    }
+
+    // Run cleanup every 6 hours
+    let mut interval = tokio::time::interval(Duration::from_secs(6 * 60 * 60));
+
+    loop {
+        tokio::select! {
+            _ = shutdown.notified() => {
+                if is_debug_pool_service_enabled() {
+                    log(LogTag::PoolService, "INFO", "Database cleanup task shutting down");
+                }
+                break;
+            }
+            _ = interval.tick() => {
+                if let Err(e) = db::cleanup_old_entries().await {
+                    log(LogTag::PoolService, "ERROR", &format!("Database cleanup failed: {}", e));
+                } else if is_debug_pool_service_enabled() {
+                    log(LogTag::PoolService, "INFO", "Database cleanup completed successfully");
+                }
+            }
+        }
+    }
 }

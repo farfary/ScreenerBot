@@ -8,6 +8,7 @@ use crate::global::is_debug_pool_service_enabled;
 use crate::arguments::is_debug_pool_cache_enabled;
 use crate::logger::{ log, LogTag };
 use super::types::{ PriceResult, PriceHistory, PRICE_CACHE_TTL_SECONDS, PRICE_HISTORY_MAX_ENTRIES };
+use super::db; // Database module for persistence
 use dashmap::DashMap;
 use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
@@ -31,6 +32,9 @@ pub async fn initialize_cache() {
         log(LogTag::PoolCache, "DEBUG", "Initializing price cache system");
     }
 
+    // Load historical data from database into cache
+    load_historical_data_into_cache().await;
+
     // Start cleanup task
     start_cache_cleanup_task().await;
 
@@ -50,6 +54,20 @@ pub fn update_price(price: PriceResult) {
 
     // Update cache
     PRICE_CACHE.insert(mint.clone(), price.clone());
+
+    // Queue for database storage (async, non-blocking)
+    let price_for_db = price.clone();
+    tokio::spawn(async move {
+        if let Err(e) = db::queue_price_for_storage(price_for_db).await {
+            if is_debug_pool_cache_enabled() {
+                log(
+                    LogTag::PoolCache,
+                    "ERROR",
+                    &format!("Failed to queue price for storage: {}", e)
+                );
+            }
+        }
+    });
 
     // Update history
     if let Ok(history_map) = PRICE_HISTORY.read() {
@@ -156,5 +174,68 @@ fn cleanup_stale_entries() {
 
     if removed_count > 0 && is_debug_pool_cache_enabled() {
         log(LogTag::PoolCache, "DEBUG", &format!("Cleaned {} stale price entries", removed_count));
+    }
+}
+
+/// Load historical data from database into in-memory cache
+async fn load_historical_data_into_cache() {
+    if is_debug_pool_cache_enabled() {
+        log(LogTag::PoolCache, "DEBUG", "Loading historical data from database into cache");
+    }
+
+    // Get list of all tokens that have available prices in cache (this will be empty on first run)
+    // Instead, we'll load based on tokens that exist in the database
+    // For now, we'll load on-demand when prices are requested
+
+    if is_debug_pool_cache_enabled() {
+        log(LogTag::PoolCache, "DEBUG", "Historical data loading setup completed");
+    }
+}
+
+/// Load historical data for a specific token from database
+pub async fn load_token_history_from_database(mint: &str) -> Result<(), String> {
+    match db::load_historical_data_for_token(mint).await {
+        Ok(historical_prices) => {
+            if !historical_prices.is_empty() {
+                // Create or update history entry
+                if let Ok(mut history_map) = PRICE_HISTORY.write() {
+                    let mut new_history = PriceHistory::new(
+                        mint.to_string(),
+                        PRICE_HISTORY_MAX_ENTRIES
+                    );
+                    let prices_count = historical_prices.len();
+
+                    // Add all historical prices
+                    for price in historical_prices {
+                        new_history.add_price(price);
+                    }
+
+                    history_map.insert(mint.to_string(), new_history);
+
+                    if is_debug_pool_cache_enabled() {
+                        log(
+                            LogTag::PoolCache,
+                            "DEBUG",
+                            &format!(
+                                "Loaded {} historical prices for token: {}",
+                                prices_count,
+                                mint
+                            )
+                        );
+                    }
+                }
+            }
+            Ok(())
+        }
+        Err(e) => {
+            if is_debug_pool_cache_enabled() {
+                log(
+                    LogTag::PoolCache,
+                    "WARN",
+                    &format!("Failed to load historical data for {}: {}", mint, e)
+                );
+            }
+            Err(e)
+        }
     }
 }

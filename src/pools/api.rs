@@ -6,6 +6,7 @@
 
 use super::cache;
 use super::service;
+use super::db;
 use super::types::{ PriceResult, PoolError };
 
 /// Get current price for a token
@@ -84,4 +85,48 @@ pub fn has_current_price(mint: &str) -> bool {
 /// * `CacheStats` - Current cache statistics
 pub fn get_cache_stats() -> cache::CacheStats {
     cache::get_cache_stats()
+}
+
+/// Get extended price history from database
+///
+/// Returns price history for a token from the persistent database storage.
+/// This can return more historical data than the in-memory cache.
+///
+/// # Arguments
+/// * `mint` - Token mint address as string
+/// * `limit` - Optional maximum number of entries to return
+/// * `since_timestamp` - Optional Unix timestamp to filter entries newer than this time
+///
+/// # Returns
+/// * `Ok(Vec<PriceResult>)` - Extended price history from database
+/// * `Err(String)` - Database error message
+pub async fn get_extended_price_history(
+    mint: &str,
+    limit: Option<usize>,
+    since_timestamp: Option<i64>
+) -> Result<Vec<PriceResult>, String> {
+    if !service::is_pool_service_running() {
+        return Err("Pool service not running".to_string());
+    }
+
+    db::get_extended_price_history(mint, limit, since_timestamp).await
+}
+
+/// Load historical data for a token from database into cache
+///
+/// This function loads historical price data from the database into the
+/// in-memory cache for faster subsequent access.
+///
+/// # Arguments
+/// * `mint` - Token mint address as string
+///
+/// # Returns
+/// * `Ok(())` - Successfully loaded historical data
+/// * `Err(String)` - Error loading data
+pub async fn load_token_history_into_cache(mint: &str) -> Result<(), String> {
+    if !service::is_pool_service_running() {
+        return Err("Pool service not running".to_string());
+    }
+
+    cache::load_token_history_from_database(mint).await
 }

@@ -16,10 +16,18 @@ mod service;
 pub mod types; // Make types public
 mod cache;
 mod api;
+mod db; // Database module for price history persistence
 pub mod utils; // Utility functions for SOL detection and vault pairing
 
 // Re-export only the public API
-pub use api::{ get_pool_price, get_available_tokens, get_price_history, get_cache_stats };
+pub use api::{
+    get_pool_price,
+    get_available_tokens,
+    get_price_history,
+    get_cache_stats,
+    get_extended_price_history,
+    load_token_history_into_cache,
+};
 pub use service::{
     start_pool_service,
     stop_pool_service,
