@@ -682,13 +682,39 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         confidence += activity_score * 12.0;
         confidence = confidence.clamp(0.0, 95.0);
 
+        // Calculate drop percentage for learner (use simple recent high approach)
+        let trend_drop_percent = if converted_history.len() >= 10 {
+            let recent_prices: Vec<f64> = converted_history
+                .iter()
+                .rev()
+                .take(60) // Look back up to 60 price points
+                .map(|(_, p)| *p)
+                .collect();
+
+            if
+                let Some(&recent_high) = recent_prices
+                    .iter()
+                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+            {
+                if recent_high > current_price && recent_high > 0.0 {
+                    ((recent_high - current_price) / recent_high) * 100.0
+                } else {
+                    0.0
+                }
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+
         // Apply learner confidence boost for trend entries
         let learning = get_learning_integration();
         let original_confidence = confidence;
         let adjustment = learning.get_entry_confidence_adjustment(
             &price_info.mint,
             current_price,
-            0.0, // drop_percent not directly available in trend context
+            trend_drop_percent, // Use calculated drop instead of 0.0
             0.0 // ath_proximity not available in this context
         ).await;
         confidence = (confidence * adjustment).clamp(0.0, 95.0);

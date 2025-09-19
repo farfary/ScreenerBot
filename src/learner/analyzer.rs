@@ -456,6 +456,82 @@ impl PatternAnalyzer {
         changes.iter().sum::<f64>() / (changes.len() as f64)
     }
 
+    /// Calculate multi-timeframe drops from pools price history
+    /// Returns (drop_10s, drop_30s, drop_60s, drop_120s, drop_320s) in percentages
+    fn calculate_multi_timeframe_drops(
+        &self,
+        price_history: &[crate::pools::PriceResult],
+        current_price: f64
+    ) -> (f64, f64, f64, f64, f64) {
+        use chrono::Utc;
+
+        let now = Utc::now();
+        let windows_sec = [10, 30, 60, 120, 320];
+        let mut drops = [0.0; 5];
+
+        for (i, &window_sec) in windows_sec.iter().enumerate() {
+            // Find highest price in this time window
+            let mut window_high = current_price;
+
+            for price_result in price_history.iter().rev() {
+                let price_time = price_result.get_utc_timestamp();
+                let age_seconds = (now - price_time).num_seconds();
+
+                if age_seconds <= (window_sec as i64) {
+                    if price_result.price_sol > window_high {
+                        window_high = price_result.price_sol;
+                    }
+                } else {
+                    break; // Prices are ordered, so we can stop here
+                }
+            }
+
+            // Calculate drop percentage
+            if window_high > 0.0 && window_high >= current_price {
+                drops[i] = ((window_high - current_price) / window_high) * 100.0;
+            }
+        }
+
+        (drops[0], drops[1], drops[2], drops[3], drops[4])
+    }
+
+    /// Calculate ATH distances from pools price history
+    /// Returns (ath_15m, ath_1h, ath_6h) distances as percentages
+    fn calculate_ath_distances(
+        &self,
+        price_history: &[crate::pools::PriceResult],
+        current_price: f64
+    ) -> (f64, f64, f64) {
+        use chrono::Utc;
+
+        let now = Utc::now();
+        let windows_sec = [15 * 60, 60 * 60, 6 * 60 * 60]; // 15m, 1h, 6h
+        let mut ath_distances = [0.0; 3];
+
+        for (i, &window_sec) in windows_sec.iter().enumerate() {
+            let mut window_high = current_price;
+
+            for price_result in price_history.iter().rev() {
+                let price_time = price_result.get_utc_timestamp();
+                let age_seconds = (now - price_time).num_seconds();
+
+                if age_seconds <= (window_sec as i64) {
+                    if price_result.price_sol > window_high {
+                        window_high = price_result.price_sol;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            // Calculate distance from ATH as percentage
+            if window_high > 0.0 && window_high >= current_price {
+                ath_distances[i] = ((window_high - current_price) / window_high) * 100.0;
+            }
+        }
+
+        (ath_distances[0], ath_distances[1], ath_distances[2])
+    }
     /// Find similar tokens based on trading patterns
     pub async fn find_similar_tokens(
         &self,
@@ -641,6 +717,16 @@ impl PatternAnalyzer {
         // Get real price history from pools system
         let price_history = get_price_history(mint);
 
+        // Calculate multi-timeframe drops from real pools data
+        let (drop_10s_pct, drop_30s_pct, drop_60s_pct, drop_120s_pct, drop_320s_pct) =
+            self.calculate_multi_timeframe_drops(&price_history, current_price);
+
+        // Calculate real ATH distances from pools data
+        let (ath_dist_15m_pct, ath_dist_1h_pct, ath_dist_6h_pct) = self.calculate_ath_distances(
+            &price_history,
+            current_price
+        );
+
         // Calculate actual market context features from real data
         let (liquidity_tier, market_cap_tier, tx_activity_score) = if
             let Some(latest_price) = price_history.last()
@@ -704,14 +790,23 @@ impl PatternAnalyzer {
         let features = FeatureVector {
             trade_id: 0, // Not associated with a trade yet
 
-            // Drop pattern features (normalize drop_percent)
-            drop_10s_norm: (drop_percent / 100.0).min(1.0),
-            drop_30s_norm: (drop_percent / 100.0).min(1.0),
-            drop_60s_norm: (drop_percent / 100.0).min(1.0),
-            drop_120s_norm: (drop_percent / 100.0).min(1.0),
-            drop_320s_norm: (drop_percent / 100.0).min(1.0),
-            drop_velocity_30s: drop_percent / 30.0,
-            drop_acceleration: 0.0, // Unknown at entry
+            // Real drop pattern features from pools price history
+            drop_10s_norm: (drop_10s_pct / 100.0).min(1.0),
+            drop_30s_norm: (drop_30s_pct / 100.0).min(1.0),
+            drop_60s_norm: (drop_60s_pct / 100.0).min(1.0),
+            drop_120s_norm: (drop_120s_pct / 100.0).min(1.0),
+            drop_320s_norm: (drop_320s_pct / 100.0).min(1.0),
+            drop_velocity_30s: if drop_30s_pct > 0.0 {
+                drop_30s_pct / 30.0
+            } else {
+                0.0
+            },
+            drop_acceleration: {
+                // Calculate acceleration from drop differences
+                let vel_30s = drop_30s_pct / 0.5; // 30s velocity per minute
+                let vel_60s = drop_60s_pct / 1.0; // 60s velocity per minute
+                ((vel_30s - vel_60s) / 50.0).clamp(-1.0, 1.0)
+            },
 
             // Real market context data from pools
             liquidity_tier,
@@ -720,11 +815,20 @@ impl PatternAnalyzer {
             holder_count_log,
             market_cap_tier,
 
-            // ATH proximity
-            ath_prox_15m: ath_proximity,
-            ath_prox_1h: ath_proximity,
-            ath_prox_6h: ath_proximity,
-            ath_risk_score: 1.0 - ath_proximity,
+            // Real ATH proximity from pools data
+            ath_prox_15m: 1.0 - (ath_dist_15m_pct / 100.0).min(1.0),
+            ath_prox_1h: 1.0 - (ath_dist_1h_pct / 100.0).min(1.0),
+            ath_prox_6h: 1.0 - (ath_dist_6h_pct / 100.0).min(1.0),
+            ath_risk_score: {
+                let proximities = [
+                    1.0 - (ath_dist_15m_pct / 100.0).min(1.0),
+                    1.0 - (ath_dist_1h_pct / 100.0).min(1.0),
+                    1.0 - (ath_dist_6h_pct / 100.0).min(1.0),
+                ];
+                let max_proximity = proximities.iter().cloned().fold(0.0f64, f64::max);
+                let avg_proximity = proximities.iter().sum::<f64>() / 3.0;
+                (max_proximity * 0.7 + avg_proximity * 0.3).powf(2.0)
+            },
 
             // Temporal features
             hour_sin: ((hour * 2.0 * PI) / 24.0).sin(),
@@ -752,12 +856,18 @@ impl PatternAnalyzer {
                 crate::logger::LogTag::Learning,
                 "DEBUG",
                 &format!(
-                    "Real features for {}: liquidity_tier={:.3}, tx_activity={:.3}, security={:.3}, market_cap={:.3}",
+                    "Real features for {}: drops(10s:{:.1}% 30s:{:.1}% 60s:{:.1}% 120s:{:.1}% 320s:{:.1}%) ath_dist(15m:{:.1}% 1h:{:.1}% 6h:{:.1}%) liquidity:{:.3} tx_activity:{:.3}",
                     mint,
+                    drop_10s_pct,
+                    drop_30s_pct,
+                    drop_60s_pct,
+                    drop_120s_pct,
+                    drop_320s_pct,
+                    ath_dist_15m_pct,
+                    ath_dist_1h_pct,
+                    ath_dist_6h_pct,
                     liquidity_tier,
-                    tx_activity_score,
-                    security_score_norm,
-                    market_cap_tier
+                    tx_activity_score
                 )
             );
         }

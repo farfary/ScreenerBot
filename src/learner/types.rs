@@ -131,38 +131,117 @@ impl TradeRecord {
             (None, None, None, None, None, None)
         };
 
-        // Calculate drop percentages from price change data in opening snapshot
-        let (drop_10s_pct, drop_30s_pct, drop_60s_pct, drop_120s_pct, drop_320s_pct) = if
-            let Some(ref snapshot) = opening_snapshot
-        {
-            // Use price change data as proxy for drops (negative values indicate drops)
-            let m5_drop = snapshot.price_change_m5.map(|pc| if pc < 0.0 { -pc } else { 0.0 });
-            let h1_drop = snapshot.price_change_h1.map(|pc| if pc < 0.0 { -pc } else { 0.0 });
+        // Calculate drop percentages using real pools price history if available
+        let (drop_10s_pct, drop_30s_pct, drop_60s_pct, drop_120s_pct, drop_320s_pct) = {
+            // Try to get pools price history for this token around entry time
+            let price_history = crate::pools::get_price_history(&position.mint);
 
-            // Approximate different timeframes from available data
-            (
-                m5_drop.map(|d| d * 0.1), // 10s approximation from 5m
-                m5_drop.map(|d| d * 0.2), // 30s approximation from 5m
-                m5_drop.map(|d| d * 0.5), // 60s approximation from 5m
-                m5_drop.map(|d| d * 0.8), // 120s approximation from 5m
-                m5_drop, // 5m drop for 320s
-            )
-        } else {
-            (None, None, None, None, None)
+            if !price_history.is_empty() {
+                // Calculate drops using same logic as learner analyzer
+                use chrono::Utc;
+
+                let entry_time = position.entry_time;
+                let entry_price = position.entry_price;
+                let windows_sec = [10, 30, 60, 120, 320];
+                let mut drops = [0.0; 5];
+
+                for (i, &window_sec) in windows_sec.iter().enumerate() {
+                    let mut window_high = entry_price;
+
+                    // Find highest price in the window before entry
+                    for price_result in price_history.iter().rev() {
+                        let price_time = price_result.get_utc_timestamp();
+                        let time_diff = (entry_time - price_time).num_seconds();
+
+                        // Only consider prices within the window and before entry
+                        if time_diff >= 0 && time_diff <= (window_sec as i64) {
+                            if price_result.price_sol > window_high {
+                                window_high = price_result.price_sol;
+                            }
+                        }
+                    }
+
+                    // Calculate drop percentage
+                    if window_high > 0.0 && window_high >= entry_price {
+                        drops[i] = ((window_high - entry_price) / window_high) * 100.0;
+                    }
+                }
+
+                (Some(drops[0]), Some(drops[1]), Some(drops[2]), Some(drops[3]), Some(drops[4]))
+            } else {
+                // Fallback to approximation from snapshot if pools data unavailable
+                if let Some(ref snapshot) = opening_snapshot {
+                    let m5_drop = snapshot.price_change_m5.map(|pc| (
+                        if pc < 0.0 {
+                            -pc
+                        } else {
+                            0.0
+                        }
+                    ));
+                    let h1_drop = snapshot.price_change_h1.map(|pc| (
+                        if pc < 0.0 {
+                            -pc
+                        } else {
+                            0.0
+                        }
+                    ));
+
+                    // Approximate different timeframes from available data
+                    (
+                        m5_drop.map(|d| d * 0.1), // 10s approximation from 5m
+                        m5_drop.map(|d| d * 0.2), // 30s approximation from 5m
+                        m5_drop.map(|d| d * 0.5), // 60s approximation from 5m
+                        m5_drop.map(|d| d * 0.8), // 120s approximation from 5m
+                        m5_drop, // 5m drop for 320s
+                    )
+                } else {
+                    (None, None, None, None, None)
+                }
+            }
         };
 
-        // Calculate ATH distances - these would need OHLCV data which isn't in snapshots
-        // For now, use price change data as rough approximation
-        let (ath_dist_15m_pct, ath_dist_1h_pct, ath_dist_6h_pct) = if
-            let Some(ref snapshot) = opening_snapshot
-        {
-            (
-                snapshot.price_change_m5.map(|pc| if pc < 0.0 { -pc } else { 0.0 }),
-                snapshot.price_change_h1.map(|pc| if pc < 0.0 { -pc } else { 0.0 }),
-                snapshot.price_change_h6.map(|pc| if pc < 0.0 { -pc } else { 0.0 }),
-            )
-        } else {
-            (None, None, None)
+        // Calculate ATH distances using real pools price history if available
+        let (ath_dist_15m_pct, ath_dist_1h_pct, ath_dist_6h_pct) = {
+            let price_history = crate::pools::get_price_history(&position.mint);
+
+            if !price_history.is_empty() {
+                let entry_time = position.entry_time;
+                let entry_price = position.entry_price;
+                let windows_sec = [15 * 60, 60 * 60, 6 * 60 * 60]; // 15m, 1h, 6h
+                let mut ath_distances = [0.0; 3];
+
+                for (i, &window_sec) in windows_sec.iter().enumerate() {
+                    let mut window_high = entry_price;
+
+                    for price_result in price_history.iter().rev() {
+                        let price_time = price_result.get_utc_timestamp();
+                        let time_diff = (entry_time - price_time).num_seconds();
+
+                        if time_diff >= 0 && time_diff <= (window_sec as i64) {
+                            if price_result.price_sol > window_high {
+                                window_high = price_result.price_sol;
+                            }
+                        }
+                    }
+
+                    if window_high > 0.0 && window_high >= entry_price {
+                        ath_distances[i] = ((window_high - entry_price) / window_high) * 100.0;
+                    }
+                }
+
+                (Some(ath_distances[0]), Some(ath_distances[1]), Some(ath_distances[2]))
+            } else {
+                // Fallback to approximation from snapshot
+                if let Some(ref snapshot) = opening_snapshot {
+                    (
+                        snapshot.price_change_m5.map(|pc| if pc < 0.0 { -pc } else { 0.0 }),
+                        snapshot.price_change_h1.map(|pc| if pc < 0.0 { -pc } else { 0.0 }),
+                        snapshot.price_change_h6.map(|pc| if pc < 0.0 { -pc } else { 0.0 }),
+                    )
+                } else {
+                    (None, None, None)
+                }
+            }
         };
 
         // Calculate peak and drawdown timing - these would need position tracking data
