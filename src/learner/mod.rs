@@ -48,7 +48,7 @@ use integration::LearningIntegration;
 // =============================================================================
 
 /// Minimum trades required before enabling model-based decisions
-const MIN_TRADES_FOR_MODEL: usize = 30;
+const MIN_TRADES_FOR_MODEL: usize = 20;
 
 /// Feature building interval (seconds)
 const FEATURE_BUILD_INTERVAL_SEC: u64 = 600; // 10 minutes
