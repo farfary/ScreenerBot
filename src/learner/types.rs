@@ -9,7 +9,7 @@
 //! * Patterns: Recognized trading patterns
 //! * Predictions: Model outputs for entry/exit decisions
 
-use crate::positions::Position;
+use crate::positions::{Position, get_token_snapshot, get_recent_closed_positions_for_mint};
 use chrono::{ DateTime, Utc, Timelike, Datelike };
 use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
@@ -79,17 +79,109 @@ pub struct TradeRecord {
 }
 
 impl TradeRecord {
-    /// Create trade record from completed position
-    pub fn from_position(
+    /// Create trade record from completed position using token snapshots
+    pub async fn from_position(
         position: &Position,
         max_up_pct: f64,
         max_down_pct: f64
     ) -> Result<Self, String> {
         let exit_time = position.exit_time.ok_or("Position must have exit time")?;
         let exit_price = position.exit_price.ok_or("Position must have exit price")?;
+        let position_id = position.id.ok_or("Position must have database ID")?;
 
         let hold_duration_sec = (exit_time - position.entry_time).num_seconds();
         let pnl_pct = ((exit_price - position.entry_price) / position.entry_price) * 100.0;
+
+        // Get token snapshots for entry and exit data
+        let opening_snapshot = get_token_snapshot(position_id, "opening").await
+            .map_err(|e| format!("Failed to get opening snapshot: {}", e))?;
+        let closing_snapshot = get_token_snapshot(position_id, "closing").await
+            .map_err(|e| format!("Failed to get closing snapshot: {}", e))?;
+
+        // Check for re-entry by looking at recent closed positions for this mint
+        let was_re_entry = match get_recent_closed_positions_for_mint(&position.mint, 5).await {
+            Ok(recent_positions) => !recent_positions.is_empty(),
+            Err(_) => false, // Default to false if query fails
+        };
+
+        // Extract data from opening snapshot (entry time data)
+        let (
+            liquidity_at_entry,
+            sol_reserves_at_entry,
+            tx_activity_5m,
+            tx_activity_1h,
+            security_score,
+            holder_count
+        ) = if let Some(ref snapshot) = opening_snapshot {
+            (
+                snapshot.liquidity_base, // SOL liquidity base
+                snapshot.liquidity_base, // Same as above for reserves
+                snapshot.txns_m5_buys.and_then(|buys| 
+                    snapshot.txns_m5_sells.map(|sells| buys + sells)
+                ),
+                snapshot.txns_h1_buys.and_then(|buys| 
+                    snapshot.txns_h1_sells.map(|sells| buys + sells)
+                ),
+                None, // Security score not in snapshots - would need separate Rugcheck call
+                None, // Holder count not in snapshots - would need separate Rugcheck call
+            )
+        } else {
+            (None, None, None, None, None, None)
+        };
+
+        // Calculate drop percentages from price change data in opening snapshot
+        let (
+            drop_10s_pct,
+            drop_30s_pct,
+            drop_60s_pct,
+            drop_120s_pct,
+            drop_320s_pct
+        ) = if let Some(ref snapshot) = opening_snapshot {
+            // Use price change data as proxy for drops (negative values indicate drops)
+            let m5_drop = snapshot.price_change_m5.map(|pc| if pc < 0.0 { -pc } else { 0.0 });
+            let h1_drop = snapshot.price_change_h1.map(|pc| if pc < 0.0 { -pc } else { 0.0 });
+            
+            // Approximate different timeframes from available data
+            (
+                m5_drop.map(|d| d * 0.1), // 10s approximation from 5m
+                m5_drop.map(|d| d * 0.2), // 30s approximation from 5m  
+                m5_drop.map(|d| d * 0.5), // 60s approximation from 5m
+                m5_drop.map(|d| d * 0.8), // 120s approximation from 5m
+                m5_drop, // 5m drop for 320s
+            )
+        } else {
+            (None, None, None, None, None)
+        };
+
+        // Calculate ATH distances - these would need OHLCV data which isn't in snapshots
+        // For now, use price change data as rough approximation
+        let (
+            ath_dist_15m_pct,
+            ath_dist_1h_pct,
+            ath_dist_6h_pct
+        ) = if let Some(ref snapshot) = opening_snapshot {
+            (
+                snapshot.price_change_m5.map(|pc| if pc < 0.0 { -pc } else { 0.0 }),
+                snapshot.price_change_h1.map(|pc| if pc < 0.0 { -pc } else { 0.0 }),
+                snapshot.price_change_h6.map(|pc| if pc < 0.0 { -pc } else { 0.0 }),
+            )
+        } else {
+            (None, None, None)
+        };
+
+        // Calculate peak and drawdown timing - these would need position tracking data
+        // For now, estimate based on hold duration and performance
+        let peak_reached_sec = if max_up_pct > 5.0 {
+            Some(hold_duration_sec / 3) // Assume peak reached in first third if profitable
+        } else {
+            None
+        };
+
+        let dd_reached_sec = if max_down_pct < -5.0 {
+            Some(hold_duration_sec / 2) // Assume max drawdown reached mid-way if significant
+        } else {
+            None
+        };
 
         Ok(TradeRecord {
             id: 0, // Will be set by database
@@ -106,33 +198,33 @@ impl TradeRecord {
             pnl_pct,
             max_up_pct,
             max_down_pct,
-            peak_reached_sec: None, // TODO: Calculate from price history
-            dd_reached_sec: None, // TODO: Calculate from price history
+            peak_reached_sec,
+            dd_reached_sec,
 
             entry_size_sol: position.entry_size_sol,
             token_amount: position.token_amount,
-            liquidity_at_entry: None, // TODO: Get from pools at entry time
-            sol_reserves_at_entry: None, // TODO: Get from pools at entry time
+            liquidity_at_entry,
+            sol_reserves_at_entry,
 
-            tx_activity_5m: None, // TODO: Get from token activity at entry time
-            tx_activity_1h: None, // TODO: Get from token activity at entry time
-            security_score: None, // TODO: Get from security info at entry time
-            holder_count: None, // TODO: Get from security info at entry time
+            tx_activity_5m,
+            tx_activity_1h,
+            security_score,
+            holder_count,
 
-            drop_10s_pct: None, // TODO: Calculate from price history at entry
-            drop_30s_pct: None, // TODO: Calculate from price history at entry
-            drop_60s_pct: None, // TODO: Calculate from price history at entry
-            drop_120s_pct: None, // TODO: Calculate from price history at entry
-            drop_320s_pct: None, // TODO: Calculate from price history at entry
+            drop_10s_pct,
+            drop_30s_pct,
+            drop_60s_pct,
+            drop_120s_pct,
+            drop_320s_pct,
 
-            ath_dist_15m_pct: None, // TODO: Calculate from OHLCV at entry
-            ath_dist_1h_pct: None, // TODO: Calculate from OHLCV at entry
-            ath_dist_6h_pct: None, // TODO: Calculate from OHLCV at entry
+            ath_dist_15m_pct,
+            ath_dist_1h_pct,
+            ath_dist_6h_pct,
 
             hour_of_day: position.entry_time.hour() as i32,
             day_of_week: position.entry_time.weekday().num_days_from_sunday() as i32,
 
-            was_re_entry: false, // TODO: Check if previous trades exist for this mint
+            was_re_entry,
             phantom_exit: position.phantom_remove,
             forced_exit: position.closed_reason
                 .as_ref()

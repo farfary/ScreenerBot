@@ -2018,3 +2018,15 @@ pub async fn get_token_snapshot(
         None => Err("Positions database not initialized".to_string()),
     }
 }
+
+/// Get recent closed positions for a specific mint
+pub async fn get_recent_closed_positions_for_mint(
+    mint: &str,
+    limit: usize,
+) -> Result<Vec<Position>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_recent_closed_positions_for_mint(mint, limit).await,
+        None => Err("Positions database not initialized".to_string()),
+    }
+}

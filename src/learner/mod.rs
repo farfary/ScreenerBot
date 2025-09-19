@@ -344,7 +344,7 @@ impl LearningSystem {
         let database_guard = system.database.read().await;
         let database = database_guard.as_ref().ok_or("Learning database not initialized")?;
 
-        let trade_record = TradeRecord::from_position(position, max_up_pct, max_down_pct)?;
+        let trade_record = TradeRecord::from_position(position, max_up_pct, max_down_pct).await?;
 
         database.store_trade(&trade_record).await?;
 
