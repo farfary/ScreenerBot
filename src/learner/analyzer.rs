@@ -448,14 +448,98 @@ impl PatternAnalyzer {
 
         let target_stats = self.calculate_token_statistics(&target_trades);
 
-        // This is a simplified similarity search
-        // In practice, you'd want to use proper feature vectors and distance metrics
+        // Get all unique mints from database for comparison
+        let all_mints = database.get_all_unique_mints().await.unwrap_or_default();
+        if all_mints.len() < 2 {
+            return Ok(Vec::new()); // Need at least 2 tokens for comparison
+        }
+
         let mut similar_tokens = Vec::new();
 
-        // For now, return empty as this would require scanning all tokens
-        // TODO: Implement proper similarity search with feature vectors
+        // Calculate similarity for each token
+        for mint in all_mints {
+            if mint == target_mint {
+                continue; // Skip self
+            }
+
+            let trades = database.get_trades_for_mint(&mint).await.unwrap_or_default();
+            if trades.is_empty() {
+                continue;
+            }
+
+            let stats = self.calculate_token_statistics(&trades);
+            let similarity = self.calculate_token_similarity(&target_stats, &stats);
+
+            if similarity > 0.1 {
+                // Only include reasonably similar tokens
+                similar_tokens.push(SimilarToken {
+                    mint: mint.clone(),
+                    symbol: "UNKNOWN".to_string(), // Will need to be filled from database
+                    similarity_score: similarity,
+                    trade_count: trades.len(),
+                    avg_profit: stats.avg_profit,
+                    success_rate: stats.success_rate,
+                    last_trade: chrono::Utc::now(), // Will be set correctly later
+                });
+            }
+        }
+
+        // Sort by similarity score descending
+        similar_tokens.sort_by(|a, b|
+            b.similarity_score.partial_cmp(&a.similarity_score).unwrap_or(std::cmp::Ordering::Equal)
+        );
+
+        // Limit results
+        similar_tokens.truncate(limit);
 
         Ok(similar_tokens)
+    }
+
+    /// Calculate similarity between two token statistics
+    fn calculate_token_similarity(
+        &self,
+        stats1: &TokenStatistics,
+        stats2: &TokenStatistics
+    ) -> f64 {
+        let mut similarity_sum = 0.0;
+        let mut weight_sum = 0.0;
+
+        // Compare success rates (high weight)
+        let success_rate_diff = (stats1.success_rate - stats2.success_rate).abs();
+        let success_rate_sim = 1.0 - success_rate_diff.min(1.0);
+        similarity_sum += success_rate_sim * 0.3;
+        weight_sum += 0.3;
+
+        // Compare average profit (high weight)
+        let profit_diff = (stats1.avg_profit - stats2.avg_profit).abs() / 100.0; // Normalize to 0-1 range
+        let profit_sim = 1.0 - profit_diff.min(1.0);
+        similarity_sum += profit_sim * 0.25;
+        weight_sum += 0.25;
+
+        // Compare duration patterns (medium weight)
+        let duration_diff = (stats1.avg_hold_duration - stats2.avg_hold_duration).abs() / 3600.0; // Hours
+        let duration_sim = 1.0 - (duration_diff / 24.0).min(1.0); // Normalize to 24h max
+        similarity_sum += duration_sim * 0.2;
+        weight_sum += 0.2;
+
+        // Compare volatility patterns (medium weight)
+        let vol_diff = (stats1.volatility_score - stats2.volatility_score).abs() / 100.0;
+        let vol_sim = 1.0 - vol_diff.min(1.0);
+        similarity_sum += vol_sim * 0.15;
+        weight_sum += 0.15;
+
+        // Compare drawdown patterns (low weight)
+        // Use volatility score as proxy for drawdown difference
+        let dd_diff = (stats1.volatility_score - stats2.volatility_score).abs() / 100.0;
+        let dd_sim = 1.0 - dd_diff.min(1.0);
+        similarity_sum += dd_sim * 0.1;
+        weight_sum += 0.1;
+
+        if weight_sum > 0.0 {
+            similarity_sum / weight_sum
+        } else {
+            0.0
+        }
     }
 
     /// Calculate pattern similarity score between two trades
@@ -643,5 +727,150 @@ impl PatternAnalyzer {
         };
 
         Ok(features)
+    }
+
+    /// Find matching trading patterns for given drop sequence
+    pub async fn find_matching_patterns(
+        &self,
+        database: &LearningDatabase,
+        mint: &str,
+        drop_10s: f64,
+        drop_30s: f64,
+        drop_60s: f64,
+        drop_120s: f64,
+        drop_320s: f64,
+        confidence_threshold: f64
+    ) -> Result<Vec<TradingPattern>, String> {
+        // Get historical trades with similar drop patterns
+        let trades = database.get_trades_for_mint(mint).await?;
+
+        let mut pattern_matches = Vec::new();
+        let target_drops = [drop_10s, drop_30s, drop_60s, drop_120s, drop_320s];
+
+        // Analyze each historical trade for pattern similarity
+        for trade in trades.iter() {
+            // Skip phantom or forced exits
+            if trade.phantom_exit || trade.forced_exit {
+                continue;
+            }
+
+            let trade_drops = [
+                trade.drop_10s_pct.unwrap_or(0.0),
+                trade.drop_30s_pct.unwrap_or(0.0),
+                trade.drop_60s_pct.unwrap_or(0.0),
+                trade.drop_120s_pct.unwrap_or(0.0),
+                trade.drop_320s_pct.unwrap_or(0.0),
+            ];
+
+            // Calculate pattern similarity
+            let similarity = self.calculate_drop_pattern_similarity(&target_drops, &trade_drops);
+
+            if similarity >= confidence_threshold {
+                // Determine pattern type based on drop characteristics
+                let pattern_type = self.classify_drop_pattern(&trade_drops);
+
+                // Create trading pattern from this match
+                let pattern = TradingPattern {
+                    pattern_id: format!("{}_{}", trade.mint, trade.id),
+                    pattern_type,
+                    confidence: similarity,
+                    drop_sequence: trade_drops.to_vec(),
+                    duration_range: (
+                        trade.hold_duration_sec - 300, // +/- 5 min
+                        trade.hold_duration_sec + 300,
+                    ),
+                    success_rate: if trade.pnl_pct > 0.0 {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                    avg_profit: trade.pnl_pct,
+                    avg_duration: trade.hold_duration_sec,
+                    sample_count: 1,
+                    liquidity_min: trade.liquidity_at_entry,
+                    tx_activity_min: trade.tx_activity_1h,
+                    ath_distance_max: trade.ath_dist_15m_pct.map(|a| a.abs()),
+                    last_updated: Utc::now(),
+                };
+
+                pattern_matches.push(pattern);
+            }
+        }
+
+        // Sort by confidence (highest first)
+        pattern_matches.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+
+        if is_debug_learning_enabled() {
+            log(
+                LogTag::Learning,
+                "pattern_search",
+                &format!(
+                    "Found {} matching patterns for mint {} with similarity >= {}",
+                    pattern_matches.len(),
+                    mint,
+                    confidence_threshold
+                )
+            );
+        }
+
+        Ok(pattern_matches)
+    }
+
+    /// Calculate similarity between two drop pattern sequences
+    fn calculate_drop_pattern_similarity(&self, pattern1: &[f64; 5], pattern2: &[f64; 5]) -> f64 {
+        let mut similarity_sum = 0.0;
+        let weights = [0.15, 0.2, 0.25, 0.25, 0.15]; // Weight middle timeframes more
+
+        for (i, (d1, d2)) in pattern1.iter().zip(pattern2.iter()).enumerate() {
+            // Calculate normalized difference (smaller difference = higher similarity)
+            let max_drop = d1.abs().max(d2.abs()).max(1.0); // Avoid division by zero
+            let diff = (d1 - d2).abs() / max_drop;
+            let point_similarity = (1.0 - diff.min(1.0)).max(0.0);
+
+            similarity_sum += point_similarity * weights[i];
+        }
+
+        similarity_sum
+    }
+
+    /// Classify drop pattern into pattern type
+    fn classify_drop_pattern(&self, drops: &[f64; 5]) -> PatternType {
+        let [drop_10s, drop_30s, drop_60s, drop_120s, drop_320s] = drops;
+
+        // Sharp drop: Most drop happens in first timeframes
+        if drop_10s.abs() > drop_30s.abs() * 0.7 && drop_30s.abs() > drop_60s.abs() * 0.7 {
+            return PatternType::SharpDrop;
+        }
+
+        // Gradual drop: Drop accelerates over time
+        if drop_320s.abs() > drop_120s.abs() && drop_120s.abs() > drop_60s.abs() {
+            return PatternType::GradualDrop;
+        }
+
+        // Double bottom: Drop, recovery, then another drop
+        if
+            drop_60s.abs() > drop_30s.abs() &&
+            drop_120s.abs() > drop_60s.abs() &&
+            drop_320s.abs() < drop_120s.abs()
+        {
+            return PatternType::DoubleBottom;
+        }
+
+        // Breakout: Large drop then recovery
+        if drop_120s.abs() > 15.0 && drop_320s.abs() < drop_120s.abs() * 0.5 {
+            return PatternType::Breakout;
+        }
+
+        // Momentum: Consistent small drops
+        if drops.iter().all(|&d| d.abs() < 10.0 && d < 0.0) {
+            return PatternType::Momentum;
+        }
+
+        // Default to reversal for large drops
+        if drop_320s.abs() > 20.0 {
+            PatternType::Reversal
+        } else {
+            PatternType::SharpDrop
+        }
     }
 }

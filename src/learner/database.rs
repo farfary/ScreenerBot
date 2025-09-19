@@ -586,6 +586,26 @@ impl LearningDatabase {
         Ok(trades)
     }
 
+    /// Get all unique mints from the trades table
+    pub async fn get_all_unique_mints(&self) -> Result<Vec<String>, String> {
+        let conn = self.connection.lock().await;
+
+        let mut stmt = conn
+            .prepare("SELECT DISTINCT mint FROM trades ORDER BY mint")
+            .map_err(|e| format!("Failed to prepare unique mints query: {}", e))?;
+
+        let mint_iter = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| format!("Failed to query unique mints: {}", e))?;
+
+        let mut mints = Vec::new();
+        for mint_result in mint_iter {
+            mints.push(mint_result.map_err(|e| format!("Failed to parse mint: {}", e))?);
+        }
+
+        Ok(mints)
+    }
+
     /// Helper: Convert database row to TradeRecord
     fn row_to_trade_record(&self, row: &Row) -> Result<TradeRecord, rusqlite::Error> {
         Ok(TradeRecord {

@@ -17,6 +17,7 @@
 
 use crate::learner::types::*;
 use crate::learner::database::LearningDatabase;
+use crate::learner::analyzer::PatternAnalyzer;
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_learning_enabled;
 use chrono::Utc;
@@ -30,6 +31,9 @@ pub struct ModelManager {
 
     /// Training state for incremental learning
     training_state: Arc<AsyncRwLock<TrainingState>>,
+
+    /// Pattern analyzer for matching patterns
+    analyzer: PatternAnalyzer,
 }
 
 /// Internal training state for incremental updates
@@ -69,6 +73,7 @@ impl ModelManager {
         Self {
             weights: Arc::new(AsyncRwLock::new(None)),
             training_state: Arc::new(AsyncRwLock::new(initial_state)),
+            analyzer: PatternAnalyzer::new(),
         }
     }
 
@@ -399,6 +404,7 @@ impl ModelManager {
     /// Generate comprehensive prediction from feature vector
     pub async fn generate_prediction(
         &self,
+        database: &LearningDatabase,
         mint: &str,
         features: &[f64],
         current_profit: Option<f64>,
@@ -441,8 +447,12 @@ impl ModelManager {
             risk_probability: risk_prob,
             expected_max_drawdown: risk_prob * 20.0, // Rough estimate
             risk_score: risk_prob,
-            matching_patterns: Vec::new(), // TODO: Implement pattern matching
-            pattern_confidence: 0.0,
+            matching_patterns: self
+                .find_matching_patterns_for_prediction(database, mint, features, success_prob).await
+                .into_iter()
+                .map(|p| p.pattern_id)
+                .collect(),
+            pattern_confidence: self.calculate_pattern_confidence(&features).await,
             entry_recommendation,
             confidence_adjustment,
             created_at: Utc::now(),
@@ -656,5 +666,97 @@ impl ModelManager {
             ),
             created_at: chrono::Utc::now(),
         })
+    }
+
+    /// Find matching patterns for prediction
+    async fn find_matching_patterns_for_prediction(
+        &self,
+        database: &LearningDatabase,
+        mint: &str,
+        features: &[f64],
+        success_prob: f64
+    ) -> Vec<TradingPattern> {
+        // Extract drop pattern from features
+        // Assuming drop features are at positions 14-18 based on feature extraction
+        if features.len() < 19 {
+            return Vec::new();
+        }
+
+        let drop_10s = features[14];
+        let drop_30s = features[15];
+        let drop_60s = features[16];
+        let drop_120s = features[17];
+        let drop_320s = features[18];
+
+        // Set confidence threshold based on success probability
+        let confidence_threshold = if success_prob > 0.7 {
+            0.6 // High success probability, stricter pattern matching
+        } else {
+            0.4 // Lower success probability, more lenient pattern matching
+        };
+
+        // Try to find patterns, but don't fail the prediction if pattern search fails
+        match
+            self.analyzer.find_matching_patterns(
+                database,
+                mint,
+                drop_10s,
+                drop_30s,
+                drop_60s,
+                drop_120s,
+                drop_320s,
+                confidence_threshold
+            ).await
+        {
+            Ok(patterns) => {
+                // Limit to top 5 most confident patterns
+                patterns.into_iter().take(5).collect()
+            }
+            Err(e) => {
+                if is_debug_learning_enabled() {
+                    log(
+                        LogTag::Learning,
+                        "pattern_error",
+                        &format!("Failed to find patterns for mint {}: {}", mint, e)
+                    );
+                }
+                Vec::new()
+            }
+        }
+    }
+
+    /// Calculate pattern confidence based on feature quality
+    async fn calculate_pattern_confidence(&self, features: &[f64]) -> f64 {
+        if features.len() < 19 {
+            return 0.0;
+        }
+
+        // Factor in drop pattern strength
+        let drop_features = &features[14..19];
+        let drop_magnitude = drop_features
+            .iter()
+            .map(|&d| d.abs())
+            .fold(0.0, f64::max);
+
+        // Factor in market context
+        let liquidity = features.get(7).unwrap_or(&0.0).max(1.0); // Avoid log(0)
+        let tx_activity = features.get(8).unwrap_or(&0.0);
+        let ath_distance = features.get(9).unwrap_or(&0.0).abs();
+
+        // Calculate composite confidence
+        let drop_confidence = (drop_magnitude / 50.0).min(1.0); // Normalize to 0-1
+        let liquidity_confidence = (liquidity.ln() / 10.0).min(1.0).max(0.0); // Log scale
+        let activity_confidence = (tx_activity / 1000.0).min(1.0); // Normalize to 0-1
+        let ath_confidence = if ath_distance > 50.0 { 0.8 } else { 0.4 }; // High ATH distance = more confident
+
+        // Weighted average
+        let weights = [0.4, 0.3, 0.2, 0.1]; // Drop, liquidity, activity, ATH
+        let values = [drop_confidence, liquidity_confidence, activity_confidence, ath_confidence];
+
+        weights
+            .iter()
+            .zip(values.iter())
+            .map(|(w, v)| w * v)
+            .sum()
     }
 }
