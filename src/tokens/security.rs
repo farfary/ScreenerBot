@@ -11,6 +11,7 @@
 /// Includes backward compatibility for existing interfaces.
 
 use crate::{ errors::ScreenerBotError, logger::{ log, LogTag }, utils::safe_truncate };
+use crate::tokens::blacklist::{ is_token_blacklisted, add_to_blacklist_db, BlacklistReason };
 
 use chrono::{ DateTime, Utc };
 use reqwest;
@@ -267,7 +268,7 @@ struct MaintenanceResponse {
 #[derive(Debug, Deserialize)]
 struct RugcheckTokenReport {
     pub mint: String,
-    pub token: TokenInfo,
+    pub token: Option<TokenInfo>,
     #[serde(rename = "totalHolders", default)]
     pub total_holders: u32,
     #[serde(default)]
@@ -429,6 +430,15 @@ pub async fn check_api_status() -> Result<bool, ScreenerBotError> {
 
 /// Analyze token security using Rugcheck API
 pub async fn analyze_token_security(mint: &str) -> Result<TokenSecurityInfo, ScreenerBotError> {
+    // Check blacklist first - never analyze blacklisted tokens
+    if is_token_blacklisted(mint) {
+        return Err(
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Token {} is blacklisted - skipping security analysis", mint),
+            })
+        );
+    }
+
     log(
         LogTag::Security,
         "ANALYZE_START",
@@ -580,11 +590,66 @@ pub async fn analyze_token_security(mint: &str) -> Result<TokenSecurityInfo, Scr
 fn extract_security_info(
     report: RugcheckTokenReport
 ) -> Result<TokenSecurityInfo, ScreenerBotError> {
+    // Detect minimal/unknown tokens and auto-blacklist them
+    let has_token_data = report.token.is_some();
+    let has_market_data = report.markets.as_ref().map_or(false, |m| !m.is_empty());
+    let has_holders = report.total_holders > 0;
+
+    if !has_token_data && !has_market_data && !has_holders {
+        // This is a minimal/unknown token - blacklist it
+        log(
+            LogTag::Security,
+            "AUTO_BLACKLIST",
+            &format!(
+                "Auto-blacklisting minimal token: {} (no token data, no markets, 0 holders)",
+                report.mint
+            )
+        );
+
+        // Add to blacklist with "UNKNOWN" symbol since we don't have reliable symbol data
+        add_to_blacklist_db(&report.mint, "UNKNOWN", BlacklistReason::ApiError);
+
+        return Err(
+            ScreenerBotError::Data(crate::errors::DataError::Generic {
+                message: format!("Token {} is minimal/unknown - auto-blacklisted", report.mint),
+            })
+        );
+    }
+
+    // Ensure we have token data for processing
+    let token_info = match report.token {
+        Some(token) => token,
+        None => {
+            log(
+                LogTag::Security,
+                "MISSING_TOKEN_DATA",
+                &format!(
+                    "Token {} has markets/holders but missing token authority data",
+                    report.mint
+                )
+            );
+            // For tokens with markets but no token data, we can't determine authorities
+            // Mark as unsafe but don't auto-blacklist as they might be legitimate
+            return Ok(
+                TokenSecurityInfo::new(
+                    report.mint,
+                    false, // Can't verify mint authority is disabled
+                    false, // Can't verify freeze authority is disabled
+                    false, // Mark as unsafe due to missing data
+                    report.total_holders,
+                    false, // Overall unsafe
+                    Utc::now(),
+                    "PARTIAL_DATA".to_string()
+                )
+            );
+        }
+    };
+
     // Check mint authority (None = safe, Some = unsafe)
-    let mint_authority_disabled = report.token.mint_authority.is_none();
+    let mint_authority_disabled = token_info.mint_authority.is_none();
 
     // Check freeze authority (None = safe, Some = unsafe)
-    let freeze_authority_disabled = report.token.freeze_authority.is_none();
+    let freeze_authority_disabled = token_info.freeze_authority.is_none();
 
     // Check LP lock status
     let lp_is_safe = check_lp_safety(&report.markets, &report.risks);
@@ -1260,12 +1325,13 @@ impl SecurityDatabase {
             })
         })?;
 
-        // Direct query for tokens without security info - much more efficient
+        // Direct query for tokens without security info AND not blacklisted - much more efficient
         let mut stmt = tokens_conn
             .prepare(
                 "SELECT t.mint FROM tokens t 
              LEFT JOIN security_db.security s ON t.mint = s.mint 
-             WHERE s.mint IS NULL 
+             LEFT JOIN blacklist b ON t.mint = b.mint 
+             WHERE s.mint IS NULL AND b.mint IS NULL 
              ORDER BY t.mint 
              LIMIT ?1"
             )
@@ -1293,7 +1359,11 @@ impl SecurityDatabase {
         log(
             LogTag::Security,
             "CYCLE_TOKENS",
-            &format!("Selected {} tokens for security scan cycle (limit: {})", missing.len(), limit)
+            &format!(
+                "Selected {} tokens for security scan cycle (limit: {}) - excluded blacklisted tokens",
+                missing.len(),
+                limit
+            )
         );
 
         Ok(missing)
