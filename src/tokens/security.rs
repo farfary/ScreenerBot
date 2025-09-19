@@ -10,7 +10,12 @@
 ///
 /// Includes backward compatibility for existing interfaces.
 
-use crate::{ errors::ScreenerBotError, logger::{ log, LogTag }, utils::safe_truncate };
+use crate::{
+    arguments::is_debug_security_enabled,
+    errors::ScreenerBotError,
+    logger::{ log, LogTag },
+    utils::safe_truncate,
+};
 use crate::tokens::blacklist::{ is_token_blacklisted, add_to_blacklist_db, BlacklistReason };
 
 use chrono::{ DateTime, Utc };
@@ -1356,15 +1361,17 @@ impl SecurityDatabase {
             }
         }
 
-        log(
-            LogTag::Security,
-            "CYCLE_TOKENS",
-            &format!(
-                "Selected {} tokens for security scan cycle (limit: {}) - excluded blacklisted tokens",
-                missing.len(),
-                limit
-            )
-        );
+        if is_debug_security_enabled() {
+            log(
+                LogTag::Security,
+                "CYCLE_TOKENS",
+                &format!(
+                    "Selected {} tokens for security scan cycle (limit: {}) - excluded blacklisted tokens",
+                    missing.len(),
+                    limit
+                )
+            );
+        }
 
         Ok(missing)
     }
