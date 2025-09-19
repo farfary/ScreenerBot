@@ -437,7 +437,7 @@ impl PoolsDatabase {
 
             let gap = current_time - prev_time;
 
-            if gap > MAX_PRICE_GAP_SECONDS {
+            if gap > (MAX_PRICE_GAP_SECONDS as i64) {
                 // Found a gap - return the older timestamp as cutoff point
                 return Ok(Some(prev_time));
             }

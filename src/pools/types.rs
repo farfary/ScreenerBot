@@ -263,19 +263,11 @@ impl PriceHistory {
         }
 
         // Get the timestamp of the new price (convert Instant to approximate unix timestamp)
-        let new_timestamp = std::time::SystemTime
-            ::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
+        let new_timestamp = self.approximate_timestamp(new_price);
 
         // Check gap from the most recent price
         if let Some(latest_price) = self.prices.back() {
-            let latest_timestamp = std::time::SystemTime
-                ::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs() as i64;
+            let latest_timestamp = self.approximate_timestamp(latest_price);
 
             let time_gap = new_timestamp - latest_timestamp;
 
@@ -329,13 +321,19 @@ impl PriceHistory {
 
     /// Approximate timestamp from Instant (helper method)
     fn approximate_timestamp(&self, price: &PriceResult) -> i64 {
-        // This is an approximation since we can't directly convert Instant to unix timestamp
-        // In practice, we should use the database timestamp for accurate gap detection
-        std::time::SystemTime
-            ::now()
+        // Convert the price's Instant to a unix timestamp by calculating elapsed time
+        // This is more accurate than always returning current time
+        let now = std::time::SystemTime::now();
+        let unix_now = now
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs() as i64
+            .as_secs() as i64;
+
+        // Calculate how long ago this price was created
+        let elapsed = price.timestamp.elapsed().as_secs() as i64;
+
+        // Return the approximate timestamp when the price was created
+        unix_now - elapsed
     }
 
     /// Check if current price history has any gaps larger than 1 minute
