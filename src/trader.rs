@@ -109,7 +109,7 @@ pub const DEBUG_FORCE_BUY_DROP_THRESHOLD_PERCENT: f64 = 0.5;
 /// This is applied in apply_cooldown_filter() and is separate from:
 /// - Global position open cooldown (5s between any opens) - in positions.rs
 /// - Frozen account cooldowns (account-specific) - in positions.rs
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 6 * 60; // 24 hours
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 1 * 60; // 24 hours
 
 // -----------------------------------------------------------------------------
 // Trading Logic Configuration
