@@ -205,6 +205,7 @@ use crate::entry::get_profit_target;
 
 use chrono::{ Duration as ChronoDuration, Utc };
 use futures;
+use futures::FutureExt; // for now_or_never on shutdown future
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -1048,13 +1049,14 @@ pub async fn get_cooldown_status(sample: usize) -> String {
 pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
     // Clone shutdown once at the start to avoid borrow checker issues
     let shutdown = shutdown.clone();
+    // Create a sticky shutdown future once to avoid missing previously-fired notifications
+    let mut shutdown_fut = Box::pin(shutdown.notified());
 
     log(LogTag::Trader, "STARTUP", "🚀 Starting monitor_new_entries task");
 
     'outer: loop {
-        // Check for shutdown at the very beginning of each loop iteration
-        if check_shutdown_or_delay(&shutdown, Duration::from_millis(10)).await {
-            log(LogTag::Trader, "INFO", "✅ New entries monitor shutdown requested at loop start");
+        // Check for shutdown at the very beginning of each loop iteration (sticky)
+        if let Some(_) = shutdown_fut.as_mut().now_or_never() {
             break 'outer;
         }
 
@@ -1081,11 +1083,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Add a maximum processing time for the entire token checking cycle
         let cycle_start = std::time::Instant::now();
 
-        // Check for shutdown before starting main processing
-        if check_shutdown_or_delay(&shutdown, Duration::from_millis(10)).await {
-            log(LogTag::Trader, "INFO", "✅ New entries monitor shutdown before token processing");
-            break 'outer;
-        }
+        // Proceed with main processing; per-step waits below are shutdown-aware
 
         // Prepare tokens for trading (fetch, sort, filter)
         if is_debug_trader_enabled() {
@@ -1212,7 +1210,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         }
 
         for price_info in price_infos.iter() {
-            // Check for shutdown before spawning tasks
+            // Check for shutdown before spawning tasks (short, responsive wait)
             if
                 check_shutdown_or_delay(
                     &shutdown,
@@ -1588,8 +1586,14 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
     // Clone shutdown once at the start to avoid borrow checker issues
     let shutdown = shutdown.clone();
+    // Sticky shutdown future for open positions monitor
+    let mut shutdown_fut = Box::pin(shutdown.notified());
 
     loop {
+        // Sticky check at the top of the loop
+        if let Some(_) = shutdown_fut.as_mut().now_or_never() {
+            break;
+        }
         // CRITICAL: Wait for position recalculation to complete before starting any position monitoring
         if
             !crate::global::POSITION_RECALCULATION_COMPLETE.load(

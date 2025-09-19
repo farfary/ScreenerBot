@@ -465,7 +465,20 @@ pub async fn run_bot() -> Result<(), String> {
         std::time::Duration::from_secs(CLEANUP_TIMEOUT_SECS),
         async {
             // Pool monitoring service cleanup (no longer needed)
-            debug_log(LogTag::System, "INFO", "Pool service cleanup completed");
+            // Gracefully stop the pool service to terminate its background tasks
+            if crate::pools::is_pool_service_running() {
+                match crate::pools::stop_pool_service(3).await {
+                    Ok(_) => debug_log(LogTag::System, "INFO", "Pool service cleanup completed"),
+                    Err(e) =>
+                        debug_log(
+                            LogTag::System,
+                            "WARN",
+                            &format!("Pool service stop failed: {}", e)
+                        ),
+                }
+            } else {
+                debug_log(LogTag::System, "INFO", "Pool service not running during cleanup");
+            }
 
             // Decimals are now automatically saved to database
             debug_log(LogTag::System, "INFO", "Decimals database persists automatically");
