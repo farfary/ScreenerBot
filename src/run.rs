@@ -11,6 +11,7 @@ use crate::{
     ata_cleanup,
     dashboard::{ self, Dashboard },
     global,
+    learner,
     logger::{ init_file_logging, log, LogTag },
     positions,
     rpc,
@@ -328,6 +329,13 @@ pub async fn run_bot() -> Result<(), String> {
         debug_log(LogTag::System, "INFO", "PositionsManager service task ended");
     });
 
+    // Initialize learning system
+    if let Err(e) = crate::learner::initialize_learning_system().await {
+        debug_log(LogTag::System, "WARN", &format!("Failed to initialize learning system: {}", e));
+    } else {
+        debug_log(LogTag::System, "INFO", "Learning system initialized successfully");
+    }
+
     let shutdown_entries = shutdown.clone();
     let entries_handle = tokio::spawn(async move {
         log(LogTag::Trader, "INFO", "New entries monitor task started");
@@ -590,6 +598,11 @@ pub async fn run_bot() -> Result<(), String> {
             } else {
                 log(LogTag::System, "INFO", "✅ Positions display task shutdown completed");
             }
+
+            // Wait for learner system shutdown
+            log(LogTag::System, "INFO", "🔄 Shutting down learning system...");
+            learner::shutdown_learning_system().await;
+            log(LogTag::System, "INFO", "✅ Learning system shutdown completed");
 
             // Wait for PositionsManager service
             log(LogTag::System, "INFO", "🔄 Waiting for PositionsManager task to shutdown...");

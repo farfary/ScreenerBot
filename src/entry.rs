@@ -10,6 +10,7 @@ use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::{ get_pool_price, get_price_history, PriceResult };
 use crate::tokens::security::get_security_analyzer; // for optional cached holder count
+use crate::learner::get_learning_integration;
 use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock as AsyncRwLock; // switched from StdRwLock
@@ -477,6 +478,32 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 confidence -= 6.0;
             }
             confidence = confidence.clamp(60.0, 95.0);
+
+            // Apply learner confidence boost for micro-liquidity scenarios
+            let learning = get_learning_integration();
+            let original_confidence = confidence;
+            let adjustment = learning.get_entry_confidence_adjustment(
+                &price_info.mint,
+                current_price,
+                drop_percent,
+                0.0 // ath_proximity not available in this context
+            ).await;
+            confidence = (confidence * adjustment).clamp(60.0, 95.0);
+
+            if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
+                log(
+                    LogTag::Entry,
+                    "LEARNER_MICRO_LIQ_BOOST",
+                    &format!(
+                        "🧠 {} micro-liq learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
+                        price_info.mint,
+                        original_confidence,
+                        confidence,
+                        adjustment
+                    )
+                );
+            }
+
             if is_debug_entry_enabled() {
                 log(
                     LogTag::Entry,
@@ -534,7 +561,33 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 if instant_drop >= 15.0 && instant_drop <= 75.0 {
                     // Higher minimum drop requirement for insufficient data
                     let confidence = (25.0 + instant_drop * 0.5).min(45.0_f64); // Conservative scaling
-                    if confidence >= 35.0 {
+                    let mut final_confidence = confidence;
+
+                    // Apply learner confidence boost for instant drop scenarios
+                    let learning = get_learning_integration();
+                    let adjustment = learning.get_entry_confidence_adjustment(
+                        &price_info.mint,
+                        current_price,
+                        instant_drop,
+                        0.0 // ath_proximity not available in this context
+                    ).await;
+                    final_confidence = (final_confidence * adjustment).clamp(0.0, 95.0);
+
+                    if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
+                        log(
+                            LogTag::Entry,
+                            "LEARNER_INSTANT_DROP_BOOST",
+                            &format!(
+                                "🧠 {} instant drop learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
+                                price_info.mint,
+                                confidence,
+                                final_confidence,
+                                adjustment
+                            )
+                        );
+                    }
+
+                    if final_confidence >= 35.0 {
                         if is_debug_entry_enabled() {
                             log(
                                 LogTag::Entry,
@@ -543,13 +596,13 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                                     "🎯 {} instant drop -{:.1}% → conf {:.0}% → APPROVE",
                                     price_info.mint,
                                     instant_drop,
-                                    confidence
+                                    final_confidence
                                 )
                             );
                         }
                         return (
                             true,
-                            confidence,
+                            final_confidence,
                             format!("Quick entry on {:.1}% instant drop", instant_drop),
                         );
                     }
@@ -588,6 +641,31 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         // Activity boost (single use): conservative scaling
         confidence += activity_score * 12.0;
         confidence = confidence.clamp(0.0, 95.0);
+
+        // Apply learner confidence boost for trend entries
+        let learning = get_learning_integration();
+        let original_confidence = confidence;
+        let adjustment = learning.get_entry_confidence_adjustment(
+            &price_info.mint,
+            current_price,
+            0.0, // drop_percent not directly available in trend context
+            0.0 // ath_proximity not available in this context
+        ).await;
+        confidence = (confidence * adjustment).clamp(0.0, 95.0);
+
+        if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
+            log(
+                LogTag::Entry,
+                "LEARNER_TREND_BOOST",
+                &format!(
+                    "🧠 {} trend learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
+                    price_info.mint,
+                    original_confidence,
+                    confidence,
+                    adjustment
+                )
+            );
+        }
 
         // ATH risk check with optional bypass
         let (ath_safe, max_ath_pct) = if brk_ath_bypass {
@@ -646,6 +724,31 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         let mut confidence = 26.0 + rec_conf;
         confidence += activity_score * 10.0;
         confidence = confidence.clamp(0.0, 95.0);
+
+        // Apply learner confidence boost for SMA reclaim entries
+        let learning = get_learning_integration();
+        let original_confidence = confidence;
+        let adjustment = learning.get_entry_confidence_adjustment(
+            &price_info.mint,
+            current_price,
+            0.0, // drop_percent not directly available in SMA reclaim context
+            0.0 // ath_proximity not available in this context
+        ).await;
+        confidence = (confidence * adjustment).clamp(0.0, 95.0);
+
+        if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
+            log(
+                LogTag::Entry,
+                "LEARNER_SMA_RECLAIM_BOOST",
+                &format!(
+                    "🧠 {} SMA reclaim learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
+                    price_info.mint,
+                    original_confidence,
+                    confidence,
+                    adjustment
+                )
+            );
+        }
 
         let (ath_safe, max_ath_pct) = check_ath_risk(&converted_history, current_price).await;
         if !ath_safe {
@@ -828,6 +931,31 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         }
 
         confidence = confidence.clamp(0.0, 95.0);
+
+        // Apply learner confidence boost
+        let learning = get_learning_integration();
+        let original_confidence = confidence;
+        let adjustment = learning.get_entry_confidence_adjustment(
+            &price_info.mint,
+            current_price,
+            sig.drop_percent,
+            max_ath_pct
+        ).await;
+        confidence = (confidence * adjustment).clamp(0.0, 95.0);
+
+        if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
+            log(
+                LogTag::Entry,
+                "LEARNER_CONFIDENCE_BOOST",
+                &format!(
+                    "🧠 {} learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
+                    price_info.mint,
+                    original_confidence,
+                    confidence,
+                    adjustment
+                )
+            );
+        }
 
         // Conservative entry confidence threshold
         let approved = confidence >= 45.0; // Increased from 35.0% for higher quality entries

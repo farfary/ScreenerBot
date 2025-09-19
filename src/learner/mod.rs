@@ -29,6 +29,7 @@ pub mod integration;
 
 use crate::global::*;
 use crate::logger::{ log, LogTag };
+use crate::global::is_debug_learning_enabled;
 use crate::positions::Position;
 use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;

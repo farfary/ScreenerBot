@@ -14,6 +14,7 @@
 //! * `crate::logger::log` and `crate::global::is_debug_profit_enabled()` are available.
 
 use crate::global::*;
+use crate::learner::get_learning_integration;
 use crate::logger::{ log, LogTag };
 use crate::positions::{ calculate_position_pnl, Position };
 use chrono::Utc;
@@ -1075,6 +1076,32 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     if ath_ctx.level != AthLevel::None {
         exit_score += ath_ctx.score_nudge;
     }
+
+    // Apply learner exit urgency multiplier to exit score
+    let learning = get_learning_integration();
+    let original_exit_score = exit_score;
+    let urgency_multiplier = learning.get_exit_score_adjustment(
+        &position.mint,
+        current_price,
+        entry,
+        minutes_held as u32
+    ).await;
+    exit_score *= urgency_multiplier;
+
+    if is_debug_profit_enabled() && (urgency_multiplier - 1.0).abs() > 0.05 {
+        log(
+            LogTag::Profit,
+            "LEARNER_EXIT_URGENCY",
+            &format!(
+                "🧠 {} learner exit urgency: score {:.2} → {:.2} (multiplier: {:.2}x)",
+                position.symbol,
+                original_exit_score,
+                exit_score,
+                urgency_multiplier
+            )
+        );
+    }
+
     // Lower threshold under high time pressure to favor exits as cap approaches
     score_threshold -= 0.2 * time_pressure; // down to ~1.0 at full pressure
     if exit_score >= score_threshold {

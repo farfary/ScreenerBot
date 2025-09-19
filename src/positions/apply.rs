@@ -2,6 +2,7 @@ use crate::{
     utils::safe_truncate,
     logger::{ log, LogTag },
     arguments::is_debug_positions_enabled,
+    learner,
 };
 use super::{ types::Position, db::{ update_position, force_database_sync } };
 use super::{
@@ -96,6 +97,61 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 "Failed to process loss detection for {}: {}",
                                 position.symbol,
                                 e
+                            )
+                        );
+                    }
+
+                    // Record completed trade for learning system
+                    let entry_price = position.effective_entry_price.unwrap_or(
+                        position.entry_price
+                    );
+                    let max_up_pct = if entry_price > 0.0 {
+                        ((position.price_highest - entry_price) / entry_price) * 100.0
+                    } else {
+                        0.0
+                    };
+                    let max_down_pct = if entry_price > 0.0 {
+                        ((entry_price - position.price_lowest) / entry_price) * 100.0
+                    } else {
+                        0.0
+                    };
+
+                    if
+                        let Err(e) = learner::record_completed_trade(
+                            &position,
+                            max_up_pct,
+                            max_down_pct
+                        ).await
+                    {
+                        log(
+                            LogTag::Positions,
+                            "WARN",
+                            &format!(
+                                "Failed to record trade for learning: {} ({})",
+                                position.symbol,
+                                e
+                            )
+                        );
+                    } else if is_debug_positions_enabled() {
+                        let current_pnl = if
+                            let (Some(exit_price), entry_price) = (position.exit_price, entry_price)
+                        {
+                            if entry_price > 0.0 {
+                                ((exit_price - entry_price) / entry_price) * 100.0
+                            } else {
+                                0.0
+                            }
+                        } else {
+                            0.0
+                        };
+                        log(
+                            LogTag::Positions,
+                            "LEARNER",
+                            &format!(
+                                "🧠 Recorded completed trade for learning: {} (profit: {:.2}%, peak: {:.2}%)",
+                                position.symbol,
+                                current_pnl,
+                                max_up_pct
                             )
                         );
                     }
