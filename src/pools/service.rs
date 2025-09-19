@@ -307,6 +307,12 @@ async fn start_background_tasks(shutdown: Arc<Notify>) {
         run_database_cleanup_task(shutdown_cleanup).await;
     });
 
+    // Start gap detection and cleanup task
+    let shutdown_gap_cleanup = shutdown.clone();
+    tokio::spawn(async move {
+        run_gap_cleanup_task(shutdown_gap_cleanup).await;
+    });
+
     if is_debug_pool_service_enabled() {
         log(LogTag::PoolService, "DEBUG", "Background tasks started");
     }
@@ -444,5 +450,65 @@ async fn run_database_cleanup_task(shutdown: Arc<Notify>) {
                 }
             }
         }
+    }
+}
+
+/// Gap cleanup task - runs periodically to remove gapped price data
+async fn run_gap_cleanup_task(shutdown: Arc<Notify>) {
+    if is_debug_pool_service_enabled() {
+        log(LogTag::PoolService, "INFO", "Starting gap cleanup task");
+    }
+
+    // Run gap cleanup every 30 minutes
+    let mut interval = tokio::time::interval(Duration::from_secs(30 * 60));
+
+    loop {
+        tokio::select! {
+            _ = shutdown.notified() => {
+                if is_debug_pool_service_enabled() {
+                    log(LogTag::PoolService, "INFO", "Gap cleanup task shutting down");
+                }
+                break;
+            }
+            _ = interval.tick() => {
+                // Clean up gapped data from memory
+                cleanup_memory_gaps().await;
+                
+                // Clean up gapped data from database
+                match db::cleanup_all_gapped_data().await {
+                    Ok(deleted) => {
+                        if deleted > 0 {
+                            log(
+                                LogTag::PoolService,
+                                "GAP_CLEANUP",
+                                &format!("Gap cleanup completed: removed {} gapped entries", deleted)
+                            );
+                        } else if is_debug_pool_service_enabled() {
+                            log(LogTag::PoolService, "INFO", "Gap cleanup completed: no gapped data found");
+                        }
+                    }
+                    Err(e) => {
+                        log(LogTag::PoolService, "ERROR", &format!("Gap cleanup failed: {}", e));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Clean up gapped data from in-memory cache
+async fn cleanup_memory_gaps() {
+    let (total_removed, tokens_cleaned) = cache::cleanup_all_memory_gaps().await;
+
+    if total_removed > 0 {
+        log(
+            LogTag::PoolCache,
+            "GAP_CLEANUP",
+            &format!(
+                "Cleaned {} gapped entries from memory across {} tokens",
+                total_removed,
+                tokens_cleaned
+            )
+        );
     }
 }

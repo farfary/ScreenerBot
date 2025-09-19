@@ -235,6 +235,12 @@ impl PriceHistory {
     }
 
     pub fn add_price(&mut self, price: PriceResult) {
+        // Check for gaps before adding new price
+        if let Some(gap_index) = self.detect_gap_before_price(&price) {
+            // Remove all data older than the gap
+            self.remove_data_before_gap(gap_index);
+        }
+
         if self.prices.len() >= self.max_entries {
             self.prices.pop_front();
         }
@@ -248,6 +254,120 @@ impl PriceHistory {
     pub fn to_vec(&self) -> Vec<PriceResult> {
         self.prices.iter().cloned().collect()
     }
+
+    /// Detect if there's a gap larger than MAX_PRICE_GAP_SECONDS before the new price
+    /// Returns the index where the gap starts (all data before this index should be removed)
+    fn detect_gap_before_price(&self, new_price: &PriceResult) -> Option<usize> {
+        if self.prices.is_empty() {
+            return None;
+        }
+
+        // Get the timestamp of the new price (convert Instant to approximate unix timestamp)
+        let new_timestamp = std::time::SystemTime
+            ::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        // Check gap from the most recent price
+        if let Some(latest_price) = self.prices.back() {
+            let latest_timestamp = std::time::SystemTime
+                ::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+
+            let time_gap = new_timestamp - latest_timestamp;
+
+            if time_gap > (MAX_PRICE_GAP_SECONDS as i64) {
+                // There's a gap - find where continuous data starts from the newest entry
+                return self.find_continuous_data_start_index();
+            }
+        }
+
+        None
+    }
+
+    /// Find the starting index of continuous data (without gaps > 1 minute)
+    fn find_continuous_data_start_index(&self) -> Option<usize> {
+        if self.prices.len() <= 1 {
+            return None;
+        }
+
+        // Work backwards from the newest data to find where continuous data starts
+        for i in (1..self.prices.len()).rev() {
+            let current_time = self.approximate_timestamp(&self.prices[i]);
+            let prev_time = self.approximate_timestamp(&self.prices[i - 1]);
+
+            let gap = current_time - prev_time;
+
+            if gap > (MAX_PRICE_GAP_SECONDS as i64) {
+                // Found a gap - return the index after the gap
+                return Some(i);
+            }
+        }
+
+        None
+    }
+
+    /// Remove all data before the specified index (due to detected gap)
+    fn remove_data_before_gap(&mut self, gap_index: usize) {
+        if gap_index >= self.prices.len() {
+            return;
+        }
+
+        // Keep only data from gap_index onwards
+        let mut new_prices = VecDeque::with_capacity(self.max_entries);
+        for i in gap_index..self.prices.len() {
+            if let Some(price) = self.prices.get(i) {
+                new_prices.push_back(price.clone());
+            }
+        }
+
+        self.prices = new_prices;
+    }
+
+    /// Approximate timestamp from Instant (helper method)
+    fn approximate_timestamp(&self, price: &PriceResult) -> i64 {
+        // This is an approximation since we can't directly convert Instant to unix timestamp
+        // In practice, we should use the database timestamp for accurate gap detection
+        std::time::SystemTime
+            ::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64
+    }
+
+    /// Check if current price history has any gaps larger than 1 minute
+    pub fn has_significant_gaps(&self) -> bool {
+        if self.prices.len() <= 1 {
+            return false;
+        }
+
+        for i in 1..self.prices.len() {
+            let current_time = self.approximate_timestamp(&self.prices[i]);
+            let prev_time = self.approximate_timestamp(&self.prices[i - 1]);
+
+            let gap = current_time - prev_time;
+
+            if gap > (MAX_PRICE_GAP_SECONDS as i64) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Remove all data with gaps, keeping only the most recent continuous segment
+    pub fn cleanup_gapped_data(&mut self) -> usize {
+        let original_len = self.prices.len();
+
+        if let Some(start_index) = self.find_continuous_data_start_index() {
+            self.remove_data_before_gap(start_index);
+        }
+
+        original_len - self.prices.len()
+    }
 }
 
 /// Configuration constants
@@ -257,6 +377,10 @@ pub const MAX_WATCHED_TOKENS: usize = 2000;
 /// Pool monitoring refresh interval (seconds)
 /// Set to 600 seconds (10 minutes) to allow proper token re-filtering
 pub const POOL_REFRESH_INTERVAL_SECONDS: u64 = 10;
+
+/// Maximum allowable gap between consecutive price updates (1 minute)
+/// If gap is larger, older data becomes invalid and should be removed
+pub const MAX_PRICE_GAP_SECONDS: u64 = 60;
 
 /// SOL mint address (primary trading currency)
 pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";

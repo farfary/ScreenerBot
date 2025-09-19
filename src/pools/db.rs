@@ -32,6 +32,9 @@ const DB_BATCH_SIZE: usize = 100;
 /// Database write interval (seconds)
 const DB_WRITE_INTERVAL_SECONDS: u64 = 10;
 
+/// Maximum allowable gap between price updates (1 minute in seconds)
+const MAX_PRICE_GAP_SECONDS: i64 = 60;
+
 // =============================================================================
 // DATABASE STRUCTURES
 // =============================================================================
@@ -368,6 +371,131 @@ impl PoolsDatabase {
 
         Ok(deleted)
     }
+
+    /// Remove price history entries older than the most recent gap for a specific token
+    pub async fn cleanup_gapped_data_for_token(&self, mint: &str) -> Result<usize, String> {
+        let connection_guard = self.connection.lock().await;
+        let conn = connection_guard.as_ref().ok_or("Database not initialized")?;
+
+        // Find the most recent timestamp where continuous data starts (no gaps > 1 minute)
+        let continuous_start_timestamp = self.find_continuous_data_start_timestamp(conn, mint)?;
+
+        if let Some(cutoff_timestamp) = continuous_start_timestamp {
+            let deleted = conn
+                .execute(
+                    "DELETE FROM price_history WHERE mint = ? AND timestamp_unix < ?",
+                    params![mint, cutoff_timestamp]
+                )
+                .map_err(|e| format!("Failed to cleanup gapped data for token {}: {}", mint, e))?;
+
+            if deleted > 0 && is_debug_pool_cache_enabled() {
+                log(
+                    LogTag::PoolCache,
+                    "GAP_CLEANUP",
+                    &format!("Removed {} gapped price entries for token: {}", deleted, mint)
+                );
+            }
+
+            Ok(deleted)
+        } else {
+            Ok(0) // No gaps found
+        }
+    }
+
+    /// Find the timestamp where continuous data starts (no gaps > 1 minute) for a token
+    fn find_continuous_data_start_timestamp(
+        &self,
+        conn: &Connection,
+        mint: &str
+    ) -> Result<Option<i64>, String> {
+        // Get all timestamps for the token, ordered by newest first
+        let mut stmt = conn
+            .prepare(
+                "SELECT timestamp_unix FROM price_history 
+                 WHERE mint = ? 
+                 ORDER BY timestamp_unix DESC"
+            )
+            .map_err(|e| format!("Failed to prepare gap detection query: {}", e))?;
+
+        let rows = stmt
+            .query_map(params![mint], |row| { Ok(row.get::<_, i64>("timestamp_unix")?) })
+            .map_err(|e| format!("Failed to execute gap detection query: {}", e))?;
+
+        let mut timestamps = Vec::new();
+        for row in rows {
+            timestamps.push(row.map_err(|e| format!("Failed to parse timestamp: {}", e))?);
+        }
+
+        if timestamps.len() <= 1 {
+            return Ok(None); // Not enough data to detect gaps
+        }
+
+        // Work backwards to find the first gap > 1 minute
+        for i in 1..timestamps.len() {
+            let current_time = timestamps[i - 1]; // Newer timestamp
+            let prev_time = timestamps[i]; // Older timestamp
+
+            let gap = current_time - prev_time;
+
+            if gap > MAX_PRICE_GAP_SECONDS {
+                // Found a gap - return the older timestamp as cutoff point
+                return Ok(Some(prev_time));
+            }
+        }
+
+        Ok(None) // No significant gaps found
+    }
+
+    /// Cleanup gapped data for all tokens
+    pub async fn cleanup_all_gapped_data(&self) -> Result<usize, String> {
+        // Get all unique tokens in the database
+        let tokens = {
+            let connection_guard = self.connection.lock().await;
+            let conn = connection_guard.as_ref().ok_or("Database not initialized")?;
+
+            let mut stmt = conn
+                .prepare("SELECT DISTINCT mint FROM price_history")
+                .map_err(|e| format!("Failed to prepare token list query: {}", e))?;
+
+            let rows = stmt
+                .query_map([], |row| { Ok(row.get::<_, String>("mint")?) })
+                .map_err(|e| format!("Failed to execute token list query: {}", e))?;
+
+            let mut tokens = Vec::new();
+            for row in rows {
+                tokens.push(row.map_err(|e| format!("Failed to parse token mint: {}", e))?);
+            }
+
+            tokens
+        }; // connection_guard is dropped here
+
+        // Clean up gapped data for each token
+        let mut total_deleted = 0;
+        for token in tokens {
+            match self.cleanup_gapped_data_for_token(&token).await {
+                Ok(deleted) => {
+                    total_deleted += deleted;
+                }
+                Err(e) => {
+                    log(
+                        LogTag::PoolCache,
+                        "ERROR",
+                        &format!("Failed to cleanup gapped data for token {}: {}", token, e)
+                    );
+                }
+            }
+        }
+
+        if total_deleted > 0 {
+            log(
+                LogTag::PoolService,
+                "GAP_CLEANUP",
+                &format!("Removed {} total gapped price entries across all tokens", total_deleted)
+            );
+        }
+
+        Ok(total_deleted)
+    }
 }
 
 // =============================================================================
@@ -540,5 +668,23 @@ pub async fn get_extended_price_history(
 pub async fn cleanup_old_entries() -> Result<usize, String> {
     unsafe {
         if let Some(ref db) = GLOBAL_POOLS_DB { db.cleanup_old_entries().await } else { Ok(0) }
+    }
+}
+
+/// Cleanup gapped data for a specific token
+pub async fn cleanup_gapped_data_for_token(mint: &str) -> Result<usize, String> {
+    unsafe {
+        if let Some(ref db) = GLOBAL_POOLS_DB {
+            db.cleanup_gapped_data_for_token(mint).await
+        } else {
+            Ok(0)
+        }
+    }
+}
+
+/// Cleanup gapped data for all tokens
+pub async fn cleanup_all_gapped_data() -> Result<usize, String> {
+    unsafe {
+        if let Some(ref db) = GLOBAL_POOLS_DB { db.cleanup_all_gapped_data().await } else { Ok(0) }
     }
 }

@@ -69,13 +69,46 @@ pub fn update_price(price: PriceResult) {
         }
     });
 
-    // Update history
+    // Update history with gap detection
     if let Ok(history_map) = PRICE_HISTORY.read() {
         if let Some(mut history) = history_map.get_mut(&mint) {
+            let removed_count = history.cleanup_gapped_data();
+            if removed_count > 0 && is_debug_pool_cache_enabled() {
+                log(
+                    LogTag::PoolCache,
+                    "GAP_CLEANUP",
+                    &format!(
+                        "Removed {} gapped entries from memory for token: {}",
+                        removed_count,
+                        mint
+                    )
+                );
+            }
+
             history.add_price(price);
+
             if is_debug_pool_cache_enabled() {
                 log(LogTag::PoolCache, "DEBUG", &format!("Updated price for token: {}", mint));
             }
+
+            // Trigger database gap cleanup if gaps were detected in memory
+            if removed_count > 0 {
+                let mint_for_cleanup = mint.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = db::cleanup_gapped_data_for_token(&mint_for_cleanup).await {
+                        log(
+                            LogTag::PoolCache,
+                            "ERROR",
+                            &format!(
+                                "Failed to cleanup gapped data in database for {}: {}",
+                                mint_for_cleanup,
+                                e
+                            )
+                        );
+                    }
+                });
+            }
+
             return;
         }
     }
@@ -237,5 +270,33 @@ pub async fn load_token_history_from_database(mint: &str) -> Result<(), String> 
             }
             Err(e)
         }
+    }
+}
+
+/// Cleanup gapped data from all tokens in memory
+pub async fn cleanup_all_memory_gaps() -> (usize, usize) {
+    if let Ok(mut history_map) = PRICE_HISTORY.write() {
+        let mut total_removed = 0;
+        let mut tokens_cleaned = 0;
+
+        // Collect all tokens to avoid holding the write lock during iteration
+        let tokens: Vec<String> = history_map
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect();
+
+        for token in tokens {
+            if let Some(mut history) = history_map.get_mut(&token) {
+                let removed = history.cleanup_gapped_data();
+                if removed > 0 {
+                    total_removed += removed;
+                    tokens_cleaned += 1;
+                }
+            }
+        }
+
+        (total_removed, tokens_cleaned)
+    } else {
+        (0, 0)
     }
 }
