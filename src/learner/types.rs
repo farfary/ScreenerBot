@@ -9,7 +9,7 @@
 //! * Patterns: Recognized trading patterns
 //! * Predictions: Model outputs for entry/exit decisions
 
-use crate::positions::{Position, get_token_snapshot, get_recent_closed_positions_for_mint};
+use crate::positions::{ Position, get_token_snapshot, get_recent_closed_positions_for_mint };
 use chrono::{ DateTime, Utc, Timelike, Datelike };
 use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
@@ -93,10 +93,12 @@ impl TradeRecord {
         let pnl_pct = ((exit_price - position.entry_price) / position.entry_price) * 100.0;
 
         // Get token snapshots for entry and exit data
-        let opening_snapshot = get_token_snapshot(position_id, "opening").await
-            .map_err(|e| format!("Failed to get opening snapshot: {}", e))?;
-        let closing_snapshot = get_token_snapshot(position_id, "closing").await
-            .map_err(|e| format!("Failed to get closing snapshot: {}", e))?;
+        let opening_snapshot = get_token_snapshot(position_id, "opening").await.map_err(|e|
+            format!("Failed to get opening snapshot: {}", e)
+        )?;
+        let closing_snapshot = get_token_snapshot(position_id, "closing").await.map_err(|e|
+            format!("Failed to get closing snapshot: {}", e)
+        )?;
 
         // Check for re-entry by looking at recent closed positions for this mint
         let was_re_entry = match get_recent_closed_positions_for_mint(&position.mint, 5).await {
@@ -111,15 +113,15 @@ impl TradeRecord {
             tx_activity_5m,
             tx_activity_1h,
             security_score,
-            holder_count
+            holder_count,
         ) = if let Some(ref snapshot) = opening_snapshot {
             (
                 snapshot.liquidity_base, // SOL liquidity base
                 snapshot.liquidity_base, // Same as above for reserves
-                snapshot.txns_m5_buys.and_then(|buys| 
+                snapshot.txns_m5_buys.and_then(|buys|
                     snapshot.txns_m5_sells.map(|sells| buys + sells)
                 ),
-                snapshot.txns_h1_buys.and_then(|buys| 
+                snapshot.txns_h1_buys.and_then(|buys|
                     snapshot.txns_h1_sells.map(|sells| buys + sells)
                 ),
                 None, // Security score not in snapshots - would need separate Rugcheck call
@@ -130,21 +132,17 @@ impl TradeRecord {
         };
 
         // Calculate drop percentages from price change data in opening snapshot
-        let (
-            drop_10s_pct,
-            drop_30s_pct,
-            drop_60s_pct,
-            drop_120s_pct,
-            drop_320s_pct
-        ) = if let Some(ref snapshot) = opening_snapshot {
+        let (drop_10s_pct, drop_30s_pct, drop_60s_pct, drop_120s_pct, drop_320s_pct) = if
+            let Some(ref snapshot) = opening_snapshot
+        {
             // Use price change data as proxy for drops (negative values indicate drops)
             let m5_drop = snapshot.price_change_m5.map(|pc| if pc < 0.0 { -pc } else { 0.0 });
             let h1_drop = snapshot.price_change_h1.map(|pc| if pc < 0.0 { -pc } else { 0.0 });
-            
+
             // Approximate different timeframes from available data
             (
                 m5_drop.map(|d| d * 0.1), // 10s approximation from 5m
-                m5_drop.map(|d| d * 0.2), // 30s approximation from 5m  
+                m5_drop.map(|d| d * 0.2), // 30s approximation from 5m
                 m5_drop.map(|d| d * 0.5), // 60s approximation from 5m
                 m5_drop.map(|d| d * 0.8), // 120s approximation from 5m
                 m5_drop, // 5m drop for 320s
@@ -155,11 +153,9 @@ impl TradeRecord {
 
         // Calculate ATH distances - these would need OHLCV data which isn't in snapshots
         // For now, use price change data as rough approximation
-        let (
-            ath_dist_15m_pct,
-            ath_dist_1h_pct,
-            ath_dist_6h_pct
-        ) = if let Some(ref snapshot) = opening_snapshot {
+        let (ath_dist_15m_pct, ath_dist_1h_pct, ath_dist_6h_pct) = if
+            let Some(ref snapshot) = opening_snapshot
+        {
             (
                 snapshot.price_change_m5.map(|pc| if pc < 0.0 { -pc } else { 0.0 }),
                 snapshot.price_change_h1.map(|pc| if pc < 0.0 { -pc } else { 0.0 }),
