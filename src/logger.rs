@@ -339,6 +339,7 @@ pub enum LogTag {
     Websocket,
     Positions,
     Security,
+    Learning,
     Test,
     Other(String),
 }
@@ -377,6 +378,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Websocket => format!("{:<8}", "WS").bright_cyan().bold(), // 🌐 WebSocket cyan
             LogTag::Positions => format!("{:<8}", "Positions").bright_yellow().bold(), // 📊 Positions yellow
             LogTag::Security => format!("{:<8}", "SECURITY").bright_red().bold(), // 🔒 Security red
+            LogTag::Learning => format!("{:<8}", "LEARNING").bright_purple().bold(), // 🧠 Learning purple
             LogTag::Test => format!("{:<8}", "TEST").bright_blue().bold(), // 🧪 Test blue
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
@@ -543,6 +545,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             format!("{:<width$}", "SECURITY", width = TAG_WIDTH)
                 .bright_red()
                 .bold(),
+        LogTag::Learning =>
+            format!("{:<width$}", "LEARNING", width = TAG_WIDTH)
+                .bright_purple()
+                .bold(),
         LogTag::Test =>
             format!("{:<width$}", "TEST", width = TAG_WIDTH)
                 .bright_blue()
@@ -627,6 +633,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Websocket => "WS",
         LogTag::Positions => "Positions",
         LogTag::Security => "SECURITY",
+        LogTag::Learning => "LEARNING",
         LogTag::Test => "TEST",
         LogTag::Other(ref s) => s,
     };

@@ -1,0 +1,647 @@
+//! learner/analyzer.rs
+//!
+//! Pattern analysis and feature extraction engine.
+//!
+//! This module handles:
+//! * Feature extraction from trade records
+//! * Pattern recognition and similarity matching
+//! * Historical context analysis
+//! * Success probability calculations
+//!
+//! The analyzer builds rich feature vectors that capture:
+//! * Drop patterns and velocity
+//! * Market context and liquidity
+//! * ATH proximity and risk factors
+//! * Temporal patterns and seasonality
+//! * Historical token behavior
+
+use crate::learner::types::*;
+use crate::learner::database::LearningDatabase;
+use crate::logger::{ log, LogTag };
+use crate::global::is_debug_learning_enabled;
+use chrono::{ DateTime, Utc, Timelike, Datelike };
+use std::collections::HashMap;
+use std::f64::consts::PI;
+
+/// Pattern analysis engine
+pub struct PatternAnalyzer {
+    // Cache for token statistics to avoid repeated database queries
+    token_stats_cache: tokio::sync::RwLock<HashMap<String, TokenStatistics>>,
+    cache_ttl: std::time::Duration,
+    last_cache_cleanup: tokio::sync::RwLock<std::time::Instant>,
+}
+
+#[derive(Debug, Clone)]
+struct TokenStatistics {
+    trade_count: usize,
+    avg_profit: f64,
+    success_rate: f64,
+    avg_hold_duration: f64,
+    avg_peak_time: f64,
+    volatility_score: f64,
+    last_updated: std::time::Instant,
+}
+
+impl PatternAnalyzer {
+    /// Create new pattern analyzer
+    pub fn new() -> Self {
+        Self {
+            token_stats_cache: tokio::sync::RwLock::new(HashMap::new()),
+            cache_ttl: std::time::Duration::from_secs(300), // 5 minutes
+            last_cache_cleanup: tokio::sync::RwLock::new(std::time::Instant::now()),
+        }
+    }
+
+    /// Extract feature vector from trade record
+    pub async fn extract_features(
+        &self,
+        trade: &TradeRecord,
+        database: &LearningDatabase
+    ) -> Result<FeatureVector, String> {
+        let mut features = FeatureVector::new(trade.id);
+
+        // Extract drop pattern features
+        self.extract_drop_features(trade, &mut features).await?;
+
+        // Extract market context features
+        self.extract_market_context_features(trade, &mut features).await?;
+
+        // Extract ATH proximity features
+        self.extract_ath_features(trade, &mut features).await?;
+
+        // Extract temporal features
+        self.extract_temporal_features(trade, &mut features).await?;
+
+        // Extract historical features
+        self.extract_historical_features(trade, database, &mut features).await?;
+
+        // Generate labels for training
+        self.generate_labels(trade, &mut features).await?;
+
+        if is_debug_learning_enabled() {
+            log(
+                LogTag::Learning,
+                "INFO",
+                &format!(
+                    "Extracted features for trade {}: {} features, success_label: {:?}",
+                    trade.id,
+                    FeatureVector::FEATURE_COUNT,
+                    features.success_label
+                )
+            );
+        }
+
+        Ok(features)
+    }
+
+    /// Extract drop pattern features
+    async fn extract_drop_features(
+        &self,
+        trade: &TradeRecord,
+        features: &mut FeatureVector
+    ) -> Result<(), String> {
+        // Normalize drop percentages by typical volatility for the timeframe
+        features.drop_10s_norm = self.normalize_drop(trade.drop_10s_pct, 10.0);
+        features.drop_30s_norm = self.normalize_drop(trade.drop_30s_pct, 30.0);
+        features.drop_60s_norm = self.normalize_drop(trade.drop_60s_pct, 60.0);
+        features.drop_120s_norm = self.normalize_drop(trade.drop_120s_pct, 120.0);
+        features.drop_320s_norm = self.normalize_drop(trade.drop_320s_pct, 320.0);
+
+        // Calculate drop velocity (percentage per minute)
+        if let Some(drop_30s) = trade.drop_30s_pct {
+            features.drop_velocity_30s = (drop_30s / 0.5).abs().min(100.0) / 100.0; // Normalize to 0-1
+        }
+
+        // Calculate drop acceleration (change in velocity)
+        if let (Some(drop_30s), Some(drop_60s)) = (trade.drop_30s_pct, trade.drop_60s_pct) {
+            let vel_early = (drop_30s / 0.5).abs();
+            let vel_total = (drop_60s / 1.0).abs();
+            features.drop_acceleration = ((vel_early - vel_total) / 50.0).clamp(-1.0, 1.0);
+        }
+
+        Ok(())
+    }
+
+    /// Extract market context features
+    async fn extract_market_context_features(
+        &self,
+        trade: &TradeRecord,
+        features: &mut FeatureVector
+    ) -> Result<(), String> {
+        // Liquidity tier (0-1 scale)
+        if let Some(liquidity) = trade.liquidity_at_entry {
+            features.liquidity_tier = self.liquidity_to_tier(liquidity);
+        }
+
+        // Transaction activity score
+        let tx_5m = trade.tx_activity_5m.unwrap_or(0) as f64;
+        let tx_1h = trade.tx_activity_1h.unwrap_or(0) as f64;
+        features.tx_activity_score = self.tx_activity_to_score(tx_5m, tx_1h);
+
+        // Security score normalized
+        if let Some(security_score) = trade.security_score {
+            features.security_score_norm = (security_score as f64) / 100.0;
+        }
+
+        // Holder count (log scale)
+        if let Some(holder_count) = trade.holder_count {
+            features.holder_count_log = (holder_count as f64).ln().max(0.0) / 20.0; // Normalize to ~0-1
+        }
+
+        // Market cap tier (estimated from liquidity and price)
+        if
+            let (Some(liquidity), Some(sol_reserves)) = (
+                trade.liquidity_at_entry,
+                trade.sol_reserves_at_entry,
+            )
+        {
+            features.market_cap_tier = self.estimate_market_cap_tier(
+                liquidity,
+                sol_reserves,
+                trade.entry_price
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Extract ATH proximity features
+    async fn extract_ath_features(
+        &self,
+        trade: &TradeRecord,
+        features: &mut FeatureVector
+    ) -> Result<(), String> {
+        // Convert distance from ATH to proximity (closer = higher value)
+        features.ath_prox_15m = trade.ath_dist_15m_pct
+            .map(|dist| 1.0 - (dist / 100.0).min(1.0))
+            .unwrap_or(0.0);
+
+        features.ath_prox_1h = trade.ath_dist_1h_pct
+            .map(|dist| 1.0 - (dist / 100.0).min(1.0))
+            .unwrap_or(0.0);
+
+        features.ath_prox_6h = trade.ath_dist_6h_pct
+            .map(|dist| 1.0 - (dist / 100.0).min(1.0))
+            .unwrap_or(0.0);
+
+        // Combined ATH risk score (higher when very close to any ATH)
+        let proximities = [features.ath_prox_15m, features.ath_prox_1h, features.ath_prox_6h];
+        let max_proximity = proximities.iter().cloned().fold(0.0f64, f64::max);
+        let avg_proximity = proximities.iter().sum::<f64>() / 3.0;
+
+        // Risk increases exponentially as we get very close to ATH
+        features.ath_risk_score = (max_proximity * 0.7 + avg_proximity * 0.3).powf(2.0);
+
+        Ok(())
+    }
+
+    /// Extract temporal features
+    async fn extract_temporal_features(
+        &self,
+        trade: &TradeRecord,
+        features: &mut FeatureVector
+    ) -> Result<(), String> {
+        // Encode hour of day as sine/cosine for cyclical nature
+        let hour_radians = ((trade.hour_of_day as f64) * 2.0 * PI) / 24.0;
+        features.hour_sin = hour_radians.sin();
+        features.hour_cos = hour_radians.cos();
+
+        // Encode day of week as sine/cosine
+        let day_radians = ((trade.day_of_week as f64) * 2.0 * PI) / 7.0;
+        features.day_sin = day_radians.sin();
+        features.day_cos = day_radians.cos();
+
+        Ok(())
+    }
+
+    /// Extract historical features about the token
+    async fn extract_historical_features(
+        &self,
+        trade: &TradeRecord,
+        database: &LearningDatabase,
+        features: &mut FeatureVector
+    ) -> Result<(), String> {
+        // Check if this is a re-entry
+        features.re_entry_flag = if trade.was_re_entry { 1.0 } else { 0.0 };
+
+        // Get token statistics (cached)
+        let token_stats = self.get_token_statistics(&trade.mint, database).await?;
+
+        features.token_trade_count = (token_stats.trade_count as f64).ln().max(0.0) / 10.0; // Log scale
+        features.avg_hold_duration = (token_stats.avg_hold_duration / 3600.0).min(24.0) / 24.0; // Hours, max 24
+
+        // Count recent exits for this token (last 24 hours)
+        let recent_trades = database.get_trades_for_mint(&trade.mint).await?;
+        let recent_exits = recent_trades
+            .iter()
+            .filter(|t| (trade.entry_time - t.exit_time).num_hours() <= 24)
+            .count();
+        features.recent_exit_count = (recent_exits as f64).min(10.0) / 10.0;
+
+        Ok(())
+    }
+
+    /// Generate training labels
+    async fn generate_labels(
+        &self,
+        trade: &TradeRecord,
+        features: &mut FeatureVector
+    ) -> Result<(), String> {
+        // Success label: profitable exit
+        features.success_label = Some(if trade.pnl_pct > 0.0 { 1.0 } else { 0.0 });
+
+        // Quick success label: >25% profit in <20 minutes
+        let quick_profit = trade.pnl_pct > 25.0 && trade.hold_duration_sec < 1200; // 20 minutes
+        features.quick_success_label = Some(if quick_profit { 1.0 } else { 0.0 });
+
+        // Risk label: >18% drawdown in first 8 minutes
+        let high_early_risk =
+            trade.max_down_pct.abs() > 18.0 &&
+            trade.dd_reached_sec.map(|t| t < 480).unwrap_or(false); // 8 minutes
+        features.risk_label = Some(if high_early_risk { 1.0 } else { 0.0 });
+
+        // Peak time label: normalized time to reach peak
+        if let Some(peak_time) = trade.peak_reached_sec {
+            features.peak_time_label = Some(((peak_time as f64) / 3600.0).min(1.0)); // Normalize to hours, max 1
+        }
+
+        Ok(())
+    }
+
+    /// Get cached token statistics
+    async fn get_token_statistics(
+        &self,
+        mint: &str,
+        database: &LearningDatabase
+    ) -> Result<TokenStatistics, String> {
+        // Cleanup cache if needed
+        self.cleanup_cache_if_needed().await;
+
+        // Check cache first
+        {
+            let cache = self.token_stats_cache.read().await;
+            if let Some(stats) = cache.get(mint) {
+                if stats.last_updated.elapsed() < self.cache_ttl {
+                    return Ok(stats.clone());
+                }
+            }
+        }
+
+        // Load from database
+        let trades = database.get_trades_for_mint(mint).await?;
+        let stats = self.calculate_token_statistics(&trades);
+
+        // Update cache
+        {
+            let mut cache = self.token_stats_cache.write().await;
+            cache.insert(mint.to_string(), stats.clone());
+        }
+
+        Ok(stats)
+    }
+
+    /// Calculate token statistics from trades
+    fn calculate_token_statistics(&self, trades: &[TradeRecord]) -> TokenStatistics {
+        if trades.is_empty() {
+            return TokenStatistics {
+                trade_count: 0,
+                avg_profit: 0.0,
+                success_rate: 0.0,
+                avg_hold_duration: 0.0,
+                avg_peak_time: 0.0,
+                volatility_score: 0.0,
+                last_updated: std::time::Instant::now(),
+            };
+        }
+
+        let profitable_trades = trades
+            .iter()
+            .filter(|t| t.pnl_pct > 0.0)
+            .count();
+        let success_rate = (profitable_trades as f64) / (trades.len() as f64);
+
+        let avg_profit =
+            trades
+                .iter()
+                .map(|t| t.pnl_pct)
+                .sum::<f64>() / (trades.len() as f64);
+        let avg_hold_duration =
+            trades
+                .iter()
+                .map(|t| t.hold_duration_sec as f64)
+                .sum::<f64>() / (trades.len() as f64);
+
+        let avg_peak_time =
+            trades
+                .iter()
+                .filter_map(|t| t.peak_reached_sec)
+                .map(|t| t as f64)
+                .sum::<f64>() / (trades.len() as f64);
+
+        // Calculate volatility as average of max swings
+        let volatility_score =
+            trades
+                .iter()
+                .map(|t| (t.max_up_pct - t.max_down_pct).abs())
+                .sum::<f64>() / (trades.len() as f64);
+
+        TokenStatistics {
+            trade_count: trades.len(),
+            avg_profit,
+            success_rate,
+            avg_hold_duration,
+            avg_peak_time,
+            volatility_score,
+            last_updated: std::time::Instant::now(),
+        }
+    }
+
+    /// Clean up old cache entries
+    async fn cleanup_cache_if_needed(&self) {
+        let mut last_cleanup = self.last_cache_cleanup.write().await;
+        if last_cleanup.elapsed() > std::time::Duration::from_secs(600) {
+            // 10 minutes
+            let mut cache = self.token_stats_cache.write().await;
+            let cutoff = std::time::Instant::now() - self.cache_ttl;
+            cache.retain(|_, stats| stats.last_updated > cutoff);
+            *last_cleanup = std::time::Instant::now();
+        }
+    }
+
+    /// Normalize drop percentage by timeframe
+    fn normalize_drop(&self, drop_pct: Option<f64>, timeframe_sec: f64) -> f64 {
+        if let Some(drop) = drop_pct {
+            // Expected volatility increases with sqrt of time
+            let expected_volatility = 2.0 * (timeframe_sec / 60.0).sqrt(); // Base 2% per minute
+            let normalized = drop.abs() / expected_volatility;
+            normalized.min(2.0) / 2.0 // Cap at 2x expected, normalize to 0-1
+        } else {
+            0.0
+        }
+    }
+
+    /// Convert liquidity to tier (0-1)
+    fn liquidity_to_tier(&self, liquidity: f64) -> f64 {
+        // Tiers: <1K=0.0, 1K-10K=0.2, 10K-100K=0.4, 100K-1M=0.6, 1M-10M=0.8, >10M=1.0
+        if liquidity < 1000.0 {
+            0.0
+        } else if liquidity < 10000.0 {
+            0.2
+        } else if liquidity < 100000.0 {
+            0.4
+        } else if liquidity < 1000000.0 {
+            0.6
+        } else if liquidity < 10000000.0 {
+            0.8
+        } else {
+            1.0
+        }
+    }
+
+    /// Convert transaction activity to score (0-1)
+    fn tx_activity_to_score(&self, tx_5m: f64, tx_1h: f64) -> f64 {
+        // Combine 5-minute and 1-hour activity with different weights
+        let score_5m = (tx_5m / 20.0).min(1.0); // Max score at 20 tx/5min
+        let score_1h = (tx_1h / 200.0).min(1.0); // Max score at 200 tx/hour
+
+        // Weight recent activity more heavily
+        (score_5m * 0.7 + score_1h * 0.3).min(1.0)
+    }
+
+    /// Estimate market cap tier from liquidity and reserves
+    fn estimate_market_cap_tier(&self, liquidity: f64, sol_reserves: f64, price: f64) -> f64 {
+        // Rough estimate: market_cap ≈ price * total_supply
+        // We can estimate total_supply from liquidity structure
+        if sol_reserves > 0.0 && price > 0.0 {
+            let estimated_token_supply = liquidity / (2.0 * price); // Rough estimate
+            let estimated_market_cap = estimated_token_supply * price;
+
+            // Tiers: <100K=0.1, 100K-1M=0.3, 1M-10M=0.5, 10M-100M=0.7, >100M=0.9
+            if estimated_market_cap < 100000.0 {
+                0.1
+            } else if estimated_market_cap < 1000000.0 {
+                0.3
+            } else if estimated_market_cap < 10000000.0 {
+                0.5
+            } else if estimated_market_cap < 100000000.0 {
+                0.7
+            } else {
+                0.9
+            }
+        } else {
+            0.0
+        }
+    }
+
+    /// Find similar tokens based on trading patterns
+    pub async fn find_similar_tokens(
+        &self,
+        target_mint: &str,
+        database: &LearningDatabase,
+        limit: usize
+    ) -> Result<Vec<SimilarToken>, String> {
+        // Get target token's features
+        let target_trades = database.get_trades_for_mint(target_mint).await?;
+        if target_trades.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let target_stats = self.calculate_token_statistics(&target_trades);
+
+        // This is a simplified similarity search
+        // In practice, you'd want to use proper feature vectors and distance metrics
+        let mut similar_tokens = Vec::new();
+
+        // For now, return empty as this would require scanning all tokens
+        // TODO: Implement proper similarity search with feature vectors
+
+        Ok(similar_tokens)
+    }
+
+    /// Calculate pattern similarity score between two trades
+    pub fn calculate_pattern_similarity(&self, trade1: &TradeRecord, trade2: &TradeRecord) -> f64 {
+        let mut similarity = 0.0;
+        let mut weight_sum = 0.0;
+
+        // Compare drop patterns
+        let drop_patterns1 = [
+            trade1.drop_10s_pct.unwrap_or(0.0),
+            trade1.drop_30s_pct.unwrap_or(0.0),
+            trade1.drop_60s_pct.unwrap_or(0.0),
+            trade1.drop_120s_pct.unwrap_or(0.0),
+            trade1.drop_320s_pct.unwrap_or(0.0),
+        ];
+
+        let drop_patterns2 = [
+            trade2.drop_10s_pct.unwrap_or(0.0),
+            trade2.drop_30s_pct.unwrap_or(0.0),
+            trade2.drop_60s_pct.unwrap_or(0.0),
+            trade2.drop_120s_pct.unwrap_or(0.0),
+            trade2.drop_320s_pct.unwrap_or(0.0),
+        ];
+
+        // Calculate pattern correlation
+        for (d1, d2) in drop_patterns1.iter().zip(drop_patterns2.iter()) {
+            let diff = (d1 - d2).abs();
+            let pattern_sim = 1.0 - (diff / 50.0).min(1.0); // Normalize by max expected difference
+            similarity += pattern_sim * 0.4; // 40% weight for drop patterns
+            weight_sum += 0.4;
+        }
+
+        // Compare hold durations
+        let duration_diff = (trade1.hold_duration_sec - trade2.hold_duration_sec).abs() as f64;
+        let duration_sim = 1.0 - (duration_diff / 3600.0).min(1.0); // Normalize by 1 hour
+        similarity += duration_sim * 0.2; // 20% weight
+        weight_sum += 0.2;
+
+        // Compare outcomes
+        let pnl_diff = (trade1.pnl_pct - trade2.pnl_pct).abs();
+        let pnl_sim = 1.0 - (pnl_diff / 100.0).min(1.0); // Normalize by 100%
+        similarity += pnl_sim * 0.2; // 20% weight
+        weight_sum += 0.2;
+
+        // Compare market context
+        if let (Some(liq1), Some(liq2)) = (trade1.liquidity_at_entry, trade2.liquidity_at_entry) {
+            let liq_ratio = liq1.min(liq2) / liq1.max(liq2);
+            similarity += liq_ratio * 0.2; // 20% weight
+            weight_sum += 0.2;
+        }
+
+        if weight_sum > 0.0 {
+            similarity / weight_sum
+        } else {
+            0.0
+        }
+    }
+
+    /// Extract features for entry decision (used by integration.rs)
+    pub async fn extract_features_for_entry(
+        &self,
+        mint: &str,
+        current_price: f64,
+        drop_percent: f64,
+        ath_proximity: f64
+    ) -> Result<FeatureVector, String> {
+        use chrono::Timelike;
+        use std::f64::consts::PI;
+
+        let now = chrono::Utc::now();
+        let hour = now.hour() as f64;
+        let day = now.weekday().num_days_from_sunday() as f64;
+
+        // Create a minimal feature vector for entry prediction
+        let features = FeatureVector {
+            trade_id: 0, // Not associated with a trade yet
+
+            // Drop pattern features (normalize drop_percent)
+            drop_10s_norm: (drop_percent / 100.0).min(1.0),
+            drop_30s_norm: (drop_percent / 100.0).min(1.0),
+            drop_60s_norm: (drop_percent / 100.0).min(1.0),
+            drop_120s_norm: (drop_percent / 100.0).min(1.0),
+            drop_320s_norm: (drop_percent / 100.0).min(1.0),
+            drop_velocity_30s: drop_percent / 30.0,
+            drop_acceleration: 0.0, // Unknown at entry
+
+            // Market context (reasonable defaults)
+            liquidity_tier: 0.5,
+            tx_activity_score: 0.5,
+            security_score_norm: 0.8,
+            holder_count_log: 8.0,
+            market_cap_tier: 0.5,
+
+            // ATH proximity
+            ath_prox_15m: ath_proximity,
+            ath_prox_1h: ath_proximity,
+            ath_prox_6h: ath_proximity,
+            ath_risk_score: 1.0 - ath_proximity,
+
+            // Temporal features
+            hour_sin: ((hour * 2.0 * PI) / 24.0).sin(),
+            hour_cos: ((hour * 2.0 * PI) / 24.0).cos(),
+            day_sin: ((day * 2.0 * PI) / 7.0).sin(),
+            day_cos: ((day * 2.0 * PI) / 7.0).cos(),
+
+            // Historical features (defaults)
+            re_entry_flag: 0.0,
+            token_trade_count: 0.0,
+            recent_exit_count: 0.0,
+            avg_hold_duration: 60.0,
+
+            // Labels (not set for prediction)
+            success_label: None,
+            quick_success_label: None,
+            risk_label: None,
+            peak_time_label: None,
+
+            created_at: chrono::Utc::now(),
+        };
+
+        Ok(features)
+    }
+
+    /// Extract features for exit decision (used by integration.rs)
+    pub async fn extract_features_for_exit(
+        &self,
+        mint: &str,
+        current_price: f64,
+        entry_price: f64,
+        position_duration_mins: u32
+    ) -> Result<FeatureVector, String> {
+        use chrono::Timelike;
+        use std::f64::consts::PI;
+
+        let now = chrono::Utc::now();
+        let hour = now.hour() as f64;
+        let day = now.weekday().num_days_from_sunday() as f64;
+        let current_profit = ((current_price - entry_price) / entry_price) * 100.0;
+
+        // Create feature vector for exit prediction
+        let features = FeatureVector {
+            trade_id: 0, // Not associated with a trade yet
+
+            // Drop pattern features (use entry assumptions)
+            drop_10s_norm: 0.3,
+            drop_30s_norm: 0.3,
+            drop_60s_norm: 0.3,
+            drop_120s_norm: 0.3,
+            drop_320s_norm: 0.3,
+            drop_velocity_30s: 1.0,
+            drop_acceleration: 0.0,
+
+            // Market context (reasonable defaults)
+            liquidity_tier: 0.5,
+            tx_activity_score: 0.5,
+            security_score_norm: 0.8,
+            holder_count_log: 8.0,
+            market_cap_tier: 0.5,
+
+            // ATH proximity (assume still good)
+            ath_prox_15m: 0.8,
+            ath_prox_1h: 0.8,
+            ath_prox_6h: 0.8,
+            ath_risk_score: 0.2,
+
+            // Temporal features
+            hour_sin: ((hour * 2.0 * PI) / 24.0).sin(),
+            hour_cos: ((hour * 2.0 * PI) / 24.0).cos(),
+            day_sin: ((day * 2.0 * PI) / 7.0).sin(),
+            day_cos: ((day * 2.0 * PI) / 7.0).cos(),
+
+            // Historical features
+            re_entry_flag: 0.0,
+            token_trade_count: 1.0, // At least one trade (current)
+            recent_exit_count: 0.0,
+            avg_hold_duration: position_duration_mins as f64,
+
+            // Labels (not set for prediction)
+            success_label: None,
+            quick_success_label: None,
+            risk_label: None,
+            peak_time_label: None,
+
+            created_at: chrono::Utc::now(),
+        };
+
+        Ok(features)
+    }
+}

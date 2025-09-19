@@ -19,6 +19,7 @@ pub use crate::arguments::{
     is_debug_discovery_enabled,
     is_debug_entry_enabled,
     is_debug_filtering_enabled,
+    is_debug_learning_enabled,
     is_debug_monitor_enabled,
     is_debug_ohlcv_enabled,
     is_debug_pool_calculator_enabled,

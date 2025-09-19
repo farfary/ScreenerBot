@@ -27,3 +27,4 @@ pub mod transactions_types; // Transaction type definitions
 pub mod utils;
 pub mod wallet; // Wallet balance monitoring
 pub mod websocket; // WebSocket client for real-time transaction monitoring
+pub mod learner; // Learning system for pattern recognition and auto-improvement
