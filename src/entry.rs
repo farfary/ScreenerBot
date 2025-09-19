@@ -8,7 +8,7 @@
 
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
-use crate::pools::{ get_pool_price, get_price_history, PriceResult };
+use crate::pools::{ get_pool_price, get_price_history, PriceResult, check_price_history_quality };
 use crate::tokens::security::get_security_analyzer; // for optional cached holder count
 use crate::learner::get_learning_integration;
 use chrono::{ DateTime, Utc };
@@ -417,6 +417,48 @@ fn detect_sma_reclaim(
 /// Main entry point for determining if a token should be bought
 /// Returns (approved_for_entry, confidence_score, reason)
 pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
+    // 1. Check if price history is available and sufficient for analysis
+    match check_price_history_quality(&price_info.mint, 10, 120) {
+        Ok(true) => {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "INFO",
+                    &format!("✅ Price history quality check passed for {}", price_info.mint)
+                );
+            }
+        }
+        Ok(false) => {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "WARN",
+                    &format!("❌ {} insufficient price history quality", price_info.mint)
+                );
+            }
+            return (false, 0.0, "Insufficient price history quality".to_string());
+        }
+        Err(e) => {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "ERROR",
+                    &format!("❌ {} price history check error: {}", price_info.mint, e)
+                );
+            }
+            return (false, 0.0, format!("Price history check error: {}", e));
+        }
+    }
+
+    // 2. Verify current price is fresh (same threshold as quality check)
+    if price_info.is_stale(120) {
+        // 2 minutes max age - consistent with quality check
+        if is_debug_entry_enabled() {
+            log(LogTag::Entry, "WARN", &format!("❌ {} price is stale", price_info.mint));
+        }
+        return (false, 0.0, "Price data is stale".to_string());
+    }
+
     let price_history = get_price_history(&price_info.mint);
 
     if is_debug_entry_enabled() {
@@ -451,12 +493,10 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         );
     }
 
+    // Fixed timestamp conversion - use the proper UTC timestamp method
     let mut converted_history: Vec<(DateTime<Utc>, f64)> = price_history
         .iter()
-        .map(|p| (
-            Utc::now() - chrono::Duration::seconds(p.timestamp.elapsed().as_secs() as i64),
-            p.price_sol,
-        ))
+        .map(|p| (p.get_utc_timestamp(), p.price_sol))
         .collect();
     converted_history.retain(|(_, p)| *p > 0.0 && p.is_finite());
 

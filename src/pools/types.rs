@@ -78,9 +78,30 @@ impl PriceResult {
         }
     }
 
-    /// Check if this price is fresh (within acceptable time threshold)
+    /// Get UTC timestamp for this price result for time series analysis
+    pub fn get_utc_timestamp(&self) -> chrono::DateTime<chrono::Utc> {
+        // Convert Instant to UTC timestamp by calculating the offset from now
+        let now_instant = std::time::Instant::now();
+        let now_utc = chrono::Utc::now();
+
+        // Calculate how long ago this price was recorded
+        let age_duration = now_instant.saturating_duration_since(self.timestamp);
+
+        // Subtract that duration from current UTC time to get the price timestamp
+        now_utc - chrono::Duration::from_std(age_duration).unwrap_or(chrono::Duration::zero())
+    }
+
+    /// Check if this price result is fresh (within specified age limit)
     pub fn is_fresh(&self, max_age_seconds: u64) -> bool {
-        self.timestamp.elapsed().as_secs() < max_age_seconds
+        let now = chrono::Utc::now();
+        let price_time = self.get_utc_timestamp();
+        let age = (now - price_time).num_seconds();
+        age >= 0 && age <= (max_age_seconds as i64)
+    }
+
+    /// Check if this price result is stale (older than specified limit)
+    pub fn is_stale(&self, max_age_seconds: u64) -> bool {
+        !self.is_fresh(max_age_seconds)
     }
 }
 

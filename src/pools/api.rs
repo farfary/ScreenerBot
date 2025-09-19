@@ -130,3 +130,160 @@ pub async fn load_token_history_into_cache(mint: &str) -> Result<(), String> {
 
     cache::load_token_history_from_database(mint).await
 }
+
+/// Check if price history is available and sufficient for analysis
+///
+/// This function verifies that price history exists, is recent, and has
+/// enough data points for meaningful technical analysis.
+///
+/// # Arguments
+/// * `mint` - Token mint address as string
+/// * `min_points` - Minimum number of price points required
+/// * `max_age_seconds` - Maximum age of newest price in seconds
+///
+/// # Returns
+/// * `Ok(true)` - Price history is available and sufficient
+/// * `Ok(false)` - Price history exists but is insufficient
+/// * `Err(String)` - Error accessing price history
+pub fn check_price_history_quality(
+    mint: &str,
+    min_points: usize,
+    max_age_seconds: u64
+) -> Result<bool, String> {
+    if !service::is_pool_service_running() {
+        return Err("Pool service not running".to_string());
+    }
+
+    let history = cache::get_price_history(mint);
+
+    // Check if we have minimum required points
+    if history.len() < min_points {
+        return Ok(false);
+    }
+
+    // Check if the most recent price is fresh enough
+    if let Some(latest_price) = history.last() {
+        if !latest_price.is_fresh(max_age_seconds) {
+            return Ok(false);
+        }
+    } else {
+        return Ok(false);
+    }
+
+    // Check for data continuity (no major gaps)
+    if history.len() > 1 {
+        let mut has_major_gaps = false;
+        for i in 1..history.len() {
+            let prev_time = history[i - 1].get_utc_timestamp();
+            let curr_time = history[i].get_utc_timestamp();
+            let gap = (curr_time - prev_time).num_seconds().abs();
+
+            // If gap is larger than 2 minutes, consider it significant
+            if gap > 120 {
+                has_major_gaps = true;
+                break;
+            }
+        }
+
+        if has_major_gaps {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
+}
+
+/// Get price history statistics for monitoring and debugging
+///
+/// Returns detailed information about the quality and characteristics
+/// of price history for a specific token.
+///
+/// # Arguments
+/// * `mint` - Token mint address as string
+///
+/// # Returns
+/// * `Ok(PriceHistoryStats)` - Detailed statistics about price history
+/// * `Err(String)` - Error accessing price history
+pub fn get_price_history_stats(mint: &str) -> Result<PriceHistoryStats, String> {
+    if !service::is_pool_service_running() {
+        return Err("Pool service not running".to_string());
+    }
+
+    let history = cache::get_price_history(mint);
+
+    if history.is_empty() {
+        return Ok(PriceHistoryStats {
+            total_points: 0,
+            age_newest_seconds: 0,
+            age_oldest_seconds: 0,
+            has_major_gaps: false,
+            largest_gap_seconds: 0,
+            average_interval_seconds: 0.0,
+            price_range_sol: (0.0, 0.0),
+        });
+    }
+
+    let newest_time = history.last().unwrap().get_utc_timestamp();
+    let oldest_time = history.first().unwrap().get_utc_timestamp();
+    let now = chrono::Utc::now();
+
+    let age_newest_seconds = (now - newest_time).num_seconds().max(0) as u64;
+    let age_oldest_seconds = (now - oldest_time).num_seconds().max(0) as u64;
+
+    // Calculate gaps and intervals
+    let mut largest_gap_seconds = 0i64;
+    let mut total_intervals = 0i64;
+    let mut has_major_gaps = false;
+
+    if history.len() > 1 {
+        for i in 1..history.len() {
+            let prev_time = history[i - 1].get_utc_timestamp();
+            let curr_time = history[i].get_utc_timestamp();
+            let interval = (curr_time - prev_time).num_seconds().abs();
+
+            total_intervals += interval;
+            largest_gap_seconds = largest_gap_seconds.max(interval);
+
+            if interval > 120 {
+                // 2 minutes
+                has_major_gaps = true;
+            }
+        }
+    }
+
+    let average_interval_seconds = if history.len() > 1 {
+        (total_intervals as f64) / ((history.len() - 1) as f64)
+    } else {
+        0.0
+    };
+
+    // Calculate price range
+    let prices: Vec<f64> = history
+        .iter()
+        .map(|p| p.price_sol)
+        .collect();
+    let min_price = prices.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max_price = prices.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+
+    Ok(PriceHistoryStats {
+        total_points: history.len(),
+        age_newest_seconds,
+        age_oldest_seconds,
+        has_major_gaps,
+        largest_gap_seconds: largest_gap_seconds as u64,
+        average_interval_seconds,
+        price_range_sol: (min_price, max_price),
+    })
+}
+
+/// Statistics about price history quality and characteristics
+#[derive(Debug, Clone)]
+pub struct PriceHistoryStats {
+    pub total_points: usize,
+    pub age_newest_seconds: u64,
+    pub age_oldest_seconds: u64,
+    pub has_major_gaps: bool,
+    pub largest_gap_seconds: u64,
+    pub average_interval_seconds: f64,
+    pub price_range_sol: (f64, f64), // (min, max)
+}

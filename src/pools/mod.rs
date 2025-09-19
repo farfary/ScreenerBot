@@ -27,6 +27,9 @@ pub use api::{
     get_cache_stats,
     get_extended_price_history,
     load_token_history_into_cache,
+    check_price_history_quality,
+    get_price_history_stats,
+    PriceHistoryStats,
 };
 pub use service::{
     start_pool_service,

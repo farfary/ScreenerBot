@@ -433,6 +433,29 @@ impl PatternAnalyzer {
         }
     }
 
+    /// Calculate price volatility from price series
+    fn calculate_price_volatility(&self, prices: &[f64]) -> f64 {
+        if prices.len() < 2 {
+            return 0.0;
+        }
+
+        // Calculate percentage changes
+        let mut changes = Vec::new();
+        for i in 1..prices.len() {
+            if prices[i - 1] > 0.0 {
+                let change = ((prices[i] - prices[i - 1]) / prices[i - 1]).abs() * 100.0;
+                changes.push(change);
+            }
+        }
+
+        if changes.is_empty() {
+            return 0.0;
+        }
+
+        // Return average absolute percentage change as volatility measure
+        changes.iter().sum::<f64>() / (changes.len() as f64)
+    }
+
     /// Find similar tokens based on trading patterns
     pub async fn find_similar_tokens(
         &self,
@@ -608,12 +631,76 @@ impl PatternAnalyzer {
     ) -> Result<FeatureVector, String> {
         use chrono::Timelike;
         use std::f64::consts::PI;
+        use crate::pools::{ get_price_history, get_price_history_stats };
+        use crate::tokens::security::get_security_analyzer;
 
         let now = chrono::Utc::now();
         let hour = now.hour() as f64;
         let day = now.weekday().num_days_from_sunday() as f64;
 
-        // Create a minimal feature vector for entry prediction
+        // Get real price history from pools system
+        let price_history = get_price_history(mint);
+
+        // Calculate actual market context features from real data
+        let (liquidity_tier, market_cap_tier, tx_activity_score) = if
+            let Some(latest_price) = price_history.last()
+        {
+            let liquidity = latest_price.sol_reserves;
+            let liquidity_tier = self.liquidity_to_tier(liquidity);
+
+            // Estimate market cap tier from reserves and price
+            let market_cap_tier = self.estimate_market_cap_tier(
+                liquidity,
+                latest_price.sol_reserves,
+                current_price
+            );
+
+            // Simple activity score based on price volatility in last 10 points
+            let tx_activity_score = if price_history.len() >= 10 {
+                let recent_prices: Vec<f64> = price_history
+                    .iter()
+                    .rev()
+                    .take(10)
+                    .map(|p| p.price_sol)
+                    .collect();
+
+                let volatility = self.calculate_price_volatility(&recent_prices);
+                (volatility / 50.0).min(1.0) // Normalize volatility to 0-1
+            } else {
+                0.3 // Low activity if insufficient data
+            };
+
+            (liquidity_tier, market_cap_tier, tx_activity_score)
+        } else {
+            // Fallback values if no price history available
+            (0.2, 0.2, 0.1)
+        };
+
+        // Get real security data if available (use database for more reliable data)
+        let (security_score_norm, holder_count_log) = {
+            let security_analyzer = get_security_analyzer();
+
+            // Try cache first, then database
+            let security_info = security_analyzer.cache.get(mint).or_else(|| {
+                // Cache returns None (dummy implementation), try database
+                match security_analyzer.database.get_security_info(mint) {
+                    Ok(Some(info)) => Some(info),
+                    _ => None,
+                }
+            });
+
+            match security_info {
+                Some(info) => {
+                    let holder_count_log = (info.holder_count as f64).ln().max(0.0) / 20.0;
+                    let security_score = if info.meets_safety_requirements() { 85.0 } else { 40.0 };
+                    let security_score_norm = security_score / 100.0;
+                    (security_score_norm, holder_count_log)
+                }
+                None => (0.5, 5.0), // Default values if security data unavailable
+            }
+        };
+
+        // Create feature vector with real market data
         let features = FeatureVector {
             trade_id: 0, // Not associated with a trade yet
 
@@ -626,12 +713,12 @@ impl PatternAnalyzer {
             drop_velocity_30s: drop_percent / 30.0,
             drop_acceleration: 0.0, // Unknown at entry
 
-            // Market context (reasonable defaults)
-            liquidity_tier: 0.5,
-            tx_activity_score: 0.5,
-            security_score_norm: 0.8,
-            holder_count_log: 8.0,
-            market_cap_tier: 0.5,
+            // Real market context data from pools
+            liquidity_tier,
+            tx_activity_score,
+            security_score_norm,
+            holder_count_log,
+            market_cap_tier,
 
             // ATH proximity
             ath_prox_15m: ath_proximity,
@@ -645,7 +732,7 @@ impl PatternAnalyzer {
             day_sin: ((day * 2.0 * PI) / 7.0).sin(),
             day_cos: ((day * 2.0 * PI) / 7.0).cos(),
 
-            // Historical features (defaults)
+            // Historical features (defaults for now, can be enhanced later)
             re_entry_flag: 0.0,
             token_trade_count: 0.0,
             recent_exit_count: 0.0,
@@ -659,6 +746,21 @@ impl PatternAnalyzer {
 
             created_at: chrono::Utc::now(),
         };
+
+        if crate::global::is_debug_learning_enabled() {
+            crate::logger::log(
+                crate::logger::LogTag::Learning,
+                "DEBUG",
+                &format!(
+                    "Real features for {}: liquidity_tier={:.3}, tx_activity={:.3}, security={:.3}, market_cap={:.3}",
+                    mint,
+                    liquidity_tier,
+                    tx_activity_score,
+                    security_score_norm,
+                    market_cap_tier
+                )
+            );
+        }
 
         Ok(features)
     }
