@@ -22,6 +22,9 @@ const TARGET_FILTERED_TOKENS: usize = 1000;
 /// Maximum tokens to process in one filtering cycle for performance
 const MAX_TOKENS_TO_PROCESS: usize = 5000;
 
+/// Security-first processing multiplier - process 3x more tokens to ensure secure tokens aren't excluded
+const SECURITY_FIRST_MULTIPLIER: usize = 3;
+
 // ===== BASIC TOKEN INFO REQUIREMENTS =====
 /// Token must have name and symbol (always required)
 const REQUIRE_NAME_AND_SYMBOL: bool = true;
@@ -65,14 +68,14 @@ const MIN_SECURITY_SCORE: u8 = 0;
 /// This is the ONLY function used by the pool service to get tokens.
 /// Returns up to 1000 token mint addresses that pass all filtering criteria.
 ///
-/// Filtering order (for efficiency):
-/// 1. Get tokens from database (ordered by liquidity descending)
-/// 2. Check decimals availability in database
-/// 3. Check basic token info completeness (name, symbol, logo)
-/// 4. Check minimum transaction activity
-/// 5. Check minimum liquidity
-/// 6. Check market cap range
-/// 7. Check security requirements (LP locks, no mint/freeze authority)
+/// Filtering order (optimized for performance and security):
+/// 1. Get tokens from database with security-aware ordering and increased limit
+/// 2. Apply security filtering FIRST to prioritize secure tokens
+/// 3. Check decimals availability in database
+/// 4. Check basic token info completeness (name, symbol, logo)
+/// 5. Check minimum transaction activity
+/// 6. Check minimum liquidity
+/// 7. Check market cap range
 ///
 /// Returns: Vec<String> - List of token mint addresses ready for monitoring
 pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
@@ -83,7 +86,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         log(LogTag::Filtering, "START", "Starting token filtering cycle");
     }
 
-    // Step 1: Get tokens from database ordered by liquidity
+    // Step 1: Get tokens from database - INCREASED LIMIT to ensure secure tokens aren't excluded
     let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
 
     let all_tokens = db
@@ -95,58 +98,82 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         return Ok(Vec::new());
     }
 
-    // Limit processing for performance
-    let tokens_to_process = if all_tokens.len() > MAX_TOKENS_TO_PROCESS {
-        &all_tokens[..MAX_TOKENS_TO_PROCESS]
-    } else {
-        &all_tokens
-    };
+    // CRITICAL FIX: Increase processing limit and apply security filtering FIRST
+    // This ensures secure tokens aren't excluded by the 5000 limit
+    let extended_limit = std::cmp::min(
+        all_tokens.len(),
+        MAX_TOKENS_TO_PROCESS * SECURITY_FIRST_MULTIPLIER
+    );
+    let tokens_to_process = &all_tokens[..extended_limit];
 
     if debug_enabled {
         log(
             LogTag::Filtering,
             "INFO",
             &format!(
-                "Processing {} tokens from database (total: {})",
+                "Processing {} tokens from database (total: {}) - SECURITY PRIORITY MODE",
                 tokens_to_process.len(),
                 all_tokens.len()
             )
         );
     }
 
-    // Step 2: Apply all filtering criteria
+    // Step 2: Apply SECURITY filtering FIRST to prioritize secure tokens
+    let token_mints: Vec<String> = tokens_to_process
+        .iter()
+        .map(|t| t.mint.clone())
+        .collect();
+    let (security_filtered, security_stats) =
+        apply_cached_security_filtering_with_stats(token_mints)?;
+
+    if debug_enabled {
+        log(
+            LogTag::Filtering,
+            "SECURITY_FIRST",
+            &format!(
+                "Security filtering FIRST: {} tokens passed from {} checked",
+                security_filtered.len(),
+                security_stats.total_checked
+            )
+        );
+    }
+
+    // Step 3: Apply remaining filters to security-approved tokens
     let mut filtered_tokens = Vec::new();
     let mut filtering_stats = FilteringStats::new();
+    filtering_stats.total_processed = security_filtered.len(); // Track security-filtered count
 
-    for token in tokens_to_process {
-        filtering_stats.total_processed += 1;
+    // Create lookup map for faster token retrieval
+    let token_map: HashMap<String, &ApiToken> = tokens_to_process
+        .iter()
+        .map(|token| (token.mint.clone(), token))
+        .collect();
 
-        // Convert ApiToken to Token for filtering
-        let token_obj = Token::from(token.clone());
+    for mint in security_filtered {
+        if let Some(token_api) = token_map.get(&mint) {
+            // Convert ApiToken to Token for filtering
+            let token_obj = Token::from((*token_api).clone());
 
-        // Apply filtering criteria in order of efficiency
-        if let Some(reason) = apply_all_filters(&token_obj, &mut filtering_stats).await {
-            filtering_stats.record_rejection(reason);
-            continue;
-        }
+            // Apply remaining filtering criteria (security already passed)
+            if let Some(reason) = apply_remaining_filters(&token_obj, &mut filtering_stats).await {
+                filtering_stats.record_rejection(reason);
+                continue;
+            }
 
-        // Token passed all filters
-        filtered_tokens.push(token.mint.clone());
-        filtering_stats.passed_basic_filters += 1;
+            // Token passed all filters
+            filtered_tokens.push(mint);
+            filtering_stats.passed_basic_filters += 1;
 
-        // Stop when we have enough tokens
-        if filtered_tokens.len() >= TARGET_FILTERED_TOKENS {
-            break;
+            // Stop when we have enough tokens
+            if filtered_tokens.len() >= TARGET_FILTERED_TOKENS {
+                break;
+            }
         }
     }
 
-    // Step 3: Security filtering (cache-only for performance)
-    let (security_filtered, security_stats) =
-        apply_cached_security_filtering_with_stats(filtered_tokens)?;
-
-    // Update main stats with security filtering results
+    // Update final stats
     filtering_stats.passed_security_filters = security_stats.passed;
-    filtering_stats.final_passed = security_filtered.len();
+    filtering_stats.final_passed = filtered_tokens.len();
 
     let elapsed = start_time.elapsed();
 
@@ -155,8 +182,8 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         LogTag::Filtering,
         "COMPLETE",
         &format!(
-            "Filtering complete: {} tokens passed from {} processed in {:.2}ms",
-            security_filtered.len(),
+            "SECURITY-FIRST filtering complete: {} tokens passed from {} processed in {:.2}ms",
+            filtered_tokens.len(),
             filtering_stats.total_processed,
             elapsed.as_millis()
         )
@@ -166,7 +193,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         log_filtering_stats(&filtering_stats, &security_stats, all_tokens.len());
     }
 
-    Ok(security_filtered)
+    Ok(filtered_tokens)
 }
 
 // =============================================================================
@@ -216,6 +243,50 @@ async fn apply_all_filters(
     stats.record_stage_pass("market_cap");
 
     None // Token passed all filters
+}
+
+/// Apply remaining filters (non-security) to tokens that already passed security check
+/// This is used when security filtering is applied first
+async fn apply_remaining_filters(
+    token: &Token,
+    stats: &mut FilteringStats
+) -> Option<FilterRejectionReason> {
+    // 1. Check decimals availability in database
+    if !has_decimals_in_database(&token.mint) {
+        return Some(FilterRejectionReason::NoDecimalsInDatabase);
+    }
+    stats.record_stage_pass("decimals");
+
+    // 2. Check cooldown period for recently closed positions
+    if check_cooldown_filter(&token.mint).await {
+        return Some(FilterRejectionReason::CooldownFiltered);
+    }
+
+    // 3. Check basic token info completeness
+    if let Some(reason) = check_basic_token_info(token) {
+        return Some(reason);
+    }
+    stats.record_stage_pass("basic_info");
+
+    // 4. Check minimum transaction activity
+    if let Some(reason) = check_transaction_activity(token) {
+        return Some(reason);
+    }
+    stats.record_stage_pass("transactions");
+
+    // 5. Check minimum liquidity
+    if let Some(reason) = check_liquidity_requirements(token) {
+        return Some(reason);
+    }
+    stats.record_stage_pass("liquidity");
+
+    // 6. Check market cap range
+    if let Some(reason) = check_market_cap_requirements(token) {
+        return Some(reason);
+    }
+    stats.record_stage_pass("market_cap");
+
+    None // Token passed all remaining filters
 }
 
 /// Check if token is in cooldown period after recent position closure
