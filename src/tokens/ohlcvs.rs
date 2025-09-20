@@ -26,9 +26,18 @@
 /// ```
 
 use crate::global::is_debug_ohlcv_enabled;
-use crate::tokens::ohlcv_db::{ get_ohlcv_database, init_ohlcv_database };
+use crate::tokens::ohlcv_db::{
+    get_ohlcv_database,
+    init_ohlcv_database,
+    DbSolPriceDataPoint,
+    MAX_OHLCV_AGE_HOURS,
+};
 use crate::logger::{ log, LogTag };
-use crate::tokens::geckoterminal::{ get_ohlcv_data_from_geckoterminal, OhlcvDataPoint };
+use crate::tokens::geckoterminal::{
+    get_ohlcv_data_from_geckoterminal,
+    get_ohlcv_data_from_geckoterminal_range,
+    OhlcvDataPoint,
+};
 use chrono::{ DateTime, Duration as ChronoDuration, Utc };
 use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
@@ -43,20 +52,33 @@ use tokio::sync::{ Notify, RwLock };
 /// Maximum number of cached entries in memory to prevent unbounded growth
 const MAX_MEMORY_CACHE_ENTRIES: usize = 500;
 
-/// Data retention period (6 hours - shorter since only 1m data)
-const DATA_RETENTION_HOURS: i64 = 6;
+/// Data retention period (7 days - increased for better analysis)
+const DATA_RETENTION_HOURS: i64 = 168;
 
 /// Default limit for OHLCV data points
 const DEFAULT_OHLCV_LIMIT: u32 = 200;
 
-/// Maximum limit for OHLCV data points
-const MAX_OHLCV_LIMIT: u32 = 500;
+/// Maximum limit for OHLCV data points (increased for analysis)
+const MAX_OHLCV_LIMIT: u32 = 2000;
 
 /// Background monitoring interval (30 seconds - more frequent for 1m data)
 const MONITORING_INTERVAL_SECS: u64 = 30;
 
 /// Cache file cleanup interval (15 minutes)
 const CLEANUP_INTERVAL_SECS: u64 = 900;
+
+// =============================================================================
+// SOL PRICE CONFIGURATION CONSTANTS
+// =============================================================================
+
+/// Major SOL pool address for fetching SOL/USD OHLCV (SOL/USDC from Raydium)
+const SOL_PRICE_POOL_ADDRESS: &str = "Czfq3xZZDmsdGdUyrNLtRhGc47cXcZtLG4crryfu44zE";
+
+/// Tolerance for SOL price timestamp matching (60 seconds)
+const SOL_PRICE_TIMESTAMP_TOLERANCE: i64 = 60;
+
+/// Interval for SOL price data (1 minute in seconds)
+const SOL_PRICE_INTERVAL_SECONDS: i64 = 60;
 
 /// Cache expiration time for 1-minute data (5 minutes)
 const CACHE_EXPIRY_MINUTES: i64 = 5;
@@ -126,6 +148,8 @@ pub struct OhlcvService {
     stats: Arc<RwLock<OhlcvStats>>,
     /// Monitoring active flag
     monitoring_active: Arc<RwLock<bool>>,
+    /// Last time we ensured SOL coverage (to avoid re-running heavy backfill too frequently)
+    sol_coverage_last_check: Arc<RwLock<Option<DateTime<Utc>>>>,
 }
 
 /// Service statistics
@@ -159,6 +183,7 @@ impl OhlcvService {
             watch_list: Arc::new(RwLock::new(HashMap::new())),
             stats: Arc::new(RwLock::new(OhlcvStats::default())),
             monitoring_active: Arc::new(RwLock::new(false)),
+            sol_coverage_last_check: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -456,6 +481,16 @@ impl OhlcvService {
     ) -> Result<Vec<OhlcvDataPoint>, String> {
         let limit = limit.unwrap_or(DEFAULT_OHLCV_LIMIT).min(MAX_OHLCV_LIMIT);
 
+        // CRITICAL: Ensure SOL price coverage for full retention period before any token OHLCV fetching
+        if let Err(e) = self.ensure_sol_coverage_if_stale().await {
+            log(
+                LogTag::Ohlcv,
+                "SOL_COVERAGE_FAILED",
+                &format!("❌ Failed to ensure SOL price coverage: {}", e)
+            );
+            return Err(format!("SOL price coverage check failed: {}", e));
+        }
+
         // Track access for watch list prioritization
         {
             let mut watch_list = self.watch_list.write().await;
@@ -469,7 +504,11 @@ impl OhlcvService {
             log(
                 LogTag::Ohlcv,
                 "DATA_REQUEST",
-                &format!("📊 1m OHLCV data request: {} (limit: {})", mint, limit)
+                &format!(
+                    "📊 1m OHLCV data request: {} (limit: {}) - SOL coverage ensured",
+                    mint,
+                    limit
+                )
             );
         }
 
@@ -685,27 +724,50 @@ impl OhlcvService {
                     cache.insert(mint.to_string(), cached_data.clone());
                 }
 
-                // Save to database
+                // Save to database (SOL-denominated)
                 if let Ok(db) = get_ohlcv_database() {
+                    let mut sol_rows: Vec<crate::tokens::ohlcv_db::DbOhlcvDataPoint> = Vec::new();
+                    for p in &data_points {
+                        if
+                            let Ok(Some(sol_rate)) = db.get_sol_price_at_timestamp(
+                                p.timestamp,
+                                SOL_PRICE_TIMESTAMP_TOLERANCE
+                            )
+                        {
+                            sol_rows.push(
+                                crate::tokens::ohlcv_db::DbOhlcvDataPoint::new(
+                                    mint,
+                                    &cached_data.pool_address,
+                                    p.timestamp,
+                                    p.open / sol_rate,
+                                    p.high / sol_rate,
+                                    p.low / sol_rate,
+                                    p.close / sol_rate,
+                                    p.volume / sol_rate,
+                                    sol_rate
+                                )
+                            );
+                        }
+                    }
                     if
-                        let Err(e) = db.store_ohlcv_data(
+                        let Err(e) = db.store_sol_ohlcv_data(
                             mint,
                             &cached_data.pool_address,
-                            &data_points
+                            &sol_rows
                         )
                     {
                         log(
                             LogTag::Ohlcv,
                             "WARNING",
-                            &format!("Failed to save to database: {}", e)
+                            &format!("Failed to save SOL OHLCV to database: {}", e)
                         );
                     } else if is_debug_ohlcv_enabled() {
                         log(
                             LogTag::Ohlcv,
-                            "DB_SAVE",
+                            "DB_SAVE_SOL",
                             &format!(
-                                "💾 Saved {} OHLCV points for {} to database",
-                                data_points.len(),
+                                "💾 Saved {} SOL OHLCV points for {} to database",
+                                sol_rows.len(),
                                 mint
                             )
                         );
@@ -732,6 +794,40 @@ impl OhlcvService {
                 Err(e)
             }
         }
+    }
+
+    /// Ensure SOL coverage but avoid repeating heavy work too frequently.
+    /// Re-run the heavy coverage only if last check is older than 5 minutes.
+    async fn ensure_sol_coverage_if_stale(&self) -> Result<(), String> {
+        const RECHECK_MINUTES: i64 = 5;
+        let now = Utc::now();
+        {
+            let last = self.sol_coverage_last_check.read().await;
+            if let Some(ts) = *last {
+                if now - ts < ChronoDuration::minutes(RECHECK_MINUTES) {
+                    if is_debug_ohlcv_enabled() {
+                        log(
+                            LogTag::Ohlcv,
+                            "SOL_COVERAGE_SKIP",
+                            &format!(
+                                "⏭️ Skipping SOL coverage recheck (last: {} < {} min)",
+                                ts,
+                                RECHECK_MINUTES
+                            )
+                        );
+                    }
+                    return Ok(());
+                }
+            }
+        }
+
+        // Run the heavy coverage check
+        self.ensure_sol_price_coverage_for_retention_period().await?;
+
+        // Record timestamp
+        let mut last = self.sol_coverage_last_check.write().await;
+        *last = Some(now);
+        Ok(())
     }
 
     /// Get service statistics
@@ -835,7 +931,7 @@ impl OhlcvService {
 
         // Delegate to geckoterminal module (which handles rate limiting)
         match get_ohlcv_data_from_geckoterminal(pool_address, limit).await {
-            Ok(data) => {
+            Ok(usd_data) => {
                 // Update successful fetch stats
                 {
                     let mut stats = self.stats.write().await;
@@ -847,13 +943,36 @@ impl OhlcvService {
                         LogTag::Ohlcv,
                         "API_SUCCESS",
                         &format!(
-                            "✅ Retrieved {} OHLCV data points via GeckoTerminal module",
-                            data.len()
+                            "✅ Retrieved {} USD OHLCV data points via GeckoTerminal module, converting to SOL...",
+                            usd_data.len()
                         )
                     );
                 }
 
-                Ok(data)
+                // CRITICAL: Convert USD OHLCV to SOL-denominated OHLCV
+                match self.convert_usd_ohlcv_to_sol(&usd_data).await {
+                    Ok(sol_data) => {
+                        if is_debug_ohlcv_enabled() {
+                            log(
+                                LogTag::Ohlcv,
+                                "SOL_CONVERSION_SUCCESS",
+                                &format!(
+                                    "🔄 Converted {} OHLCV points to SOL denomination",
+                                    sol_data.len()
+                                )
+                            );
+                        }
+                        Ok(sol_data)
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Ohlcv,
+                            "SOL_CONVERSION_ERROR",
+                            &format!("❌ Failed to convert USD OHLCV to SOL: {}", e)
+                        );
+                        Err(format!("USD to SOL conversion failed: {}", e))
+                    }
+                }
             }
             Err(e) => {
                 if is_debug_ohlcv_enabled() {
@@ -1101,6 +1220,7 @@ impl OhlcvService {
                     watch_list: watch_list.clone(),
                     stats: stats.clone(),
                     monitoring_active: Arc::new(RwLock::new(true)),
+                    sol_coverage_last_check: Arc::new(RwLock::new(None)),
                 };
 
                 // Fetch new data (now delegated to geckoterminal module)
@@ -1144,19 +1264,43 @@ impl OhlcvService {
                             cache.insert(entry.mint.clone(), cached_data.clone());
                         }
 
-                        // Save to database
+                        // Save to database (SOL-denominated)
                         if let Ok(db) = get_ohlcv_database() {
+                            let mut sol_rows: Vec<crate::tokens::ohlcv_db::DbOhlcvDataPoint> =
+                                Vec::new();
+                            for p in &data_points {
+                                if
+                                    let Ok(Some(sol_rate)) = db.get_sol_price_at_timestamp(
+                                        p.timestamp,
+                                        SOL_PRICE_TIMESTAMP_TOLERANCE
+                                    )
+                                {
+                                    sol_rows.push(
+                                        crate::tokens::ohlcv_db::DbOhlcvDataPoint::new(
+                                            &entry.mint,
+                                            &pool_address,
+                                            p.timestamp,
+                                            p.open / sol_rate,
+                                            p.high / sol_rate,
+                                            p.low / sol_rate,
+                                            p.close / sol_rate,
+                                            p.volume / sol_rate,
+                                            sol_rate
+                                        )
+                                    );
+                                }
+                            }
                             if
-                                let Err(e) = db.store_ohlcv_data(
+                                let Err(e) = db.store_sol_ohlcv_data(
                                     &entry.mint,
                                     &pool_address,
-                                    &data_points
+                                    &sol_rows
                                 )
                             {
                                 log(
                                     LogTag::Ohlcv,
                                     "WARNING",
-                                    &format!("Failed to save background fetch to database: {}", e)
+                                    &format!("Failed to save background SOL OHLCV: {}", e)
                                 );
                             }
                         }
@@ -1215,6 +1359,366 @@ impl OhlcvService {
         }
 
         Ok(())
+    }
+
+    // =============================================================================
+    // SOL PRICE METHODS
+    // =============================================================================
+
+    /// Fetch SOL price history for a given timestamp range
+    pub async fn fetch_sol_price_history(
+        &self,
+        start_timestamp: i64,
+        end_timestamp: i64
+    ) -> Result<Vec<DbSolPriceDataPoint>, String> {
+        if is_debug_ohlcv_enabled() {
+            log(
+                LogTag::Ohlcv,
+                "SOL_PRICE_FETCH",
+                &format!(
+                    "💰 Fetching SOL price history from {} to {} using pool {}",
+                    start_timestamp,
+                    end_timestamp,
+                    SOL_PRICE_POOL_ADDRESS
+                )
+            );
+        }
+
+        // Calculate how many data points we need (1 per minute)
+        let duration_minutes = ((end_timestamp - start_timestamp) / 60).max(0);
+        // Request the full window; the range helper will paginate internally respecting per-request caps
+        let limit = std::cmp::min(duration_minutes as u32, 20_000); // hard safety cap
+
+        // Fetch SOL/USD OHLCV data from the SOL pool
+        let ohlcv_data = match
+            get_ohlcv_data_from_geckoterminal_range(
+                SOL_PRICE_POOL_ADDRESS,
+                Some(start_timestamp),
+                Some(end_timestamp),
+                limit
+            ).await
+        {
+            Ok(data) => data,
+            Err(e) => {
+                log(
+                    LogTag::Ohlcv,
+                    "SOL_PRICE_ERROR",
+                    &format!("❌ Failed to fetch SOL price OHLCV: {}", e)
+                );
+                return Err(format!("Failed to fetch SOL price data: {}", e));
+            }
+        };
+
+        // Convert OHLCV data to SOL price points
+        let sol_price_points: Vec<DbSolPriceDataPoint> = ohlcv_data
+            .into_iter()
+            .filter(|point| point.timestamp >= start_timestamp && point.timestamp <= end_timestamp)
+            .map(|point|
+                DbSolPriceDataPoint::new(
+                    point.timestamp,
+                    point.close, // Use close price as SOL/USD rate
+                    "geckoterminal"
+                )
+            )
+            .collect();
+
+        if is_debug_ohlcv_enabled() {
+            log(
+                LogTag::Ohlcv,
+                "SOL_PRICE_SUCCESS",
+                &format!("✅ Fetched {} SOL price points", sol_price_points.len())
+            );
+        }
+
+        Ok(sol_price_points)
+    }
+
+    /// Ensure SOL prices are available for the full MAX_OHLCV_AGE_HOURS range
+    /// This MUST be called before any token OHLCV fetching to guarantee SOL conversion is possible
+    pub async fn ensure_sol_price_coverage_for_retention_period(&self) -> Result<(), String> {
+        let db = get_ohlcv_database().map_err(|e| format!("Failed to get OHLCV database: {}", e))?;
+
+        // Calculate the full retention period
+        let end_timestamp = Utc::now().timestamp();
+        let start_timestamp = end_timestamp - MAX_OHLCV_AGE_HOURS * 3600;
+
+        if is_debug_ohlcv_enabled() {
+            log(
+                LogTag::Ohlcv,
+                "SOL_COVERAGE_CHECK",
+                &format!(
+                    "🔍 Ensuring SOL price coverage for retention period: {} hours ({} to {})",
+                    MAX_OHLCV_AGE_HOURS,
+                    start_timestamp,
+                    end_timestamp
+                )
+            );
+        }
+
+        // Quick coverage check: count existing points in the window
+        let existing_count = db.count_sol_prices_in_range(start_timestamp, end_timestamp)? as i64;
+        let expected_points =
+            ((end_timestamp - start_timestamp) / SOL_PRICE_INTERVAL_SECONDS).max(0) + 1;
+
+        if is_debug_ohlcv_enabled() {
+            log(
+                LogTag::Ohlcv,
+                "SOL_COVERAGE_STATUS",
+                &format!(
+                    "Existing SOL price points: {}/{} (~{}%)",
+                    existing_count,
+                    expected_points,
+                    (((existing_count as f64) / (expected_points as f64)) * 100.0).round()
+                )
+            );
+        }
+
+        // If coverage below 95%, perform bulk backfill for the entire window
+        if existing_count < (((expected_points as f64) * 0.95) as i64) {
+            if is_debug_ohlcv_enabled() {
+                log(
+                    LogTag::Ohlcv,
+                    "SOL_BULK_BACKFILL",
+                    &format!(
+                        "Performing bulk SOL price backfill for {} -> {}",
+                        start_timestamp,
+                        end_timestamp
+                    )
+                );
+            }
+
+            let points = self.fetch_sol_price_history(start_timestamp, end_timestamp).await?;
+            if !points.is_empty() {
+                db.store_sol_prices(&points)?;
+            }
+        }
+
+        // Final gap sweep for any remaining missing minutes
+        let gaps = db
+            .find_sol_price_gaps(start_timestamp, end_timestamp, SOL_PRICE_INTERVAL_SECONDS)
+            .map_err(|e| format!("Failed to find SOL price gaps: {}", e))?;
+
+        if gaps.is_empty() {
+            if is_debug_ohlcv_enabled() {
+                log(
+                    LogTag::Ohlcv,
+                    "SOL_COVERAGE_COMPLETE",
+                    &format!("✅ SOL price coverage complete for {} hours retention period", MAX_OHLCV_AGE_HOURS)
+                );
+            }
+            return Ok(());
+        }
+
+        if is_debug_ohlcv_enabled() {
+            log(
+                LogTag::Ohlcv,
+                "SOL_COVERAGE_GAPS",
+                &format!("📈 Remaining gaps after bulk backfill: {}", gaps.len())
+            );
+        }
+
+        // Coalesce consecutive gaps to minimize API calls
+        let mut merged: Vec<(i64, i64)> = Vec::new();
+        for (mut s, mut e) in gaps.into_iter() {
+            if let Some(last) = merged.last_mut() {
+                if s == last.1 {
+                    // contiguous
+                    last.1 = e;
+                    continue;
+                }
+            }
+            merged.push((s, e));
+        }
+
+        for (gap_start, gap_end) in merged {
+            if is_debug_ohlcv_enabled() {
+                log(
+                    LogTag::Ohlcv,
+                    "SOL_GAP_FETCH",
+                    &format!("📊 Fetching SOL prices for gap range: {} to {}", gap_start, gap_end)
+                );
+            }
+
+            let sol_price_points = self.fetch_sol_price_history(gap_start, gap_end).await?;
+
+            if !sol_price_points.is_empty() {
+                db
+                    .store_sol_prices(&sol_price_points)
+                    .map_err(|e| format!("Failed to store SOL prices for gap: {}", e))?;
+            }
+
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+
+        log(
+            LogTag::Ohlcv,
+            "SOL_COVERAGE_ENSURED",
+            &format!("✅ SOL price coverage ensured for full {} hours retention period", MAX_OHLCV_AGE_HOURS)
+        );
+
+        // Record a last-check timestamp so subsequent calls within a short window
+        // (e.g., via get_ohlcv_data -> ensure_sol_coverage_if_stale) will skip
+        // re-running the heavy coverage logic. This prevents redundant gap sweeps
+        // in tests and during bursty token requests.
+        {
+            let mut last = self.sol_coverage_last_check.write().await;
+            *last = Some(Utc::now());
+        }
+
+        Ok(())
+    }
+
+    /// Ensure SOL prices are available for all given timestamps
+    pub async fn ensure_sol_prices_for_timestamps(&self, timestamps: &[i64]) -> Result<(), String> {
+        if timestamps.is_empty() {
+            return Ok(());
+        }
+
+        let db = get_ohlcv_database().map_err(|e| format!("Failed to get OHLCV database: {}", e))?;
+
+        // Check which timestamps are missing SOL prices
+        let mut missing_timestamps = Vec::new();
+
+        for &timestamp in timestamps {
+            match db.get_sol_price_at_timestamp(timestamp, SOL_PRICE_TIMESTAMP_TOLERANCE) {
+                Ok(Some(_)) => {
+                    // SOL price exists, continue
+                    continue;
+                }
+                Ok(None) => {
+                    // Missing SOL price
+                    missing_timestamps.push(timestamp);
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Ohlcv,
+                        "SOL_PRICE_CHECK_ERROR",
+                        &format!("❌ Error checking SOL price for timestamp {}: {}", timestamp, e)
+                    );
+                    missing_timestamps.push(timestamp);
+                }
+            }
+        }
+
+        if missing_timestamps.is_empty() {
+            if is_debug_ohlcv_enabled() {
+                log(
+                    LogTag::Ohlcv,
+                    "SOL_PRICE_COMPLETE",
+                    &format!("✅ All {} timestamps have SOL prices available", timestamps.len())
+                );
+            }
+            return Ok(());
+        }
+
+        // Fetch missing SOL prices in batches
+        if is_debug_ohlcv_enabled() {
+            log(
+                LogTag::Ohlcv,
+                "SOL_PRICE_GAPS",
+                &format!(
+                    "🔍 Found {} missing SOL price timestamps, fetching...",
+                    missing_timestamps.len()
+                )
+            );
+        }
+
+        // Group missing timestamps into ranges for efficient fetching
+        missing_timestamps.sort();
+        let start_timestamp = *missing_timestamps.first().unwrap() - SOL_PRICE_INTERVAL_SECONDS * 5; // Add buffer
+        let end_timestamp = *missing_timestamps.last().unwrap() + SOL_PRICE_INTERVAL_SECONDS * 5; // Add buffer
+
+        let sol_price_points = self.fetch_sol_price_history(start_timestamp, end_timestamp).await?;
+
+        // Store the fetched SOL price points
+        if !sol_price_points.is_empty() {
+            db
+                .store_sol_prices(&sol_price_points)
+                .map_err(|e| format!("Failed to store SOL prices: {}", e))?;
+
+            if is_debug_ohlcv_enabled() {
+                log(
+                    LogTag::Ohlcv,
+                    "SOL_PRICE_STORED",
+                    &format!("💾 Stored {} SOL price points to fill gaps", sol_price_points.len())
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Convert USD OHLCV data to SOL-denominated OHLCV
+    pub async fn convert_usd_ohlcv_to_sol(
+        &self,
+        usd_ohlcv: &[OhlcvDataPoint]
+    ) -> Result<Vec<OhlcvDataPoint>, String> {
+        if usd_ohlcv.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // First ensure SOL prices are available for all timestamps
+        let timestamps: Vec<i64> = usd_ohlcv
+            .iter()
+            .map(|point| point.timestamp)
+            .collect();
+        self.ensure_sol_prices_for_timestamps(&timestamps).await?;
+
+        let db = get_ohlcv_database().map_err(|e| format!("Failed to get OHLCV database: {}", e))?;
+
+        // Convert each OHLCV point
+        let mut sol_ohlcv = Vec::with_capacity(usd_ohlcv.len());
+
+        for usd_point in usd_ohlcv {
+            // Get SOL price at this timestamp
+            let sol_usd_price = match
+                db.get_sol_price_at_timestamp(usd_point.timestamp, SOL_PRICE_TIMESTAMP_TOLERANCE)
+            {
+                Ok(Some(price)) => price,
+                Ok(None) => {
+                    log(
+                        LogTag::Ohlcv,
+                        "SOL_PRICE_MISSING",
+                        &format!("❌ No SOL price found for timestamp {}", usd_point.timestamp)
+                    );
+                    continue; // Skip this point
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Ohlcv,
+                        "SOL_PRICE_ERROR",
+                        &format!(
+                            "❌ Error getting SOL price for timestamp {}: {}",
+                            usd_point.timestamp,
+                            e
+                        )
+                    );
+                    continue; // Skip this point
+                }
+            };
+
+            // Convert USD prices to SOL prices
+            let sol_point = OhlcvDataPoint {
+                timestamp: usd_point.timestamp,
+                open: usd_point.open / sol_usd_price,
+                high: usd_point.high / sol_usd_price,
+                low: usd_point.low / sol_usd_price,
+                close: usd_point.close / sol_usd_price,
+                volume: usd_point.volume / sol_usd_price, // Convert volume to SOL too
+            };
+
+            sol_ohlcv.push(sol_point);
+        }
+
+        if is_debug_ohlcv_enabled() {
+            log(
+                LogTag::Ohlcv,
+                "SOL_CONVERSION_SUCCESS",
+                &format!("🔄 Converted {} USD OHLCV points to SOL denomination", sol_ohlcv.len())
+            );
+        }
+
+        Ok(sol_ohlcv)
     }
 }
 
@@ -1287,6 +1791,13 @@ pub async fn start_ohlcv_monitoring(
     });
 
     Ok(handle)
+}
+
+/// Ensure SOL price coverage for the full retention period
+/// This should be called before any bulk OHLCV operations to guarantee SOL conversion is possible
+pub async fn ensure_sol_price_coverage() -> Result<(), String> {
+    let service = get_ohlcv_service_clone().await?;
+    service.ensure_sol_price_coverage_for_retention_period().await
 }
 
 /// Check if OHLCV data is available for trading decisions

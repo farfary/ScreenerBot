@@ -7,7 +7,7 @@ use crate::logger::{ log, LogTag };
 use crate::global::is_debug_pool_service_enabled;
 use crate::rpc::{ get_rpc_client, RpcClient };
 use super::{ PoolError, cache, db };
-use super::discovery::PoolDiscovery;
+use super::discovery::{ PoolDiscovery, ENABLE_DEXSCREENER_DISCOVERY };
 use super::analyzer::PoolAnalyzer;
 use super::fetcher::AccountFetcher;
 use super::calculator::PriceCalculator;
@@ -210,6 +210,29 @@ pub fn get_debug_token_override() -> Option<Vec<String>> {
 async fn initialize_service_components() -> Result<(), String> {
     if is_debug_pool_service_enabled() {
         log(LogTag::PoolService, "DEBUG", "Initializing service components...");
+    }
+
+    // Initialize external APIs required by discovery before starting background tasks
+    if ENABLE_DEXSCREENER_DISCOVERY {
+        if let Err(e) = crate::tokens::init_dexscreener_api().await {
+            // Fail fast because discovery depends on this API when enabled
+            return Err(format!("Failed to initialize DexScreener API: {}", e));
+        }
+        // Verify global handle is available
+        match crate::tokens::get_global_dexscreener_api().await {
+            Ok(_) => {
+                if is_debug_pool_service_enabled() {
+                    log(
+                        LogTag::PoolService,
+                        "DEBUG",
+                        "DexScreener API initialized and global handle acquired"
+                    );
+                }
+            }
+            Err(e) => {
+                return Err(format!("DexScreener API global handle unavailable after init: {}", e));
+            }
+        }
     }
 
     // Get the global RPC client and create an Arc reference

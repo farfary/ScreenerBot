@@ -155,20 +155,20 @@ pub struct GeckoTerminalBatchResult {
     pub failed_tokens: usize,
 }
 
-/// OHLCV data point
+/// OHLCV data point (SOL-denominated)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OhlcvDataPoint {
     /// Timestamp (Unix seconds)
     pub timestamp: i64,
-    /// Open price in USD
+    /// Open price in SOL
     pub open: f64,
-    /// High price in USD
+    /// High price in SOL
     pub high: f64,
-    /// Low price in USD
+    /// Low price in SOL
     pub low: f64,
-    /// Close price in USD
+    /// Close price in SOL
     pub close: f64,
-    /// Volume in USD
+    /// Volume in SOL
     pub volume: f64,
 }
 
@@ -681,6 +681,26 @@ pub async fn get_ohlcv_data_from_geckoterminal(
     // Apply strict rate limiting and get exclusive access
     let _permit = apply_rate_limit_and_concurrency_control().await?;
 
+    // GeckoTerminal enforces a maximum limit (typically 1000)
+    const GECKO_OHLCV_MAX_LIMIT: u32 = 1000;
+    let effective_limit = if limit > GECKO_OHLCV_MAX_LIMIT {
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "GECKO_OHLCV_LIMIT_CLAMP",
+                &format!(
+                    "Clamping requested OHLCV limit from {} to {} for pool {}",
+                    limit,
+                    GECKO_OHLCV_MAX_LIMIT,
+                    pool_address
+                )
+            );
+        }
+        GECKO_OHLCV_MAX_LIMIT
+    } else {
+        limit
+    };
+
     let url = format!(
         "{}/networks/{}/pools/{}/ohlcv/minute",
         GECKOTERMINAL_BASE_URL,
@@ -692,7 +712,7 @@ pub async fn get_ohlcv_data_from_geckoterminal(
         log(
             LogTag::Api,
             "GECKO_OHLCV_START",
-            &format!("🦎 Fetching 1m OHLCV for pool {} (limit: {})", &pool_address[..8], limit)
+            &format!("🦎 Fetching 1m OHLCV for pool {} (limit: {})", pool_address, effective_limit)
         );
     }
 
@@ -711,8 +731,7 @@ pub async fn get_ohlcv_data_from_geckoterminal(
                 .query(
                     &[
                         ("aggregate", "1".to_string()),
-                        ("limit", limit.to_string()),
-                        ("currency", "usd".to_string()),
+                        ("limit", effective_limit.to_string()),
                     ]
                 )
                 .send()
@@ -724,7 +743,7 @@ pub async fn get_ohlcv_data_from_geckoterminal(
                 log(
                     LogTag::Api,
                     "GECKO_OHLCV_ERROR",
-                    &format!("HTTP error for pool {}: {}", &pool_address[..8], e)
+                    &format!("HTTP error for pool {}: {}", pool_address, e)
                 );
             }
             return Err(format!("HTTP request failed: {}", e));
@@ -734,7 +753,7 @@ pub async fn get_ohlcv_data_from_geckoterminal(
                 log(
                     LogTag::Api,
                     "GECKO_OHLCV_TIMEOUT",
-                    &format!("Request timeout for pool {}", &pool_address[..8])
+                    &format!("Request timeout for pool {}", pool_address)
                 );
             }
             return Err("Request timeout".to_string());
@@ -748,7 +767,7 @@ pub async fn get_ohlcv_data_from_geckoterminal(
                 log(
                     LogTag::Api,
                     "GECKO_OHLCV_RATE_LIMIT",
-                    &format!("Rate limited for pool {}, waiting 10s", &pool_address[..8])
+                    &format!("Rate limited for pool {}, waiting 10s", pool_address)
                 );
             }
             sleep(Duration::from_secs(10)).await;
@@ -759,7 +778,7 @@ pub async fn get_ohlcv_data_from_geckoterminal(
             log(
                 LogTag::Api,
                 "GECKO_OHLCV_STATUS_ERROR",
-                &format!("HTTP {} for pool {}", status, &pool_address[..8])
+                &format!("HTTP {} for pool {}", status, pool_address)
             );
         }
 
@@ -802,7 +821,7 @@ pub async fn get_ohlcv_data_from_geckoterminal(
                     "GECKO_OHLCV_PARSE_ERROR",
                     &format!(
                         "Failed to parse JSON for pool {}: {} (body preview: {})",
-                        &pool_address[..8],
+                        pool_address,
                         e,
                         &body[..std::cmp::min(200, body.len())]
                     )
@@ -905,15 +924,241 @@ pub async fn get_ohlcv_data_from_geckoterminal(
         log(
             LogTag::Api,
             "GECKO_OHLCV_SUCCESS",
-            &format!(
-                "🦎 Retrieved {} OHLCV data points for pool {}",
-                result.len(),
-                &pool_address[..8]
-            )
+            &format!("🦎 Retrieved {} OHLCV data points for pool {}", result.len(), pool_address)
         );
     }
 
     Ok(result)
+}
+
+/// Fetch 1-minute OHLCV data for a pool within an optional time window by paging backwards.
+/// If start_timestamp and end_timestamp are provided, this function fetches pages using
+/// `before_timestamp` until the window is covered or the page limit is reached.
+/// If only end_timestamp is provided, it fetches up to `limit` points strictly before that time.
+/// If neither is provided, it behaves like `get_ohlcv_data_from_geckoterminal` with the given limit.
+pub async fn get_ohlcv_data_from_geckoterminal_range(
+    pool_address: &str,
+    start_timestamp: Option<i64>,
+    end_timestamp: Option<i64>,
+    limit: u32
+) -> Result<Vec<OhlcvDataPoint>, String> {
+    // Fast path: no window provided -> fall back to simple fetch
+    if start_timestamp.is_none() && end_timestamp.is_none() {
+        return get_ohlcv_data_from_geckoterminal(pool_address, limit).await;
+    }
+
+    // GeckoTerminal maximum page size
+    const GECKO_OHLCV_MAX_LIMIT: u32 = 1000;
+    let mut remaining = limit.min(GECKO_OHLCV_MAX_LIMIT * 20); // hard safety cap ~20k points
+
+    // Start from the inclusive end bound; if not provided, use "now"
+    let mut current_before = end_timestamp.unwrap_or_else(|| chrono::Utc::now().timestamp());
+    let start_bound = start_timestamp.unwrap_or(0);
+
+    let mut all_points: Vec<OhlcvDataPoint> = Vec::new();
+
+    loop {
+        if remaining == 0 {
+            break;
+        }
+
+        // Page size is min(remaining, 1000)
+        let page_limit = remaining.min(GECKO_OHLCV_MAX_LIMIT);
+
+        // Apply strict rate limiting and get exclusive access
+        let _permit = apply_rate_limit_and_concurrency_control().await?;
+
+        let url = format!(
+            "{}/networks/{}/pools/{}/ohlcv/minute",
+            GECKOTERMINAL_BASE_URL,
+            SOLANA_NETWORK,
+            pool_address
+        );
+
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "GECKO_OHLCV_RANGE_START",
+                &format!(
+                    "🦎 Paging 1m OHLCV for pool {} (page_limit: {}, before: {}), start_bound: {}",
+                    pool_address,
+                    page_limit,
+                    current_before,
+                    start_bound
+                )
+            );
+        }
+
+        let client = reqwest::Client
+            ::builder()
+            .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .build()
+            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+        let response = match
+            timeout(
+                Duration::from_secs(REQUEST_TIMEOUT_SECS),
+                client
+                    .get(&url)
+                    .header("Accept", format!("application/json;version={}", API_VERSION))
+                    .query(
+                        &[
+                            ("aggregate", "1".to_string()),
+                            ("limit", page_limit.to_string()),
+                            ("before_timestamp", current_before.to_string()),
+                        ]
+                    )
+                    .send()
+            ).await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(e)) => {
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "GECKO_OHLCV_RANGE_ERROR",
+                        &format!("HTTP error for pool {}: {}", pool_address, e)
+                    );
+                }
+                return Err(format!("HTTP request failed: {}", e));
+            }
+            Err(_) => {
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "GECKO_OHLCV_RANGE_TIMEOUT",
+                        &format!("Request timeout for pool {}", pool_address)
+                    );
+                }
+                return Err("Request timeout".to_string());
+            }
+        };
+
+        if !response.status().is_success() {
+            let status = response.status();
+            if status == StatusCode::TOO_MANY_REQUESTS {
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "GECKO_OHLCV_RANGE_RATE_LIMIT",
+                        &format!("Rate limited for pool {}, waiting 10s", pool_address)
+                    );
+                }
+                sleep(Duration::from_secs(10)).await;
+                continue; // try next loop after backoff
+            }
+
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "GECKO_OHLCV_RANGE_STATUS_ERROR",
+                    &format!("HTTP {} for pool {}", status, pool_address)
+                );
+            }
+            // On non-429 errors break to avoid infinite loop
+            return Err(format!("HTTP {}", status));
+        }
+
+        let body = match response.text().await {
+            Ok(body) => body,
+            Err(e) => {
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "GECKO_OHLCV_RANGE_BODY_ERROR",
+                        &format!(
+                            "Failed to read response body for pool {}: {}",
+                            &pool_address[..8],
+                            e
+                        )
+                    );
+                }
+                return Err(format!("Failed to read response: {}", e));
+            }
+        };
+
+        let gecko_response: GeckoTerminalOhlcvResponse = match serde_json::from_str(&body) {
+            Ok(response) => response,
+            Err(e) => {
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "GECKO_OHLCV_RANGE_PARSE_ERROR",
+                        &format!(
+                            "Failed to parse JSON for pool {}: {} (body preview: {})",
+                            pool_address,
+                            e,
+                            &body[..std::cmp::min(200, body.len())]
+                        )
+                    );
+                }
+                return Err(format!("Failed to parse JSON: {}", e));
+            }
+        };
+
+        let mut page_points: Vec<OhlcvDataPoint> = Vec::new();
+        let mut oldest_ts_in_page: Option<i64> = None;
+
+        for ohlcv in gecko_response.data.attributes.ohlcv_list.into_iter() {
+            if ohlcv.len() != 6 {
+                continue;
+            }
+            let ts = ohlcv[0] as i64;
+            let open = ohlcv[1];
+            let high = ohlcv[2];
+            let low = ohlcv[3];
+            let close = ohlcv[4];
+            let volume = ohlcv[5];
+
+            if ts < start_bound {
+                continue;
+            }
+            if ts > current_before {
+                continue;
+            }
+
+            page_points.push(OhlcvDataPoint { timestamp: ts, open, high, low, close, volume });
+            oldest_ts_in_page = Some(oldest_ts_in_page.map(|o| o.min(ts)).unwrap_or(ts));
+        }
+
+        if page_points.is_empty() {
+            // No more data or nothing in range
+            break;
+        }
+
+        // Append and update counters
+        remaining = remaining.saturating_sub(page_points.len() as u32);
+        all_points.extend(page_points);
+
+        // Move the window back by 60s before the oldest ts
+        if let Some(oldest) = oldest_ts_in_page {
+            if oldest <= start_bound {
+                break;
+            }
+            current_before = oldest - 60;
+        } else {
+            break;
+        }
+    }
+
+    // Sort chronologically ascending for consumers that expect ordered data
+    all_points.sort_by_key(|p| p.timestamp);
+
+    if is_debug_api_enabled() {
+        log(
+            LogTag::Api,
+            "GECKO_OHLCV_RANGE_SUCCESS",
+            &format!(
+                "🦎 Retrieved {} OHLCV points in range for pool {} (start: {}, end: {})",
+                all_points.len(),
+                pool_address,
+                start_bound,
+                end_timestamp.unwrap_or(0)
+            )
+        );
+    }
+
+    Ok(all_points)
 }
 
 // =============================================================================
