@@ -6,6 +6,7 @@ pub mod configs;
 pub mod dashboard;
 pub mod entry; // New improved entry system
 pub mod errors; // New structured error handling
+pub mod events; // Event recording system for analytics and debugging
 pub mod filtering;
 pub mod global;
 pub mod logger;
