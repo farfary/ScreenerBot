@@ -27,6 +27,18 @@ static RECENT_EXIT_PRICE_CACHE: Lazy<
 const EXIT_PRICE_CACHE_TTL: Duration = Duration::from_secs(30);
 const EXIT_PRICE_CACHE_MAX_ENTRIES: usize = 1024; // prune safeguard
 
+// Lightweight recent liquidity snapshots to infer short-term trend without external calls
+#[derive(Clone, Copy)]
+struct LiqSnap {
+    sol: f64,
+    t: Instant,
+}
+static RECENT_LIQ_CACHE: Lazy<
+    AsyncRwLock<std::collections::HashMap<String, std::collections::VecDeque<LiqSnap>>>
+> = Lazy::new(|| AsyncRwLock::new(std::collections::HashMap::new()));
+const LIQ_CACHE_MAX_SNAPS: usize = 5;
+const LIQ_CACHE_MAX_AGE: Duration = Duration::from_secs(5 * 60); // keep ~5 minutes
+
 // Optimized: Check cache only, no database calls during token checking
 async fn get_cached_recent_exit_prices_fast(mint: &str) -> Vec<f64> {
     let map = RECENT_EXIT_PRICE_CACHE.read().await;
@@ -119,6 +131,18 @@ const MIN_PRICE_POINTS: usize = 3; // Increased from 3 for better analysis
 const WINDOWS_SEC: [i64; 6] = [10, 20, 40, 80, 160, 320]; // 30s to 10min windows
 const MIN_DROP_PERCENT: f64 = 1.0; // Higher minimum for quality entries
 const MAX_DROP_PERCENT: f64 = 90.0; // Allow larger drops for volatile tokens
+
+// ============================= POST-PEAK CASCADE GUARD =============================
+// Blocks entries during liquidity-drain cascades (like ASTER) until reset conditions appear.
+const CASCADE_LOOKBACK_M15: i64 = 900; // 15m
+const CASCADE_LOOKBACK_H1: i64 = 3600; // 60m
+const CASCADE_DROP_THRESHOLD_M15: f64 = 60.0; // ≥60% drop over 15m
+const CASCADE_DROP_THRESHOLD_H1: f64 = 60.0; // ≥60% drop over 1h
+const CASCADE_MDD_WINDOW_SEC: i64 = 180; // analyze last 3m micro-structure
+const CASCADE_MDD_MIN_PCT: f64 = 30.0; // big drawdown from 3m high
+const CASCADE_MRU_MAX_PCT: f64 = 3.0; // tiny run-up from 3m low → no bounce
+const CASCADE_MIN_QUOTE_SOL: f64 = 50.0; // if below, treat as dangerous unless rising
+const CASCADE_LIQ_FALLING_MIN_SNAPS: usize = 3; // require 3 decreasing snaps to consider falling
 
 // ============================= TREND ENTRY (Conservative) =============================
 // Lightweight, safe detectors to capture strong trends while avoiding noise.
@@ -499,6 +523,88 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         .map(|p| (p.get_utc_timestamp(), p.price_sol))
         .collect();
     converted_history.retain(|(_, p)| *p > 0.0 && p.is_finite());
+
+    // Record a liquidity snapshot for trend assessment
+    record_liquidity_snapshot(&price_info.mint, price_info.sol_reserves).await;
+
+    // Early cascade guard (post-peak liquidity drain) — block entries in dump phase
+    if converted_history.len() >= 6 {
+        // Compute m15 and h1 changes using first vs last in those windows
+        let now = Utc::now();
+        let (mut first_15, mut last_15) = (None, None);
+        let (mut first_60, mut last_60) = (None, None);
+        for (ts, p) in converted_history.iter() {
+            let age = (now - *ts).num_seconds();
+            if age <= CASCADE_LOOKBACK_M15 {
+                if first_15.is_none() {
+                    first_15 = Some(*p);
+                }
+                last_15 = Some(*p);
+            }
+            if age <= CASCADE_LOOKBACK_H1 {
+                if first_60.is_none() {
+                    first_60 = Some(*p);
+                }
+                last_60 = Some(*p);
+            }
+        }
+        let pct_change = |f: f64, l: f64| if f > 0.0 { ((l - f) / f) * 100.0 } else { 0.0 };
+        let m15_change = match (first_15, last_15) {
+            (Some(f), Some(l)) => pct_change(f, l),
+            _ => 0.0,
+        };
+        let h1_change = match (first_60, last_60) {
+            (Some(f), Some(l)) => pct_change(f, l),
+            _ => 0.0,
+        };
+
+        // Micro-structure MDD/MRU over last 3m
+        let (mdd_3m, mru_3m) = compute_mdd_mru(
+            &converted_history,
+            CASCADE_MDD_WINDOW_SEC
+        ).unwrap_or((0.0, 0.0));
+
+        // Liquidity checks
+        let liq_falling = is_liquidity_falling(&price_info.mint).await;
+        let low_liq =
+            price_info.sol_reserves > 0.0 && price_info.sol_reserves < CASCADE_MIN_QUOTE_SOL;
+
+        let drop_criteria =
+            m15_change <= -CASCADE_DROP_THRESHOLD_M15 || h1_change <= -CASCADE_DROP_THRESHOLD_H1;
+        let microstruct_bad = mdd_3m >= CASCADE_MDD_MIN_PCT && mru_3m <= CASCADE_MRU_MAX_PCT;
+        let liq_criteria = low_liq || liq_falling;
+
+        if drop_criteria && microstruct_bad && liq_criteria {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "CASCADE_GUARD",
+                    &format!(
+                        "⛔ {} blocked by cascade guard: m15={:.1}% h1={:.1}% mdd3m={:.1}% mru3m={:.1}% sol_res={:.3} falling={}",
+                        price_info.mint,
+                        m15_change,
+                        h1_change,
+                        mdd_3m,
+                        mru_3m,
+                        price_info.sol_reserves,
+                        liq_falling
+                    )
+                );
+            }
+            return (
+                false,
+                10.0,
+                format!(
+                    "Cascade guard: m15={:.1}% h1={:.1}% mdd3m={:.1}% mru3m={:.1}% liq={:.1} SOL",
+                    m15_change,
+                    h1_change,
+                    mdd_3m,
+                    mru_3m,
+                    price_info.sol_reserves
+                ),
+            );
+        }
+    }
 
     // Micro-liquidity capitulation fast-path (before standard insufficient/history gates)
     if converted_history.len() >= 5 {
@@ -1199,6 +1305,69 @@ async fn check_ath_risk(price_history: &[(DateTime<Utc>, f64)], current_price: f
     }
 
     (!near_ath, max_ath_percentage * 100.0) // Return (ath_safe, max_ath_percentage)
+}
+
+// Record a quick liquidity snapshot for the mint (uses current PriceResult.sol_reserves)
+async fn record_liquidity_snapshot(mint: &str, sol_reserves: f64) {
+    let mut map = RECENT_LIQ_CACHE.write().await;
+    let q = map
+        .entry(mint.to_string())
+        .or_insert_with(|| { std::collections::VecDeque::with_capacity(LIQ_CACHE_MAX_SNAPS) });
+    let now = Instant::now();
+    // prune old
+    while let Some(front) = q.front() {
+        if now.duration_since(front.t) > LIQ_CACHE_MAX_AGE {
+            q.pop_front();
+        } else {
+            break;
+        }
+    }
+    // push
+    if q.len() == LIQ_CACHE_MAX_SNAPS {
+        q.pop_front();
+    }
+    q.push_back(LiqSnap { sol: sol_reserves.max(0.0), t: now });
+}
+
+// Determine if liquidity is falling across recent snapshots (strict: monotonic decrease at least N steps)
+async fn is_liquidity_falling(mint: &str) -> bool {
+    let map = RECENT_LIQ_CACHE.read().await;
+    if let Some(q) = map.get(mint) {
+        if q.len() < CASCADE_LIQ_FALLING_MIN_SNAPS {
+            return false;
+        }
+        let mut falls = 0usize;
+        for i in 1..q.len() {
+            if q[i].sol + 1e-9 < q[i - 1].sol {
+                falls += 1;
+            }
+        }
+        return falls + 1 >= CASCADE_LIQ_FALLING_MIN_SNAPS; // at least N decreasing steps
+    }
+    false
+}
+
+// Compute MDD/MRU over a recent seconds window from history
+fn compute_mdd_mru(price_history: &[(DateTime<Utc>, f64)], seconds: i64) -> Option<(f64, f64)> {
+    let now = Utc::now();
+    let mut high = 0.0f64;
+    let mut low = f64::INFINITY;
+    let mut cur = 0.0f64;
+    let mut have = false;
+    for (ts, p) in price_history.iter() {
+        if (now - *ts).num_seconds() <= seconds && *p > 0.0 && p.is_finite() {
+            high = high.max(*p);
+            low = low.min(*p);
+            cur = *p;
+            have = true;
+        }
+    }
+    if !have || high <= 0.0 || !high.is_finite() || !low.is_finite() || low <= 0.0 {
+        return None;
+    }
+    let mdd = ((high - cur) / high) * 100.0;
+    let mru = ((cur - low) / low) * 100.0;
+    Some((mdd, mru))
 }
 
 /// Calculate enhanced drop magnitude score (balanced approach for various drop sizes)
