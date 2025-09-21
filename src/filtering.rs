@@ -484,16 +484,11 @@ fn get_cached_security_info(mint: &str) -> Option<TokenSecurityInfo> {
     // If not in cache, check database (this is still "cached" vs live analysis)
     // The database contains previously analyzed data, so it's cached in that sense
     if let Ok(Some(db_info)) = analyzer.database.get_security_info(mint) {
-        // Check if the data is not too old (avoid stale data)
-        let now = chrono::Utc::now();
-        let age = now.signed_duration_since(db_info.timestamps.last_updated);
-
-        // Only use database data if it's less than 1 day old
-        if age < chrono::Duration::days(1) {
-            // Cache it for future requests
-            analyzer.cache.set(db_info.clone());
-            return Some(db_info);
-        }
+        // Security characteristics (mint authority, freeze authority, LP locks) are stable
+        // and don't change frequently, so we can use any security data we have regardless of age
+        // Cache it for future requests
+        analyzer.cache.set(db_info.clone());
+        return Some(db_info);
     }
 
     None
