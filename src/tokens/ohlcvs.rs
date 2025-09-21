@@ -820,11 +820,14 @@ impl OhlcvService {
     async fn ensure_sol_coverage_if_stale(&self) -> Result<(), String> {
         self.ensure_sol_coverage_if_stale_with_force(false).await
     }
-    
+
     /// Ensure SOL coverage with optional force refresh
-    async fn ensure_sol_coverage_if_stale_with_force(&self, force_refresh: bool) -> Result<(), String> {
+    async fn ensure_sol_coverage_if_stale_with_force(
+        &self,
+        force_refresh: bool
+    ) -> Result<(), String> {
         let now = Utc::now();
-        
+
         if !force_refresh {
             let last = self.sol_coverage_last_check.read().await;
             if let Some(ts) = *last {
@@ -1416,39 +1419,48 @@ impl OhlcvService {
 
         // Calculate how many data points we need (1 per minute)
         let duration_minutes = ((end_timestamp - start_timestamp) / 60).max(0);
-        
+
         // Chunk large requests to reduce memory pressure and improve reliability
         let chunk_size_minutes = MAX_CHUNK_SIZE_HOURS * 60;
-        
+
         if duration_minutes > chunk_size_minutes {
             if is_debug_ohlcv_enabled() {
                 log(
                     LogTag::Ohlcv,
                     "SOL_PRICE_CHUNKING",
-                    &format!("📦 Chunking large request: {} minutes into {}-minute chunks", 
-                        duration_minutes, chunk_size_minutes)
+                    &format!(
+                        "📦 Chunking large request: {} minutes into {}-minute chunks",
+                        duration_minutes,
+                        chunk_size_minutes
+                    )
                 );
             }
-            
+
             // Process in chunks
             let mut all_points = Vec::new();
             let mut current_start = start_timestamp;
-            
+
             while current_start < end_timestamp {
-                let current_end = std::cmp::min(current_start + (chunk_size_minutes * 60), end_timestamp);
-                let chunk_points = self.fetch_sol_price_history_chunk(current_start, current_end).await?;
+                let current_end = std::cmp::min(
+                    current_start + chunk_size_minutes * 60,
+                    end_timestamp
+                );
+                let chunk_points = self.fetch_sol_price_history_chunk(
+                    current_start,
+                    current_end
+                ).await?;
                 all_points.extend(chunk_points);
                 current_start = current_end;
-                
+
                 // Small delay between chunks to be API-friendly
                 if current_start < end_timestamp {
                     tokio::time::sleep(Duration::from_millis(500)).await;
                 }
             }
-            
+
             return Ok(all_points);
         }
-        
+
         // For smaller requests, use single chunk
         self.fetch_sol_price_history_chunk(start_timestamp, end_timestamp).await
     }
@@ -1535,7 +1547,11 @@ impl OhlcvService {
                 log(
                     LogTag::Ohlcv,
                     "SOL_COVERAGE_EXTEND",
-                    &format!("🔄 Extending SOL coverage to current time: {} -> {}", end_timestamp, current_time)
+                    &format!(
+                        "🔄 Extending SOL coverage to current time: {} -> {}",
+                        end_timestamp,
+                        current_time
+                    )
                 );
             }
             current_time
@@ -1591,7 +1607,9 @@ impl OhlcvService {
                 log(
                     LogTag::Ohlcv,
                     "SOL_COVERAGE_COMPLETE",
-                    &format!("✅ SOL price coverage complete for extended range (retention + real-time)")
+                    &format!(
+                        "✅ SOL price coverage complete for extended range (retention + real-time)"
+                    )
                 );
             }
             return Ok(());
@@ -1609,7 +1627,7 @@ impl OhlcvService {
         let gaps_before_optimization = gaps.len();
         let mut merged: Vec<(i64, i64)> = Vec::new();
         let mut consecutive_empty_count = 0;
-        
+
         for (mut s, mut e) in gaps.into_iter() {
             // Skip gaps smaller than minimum size
             let gap_duration = e - s;
@@ -1618,26 +1636,28 @@ impl OhlcvService {
                     log(
                         LogTag::Ohlcv,
                         "SOL_GAP_SKIP",
-                        &format!("⏭️ Skipping small gap: {} seconds (< {} minimum)", 
-                            gap_duration, MIN_GAP_SIZE_SECONDS)
+                        &format!(
+                            "⏭️ Skipping small gap: {} seconds (< {} minimum)",
+                            gap_duration,
+                            MIN_GAP_SIZE_SECONDS
+                        )
                     );
                 }
                 continue;
             }
-            
+
             // Circuit breaker: stop if too many consecutive empty fetches
             if consecutive_empty_count >= MAX_CONSECUTIVE_EMPTY_FETCHES {
                 if is_debug_ohlcv_enabled() {
                     log(
                         LogTag::Ohlcv,
                         "SOL_GAP_CIRCUIT_BREAKER",
-                        &format!("🛑 Circuit breaker triggered: {} consecutive empty fetches", 
-                            consecutive_empty_count)
+                        &format!("🛑 Circuit breaker triggered: {} consecutive empty fetches", consecutive_empty_count)
                     );
                 }
                 break;
             }
-            
+
             // Try to merge with previous gap if close enough
             if let Some(last) = merged.last_mut() {
                 let distance = s - last.1;
@@ -1647,8 +1667,11 @@ impl OhlcvService {
                         log(
                             LogTag::Ohlcv,
                             "SOL_GAP_MERGE",
-                            &format!("🔗 Merging gaps: distance {} seconds (< {} threshold)", 
-                                distance, MAX_GAP_COALESCE_DISTANCE)
+                            &format!(
+                                "🔗 Merging gaps: distance {} seconds (< {} threshold)",
+                                distance,
+                                MAX_GAP_COALESCE_DISTANCE
+                            )
                         );
                     }
                     last.1 = e;
@@ -1666,9 +1689,12 @@ impl OhlcvService {
             log(
                 LogTag::Ohlcv,
                 "SOL_COVERAGE_OPTIMIZED",
-                &format!("🎯 Optimized gaps: {} → {} (filtered {} small gaps)", 
-                    gaps_before_optimization, merged.len(), 
-                    gaps_before_optimization - merged.len())
+                &format!(
+                    "🎯 Optimized gaps: {} → {} (filtered {} small gaps)",
+                    gaps_before_optimization,
+                    merged.len(),
+                    gaps_before_optimization - merged.len()
+                )
             );
         }
 
@@ -1677,8 +1703,12 @@ impl OhlcvService {
                 log(
                     LogTag::Ohlcv,
                     "SOL_GAP_FETCH",
-                    &format!("📊 Fetching SOL prices for optimized gap: {} to {} ({} minutes)", 
-                        gap_start, gap_end, (gap_end - gap_start) / 60)
+                    &format!(
+                        "📊 Fetching SOL prices for optimized gap: {} to {} ({} minutes)",
+                        gap_start,
+                        gap_end,
+                        (gap_end - gap_start) / 60
+                    )
                 );
             }
 
@@ -1690,8 +1720,11 @@ impl OhlcvService {
                     log(
                         LogTag::Ohlcv,
                         "SOL_GAP_EMPTY",
-                        &format!("⚠️ Empty result for gap {} (consecutive: {})", 
-                            gap_start, consecutive_empty_count)
+                        &format!(
+                            "⚠️ Empty result for gap {} (consecutive: {})",
+                            gap_start,
+                            consecutive_empty_count
+                        )
                     );
                 }
             } else {
@@ -1842,15 +1875,18 @@ impl OhlcvService {
                 Ok(Some(price)) => price,
                 Ok(None) => {
                     missing_count += 1;
-                    
+
                     // Force refresh SOL coverage if we still have missing prices after ensure
                     if missing_count == 1 {
                         log(
                             LogTag::Ohlcv,
                             "SOL_PRICE_FORCE_REFRESH",
-                            &format!("🔄 Missing SOL price detected at {}, forcing coverage refresh", usd_point.timestamp)
+                            &format!(
+                                "🔄 Missing SOL price detected at {}, forcing coverage refresh",
+                                usd_point.timestamp
+                            )
                         );
-                        
+
                         // Force refresh and extend coverage
                         if let Err(e) = self.ensure_sol_coverage_if_stale_with_force(true).await {
                             log(
@@ -1860,15 +1896,23 @@ impl OhlcvService {
                             );
                             continue;
                         }
-                        
+
                         // Try again after refresh
-                        match db.get_sol_price_at_timestamp(usd_point.timestamp, SOL_PRICE_TIMESTAMP_TOLERANCE) {
+                        match
+                            db.get_sol_price_at_timestamp(
+                                usd_point.timestamp,
+                                SOL_PRICE_TIMESTAMP_TOLERANCE
+                            )
+                        {
                             Ok(Some(price)) => price,
                             _ => {
                                 log(
                                     LogTag::Ohlcv,
                                     "SOL_PRICE_MISSING",
-                                    &format!("❌ No SOL price found for timestamp {} even after refresh", usd_point.timestamp)
+                                    &format!(
+                                        "❌ No SOL price found for timestamp {} even after refresh",
+                                        usd_point.timestamp
+                                    )
                                 );
                                 continue; // Skip this point
                             }
@@ -1914,14 +1958,21 @@ impl OhlcvService {
                 log(
                     LogTag::Ohlcv,
                     "SOL_CONVERSION_PARTIAL",
-                    &format!("⚠️ Converted {}/{} USD OHLCV points to SOL denomination ({} missing SOL prices)", 
-                        sol_ohlcv.len(), usd_ohlcv.len(), missing_count)
+                    &format!(
+                        "⚠️ Converted {}/{} USD OHLCV points to SOL denomination ({} missing SOL prices)",
+                        sol_ohlcv.len(),
+                        usd_ohlcv.len(),
+                        missing_count
+                    )
                 );
             } else {
                 log(
                     LogTag::Ohlcv,
                     "SOL_CONVERSION_SUCCESS",
-                    &format!("🔄 Converted {} USD OHLCV points to SOL denomination", sol_ohlcv.len())
+                    &format!(
+                        "🔄 Converted {} USD OHLCV points to SOL denomination",
+                        sol_ohlcv.len()
+                    )
                 );
             }
         }

@@ -5,9 +5,7 @@ use screenerbot::logger::{ log, LogTag };
 use screenerbot::positions::{ get_db_open_positions, initialize_positions_database };
 use screenerbot::tokens::{ init_ohlcv_service, get_latest_ohlcv };
 use screenerbot::pools::{ init_pool_service, stop_pool_service, set_debug_token_override };
-use screenerbot::tokens::ohlcv_db::{
-    init_ohlcv_database,
-};
+use screenerbot::tokens::ohlcv_db::{ init_ohlcv_database };
 use std::sync::Arc;
 use tokio::sync::Notify;
 use rusqlite;
