@@ -20,8 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         vec![
             "test_sol_coverage".to_string(),
             "--debug-ohlcv".to_string(),
-            "--debug-sol-price".to_string(),
-            "--debug-rpc".to_string()
+            "--debug-sol-price".to_string()
         ]
     );
 

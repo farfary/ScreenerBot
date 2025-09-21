@@ -416,7 +416,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "--debug-swaps", // Detailed swap + quote lifecycle
         "--debug-ata", // ATA close + balance checks
         "--debug-wallet", // Wallet balance + token account fetches
-        "--debug-rpc", // Underlying RPC client rotation + errors
+        // Do NOT auto-enable --debug-rpc to avoid printing RPC URLs/keys in logs
         "--debug-system", // System-level debug summaries
     ];
 
