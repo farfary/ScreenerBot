@@ -1,19 +1,12 @@
 use clap::{ Arg, Command };
-use chrono::{ DateTime, Duration as ChronoDuration, Utc };
+use chrono::{ DateTime, Utc };
 use screenerbot::arguments::set_cmd_args;
 use screenerbot::logger::{ log, LogTag };
 use screenerbot::positions::{ get_db_open_positions, initialize_positions_database };
-use screenerbot::tokens::{ init_ohlcv_service };
+use screenerbot::tokens::{ init_ohlcv_service, get_latest_ohlcv };
 use screenerbot::pools::{ init_pool_service, stop_pool_service, set_debug_token_override };
-use screenerbot::tokens::geckoterminal::{
-    get_ohlcv_data_from_geckoterminal,
-    get_token_pools_from_geckoterminal,
-};
 use screenerbot::tokens::ohlcv_db::{
-    get_ohlcv_database,
     init_ohlcv_database,
-    DbSolPriceDataPoint,
-    DbOhlcvDataPoint,
 };
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -154,18 +147,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("✅ OHLCV service started");
 
-    // Step 6: Ensure SOL price history is available
-    log(LogTag::System, "INFO", "💰 Ensuring SOL price history...");
-    let result = ensure_sol_price_history(days).await;
-    match result {
-        Ok(count) => {
-            println!("✅ SOL price history available: {} data points", count);
-        }
-        Err(e) => {
-            log(LogTag::Ohlcv, "ERROR", &format!("Failed to ensure SOL price history: {}", e));
-            println!("❌ Failed to ensure SOL price history: {}", e);
-        }
-    }
+    // Step 6: SOL price coverage is now handled automatically by OHLCV service
+    log(LogTag::System, "INFO", "💰 SOL price coverage handled by OHLCV service...");
 
     if !validate_only {
         // Step 7: Fetch OHLCV data for each position
@@ -184,9 +167,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 position.mint
             );
 
-            match fetch_and_store_position_data(&position.mint, total_candles).await {
-                Ok(count) => {
-                    println!("  ✅ Stored {} OHLCV data points", count);
+            // Use OHLCV service instead of direct API calls
+            match get_latest_ohlcv(&position.mint, total_candles).await {
+                Ok(data) => {
+                    println!("  ✅ Stored {} OHLCV data points", data.len());
                 }
                 Err(e) => {
                     println!("  ❌ Failed: {}", e);
@@ -274,188 +258,6 @@ struct PriceValidation {
     ohlcv_price_at_entry: f64,
     current_price: Option<f64>,
     status: String,
-}
-
-async fn ensure_sol_price_history(days: u32) -> Result<usize, String> {
-    // Calculate time range
-    let now = Utc::now();
-    let start_time = now - ChronoDuration::days(days as i64);
-
-    // Use raw database connection to check SOL price coverage
-    let conn = rusqlite::Connection
-        ::open("data/ohlcvs.db")
-        .map_err(|e| format!("Failed to open database: {}", e))?;
-
-    let existing_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sol_prices WHERE timestamp >= ? AND timestamp <= ?",
-            rusqlite::params![start_time.timestamp(), now.timestamp()],
-            |row| row.get(0)
-        )
-        .map_err(|e| format!("Failed to count existing SOL prices: {}", e))?;
-
-    log(
-        LogTag::Ohlcv,
-        "INFO",
-        &format!("Found {} existing SOL price points for {} days", existing_count, days)
-    );
-
-    // If we have good coverage (at least 80% of expected data points), return
-    let expected_points = days * 24; // roughly hourly data points
-    if (existing_count as u32) >= (expected_points * 80) / 100 {
-        return Ok(existing_count as usize);
-    }
-
-    // Need to fetch more SOL price data - use the SOL major pool
-    let sol_pool_address = "Czfq3xZZDmsdGdUyrNLtRhGc47cXcZtLG4crryfu44zE"; // Major SOL/USDC pool
-    log(
-        LogTag::Ohlcv,
-        "INFO",
-        &format!("Fetching SOL price history from pool: {}", sol_pool_address)
-    );
-
-    // Fetch SOL price OHLCV data
-    let limit = days * 24 * 60; // 1-minute candles for the period
-    match get_ohlcv_data_from_geckoterminal(sol_pool_address, limit).await {
-        Ok(ohlcv_data) => {
-            log(
-                LogTag::Ohlcv,
-                "INFO",
-                &format!("Fetched {} SOL OHLCV data points", ohlcv_data.len())
-            );
-
-            // Convert OHLCV to SOL price points (close price as SOL/USD rate)
-            let mut sol_prices = Vec::new();
-            for point in ohlcv_data {
-                sol_prices.push(DbSolPriceDataPoint {
-                    timestamp: point.timestamp,
-                    price_usd: point.close, // SOL/USD close price
-                    source: "geckoterminal_sol_pool".to_string(),
-                    created_at: now,
-                });
-            }
-
-            // Store SOL prices using database connection
-            let db = get_ohlcv_database().map_err(|e| format!("Database access failed: {}", e))?;
-            if let Err(e) = db.store_sol_prices(&sol_prices) {
-                return Err(format!("Failed to store SOL prices: {}", e));
-            }
-
-            log(LogTag::Ohlcv, "INFO", &format!("Stored {} SOL price points", sol_prices.len()));
-            Ok(sol_prices.len())
-        }
-        Err(e) => { Err(format!("Failed to fetch SOL price history: {}", e)) }
-    }
-}
-
-async fn fetch_and_store_position_data(mint: &str, limit: u32) -> Result<usize, String> {
-    // Try to get pool address for token
-    let pools = get_token_pools_from_geckoterminal(mint).await.map_err(|e|
-        format!("Failed to get pools for token: {}", e)
-    )?;
-
-    if pools.is_empty() {
-        return Err("No pools found for token".to_string());
-    }
-
-    // Use the first pool with highest liquidity
-    let pool_address = &pools[0].pool_address;
-
-    log(
-        LogTag::Ohlcv,
-        "INFO",
-        &format!("Fetching OHLCV for mint {} using pool {}", mint, pool_address)
-    );
-
-    // Fetch OHLCV data from GeckoTerminal
-    let ohlcv_data = get_ohlcv_data_from_geckoterminal(pool_address, limit).await.map_err(|e|
-        format!("Failed to fetch OHLCV data: {}", e)
-    )?;
-
-    if ohlcv_data.is_empty() {
-        return Err("No OHLCV data returned".to_string());
-    }
-
-    log(
-        LogTag::Ohlcv,
-        "INFO",
-        &format!("Fetched {} OHLCV data points, converting to SOL denomination", ohlcv_data.len())
-    );
-
-    // Get database connection
-    let db = get_ohlcv_database().map_err(|e| format!("Database access failed: {}", e))?;
-
-    // Convert USD OHLCV to SOL OHLCV
-    let mut sol_ohlcv_data = Vec::new();
-    let mut conversion_failures = 0;
-
-    for point in ohlcv_data {
-        // Get SOL price at this timestamp (60 second tolerance)
-        match db.get_sol_price_at_timestamp(point.timestamp, 60) {
-            Ok(Some(sol_rate)) => {
-                // Convert USD prices to SOL prices
-                let sol_point = DbOhlcvDataPoint {
-                    id: None,
-                    mint: mint.to_string(),
-                    pool_address: pool_address.to_string(),
-                    timestamp: point.timestamp,
-                    open_sol: point.open / sol_rate,
-                    high_sol: point.high / sol_rate,
-                    low_sol: point.low / sol_rate,
-                    close_sol: point.close / sol_rate,
-                    volume_sol: point.volume / sol_rate,
-                    sol_usd_rate: sol_rate,
-                    created_at: Utc::now(),
-                };
-                sol_ohlcv_data.push(sol_point);
-            }
-            Ok(None) => {
-                conversion_failures += 1;
-                log(
-                    LogTag::Ohlcv,
-                    "WARN",
-                    &format!("No SOL price available for timestamp {}", point.timestamp)
-                );
-            }
-            Err(e) => {
-                conversion_failures += 1;
-                log(
-                    LogTag::Ohlcv,
-                    "ERROR",
-                    &format!("Failed to get SOL price for timestamp {}: {}", point.timestamp, e)
-                );
-            }
-        }
-    }
-
-    if conversion_failures > 0 {
-        log(
-            LogTag::Ohlcv,
-            "WARN",
-            &format!("Failed to convert {} OHLCV points due to missing SOL prices", conversion_failures)
-        );
-    }
-
-    if sol_ohlcv_data.is_empty() {
-        return Err("No OHLCV data could be converted to SOL denomination".to_string());
-    }
-
-    // Store SOL OHLCV data
-    db
-        .store_sol_ohlcv_data(mint, pool_address, &sol_ohlcv_data)
-        .map_err(|e| format!("Failed to store SOL OHLCV data: {}", e))?;
-
-    log(
-        LogTag::Ohlcv,
-        "INFO",
-        &format!(
-            "Successfully stored {} SOL OHLCV data points for mint {}",
-            sol_ohlcv_data.len(),
-            mint
-        )
-    );
-
-    Ok(sol_ohlcv_data.len())
 }
 
 async fn validate_position_prices(
