@@ -644,7 +644,7 @@ impl OhlcvService {
         };
 
         // Fetch from API
-        match self.fetch_ohlcv_from_api(&pool_address, limit).await {
+        match self.fetch_ohlcv_from_api(mint, &pool_address, limit).await {
             Ok(data_points) => {
                 if is_debug_ohlcv_enabled() {
                     log(
@@ -903,6 +903,7 @@ impl OhlcvService {
     /// Fetch 1-minute OHLCV data from GeckoTerminal API (delegates to geckoterminal module)
     async fn fetch_ohlcv_from_api(
         &self,
+        mint: &str,
         pool_address: &str,
         limit: u32
     ) -> Result<Vec<OhlcvDataPoint>, String> {
@@ -925,7 +926,7 @@ impl OhlcvService {
         }
 
         // Delegate to geckoterminal module (which handles rate limiting)
-        match get_ohlcv_data_from_geckoterminal(pool_address, limit).await {
+        match get_ohlcv_data_from_geckoterminal(pool_address, mint, limit).await {
             Ok(sol_data) => {
                 // Update successful fetch stats
                 {
@@ -1196,7 +1197,13 @@ impl OhlcvService {
                 };
 
                 // Fetch new data (now delegated to geckoterminal module)
-                match temp_service.fetch_ohlcv_from_api(&pool_address, DEFAULT_OHLCV_LIMIT).await {
+                match
+                    temp_service.fetch_ohlcv_from_api(
+                        &entry.mint,
+                        &pool_address,
+                        DEFAULT_OHLCV_LIMIT
+                    ).await
+                {
                     Ok(data_points) => {
                         // Cache the data in memory
                         let cached_data = CachedOhlcvData {

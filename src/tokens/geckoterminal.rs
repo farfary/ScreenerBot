@@ -676,6 +676,7 @@ fn parse_single_pool(
 /// Fetch 1-minute OHLCV data from GeckoTerminal API (SOL-denominated)
 pub async fn get_ohlcv_data_from_geckoterminal(
     pool_address: &str,
+    target_mint: &str,
     limit: u32
 ) -> Result<Vec<OhlcvDataPoint>, String> {
     // Apply strict rate limiting and get exclusive access
@@ -737,6 +738,7 @@ pub async fn get_ohlcv_data_from_geckoterminal(
                         ("aggregate", "1".to_string()),
                         ("limit", effective_limit.to_string()),
                         ("currency", "token".to_string()),
+                        ("token", target_mint.to_string()),
                     ]
                 )
                 .send()
@@ -947,13 +949,14 @@ pub async fn get_ohlcv_data_from_geckoterminal(
 /// If neither is provided, it behaves like `get_ohlcv_data_from_geckoterminal` with the given limit.
 pub async fn get_ohlcv_data_from_geckoterminal_range(
     pool_address: &str,
+    target_mint: &str,
     start_timestamp: Option<i64>,
     end_timestamp: Option<i64>,
     limit: u32
 ) -> Result<Vec<OhlcvDataPoint>, String> {
     // Fast path: no window provided -> fall back to simple fetch
     if start_timestamp.is_none() && end_timestamp.is_none() {
-        return get_ohlcv_data_from_geckoterminal(pool_address, limit).await;
+        return get_ohlcv_data_from_geckoterminal(pool_address, target_mint, limit).await;
     }
 
     // GeckoTerminal maximum page size
@@ -1016,6 +1019,7 @@ pub async fn get_ohlcv_data_from_geckoterminal_range(
                             ("limit", page_limit.to_string()),
                             ("before_timestamp", current_before.to_string()),
                             ("currency", "token".to_string()),
+                            ("token", target_mint.to_string()),
                         ]
                     )
                     .send()
