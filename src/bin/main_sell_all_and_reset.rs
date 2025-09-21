@@ -179,7 +179,7 @@ const RETRY_DELAY_MS: u64 = 2000;
 const DUST_THRESHOLD_RAW_UNITS: u64 = 25; // configurable heuristic
 
 /// Minimum token units that should be burned instead of sold (saves on swap fees)
-const BURN_THRESHOLD_RAW_UNITS: u64 = 1000; // tokens below this will be burned
+const BURN_THRESHOLD_RAW_UNITS: u64 = 1; // tokens below this will be burned
 
 /// Burn small token amounts to prepare ATAs for closing
 async fn burn_dust_tokens_with_retry(
