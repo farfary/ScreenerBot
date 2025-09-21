@@ -128,8 +128,9 @@ pub async fn preload_exit_prices_batch(mints: &[String]) -> Result<(), String> {
 const MIN_PRICE_POINTS: usize = 3; // Increased from 3 for better analysis
 
 // CONSERVATIVE entry windows - more balanced approach
-const WINDOWS_SEC: [i64; 6] = [10, 20, 40, 80, 160, 320]; // 30s to 10min windows
-const MIN_DROP_PERCENT: f64 = 1.0; // Higher minimum for quality entries
+// Extended with ultra-short and longer slice to catch quick dips and orderly step-downs
+const WINDOWS_SEC: [i64; 9] = [5, 8, 10, 20, 40, 80, 160, 320, 1200]; // 5s..20m windows
+const MIN_DROP_PERCENT: f64 = 1.0; // base fallback; dynamic function overrides in logic
 const MAX_DROP_PERCENT: f64 = 90.0; // Allow larger drops for volatile tokens
 
 // ============================= POST-PEAK CASCADE GUARD =============================
@@ -227,6 +228,50 @@ fn detect_micro_liquidity_capitulation(
     None
 }
 
+// ============================= DYNAMIC THRESHOLDS =============================
+// Minimum drop required scales by SOL liquidity and short-term volatility.
+// High-liquidity pools can qualify on smaller pullbacks; thin pools need deeper.
+fn dynamic_min_drop_percent(sol_reserves: f64, price_history: &[(DateTime<Utc>, f64)]) -> f64 {
+    // Liquidity band factor
+    let liq_factor = if sol_reserves >= 200.0 {
+        0.6
+    } else if sol_reserves >= 100.0 {
+        0.75
+    } else if sol_reserves >= 50.0 {
+        0.9
+    } else if sol_reserves >= 10.0 {
+        1.0
+    } else {
+        1.2
+    };
+
+    // Volatility factor based on 2m high-low range
+    let now = Utc::now();
+    let prices_2m: Vec<f64> = price_history
+        .iter()
+        .filter(|(ts, _)| (now - *ts).num_seconds() <= 120)
+        .map(|(_, p)| *p)
+        .filter(|p| *p > 0.0 && p.is_finite())
+        .collect();
+    let vol_factor = if prices_2m.len() >= 3 {
+        let hi = prices_2m.iter().fold(0.0f64, |a, b| a.max(*b));
+        let lo = prices_2m.iter().fold(f64::INFINITY, |a, b| a.min(*b));
+        if hi > 0.0 && lo.is_finite() && lo > 0.0 {
+            let hl = ((hi - lo) / hi) * 100.0; // % range
+            // Map 0..20% → 1.0..0.8 (more volatile → slightly lower min drop)
+            (1.0 - (hl / 100.0).clamp(0.0, 0.2) * 1.0).max(0.8)
+        } else {
+            1.0
+        }
+    } else {
+        1.0
+    };
+
+    let base = MIN_DROP_PERCENT; // 1.0%
+    let dyn_val = base * liq_factor * vol_factor;
+    dyn_val.clamp(0.5, 2.0) // Bound minimal sanity 0.5%..2.0%
+}
+
 // ATH Prevention parameters for scalping
 const ATH_LOOKBACK_15MIN: i64 = 900; // 15 minutes
 const ATH_LOOKBACK_1HR: i64 = 3600; // 1 hour
@@ -245,7 +290,7 @@ const MIN_ACTIVITY_ENTRY: f64 = 3.0; // Reduced from 5.0 for minimum activity
 // to avoid catching a decaying downtrend too early.
 pub const REENTRY_LOOKBACK_MAX: usize = 6; // how many prior exits to inspect
 pub const REENTRY_DROP_EXTRA_PER_ENTRY_PCT: f64 = 2.2; // each prior entry adds this % to required min drop
-pub const REENTRY_DROP_EXTRA_MAX_PCT: f64 = 14.0; // cap additional drop requirement
+pub const REENTRY_DROP_EXTRA_MAX_PCT: f64 = 10.0; // cap additional drop requirement (reduced from 14%)
 pub const REENTRY_MIN_DISCOUNT_TO_LAST_EXIT_PCT: f64 = 4.0; // require current price at least this % below most recent verified exit
 pub const REENTRY_LOCAL_STABILITY_SECS: i64 = 45; // need some sideways stabilization length
 pub const REENTRY_LOCAL_MAX_VOLATILITY_PCT: f64 = 9.0; // if intrarange > this then treat as unstable (need deeper drop)
@@ -310,7 +355,7 @@ fn analyze_local_structure(
     } else {
         0.0
     };
-    let stabilization_score = (0.55 * tight_factor + 0.45 * recovery_factor).clamp(0.0, 1.0);
+    let stabilization_score = (0.65 * tight_factor + 0.35 * recovery_factor).clamp(0.0, 1.0);
     (local_low, local_high, stabilization_score, intrarange_pct)
 }
 
@@ -378,6 +423,14 @@ fn detect_breakout_retest(
     };
     if r_high <= 0.0 {
         return (false, 0.0, "", false);
+    }
+
+    // If just above range high with strong momentum, allow continuation entries
+    if current_price >= r_high * 1.004 {
+        // momentum proxy: require stabilization and small micro-pullback
+        if stabilization_score >= 0.35 && intrarange_pct <= MICRO_PULLBACK_MAX_PCT {
+            return (true, 10.0, "TREND_CONTINUATION", true);
+        }
     }
 
     // Breakout must clear range high by buffer
@@ -521,7 +574,18 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         return (false, 0.0, "Invalid price".to_string());
     };
 
-    let activity_score = 0.5;
+    // Dynamic activity score based on cached token txns (m5 buys)
+    let activity_score: f64 = {
+        let mut txns_m5_buys: f64 = 0.0;
+        if let Some(token) = crate::tokens::get_token_from_db(&price_info.mint).await {
+            if let Some(txns) = token.txns.as_ref() {
+                if let Some(m5) = txns.m5.as_ref() {
+                    txns_m5_buys = m5.buys.unwrap_or(0) as f64;
+                }
+            }
+        }
+        calculate_scalp_activity_score(txns_m5_buys)
+    };
 
     // Get recent pool price history
     if is_debug_entry_enabled() {
@@ -1077,7 +1141,9 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
     }
 
     // Adaptive extra drop requirement for re-entry scenarios
-    let mut adaptive_min_drop = MIN_DROP_PERCENT;
+    // Base dynamic minimum drop based on liquidity and short-term volatility
+    let dyn_min_drop = dynamic_min_drop_percent(price_info.sol_reserves, &converted_history);
+    let mut adaptive_min_drop = dyn_min_drop;
     if prior_count > 0 {
         let extra = ((prior_count as f64) * REENTRY_DROP_EXTRA_PER_ENTRY_PCT).min(
             REENTRY_DROP_EXTRA_MAX_PCT
@@ -1322,7 +1388,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     "❌ {} no entry drops >= adapt_min_drop {:.1}% (base {:.1}%) detected in windows [{}] prior_exits:{}",
                     price_info.mint,
                     adaptive_min_drop,
-                    MIN_DROP_PERCENT,
+                    dyn_min_drop,
                     recent_prices.join(", "),
                     prior_count
                 )
@@ -1547,7 +1613,15 @@ fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
         return 0.0;
     }
 
-    let velocity_per_minute = percent_change / minutes;
+    let mut velocity_per_minute = percent_change / minutes;
+
+    // Volume weighting: scale by recent 5m activity vs a soft baseline
+    // We don't have mint context here; caller prefers adjusted velocity using global recent token snapshot.
+    // As a lightweight proxy, use number of samples and clamp to [0.8, 1.2]. More samples -> higher trust.
+    if prices.len() >= 3 {
+        let sample_factor = ((prices.len() as f64) / 12.0).clamp(0.8, 1.2);
+        velocity_per_minute *= sample_factor;
+    }
 
     // Add debug logging to see what's happening - only for very large velocity changes
     if crate::global::is_debug_entry_enabled() && velocity_per_minute.abs() > 50.0 {
@@ -1564,7 +1638,7 @@ fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
         );
     }
 
-    velocity_per_minute // Percent per minute
+    velocity_per_minute // Percent per minute (volume-weighted proxy)
 }
 
 // Simple best-drop detector over predefined windows
@@ -1590,7 +1664,7 @@ fn detect_best_drop(
             continue;
         }
         let drop_percent = ((window_high - current_price) / window_high) * 100.0;
-        if drop_percent < MIN_DROP_PERCENT || drop_percent > MAX_DROP_PERCENT {
+        if drop_percent <= 0.0 || drop_percent > MAX_DROP_PERCENT {
             continue;
         }
 
