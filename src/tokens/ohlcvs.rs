@@ -927,14 +927,38 @@ impl OhlcvService {
 
             Some(pool_address)
         } else {
-            if is_debug_ohlcv_enabled() {
-                log(
-                    LogTag::Ohlcv,
-                    "POOL_LOOKUP_FAILED",
-                    &format!("❌ Pool lookup failed for {}", mint)
-                );
+            // Fallback: ask discovery to resolve canonical pool (cache-first in discovery)
+            if let Some(addr) = crate::pools::get_canonical_pool_address(mint).await {
+                // Update watch list cache
+                {
+                    let mut watch_list = self.watch_list.write().await;
+                    if let Some(entry) = watch_list.get_mut(mint) {
+                        entry.pool_address = Some(addr.clone());
+                        entry.pool_address_cached_at = Some(Utc::now());
+                        if is_debug_ohlcv_enabled() {
+                            log(
+                                LogTag::Ohlcv,
+                                "POOL_CACHE_UPDATE",
+                                &format!(
+                                    "🏊 Updated pool address via discovery for {}: {}",
+                                    mint,
+                                    addr
+                                )
+                            );
+                        }
+                    }
+                }
+                Some(addr)
+            } else {
+                if is_debug_ohlcv_enabled() {
+                    log(
+                        LogTag::Ohlcv,
+                        "POOL_LOOKUP_FAILED",
+                        &format!("❌ Pool lookup failed for {} (cache + discovery)", mint)
+                    );
+                }
+                None
             }
-            None
         }
     }
 

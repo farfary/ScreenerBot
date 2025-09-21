@@ -44,6 +44,7 @@ pub use discovery::{
     ENABLE_DEXSCREENER_DISCOVERY,
     ENABLE_GECKOTERMINAL_DISCOVERY,
     ENABLE_RAYDIUM_DISCOVERY,
+    get_canonical_pool_address,
 }; // Expose for configuration access
 pub use chain_discovery::{ ChainPoolDiscovery, ChainPoolInfo }; // Expose chain discovery for debug tools
 

@@ -55,7 +55,9 @@ use super::utils::{ is_stablecoin_mint };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{ Arc, OnceLock };
+use std::time::{ Duration, Instant };
+use dashmap::DashMap;
 use tokio::sync::Notify;
 
 /// Pool discovery service state
@@ -882,4 +884,168 @@ impl PoolDiscovery {
 
         result
     }
+}
+
+// =============================================================================
+// Lightweight, in-memory discovery cache (canonical pool per mint)
+// =============================================================================
+
+// TTL for discovered pools used by non-monitoring components (e.g., OHLCV)
+const DISCOVERY_CACHE_TTL_SECS: u64 = 6 * 60 * 60; // 6 hours
+
+// Cache: mint -> (canonical PoolDescriptor, cached_at)
+static DISCOVERY_CACHE: OnceLock<Arc<DashMap<Pubkey, (PoolDescriptor, Instant)>>> = OnceLock::new();
+
+// In-flight guard: mint -> Notify; ensures single-flight discovery per mint
+static INFLIGHT_GUARD: OnceLock<Arc<DashMap<Pubkey, Arc<Notify>>>> = OnceLock::new();
+
+fn discovery_cache() -> &'static Arc<DashMap<Pubkey, (PoolDescriptor, Instant)>> {
+    DISCOVERY_CACHE.get_or_init(|| Arc::new(DashMap::new()))
+}
+
+fn inflight_guard() -> &'static Arc<DashMap<Pubkey, Arc<Notify>>> {
+    INFLIGHT_GUARD.get_or_init(|| Arc::new(DashMap::new()))
+}
+
+fn is_cache_fresh(cached_at: Instant) -> bool {
+    cached_at.elapsed() < Duration::from_secs(DISCOVERY_CACHE_TTL_SECS)
+}
+
+/// Public accessor: get canonical pool address for a mint (cache-first, single-flight discovery on miss)
+///
+/// Contract:
+/// - Does NOT touch price APIs or price cache
+/// - Uses existing discovery + selection logic (no duplication)
+/// - Returns Some(<pool_pubkey_string>) on success, None on failure/invalid mint
+pub async fn get_canonical_pool_address(mint: &str) -> Option<String> {
+    // Parse mint pubkey
+    let mint_pk = match Pubkey::from_str(mint) {
+        Ok(pk) => pk,
+        Err(e) => {
+            if is_debug_pool_discovery_enabled() {
+                log(
+                    LogTag::PoolDiscovery,
+                    "WARN",
+                    &format!(
+                        "Invalid mint provided to get_canonical_pool_address: {} ({})",
+                        mint,
+                        e
+                    )
+                );
+            }
+            return None;
+        }
+    };
+
+    // Fast path: check cache
+    if let Some(entry) = discovery_cache().get(&mint_pk) {
+        let (desc, cached_at) = entry.value();
+        if is_cache_fresh(*cached_at) {
+            return Some(desc.pool_id.to_string());
+        }
+    }
+
+    // Single-flight guard: only one discovery per mint at a time
+    let notify = {
+        let guards = inflight_guard();
+        match guards.entry(mint_pk) {
+            dashmap::mapref::entry::Entry::Vacant(v) => {
+                let n = Arc::new(Notify::new());
+                v.insert(n.clone());
+                // Leader path: perform discovery
+                drop(guards);
+                // Re-check cache just before doing network work in case another thread populated it
+                if let Some(entry) = discovery_cache().get(&mint_pk) {
+                    let (desc, cached_at) = entry.value();
+                    if is_cache_fresh(*cached_at) {
+                        inflight_guard().remove(&mint_pk);
+                        n.notify_waiters();
+                        return Some(desc.pool_id.to_string());
+                    }
+                }
+
+                // Perform discovery using existing logic
+                let discovery = PoolDiscovery::new();
+                let pools = discovery.discover_pools_for_token(mint).await;
+
+                // Deduplicate and select canonical pool using existing helpers
+                let deduped = PoolDiscovery::deduplicate_discovered(pools);
+                let selected = PoolDiscovery::select_highest_liquidity_per_token(deduped);
+
+                // Keep only the first selected pool (canonical)
+                let result = selected.first().cloned();
+
+                // Update cache and notify waiters
+                if let Some(desc) = result.as_ref() {
+                    discovery_cache().insert(mint_pk, (desc.clone(), Instant::now()));
+                    if is_debug_pool_discovery_enabled() {
+                        log(
+                            LogTag::PoolDiscovery,
+                            "INFO",
+                            &format!(
+                                "Cached canonical pool for mint {} -> {} (program: {:?})",
+                                mint,
+                                desc.pool_id,
+                                desc.program_kind
+                            )
+                        );
+                    }
+                } else if is_debug_pool_discovery_enabled() {
+                    log(
+                        LogTag::PoolDiscovery,
+                        "WARN",
+                        &format!("No pools discovered for mint {}", mint)
+                    );
+                }
+
+                // Prepare return value without moving `result`
+                let pool_id_str = result.as_ref().map(|d| d.pool_id.to_string());
+
+                inflight_guard().remove(&mint_pk);
+                n.notify_waiters();
+
+                return pool_id_str;
+            }
+            dashmap::mapref::entry::Entry::Occupied(o) => {
+                // Follower path: wait for leader to finish
+                o.get().clone()
+            }
+        }
+    };
+
+    // Wait for leader with short polling to avoid lost-notify race
+    let start = Instant::now();
+    let max_wait = Duration::from_secs(5);
+    loop {
+        // If cache is now fresh, return immediately
+        if let Some(entry) = discovery_cache().get(&mint_pk) {
+            let (desc, cached_at) = entry.value();
+            if is_cache_fresh(*cached_at) {
+                return Some(desc.pool_id.to_string());
+            }
+        }
+
+        // If the guard is gone, leader finished; break to final read
+        if !inflight_guard().contains_key(&mint_pk) {
+            break;
+        }
+
+        // Wait briefly, then re-check
+        let _ = tokio::time::timeout(Duration::from_millis(150), notify.notified()).await;
+        if start.elapsed() >= max_wait {
+            break;
+        }
+    }
+
+    // Final cache read
+    discovery_cache()
+        .get(&mint_pk)
+        .and_then(|e| {
+            let (desc, cached_at) = e.value();
+            if is_cache_fresh(*cached_at) {
+                Some(desc.pool_id.to_string())
+            } else {
+                None
+            }
+        })
 }
