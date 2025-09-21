@@ -147,14 +147,29 @@ async fn verification_worker(shutdown: Arc<Notify>) {
         cycle_count += 1;
         let is_first_cycle = cycle_count == 1;
 
+        // Compute adaptive sleep duration before select to avoid awaiting inside select arm
+        let sleep_duration = {
+            let (q_size, _) = super::queue::get_queue_status().await;
+            if is_first_cycle {
+                Duration::from_secs(3)
+            } else if q_size > 50 {
+                Duration::from_millis(500)
+            } else if q_size > 0 {
+                Duration::from_secs(2)
+            } else {
+                Duration::from_secs(5)
+            }
+        };
+
         tokio::select! {
             _ = shutdown.notified() => {
                 log(LogTag::Positions, "SHUTDOWN", "🛑 Stopping verification worker");
                 break;
             }
-            _ = sleep(if is_first_cycle { Duration::from_secs(5) } else { Duration::from_secs(5) }) => {
+            _ = sleep(sleep_duration) => {
                 // GUARD: Re-enqueue any missing verifications that should be queued but aren't
                 let mut requeued_count = 0;
+                let (queue_size_before, signatures_in_queue) = super::queue::get_queue_status().await;
                 {
                     let positions = POSITIONS.read().await;
                     for position in positions.iter() {
@@ -162,8 +177,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                         if !position.transaction_entry_verified {
                             if let Some(entry_sig) = &position.entry_transaction_signature {
                                 // Check if already in queue
-                                let (queue_size, signatures) = super::queue::get_queue_status().await;
-                                if !signatures.contains(entry_sig) {
+                                if !signatures_in_queue.contains(entry_sig) {
                                     let item = VerificationItem::new(
                                         entry_sig.clone(),
                                         position.mint.clone(),
@@ -181,8 +195,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                         if !position.transaction_exit_verified {
                             if let Some(exit_sig) = &position.exit_transaction_signature {
                                 // Check if already in queue
-                                let (queue_size, signatures) = super::queue::get_queue_status().await;
-                                if !signatures.contains(exit_sig) {
+                                if !signatures_in_queue.contains(exit_sig) {
                                     let item = VerificationItem::new(
                                         exit_sig.clone(),
                                         position.mint.clone(),
@@ -202,7 +215,11 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                     log(
                         LogTag::Positions,
                         "VERIFICATION_GUARD_REQUEUE",
-                        &format!("🛡️ Re-enqueued {} missing verifications", requeued_count)
+                        &format!(
+                            "🛡️ Re-enqueued {} missing verifications (queue before: {})",
+                            requeued_count,
+                            queue_size_before
+                        )
                     );
                 }
 
@@ -257,8 +274,14 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                             log(
                                                 LogTag::Positions,
                                                 "DEBUG",
-                                                &format!("✅ Applied transition for {}: db_updated={}, position_closed={}",
-                                                    item.signature, effects.db_updated, effects.position_closed)
+                                                &format!(
+                                                    "✅ Applied transition for {} (mint {} kind {:?}): db_updated={}, position_closed={}",
+                                                    item.signature,
+                                                    item.mint,
+                                                    item.kind,
+                                                    effects.db_updated,
+                                                    effects.position_closed
+                                                )
                                             );
                                         }
                                     }
@@ -266,7 +289,13 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                         log(
                                             LogTag::Positions,
                                             "ERROR",
-                                            &format!("❌ Failed to apply transition for {}: {}", item.signature, e)
+                                            &format!(
+                                                "❌ Failed to apply transition for {} (mint {} kind {:?}): {}",
+                                                item.signature,
+                                                item.mint,
+                                                item.kind,
+                                                e
+                                            )
                                         );
                                         requeue_verification(item).await;
                                     }
@@ -277,7 +306,14 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                     log(
                                         LogTag::Positions,
                                         "DEBUG",
-                                        &format!("🔄 Retrying verification for {}: {}", item.signature, reason)
+                                        &format!(
+                                            "🔄 Retrying verification for {} (mint {} kind {:?} attempts {}): {}",
+                                            item.signature,
+                                            item.mint,
+                                            item.kind,
+                                            item.attempts,
+                                            reason
+                                        )
                                     );
                                 }
                                 requeue_verification(item).await;
@@ -286,7 +322,12 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                 log(
                                     LogTag::Positions,
                                     "WARNING",
-                                    &format!("🚫 Permanent failure for {}, applying cleanup", item.signature)
+                                    &format!(
+                                        "🚫 Permanent failure for {} (mint {} kind {:?}), applying cleanup",
+                                        item.signature,
+                                        item.mint,
+                                        item.kind
+                                    )
                                 );
 
                                 let _ = apply_transition(transition).await;

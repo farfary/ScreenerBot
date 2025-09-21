@@ -1,4 +1,4 @@
-use chrono::{ DateTime, Utc };
+use chrono::{ DateTime, Utc, Duration as ChronoDuration };
 use serde::{ Deserialize, Serialize };
 use std::collections::VecDeque;
 use tokio::sync::RwLock;
@@ -18,6 +18,7 @@ pub struct VerificationItem {
     pub kind: VerificationKind,
     pub created_at: DateTime<Utc>,
     pub last_attempt_at: Option<DateTime<Utc>>,
+    pub next_retry_at: Option<DateTime<Utc>>, // backoff scheduling
     pub attempts: u8,
     pub expiry_height: Option<u64>,
 }
@@ -37,12 +38,28 @@ impl VerificationItem {
             kind,
             created_at: Utc::now(),
             last_attempt_at: None,
+            next_retry_at: None,
             attempts: 0,
             expiry_height,
         }
     }
 
     pub fn with_retry(&self) -> Self {
+        // Compute exponential backoff (bounded) based on attempts (after increment)
+        let next_attempts = self.attempts.saturating_add(1);
+        // Tiered backoff in seconds: 1, 3, 7, 15, 30, 60, 90, 120
+        let backoff_secs = match next_attempts {
+            0 => 0,
+            1 => 1,
+            2 => 3,
+            3 => 7,
+            4 => 15,
+            5 => 30,
+            6 => 60,
+            7 => 90,
+            _ => 120,
+        };
+
         Self {
             signature: self.signature.clone(),
             mint: self.mint.clone(),
@@ -50,7 +67,8 @@ impl VerificationItem {
             kind: self.kind.clone(),
             created_at: self.created_at,
             last_attempt_at: Some(Utc::now()),
-            attempts: self.attempts + 1,
+            next_retry_at: Some(Utc::now() + ChronoDuration::seconds(backoff_secs)),
+            attempts: next_attempts,
             expiry_height: self.expiry_height,
         }
     }
@@ -59,13 +77,24 @@ impl VerificationItem {
         if let (Some(expiry), Some(current)) = (self.expiry_height, current_height) {
             current > expiry
         } else {
-            // Time-based fallback: 3 minutes
-            Utc::now().signed_duration_since(self.created_at).num_seconds() > 180
+            // Time-based fallback by kind: Entries 10m, Exits 3m
+            let fallback_secs = match self.kind {
+                VerificationKind::Entry => 600,
+                VerificationKind::Exit => 180,
+            };
+            Utc::now().signed_duration_since(self.created_at).num_seconds() > fallback_secs
         }
     }
 
     pub fn age_seconds(&self) -> i64 {
         Utc::now().signed_duration_since(self.created_at).num_seconds()
+    }
+
+    pub fn is_due(&self) -> bool {
+        match self.next_retry_at {
+            None => true,
+            Some(when) => Utc::now() >= when,
+        }
     }
 }
 
@@ -91,8 +120,17 @@ impl VerificationQueue {
     pub fn poll_batch(&mut self, limit: usize) -> Vec<VerificationItem> {
         let mut batch = Vec::new();
 
-        // Sort by priority: recent items first (within 60s), then by age
+        // Sort by priority: due items first, then recent (within 60s), then by age
         self.items.make_contiguous().sort_by(|a, b| {
+            let a_due = a.is_due();
+            let b_due = b.is_due();
+            if a_due && !b_due {
+                return std::cmp::Ordering::Less;
+            }
+            if !a_due && b_due {
+                return std::cmp::Ordering::Greater;
+            }
+
             let a_recent = a.age_seconds() <= 60;
             let b_recent = b.age_seconds() <= 60;
 
@@ -103,18 +141,23 @@ impl VerificationQueue {
             }
         });
 
-        // Take up to limit items
-        for _ in 0..limit.min(self.items.len()) {
-            if let Some(item) = self.items.pop_front() {
+        // Drain up to limit DUE items and keep the rest
+        let mut remaining: VecDeque<VerificationItem> = VecDeque::with_capacity(self.items.len());
+        while let Some(item) = self.items.pop_front() {
+            if batch.len() < limit && item.is_due() {
                 batch.push(item);
+            } else {
+                remaining.push_back(item);
             }
         }
+        self.items = remaining;
 
         batch
     }
 
     pub fn requeue(&mut self, item: VerificationItem) {
-        if item.attempts < 5 {
+        // Allow more retries but with backoff; hard cap attempts to avoid infinite loops
+        if item.attempts < 12 {
             self.items.push_back(item.with_retry());
         }
     }
