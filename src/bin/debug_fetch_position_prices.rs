@@ -269,7 +269,7 @@ async fn validate_position_prices(
 
     let mut stmt = conn
         .prepare(
-            "SELECT timestamp, close_sol FROM ohlcv_data WHERE mint = ? ORDER BY timestamp DESC LIMIT 2000"
+            "SELECT timestamp, close FROM ohlcv_data WHERE mint = ? ORDER BY timestamp DESC LIMIT 2000"
         )
         .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 

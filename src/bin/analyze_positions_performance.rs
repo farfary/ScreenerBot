@@ -506,7 +506,22 @@ async fn analyze_closed_positions(
             Some(c) => c,
             None => {
                 if verbose {
-                    println!("- ⚠️  {} | mint {} | No candle near exit time", p.symbol, mint);
+                    let earliest_candle_time = candles
+                        .first()
+                        .map(|c|
+                            DateTime::<Utc>
+                                ::from_timestamp(c.timestamp, 0)
+                                .map(|dt| dt.to_rfc3339())
+                                .unwrap_or_else(|| "invalid".to_string())
+                        )
+                        .unwrap_or_else(|| "none".to_string());
+                    println!(
+                        "- ⚠️  {} | mint {} | No candle near exit time {} (earliest OHLCV: {})",
+                        p.symbol,
+                        mint,
+                        exit_time.to_rfc3339(),
+                        earliest_candle_time
+                    );
                 }
                 continue;
             }

@@ -17,7 +17,7 @@ const OHLCV_DB_PATH: &str = "data/ohlcvs.db";
 pub const MAX_OHLCV_AGE_HOURS: i64 = 168;
 
 /// Cache expiration time for 1-minute data (2 minutes)
-const CACHE_EXPIRY_MINUTES: i64 = 2;
+pub const CACHE_EXPIRY_MINUTES: i64 = 2;
 
 // =============================================================================
 // DATABASE STRUCTURES
@@ -30,12 +30,11 @@ pub struct DbOhlcvDataPoint {
     pub mint: String,
     pub pool_address: String,
     pub timestamp: i64, // Unix timestamp
-    pub open_sol: f64, // Open price in SOL
-    pub high_sol: f64, // High price in SOL
-    pub low_sol: f64, // Low price in SOL
-    pub close_sol: f64, // Close price in SOL
-    pub volume_sol: f64, // Volume in SOL
-    pub sol_usd_rate: f64, // SOL/USD rate used for conversion (audit trail)
+    pub open: f64, // Open price (SOL-denominated)
+    pub high: f64, // High price (SOL-denominated)
+    pub low: f64, // Low price (SOL-denominated)
+    pub close: f64, // Close price (SOL-denominated)
+    pub volume: f64, // Volume (SOL-denominated)
     pub created_at: DateTime<Utc>,
 }
 
@@ -45,24 +44,22 @@ impl DbOhlcvDataPoint {
         mint: &str,
         pool_address: &str,
         timestamp: i64,
-        open_sol: f64,
-        high_sol: f64,
-        low_sol: f64,
-        close_sol: f64,
-        volume_sol: f64,
-        sol_usd_rate: f64
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: f64
     ) -> Self {
         Self {
             id: None,
             mint: mint.to_string(),
             pool_address: pool_address.to_string(),
             timestamp,
-            open_sol,
-            high_sol,
-            low_sol,
-            close_sol,
-            volume_sol,
-            sol_usd_rate,
+            open,
+            high,
+            low,
+            close,
+            volume,
             created_at: Utc::now(),
         }
     }
@@ -71,11 +68,11 @@ impl DbOhlcvDataPoint {
     pub fn to_ohlcv_data_point(&self) -> crate::tokens::geckoterminal::OhlcvDataPoint {
         crate::tokens::geckoterminal::OhlcvDataPoint {
             timestamp: self.timestamp,
-            open: self.open_sol,
-            high: self.high_sol,
-            low: self.low_sol,
-            close: self.close_sol,
-            volume: self.volume_sol,
+            open: self.open,
+            high: self.high,
+            low: self.low,
+            close: self.close,
+            volume: self.volume,
         }
     }
 
@@ -97,12 +94,11 @@ impl DbOhlcvDataPoint {
             mint: row.get("mint")?,
             pool_address: row.get("pool_address")?,
             timestamp: row.get("timestamp")?,
-            open_sol: row.get("open_sol")?,
-            high_sol: row.get("high_sol")?,
-            low_sol: row.get("low_sol")?,
-            close_sol: row.get("close_sol")?,
-            volume_sol: row.get("volume_sol")?,
-            sol_usd_rate: row.get("sol_usd_rate")?,
+            open: row.get("open")?,
+            high: row.get("high")?,
+            low: row.get("low")?,
+            close: row.get("close")?,
+            volume: row.get("volume")?,
             created_at,
         })
     }
@@ -117,48 +113,6 @@ pub struct OhlcvCacheMetadata {
     pub last_updated: DateTime<Utc>,
     pub last_timestamp: Option<i64>,
     pub is_expired: bool,
-}
-
-/// SOL price data point for database storage
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DbSolPriceDataPoint {
-    pub timestamp: i64, // Unix timestamp (1-minute intervals)
-    pub price_usd: f64, // SOL price in USD
-    pub source: String, // Data source (e.g., "geckoterminal")
-    pub created_at: DateTime<Utc>,
-}
-
-impl DbSolPriceDataPoint {
-    /// Create new SOL price data point
-    pub fn new(timestamp: i64, price_usd: f64, source: &str) -> Self {
-        Self {
-            timestamp,
-            price_usd,
-            source: source.to_string(),
-            created_at: Utc::now(),
-        }
-    }
-
-    /// Create from Row (for rusqlite)
-    pub fn from_row(row: &Row) -> Result<Self, rusqlite::Error> {
-        let created_at_str: String = row.get("created_at")?;
-        let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-            .map_err(|e|
-                rusqlite::Error::InvalidColumnType(
-                    0,
-                    "created_at".to_string(),
-                    rusqlite::types::Type::Text
-                )
-            )?
-            .with_timezone(&Utc);
-
-        Ok(Self {
-            timestamp: row.get("timestamp")?,
-            price_usd: row.get("price_usd")?,
-            source: row.get("source")?,
-            created_at,
-        })
-    }
 }
 
 // =============================================================================
@@ -198,7 +152,90 @@ impl OhlcvDatabase {
             format!("Failed to open OHLCV database: {}", e)
         )?;
 
-        // Create OHLCV data table (SOL-denominated)
+        // Check for legacy schema (columns with *_sol suffix) and migrate if needed
+        {
+            let has_legacy_columns = {
+                let mut stmt = conn
+                    .prepare("PRAGMA table_info('ohlcv_data')")
+                    .map_err(|e| format!("Failed to inspect ohlcv_data schema: {}", e))?;
+                let mut has_legacy = false;
+                let mut rows = stmt.query([]).map_err(|e| format!("Failed to run PRAGMA: {}", e))?;
+                while
+                    let Some(row) = rows
+                        .next()
+                        .map_err(|e| format!("Failed to iterate PRAGMA rows: {}", e))?
+                {
+                    let col_name: String = row.get(1).unwrap_or_default(); // name column
+                    if
+                        col_name == "open_sol" ||
+                        col_name == "high_sol" ||
+                        col_name == "low_sol" ||
+                        col_name == "close_sol" ||
+                        col_name == "volume_sol"
+                    {
+                        has_legacy = true;
+                        break;
+                    }
+                }
+                has_legacy
+            };
+
+            if has_legacy_columns {
+                // Perform migration by creating a new table and copying data
+                let tx = conn
+                    .unchecked_transaction()
+                    .map_err(|e| format!("Failed to begin migration transaction: {}", e))?;
+
+                // Create new table with updated column names
+                tx
+                    .execute(
+                        "CREATE TABLE IF NOT EXISTS ohlcv_data_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        mint TEXT NOT NULL,
+                        pool_address TEXT NOT NULL,
+                        timestamp INTEGER NOT NULL,
+                        open REAL NOT NULL,
+                        high REAL NOT NULL,
+                        low REAL NOT NULL,
+                        close REAL NOT NULL,
+                        volume REAL NOT NULL,
+                        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        UNIQUE(mint, pool_address, timestamp)
+                    )",
+                        []
+                    )
+                    .map_err(|e| format!("Failed to create ohlcv_data_new table: {}", e))?;
+
+                // Copy data from legacy columns
+                tx
+                    .execute(
+                        "INSERT OR REPLACE INTO ohlcv_data_new (mint, pool_address, timestamp, open, high, low, close, volume, created_at)
+                     SELECT mint, pool_address, timestamp, open_sol, high_sol, low_sol, close_sol, volume_sol, created_at FROM ohlcv_data",
+                        []
+                    )
+                    .map_err(|e| format!("Failed to migrate legacy OHLCV rows: {}", e))?;
+
+                // Drop old table and rename new one
+                tx
+                    .execute("DROP TABLE ohlcv_data", [])
+                    .map_err(|e| format!("Failed to drop legacy ohlcv_data table: {}", e))?;
+                tx
+                    .execute("ALTER TABLE ohlcv_data_new RENAME TO ohlcv_data", [])
+                    .map_err(|e| format!("Failed to rename migrated table: {}", e))?;
+
+                tx.commit().map_err(|e| format!("Failed to commit migration transaction: {}", e))?;
+
+                if is_debug_ohlcv_enabled() {
+                    log(
+                        LogTag::Ohlcv,
+                        "DB_MIGRATION",
+                        "🔧 Migrated ohlcv_data schema from *_sol columns to unified column names"
+                    );
+                }
+            }
+        }
+
+        // Create OHLCV data table (SOL-denominated only)
         conn
             .execute(
                 "CREATE TABLE IF NOT EXISTS ohlcv_data (
@@ -206,12 +243,11 @@ impl OhlcvDatabase {
                 mint TEXT NOT NULL,
                 pool_address TEXT NOT NULL,
                 timestamp INTEGER NOT NULL,
-                open_sol REAL NOT NULL,
-                high_sol REAL NOT NULL,
-                low_sol REAL NOT NULL,
-                close_sol REAL NOT NULL,
-                volume_sol REAL NOT NULL,
-                sol_usd_rate REAL NOT NULL,
+                open REAL NOT NULL,
+                high REAL NOT NULL,
+                low REAL NOT NULL,
+                close REAL NOT NULL,
+                volume REAL NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(mint, pool_address, timestamp)
             )",
@@ -259,28 +295,6 @@ impl OhlcvDatabase {
             )
             .map_err(|e| format!("Failed to create ohlcv_cache_metadata table: {}", e))?;
 
-        // Create SOL prices table for historical SOL/USD rates
-        conn
-            .execute(
-                "CREATE TABLE IF NOT EXISTS sol_prices (
-                timestamp INTEGER PRIMARY KEY,
-                price_usd REAL NOT NULL,
-                source TEXT NOT NULL DEFAULT 'geckoterminal',
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )",
-                []
-            )
-            .map_err(|e| format!("Failed to create sol_prices table: {}", e))?;
-
-        // Create index for SOL prices timestamp queries
-        conn
-            .execute(
-                "CREATE INDEX IF NOT EXISTS idx_sol_prices_timestamp 
-             ON sol_prices(timestamp DESC)",
-                []
-            )
-            .map_err(|e| format!("Failed to create sol_prices timestamp index: {}", e))?;
-
         if is_debug_ohlcv_enabled() {
             log(
                 LogTag::Ohlcv,
@@ -317,8 +331,8 @@ impl OhlcvDatabase {
             let mut stmt = tx
                 .prepare(
                     "INSERT OR REPLACE INTO ohlcv_data 
-                 (mint, pool_address, timestamp, open_sol, high_sol, low_sol, close_sol, volume_sol, sol_usd_rate, created_at) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                      (mint, pool_address, timestamp, open, high, low, close, volume, created_at) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 )
                 .map_err(|e| format!("Failed to prepare SOL insert statement: {}", e))?;
 
@@ -329,12 +343,11 @@ impl OhlcvDatabase {
                             mint,
                             pool_address,
                             point.timestamp,
-                            point.open_sol,
-                            point.high_sol,
-                            point.low_sol,
-                            point.close_sol,
-                            point.volume_sol,
-                            point.sol_usd_rate,
+                            point.open,
+                            point.high,
+                            point.low,
+                            point.close,
+                            point.volume,
                             point.created_at.to_rfc3339()
                         ]
                     )
@@ -379,99 +392,6 @@ impl OhlcvDatabase {
         Ok(())
     }
 
-    /// Store OHLCV data points for a token (legacy USD function - will be deprecated)
-    pub fn store_ohlcv_data(
-        &self,
-        mint: &str,
-        pool_address: &str,
-        data_points: &[crate::tokens::geckoterminal::OhlcvDataPoint]
-    ) -> Result<(), String> {
-        // This function should not be used directly anymore
-        // All OHLCV data should be converted to SOL before storage
-        log(
-            LogTag::Ohlcv,
-            "DEPRECATED_WARN",
-            "⚠️ store_ohlcv_data called - should use store_sol_ohlcv_data instead"
-        );
-
-        if data_points.is_empty() {
-            return Ok(());
-        }
-
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database for storage: {}", e)
-        )?;
-
-        // Begin transaction for atomicity
-        let tx = conn
-            .unchecked_transaction()
-            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
-
-        // Insert/update OHLCV data points (using legacy column names)
-        {
-            let mut stmt = tx
-                .prepare(
-                    "INSERT OR REPLACE INTO ohlcv_data 
-                 (mint, pool_address, timestamp, open_sol, high_sol, low_sol, close_sol, volume_sol, sol_usd_rate, created_at) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                )
-                .map_err(|e| format!("Failed to prepare insert statement: {}", e))?;
-
-            for point in data_points {
-                // WARNING: This stores USD data in SOL columns - should be avoided
-                stmt
-                    .execute(
-                        params![
-                            mint,
-                            pool_address,
-                            point.timestamp,
-                            point.open, // USD data incorrectly stored as SOL
-                            point.high,
-                            point.low,
-                            point.close,
-                            point.volume,
-                            1.0, // Unknown SOL rate
-                            Utc::now().to_rfc3339()
-                        ]
-                    )
-                    .map_err(|e| format!("Failed to insert OHLCV point: {}", e))?;
-            }
-        }
-
-        // Update metadata
-        let last_timestamp = data_points
-            .iter()
-            .map(|p| p.timestamp)
-            .max();
-        tx
-            .execute(
-                "INSERT OR REPLACE INTO ohlcv_cache_metadata 
-             (mint, pool_address, data_points_count, last_updated, last_timestamp) 
-             VALUES (?, ?, ?, ?, ?)",
-                params![
-                    mint,
-                    pool_address,
-                    data_points.len(),
-                    Utc::now().to_rfc3339(),
-                    last_timestamp
-                ]
-            )
-            .map_err(|e| format!("Failed to update metadata: {}", e))?;
-
-        // Commit transaction
-        tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
-
-        if is_debug_ohlcv_enabled() {
-            log(
-                LogTag::Ohlcv,
-                "DB_STORE",
-                &format!("💾 Stored {} OHLCV points for {} in database", data_points.len(), mint)
-            );
-        }
-
-        Ok(())
-    }
-
     /// Get OHLCV data for a token (with limit) - returns SOL-denominated data
     pub fn get_ohlcv_data(
         &self,
@@ -486,7 +406,7 @@ impl OhlcvDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, mint, pool_address, timestamp, open_sol, high_sol, low_sol, close_sol, volume_sol, sol_usd_rate, created_at 
+                "SELECT id, mint, pool_address, timestamp, open, high, low, close, volume, created_at 
              FROM ohlcv_data 
              WHERE mint = ? 
              ORDER BY timestamp DESC 
@@ -659,191 +579,6 @@ impl OhlcvDatabase {
             .map_err(|e| format!("Failed to get fresh cache count: {}", e))?;
 
         Ok((total_points, unique_mints, fresh_caches))
-    }
-
-    // =============================================================================
-    // SOL PRICE DATABASE FUNCTIONS
-    // =============================================================================
-
-    /// Store SOL price data points
-    pub fn store_sol_prices(&self, price_points: &[DbSolPriceDataPoint]) -> Result<(), String> {
-        if price_points.is_empty() {
-            return Ok(());
-        }
-
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database for SOL price storage: {}", e)
-        )?;
-
-        let tx = conn
-            .unchecked_transaction()
-            .map_err(|e| format!("Failed to begin SOL price transaction: {}", e))?;
-
-        {
-            let mut stmt = tx
-                .prepare(
-                    "INSERT OR REPLACE INTO sol_prices 
-                 (timestamp, price_usd, source, created_at) 
-                 VALUES (?, ?, ?, ?)"
-                )
-                .map_err(|e| format!("Failed to prepare SOL price insert statement: {}", e))?;
-
-            for point in price_points {
-                stmt
-                    .execute(
-                        params![
-                            point.timestamp,
-                            point.price_usd,
-                            point.source,
-                            point.created_at.to_rfc3339()
-                        ]
-                    )
-                    .map_err(|e| format!("Failed to insert SOL price point: {}", e))?;
-            }
-        }
-
-        tx.commit().map_err(|e| format!("Failed to commit SOL price transaction: {}", e))?;
-
-        if is_debug_ohlcv_enabled() {
-            log(
-                LogTag::Ohlcv,
-                "SOL_PRICE_STORE",
-                &format!("💰 Stored {} SOL price points", price_points.len())
-            );
-        }
-
-        Ok(())
-    }
-
-    /// Get SOL price at specific timestamp (with tolerance for nearest match)
-    pub fn get_sol_price_at_timestamp(
-        &self,
-        timestamp: i64,
-        tolerance_seconds: i64
-    ) -> Result<Option<f64>, String> {
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database for SOL price query: {}", e)
-        )?;
-
-        let result = conn.query_row(
-            "SELECT price_usd FROM sol_prices 
-                 WHERE ABS(timestamp - ?) <= ? 
-                 ORDER BY ABS(timestamp - ?) ASC 
-                 LIMIT 1",
-            params![timestamp, tolerance_seconds, timestamp],
-            |row| row.get::<_, f64>(0)
-        );
-
-        match result {
-            Ok(price) => Ok(Some(price)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Failed to query SOL price: {}", e)),
-        }
-    }
-
-    /// Find gaps in SOL price data within a timestamp range
-    pub fn find_sol_price_gaps(
-        &self,
-        start_timestamp: i64,
-        end_timestamp: i64,
-        interval_seconds: i64
-    ) -> Result<Vec<(i64, i64)>, String> {
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database for SOL price gap analysis: {}", e)
-        )?;
-
-        let mut gaps = Vec::new();
-        let mut current_timestamp = start_timestamp;
-
-        while current_timestamp < end_timestamp {
-            let next_timestamp = current_timestamp + interval_seconds;
-
-            let count: i64 = conn
-                .query_row(
-                    "SELECT COUNT(*) FROM sol_prices 
-                     WHERE timestamp >= ? AND timestamp < ?",
-                    params![current_timestamp, next_timestamp],
-                    |row| row.get(0)
-                )
-                .map_err(|e| format!("Failed to check SOL price gap: {}", e))?;
-
-            if count == 0 {
-                gaps.push((current_timestamp, next_timestamp));
-            }
-
-            current_timestamp = next_timestamp;
-        }
-
-        Ok(gaps)
-    }
-
-    /// Get SOL price statistics
-    pub fn get_sol_price_stats(&self) -> Result<(usize, Option<i64>, Option<i64>), String> {
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database for SOL price stats: {}", e)
-        )?;
-
-        // Get total SOL price points
-        let total_points: usize = conn
-            .query_row("SELECT COUNT(*) FROM sol_prices", [], |row| row.get(0))
-            .map_err(|e| format!("Failed to get SOL price count: {}", e))?;
-
-        // Get oldest timestamp
-        let oldest_timestamp: Option<i64> = conn
-            .query_row("SELECT MIN(timestamp) FROM sol_prices", [], |row| row.get(0))
-            .map_err(|e| format!("Failed to get oldest SOL price timestamp: {}", e))?;
-
-        // Get newest timestamp
-        let newest_timestamp: Option<i64> = conn
-            .query_row("SELECT MAX(timestamp) FROM sol_prices", [], |row| row.get(0))
-            .map_err(|e| format!("Failed to get newest SOL price timestamp: {}", e))?;
-
-        Ok((total_points, oldest_timestamp, newest_timestamp))
-    }
-
-    /// Count SOL price points in a given timestamp range
-    pub fn count_sol_prices_in_range(
-        &self,
-        start_timestamp: i64,
-        end_timestamp: i64
-    ) -> Result<usize, String> {
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database for SOL price count: {}", e)
-        )?;
-
-        let count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM sol_prices WHERE timestamp >= ? AND timestamp <= ?",
-                params![start_timestamp, end_timestamp],
-                |row| row.get(0)
-            )
-            .map_err(|e| format!("Failed to count SOL prices in range: {}", e))?;
-
-        Ok(count as usize)
-    }
-
-    /// Clean up old SOL price data (keep same retention as OHLCV)
-    pub fn cleanup_old_sol_prices(&self) -> Result<usize, String> {
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database for SOL price cleanup: {}", e)
-        )?;
-
-        let cutoff_time = Utc::now() - ChronoDuration::hours(MAX_OHLCV_AGE_HOURS);
-        let cutoff_timestamp = cutoff_time.timestamp();
-
-        let deleted_count = conn
-            .execute("DELETE FROM sol_prices WHERE timestamp < ?", params![cutoff_timestamp])
-            .map_err(|e| format!("Failed to delete old SOL price data: {}", e))?;
-
-        if deleted_count > 0 && is_debug_ohlcv_enabled() {
-            log(
-                LogTag::Ohlcv,
-                "SOL_PRICE_CLEANUP",
-                &format!("🧹 Cleaned up {} old SOL price entries", deleted_count)
-            );
-        }
-
-        Ok(deleted_count)
     }
 }
 

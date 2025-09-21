@@ -673,7 +673,7 @@ fn parse_single_pool(
     Ok(Some(pool))
 }
 
-/// Fetch 1-minute OHLCV data from GeckoTerminal API
+/// Fetch 1-minute OHLCV data from GeckoTerminal API (SOL-denominated)
 pub async fn get_ohlcv_data_from_geckoterminal(
     pool_address: &str,
     limit: u32
@@ -712,7 +712,11 @@ pub async fn get_ohlcv_data_from_geckoterminal(
         log(
             LogTag::Api,
             "GECKO_OHLCV_START",
-            &format!("🦎 Fetching 1m OHLCV for pool {} (limit: {})", pool_address, effective_limit)
+            &format!(
+                "🦎 Fetching 1m SOL-denominated OHLCV for pool {} (limit: {})",
+                pool_address,
+                effective_limit
+            )
         );
     }
 
@@ -732,6 +736,7 @@ pub async fn get_ohlcv_data_from_geckoterminal(
                     &[
                         ("aggregate", "1".to_string()),
                         ("limit", effective_limit.to_string()),
+                        ("currency", "token".to_string()),
                     ]
                 )
                 .send()
@@ -924,14 +929,18 @@ pub async fn get_ohlcv_data_from_geckoterminal(
         log(
             LogTag::Api,
             "GECKO_OHLCV_SUCCESS",
-            &format!("🦎 Retrieved {} OHLCV data points for pool {}", result.len(), pool_address)
+            &format!(
+                "🦎 Retrieved {} SOL-denominated OHLCV data points for pool {}",
+                result.len(),
+                pool_address
+            )
         );
     }
 
     Ok(result)
 }
 
-/// Fetch 1-minute OHLCV data for a pool within an optional time window by paging backwards.
+/// Fetch 1-minute SOL-denominated OHLCV data for a pool within an optional time window by paging backwards.
 /// If start_timestamp and end_timestamp are provided, this function fetches pages using
 /// `before_timestamp` until the window is covered or the page limit is reached.
 /// If only end_timestamp is provided, it fetches up to `limit` points strictly before that time.
@@ -1006,6 +1015,7 @@ pub async fn get_ohlcv_data_from_geckoterminal_range(
                             ("aggregate", "1".to_string()),
                             ("limit", page_limit.to_string()),
                             ("before_timestamp", current_before.to_string()),
+                            ("currency", "token".to_string()),
                         ]
                     )
                     .send()
