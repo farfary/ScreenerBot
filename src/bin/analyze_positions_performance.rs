@@ -440,7 +440,7 @@ async fn analyze_closed_positions(
         }
         let exit_time = p.exit_time.unwrap();
 
-        // Retrieve OHLCV series and compute prices at exit and max high after exit
+        // Retrieve OHLCV series and compute prices at exit and max high after exit (SOL-denominated)
         let candles = match get_latest_ohlcv(mint, ohlcv_limit).await {
             Ok(v) if !v.is_empty() => v,
             Err(e) if force_fetch => {
@@ -528,7 +528,7 @@ async fn analyze_closed_positions(
         if verbose {
             let dt = max_high_time.map(|t| t.to_rfc3339()).unwrap_or_else(|| "n/a".to_string());
             println!(
-                "- {} | mint {} | exit_close={:.10} USD | post-peak={:.10} USD (+{:.2}% at {})",
+                "- {} | mint {} | exit_close={:.10} SOL | post-peak={:.10} SOL (+{:.2}% at {})",
                 p.symbol,
                 mint,
                 exit_candle.close,
