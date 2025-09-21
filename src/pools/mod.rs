@@ -46,11 +46,9 @@ pub use discovery::{
     ENABLE_RAYDIUM_DISCOVERY,
     get_canonical_pool_address,
 }; // Expose for configuration access
-pub use chain_discovery::{ ChainPoolDiscovery, ChainPoolInfo }; // Expose chain discovery for debug tools
 
 // Internal modules (not exposed)
 pub mod discovery;
-pub mod chain_discovery; // Chain-based pool discovery (bypassing APIs)
 mod analyzer;
 pub mod fetcher; // Public for debug tooling
 pub mod calculator; // Public for debug tooling
