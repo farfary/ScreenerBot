@@ -313,13 +313,25 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
             } else if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
                 // Record 429 error for adaptive rate limiting
                 rpc_client.record_429_error(Some(&current_url));
-                log(LogTag::Rpc, "WARN", &format!("Rate limited on RPC {}", current_url));
+                if is_debug_rpc_enabled() {
+                    log(LogTag::Rpc, "WARN", &format!("Rate limited on RPC {}", current_url));
+                } else {
+                    log(LogTag::Rpc, "WARN", "Rate limited on RPC");
+                }
             } else {
                 log(LogTag::Rpc, "WARN", &format!("RPC error status: {}", response.status()));
             }
         }
         Err(e) => {
-            log(LogTag::Rpc, "WARN", &format!("Failed to connect to RPC {}: {}", current_url, e));
+            if is_debug_rpc_enabled() {
+                log(
+                    LogTag::Rpc,
+                    "WARN",
+                    &format!("Failed to connect to RPC {}: {}", current_url, e)
+                );
+            } else {
+                log(LogTag::Rpc, "WARN", &format!("Failed to connect to RPC: {}", e));
+            }
         }
     }
 
@@ -855,8 +867,10 @@ impl RpcClient {
             )
         );
 
-        for (i, url) in configs.rpc_urls.iter().enumerate() {
-            log(LogTag::Rpc, "RPC_URL", &format!("RPC URL {}: {}", i + 1, url));
+        if is_debug_rpc_enabled() {
+            for (i, url) in configs.rpc_urls.iter().enumerate() {
+                log(LogTag::Rpc, "RPC_URL", &format!("RPC URL {}: {}", i + 1, url));
+            }
         }
 
         Self::new_with_urls(configs.rpc_urls)
@@ -892,7 +906,11 @@ impl RpcClient {
 
     /// Create new RPC client with custom URL (legacy method)
     pub fn new_with_url(rpc_url: &str) -> Self {
-        log(LogTag::Rpc, "INIT", &format!("Initializing RPC client with URL: {}", rpc_url));
+        if is_debug_rpc_enabled() {
+            log(LogTag::Rpc, "INIT", &format!("Initializing RPC client with URL: {}", rpc_url));
+        } else {
+            log(LogTag::Rpc, "INIT", "Initializing RPC client with custom URL");
+        }
 
         let client = SolanaRpcClient::new_with_commitment(
             rpc_url.to_string(),

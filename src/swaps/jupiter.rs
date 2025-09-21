@@ -153,7 +153,7 @@ pub async fn get_jupiter_quote(
         );
     }
 
-    if is_debug_api_enabled() {
+    if is_debug_swaps_enabled() {
         log(LogTag::Swap, "JUPITER_API", &format!("Jupiter Quote URL: {}", url));
     }
 

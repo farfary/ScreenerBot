@@ -46,10 +46,19 @@ use screenerbot::utils::{
     get_wallet_address,
     safe_truncate,
 };
+use solana_sdk::{
+    instruction::Instruction,
+    signature::{ Signature, Signer },
+    signer::keypair::Keypair,
+    transaction::Transaction,
+    pubkey::Pubkey,
+};
+use spl_token::instruction as spl_instruction;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::time::{ sleep, Duration };
@@ -100,11 +109,12 @@ fn print_help() {
     log(LogTag::System, "INFO", "OPERATIONS PERFORMED:");
     log(LogTag::System, "INFO", "    1. Scan wallet for all SPL Token and Token-2022 accounts");
     log(LogTag::System, "INFO", "    2. Identify tokens with non-zero balances");
-    log(LogTag::System, "INFO", "    3. Sell all tokens for SOL using GMGN swap service");
-    log(LogTag::System, "INFO", "    4. Close only EMPTY Associated Token Accounts (zero balance)");
-    log(LogTag::System, "INFO", "    5. Reclaim rent SOL from closed ATAs (~0.00203928 SOL each)");
-    log(LogTag::System, "INFO", "    6. Delete specific bot data files to reset the system");
-    log(LogTag::System, "INFO", "    7. Clean up all bot log files from logs/ directory");
+    log(LogTag::System, "INFO", "    3. Sell larger token amounts for SOL using swap service");
+    log(LogTag::System, "INFO", "    4. Burn small dust amounts (<1000 raw units) to empty ATAs");
+    log(LogTag::System, "INFO", "    5. Close only EMPTY Associated Token Accounts (zero balance)");
+    log(LogTag::System, "INFO", "    6. Reclaim rent SOL from closed ATAs (~0.00203928 SOL each)");
+    log(LogTag::System, "INFO", "    7. Delete specific bot data files to reset the system");
+    log(LogTag::System, "INFO", "    8. Clean up all bot log files from logs/ directory");
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "INFO", "DATA FILES THAT WILL BE DELETED:");
     log(LogTag::System, "INFO", "    • data/rpc_stats.json (RPC statistics)");
@@ -168,6 +178,226 @@ const RETRY_DELAY_MS: u64 = 2000;
 /// Minimum raw token units to attempt a swap (avoid wasting quote calls on dust)
 const DUST_THRESHOLD_RAW_UNITS: u64 = 25; // configurable heuristic
 
+/// Minimum token units that should be burned instead of sold (saves on swap fees)
+const BURN_THRESHOLD_RAW_UNITS: u64 = 1000; // tokens below this will be burned
+
+/// Burn small token amounts to prepare ATAs for closing
+async fn burn_dust_tokens_with_retry(
+    token_accounts: &[TokenAccountInfo],
+    dry_run: bool
+) -> (usize, usize, HashSet<String>) {
+    log(
+        LogTag::System,
+        "BURN_START",
+        &format!("Starting dust token burning for {} accounts{}", token_accounts.len(), if dry_run {
+            " (DRY RUN)"
+        } else {
+            ""
+        })
+    );
+
+    // Filter accounts for burning (small amounts > 0 but < BURN_THRESHOLD)
+    let burnable_accounts: Vec<_> = token_accounts
+        .iter()
+        .filter(|account| {
+            if account.balance == 0 {
+                return false;
+            }
+
+            if account.mint == SOL_MINT {
+                return false;
+            }
+
+            // Only burn very small amounts that are uneconomical to sell
+            if account.balance > 0 && account.balance < BURN_THRESHOLD_RAW_UNITS {
+                log(
+                    LogTag::System,
+                    "BURN_CANDIDATE",
+                    &format!(
+                        "Found dust token for burning: {} ({} raw units)",
+                        safe_truncate(&account.mint, 8),
+                        account.balance
+                    )
+                );
+                return true;
+            }
+
+            false
+        })
+        .collect();
+
+    log(
+        LogTag::System,
+        "BURN_FILTER",
+        &format!(
+            "Filtered {} burnable accounts from {} total (burn threshold: {} units)",
+            burnable_accounts.len(),
+            token_accounts.len(),
+            BURN_THRESHOLD_RAW_UNITS
+        )
+    );
+
+    if burnable_accounts.is_empty() {
+        return (0, 0, HashSet::new());
+    }
+
+    if dry_run {
+        log(
+            LogTag::System,
+            "DRY_BURN",
+            &format!("Would burn {} dust tokens", burnable_accounts.len())
+        );
+        let dry_run_burned_mints: HashSet<String> = burnable_accounts
+            .iter()
+            .map(|account| account.mint.clone())
+            .collect();
+        return (burnable_accounts.len(), 0, dry_run_burned_mints);
+    }
+
+    // For now, we'll use a simple burn by transferring to a burn address
+    // In the future, this could use actual SPL Token burn instructions
+    let mut successful_burns = 0;
+    let mut failed_burns = 0;
+    let mut successfully_burned_mints = HashSet::new();
+
+    for account in &burnable_accounts {
+        log(
+            LogTag::System,
+            "BURN_ATTEMPT",
+            &format!(
+                "Attempting to burn {} raw units of {}",
+                account.balance,
+                safe_truncate(&account.mint, 8)
+            )
+        );
+
+        // For simplicity, we'll use a "burn" by transferring to the null address
+        // This is not a real burn but achieves the same goal of emptying the ATA
+        match burn_single_token_amount(account).await {
+            Ok(signature) => {
+                log(
+                    LogTag::System,
+                    "BURN_SUCCESS",
+                    &format!(
+                        "Successfully burned dust amount for {}. TX: {}",
+                        safe_truncate(&account.mint, 8),
+                        signature
+                    )
+                );
+                successful_burns += 1;
+                successfully_burned_mints.insert(account.mint.clone());
+            }
+            Err(error_msg) => {
+                log(
+                    LogTag::System,
+                    "BURN_FAILED",
+                    &format!(
+                        "Failed to burn dust amount for {}: {}",
+                        safe_truncate(&account.mint, 8),
+                        error_msg
+                    )
+                );
+                failed_burns += 1;
+            }
+        }
+    }
+
+    log(
+        LogTag::System,
+        "BURN_SUMMARY",
+        &format!("Burn completed: {} success, {} failed", successful_burns, failed_burns)
+    );
+
+    (successful_burns, failed_burns, successfully_burned_mints)
+}
+
+/// Burn a single token's small amount using SPL Token burn instruction
+async fn burn_single_token_amount(account: &TokenAccountInfo) -> Result<String, String> {
+    let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
+    let rpc_client = get_rpc_client();
+
+    log(
+        LogTag::System,
+        "BURN_START",
+        &format!(
+            "Starting burn of {} raw units for token {}",
+            account.balance,
+            safe_truncate(&account.mint, 8)
+        )
+    );
+
+    // Get the associated token account address
+    let ata_address = match
+        rpc_client.get_associated_token_account(&wallet_address, &account.mint).await
+    {
+        Ok(addr) => addr,
+        Err(e) => {
+            return Err(format!("Failed to get ATA address: {}", e));
+        }
+    };
+
+    // Parse addresses
+    let wallet_pubkey = Pubkey::from_str(&wallet_address).map_err(|e|
+        format!("Invalid wallet address: {}", e)
+    )?;
+    let mint_pubkey = Pubkey::from_str(&account.mint).map_err(|e|
+        format!("Invalid mint address: {}", e)
+    )?;
+    let ata_pubkey = Pubkey::from_str(&ata_address).map_err(|e|
+        format!("Invalid ATA address: {}", e)
+    )?;
+
+    // Get wallet keypair from config
+    let configs = screenerbot::configs
+        ::read_configs()
+        .map_err(|e| format!("Failed to read configs: {:?}", e))?;
+    let wallet_keypair = screenerbot::configs
+        ::load_wallet_from_config(&configs)
+        .map_err(|e| format!("Failed to load wallet keypair: {:?}", e))?;
+
+    // Create burn instruction
+    let burn_instruction = spl_instruction
+        ::burn(
+            &spl_token::id(), // Token program ID
+            &ata_pubkey, // Source account (ATA)
+            &mint_pubkey, // Mint
+            &wallet_pubkey, // Authority (wallet)
+            &[&wallet_pubkey], // Signers
+            account.balance // Amount to burn
+        )
+        .map_err(|e| format!("Failed to create burn instruction: {}", e))?;
+
+    log(
+        LogTag::System,
+        "BURN_INSTRUCTION",
+        &format!("Created burn instruction for {} tokens", account.balance)
+    );
+
+    // Get recent blockhash
+    let recent_blockhash = rpc_client
+        .get_latest_blockhash().await
+        .map_err(|e| format!("Failed to get recent blockhash: {}", e))?;
+
+    // Create and sign transaction
+    let transaction = Transaction::new_signed_with_payer(
+        &[burn_instruction],
+        Some(&wallet_pubkey),
+        &[&wallet_keypair],
+        recent_blockhash
+    );
+
+    log(LogTag::System, "BURN_TRANSACTION", "Sending burn transaction to network");
+
+    // Send and confirm transaction
+    let signature = rpc_client
+        .send_and_confirm_signed_transaction(&transaction).await
+        .map_err(|e| format!("Failed to send burn transaction: {}", e))?;
+
+    log(LogTag::System, "BURN_SUCCESS", &format!("Burn transaction confirmed: {}", signature));
+
+    Ok(signature)
+}
+
 /// Main function to sell all tokens, close all ATAs, and reset bot data
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -224,7 +454,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::System, "INFO", "This tool will:");
     log(LogTag::System, "INFO", "  - Scan for all token accounts (SPL & Token-2022)");
     if !dry_run {
-        log(LogTag::System, "INFO", "  - Sell ALL tokens for SOL with retry logic");
+        log(LogTag::System, "INFO", "  - Sell larger token amounts for SOL with retry logic");
+        log(LogTag::System, "INFO", "  - Burn small dust amounts to empty ATAs");
         log(
             LogTag::System,
             "INFO",
@@ -351,15 +582,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log(
             LogTag::System,
             "WAIT_CONFIRMATION_DONE",
-            "Swap confirmation wait completed, proceeding with ATA closing"
+            "Swap confirmation wait completed, proceeding with dust burning and ATA closing"
         );
     }
+
+    // Step 3.5: Burn any remaining dust tokens before ATA closing
+    let (successful_burns, failed_burns, successfully_burned_mints) = if !token_accounts.is_empty() {
+        burn_dust_tokens_with_retry(&token_accounts, dry_run).await
+    } else {
+        (0, 0, HashSet::new())
+    };
 
     // Step 4: Close all ATAs with retry logic
     let (successful_closes, failed_closes) = if !token_accounts.is_empty() {
         close_all_atas_with_retry(
             &token_accounts,
             &successfully_sold_mints,
+            &successfully_burned_mints,
             &wallet_address,
             dry_run
         ).await
@@ -539,6 +778,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             log(
                 LogTag::System,
                 "FINAL_REPORT",
+                &format!("Would Burn - Success: {} | Failed: {}", successful_burns, failed_burns)
+            );
+            log(
+                LogTag::System,
+                "FINAL_REPORT",
                 &format!(
                     "Would Close ATAs - Success: {} | Failed: {}",
                     successful_closes,
@@ -566,6 +810,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             log(
                 LogTag::System,
                 "FINAL_REPORT",
+                &format!("Burns - Success: {} | Failed: {}", successful_burns, failed_burns)
+            );
+            log(
+                LogTag::System,
+                "FINAL_REPORT",
                 &format!("ATA Closes - Success: {} | Failed: {}", successful_closes, failed_closes)
             );
         }
@@ -583,6 +832,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if failed_sells > 0 {
         log(LogTag::System, "FAILED_SELLS", &format!("Found {} failed sells", failed_sells));
+    }
+
+    if failed_burns > 0 {
+        log(LogTag::System, "FAILED_BURNS", &format!("Found {} failed burns", failed_burns));
     }
 
     if failed_closes > 0 {
@@ -625,9 +878,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         token_accounts.len() - sol_accounts
     };
 
+    // Success means all non-SOL tokens were either sold or burned, and all empty ATAs were closed
     let all_wallet_ops_successful =
-        token_accounts.is_empty() ||
-        (successful_sells == expected_operations && successful_closes == expected_operations);
+        token_accounts.is_empty() || (failed_sells == 0 && failed_burns == 0 && failed_closes == 0);
     let all_file_ops_successful = files_failed == 0;
 
     if all_wallet_ops_successful && all_file_ops_successful {
@@ -642,7 +895,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             log(
                 LogTag::System,
                 "RESET_COMPLETE",
-                "All tokens sold, ATAs closed, and data files removed successfully"
+                "All tokens sold/burned, ATAs closed, and data files removed successfully"
             );
         }
     } else {
@@ -651,8 +904,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 LogTag::System,
                 "DRY_RUN_ISSUES",
                 &format!(
-                    "Dry run completed with issues: {} sell failures, {} close failures, {} file removal failures",
+                    "Dry run completed with issues: {} sell failures, {} burn failures, {} close failures, {} file removal failures",
                     failed_sells,
+                    failed_burns,
                     failed_closes,
                     files_failed
                 )
@@ -662,8 +916,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 LogTag::System,
                 "RESET_ISSUES",
                 &format!(
-                    "Reset completed with issues: {} sell failures, {} close failures, {} file removal failures",
+                    "Reset completed with issues: {} sell failures, {} burn failures, {} close failures, {} file removal failures",
                     failed_sells,
+                    failed_burns,
                     failed_closes,
                     files_failed
                 )
@@ -1045,6 +1300,7 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
 async fn close_all_atas_with_retry(
     token_accounts: &[TokenAccountInfo],
     successfully_sold_mints: &HashSet<String>,
+    successfully_burned_mints: &HashSet<String>,
     wallet_address: &str,
     dry_run: bool
 ) -> (usize, usize) {
@@ -1058,7 +1314,7 @@ async fn close_all_atas_with_retry(
         })
     );
 
-    // Filter accounts for ATA closing (skip SOL and non-zero balances)
+    // Filter accounts for ATA closing (skip SOL and non-zero balances unless burned)
     let closable_accounts: Vec<_> = token_accounts
         .iter()
         .filter(|account| {
@@ -1066,7 +1322,12 @@ async fn close_all_atas_with_retry(
                 log(LogTag::System, "SKIP_SOL_ATA", "Skipping SOL account for ATA closing");
                 return false;
             }
-            if account.balance > 0 {
+
+            // Check if the token was successfully burned or sold
+            let was_burned = successfully_burned_mints.contains(&account.mint);
+            let was_sold = successfully_sold_mints.contains(&account.mint);
+
+            if account.balance > 0 && !was_burned && !was_sold {
                 log(
                     LogTag::System,
                     "SKIP_NONZERO_ATA",
@@ -1078,6 +1339,18 @@ async fn close_all_atas_with_retry(
                 );
                 return false;
             }
+
+            if was_burned {
+                log(
+                    LogTag::System,
+                    "BURNED_ATA_CANDIDATE",
+                    &format!(
+                        "Including ATA for {} - tokens were burned (should now be empty)",
+                        safe_truncate(&account.mint, 8)
+                    )
+                );
+            }
+
             true
         })
         .collect();
@@ -1105,11 +1378,13 @@ async fn close_all_atas_with_retry(
             let account = (*account).clone();
             let wallet_address = wallet_address.to_string();
             let successfully_sold_mints = successfully_sold_mints.clone();
+            let successfully_burned_mints = successfully_burned_mints.clone();
             async move {
                 let _permit = semaphore.acquire().await.unwrap();
                 close_single_ata_with_retry(
                     &account,
                     &successfully_sold_mints,
+                    &successfully_burned_mints,
                     &wallet_address,
                     dry_run
                 ).await
@@ -1140,6 +1415,7 @@ async fn close_all_atas_with_retry(
 async fn close_single_ata_with_retry(
     account: &TokenAccountInfo,
     successfully_sold_mints: &HashSet<String>,
+    successfully_burned_mints: &HashSet<String>,
     wallet_address: &str,
     dry_run: bool
 ) -> (String, bool, Option<String>) {
@@ -1158,8 +1434,10 @@ async fn close_single_ata_with_retry(
         &format!("Starting ATA close for token: {}", safe_truncate(&account.mint, 8))
     );
 
-    // Check if this token was recently sold
+    // Check if this token was recently sold or burned
     let recently_sold = successfully_sold_mints.contains(&account.mint);
+    let recently_burned = successfully_burned_mints.contains(&account.mint);
+    let recently_processed = recently_sold || recently_burned;
 
     // Try to close with retries
     for attempt in 1..=MAX_ATA_CLOSE_RETRIES {
@@ -1174,7 +1452,7 @@ async fn close_single_ata_with_retry(
             )
         );
 
-        match attempt_single_ata_close(&account.mint, wallet_address, recently_sold).await {
+        match attempt_single_ata_close(&account.mint, wallet_address, recently_processed).await {
             Ok(signature) => {
                 log(
                     LogTag::System,

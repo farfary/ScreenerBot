@@ -658,7 +658,19 @@ pub async fn close_token_account_with_context(
 ) -> Result<String, ScreenerBotError> {
     use crate::arguments::is_debug_ata_enabled;
 
-    log(LogTag::Wallet, "ATA", &format!("Attempting to close token account for mint: {}", mint));
+    if is_debug_ata_enabled() {
+        log(
+            LogTag::Wallet,
+            "ATA",
+            &format!("Attempting to close token account for mint: {}", mint)
+        );
+    } else {
+        log(
+            LogTag::Wallet,
+            "ATA",
+            &format!("Attempting to close token account for mint: {}", format_mint_for_log(mint))
+        );
+    }
 
     if is_debug_ata_enabled() {
         log(
