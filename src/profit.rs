@@ -46,9 +46,9 @@ const ATH_TRAIL_TIGHTEN_ELEV: f64 = 0.9; // 10% tighter
 const ATH_TARGET_MAX_REDUCTION_EXTREME: f64 = 0.75; // reduce target_max by 25%
 const ATH_TARGET_MAX_REDUCTION_HIGH: f64 = 0.85; // reduce by 15%
 const ATH_TARGET_MAX_REDUCTION_ELEV: f64 = 0.92; // reduce by 8%
-const ATH_SCORE_NUDGE_EXTREME: f64 = 0.25; // add to exit_score
-const ATH_SCORE_NUDGE_HIGH: f64 = 0.15;
-const ATH_SCORE_NUDGE_ELEV: f64 = 0.08;
+const ATH_SCORE_NUDGE_EXTREME: f64 = 0.18; // reduced ~30% to avoid over-stacking risk
+const ATH_SCORE_NUDGE_HIGH: f64 = 0.1;
+const ATH_SCORE_NUDGE_ELEV: f64 = 0.06;
 
 const ATH_CACHE_TTL_SEC: u64 = 20; // refresh at most every 20s per mint
 const ATH_MAX_OHLCV_POINTS: u32 = 400; // ~6h of 1m candles
@@ -239,7 +239,7 @@ pub const MAX_HOLD_MINUTES: f64 = 90.0; // Reduced from 120.0 for faster scalpin
 // Profit ladders (percent) - Aggressive but allow runners
 pub const BASE_MIN_PROFIT_PERCENT: f64 = 5.0; // base min profit gate
 pub const INSTANT_EXIT_LEVEL_1: f64 = 20.0; // level 1 now conditional (needs context)
-pub const INSTANT_EXIT_LEVEL_2: f64 = 35.0; // still relatively low but gives room for 20-30% runners
+pub const INSTANT_EXIT_LEVEL_2: f64 = 40.0; // slightly higher to avoid cutting strong early runners
 
 // Trailing stop dynamics (tighter for scalping)
 pub const TRAIL_MIN_GAP: f64 = 3.0; // Reduced from 5.0 for tighter trailing
@@ -399,7 +399,7 @@ pub fn trailing_gap(peak_profit: f64, minutes_held: f64) -> f64 {
     } else if peak_profit < 100.0 {
         peak_profit * 0.2
     } else {
-        peak_profit * 0.16
+        peak_profit * 0.18
     };
 
     // Clamp
@@ -508,11 +508,11 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
             // Move linearly down to 0.50 at full pressure (forces more exits)
             let factor = 1.0 - (time_pressure - 0.6) / (1.0 - 0.6); // 1 -> 0 as pressure increases
             let lowered = 0.5 + 0.15 * factor; // ranges roughly 0.50 .. 0.65
-            lowered.clamp(0.45, EXIT_ODDS_THRESHOLD)
+            lowered.clamp(0.55, EXIT_ODDS_THRESHOLD)
         }
     };
 
-    let trailing_time_pressure_multiplier = 1.0 - time_pressure * 0.35; // up to 35% tighter trailing gaps
+    let trailing_time_pressure_multiplier = 1.0 - time_pressure * 0.3; // slightly less tightening near cap
 
     // ============================= Profit Targets Integration (ATH Adaptive) =============================
     // Use position-specific targets when available. Keep it simple and local.
@@ -870,7 +870,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         // Base decays from target_min toward 0.5 * target_min over time pressure
         let decay_component = target_min * (1.0 - 0.5 * time_pressure);
         // After 25 minutes allow a further soft decay to encourage freeing capital
-        let long_hold_bonus = if minutes_held > 25.0 { target_min * 0.2 } else { 0.0 };
+        let long_hold_bonus = if minutes_held > 25.0 { target_min * 0.15 } else { 0.0 };
         (decay_component - long_hold_bonus).max(3.0)
     };
 
@@ -945,7 +945,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                 gap = micro_gap;
             }
         } else if peak_profit < 60.0 {
-            let micro_gap_mid = (peak_profit * 0.3).clamp(6.0, 12.0);
+            let micro_gap_mid = (peak_profit * 0.3).clamp(7.0, 13.0);
             if micro_gap_mid < gap {
                 gap = micro_gap_mid;
             }
@@ -1103,7 +1103,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     }
 
     // Lower threshold under high time pressure to favor exits as cap approaches
-    score_threshold -= 0.2 * time_pressure; // down to ~1.0 at full pressure
+    score_threshold -= 0.15 * time_pressure; // down to ~1.05 at full pressure
     if exit_score >= score_threshold {
         if is_debug_profit_enabled() {
             log(
@@ -1129,7 +1129,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     // 9) Time pressure final nudge — if we are very close to MAX_HOLD_MINUTES and have any decent profit,
     // prefer to exit rather than risk forced closure on the cap.
-    if time_pressure > 0.92 && pnl_percent > target_min {
+    if time_pressure > 0.95 && pnl_percent > (0.8 * target_min).max(3.0) && odds < 0.65 {
         if is_debug_profit_enabled() {
             log(
                 LogTag::Profit,

@@ -17,6 +17,12 @@ use screenerbot::tokens::{
 };
 use screenerbot::pools::{ init_pool_service, stop_pool_service, set_debug_token_override };
 use std::sync::Arc;
+use std::fs::{ self, OpenOptions };
+use std::io::Write;
+use std::path::{ Path, PathBuf };
+
+// CSV export (lightweight, single dependency)
+use csv::WriterBuilder;
 use tokio::sync::Notify;
 
 /// Analyze positions performance: open position failure patterns and missed profits on closed ones
@@ -48,6 +54,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .help("1m OHLCV candles to fetch (recent history window)")
                 .required(false)
                 .default_value("2000")
+        )
+        .arg(
+            Arg::new("export-csv-dir")
+                .long("export-csv-dir")
+                .value_name("PATH")
+                .help("Directory to export CSV files (open/closed diagnostics)")
+                .required(false)
+        )
+        .arg(
+            Arg::new("csv-append")
+                .long("csv-append")
+                .help("Append to existing CSVs instead of overwriting")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("lookahead-all")
+                .long("lookahead-all")
+                .help("Also compute missed-profit for multiple windows [15,30,60,120,180,360]")
+                .action(clap::ArgAction::SetTrue)
         )
         .arg(
             Arg::new("force-fetch")
@@ -112,6 +137,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get_one::<String>("ohlcv-limit")
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(1000);
+    let export_csv_dir: Option<PathBuf> = matches
+        .get_one::<String>("export-csv-dir")
+        .map(|s| PathBuf::from(s));
+    let csv_append = matches.get_flag("csv-append");
+    let lookahead_all = matches.get_flag("lookahead-all");
     let filter_mint = matches.get_one::<String>("mint").map(|s| s.to_string());
     let force_fetch = matches.get_flag("force-fetch");
     let verbose = matches.get_flag("verbose");
@@ -200,7 +230,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Analyze open positions: find failure patterns
-    analyze_open_positions(&open_positions, ohlcv_limit, force_fetch, verbose).await;
+    analyze_open_positions(
+        &open_positions,
+        ohlcv_limit,
+        force_fetch,
+        verbose,
+        export_csv_dir.as_deref(),
+        csv_append
+    ).await;
 
     // Analyze closed positions: compute missed profit
     analyze_closed_positions(
@@ -208,7 +245,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         lookahead_mins,
         ohlcv_limit,
         force_fetch,
-        verbose
+        verbose,
+        export_csv_dir.as_deref(),
+        csv_append,
+        lookahead_all
     ).await;
 
     // Gracefully stop pool service before exit to clean up background tasks
@@ -224,7 +264,9 @@ async fn analyze_open_positions(
     open_positions: &[Position],
     ohlcv_limit: u32,
     force_fetch: bool,
-    verbose: bool
+    verbose: bool,
+    export_dir: Option<&Path>,
+    csv_append: bool
 ) {
     if open_positions.is_empty() {
         println!("\n🟢 No open positions to analyze.");
@@ -246,6 +288,53 @@ async fn analyze_open_positions(
     // Buckets for early dump detection
     let mut early_dump_30m = 0usize;
     let mut early_dump_10m = 0usize;
+
+    // Prepare CSV if requested
+    let mut open_writer: Option<csv::Writer<Box<dyn std::io::Write>>> = None;
+    if let Some(dir) = export_dir {
+        if let Err(e) = fs::create_dir_all(dir) {
+            log(LogTag::System, "WARN", &format!("Failed to create export dir {:?}: {}", dir, e));
+        } else {
+            let path = dir.join("open_positions_diagnostics.csv");
+            match
+                create_csv_writer_with_header(
+                    &path,
+                    csv_append,
+                    &[
+                        "mint",
+                        "symbol",
+                        "entry_time",
+                        "current_time",
+                        "entry_price_sol",
+                        "current_price_sol",
+                        "pnl_pct",
+                        "age_min",
+                        "mdd_10m_pct",
+                        "mdd_30m_pct",
+                        "mru_10m_pct",
+                        "mru_30m_pct",
+                        "trend_5m_pct_per_min",
+                        "trend_15m_pct_per_min",
+                        "trend_60m_pct_per_min",
+                        "price_fresh_secs",
+                        "mint_auth_disabled",
+                        "freeze_auth_disabled",
+                        "lp_is_safe",
+                        "holder_count",
+                        "early_dump_10m",
+                        "early_dump_30m",
+                        "v_recovery_candidate",
+                    ]
+                )
+            {
+                Ok(w) => {
+                    open_writer = Some(w);
+                }
+                Err(e) =>
+                    log(LogTag::System, "WARN", &format!("CSV open failed {:?}: {}", path, e)),
+            }
+        }
+    }
 
     for p in open_positions {
         total += 1;
@@ -270,9 +359,17 @@ async fn analyze_open_positions(
             }
         }
 
-        // Try OHLCV to evaluate early dump after entry
+        // Try OHLCV to evaluate early dump after entry and compute metrics
         let mut had_early_dump_30m = false;
         let mut had_early_dump_10m = false;
+        let mut mdd_10m = 0.0f64;
+        let mut mdd_30m = 0.0f64;
+        let mut mru_10m = 0.0f64;
+        let mut mru_30m = 0.0f64;
+        let mut trend_5m: Option<f64> = None;
+        let mut trend_15m: Option<f64> = None;
+        let mut trend_60m: Option<f64> = None;
+        let mut price_fresh_secs: Option<i64> = None;
         match get_latest_ohlcv(mint, ohlcv_limit).await {
             Ok(candles) if !candles.is_empty() => {
                 if let Some(entry_candle) = nearest_at_or_before(&candles, p.entry_time) {
@@ -290,8 +387,30 @@ async fn analyze_open_positions(
                         t30,
                         entry_candle.close
                     );
+                    mdd_10m = dd10;
+                    mdd_30m = dd30;
+                    mru_10m = percent_runup_from(&candles, p.entry_time, t10, entry_candle.close);
+                    mru_30m = percent_runup_from(&candles, p.entry_time, t30, entry_candle.close);
                     had_early_dump_10m = dd10 <= -30.0; // 30%+ drop in first 10m
                     had_early_dump_30m = dd30 <= -50.0; // 50%+ drop in first 30m
+
+                    let now = Utc::now();
+                    price_fresh_secs = candles.last().map(|c| now.timestamp() - c.timestamp);
+                    trend_5m = slope_pct_per_min(
+                        &candles,
+                        p.entry_time,
+                        p.entry_time + ChronoDuration::minutes(5)
+                    );
+                    trend_15m = slope_pct_per_min(
+                        &candles,
+                        p.entry_time,
+                        p.entry_time + ChronoDuration::minutes(15)
+                    );
+                    trend_60m = slope_pct_per_min(
+                        &candles,
+                        p.entry_time,
+                        p.entry_time + ChronoDuration::minutes(60)
+                    );
                 }
             }
             Err(_) if force_fetch => {
@@ -328,8 +447,42 @@ async fn analyze_open_positions(
                                     t30,
                                     entry_candle.close
                                 );
+                                mdd_10m = dd10;
+                                mdd_30m = dd30;
+                                mru_10m = percent_runup_from(
+                                    &candles,
+                                    p.entry_time,
+                                    t10,
+                                    entry_candle.close
+                                );
+                                mru_30m = percent_runup_from(
+                                    &candles,
+                                    p.entry_time,
+                                    t30,
+                                    entry_candle.close
+                                );
                                 had_early_dump_10m = dd10 <= -30.0;
                                 had_early_dump_30m = dd30 <= -50.0;
+
+                                let now = Utc::now();
+                                price_fresh_secs = candles
+                                    .last()
+                                    .map(|c| now.timestamp() - c.timestamp);
+                                trend_5m = slope_pct_per_min(
+                                    &candles,
+                                    p.entry_time,
+                                    p.entry_time + ChronoDuration::minutes(5)
+                                );
+                                trend_15m = slope_pct_per_min(
+                                    &candles,
+                                    p.entry_time,
+                                    p.entry_time + ChronoDuration::minutes(15)
+                                );
+                                trend_60m = slope_pct_per_min(
+                                    &candles,
+                                    p.entry_time,
+                                    p.entry_time + ChronoDuration::minutes(60)
+                                );
                             }
                         }
                     }
@@ -388,6 +541,45 @@ async fn analyze_open_positions(
                 had_early_dump_30m
             );
         }
+
+        // CSV row
+        if let Some(w) = open_writer.as_mut() {
+            let now = Utc::now();
+            let age_min = (now - p.entry_time).num_minutes();
+            let pnl_pct = p.current_price
+                .map(|cur| ((cur - p.entry_price) / p.entry_price) * 100.0)
+                .unwrap_or(0.0);
+            let v_recovery = mdd_30m <= -30.0 && trend_60m.unwrap_or(0.0) > 0.0;
+            let _ = w.write_record(
+                &[
+                    mint,
+                    p.symbol.as_str(),
+                    &p.entry_time.to_rfc3339(),
+                    &now.to_rfc3339(),
+                    &format!("{:.10}", p.entry_price),
+                    &p.current_price
+                        .map(|v| format!("{:.10}", v))
+                        .unwrap_or_else(|| "".to_string()),
+                    &format!("{:.2}", pnl_pct),
+                    &age_min.to_string(),
+                    &format!("{:.2}", mdd_10m),
+                    &format!("{:.2}", mdd_30m),
+                    &format!("{:.2}", mru_10m),
+                    &format!("{:.2}", mru_30m),
+                    &trend_5m.map(|v| format!("{:.4}", v)).unwrap_or_default(),
+                    &trend_15m.map(|v| format!("{:.4}", v)).unwrap_or_default(),
+                    &trend_60m.map(|v| format!("{:.4}", v)).unwrap_or_default(),
+                    &price_fresh_secs.map(|s| s.to_string()).unwrap_or_default(),
+                    &(!can_mint).to_string(),
+                    &(!can_freeze).to_string(),
+                    &lp_locked.to_string(),
+                    &holder_count.to_string(),
+                    &had_early_dump_10m.to_string(),
+                    &had_early_dump_30m.to_string(),
+                    &v_recovery.to_string(),
+                ]
+            );
+        }
     }
 
     // Summary
@@ -417,7 +609,10 @@ async fn analyze_closed_positions(
     lookahead_mins: i64,
     ohlcv_limit: u32,
     force_fetch: bool,
-    verbose: bool
+    verbose: bool,
+    export_dir: Option<&Path>,
+    csv_append: bool,
+    lookahead_all: bool
 ) {
     if closed_positions.is_empty() {
         println!("\n📗 No recent closed positions to analyze.");
@@ -431,6 +626,49 @@ async fn analyze_closed_positions(
     let mut analyzed = 0usize;
     let mut sum_missed_pct = 0f64;
     let mut count_large_miss_50 = 0usize;
+
+    // Prepare CSV if requested
+    let mut closed_writer: Option<csv::Writer<Box<dyn std::io::Write>>> = None;
+    let windows: Vec<i64> = if lookahead_all {
+        vec![15, 30, 60, 120, 180, 360]
+    } else {
+        vec![lookahead_mins]
+    };
+    if let Some(dir) = export_dir {
+        if let Err(e) = fs::create_dir_all(dir) {
+            log(LogTag::System, "WARN", &format!("Failed to create export dir {:?}: {}", dir, e));
+        } else {
+            let path = dir.join("closed_positions_missed_profit.csv");
+            // Build headers dynamically for windows
+            let mut headers = vec![
+                "mint",
+                "symbol",
+                "entry_time",
+                "exit_time",
+                "entry_price_sol",
+                "exit_price_sol",
+                "exit_pnl_pct",
+                "time_in_position_min",
+                "pre_exit_trend_15m_pct_per_min",
+                "pre_exit_vol_15m_pct"
+            ];
+            for w in &windows {
+                headers.push(Box::leak(format!("missed_peak_pct_{}m", w).into_boxed_str()));
+                headers.push(Box::leak(format!("time_to_peak_min_{}m", w).into_boxed_str()));
+            }
+            headers.extend_from_slice(
+                &["holder_count", "lp_is_safe", "mint_auth_disabled", "freeze_auth_disabled"]
+            );
+
+            match create_csv_writer_with_header(&path, csv_append, &headers) {
+                Ok(w) => {
+                    closed_writer = Some(w);
+                }
+                Err(e) =>
+                    log(LogTag::System, "WARN", &format!("CSV open failed {:?}: {}", path, e)),
+            }
+        }
+    }
 
     for p in closed_positions.iter() {
         total += 1;
@@ -527,30 +765,103 @@ async fn analyze_closed_positions(
             }
         };
 
-        let window_end = exit_time + ChronoDuration::minutes(lookahead_mins);
-        let (max_high, max_high_time) = max_high_after(&candles, exit_time, window_end);
-        if max_high <= 0.0 {
+        // Multi-window computation
+        let mut row_dynamic: Vec<String> = Vec::new();
+        let entry_price = p.entry_price;
+        let exit_pnl_pct = if entry_price > 0.0 {
+            ((exit_candle.close - entry_price) / entry_price) * 100.0
+        } else {
+            0.0
+        };
+        let time_in_pos = p.exit_time.map(|et| (et - p.entry_time).num_minutes()).unwrap_or(0);
+
+        // Pre-exit metrics (15m)
+        let pre_start = exit_time - ChronoDuration::minutes(15);
+        let pre_trend = slope_pct_per_min(&candles, pre_start, exit_time).unwrap_or(0.0);
+        let pre_vol = realized_volatility_pct(&candles, pre_start, exit_time).unwrap_or(0.0);
+
+        // Aggregate summary uses primary lookahead (first in windows)
+        let primary_window = *windows.first().unwrap_or(&lookahead_mins);
+        let (max_high_primary, _) = max_high_after(
+            &candles,
+            exit_time,
+            exit_time + ChronoDuration::minutes(primary_window)
+        );
+        if max_high_primary <= 0.0 {
             continue;
         }
-
-        let missed_pct = ((max_high - exit_candle.close) / exit_candle.close) * 100.0;
+        let missed_pct_primary =
+            ((max_high_primary - exit_candle.close) / exit_candle.close) * 100.0;
         analyzed += 1;
-        sum_missed_pct += missed_pct;
-        if missed_pct >= 50.0 {
+        sum_missed_pct += missed_pct_primary;
+        if missed_pct_primary >= 50.0 {
             count_large_miss_50 += 1;
         }
 
         if verbose {
-            let dt = max_high_time.map(|t| t.to_rfc3339()).unwrap_or_else(|| "n/a".to_string());
             println!(
-                "- {} | mint {} | exit_close={:.10} SOL | post-peak={:.10} SOL (+{:.2}% at {})",
+                "- {} | mint {} | exit_close={:.10} SOL | missed_peak(+{}m) +{:.2}%",
                 p.symbol,
                 mint,
                 exit_candle.close,
-                max_high,
-                missed_pct,
-                dt
+                primary_window,
+                missed_pct_primary
             );
+        }
+
+        // CSV row if requested
+        if let Some(w) = closed_writer.as_mut() {
+            // Security data for row
+            let mut can_mint = false;
+            let mut can_freeze = false;
+            let mut lp_locked = true;
+            let mut holder_count: u32 = 0;
+            {
+                let analyzer = get_security_analyzer();
+                if let Ok(Some(info)) = analyzer.database.get_security_info(mint) {
+                    can_mint = !info.mint_authority_disabled;
+                    can_freeze = !info.freeze_authority_disabled;
+                    lp_locked = info.lp_is_safe;
+                    holder_count = info.holder_count;
+                }
+            }
+
+            let mut record: Vec<String> = vec![
+                mint.clone(),
+                p.symbol.clone(),
+                p.entry_time.to_rfc3339(),
+                exit_time.to_rfc3339(),
+                format!("{:.10}", entry_price),
+                format!("{:.10}", exit_candle.close),
+                format!("{:.2}", exit_pnl_pct),
+                time_in_pos.to_string(),
+                format!("{:.4}", pre_trend),
+                format!("{:.4}", pre_vol)
+            ];
+            for wmin in &windows {
+                let (mx, mxt) = max_high_after(
+                    &candles,
+                    exit_time,
+                    exit_time + ChronoDuration::minutes(*wmin)
+                );
+                if mx > 0.0 {
+                    let miss = ((mx - exit_candle.close) / exit_candle.close) * 100.0;
+                    let ttp = mxt
+                        .map(|t| (t - exit_time).num_minutes().to_string())
+                        .unwrap_or_default();
+                    record.push(format!("{:.2}", miss));
+                    record.push(ttp);
+                } else {
+                    record.push(String::new());
+                    record.push(String::new());
+                }
+            }
+            record.push(holder_count.to_string());
+            record.push(lp_locked.to_string());
+            record.push((!can_mint).to_string());
+            record.push((!can_freeze).to_string());
+
+            let _ = w.write_record(&record);
         }
     }
 
@@ -604,6 +915,31 @@ fn percent_drawdown_from(
     ((min_close - ref_price) / ref_price) * 100.0
 }
 
+fn percent_runup_from(
+    candles: &[OhlcvDataPoint],
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    ref_price: f64
+) -> f64 {
+    if ref_price <= 0.0 {
+        return 0.0;
+    }
+    let start_ts = start.timestamp();
+    let end_ts = end.timestamp();
+    let mut max_close = 0.0f64;
+    for c in candles.iter() {
+        if c.timestamp >= start_ts && c.timestamp <= end_ts {
+            if c.close > max_close {
+                max_close = c.close;
+            }
+        }
+    }
+    if max_close == 0.0 {
+        return 0.0;
+    }
+    ((max_close - ref_price) / ref_price) * 100.0
+}
+
 fn max_high_after(
     candles: &[OhlcvDataPoint],
     start: DateTime<Utc>,
@@ -623,4 +959,97 @@ fn max_high_after(
     }
     let max_dt = max_ts.and_then(|t| DateTime::<Utc>::from_timestamp(t, 0));
     (max_high, max_dt)
+}
+
+fn slope_pct_per_min(
+    candles: &[OhlcvDataPoint],
+    start: DateTime<Utc>,
+    end: DateTime<Utc>
+) -> Option<f64> {
+    let start_ts = start.timestamp();
+    let end_ts = end.timestamp();
+    let mut first: Option<&OhlcvDataPoint> = None;
+    let mut last: Option<&OhlcvDataPoint> = None;
+    for c in candles.iter() {
+        if c.timestamp >= start_ts && c.timestamp <= end_ts {
+            if first.is_none() {
+                first = Some(c);
+            }
+            last = Some(c);
+        }
+    }
+    match (first, last) {
+        (Some(f), Some(l)) if f.close > 0.0 && l.timestamp > f.timestamp => {
+            let mins = ((l.timestamp - f.timestamp) as f64) / 60.0;
+            if mins <= 0.0 {
+                return None;
+            }
+            let pct = ((l.close - f.close) / f.close) * 100.0;
+            Some(pct / mins)
+        }
+        _ => None,
+    }
+}
+
+fn realized_volatility_pct(
+    candles: &[OhlcvDataPoint],
+    start: DateTime<Utc>,
+    end: DateTime<Utc>
+) -> Option<f64> {
+    let start_ts = start.timestamp();
+    let end_ts = end.timestamp();
+    let mut prev: Option<f64> = None;
+    let mut rets: Vec<f64> = Vec::new();
+    for c in candles.iter() {
+        if c.timestamp >= start_ts && c.timestamp <= end_ts {
+            if let Some(p) = prev {
+                if p > 0.0 {
+                    let r = (c.close / p - 1.0) * 100.0; // percent return
+                    rets.push(r);
+                }
+            }
+            prev = Some(c.close);
+        }
+    }
+    if rets.len() < 2 {
+        return None;
+    }
+    let mean: f64 = rets.iter().sum::<f64>() / (rets.len() as f64);
+    let var: f64 =
+        rets
+            .iter()
+            .map(|r| (r - mean).powi(2))
+            .sum::<f64>() / ((rets.len() - 1) as f64);
+    Some(var.sqrt())
+}
+
+fn create_csv_writer_with_header(
+    path: &Path,
+    append: bool,
+    headers: &[&str]
+) -> Result<csv::Writer<Box<dyn std::io::Write>>, String> {
+    let file_exists = path.exists();
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(append)
+        .write(true)
+        .truncate(!append)
+        .open(path)
+        .map_err(|e| format!("open csv: {}", e))?;
+    let need_header = if append {
+        match file.metadata() {
+            Ok(m) => m.len() == 0,
+            Err(_) => true,
+        }
+    } else {
+        true
+    };
+    // csv writer
+    let mut w = WriterBuilder::new()
+        .has_headers(false)
+        .from_writer(Box::new(file) as Box<dyn std::io::Write>);
+    if need_header {
+        w.write_record(headers).map_err(|e| format!("csv header: {}", e))?;
+    }
+    Ok(w)
 }
