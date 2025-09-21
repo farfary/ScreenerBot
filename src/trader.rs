@@ -47,14 +47,14 @@
 pub const MAX_OPEN_POSITIONS: usize = 6;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.02;
+pub const TRADE_SIZE_SOL: f64 = 0.005;
 
 /// Enable minimum profit threshold requirement before allowing sells
 pub const MIN_PROFIT_THRESHOLD_ENABLED: bool = true;
 
 /// Minimum profit threshold percentage (e.g., 5.0 for 5%, -5.0 for -5%)
 /// Positions below this P&L will not be sold regardless of other exit conditions
-pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
+pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 2.0;
 
 /// Time-based override: Allow sell decisions after this duration (hours)
 /// Positions held longer than this can bypass profit threshold if in significant loss
@@ -77,7 +77,7 @@ pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
 ///   SLIPPAGE_EXIT_RETRY_STEPS_PCT      -> progressive retry slippage attempts (filtered by shortfall caps)
 ///
 /// ONLY these constants should be referenced by other modules; duplicates elsewhere should be removed.
-pub const SLIPPAGE_QUOTE_DEFAULT_PCT: f64 = 5.0;
+pub const SLIPPAGE_QUOTE_DEFAULT_PCT: f64 = 3.0;
 pub const SLIPPAGE_EXIT_PROFIT_SHORTFALL_PCT: f64 = 8.0; // Increased from 3.0% - profit exits need more flexibility
 pub const SLIPPAGE_EXIT_LOSS_SHORTFALL_PCT: f64 = 15.0; // Increased from 12.0% - stop losses need maximum flexibility
 pub const SLIPPAGE_EXIT_RETRY_STEPS_PCT: &[f64] = &[3.0, 5.0, 8.0, 12.0, 15.0]; // Added 15.0% for maximum flexibility

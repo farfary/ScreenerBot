@@ -144,6 +144,21 @@ const CASCADE_MRU_MAX_PCT: f64 = 3.0; // tiny run-up from 3m low → no bounce
 const CASCADE_MIN_QUOTE_SOL: f64 = 50.0; // if below, treat as dangerous unless rising
 const CASCADE_LIQ_FALLING_MIN_SNAPS: usize = 3; // require 3 decreasing snaps to consider falling
 
+// ============================= PUMP FUN NEAR-20 SOL GUARD =============================
+// Goal: Avoid catching continuing dumps around Pump Fun migration band (~20 SOL quote liquidity).
+// Trigger only inside a narrow SOL reserve band; use cheap long-lookback proxy (h24 change from
+// tokens cache) and corroborate with sell-dominance on 1h txns plus micro-structure weakness.
+// DB read is optional and occurs only when in band to keep perf acceptable.
+const PF_BAND_MIN_SOL: f64 = 18.0;
+const PF_BAND_MAX_SOL: f64 = 26.0;
+const PF_H24_DROP_EXTREME: f64 = -90.0; // ≤ -90% on h24 change implies post-peak context
+const PF_M15_DROP_MIN: f64 = 35.0; // alternative recent drop gate
+const PF_H1_DROP_MIN: f64 = 50.0;
+const PF_SELL_DOM_H1_MIN: f64 = 2.0; // sells >= 2x buys
+const PF_TXNS_H1_MIN_TOTAL: i64 = 6; // ensure some activity
+const PF_MDD3M_MIN: f64 = 12.0; // still sliding within last 3m
+const PF_MRU3M_MAX: f64 = 4.0; // lack of bounce in last 3m
+
 // ============================= TREND ENTRY (Conservative) =============================
 // Lightweight, safe detectors to capture strong trends while avoiding noise.
 // These are designed to work with existing pool price history (no extra sources).
@@ -601,6 +616,105 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     mdd_3m,
                     mru_3m,
                     price_info.sol_reserves
+                ),
+            );
+        }
+    }
+
+    // Pump Fun near-20 SOL band guard — lighter drop conditions + sell dominance corroboration
+    // Only engages inside a tight SOL-quote band to avoid broad DB lookups.
+    if
+        price_info.sol_reserves >= PF_BAND_MIN_SOL &&
+        price_info.sol_reserves <= PF_BAND_MAX_SOL &&
+        converted_history.len() >= 6
+    {
+        let now = Utc::now();
+        let (mut first_15, mut last_15) = (None, None);
+        let (mut first_60, mut last_60) = (None, None);
+        for (ts, p) in converted_history.iter() {
+            let age = (now - *ts).num_seconds();
+            if age <= CASCADE_LOOKBACK_M15 {
+                if first_15.is_none() {
+                    first_15 = Some(*p);
+                }
+                last_15 = Some(*p);
+            }
+            if age <= CASCADE_LOOKBACK_H1 {
+                if first_60.is_none() {
+                    first_60 = Some(*p);
+                }
+                last_60 = Some(*p);
+            }
+        }
+        let pct_change = |f: f64, l: f64| if f > 0.0 { ((l - f) / f) * 100.0 } else { 0.0 };
+        let m15_change = match (first_15, last_15) {
+            (Some(f), Some(l)) => pct_change(f, l),
+            _ => 0.0,
+        };
+        let h1_change = match (first_60, last_60) {
+            (Some(f), Some(l)) => pct_change(f, l),
+            _ => 0.0,
+        };
+        let (mdd_3m, mru_3m) = compute_mdd_mru(
+            &converted_history,
+            CASCADE_MDD_WINDOW_SEC
+        ).unwrap_or((0.0, 0.0));
+
+        // Optional token market snapshot (price_change_h24 + txns_h1)
+        let mut h24_change_opt: Option<f64> = None;
+        let mut h1_buys: i64 = 0;
+        let mut h1_sells: i64 = 0;
+        if let Some(snap) = get_token_market_snapshot(&price_info.mint).await {
+            h24_change_opt = snap.price_change_h24;
+            h1_buys = snap.txns_h1_buys.unwrap_or(0);
+            h1_sells = snap.txns_h1_sells.unwrap_or(0);
+        }
+        let total_h1 = h1_buys.saturating_add(h1_sells);
+        let sell_dom = if h1_buys <= 0 {
+            if h1_sells > 0 { 10.0 } else { 0.0 }
+        } else {
+            (h1_sells as f64) / (h1_buys as f64)
+        };
+
+        let long_lookback_bad = h24_change_opt.map(|c| c <= PF_H24_DROP_EXTREME).unwrap_or(false);
+        let recent_drop_bad = m15_change <= -PF_M15_DROP_MIN || h1_change <= -PF_H1_DROP_MIN;
+        let micro_weak = mdd_3m >= PF_MDD3M_MIN && mru_3m <= PF_MRU3M_MAX;
+        let sell_pressure_ok = total_h1 >= PF_TXNS_H1_MIN_TOTAL && sell_dom >= PF_SELL_DOM_H1_MIN;
+
+        if (long_lookback_bad || recent_drop_bad) && micro_weak && sell_pressure_ok {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "PF_GUARD",
+                    &format!(
+                        "⛔ {} blocked by PF band guard: sol_res={:.2} h24={:?}% m15={:.1}% h1={:.1}% mdd3m={:.1}% mru3m={:.1}% h1_buys={} h1_sells={} sell_dom={:.2}",
+                        price_info.mint,
+                        price_info.sol_reserves,
+                        h24_change_opt,
+                        m15_change,
+                        h1_change,
+                        mdd_3m,
+                        mru_3m,
+                        h1_buys,
+                        h1_sells,
+                        sell_dom
+                    )
+                );
+            }
+            return (
+                false,
+                12.0,
+                format!(
+                    "PF band guard: liq {:.1} SOL, h24 {:?}%, m15 {:.1}%, h1 {:.1}%, mdd3m {:.1}%, mru3m {:.1}%, h1 sell-dom {:.2} ({}/{})",
+                    price_info.sol_reserves,
+                    h24_change_opt,
+                    m15_change,
+                    h1_change,
+                    mdd_3m,
+                    mru_3m,
+                    sell_dom,
+                    h1_sells,
+                    h1_buys
                 ),
             );
         }
@@ -1368,6 +1482,24 @@ fn compute_mdd_mru(price_history: &[(DateTime<Utc>, f64)], seconds: i64) -> Opti
     let mdd = ((high - cur) / high) * 100.0;
     let mru = ((cur - low) / low) * 100.0;
     Some((mdd, mru))
+}
+
+// Lightweight accessor for cached token market snapshot (optional DB read).
+// Called only inside a tight SOL band to keep overhead low.
+struct TokenMarketSnapshot {
+    price_change_h24: Option<f64>,
+    txns_h1_buys: Option<i64>,
+    txns_h1_sells: Option<i64>,
+}
+
+async fn get_token_market_snapshot(mint: &str) -> Option<TokenMarketSnapshot> {
+    let token = crate::tokens::get_token_from_db(mint).await?;
+    let price_change_h24 = token.price_change.as_ref().and_then(|pc| pc.h24);
+    let (txns_h1_buys, txns_h1_sells) = token.txns
+        .as_ref()
+        .and_then(|t| t.h1.as_ref().map(|p| (p.buys, p.sells)))
+        .unwrap_or((None, None));
+    Some(TokenMarketSnapshot { price_change_h24, txns_h1_buys, txns_h1_sells })
 }
 
 /// Calculate enhanced drop magnitude score (balanced approach for various drop sizes)
