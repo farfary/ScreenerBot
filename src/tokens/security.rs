@@ -880,6 +880,28 @@ impl SecurityAnalyzer {
         None
     }
 
+    /// Analyze token using ANY available security data (including stale) for filtering
+    /// This is more inclusive than cached_only - uses any DB data we have, even if old
+    /// Still avoids API calls for performance in filtering context
+    pub async fn analyze_token_any_cached(&self, mint: &str) -> Option<bool> {
+        // First try the standard cache/fresh DB path
+        if let Some(is_safe) = self.analyze_token_cached_only(mint).await {
+            return Some(is_safe);
+        }
+
+        // If that fails, try ANY security data in DB, even if stale
+        if let Ok(db) = self.get_db() {
+            if let Ok(Some(info)) = db.get_security_info(mint) {
+                // Use any available security data, regardless of age
+                let analysis = self.calculate_security_analysis(&info);
+                self.metrics.record_analysis(&analysis);
+                return Some(analysis.is_safe);
+            }
+        }
+
+        None
+    }
+
     pub async fn get_security_summary(&self) -> SecuritySummary {
         let cache_size = self.cache.read().await.len();
         let last_api_call = *self.metrics.last_api_call.read().await;

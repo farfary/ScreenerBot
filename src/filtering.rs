@@ -103,26 +103,6 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         return Ok(Vec::new());
     }
 
-    // CRITICAL FIX: Increase processing limit and apply security filtering FIRST
-    // This ensures secure tokens aren't excluded by the 5000 limit
-    let extended_limit = std::cmp::min(
-        all_tokens.len(),
-        MAX_TOKENS_TO_PROCESS * SECURITY_FIRST_MULTIPLIER
-    );
-    let tokens_to_process = &all_tokens[..extended_limit];
-
-    if debug_enabled {
-        log(
-            LogTag::Filtering,
-            "INFO",
-            &format!(
-                "Processing {} tokens from database (total: {}) - SECURITY PRIORITY MODE",
-                tokens_to_process.len(),
-                all_tokens.len()
-            )
-        );
-    }
-
     // Ensure security analyzer is initialized (debug binaries may not have run the main init)
     if get_security_analyzer().is_none() {
         if let Err(e) = initialize_security_analyzer() {
@@ -136,11 +116,23 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         }
     }
 
-    // Step 2: Apply SECURITY filtering FIRST to prioritize secure tokens
-    let token_mints: Vec<String> = tokens_to_process
+    // Step 2: Apply SECURITY filtering FIRST to ALL tokens with security info
+    // No artificial limits here - let all safe tokens through, then apply other criteria
+    let token_mints: Vec<String> = all_tokens
         .iter()
         .map(|t| t.mint.clone())
         .collect();
+
+    if debug_enabled {
+        log(
+            LogTag::Filtering,
+            "INFO",
+            &format!(
+                "Processing ALL {} tokens for security filtering - NO LIMITS at this stage",
+                token_mints.len()
+            )
+        );
+    }
     let (security_filtered, security_stats) =
         apply_cached_security_filtering_with_stats(token_mints).await?;
 
@@ -161,8 +153,8 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
     let mut filtering_stats = FilteringStats::new();
     filtering_stats.total_processed = security_filtered.len(); // Track security-filtered count
 
-    // Create lookup map for faster token retrieval
-    let token_map: HashMap<String, &ApiToken> = tokens_to_process
+    // Create lookup map for faster token retrieval - use ALL tokens now
+    let token_map: HashMap<String, &ApiToken> = all_tokens
         .iter()
         .map(|token| (token.mint.clone(), token))
         .collect();
@@ -461,14 +453,31 @@ async fn apply_cached_security_filtering_with_stats(
         security_stats.passed += 1;
     }
 
+    if debug_enabled {
+        log(
+            LogTag::Filtering,
+            "SECURITY_RESULTS",
+            &format!(
+                "Security filtering results: {} passed / {} total checked ({:.1}% pass rate)",
+                security_stats.passed,
+                security_stats.total_checked,
+                if security_stats.total_checked > 0 {
+                    ((security_stats.passed as f64) / (security_stats.total_checked as f64)) * 100.0
+                } else {
+                    0.0
+                }
+            )
+        );
+    }
+
     Ok((passed_tokens, security_stats))
 }
 
-/// Get security info for filtering (simplified for now)
+/// Get security info for filtering - use any available security data, even if stale
 async fn get_security_info_for_filtering(mint: &str) -> Option<bool> {
-    // Use the analyzer cache/database only; avoid API calls in filtering
     if let Some(analyzer) = crate::tokens::security::get_security_analyzer() {
-        return analyzer.analyze_token_cached_only(mint).await;
+        // Use the new method that includes stale data for more inclusive filtering
+        return analyzer.analyze_token_any_cached(mint).await;
     }
     None
 }
