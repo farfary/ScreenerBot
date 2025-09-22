@@ -7,7 +7,12 @@ use crate::global::is_debug_filtering_enabled;
 use crate::logger::{ log, LogTag };
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::decimals::get_cached_decimals;
-use crate::tokens::security::{ get_security_analyzer, SecurityAnalyzer, RiskLevel };
+use crate::tokens::security::{
+    get_security_analyzer,
+    initialize_security_analyzer,
+    SecurityAnalyzer,
+    RiskLevel,
+};
 use crate::tokens::types::{ ApiToken, Token };
 use chrono::{ Duration as ChronoDuration, Utc };
 use std::collections::HashMap;
@@ -116,6 +121,19 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
                 all_tokens.len()
             )
         );
+    }
+
+    // Ensure security analyzer is initialized (debug binaries may not have run the main init)
+    if get_security_analyzer().is_none() {
+        if let Err(e) = initialize_security_analyzer() {
+            log(
+                LogTag::Filtering,
+                "WARN",
+                &format!("Security analyzer not initialized and failed to init: {}", e)
+            );
+        } else if debug_enabled {
+            log(LogTag::Filtering, "INFO", "Security analyzer initialized lazily for filtering");
+        }
     }
 
     // Step 2: Apply SECURITY filtering FIRST to prioritize secure tokens
@@ -448,10 +466,9 @@ async fn apply_cached_security_filtering_with_stats(
 
 /// Get security info for filtering (simplified for now)
 async fn get_security_info_for_filtering(mint: &str) -> Option<bool> {
-    // Use the new security analyzer if available
+    // Use the analyzer cache/database only; avoid API calls in filtering
     if let Some(analyzer) = crate::tokens::security::get_security_analyzer() {
-        let analysis = analyzer.analyze_token(mint).await;
-        return Some(analysis.is_safe);
+        return analyzer.analyze_token_cached_only(mint).await;
     }
     None
 }
@@ -571,90 +588,124 @@ fn log_filtering_stats(
     summary.push_str(&format!("{}\n", "🔍 FILTERING PIPELINE RESULTS".bright_cyan().bold()));
 
     // Database overview with total tokens context
+    let security_limit = MAX_TOKENS_TO_PROCESS * SECURITY_FIRST_MULTIPLIER;
     summary.push_str(
         &format!(
-            "{} {} tokens in database, {} processed {}\n",
+            "{} {} tokens in DB; security check limit: {}; post-security processed: {}\n",
             "💾 Database:".bright_white().bold(),
             format!("{}", total_in_db).bright_cyan().bold(),
-            format!("{}", filtering_stats.total_processed).bright_yellow().bold(),
-            if total_in_db > MAX_TOKENS_TO_PROCESS {
-                format!("(limited to {})", MAX_TOKENS_TO_PROCESS).dimmed().to_string()
-            } else {
-                "(all processed)".dimmed().to_string()
-            }
+            format!("{}", security_limit).bright_yellow().bold(),
+            format!("{}", filtering_stats.total_processed).bright_yellow().bold()
         )
     );
 
-    // Pipeline flow with colorized numbers and percentages
-    let basic_pass_rate = if filtering_stats.total_processed > 0 {
-        ((filtering_stats.passed_basic_filters as f64) / (filtering_stats.total_processed as f64)) *
-            100.0
-    } else {
-        0.0
-    };
-
+    // Security stage first: show pass rate vs. total checked at security stage
     let security_pass_rate = if security_stats.total_checked > 0 {
         ((security_stats.passed as f64) / (security_stats.total_checked as f64)) * 100.0
     } else {
         0.0
     };
-
+    let security_rejected = security_stats.total_checked.saturating_sub(security_stats.passed);
     summary.push_str(
         &format!(
-            "{} {} {} → {} {} ({:.1}%) → {} {} ({:.1}%) → {} {}\n",
-            "📊 Pipeline Flow:".bright_white().bold(),
-            format!("{}", filtering_stats.total_processed).bright_yellow().bold(),
-            "processed".dimmed(),
-            format!("{}", filtering_stats.passed_basic_filters).bright_green().bold(),
-            "basic passed".dimmed(),
-            format!("{:.1}", basic_pass_rate).bright_green().bold(),
+            "{} checked={}, passed={} ({}%), rejected={}\n",
+            "🛡️ Security:".bright_white().bold(),
+            format!("{}", security_stats.total_checked).bright_cyan().bold(),
             format!("{}", security_stats.passed).bright_blue().bold(),
-            "security passed".dimmed(),
             format!("{:.1}", security_pass_rate).bright_blue().bold(),
+            format!("{}", security_rejected).bright_red().bold()
+        )
+    );
+
+    // Post-security pipeline: show pass rate vs. post-security processed
+    let post_security_pass_rate = if filtering_stats.total_processed > 0 {
+        ((filtering_stats.final_passed as f64) / (filtering_stats.total_processed as f64)) * 100.0
+    } else {
+        0.0
+    };
+    summary.push_str(
+        &format!(
+            "{} processed={}, final={} ({}%)\n",
+            "📊 Pipeline (post-security):".bright_white().bold(),
+            format!("{}", filtering_stats.total_processed).bright_yellow().bold(),
             format!("{}", filtering_stats.final_passed).bright_magenta().bold(),
-            "final tokens".dimmed()
+            format!("{:.1}", post_security_pass_rate).bright_magenta().bold()
         )
     );
 
     // Detailed stage breakdown showing losses at each step
+    // Stage details on multiple short lines to avoid wrap truncating numbers
+    summary.push_str(&format!("{}\n", "📈 Stage Details:".bright_white().bold()));
     summary.push_str(
         &format!(
-            "{} Decimals: {} → {} (lost {}), Info: {} → {} (lost {}), Transactions: {} → {} (lost {}), Liquidity: {} → {} (lost {}), MarketCap: {} → {} (lost {})\n",
-            "📈 Stage Details:".bright_white().bold(),
+            "  • Decimals: {} → {} (lost {})\n",
             format!("{}", filtering_stats.total_processed).bright_yellow().bold(),
             format!("{}", filtering_stats.decimals_check_passed).bright_cyan().bold(),
-            format!("{}", filtering_stats.total_processed - filtering_stats.decimals_check_passed)
+            format!(
+                "{}",
+                filtering_stats.total_processed.saturating_sub(
+                    filtering_stats.decimals_check_passed
+                )
+            )
                 .bright_red()
-                .bold(),
+                .bold()
+        )
+    );
+    summary.push_str(
+        &format!(
+            "  • Info: {} → {} (lost {})\n",
             format!("{}", filtering_stats.decimals_check_passed).bright_cyan().bold(),
             format!("{}", filtering_stats.basic_info_check_passed).bright_green().bold(),
             format!(
                 "{}",
-                filtering_stats.decimals_check_passed - filtering_stats.basic_info_check_passed
+                filtering_stats.decimals_check_passed.saturating_sub(
+                    filtering_stats.basic_info_check_passed
+                )
             )
                 .bright_red()
-                .bold(),
+                .bold()
+        )
+    );
+    summary.push_str(
+        &format!(
+            "  • Transactions: {} → {} (lost {})\n",
             format!("{}", filtering_stats.basic_info_check_passed).bright_green().bold(),
             format!("{}", filtering_stats.transaction_check_passed).bright_blue().bold(),
             format!(
                 "{}",
-                filtering_stats.basic_info_check_passed - filtering_stats.transaction_check_passed
+                filtering_stats.basic_info_check_passed.saturating_sub(
+                    filtering_stats.transaction_check_passed
+                )
             )
                 .bright_red()
-                .bold(),
+                .bold()
+        )
+    );
+    summary.push_str(
+        &format!(
+            "  • Liquidity: {} → {} (lost {})\n",
             format!("{}", filtering_stats.transaction_check_passed).bright_blue().bold(),
             format!("{}", filtering_stats.liquidity_check_passed).bright_yellow().bold(),
             format!(
                 "{}",
-                filtering_stats.transaction_check_passed - filtering_stats.liquidity_check_passed
+                filtering_stats.transaction_check_passed.saturating_sub(
+                    filtering_stats.liquidity_check_passed
+                )
             )
                 .bright_red()
-                .bold(),
+                .bold()
+        )
+    );
+    summary.push_str(
+        &format!(
+            "  • MarketCap: {} → {} (lost {})\n",
             format!("{}", filtering_stats.liquidity_check_passed).bright_yellow().bold(),
             format!("{}", filtering_stats.market_cap_check_passed).bright_magenta().bold(),
             format!(
                 "{}",
-                filtering_stats.liquidity_check_passed - filtering_stats.market_cap_check_passed
+                filtering_stats.liquidity_check_passed.saturating_sub(
+                    filtering_stats.market_cap_check_passed
+                )
             )
                 .bright_red()
                 .bold()
@@ -662,8 +713,9 @@ fn log_filtering_stats(
     );
 
     // Basic rejections summary with top causes highlighted
-    let total_basic_rejections =
-        filtering_stats.total_processed - filtering_stats.passed_basic_filters;
+    let total_basic_rejections = filtering_stats.total_processed.saturating_sub(
+        filtering_stats.final_passed
+    );
     summary.push_str(
         &format!(
             "{} {} total ({:.1}% of processed)\n",
@@ -693,7 +745,7 @@ fn log_filtering_stats(
                     0.0
                 };
                 format!(
-                    "{}={} ({:.1}%)",
+                    "{}={} ({}%)",
                     reason.bright_white(),
                     format!("{}", count).bright_red().bold(),
                     format!("{:.1}", percentage).bright_red().bold()
@@ -704,19 +756,15 @@ fn log_filtering_stats(
         summary.push('\n');
     }
 
-    // Security summary with colorized numbers and pass rate
-    let total_security_rejections = security_stats.total_checked - security_stats.passed;
+    // Security summary with colorized numbers and pass rate (redundant with the first line but kept concise)
+    let total_security_rejections = security_rejected;
     summary.push_str(
         &format!(
-            "{} {} checked, {} passed ({:.1}%), {} rejected\n",
+            "{} checked={}, passed={} ({}%), rejected={}\n",
             "🔒 Security Filtering:".bright_white().bold(),
             format!("{}", security_stats.total_checked).bright_cyan().bold(),
             format!("{}", security_stats.passed).bright_green().bold(),
-            if security_stats.total_checked > 0 {
-                ((security_stats.passed as f64) / (security_stats.total_checked as f64)) * 100.0
-            } else {
-                0.0
-            },
+            format!("{:.1}", security_pass_rate).bright_green().bold(),
             format!("{}", total_security_rejections).bright_red().bold()
         )
     );

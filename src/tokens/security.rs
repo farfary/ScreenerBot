@@ -738,6 +738,36 @@ impl SecurityAnalyzer {
         None
     }
 
+    /// Lightweight cache-only security check for filtering: no API calls
+    /// Returns Some(is_safe) if cache or non-stale DB data exists, else None
+    pub async fn analyze_token_cached_only(&self, mint: &str) -> Option<bool> {
+        // 1) In-memory cache fast path
+        {
+            let cache = self.cache.read().await;
+            if let Some(info) = cache.get(mint) {
+                let analysis = self.calculate_security_analysis(info);
+                return Some(analysis.is_safe);
+            }
+        }
+
+        // 2) Database non-stale path
+        if let Ok(db) = self.get_db() {
+            if let Ok(Some(info)) = db.get_security_info(mint) {
+                if let Ok(false) = db.is_stale(mint, MAX_CACHE_AGE_HOURS) {
+                    // Put into cache for next time
+                    {
+                        let mut cache = self.cache.write().await;
+                        cache.insert(mint.to_string(), info.clone());
+                    }
+                    let analysis = self.calculate_security_analysis(&info);
+                    return Some(analysis.is_safe);
+                }
+            }
+        }
+
+        None
+    }
+
     pub async fn get_security_summary(&self) -> SecuritySummary {
         let cache_size = self.cache.read().await.len();
         let last_api_call = *self.metrics.last_api_call.read().await;
