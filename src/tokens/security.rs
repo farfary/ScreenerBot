@@ -1,4 +1,5 @@
 use crate::logger::{ log, LogTag };
+use crate::arguments::is_debug_security_enabled;
 use crate::tokens::security_db::{ SecurityDatabase, SecurityInfo, parse_rugcheck_response };
 use once_cell::sync::Lazy;
 use reqwest::{ Client, StatusCode };
@@ -231,20 +232,42 @@ impl SecurityAnalyzer {
     }
 
     pub async fn analyze_token(&self, mint: &str) -> SecurityAnalysis {
-        log(LogTag::Security, "ANALYZE", &format!("Starting security analysis for mint={}", mint));
+        // Only log a compact start line in debug mode to avoid noise
+        if is_debug_security_enabled() {
+            log(
+                LogTag::Security,
+                "ANALYZE",
+                &format!("Starting security analysis for mint={}", mint)
+            );
+        }
 
         // Try to get from cache first
         {
             let cache = self.cache.read().await;
             if let Some(info) = cache.get(mint) {
                 self.metrics.record_cache_hit();
-                log(
-                    LogTag::Security,
-                    "CACHE_HIT",
-                    &format!("Using cached security data for mint={}", mint)
-                );
+                if is_debug_security_enabled() {
+                    log(
+                        LogTag::Security,
+                        "CACHE_HIT",
+                        &format!("Using cached security data for mint={}", mint)
+                    );
+                }
                 let analysis = self.calculate_security_analysis(info);
                 self.metrics.record_analysis(&analysis);
+                // One compact per-token log for full analysis paths (cache hit)
+                log(
+                    LogTag::Security,
+                    "ANALYSIS",
+                    &format!(
+                        "mint={} safe={} score={} risks={} pump_fun={} source=cache",
+                        mint,
+                        analysis.is_safe,
+                        analysis.score_normalized,
+                        analysis.risks.len(),
+                        analysis.pump_fun_token
+                    )
+                );
                 return analysis;
             }
         }
@@ -257,11 +280,13 @@ impl SecurityAnalyzer {
                     match db.is_stale(mint, MAX_CACHE_AGE_HOURS) {
                         Ok(false) => {
                             self.metrics.record_db_hit();
-                            log(
-                                LogTag::Security,
-                                "DB_HIT",
-                                &format!("Using fresh database security data for mint={}", mint)
-                            );
+                            if is_debug_security_enabled() {
+                                log(
+                                    LogTag::Security,
+                                    "DB_HIT",
+                                    &format!("Using fresh database security data for mint={}", mint)
+                                );
+                            }
                             // Add to cache
                             {
                                 let mut cache = self.cache.write().await;
@@ -269,38 +294,58 @@ impl SecurityAnalyzer {
                             }
                             let analysis = self.calculate_security_analysis(&info);
                             self.metrics.record_analysis(&analysis);
+                            log(
+                                LogTag::Security,
+                                "ANALYSIS",
+                                &format!(
+                                    "mint={} safe={} score={} risks={} pump_fun={} source=db",
+                                    mint,
+                                    analysis.is_safe,
+                                    analysis.score_normalized,
+                                    analysis.risks.len(),
+                                    analysis.pump_fun_token
+                                )
+                            );
                             return analysis;
                         }
                         Ok(true) => {
-                            log(
-                                LogTag::Security,
-                                "DB_STALE",
-                                &format!("Database security data is stale for mint={}, refreshing", mint)
-                            );
+                            if is_debug_security_enabled() {
+                                log(
+                                    LogTag::Security,
+                                    "DB_STALE",
+                                    &format!("Database security data is stale for mint={}, refreshing", mint)
+                                );
+                            }
                         }
                         Err(e) => {
-                            log(
-                                LogTag::Security,
-                                "DB_ERROR",
-                                &format!("Error checking staleness for mint={}: {}", mint, e)
-                            );
+                            if is_debug_security_enabled() {
+                                log(
+                                    LogTag::Security,
+                                    "DB_ERROR",
+                                    &format!("Error checking staleness for mint={}: {}", mint, e)
+                                );
+                            }
                         }
                     }
                 }
                 Ok(None) => {
                     self.metrics.record_db_miss();
-                    log(
-                        LogTag::Security,
-                        "DB_MISS",
-                        &format!("No security data in database for mint={}", mint)
-                    );
+                    if is_debug_security_enabled() {
+                        log(
+                            LogTag::Security,
+                            "DB_MISS",
+                            &format!("No security data in database for mint={}", mint)
+                        );
+                    }
                 }
                 Err(e) => {
-                    log(
-                        LogTag::Security,
-                        "DB_ERROR",
-                        &format!("Database error for mint={}: {}", mint, e)
-                    );
+                    if is_debug_security_enabled() {
+                        log(
+                            LogTag::Security,
+                            "DB_ERROR",
+                            &format!("Database error for mint={}: {}", mint, e)
+                        );
+                    }
                 }
             }
         }
@@ -315,11 +360,13 @@ impl SecurityAnalyzer {
                         .get_db()
                         .and_then(|db| db.store_security_info(&info).map_err(|e| e.to_string()))
                 {
-                    log(
-                        LogTag::Security,
-                        "DB_STORE_ERROR",
-                        &format!("Failed to store security data for mint={}: {}", mint, e)
-                    );
+                    if is_debug_security_enabled() {
+                        log(
+                            LogTag::Security,
+                            "DB_STORE_ERROR",
+                            &format!("Failed to store security data for mint={}: {}", mint, e)
+                        );
+                    }
                 }
 
                 // Add to cache
@@ -330,15 +377,29 @@ impl SecurityAnalyzer {
 
                 let analysis = self.calculate_security_analysis(&info);
                 self.metrics.record_analysis(&analysis);
+                log(
+                    LogTag::Security,
+                    "ANALYSIS",
+                    &format!(
+                        "mint={} safe={} score={} risks={} pump_fun={} source=api",
+                        mint,
+                        analysis.is_safe,
+                        analysis.score_normalized,
+                        analysis.risks.len(),
+                        analysis.pump_fun_token
+                    )
+                );
                 analysis
             }
             Err(e) => {
                 self.metrics.record_api_call(false).await;
-                log(
-                    LogTag::Security,
-                    "API_ERROR",
-                    &format!("Failed to fetch security data for mint={}: {}", mint, e)
-                );
+                if is_debug_security_enabled() {
+                    log(
+                        LogTag::Security,
+                        "API_ERROR",
+                        &format!("Failed to fetch security data for mint={}: {}", mint, e)
+                    );
+                }
                 // Return conservative analysis for unknown tokens
                 let analysis = SecurityAnalysis {
                     is_safe: false,
@@ -354,6 +415,18 @@ impl SecurityAnalyzer {
                     summary: "Unable to analyze token security".to_string(),
                 };
                 self.metrics.record_analysis(&analysis);
+                log(
+                    LogTag::Security,
+                    "ANALYSIS",
+                    &format!(
+                        "mint={} safe={} score={} risks={} pump_fun={} source=error",
+                        mint,
+                        analysis.is_safe,
+                        analysis.score_normalized,
+                        analysis.risks.len(),
+                        analysis.pump_fun_token
+                    )
+                );
                 analysis
             }
         }
@@ -386,19 +459,27 @@ impl SecurityAnalyzer {
         };
 
         if let Some(delay) = delay_needed {
-            log(
-                LogTag::Security,
-                "RATE_LIMIT",
-                &format!(
-                    "Rate limiting: waiting {}ms before API call for mint={}",
-                    delay.as_millis(),
-                    mint
-                )
-            );
+            if is_debug_security_enabled() {
+                log(
+                    LogTag::Security,
+                    "RATE_LIMIT",
+                    &format!(
+                        "Rate limiting: waiting {}ms before API call for mint={}",
+                        delay.as_millis(),
+                        mint
+                    )
+                );
+            }
             sleep(delay).await;
         }
 
-        log(LogTag::Security, "API_FETCH", &format!("Fetching Rugcheck data for mint={}", mint));
+        if is_debug_security_enabled() {
+            log(
+                LogTag::Security,
+                "API_FETCH",
+                &format!("Fetching Rugcheck data for mint={}", mint)
+            );
+        }
 
         let url = format!("{}/{}/report", RUGCHECK_API_BASE, mint);
 
@@ -439,19 +520,21 @@ impl SecurityAnalyzer {
                             Duration::from_millis(base_delay_ms)
                         };
 
-                        log(
-                            LogTag::Security,
-                            "API_RETRY",
-                            &format!(
-                                "Rugcheck status {} {} for mint={}, retrying in {}ms (attempt {}/{})",
-                                status.as_u16(),
-                                status.canonical_reason().unwrap_or("Unknown"),
-                                mint,
-                                delay.as_millis(),
-                                attempt,
-                                max_attempts
-                            )
-                        );
+                        if is_debug_security_enabled() {
+                            log(
+                                LogTag::Security,
+                                "API_RETRY",
+                                &format!(
+                                    "Rugcheck status {} {} for mint={}, retrying in {}ms (attempt {}/{})",
+                                    status.as_u16(),
+                                    status.canonical_reason().unwrap_or("Unknown"),
+                                    mint,
+                                    delay.as_millis(),
+                                    attempt,
+                                    max_attempts
+                                )
+                            );
+                        }
                         sleep(delay).await;
                         continue;
                     } else {
@@ -464,17 +547,19 @@ impl SecurityAnalyzer {
                     if attempt < max_attempts {
                         let base_delay_ms = 250u64 * (1u64 << (attempt - 1));
                         let delay = Duration::from_millis(base_delay_ms);
-                        log(
-                            LogTag::Security,
-                            "API_RETRY",
-                            &format!(
-                                "HTTP error for mint={}, retrying in {}ms (attempt {}/{})",
-                                mint,
-                                delay.as_millis(),
-                                attempt,
-                                max_attempts
-                            )
-                        );
+                        if is_debug_security_enabled() {
+                            log(
+                                LogTag::Security,
+                                "API_RETRY",
+                                &format!(
+                                    "HTTP error for mint={}, retrying in {}ms (attempt {}/{})",
+                                    mint,
+                                    delay.as_millis(),
+                                    attempt,
+                                    max_attempts
+                                )
+                            );
+                        }
                         sleep(delay).await;
                         continue;
                     }
@@ -563,19 +648,6 @@ impl SecurityAnalyzer {
             format!("Risky token (score: {}/100, {} risks)", info.score_normalised, risks.len())
         };
 
-        log(
-            LogTag::Security,
-            "ANALYSIS",
-            &format!(
-                "Security analysis complete for mint={}: safe={}, score={}, risks={}, pump_fun={}",
-                info.mint,
-                is_safe,
-                info.score_normalised,
-                risks.len(),
-                pump_fun_token
-            )
-        );
-
         SecurityAnalysis {
             is_safe,
             score: info.score,
@@ -600,30 +672,34 @@ impl SecurityAnalyzer {
         if is_pump_fun {
             for market in &info.markets {
                 if market.lp_locked_pct >= 100.0 {
-                    log(
-                        LogTag::Security,
-                        "LP_PUMP_SAFE",
-                        &format!(
-                            "Pump.Fun LP verified as safe: locked_pct={:.2}%, mint={}",
-                            market.lp_locked_pct,
-                            info.mint
-                        )
-                    );
+                    if is_debug_security_enabled() {
+                        log(
+                            LogTag::Security,
+                            "LP_PUMP_SAFE",
+                            &format!(
+                                "Pump.Fun LP verified as safe: locked_pct={:.2}%, mint={}",
+                                market.lp_locked_pct,
+                                info.mint
+                            )
+                        );
+                    }
                     return true;
                 }
             }
-            log(
-                LogTag::Security,
-                "LP_PUMP_UNSAFE",
-                &format!(
-                    "Pump.Fun LP not fully locked: max_locked={:.2}%, mint={}",
-                    info.markets
-                        .iter()
-                        .map(|m| m.lp_locked_pct)
-                        .fold(0.0, f64::max),
-                    info.mint
-                )
-            );
+            if is_debug_security_enabled() {
+                log(
+                    LogTag::Security,
+                    "LP_PUMP_UNSAFE",
+                    &format!(
+                        "Pump.Fun LP not fully locked: max_locked={:.2}%, mint={}",
+                        info.markets
+                            .iter()
+                            .map(|m| m.lp_locked_pct)
+                            .fold(0.0, f64::max),
+                        info.mint
+                    )
+                );
+            }
             return false;
         }
 
@@ -645,17 +721,19 @@ impl SecurityAnalyzer {
             max_lp_locked >= 50.0
         };
 
-        log(
-            LogTag::Security,
-            "LP_CHECK",
-            &format!(
-                "LP safety check: max_locked={:.2}%, liquidity=${:.0}, safe={}, mint={}",
-                max_lp_locked,
-                info.total_market_liquidity,
-                is_safe,
-                info.mint
-            )
-        );
+        if is_debug_security_enabled() {
+            log(
+                LogTag::Security,
+                "LP_CHECK",
+                &format!(
+                    "LP safety check: max_locked={:.2}%, liquidity=${:.0}, safe={}, mint={}",
+                    max_lp_locked,
+                    info.total_market_liquidity,
+                    is_safe,
+                    info.mint
+                )
+            );
+        }
 
         is_safe
     }
@@ -691,19 +769,21 @@ impl SecurityAnalyzer {
             top_holder_pct < 60.0 && top_3_pct < 80.0 && top_10_pct < 92.0
         };
 
-        log(
-            LogTag::Security,
-            "HOLDER_CHECK",
-            &format!(
-                "Holder distribution: top1={:.2}%, top3={:.2}%, top10={:.2}%, liquidity=${:.0}, safe={}, mint={}",
-                top_holder_pct,
-                top_3_pct,
-                top_10_pct,
-                info.total_market_liquidity,
-                is_safe,
-                info.mint
-            )
-        );
+        if is_debug_security_enabled() {
+            log(
+                LogTag::Security,
+                "HOLDER_CHECK",
+                &format!(
+                    "Holder distribution: top1={:.2}%, top3={:.2}%, top10={:.2}%, liquidity=${:.0}, safe={}, mint={}",
+                    top_holder_pct,
+                    top_3_pct,
+                    top_10_pct,
+                    info.total_market_liquidity,
+                    is_safe,
+                    info.mint
+                )
+            );
+        }
 
         is_safe
     }
@@ -717,7 +797,9 @@ impl SecurityAnalyzer {
     pub async fn clear_cache(&self) {
         let mut cache = self.cache.write().await;
         cache.clear();
-        log(LogTag::Security, "CACHE_CLEAR", "Security cache cleared");
+        if is_debug_security_enabled() {
+            log(LogTag::Security, "CACHE_CLEAR", "Security cache cleared");
+        }
     }
 
     pub async fn get_cached_holder_count(&self, mint: &str) -> Option<u32> {

@@ -59,6 +59,10 @@ pub use security::{
     RiskLevel,
     is_token_safe,
     get_token_risk_level,
+    // Re-export helpers used by bins/tools
+    get_security_analyzer,
+    initialize_security_analyzer,
+    start_security_summary_task,
 };
 pub use security_db::{
     SecurityDatabase,
