@@ -11,6 +11,7 @@ use crate::tokens::security::{
     get_security_analyzer,
     initialize_security_analyzer,
     SecurityAnalyzer,
+    SecurityAnalysis,
     RiskLevel,
 };
 use crate::tokens::types::{ ApiToken, Token };
@@ -64,10 +65,6 @@ const MAX_TOP_3_HOLDERS_PCT: f64 = 30.0;
 const MIN_PUMPFUN_LP_LOCK_PCT: f64 = 50.0;
 /// Minimum LP lock percentage for regular tokens (very relaxed)
 const MIN_REGULAR_LP_LOCK_PCT: f64 = 50.0;
-/// Allow tokens with mint authority (trading focus over safety)
-const ALLOW_MINT_AUTHORITY: bool = false;
-/// Allow tokens with freeze authority (trading focus over safety)
-const ALLOW_FREEZE_AUTHORITY: bool = false;
 
 // =============================================================================
 // MAIN FILTERING FUNCTION
@@ -241,36 +238,78 @@ async fn check_cooldown_filter(mint: &str) -> bool {
     crate::positions::is_token_in_cooldown(mint).await
 }
 
-/// Check security requirements using minimal safety thresholds
+/// Check security requirements - STRICT authority checking
 async fn check_security_requirements(mint: &str) -> Option<FilterRejectionReason> {
+    use crate::global::is_debug_filtering_enabled;
+
     // Get security analyzer
     let analyzer = match get_security_analyzer() {
         Some(analyzer) => analyzer,
         None => {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "SECURITY_REJECT",
+                    &format!("No security analyzer available for mint={}", mint)
+                );
+            }
             return Some(FilterRejectionReason::SecurityNoData);
         }
     };
 
     // Get cached security data (avoid API calls for performance)
     match analyzer.analyze_token_any_cached(mint).await {
-        Some(risk_level) => {
-            // Apply minimal safety filtering based on risk level
-            match risk_level {
-                crate::tokens::security::RiskLevel::Safe => None, // Always allow safe tokens
-                crate::tokens::security::RiskLevel::Warning => None, // Allow warning tokens (permissive)
+        Some(analysis) => {
+            // CRITICAL: Always reject tokens with unsafe authorities (mint/freeze)
+            if !analysis.authorities_safe {
+                if is_debug_filtering_enabled() {
+                    log(
+                        LogTag::Filtering,
+                        "AUTHORITY_REJECT",
+                        &format!("Unsafe authorities detected for mint={}", mint)
+                    );
+                }
+                return Some(FilterRejectionReason::SecurityHighRisk);
+            }
+
+            // Apply risk level filtering
+            match analysis.risk_level {
                 crate::tokens::security::RiskLevel::Danger => {
-                    // Only reject danger tokens with very high risk
+                    if is_debug_filtering_enabled() {
+                        log(
+                            LogTag::Filtering,
+                            "RISK_REJECT",
+                            &format!("High risk level detected for mint={}", mint)
+                        );
+                    }
                     Some(FilterRejectionReason::SecurityHighRisk)
                 }
-                crate::tokens::security::RiskLevel::Unknown => {
-                    // Allow unknown tokens (permissive approach for new tokens)
-                    None
+                _ => {
+                    if is_debug_filtering_enabled() {
+                        log(
+                            LogTag::Filtering,
+                            "SECURITY_PASS",
+                            &format!(
+                                "Security check passed for mint={} risk={:?}",
+                                mint,
+                                analysis.risk_level
+                            )
+                        );
+                    }
+                    None // Allow Safe, Warning, Unknown if authorities are safe
                 }
             }
         }
         None => {
-            // No security data available - be permissive for new tokens
-            None
+            // No security data available - reject for safety
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "NO_DATA_REJECT",
+                    &format!("No security data available for mint={}", mint)
+                );
+            }
+            Some(FilterRejectionReason::SecurityNoData)
         }
     }
 }

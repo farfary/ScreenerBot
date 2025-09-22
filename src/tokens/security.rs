@@ -725,8 +725,8 @@ impl SecurityAnalyzer {
     }
 
     /// Lightweight cache-only security check for filtering: no API calls
-    /// Returns Some(risk_level) if cache or non-stale DB data exists, else None
-    pub async fn analyze_token_cached_only(&self, mint: &str) -> Option<RiskLevel> {
+    /// Returns Some(SecurityAnalysis) if cache or non-stale DB data exists, else None
+    pub async fn analyze_token_cached_only(&self, mint: &str) -> Option<SecurityAnalysis> {
         // 1) In-memory cache fast path
         {
             let cache = self.cache.read().await;
@@ -735,7 +735,7 @@ impl SecurityAnalyzer {
                 self.metrics.record_cache_hit();
                 let analysis = self.calculate_security_analysis(info);
                 self.metrics.record_analysis(&analysis);
-                return Some(analysis.risk_level);
+                return Some(analysis);
             }
         }
 
@@ -757,7 +757,7 @@ impl SecurityAnalyzer {
                             }
                             let analysis = self.calculate_security_analysis(&info);
                             self.metrics.record_analysis(&analysis);
-                            return Some(analysis.risk_level);
+                            return Some(analysis);
                         }
                         Ok(true) => {
                             // Stale counts as a miss for hit-rate visibility
@@ -786,10 +786,11 @@ impl SecurityAnalyzer {
     /// Analyze token using ANY available security data (including stale) for filtering
     /// This is more inclusive than cached_only - uses any DB data we have, even if old
     /// Still avoids API calls for performance in filtering context
-    pub async fn analyze_token_any_cached(&self, mint: &str) -> Option<RiskLevel> {
+    /// Returns full SecurityAnalysis for authority checking
+    pub async fn analyze_token_any_cached(&self, mint: &str) -> Option<SecurityAnalysis> {
         // First try the standard cache/fresh DB path
-        if let Some(risk_level) = self.analyze_token_cached_only(mint).await {
-            return Some(risk_level);
+        if let Some(analysis) = self.analyze_token_cached_only(mint).await {
+            return Some(analysis);
         }
 
         // If that fails, try ANY security data in DB, even if stale
@@ -798,7 +799,7 @@ impl SecurityAnalyzer {
                 // Use any available security data, regardless of age
                 let analysis = self.calculate_security_analysis(&info);
                 self.metrics.record_analysis(&analysis);
-                return Some(analysis.risk_level);
+                return Some(analysis);
             }
         }
 
