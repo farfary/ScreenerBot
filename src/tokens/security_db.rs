@@ -486,9 +486,10 @@ impl SecurityDatabase {
         // Use separate connection to tokens.db to avoid ATTACH race conditions
         let tokens_conn = Connection::open("data/tokens.db")?;
 
-        // Get token mints from tokens.db (limited to 100 for performance)
+        // Get token mints from tokens.db ordered by liquidity (highest first) with no hard limit
+        // Prioritize high-liquidity tokens to ensure security info is populated for tradable assets first
         let mut tokens_stmt = tokens_conn.prepare(
-            "SELECT mint FROM tokens ORDER BY mint LIMIT 100"
+            "SELECT mint FROM tokens ORDER BY liquidity_usd DESC"
         )?;
         let token_rows = tokens_stmt.query_map([], |row| {
             let mint: String = row.get(0)?;
