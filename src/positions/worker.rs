@@ -142,6 +142,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
     log(LogTag::Positions, "STARTUP", "🔍 Starting verification worker");
 
     let mut cycle_count = 0;
+    let mut last_summary = chrono::Utc::now();
 
     loop {
         cycle_count += 1;
@@ -221,6 +222,28 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                             queue_size_before
                         )
                     );
+                }
+
+                // Emit a periodic summary event every ~30s
+                let now = chrono::Utc::now();
+                if (now - last_summary).num_seconds() >= 30 {
+                    let (q_size_after, _) = super::queue::get_queue_status().await;
+                    crate::events::record_safe(
+                        crate::events::Event::new(
+                            crate::events::EventCategory::Position,
+                            Some("verification_worker_summary".to_string()),
+                            crate::events::Severity::Debug,
+                            None,
+                            None,
+                            serde_json::json!({
+                                "queue_size_before": queue_size_before,
+                                "queue_size_after": q_size_after,
+                                "requeued_count": requeued_count,
+                                "batch_size": VERIFICATION_BATCH_SIZE
+                            })
+                        )
+                    ).await;
+                    last_summary = now;
                 }
 
                 // Clean up expired items - only fetch block height if needed

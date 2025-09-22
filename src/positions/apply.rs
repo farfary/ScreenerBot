@@ -232,6 +232,18 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
             if let Some(sig) = old_sig {
                 remove_signature_from_index(&sig).await;
+                crate::events::record_safe(
+                    crate::events::Event::new(
+                        crate::events::EventCategory::Position,
+                        Some("exit_retry_cleared".to_string()),
+                        crate::events::Severity::Warn,
+                        None,
+                        Some(sig),
+                        serde_json::json!({
+                            "position_id": position_id
+                        })
+                    )
+                ).await;
             }
 
             if updated && transition.requires_db_update() {
@@ -287,6 +299,18 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             if let Ok(mint) = find_mint_by_position_id(position_id).await {
                 if let Some(_) = remove_position(&mint).await {
                     effects.position_removed = true;
+                    crate::events::record_safe(
+                        crate::events::Event::new(
+                            crate::events::EventCategory::Position,
+                            Some("orphan_entry_removed".to_string()),
+                            crate::events::Severity::Warn,
+                            Some(mint.clone()),
+                            None,
+                            serde_json::json!({
+                                "position_id": position_id
+                            })
+                        )
+                    ).await;
 
                     if is_debug_positions_enabled() {
                         log(

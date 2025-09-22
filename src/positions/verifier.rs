@@ -609,6 +609,20 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 )
                             );
 
+                            crate::events::record_safe(
+                                crate::events::Event::new(
+                                    crate::events::EventCategory::Position,
+                                    Some("exit_residual_detected".to_string()),
+                                    crate::events::Severity::Warn,
+                                    Some(item.mint.clone()),
+                                    item.position_id.map(|id| id.to_string()),
+                                    serde_json::json!({
+                                        "position_id": item.position_id,
+                                        "remaining_balance": remaining_balance
+                                    })
+                                )
+                            ).await;
+
                             return VerificationOutcome::Transition(
                                 PositionTransition::ExitFailedClearForRetry { position_id }
                             );

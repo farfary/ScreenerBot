@@ -15,6 +15,7 @@ use crate::{
 };
 use super::{ db::save_position, types::Position };
 use super::db as positions_db;
+use serde_json::json;
 use super::{
     state::{
         acquire_position_lock,
@@ -64,6 +65,20 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
 
     // Re-check no existing open position for this mint (prevents duplicate concurrent entries)
     if super::state::is_open_position(&token.mint).await {
+        // Record event for better post-mortem visibility
+        crate::events::record_safe(
+            crate::events::Event::new(
+                crate::events::EventCategory::Position,
+                Some("open_blocked_in_memory".to_string()),
+                crate::events::Severity::Warn,
+                Some(token.mint.clone()),
+                None,
+                json!({
+                    "reason": "is_open_position_guard",
+                    "mint": token.mint,
+                })
+            )
+        ).await;
         return Err("Already have open position for this token".to_string());
     }
 
@@ -87,6 +102,22 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
                         db_pos.exit_transaction_signature
                     )
                 );
+                // Record event for DB guard block
+                crate::events::record_safe(
+                    crate::events::Event::new(
+                        crate::events::EventCategory::Position,
+                        Some("open_blocked_db_guard".to_string()),
+                        crate::events::Severity::Warn,
+                        Some(token.mint.clone()),
+                        db_pos.entry_transaction_signature.clone(),
+                        json!({
+                            "db_position_id": db_pos.id,
+                            "entry_sig": db_pos.entry_transaction_signature,
+                            "exit_sig": db_pos.exit_transaction_signature,
+                            "has_exit_verified": db_pos.transaction_exit_verified,
+                        })
+                    )
+                ).await;
                 return Err("Open position already exists in DB".to_string());
             }
         }
@@ -130,6 +161,18 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
 
     // Mark mint as pending-open BEFORE submitting the swap to avoid duplicate attempts
     super::state::set_pending_open(&token.mint, super::state::PENDING_OPEN_TTL_SECS).await;
+    crate::events::record_safe(
+        crate::events::Event::new(
+            crate::events::EventCategory::Position,
+            Some("pending_open_set".to_string()),
+            crate::events::Severity::Debug,
+            Some(token.mint.clone()),
+            None,
+            json!({
+                "ttl_secs": super::state::PENDING_OPEN_TTL_SECS,
+            })
+        )
+    ).await;
 
     let quote = get_best_quote_for_opening(
         SOL_MINT,
@@ -242,6 +285,16 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
 
     // We successfully created the position; clear pending-open now
     super::state::clear_pending_open(&token.mint).await;
+    crate::events::record_safe(
+        crate::events::Event::new(
+            crate::events::EventCategory::Position,
+            Some("pending_open_cleared".to_string()),
+            crate::events::Severity::Debug,
+            Some(token.mint.clone()),
+            Some(transaction_signature.clone()),
+            json!({})
+        )
+    ).await;
 
     log(
         LogTag::Positions,
@@ -298,6 +351,18 @@ pub async fn close_position_direct(
                     &pending_sig[..8]
                 )
             );
+            crate::events::record_safe(
+                crate::events::Event::new(
+                    crate::events::EventCategory::Position,
+                    Some("exit_blocked_pending_sig".to_string()),
+                    crate::events::Severity::Warn,
+                    Some(token.mint.clone()),
+                    Some(pending_sig.clone()),
+                    json!({
+                        "reason": "pending_exit_tx_present"
+                    })
+                )
+            ).await;
             return Err(
                 format!("Position already has pending exit transaction: {}", &pending_sig[..8])
             );
