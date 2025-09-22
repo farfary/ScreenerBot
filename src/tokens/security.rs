@@ -182,6 +182,7 @@ pub struct SecuritySummary {
     pub db_high_score_tokens: u64,
     pub last_api_call: Option<Instant>,
     pub top_rejection_reasons: Vec<(String, u64)>,
+    pub db_unprocessed_tokens: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -888,6 +889,13 @@ impl SecurityAnalyzer {
             Err(_) => HashMap::new(),
         };
 
+        // Count tokens present in tokens.db missing security_info (unprocessed)
+        let db_unprocessed_tokens: u64 = self
+            .get_db()
+            .ok()
+            .and_then(|db| db.count_tokens_without_security().ok())
+            .unwrap_or(0) as u64;
+
         // Prepare top rejection reasons snapshot (top 5)
         let top_rejection_reasons = {
             let mut pairs: Vec<(String, u64)> = self.metrics.rejection_reasons
@@ -920,6 +928,7 @@ impl SecurityAnalyzer {
             db_high_score_tokens: db_stats.get("high_score").copied().unwrap_or(0) as u64,
             last_api_call,
             top_rejection_reasons,
+            db_unprocessed_tokens,
         }
     }
 
@@ -1055,7 +1064,7 @@ fn log_security_summary(summary: &SecuritySummary) {
              ⚡ Hits: {}/{} ({:.1}% hit rate) | � Cache Size: {} tokens\n\
              \n\
              {} DATABASE PERFORMANCE:\n\
-             💾 Hits: {}/{} ({:.1}% hit rate) | 📊 Total: {} tokens | 🟢 Safe: {} tokens\n\
+             💾 Hits: {}/{} ({:.1}% hit rate) | 📊 Total: {} tokens | 🟢 Safe: {} tokens | ⏳ Unprocessed: {}\n\
              \n\
              {} TOKEN SAFETY OVERVIEW:\n\
              🛡️ Safe: {} tokens ({:.1}%) | ⛔ Unsafe: {} tokens | ❓ Unknown: {} tokens\n\
@@ -1089,6 +1098,7 @@ fn log_security_summary(summary: &SecuritySummary) {
             db_hit_rate,
             summary.db_total_tokens,
             summary.db_safe_tokens,
+            summary.db_unprocessed_tokens,
             safety_status_icon,
             summary.tokens_safe,
             safe_percentage,

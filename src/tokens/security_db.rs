@@ -447,6 +447,28 @@ impl SecurityDatabase {
 
         Ok(stats)
     }
+
+    /// Count tokens present in tokens.db that do not have a corresponding row in security_info
+    /// Read-only, uses ATTACH DATABASE to avoid a second connection lifecycle here.
+    pub fn count_tokens_without_security(&self) -> SqliteResult<i64> {
+        // Attach tokens database under an alias for this query scope
+        // If already attached, the statement will be a no-op; ignore errors on detach
+        let _ = self.conn.execute("DETACH DATABASE tokensdb", []);
+        self.conn.execute("ATTACH DATABASE 'data/tokens.db' AS tokensdb", [])?;
+
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT COUNT(*)
+            FROM tokensdb.tokens t
+            LEFT JOIN security_info s ON s.mint = t.mint
+            WHERE s.mint IS NULL
+            "#
+        )?;
+        let count: i64 = stmt.query_row([], |row| row.get(0))?;
+
+        let _ = self.conn.execute("DETACH DATABASE tokensdb", []);
+        Ok(count)
+    }
 }
 
 // Helper function to parse Rugcheck JSON response into SecurityInfo
