@@ -827,22 +827,51 @@ impl SecurityAnalyzer {
         {
             let cache = self.cache.read().await;
             if let Some(info) = cache.get(mint) {
+                // Record cache hit and analysis metrics for summary accuracy
+                self.metrics.record_cache_hit();
                 let analysis = self.calculate_security_analysis(info);
+                self.metrics.record_analysis(&analysis);
                 return Some(analysis.is_safe);
             }
         }
 
+        // Record a cache miss when not found in memory
+        self.metrics.record_cache_miss();
+
         // 2) Database non-stale path
         if let Ok(db) = self.get_db() {
-            if let Ok(Some(info)) = db.get_security_info(mint) {
-                if let Ok(false) = db.is_stale(mint, MAX_CACHE_AGE_HOURS) {
-                    // Put into cache for next time
-                    {
-                        let mut cache = self.cache.write().await;
-                        cache.insert(mint.to_string(), info.clone());
+            match db.get_security_info(mint) {
+                Ok(Some(info)) => {
+                    match db.is_stale(mint, MAX_CACHE_AGE_HOURS) {
+                        Ok(false) => {
+                            // Count DB hit
+                            self.metrics.record_db_hit();
+                            // Put into cache for next time
+                            {
+                                let mut cache = self.cache.write().await;
+                                cache.insert(mint.to_string(), info.clone());
+                            }
+                            let analysis = self.calculate_security_analysis(&info);
+                            self.metrics.record_analysis(&analysis);
+                            return Some(analysis.is_safe);
+                        }
+                        Ok(true) => {
+                            // Stale counts as a miss for hit-rate visibility
+                            self.metrics.record_db_miss();
+                        }
+                        Err(_) => {
+                            // Error also treated as miss
+                            self.metrics.record_db_miss();
+                        }
                     }
-                    let analysis = self.calculate_security_analysis(&info);
-                    return Some(analysis.is_safe);
+                }
+                Ok(None) => {
+                    // Not found counts as miss
+                    self.metrics.record_db_miss();
+                }
+                Err(_) => {
+                    // Error counts as miss
+                    self.metrics.record_db_miss();
                 }
             }
         }
