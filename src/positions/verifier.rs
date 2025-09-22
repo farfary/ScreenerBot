@@ -13,6 +13,34 @@ use super::{
     state::get_mint_by_signature,
 };
 use chrono::Utc;
+use std::collections::HashMap;
+use std::sync::LazyLock;
+use tokio::sync::RwLock;
+
+// Throttle repeated token accounts queries per mint to reduce RPC pressure
+const TOKEN_ACCOUNTS_THROTTLE_SECS: i64 = 5; // min interval per mint between balance checks
+
+static LAST_TOKEN_ACCOUNTS_CHECK: LazyLock<
+    RwLock<HashMap<String, chrono::DateTime<Utc>>>
+> = LazyLock::new(|| RwLock::new(HashMap::new()));
+
+async fn should_throttle_token_accounts(mint: &str) -> bool {
+    let now = Utc::now();
+    {
+        let map = LAST_TOKEN_ACCOUNTS_CHECK.read().await;
+        if let Some(last) = map.get(mint) {
+            if (now - *last).num_seconds() < TOKEN_ACCOUNTS_THROTTLE_SECS {
+                return true;
+            }
+        }
+    }
+    // Upgrade to write: record this check time
+    {
+        let mut map = LAST_TOKEN_ACCOUNTS_CHECK.write().await;
+        map.insert(mint.to_string(), now);
+    }
+    false
+}
 use serde_json::Value;
 
 /// Classify transient (retryable) verification errors
@@ -478,6 +506,22 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             // Prefer authoritative on-chain balance immediately after entry finalization, if available.
             // This avoids float rounding drift and accounts for token-2022 transfer fees or router nuances.
             if let Ok(wallet_address) = get_wallet_address() {
+                // Throttle token accounts query to reduce RPC load
+                if should_throttle_token_accounts(&item.mint).await {
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG",
+                            &format!(
+                                "⏳ Throttling token accounts check (entry verify) for mint {}",
+                                crate::utils::safe_truncate(&item.mint, 8)
+                            )
+                        );
+                    }
+                    return VerificationOutcome::RetryTransient(
+                        "Token accounts check throttled".to_string()
+                    );
+                }
                 if
                     let Ok(actual_units) = get_total_token_balance(
                         &wallet_address,
@@ -534,6 +578,22 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             // CRITICAL: Check if any tokens remain after exit. If so, clear for retry instead of
             // marking exit verified. This ensures we re-attempt until ATA is zero and closable.
             if let Ok(wallet_address) = get_wallet_address() {
+                // Throttle token accounts query to reduce RPC load
+                if should_throttle_token_accounts(&item.mint).await {
+                    if is_debug_positions_enabled() {
+                        log(
+                            LogTag::Positions,
+                            "DEBUG",
+                            &format!(
+                                "⏳ Throttling token accounts check (exit residual) for mint {}",
+                                crate::utils::safe_truncate(&item.mint, 8)
+                            )
+                        );
+                    }
+                    return VerificationOutcome::RetryTransient(
+                        "Token accounts check throttled".to_string()
+                    );
+                }
                 match get_total_token_balance(&wallet_address, &item.mint).await {
                     Ok(remaining_balance) => {
                         if remaining_balance > 0 {

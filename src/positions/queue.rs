@@ -47,18 +47,37 @@ impl VerificationItem {
     pub fn with_retry(&self) -> Self {
         // Compute exponential backoff (bounded) based on attempts (after increment)
         let next_attempts = self.attempts.saturating_add(1);
-        // Tiered backoff in seconds: 1, 3, 7, 15, 30, 60, 90, 120
+        // Tiered backoff in seconds (more conservative to reduce RPC pressure):
+        // 5, 10, 20, 40, 60, 90, 120, 150, 180, 210, 240, 300
         let backoff_secs = match next_attempts {
             0 => 0,
-            1 => 1,
-            2 => 3,
-            3 => 7,
-            4 => 15,
-            5 => 30,
-            6 => 60,
-            7 => 90,
-            _ => 120,
+            1 => 5,
+            2 => 10,
+            3 => 20,
+            4 => 40,
+            5 => 60,
+            6 => 90,
+            7 => 120,
+            8 => 150,
+            9 => 180,
+            10 => 210,
+            _ => 300,
         };
+
+        // Add small jitter (±10%) to avoid thundering herd
+        let jitter_fraction: f64 = 0.1;
+        let jitter = {
+            // Simple deterministic jitter based on signature hash and attempt number
+            use std::hash::{ Hash, Hasher };
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            self.signature.hash(&mut hasher);
+            next_attempts.hash(&mut hasher);
+            let h = hasher.finish();
+            let sign = if (h & 1) == 0 { 1.0 } else { -1.0 };
+            let frac = (((h >> 1) as f64) / ((u64::MAX >> 1) as f64)) * jitter_fraction;
+            ((backoff_secs as f64) * frac * sign) as i64
+        };
+        let backoff_with_jitter = std::cmp::max(1, (backoff_secs as i64) + jitter);
 
         Self {
             signature: self.signature.clone(),
@@ -67,7 +86,7 @@ impl VerificationItem {
             kind: self.kind.clone(),
             created_at: self.created_at,
             last_attempt_at: Some(Utc::now()),
-            next_retry_at: Some(Utc::now() + ChronoDuration::seconds(backoff_secs)),
+            next_retry_at: Some(Utc::now() + ChronoDuration::seconds(backoff_with_jitter)),
             attempts: next_attempts,
             expiry_height: self.expiry_height,
         }
