@@ -169,7 +169,19 @@ pub async fn run_bot() -> Result<(), String> {
         }
     };
 
-    // Initialize pool service for real-time price calculations and history caching
+    // Start PositionsManager EARLY to ensure open positions are loaded into memory
+    // before the pool service begins discovery (so position tokens are prioritized from tick 1)
+    if let Err(e) = positions::start_positions_manager_service(shutdown.clone()).await {
+        debug_log(
+            LogTag::System,
+            "ERROR",
+            &format!("Failed to start positions manager service: {}", e)
+        );
+        return Err(format!("Failed to start positions manager service: {}", e));
+    }
+    debug_log(LogTag::System, "INFO", "Positions manager initialized (pre-pool)");
+
+    // Initialize pool service for real-time price calculations and history caching (after positions loaded)
     let _pool_service = crate::pools::init_pool_service(shutdown.clone()).await;
     debug_log(LogTag::System, "INFO", "Pool price service with disk caching initialized");
 
@@ -331,13 +343,7 @@ pub async fn run_bot() -> Result<(), String> {
         }
     }
 
-    // Start PositionsManager background service
-    let shutdown_positions_manager = shutdown.clone();
-    let positions_manager_handle = tokio::spawn(async move {
-        debug_log(LogTag::System, "INFO", "PositionsManager service task started");
-        let _sender = positions::start_positions_manager_service(shutdown_positions_manager).await;
-        debug_log(LogTag::System, "INFO", "PositionsManager service task ended");
-    });
+    // PositionsManager already started above (pre-pool). No duplicate spawn here.
 
     // Initialize learning system
     if let Err(e) = crate::learner::initialize_learning_system().await {
@@ -614,17 +620,7 @@ pub async fn run_bot() -> Result<(), String> {
             learner::shutdown_learning_system().await;
             log(LogTag::System, "INFO", "✅ Learning system shutdown completed");
 
-            // Wait for PositionsManager service
-            log(LogTag::System, "INFO", "🔄 Waiting for PositionsManager task to shutdown...");
-            if let Err(e) = positions_manager_handle.await {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!("PositionsManager task failed to shutdown cleanly: {}", e)
-                );
-            } else {
-                log(LogTag::System, "INFO", "✅ PositionsManager task shutdown completed");
-            }
+            // PositionsManager was initialized pre-pool and internally spawns its worker; no dedicated task handle to await here.
 
             // Wait for RPC stats auto-save service
             log(LogTag::System, "INFO", "🔄 Waiting for RPC stats auto-save task to shutdown...");
