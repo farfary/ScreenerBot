@@ -2,7 +2,7 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::security_db::{ SecurityDatabase, SecurityInfo, parse_rugcheck_response };
 use once_cell::sync::Lazy;
 use reqwest::{ Client, StatusCode };
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
 use std::sync::{ Arc, Mutex };
 use std::sync::atomic::{ AtomicU64, Ordering };
 use tokio::sync::RwLock;
@@ -129,16 +129,23 @@ impl SecurityMetrics {
             self.tokens_unknown.fetch_add(1, Ordering::Relaxed);
         } else {
             self.tokens_unsafe.fetch_add(1, Ordering::Relaxed);
-            // Aggregate rejection reasons
-            if !analysis.risks.is_empty() {
-                let mut map = self.rejection_reasons.lock().unwrap_or_else(|e| e.into_inner());
-                for r in &analysis.risks {
-                    let key = normalize_reason(r);
-                    *map.entry(key).or_insert(0) += 1;
-                }
-            } else {
-                let mut map = self.rejection_reasons.lock().unwrap_or_else(|e| e.into_inner());
-                *map.entry("Unspecified".to_string()).or_insert(0) += 1;
+            // Aggregate rejection reasons per token (deduplicated categories per token)
+            let mut categories: HashSet<String> = HashSet::new();
+            for r in &analysis.risks {
+                categories.insert(normalize_reason(r));
+            }
+            // Consider Pump.fun nature as a reason category
+            if analysis.pump_fun_token {
+                categories.insert("Pump.fun risk".to_string());
+            }
+            // If still empty but token is unsafe, attribute to low score
+            if categories.is_empty() {
+                categories.insert("Low Rugcheck score".to_string());
+            }
+
+            let mut map = self.rejection_reasons.lock().unwrap_or_else(|e| e.into_inner());
+            for cat in categories {
+                *map.entry(cat).or_insert(0) += 1;
             }
         }
         if analysis.pump_fun_token {
