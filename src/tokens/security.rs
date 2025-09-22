@@ -1139,112 +1139,57 @@ fn log_security_summary(summary: &SecuritySummary) {
         "never".to_string()
     };
 
-    // Create status indicators with emojis
-    let api_status_icon = if api_success_rate >= 90.0 {
-        "🟢"
-    } else if api_success_rate >= 70.0 {
-        "🟡"
-    } else {
-        "🔴"
+    // Compact summary: minimal emojis (header/footer + safety), concise single-line sections.
+    let reasons_inline = {
+        if summary.top_rejection_reasons.is_empty() {
+            "-".to_string()
+        } else {
+            let mut parts: Vec<String> = Vec::new();
+            for (idx, (reason, count)) in summary.top_rejection_reasons.iter().take(3).enumerate() {
+                let pct = if summary.tokens_unsafe > 0 {
+                    ((*count as f64) / (summary.tokens_unsafe as f64)) * 100.0
+                } else {
+                    0.0
+                };
+                parts.push(format!("{}. {} — {} ({:.1}%)", idx + 1, reason, count, pct));
+            }
+            parts.join(" | ")
+        }
     };
 
-    let cache_status_icon = if cache_hit_rate >= 80.0 {
-        "⚡"
-    } else if cache_hit_rate >= 50.0 {
-        "🟡"
-    } else {
-        "🔴"
-    };
-
-    let db_status_icon = if db_hit_rate >= 70.0 {
-        "💾"
-    } else if db_hit_rate >= 40.0 {
-        "🟡"
-    } else {
-        "🔴"
-    };
-
-    let safety_status_icon = if safe_percentage >= 50.0 {
-        "🛡️"
-    } else if safe_percentage >= 20.0 {
-        "⚠️"
-    } else {
-        "⛔"
-    };
-
-    // Create formatted sections without table structure
     log(
         LogTag::Security,
         "MONITOR",
         &format!(
-            "\n🔐 ════════════════════════════════════════════════════════════════════════\n\
-             🔐 SECURITY ANALYZER STATUS - 30 Second Summary Report\n\
-             🔐 ════════════════════════════════════════════════════════════════════════\n\
-             \n\
-             {} API PERFORMANCE:\n\
-             📞 Total Calls: {} | ✅ Success: {} ({:.1}%) | ❌ Failed: {} | ⏰ Last: {}\n\
-             \n\
-             {} CACHE PERFORMANCE:\n\
-             ⚡ Hits: {}/{} ({:.1}% hit rate) | � Cache Size: {} tokens\n\
-             \n\
-             {} DATABASE PERFORMANCE:\n\
-             💾 Hits: {}/{} ({:.1}% hit rate) | 📊 Total: {} tokens | 🟢 Safe: {} tokens | ⏳ Unprocessed: {}\n\
-             \n\
-             {} TOKEN SAFETY OVERVIEW:\n\
-             🛡️ Safe: {} tokens ({:.1}%) | ⛔ Unsafe: {} tokens | ❓ Unknown: {} tokens\n\
-             🔄 Pump.Fun: {} tokens | 📈 High Score: {} tokens\n\
-             \n\
-             🚫 TOP REJECTION REASONS (last session):\n\
-             {}\n\
-             \n\
-             � SESSION SUMMARY:\n\
-             ├─ Total Analyzed: {} tokens\n\
-             ├─ Safety Rate: {:.1}% classified as safe\n\
-             ├─ API Success Rate: {:.1}% ({} successful calls)\n\
-             ├─ Cache Efficiency: {:.1}% hit rate ({})\n\
-             └─ Database Coverage: {}/{} tokens stored\n\
-             \n\
-             🔐 ════════════════════════════════════════════════════════════════════════",
-            api_status_icon,
-            summary.api_calls_total,
-            summary.api_calls_success,
-            api_success_rate,
-            summary.api_calls_failed,
-            last_api,
-            cache_status_icon,
-            summary.cache_hits,
-            summary.cache_hits + summary.cache_misses,
-            cache_hit_rate,
-            summary.cache_size,
-            db_status_icon,
-            summary.db_hits,
-            summary.db_hits + summary.db_misses,
-            db_hit_rate,
-            summary.db_total_tokens,
-            summary.db_safe_tokens,
-            summary.db_unprocessed_tokens,
-            safety_status_icon,
-            summary.tokens_safe,
-            safe_percentage,
-            summary.tokens_unsafe,
-            summary.tokens_unknown,
-            summary.pump_fun_tokens,
-            summary.db_high_score_tokens,
-            format_top_reasons(&summary.top_rejection_reasons, summary.tokens_unsafe),
-            summary.tokens_analyzed,
-            safe_percentage,
-            api_success_rate,
-            summary.api_calls_success,
-            cache_hit_rate,
-            if cache_hit_rate >= 80.0 {
-                "EXCELLENT"
-            } else if cache_hit_rate >= 50.0 {
-                "GOOD"
-            } else {
-                "NEEDS IMPROVEMENT"
-            },
-            summary.db_safe_tokens,
-            summary.db_total_tokens
+            "\n🔐 Security (30s)\n\
+             SAFETY: 🛡️ {safe_cnt} ({safe_pct:.1}%) | ⛔ {unsafe_cnt} | ❓ {unknown_cnt}\n\
+             API: calls={api_total}, ok={api_ok} ({api_pct:.1}%), fail={api_fail}, last={last_api}\n\
+             CACHE: {cache_hits}/{cache_total} ({cache_rate:.1}%), size={cache_size} | DB: {db_hits}/{db_total} ({db_rate:.1}%), stored={db_tokens_safe}/{db_tokens_total}, unproc={db_unprocessed}\n\
+             MARKET: pump.fun={pump_cnt}, high_score={high_score_cnt}\n\
+             REASONS: {reasons}\n\
+             🔐",
+            safe_cnt = summary.tokens_safe,
+            safe_pct = safe_percentage,
+            unsafe_cnt = summary.tokens_unsafe,
+            unknown_cnt = summary.tokens_unknown,
+            api_total = summary.api_calls_total,
+            api_ok = summary.api_calls_success,
+            api_pct = api_success_rate,
+            api_fail = summary.api_calls_failed,
+            last_api = last_api,
+            cache_hits = summary.cache_hits,
+            cache_total = summary.cache_hits + summary.cache_misses,
+            cache_rate = cache_hit_rate,
+            cache_size = summary.cache_size,
+            db_hits = summary.db_hits,
+            db_total = summary.db_hits + summary.db_misses,
+            db_rate = db_hit_rate,
+            db_tokens_total = summary.db_total_tokens,
+            db_tokens_safe = summary.db_safe_tokens,
+            db_unprocessed = summary.db_unprocessed_tokens,
+            pump_cnt = summary.pump_fun_tokens,
+            high_score_cnt = summary.db_high_score_tokens,
+            reasons = reasons_inline
         )
     );
 }
