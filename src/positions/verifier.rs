@@ -504,7 +504,9 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             }
 
             // Prefer authoritative on-chain balance immediately after entry finalization, if available.
-            // This avoids float rounding drift and accounts for token-2022 transfer fees or router nuances.
+            // IMPORTANT: Only ever reduce token_amount_units to the on-chain balance if it's smaller.
+            // Never increase to an aggregated wallet balance as that may include subsequent buys and
+            // incorrectly attribute tokens to this entry (causing duplicate-buys to be merged).
             if let Ok(wallet_address) = get_wallet_address() {
                 // Throttle token accounts query to reduce RPC load
                 if should_throttle_token_accounts(&item.mint).await {
@@ -528,13 +530,13 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         &item.mint
                     ).await
                 {
-                    if actual_units > 0 && actual_units != token_amount_units {
+                    if actual_units > 0 && actual_units < token_amount_units {
                         if is_debug_positions_enabled() {
                             log(
                                 LogTag::Positions,
                                 "ENTRY_UNITS_CORRECTED",
                                 &format!(
-                                    "Adjusted token units to on-chain balance for mint {}: tx-derived={} actual={}",
+                                    "Reduced token units to on-chain balance for mint {}: tx-derived={} actual={}",
                                     &item.mint,
                                     token_amount_units,
                                     actual_units

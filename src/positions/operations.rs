@@ -14,6 +14,7 @@ use crate::{
     },
 };
 use super::{ db::save_position, types::Position };
+use super::db as positions_db;
 use super::{
     state::{
         acquire_position_lock,
@@ -64,6 +65,31 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     // Re-check no existing open position for this mint (prevents duplicate concurrent entries)
     if super::state::is_open_position(&token.mint).await {
         return Err("Already have open position for this token".to_string());
+    }
+
+    // Extra safety: consult database for any existing open or unverified position for this mint.
+    // This covers edge cases across restarts or rare state desyncs where in-memory guards miss.
+    if let Ok(db_pos_opt) = positions_db::get_position_by_mint(&token.mint).await {
+        if let Some(db_pos) = db_pos_opt {
+            let is_still_open =
+                db_pos.position_type == "buy" &&
+                db_pos.exit_time.is_none() &&
+                (!db_pos.exit_transaction_signature.is_some() || !db_pos.transaction_exit_verified);
+            if is_still_open {
+                log(
+                    LogTag::Positions,
+                    "DB_GUARD_OPEN_BLOCKED",
+                    &format!(
+                        "🚫 DB guard: mint {} already has open/unverified position (id: {:?}, entry_sig: {:?}, exit_sig: {:?})",
+                        &token.mint,
+                        db_pos.id,
+                        db_pos.entry_transaction_signature,
+                        db_pos.exit_transaction_signature
+                    )
+                );
+                return Err("Open position already exists in DB".to_string());
+            }
+        }
     }
 
     // Note: No need to check MAX_OPEN_POSITIONS here anymore - the semaphore enforces it atomically
