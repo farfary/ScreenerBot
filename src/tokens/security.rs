@@ -11,6 +11,51 @@ use tokio::time::{ sleep, Duration, Instant };
 const RUGCHECK_API_BASE: &str = "https://api.rugcheck.xyz/v1/tokens";
 const MAX_CACHE_AGE_HOURS: i64 = 24; // Cache security data for 24 hours
 
+// Normalize raw risk strings into concise categories for aggregation
+fn normalize_reason(reason: &str) -> String {
+    let r = reason.to_lowercase();
+    if
+        r.contains("authorit") ||
+        r.contains("not revoked") ||
+        r.contains("mint authority") ||
+        r.contains("freeze authority")
+    {
+        return "Authorities not revoked".to_string();
+    }
+    if
+        r.contains("lp") &&
+        (r.contains("not") ||
+            r.contains("unlock") ||
+            r.contains("lock") ||
+            r.contains("locked") ||
+            r.contains("burn"))
+    {
+        return "LP not locked/burned".to_string();
+    }
+    if
+        r.contains("holder") ||
+        r.contains("concentration") ||
+        r.contains("top10") ||
+        r.contains("top1")
+    {
+        return "High holder concentration".to_string();
+    }
+    if r.contains("liquidity") || r.contains("low liquidity") {
+        return "Low liquidity".to_string();
+    }
+    if r.contains("pump") {
+        return "Pump.fun risk".to_string();
+    }
+    if r.contains("blacklist") {
+        return "Blacklisted".to_string();
+    }
+    if r.contains("danger") || r.contains("risk") {
+        return "Rugcheck risk: danger".to_string();
+    }
+    // Compact long strings
+    reason.chars().take(64).collect()
+}
+
 #[derive(Debug, Default)]
 pub struct SecurityMetrics {
     pub api_calls_total: AtomicU64,
@@ -26,11 +71,28 @@ pub struct SecurityMetrics {
     pub tokens_unknown: AtomicU64,
     pub pump_fun_tokens: AtomicU64,
     pub last_api_call: Arc<RwLock<Option<Instant>>>,
+    // Aggregated rejection reasons for unsafe classifications
+    pub rejection_reasons: Arc<Mutex<HashMap<String, u64>>>,
 }
 
 impl SecurityMetrics {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            api_calls_total: AtomicU64::new(0),
+            api_calls_success: AtomicU64::new(0),
+            api_calls_failed: AtomicU64::new(0),
+            cache_hits: AtomicU64::new(0),
+            cache_misses: AtomicU64::new(0),
+            db_hits: AtomicU64::new(0),
+            db_misses: AtomicU64::new(0),
+            tokens_analyzed: AtomicU64::new(0),
+            tokens_safe: AtomicU64::new(0),
+            tokens_unsafe: AtomicU64::new(0),
+            tokens_unknown: AtomicU64::new(0),
+            pump_fun_tokens: AtomicU64::new(0),
+            last_api_call: Arc::new(RwLock::new(None)),
+            rejection_reasons: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     pub async fn record_api_call(&self, success: bool) {
@@ -67,6 +129,17 @@ impl SecurityMetrics {
             self.tokens_unknown.fetch_add(1, Ordering::Relaxed);
         } else {
             self.tokens_unsafe.fetch_add(1, Ordering::Relaxed);
+            // Aggregate rejection reasons
+            if !analysis.risks.is_empty() {
+                let mut map = self.rejection_reasons.lock().unwrap_or_else(|e| e.into_inner());
+                for r in &analysis.risks {
+                    let key = normalize_reason(r);
+                    *map.entry(key).or_insert(0) += 1;
+                }
+            } else {
+                let mut map = self.rejection_reasons.lock().unwrap_or_else(|e| e.into_inner());
+                *map.entry("Unspecified".to_string()).or_insert(0) += 1;
+            }
         }
         if analysis.pump_fun_token {
             self.pump_fun_tokens.fetch_add(1, Ordering::Relaxed);
@@ -100,6 +173,7 @@ pub struct SecuritySummary {
     pub db_safe_tokens: u64,
     pub db_high_score_tokens: u64,
     pub last_api_call: Option<Instant>,
+    pub top_rejection_reasons: Vec<(String, u64)>,
 }
 
 #[derive(Debug, Clone)]
@@ -666,6 +740,19 @@ impl SecurityAnalyzer {
             Err(_) => HashMap::new(),
         };
 
+        // Prepare top rejection reasons snapshot (top 5)
+        let top_rejection_reasons = {
+            let mut pairs: Vec<(String, u64)> = self.metrics.rejection_reasons
+                .lock()
+                .map(|m| m.clone())
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
+            pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            pairs.truncate(5);
+            pairs
+        };
+
         SecuritySummary {
             api_calls_total: self.metrics.api_calls_total.load(Ordering::Relaxed),
             api_calls_success: self.metrics.api_calls_success.load(Ordering::Relaxed),
@@ -684,6 +771,7 @@ impl SecurityAnalyzer {
             db_safe_tokens: db_stats.get("safe").copied().unwrap_or(0) as u64,
             db_high_score_tokens: db_stats.get("high_score").copied().unwrap_or(0) as u64,
             last_api_call,
+            top_rejection_reasons,
         }
     }
 
@@ -825,6 +913,9 @@ fn log_security_summary(summary: &SecuritySummary) {
              🛡️ Safe: {} tokens ({:.1}%) | ⛔ Unsafe: {} tokens | ❓ Unknown: {} tokens\n\
              🔄 Pump.Fun: {} tokens | 📈 High Score: {} tokens\n\
              \n\
+             🚫 TOP REJECTION REASONS (last session):\n\
+             {}\n\
+             \n\
              � SESSION SUMMARY:\n\
              ├─ Total Analyzed: {} tokens\n\
              ├─ Safety Rate: {:.1}% classified as safe\n\
@@ -857,6 +948,7 @@ fn log_security_summary(summary: &SecuritySummary) {
             summary.tokens_unknown,
             summary.pump_fun_tokens,
             summary.db_high_score_tokens,
+            format_top_reasons(&summary.top_rejection_reasons, summary.tokens_unsafe),
             summary.tokens_analyzed,
             safe_percentage,
             api_success_rate,
@@ -873,6 +965,23 @@ fn log_security_summary(summary: &SecuritySummary) {
             summary.db_total_tokens
         )
     );
+}
+
+fn format_top_reasons(top: &[(String, u64)], total_unsafe: u64) -> String {
+    if top.is_empty() {
+        return "(no unsafe tokens recorded)".to_string();
+    }
+    let mut out = String::new();
+    for (i, (reason, count)) in top.iter().enumerate() {
+        let pct = if total_unsafe > 0 {
+            ((*count as f64) / (total_unsafe as f64)) * 100.0
+        } else {
+            0.0
+        };
+        // Indented bullet points
+        out.push_str(&format!("   {}. {} — {} ({:.1}%)\n", i + 1, reason, count, pct));
+    }
+    out.trim_end().to_string()
 }
 
 #[cfg(test)]
