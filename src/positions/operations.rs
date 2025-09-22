@@ -420,9 +420,10 @@ pub async fn close_position_direct(
         );
     }
 
-    // Update position with exit signature
+    // Update position with exit signature and market exit price
     super::state::update_position_state(token_mint, |pos| {
         pos.exit_transaction_signature = Some(transaction_signature.clone());
+        pos.exit_price = Some(exit_price); // Store pool/market price at exit decision time
         pos.closed_reason = Some(format!("{}_pending_verification", exit_reason));
     }).await;
 

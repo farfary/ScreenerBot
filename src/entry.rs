@@ -1398,8 +1398,6 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
     }
 }
 
-// Removed complex multi-style detectors and confidence systems
-
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================

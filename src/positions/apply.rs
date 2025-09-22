@@ -94,7 +94,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     pos.sol_received = Some(sol_received);
                     pos.exit_fee_lamports = Some(fee_lamports);
                     pos.exit_time = Some(exit_time);
-                    pos.exit_price = Some(effective_exit_price);
+                    // Note: exit_price is already set by close_position_direct to market price
                 }
             ).await;
 
