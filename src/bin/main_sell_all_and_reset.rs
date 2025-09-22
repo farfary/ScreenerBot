@@ -120,6 +120,9 @@ fn print_help() {
     log(LogTag::System, "INFO", "    • data/rpc_stats.json (RPC statistics)");
     log(LogTag::System, "INFO", "    • data/ata_failed_cache.json (failed ATA cache)");
     log(LogTag::System, "INFO", "    • data/positions.db (trading positions database)");
+    log(LogTag::System, "INFO", "    • data/events.db (events system database)");
+    log(LogTag::System, "INFO", "    • data/events.db-shm (events DB shared memory)");
+    log(LogTag::System, "INFO", "    • data/events.db-wal (events DB write-ahead log)");
     log(LogTag::System, "INFO", "    • logs/screenerbot_*.log (all bot log files)");
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "INFO", "FILES THAT WILL BE PRESERVED:");
@@ -169,6 +172,9 @@ const DATA_FILES_TO_REMOVE: &[&str] = &[
     "data/rpc_stats.json",
     "data/ata_failed_cache.json",
     "data/positions.db",
+    "data/events.db",
+    "data/events.db-shm",
+    "data/events.db-wal",
 ];
 
 /// Configuration for retry logic
