@@ -79,7 +79,8 @@ pub async fn record_transaction_event(
         "fee": fee,
         "slot": slot,
         "success": success,
-        "error_message": error_message
+        "error_message": error_message,
+        "event_time": Utc::now().to_rfc3339()
     });
 
     let severity = if success { Severity::Info } else { Severity::Error };
@@ -114,7 +115,8 @@ pub async fn record_swap_event(
         "amount_in": amount_in,
         "amount_out": amount_out,
         "success": success,
-        "error_message": error_message
+        "error_message": error_message,
+        "event_time": Utc::now().to_rfc3339()
     });
 
     let severity = if success { Severity::Info } else { Severity::Error };
@@ -151,7 +153,8 @@ pub async fn record_pool_event(
         "program_id": program_id,
         "pool_type": pool_type,
         "action": action,
-        "details": details
+        "details": details,
+        "event_time": Utc::now().to_rfc3339()
     });
 
     let event = Event::new(
@@ -187,7 +190,8 @@ pub async fn record_position_event(
         "amount_sol": amount_sol,
         "amount_tokens": amount_tokens,
         "pnl_sol": pnl_sol,
-        "pnl_percent": pnl_percent
+        "pnl_percent": pnl_percent,
+        "event_time": Utc::now().to_rfc3339()
     });
 
     let reference_id = entry_signature.or(exit_signature).map(|s| s.to_string());
@@ -221,7 +225,8 @@ pub async fn record_entry_event(
         "price_sol": price_sol,
         "timeframe": timeframe,
         "strength": strength,
-        "reason": reason
+        "reason": reason,
+        "event_time": Utc::now().to_rfc3339()
     });
 
     let severity = match decision {
@@ -254,7 +259,8 @@ pub async fn record_system_event(
         "component": component,
         "action": action,
         "details": details,
-        "timestamp": Utc::now().to_rfc3339()
+        "timestamp": Utc::now().to_rfc3339(),
+        "event_time": Utc::now().to_rfc3339()
     });
 
     let event = Event::new(
@@ -271,9 +277,11 @@ pub async fn record_system_event(
 
 /// Record a token-related event (blacklist, metadata update, etc.)
 pub async fn record_token_event(mint: &str, action: &str, severity: Severity, details: Value) {
-    let payload = json!({
+    let payload =
+        json!({
         "action": action,
-        "details": details
+        "details": details,
+        "event_time": Utc::now().to_rfc3339()
     });
 
     let event = Event::new(
@@ -299,7 +307,8 @@ pub async fn record_security_event(
         json!({
         "analysis_type": analysis_type,
         "risk_level": risk_level,
-        "findings": findings
+        "findings": findings,
+        "event_time": Utc::now().to_rfc3339()
     });
 
     let severity = match risk_level {

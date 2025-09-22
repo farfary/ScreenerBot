@@ -13,6 +13,7 @@ use super::{
     state::get_mint_by_signature,
 };
 use chrono::Utc;
+use serde_json::Value;
 
 /// Classify transient (retryable) verification errors
 fn is_transient_verification_error(msg: &str) -> bool {
@@ -133,6 +134,104 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             }
         }
         Ok(None) => {
+            // Event-aware shortcut: if our events DB shows a confirmed/failed outcome, act accordingly
+            if
+                let Ok(events) = crate::events::search_events(
+                    Some("transaction"),
+                    None,
+                    Some(&item.signature),
+                    Some(24),
+                    5
+                ).await
+            {
+                // Prefer the latest decisive outcome among returned events
+                let mut decided: Option<(String, bool, Option<Value>)> = None; // (status, success, payload)
+                for ev in events {
+                    if
+                        let Some(cs) = ev.payload
+                            .get("confirmation_status")
+                            .and_then(|v| v.as_str())
+                    {
+                        match cs {
+                            "confirmed" => {
+                                decided = Some((cs.to_string(), true, Some(ev.payload)));
+                                break;
+                            }
+                            "failed" => {
+                                decided = Some((cs.to_string(), false, Some(ev.payload)));
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                if let Some((status, success, payload)) = decided {
+                    if success && status == "confirmed" {
+                        // Confirmed by events but transaction object not yet available → retry shortly
+                        return VerificationOutcome::RetryTransient(
+                            "Transaction confirmed by events; awaiting RPC indexing".to_string()
+                        );
+                    } else if !success && status == "failed" {
+                        // Failed by events → map to existing failure handling per kind
+                        match item.kind {
+                            VerificationKind::Entry => {
+                                return VerificationOutcome::PermanentFailure(
+                                    PositionTransition::RemoveOrphanEntry {
+                                        position_id: item.position_id.unwrap_or(0),
+                                    }
+                                );
+                            }
+                            VerificationKind::Exit => {
+                                // For exit failures, prefer wallet residual check
+                                if
+                                    let (Ok(wallet_address), Some(position_id)) = (
+                                        get_wallet_address(),
+                                        item.position_id,
+                                    )
+                                {
+                                    match
+                                        get_total_token_balance(&wallet_address, &item.mint).await
+                                    {
+                                        Ok(balance) => {
+                                            if balance > 0 {
+                                                return VerificationOutcome::Transition(
+                                                    PositionTransition::ExitFailedClearForRetry {
+                                                        position_id,
+                                                    }
+                                                );
+                                            } else {
+                                                return VerificationOutcome::PermanentFailure(
+                                                    PositionTransition::ExitPermanentFailureSynthetic {
+                                                        position_id,
+                                                        exit_time: Utc::now(),
+                                                    }
+                                                );
+                                            }
+                                        }
+                                        Err(_) => {
+                                            return VerificationOutcome::PermanentFailure(
+                                                PositionTransition::ExitPermanentFailureSynthetic {
+                                                    position_id,
+                                                    exit_time: Utc::now(),
+                                                }
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    return VerificationOutcome::PermanentFailure(
+                                        PositionTransition::ExitPermanentFailureSynthetic {
+                                            position_id: item.position_id.unwrap_or(0),
+                                            exit_time: Utc::now(),
+                                        }
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Progressive timeout logic - different timeouts for entry vs exit
             let timeout_threshold = match item.kind {
                 VerificationKind::Exit => 60, // 1 minute for exit transactions
@@ -206,6 +305,93 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
         }
         Err(e) => {
             let error_msg = format!("Error getting transaction: {}", e);
+
+            // Event-aware fallback: if events show a decisive outcome, act accordingly
+            if
+                let Ok(events) = crate::events::search_events(
+                    Some("transaction"),
+                    None,
+                    Some(&item.signature),
+                    Some(24),
+                    5
+                ).await
+            {
+                for ev in events {
+                    if
+                        let Some(cs) = ev.payload
+                            .get("confirmation_status")
+                            .and_then(|v| v.as_str())
+                    {
+                        match cs {
+                            "confirmed" => {
+                                return VerificationOutcome::RetryTransient(
+                                    "Transaction confirmed by events; awaiting RPC indexing".to_string()
+                                );
+                            }
+                            "failed" => {
+                                // Map failure as above
+                                match item.kind {
+                                    VerificationKind::Entry => {
+                                        return VerificationOutcome::PermanentFailure(
+                                            PositionTransition::RemoveOrphanEntry {
+                                                position_id: item.position_id.unwrap_or(0),
+                                            }
+                                        );
+                                    }
+                                    VerificationKind::Exit => {
+                                        if
+                                            let (Ok(wallet_address), Some(position_id)) = (
+                                                get_wallet_address(),
+                                                item.position_id,
+                                            )
+                                        {
+                                            match
+                                                get_total_token_balance(
+                                                    &wallet_address,
+                                                    &item.mint
+                                                ).await
+                                            {
+                                                Ok(balance) => {
+                                                    if balance > 0 {
+                                                        return VerificationOutcome::Transition(
+                                                            PositionTransition::ExitFailedClearForRetry {
+                                                                position_id,
+                                                            }
+                                                        );
+                                                    } else {
+                                                        return VerificationOutcome::PermanentFailure(
+                                                            PositionTransition::ExitPermanentFailureSynthetic {
+                                                                position_id,
+                                                                exit_time: Utc::now(),
+                                                            }
+                                                        );
+                                                    }
+                                                }
+                                                Err(_) => {
+                                                    return VerificationOutcome::PermanentFailure(
+                                                        PositionTransition::ExitPermanentFailureSynthetic {
+                                                            position_id,
+                                                            exit_time: Utc::now(),
+                                                        }
+                                                    );
+                                                }
+                                            }
+                                        } else {
+                                            return VerificationOutcome::PermanentFailure(
+                                                PositionTransition::ExitPermanentFailureSynthetic {
+                                                    position_id: item.position_id.unwrap_or(0),
+                                                    exit_time: Utc::now(),
+                                                }
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
 
             // Enhanced error classification for immediate verification optimization
             if
