@@ -1,6 +1,7 @@
 use crate::logger::{ log, LogTag };
 use crate::arguments::is_debug_security_enabled;
 use crate::tokens::security_db::{ SecurityDatabase, SecurityInfo, parse_rugcheck_response };
+use crate::tokens::patterns::{ categorize_token };
 use once_cell::sync::Lazy;
 use reqwest::{ Client, StatusCode };
 use std::collections::{ HashMap, HashSet };
@@ -74,6 +75,8 @@ pub struct SecurityMetrics {
     pub last_api_call: Arc<RwLock<Option<Instant>>>,
     // Aggregated rejection reasons for unsafe classifications
     pub rejection_reasons: Arc<Mutex<HashMap<String, u64>>>,
+    // Pattern categorization tracking
+    pub platform_categories: Arc<Mutex<HashMap<String, u64>>>,
 }
 
 impl SecurityMetrics {
@@ -93,6 +96,7 @@ impl SecurityMetrics {
             pump_fun_tokens: AtomicU64::new(0),
             last_api_call: Arc::new(RwLock::new(None)),
             rejection_reasons: Arc::new(Mutex::new(HashMap::new())),
+            platform_categories: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -158,6 +162,18 @@ impl SecurityMetrics {
             self.pump_fun_tokens.fetch_add(1, Ordering::Relaxed);
         }
     }
+
+    /// Record pattern categorization for a token
+    pub fn record_pattern_categorization(&self, mint: &str, name: &str, symbol: &str) {
+        let categorizations = categorize_token(mint, name, symbol);
+
+        if !categorizations.is_empty() {
+            let mut map = self.platform_categories.lock().unwrap_or_else(|e| e.into_inner());
+            for cat in categorizations {
+                *map.entry(cat.category).or_insert(0) += 1;
+            }
+        }
+    }
 }
 
 pub struct SecurityAnalyzer {
@@ -187,6 +203,7 @@ pub struct SecuritySummary {
     pub db_high_score_tokens: u64,
     pub last_api_call: Option<Instant>,
     pub top_rejection_reasons: Vec<(String, u64)>,
+    pub top_platform_categories: Vec<(String, u64)>,
     pub db_unprocessed_tokens: u64,
 }
 
@@ -817,6 +834,19 @@ impl SecurityAnalyzer {
             pairs
         };
 
+        // Prepare top platform categories snapshot (top 5)
+        let top_platform_categories = {
+            let mut pairs: Vec<(String, u64)> = self.metrics.platform_categories
+                .lock()
+                .map(|m| m.clone())
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
+            pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            pairs.truncate(5);
+            pairs
+        };
+
         SecuritySummary {
             api_calls_total: self.metrics.api_calls_total.load(Ordering::Relaxed),
             api_calls_success: self.metrics.api_calls_success.load(Ordering::Relaxed),
@@ -836,6 +866,7 @@ impl SecurityAnalyzer {
             db_high_score_tokens: db_stats.get("high_score").copied().unwrap_or(0) as u64,
             last_api_call,
             top_rejection_reasons,
+            top_platform_categories,
             db_unprocessed_tokens,
         }
     }
@@ -983,6 +1014,38 @@ pub fn start_security_summary_task() {
     log(LogTag::Security, "SUMMARY_TASK", "Started 30-second security summary task");
 }
 
+/// Analyze and record pattern categorization for tokens in the database
+pub async fn analyze_token_patterns_for_security() -> Result<(), String> {
+    if let Some(analyzer) = get_security_analyzer() {
+        // Get token database to access token names and symbols
+        let token_db = crate::tokens::cache::TokenDatabase
+            ::new()
+            .map_err(|e| format!("Failed to create token database: {}", e))?;
+
+        let tokens = token_db
+            .get_all_tokens().await
+            .map_err(|e| format!("Failed to get tokens: {}", e))?;
+
+        log(
+            LogTag::Security,
+            "PATTERNS",
+            &format!("Analyzing patterns for {} tokens", tokens.len())
+        );
+
+        for token in tokens.iter().take(1000) {
+            // Limit to avoid performance issues
+            analyzer
+                .get_metrics()
+                .record_pattern_categorization(&token.mint, &token.name, &token.symbol);
+        }
+
+        log(LogTag::Security, "PATTERNS", "Pattern categorization analysis complete");
+        Ok(())
+    } else {
+        Err("Security analyzer not initialized".to_string())
+    }
+}
+
 fn log_security_summary(summary: &SecuritySummary) {
     let cache_hit_rate = if summary.cache_hits + summary.cache_misses > 0 {
         ((summary.cache_hits as f64) / ((summary.cache_hits + summary.cache_misses) as f64)) * 100.0
@@ -1032,6 +1095,21 @@ fn log_security_summary(summary: &SecuritySummary) {
         }
     };
 
+    let platforms_inline = {
+        if summary.top_platform_categories.is_empty() {
+            "-".to_string()
+        } else {
+            let mut parts: Vec<String> = Vec::new();
+            for (idx, (platform, count)) in summary.top_platform_categories
+                .iter()
+                .take(3)
+                .enumerate() {
+                parts.push(format!("{}. {} — {}", idx + 1, platform, count));
+            }
+            parts.join(" | ")
+        }
+    };
+
     log(
         LogTag::Security,
         "MONITOR",
@@ -1041,6 +1119,7 @@ fn log_security_summary(summary: &SecuritySummary) {
              API: calls={api_total}, ok={api_ok} ({api_pct:.1}%), fail={api_fail}, last={last_api}\n\
              CACHE: {cache_hits}/{cache_total} ({cache_rate:.1}%), size={cache_size} | DB: {db_hits}/{db_total} ({db_rate:.1}%), stored={db_tokens_safe}/{db_tokens_total}, unproc={db_unprocessed}\n\
              MARKET: pump.fun={pump_cnt}, high_score={high_score_cnt}\n\
+             PLATFORMS: {platforms}\n\
              REASONS: {reasons}\n\
              🔐",
             safe_cnt = summary.tokens_safe,
@@ -1064,6 +1143,7 @@ fn log_security_summary(summary: &SecuritySummary) {
             db_unprocessed = summary.db_unprocessed_tokens,
             pump_cnt = summary.pump_fun_tokens,
             high_score_cnt = summary.db_high_score_tokens,
+            platforms = platforms_inline,
             reasons = reasons_inline
         )
     );

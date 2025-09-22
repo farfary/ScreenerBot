@@ -14,6 +14,7 @@ pub mod geckoterminal;
 pub mod monitor;
 pub mod ohlcv_db;
 pub mod ohlcvs;
+pub mod patterns;
 pub mod raydium;
 pub mod security;
 pub mod security_db;
@@ -52,6 +53,19 @@ pub use ohlcvs::{
     start_ohlcv_monitoring,
     DataAvailability,
     OhlcvService,
+};
+pub use patterns::{
+    TokenPatternAnalyzer,
+    TokenPattern,
+    PlatformCategory,
+    PatternType,
+    TokenCategorization,
+    PatternAnalysisSummary,
+    initialize_pattern_analyzer,
+    get_pattern_analyzer,
+    refresh_pattern_analysis,
+    categorize_token,
+    log_pattern_analysis_results,
 };
 pub use security::{
     SecurityAnalyzer,

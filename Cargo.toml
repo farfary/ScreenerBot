@@ -61,6 +61,10 @@ path = "src/bin/find_biggest_pools_by_program.rs"
 name = "debug_decimals"
 path = "src/bin/debug_decimals.rs"
 
+[[bin]]
+name = "debug_token_patterns"
+path = "src/bin/debug_token_patterns.rs"
+
 
 [dependencies]
 # Core async runtime with minimal features for faster builds

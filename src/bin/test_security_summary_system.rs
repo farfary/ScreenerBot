@@ -44,8 +44,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 LogTag::System,
                 "TEST",
                 &format!(
-                    "Analysis result: safe={}, risk={:?}",
-                    analysis.is_safe,
+                    "Analysis result: authorities_safe={}, risk={:?}",
+                    analysis.authorities_safe,
                     analysis.risk_level
                 )
             );
