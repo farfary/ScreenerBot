@@ -279,11 +279,49 @@ impl SecurityAnalyzer {
     }
 
     async fn fetch_rugcheck_data(&self, mint: &str) -> Result<SecurityInfo, String> {
+        // Add a base delay between all API calls to prevent rate limiting
+        static LAST_API_CALL: std::sync::OnceLock<std::sync::Mutex<Option<Instant>>> = std::sync::OnceLock::new();
+        let last_call_mutex = LAST_API_CALL.get_or_init(|| std::sync::Mutex::new(None));
+
+        // Rate limit: minimum 500ms between API calls to respect Rugcheck limits
+        let delay_needed = {
+            if let Ok(mut last_call) = last_call_mutex.lock() {
+                let delay_needed = if let Some(last_instant) = *last_call {
+                    let elapsed = last_instant.elapsed();
+                    let min_interval = Duration::from_millis(500);
+                    if elapsed < min_interval {
+                        Some(min_interval - elapsed)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                *last_call = Some(Instant::now());
+                delay_needed
+            } else {
+                None
+            }
+        };
+
+        if let Some(delay) = delay_needed {
+            log(
+                LogTag::Security,
+                "RATE_LIMIT",
+                &format!(
+                    "Rate limiting: waiting {}ms before API call for mint={}",
+                    delay.as_millis(),
+                    mint
+                )
+            );
+            sleep(delay).await;
+        }
+
         log(LogTag::Security, "API_FETCH", &format!("Fetching Rugcheck data for mint={}", mint));
 
         let url = format!("{}/{}/report", RUGCHECK_API_BASE, mint);
 
-        // Simple exponential backoff with jitter for transient failures and rate limits
+        // Improved exponential backoff for rate limits - longer delays for 429 errors
         let mut attempt: u32 = 0;
         let max_attempts: u32 = 4; // 1 initial + 3 retries
         let mut last_err: Option<String> = None;
@@ -303,16 +341,30 @@ impl SecurityAnalyzer {
                         );
                     }
 
-                    // For rate limit or server errors, retry with backoff
+                    // For rate limit errors, use longer delays specifically
                     if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
-                        let base_delay_ms = 250u64 * (1u64 << (attempt - 1));
-                        let delay = Duration::from_millis(base_delay_ms);
+                        let delay = if status == StatusCode::TOO_MANY_REQUESTS {
+                            // For 429 errors, use much longer delays: 1s, 3s, 8s, 20s
+                            let backoff_seconds = match attempt {
+                                1 => 1,
+                                2 => 3,
+                                3 => 8,
+                                _ => 20,
+                            };
+                            Duration::from_secs(backoff_seconds)
+                        } else {
+                            // For server errors, use normal exponential backoff
+                            let base_delay_ms = 250u64 * (1u64 << (attempt - 1));
+                            Duration::from_millis(base_delay_ms)
+                        };
+
                         log(
                             LogTag::Security,
                             "API_RETRY",
                             &format!(
-                                "Rugcheck status {} for mint={}, retrying in {}ms (attempt {}/{})",
-                                status,
+                                "Rugcheck status {} {} for mint={}, retrying in {}ms (attempt {}/{})",
+                                status.as_u16(),
+                                status.canonical_reason().unwrap_or("Unknown"),
                                 mint,
                                 delay.as_millis(),
                                 attempt,
