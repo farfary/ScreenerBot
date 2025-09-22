@@ -31,6 +31,7 @@ const EXIT_PRICE_CACHE_MAX_ENTRIES: usize = 1024; // prune safeguard
 #[derive(Clone, Copy)]
 struct LiqSnap {
     sol: f64,
+    price: f64,
     t: Instant,
 }
 static RECENT_LIQ_CACHE: Lazy<
@@ -172,6 +173,33 @@ const MOMENTUM_LOOKBACK_SEC: i64 = 120; // momentum check window
 const BREAKOUT_BUFFER_PCT: f64 = 1.8; // breakout must exceed range high by this buffer
 const RETEST_TOLERANCE_PCT: f64 = 1.2; // acceptable retest depth around breakout line
 const MICRO_PULLBACK_MAX_PCT: f64 = 3.5; // max pullback for momentum continuation validation
+
+// ============================= VOLATILITY CONTRACTION PATTERN =============================
+// Detect volatility compression followed by expansion - a powerful entry pattern
+const VCP_BASE_WINDOW_SEC: i64 = 240; // 4 minutes base window
+const VCP_LOOKBACK_WINDOW_SEC: i64 = 120; // 2 minutes lookback window
+const VCP_MIN_SAMPLES: usize = 10; // Minimum price points needed for detection
+const VCP_MAX_VOLATILITY_PCT: f64 = 6.0; // Maximum range during contraction phase
+const VCP_BREAKOUT_MIN_PCT: f64 = 3.0; // Minimum breakout percentage
+const VCP_MIN_VOLATILITY_REDUCTION: f64 = 0.5; // Contraction must be at least 50% of previous volatility
+const VCP_MIN_CONFIDENCE_BONUS: f64 = 15.0; // Base confidence bonus
+
+// ============================= MEAN-REVERSION OVERSOLD ENTRY =============================
+// Detect extremely oversold conditions with reversal signs
+const OVERSOLD_MIN_DROP_PCT: f64 = 25.0; // Minimum initial drop percentage
+const OVERSOLD_MAX_TIME_SEC: i64 = 300; // Maximum time window for oversold condition (5m)
+const OVERSOLD_MIN_RECOVERY_PCT: f64 = 5.0; // Minimum recovery from low
+const OVERSOLD_MAX_FROM_LOW_PCT: f64 = 15.0; // Maximum allowed recovery (avoid late entry)
+const OVERSOLD_MIN_SAMPLES: usize = 8; // Minimum samples for detection
+const OVERSOLD_MIN_CONFIDENCE_BONUS: f64 = 12.0; // Base confidence bonus
+
+// ============================= LIQUIDITY ACCUMULATION ENTRY =============================
+// Detect when liquidity is being accumulated before price moves up
+const LIQ_ACCUM_MIN_INCREASE_PCT: f64 = 20.0; // Minimum liquidity increase percentage
+const LIQ_ACCUM_MIN_SNAPS: usize = 3; // Minimum snapshots needed
+const LIQ_ACCUM_MIN_SOL_RESERVES: f64 = 1.0; // Minimum SOL reserves to consider
+const LIQ_ACCUM_MIN_PRICE_UPTICK_PCT: f64 = 2.0; // Minimum price uptick after accumulation
+const LIQ_ACCUM_MIN_CONFIDENCE_BONUS: f64 = 12.0; // Base confidence bonus
 
 // ============================= MICRO-LIQUIDITY CAPITULATION =============================
 // Goal: Auto-approve high-upside entries when a token has near-zero real SOL liquidity and
@@ -506,6 +534,172 @@ fn detect_sma_reclaim(
     (false, 0.0, "")
 }
 
+// Detect Volatility Contraction Pattern (VCP) followed by breakout
+// Returns (detected, confidence_bonus, reason)
+fn detect_vcp_breakout(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64
+) -> (bool, f64, &'static str) {
+    if price_history.len() < VCP_MIN_SAMPLES || current_price <= 0.0 || !current_price.is_finite() {
+        return (false, 0.0, "");
+    }
+
+    let now = Utc::now();
+
+    // Contraction phase prices (earlier window)
+    let contraction_prices: Vec<f64> = price_history
+        .iter()
+        .filter(|(ts, _)| {
+            let age_sec = (now - *ts).num_seconds();
+            age_sec > VCP_LOOKBACK_WINDOW_SEC &&
+                age_sec <= VCP_BASE_WINDOW_SEC + VCP_LOOKBACK_WINDOW_SEC
+        })
+        .map(|(_, p)| *p)
+        .filter(|p| *p > 0.0 && p.is_finite())
+        .collect();
+
+    // Breakout phase prices (recent window)
+    let breakout_prices: Vec<f64> = price_history
+        .iter()
+        .filter(|(ts, _)| (now - *ts).num_seconds() <= VCP_LOOKBACK_WINDOW_SEC)
+        .map(|(_, p)| *p)
+        .filter(|p| *p > 0.0 && p.is_finite())
+        .collect();
+
+    if contraction_prices.len() < 5 || breakout_prices.len() < 3 {
+        return (false, 0.0, "");
+    }
+
+    // Contraction volatility
+    let contraction_high = contraction_prices.iter().fold(0.0f64, |a, b| a.max(*b));
+    let contraction_low = contraction_prices.iter().fold(f64::INFINITY, |a, b| a.min(*b));
+    if
+        !contraction_high.is_finite() ||
+        !contraction_low.is_finite() ||
+        contraction_high <= 0.0 ||
+        contraction_low <= 0.0
+    {
+        return (false, 0.0, "");
+    }
+    let contraction_volatility = ((contraction_high - contraction_low) / contraction_high) * 100.0;
+    if !contraction_volatility.is_finite() || contraction_volatility > VCP_MAX_VOLATILITY_PCT {
+        return (false, 0.0, "");
+    }
+
+    // Prior volatility to confirm contraction
+    let prior_prices: Vec<f64> = price_history
+        .iter()
+        .filter(|(ts, _)| {
+            let age_sec = (now - *ts).num_seconds();
+            age_sec > VCP_BASE_WINDOW_SEC + VCP_LOOKBACK_WINDOW_SEC &&
+                age_sec <= 2 * VCP_BASE_WINDOW_SEC + VCP_LOOKBACK_WINDOW_SEC
+        })
+        .map(|(_, p)| *p)
+        .filter(|p| *p > 0.0 && p.is_finite())
+        .collect();
+    if prior_prices.len() >= 5 {
+        let prior_high = prior_prices.iter().fold(0.0f64, |a, b| a.max(*b));
+        let prior_low = prior_prices.iter().fold(f64::INFINITY, |a, b| a.min(*b));
+        if prior_high.is_finite() && prior_low.is_finite() && prior_high > 0.0 && prior_low > 0.0 {
+            let prior_volatility = ((prior_high - prior_low) / prior_high) * 100.0;
+            if contraction_volatility > prior_volatility * VCP_MIN_VOLATILITY_REDUCTION {
+                return (false, 0.0, "");
+            }
+        }
+    }
+
+    // Verify breakout from contraction
+    let breakout_high = breakout_prices.iter().fold(0.0f64, |a, b| a.max(*b));
+    let min_breakout_price = contraction_high * (1.0 + VCP_BREAKOUT_MIN_PCT / 100.0);
+    if current_price >= min_breakout_price && breakout_high >= min_breakout_price {
+        let volatility_quality = (1.0 - contraction_volatility / VCP_MAX_VOLATILITY_PCT).clamp(
+            0.0,
+            1.0
+        );
+        let breakout_strength =
+            ((current_price / contraction_high - 1.0) * 100.0).clamp(3.0, 20.0) / 17.0;
+        let confidence_bonus =
+            VCP_MIN_CONFIDENCE_BONUS + 10.0 * volatility_quality + 12.0 * breakout_strength;
+        return (true, confidence_bonus, "VCP_BREAKOUT");
+    }
+
+    (false, 0.0, "")
+}
+
+// Detect mean-reversion oversold entry (extreme drop + initial recovery)
+// Returns (detected, confidence_bonus, reason)
+fn detect_oversold_reversal(
+    price_history: &[(DateTime<Utc>, f64)],
+    current_price: f64
+) -> (bool, f64, &'static str) {
+    if
+        price_history.len() < OVERSOLD_MIN_SAMPLES ||
+        current_price <= 0.0 ||
+        !current_price.is_finite()
+    {
+        return (false, 0.0, "");
+    }
+    let now = Utc::now();
+    let window: Vec<(DateTime<Utc>, f64)> = price_history
+        .iter()
+        .filter(
+            |(ts, p)|
+                (now - *ts).num_seconds() <= OVERSOLD_MAX_TIME_SEC && *p > 0.0 && p.is_finite()
+        )
+        .cloned()
+        .collect();
+    if window.len() < OVERSOLD_MIN_SAMPLES {
+        return (false, 0.0, "");
+    }
+
+    // Find high, low and their timestamps
+    let mut high = 0.0;
+    let mut high_ts = now;
+    let mut low = f64::INFINITY;
+    let mut low_ts = now;
+    for (ts, p) in &window {
+        if *p > high {
+            high = *p;
+            high_ts = *ts;
+        }
+        if *p < low {
+            low = *p;
+            low_ts = *ts;
+        }
+    }
+    if !high.is_finite() || !low.is_finite() || high <= 0.0 || low <= 0.0 {
+        return (false, 0.0, "");
+    }
+    if high_ts >= low_ts {
+        return (false, 0.0, "");
+    }
+
+    let drop_pct = ((high - low) / high) * 100.0;
+    if drop_pct < OVERSOLD_MIN_DROP_PCT {
+        return (false, 0.0, "");
+    }
+
+    let recovery_pct = ((current_price - low) / low) * 100.0;
+    if recovery_pct < OVERSOLD_MIN_RECOVERY_PCT || recovery_pct > OVERSOLD_MAX_FROM_LOW_PCT {
+        return (false, 0.0, "");
+    }
+
+    let still_down_pct = ((high - current_price) / high) * 100.0;
+    if still_down_pct < 10.0 {
+        return (false, 0.0, "");
+    }
+
+    let drop_quality = (drop_pct / 50.0).clamp(0.5, 1.5);
+    let recovery_quality = (recovery_pct / OVERSOLD_MAX_FROM_LOW_PCT).clamp(0.3, 0.9);
+    let time_quality = 1.0 - (((now - low_ts).num_seconds() as f64) / 120.0).clamp(0.0, 0.8);
+    let confidence_bonus =
+        OVERSOLD_MIN_CONFIDENCE_BONUS +
+        10.0 * drop_quality +
+        5.0 * recovery_quality +
+        8.0 * time_quality;
+    (true, confidence_bonus, "OVERSOLD_REVERSAL")
+}
+
 /// Main entry point for determining if a token should be bought
 /// Returns (approved_for_entry, confidence_score, reason)
 pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
@@ -603,8 +797,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         .collect();
     converted_history.retain(|(_, p)| *p > 0.0 && p.is_finite());
 
-    // Record a liquidity snapshot for trend assessment
-    record_liquidity_snapshot(&price_info.mint, price_info.sol_reserves).await;
+    // Record a liquidity snapshot for trend assessment (store price too)
+    record_liquidity_snapshot(&price_info.mint, price_info.sol_reserves, current_price).await;
 
     // Early cascade guard (post-peak liquidity drain) — block entries in dump phase
     if converted_history.len() >= 6 {
@@ -1140,6 +1334,238 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         }
     }
 
+    // ============================= NEW ENTRY STRATEGIES =============================
+    // 1) Volatility Contraction Pattern (VCP) breakout
+    {
+        let (vcp_ok, vcp_conf, vcp_tag) = detect_vcp_breakout(&converted_history, current_price);
+        if vcp_ok {
+            let mut confidence = 28.0 + vcp_conf; // Base confidence for VCP
+            confidence += activity_score * 10.0; // Activity bonus
+            confidence = confidence.clamp(0.0, 95.0);
+
+            // Learner adjustment
+            let learning = get_learning_integration();
+            let original_confidence = confidence;
+            let adjustment = learning.get_entry_confidence_adjustment(
+                &price_info.mint,
+                current_price,
+                0.0,
+                0.0
+            ).await;
+            confidence = (confidence * adjustment).clamp(0.0, 95.0);
+
+            if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
+                log(
+                    LogTag::Entry,
+                    "LEARNER_VCP_BOOST",
+                    &format!(
+                        "🧠 {} VCP learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
+                        price_info.mint,
+                        original_confidence,
+                        confidence,
+                        adjustment
+                    )
+                );
+            }
+
+            // ATH check
+            let (ath_safe, max_ath_pct) = check_ath_risk(&converted_history, current_price).await;
+            if !ath_safe {
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Entry,
+                        "VCP_ATH_BLOCK",
+                        &format!(
+                            "❌ {} {} blocked by ATH: {:.1}%",
+                            price_info.mint,
+                            vcp_tag,
+                            max_ath_pct
+                        )
+                    );
+                }
+            } else {
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Entry,
+                        vcp_tag,
+                        &format!("🎯 {} VCP entry → conf {:.1}%", price_info.mint, confidence)
+                    );
+                }
+                let approved = confidence >= 42.0;
+                return (
+                    approved,
+                    confidence,
+                    if approved {
+                        "Volatility Contraction Pattern breakout entry".to_string()
+                    } else {
+                        format!("{}: confidence {:.1}% < 42%", vcp_tag, confidence)
+                    },
+                );
+            }
+        }
+    }
+
+    // 2) Mean-reversion oversold entry
+    {
+        let (oversold_ok, oversold_conf, oversold_tag) = detect_oversold_reversal(
+            &converted_history,
+            current_price
+        );
+        if oversold_ok {
+            let mut confidence = 25.0 + oversold_conf; // Base confidence
+            confidence += activity_score * 8.0; // reduced weight
+            confidence = confidence.clamp(0.0, 95.0);
+
+            // Learner adjustment
+            let learning = get_learning_integration();
+            let original_confidence = confidence;
+            let adjustment = learning.get_entry_confidence_adjustment(
+                &price_info.mint,
+                current_price,
+                0.0,
+                0.0
+            ).await;
+            confidence = (confidence * adjustment).clamp(0.0, 95.0);
+            if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
+                log(
+                    LogTag::Entry,
+                    "LEARNER_OVERSOLD_BOOST",
+                    &format!(
+                        "🧠 {} Oversold reversal learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
+                        price_info.mint,
+                        original_confidence,
+                        confidence,
+                        adjustment
+                    )
+                );
+            }
+
+            // ATH check (lenient)
+            let (ath_safe, max_ath_pct) = check_ath_risk(&converted_history, current_price).await;
+            if !ath_safe && max_ath_pct > 75.0 {
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Entry,
+                        "OVERSOLD_ATH_BLOCK",
+                        &format!(
+                            "❌ {} {} blocked by extreme ATH: {:.1}%",
+                            price_info.mint,
+                            oversold_tag,
+                            max_ath_pct
+                        )
+                    );
+                }
+            } else {
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Entry,
+                        oversold_tag,
+                        &format!(
+                            "🎯 {} Oversold reversal entry → conf {:.1} pct (lenient ATH)",
+                            price_info.mint,
+                            confidence
+                        )
+                    );
+                }
+                let approved = confidence >= 40.0;
+                return (
+                    approved,
+                    confidence,
+                    if approved {
+                        "Oversold reversal entry".to_string()
+                    } else {
+                        format!("{}: confidence {:.1}% < 40%", oversold_tag, confidence)
+                    },
+                );
+            }
+        }
+    }
+
+    // 3) Liquidity accumulation entry
+    {
+        let (liq_ok, liq_conf, liq_tag, liq_accum_pct) = detect_liquidity_accumulation(
+            &price_info.mint,
+            current_price,
+            price_info.sol_reserves
+        ).await;
+        if liq_ok {
+            let mut confidence = 26.0 + liq_conf;
+            confidence += activity_score * 6.0;
+            confidence = confidence.clamp(0.0, 95.0);
+
+            let learning = get_learning_integration();
+            let original_confidence = confidence;
+            let adjustment = learning.get_entry_confidence_adjustment(
+                &price_info.mint,
+                current_price,
+                0.0,
+                0.0
+            ).await;
+            confidence = (confidence * adjustment).clamp(0.0, 95.0);
+            if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
+                log(
+                    LogTag::Entry,
+                    "LEARNER_LIQ_ACCUM_BOOST",
+                    &format!(
+                        "🧠 {} Liquidity accumulation learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
+                        price_info.mint,
+                        original_confidence,
+                        confidence,
+                        adjustment
+                    )
+                );
+            }
+
+            let (ath_safe, max_ath_pct) = check_ath_risk(&converted_history, current_price).await;
+            if !ath_safe {
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Entry,
+                        "LIQ_ACCUM_ATH_BLOCK",
+                        &format!(
+                            "❌ {} {} blocked by ATH: {:.1}%",
+                            price_info.mint,
+                            liq_tag,
+                            max_ath_pct
+                        )
+                    );
+                }
+            } else {
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Entry,
+                        liq_tag,
+                        &format!(
+                            "🎯 {} Liquidity accumulation +{:.1}% → conf {:.1}% (sol:{:.3})",
+                            price_info.mint,
+                            liq_accum_pct,
+                            confidence,
+                            price_info.sol_reserves
+                        )
+                    );
+                }
+                let approved = confidence >= 42.0;
+                return (
+                    approved,
+                    confidence,
+                    if approved {
+                        format!(
+                            "Liquidity accumulation entry (+{:.1}% SOL reserves)",
+                            liq_accum_pct
+                        )
+                    } else {
+                        format!(
+                            "{}: confidence {:.1}% < 42%, accum +{:.1}%",
+                            liq_tag,
+                            confidence,
+                            liq_accum_pct
+                        )
+                    },
+                );
+            }
+        }
+    }
+
     // Adaptive extra drop requirement for re-entry scenarios
     // Base dynamic minimum drop based on liquidity and short-term volatility
     let dyn_min_drop = dynamic_min_drop_percent(price_info.sol_reserves, &converted_history);
@@ -1486,7 +1912,7 @@ async fn check_ath_risk(price_history: &[(DateTime<Utc>, f64)], current_price: f
 }
 
 // Record a quick liquidity snapshot for the mint (uses current PriceResult.sol_reserves)
-async fn record_liquidity_snapshot(mint: &str, sol_reserves: f64) {
+async fn record_liquidity_snapshot(mint: &str, sol_reserves: f64, price: f64) {
     let mut map = RECENT_LIQ_CACHE.write().await;
     let q = map
         .entry(mint.to_string())
@@ -1504,7 +1930,7 @@ async fn record_liquidity_snapshot(mint: &str, sol_reserves: f64) {
     if q.len() == LIQ_CACHE_MAX_SNAPS {
         q.pop_front();
     }
-    q.push_back(LiqSnap { sol: sol_reserves.max(0.0), t: now });
+    q.push_back(LiqSnap { sol: sol_reserves.max(0.0), price: price.max(0.0), t: now });
 }
 
 // Determine if liquidity is falling across recent snapshots (strict: monotonic decrease at least N steps)
@@ -1523,6 +1949,56 @@ async fn is_liquidity_falling(mint: &str) -> bool {
         return falls + 1 >= CASCADE_LIQ_FALLING_MIN_SNAPS; // at least N decreasing steps
     }
     false
+}
+
+/// Detect significant liquidity accumulation followed by initial price movement
+/// Returns (detected, confidence_bonus, reason, accum_percent)
+async fn detect_liquidity_accumulation(
+    mint: &str,
+    current_price: f64,
+    current_sol_reserves: f64
+) -> (bool, f64, &'static str, f64) {
+    if
+        current_price <= 0.0 ||
+        !current_price.is_finite() ||
+        current_sol_reserves < LIQ_ACCUM_MIN_SOL_RESERVES
+    {
+        return (false, 0.0, "", 0.0);
+    }
+    let map = RECENT_LIQ_CACHE.read().await;
+    if let Some(q) = map.get(mint) {
+        if q.len() < LIQ_ACCUM_MIN_SNAPS {
+            return (false, 0.0, "", 0.0);
+        }
+        let oldest_snap = q.front().unwrap();
+        let newest_snap = q.back().unwrap();
+        if newest_snap.sol <= oldest_snap.sol || oldest_snap.sol <= 0.0 {
+            return (false, 0.0, "", 0.0);
+        }
+        let accum_percent = ((newest_snap.sol - oldest_snap.sol) / oldest_snap.sol) * 100.0;
+        if !accum_percent.is_finite() || accum_percent < LIQ_ACCUM_MIN_INCREASE_PCT {
+            return (false, 0.0, "", 0.0);
+        }
+        if newest_snap.price <= oldest_snap.price || oldest_snap.price <= 0.0 {
+            return (false, 0.0, "", 0.0);
+        }
+        let price_change_pct =
+            ((newest_snap.price - oldest_snap.price) / oldest_snap.price) * 100.0;
+        if !price_change_pct.is_finite() || price_change_pct < LIQ_ACCUM_MIN_PRICE_UPTICK_PCT {
+            return (false, 0.0, "", 0.0);
+        }
+        // Confidence estimation
+        let liq_quality = (accum_percent / 50.0).clamp(0.4, 1.2);
+        let price_quality = (price_change_pct / 10.0).clamp(0.2, 1.0);
+        let size_quality = (current_sol_reserves / 20.0).clamp(0.1, 1.0);
+        let confidence_bonus =
+            LIQ_ACCUM_MIN_CONFIDENCE_BONUS +
+            12.0 * liq_quality +
+            8.0 * price_quality +
+            6.0 * size_quality;
+        return (true, confidence_bonus, "LIQUIDITY_ACCUMULATION", accum_percent);
+    }
+    (false, 0.0, "", 0.0)
 }
 
 // Compute MDD/MRU over a recent seconds window from history
