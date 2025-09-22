@@ -449,57 +449,68 @@ impl SecurityDatabase {
     }
 
     /// Count tokens present in tokens.db that do not have a corresponding row in security_info
-    /// Read-only, uses ATTACH DATABASE to avoid a second connection lifecycle here.
+    /// Uses separate connection to avoid ATTACH race conditions.
     pub fn count_tokens_without_security(&self) -> SqliteResult<i64> {
-        // Attach tokens database under an alias for this query scope
-        // If already attached, the statement will be a no-op; ignore errors on detach
-        let _ = self.conn.execute("DETACH DATABASE tokensdb", []);
-        self.conn.execute("ATTACH DATABASE 'data/tokens.db' AS tokensdb", [])?;
+        // Use separate connection to tokens.db to avoid ATTACH race conditions
+        let tokens_conn = Connection::open("data/tokens.db")?;
 
-        let mut stmt = self.conn.prepare(
-            r#"
-            SELECT COUNT(*)
-            FROM tokensdb.tokens t
-            LEFT JOIN security_info s ON s.mint = t.mint
-            WHERE s.mint IS NULL
-            "#
-        )?;
-        let count: i64 = stmt.query_row([], |row| row.get(0))?;
-
-        let _ = self.conn.execute("DETACH DATABASE tokensdb", []);
-        Ok(count)
-    }
-
-    /// Get list of token mints that don't have security info
-    /// Used by background monitoring task to fetch security data for unprocessed tokens
-    pub fn get_tokens_without_security(&self) -> SqliteResult<Vec<String>> {
-        // Attach tokens database under an alias for this query scope
-        let _ = self.conn.execute("DETACH DATABASE tokensdb", []);
-        self.conn.execute("ATTACH DATABASE 'data/tokens.db' AS tokensdb", [])?;
-
-        let mut stmt = self.conn.prepare(
-            r#"
-            SELECT t.mint
-            FROM tokensdb.tokens t
-            LEFT JOIN security_info s ON s.mint = t.mint
-            WHERE s.mint IS NULL
-            ORDER BY t.mint
-            LIMIT 100
-            "#
-        )?;
-
-        let mut tokens = Vec::new();
-        let rows = stmt.query_map([], |row| {
+        // Get all token mints from tokens.db
+        let mut tokens_stmt = tokens_conn.prepare("SELECT mint FROM tokens")?;
+        let token_rows = tokens_stmt.query_map([], |row| {
             let mint: String = row.get(0)?;
             Ok(mint)
         })?;
 
-        for row_result in rows {
-            tokens.push(row_result?);
+        let mut tokens_without_security = 0i64;
+
+        // Check each token mint against security_info table
+        let mut security_stmt = self.conn.prepare(
+            "SELECT 1 FROM security_info WHERE mint = ?1 LIMIT 1"
+        )?;
+
+        for token_result in token_rows {
+            let mint = token_result?;
+            let has_security = security_stmt.query_row([&mint], |_| Ok(())).is_ok();
+            if !has_security {
+                tokens_without_security += 1;
+            }
         }
 
-        let _ = self.conn.execute("DETACH DATABASE tokensdb", []);
-        Ok(tokens)
+        Ok(tokens_without_security)
+    }
+
+    /// Get list of token mints that don't have security info
+    /// Used by background monitoring task to fetch security data for unprocessed tokens
+    /// Uses separate connection to avoid ATTACH race conditions.
+    pub fn get_tokens_without_security(&self) -> SqliteResult<Vec<String>> {
+        // Use separate connection to tokens.db to avoid ATTACH race conditions
+        let tokens_conn = Connection::open("data/tokens.db")?;
+
+        // Get token mints from tokens.db (limited to 100 for performance)
+        let mut tokens_stmt = tokens_conn.prepare(
+            "SELECT mint FROM tokens ORDER BY mint LIMIT 100"
+        )?;
+        let token_rows = tokens_stmt.query_map([], |row| {
+            let mint: String = row.get(0)?;
+            Ok(mint)
+        })?;
+
+        let mut tokens_without_security = Vec::new();
+
+        // Check each token mint against security_info table
+        let mut security_stmt = self.conn.prepare(
+            "SELECT 1 FROM security_info WHERE mint = ?1 LIMIT 1"
+        )?;
+
+        for token_result in token_rows {
+            let mint = token_result?;
+            let has_security = security_stmt.query_row([&mint], |_| Ok(())).is_ok();
+            if !has_security {
+                tokens_without_security.push(mint);
+            }
+        }
+
+        Ok(tokens_without_security)
     }
 }
 
