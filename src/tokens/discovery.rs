@@ -1365,57 +1365,76 @@ async fn print_discovery_cycle_summary(
         "NO NEW TOKENS: All fetched tokens already exist in database".to_string()
     };
 
-    // Single comprehensive log call with all information
-    log(
-        LogTag::Discovery,
-        "SUMMARY",
-        &format!(
-            "═══════════════════════════════════════════════════════════════\n\
-        🔍 DISCOVERY CYCLE COMPLETE - Comprehensive Token Sweep\n\
-        ═══════════════════════════════════════════════════════════════\n\
-        📊 Cycle #{:<3} | Duration: {} | Total Lifetime: {} cycles\n\
-        🎯 RESULTS: Processed {} | 🆕 NEW VALID: {} | Filtered out: {}\n\
-        {} {}\n\
-        \n\
-        📚 API SOURCE BREAKDOWN ({} total from 9 endpoints):\n\
-        🔸 DexScreener: Profiles({}) + Boosted({}) + TopBoosts({}) = {}\n\
-        🔸 RugCheck: New({}) + Viewed({}) + Trending({}) + Verified({}) = {}\n\
-        🔸 GeckoTerminal: Updated({}) + TrendingPools({}) = {}\n\
-        \n\
-        {}\n\
-        {}\n\
-        📈 LIFETIME STATS: Processed {} | 🆕 Total Valid Added {} | Success Rate {:.1}%\n\
-        {}\n\
-        ═══════════════════════════════════════════════════════════════",
-            stats.total_cycles,
-            cycle_duration,
-            stats.total_cycles,
-            processed,
-            added,
-            dedup_removed + blacklist_removed,
-            results_emoji,
-            results_text,
-            total_fetched,
-            cycle_counts.profiles,
-            cycle_counts.boosted,
-            cycle_counts.top_boosts,
-            dex_total,
-            cycle_counts.rug_new,
-            cycle_counts.rug_viewed,
-            cycle_counts.rug_trending,
-            cycle_counts.rug_verified,
-            rug_total,
-            cycle_counts.gecko_updated,
-            cycle_counts.gecko_trending,
-            gecko_total,
-            filtering_info,
-            error_status,
-            stats.total_processed,
-            stats.total_added,
-            success_rate,
-            timing_info
-        )
+    let header_line = "════════════════════════════════════════════════════════════";
+    let title = "🔍 DISCOVERY SUMMARY - Comprehensive Token Sweep";
+    let cycle_line = format!(
+        "  • Cycle     📊  #{:<3} | Duration: {} | Total Lifetime: {} cycles",
+        stats.total_cycles,
+        cycle_duration,
+        stats.total_cycles
     );
+    let results_line = format!(
+        "  • Results   🎯  Processed {} | 🆕 NEW VALID: {} | Filtered out: {}",
+        processed,
+        added,
+        dedup_removed + blacklist_removed
+    );
+    let status_line = format!("  • Status    {} {}", results_emoji, results_text);
+
+    let api_breakdown_line = format!("  • API Calls 📚  {} total from 9 endpoints:", total_fetched);
+    let dex_line = format!(
+        "    🔸 DexScreener: Profiles({}) + Boosted({}) + TopBoosts({}) = {}",
+        cycle_counts.profiles,
+        cycle_counts.boosted,
+        cycle_counts.top_boosts,
+        dex_total
+    );
+    let rug_line = format!(
+        "    🔸 RugCheck: New({}) + Viewed({}) + Trending({}) + Verified({}) = {}",
+        cycle_counts.rug_new,
+        cycle_counts.rug_viewed,
+        cycle_counts.rug_trending,
+        cycle_counts.rug_verified,
+        rug_total
+    );
+    let gecko_line = format!(
+        "    🔸 GeckoTerminal: Updated({}) + TrendingPools({}) = {}",
+        cycle_counts.gecko_updated,
+        cycle_counts.gecko_trending,
+        gecko_total
+    );
+
+    let filtering_line = format!(
+        "  • Filtering {}",
+        filtering_info.replace("🧹 FILTERING: ", "🧹  ")
+    );
+    let error_line = format!("  • Status    {}", error_status);
+    let lifetime_line = format!(
+        "  • Lifetime  📈  Processed {} | 🆕 Total Valid Added {} | Success Rate {:.1}%",
+        stats.total_processed,
+        stats.total_added,
+        success_rate
+    );
+    let timing_line = format!("  • Timing    {}", timing_info.replace("⏰ TIMING: ", "⏰  "));
+
+    let body = format!(
+        "\n{header}\n{title}\n{header}\n{cycle}\n{results}\n{status}\n\n{api_breakdown}\n{dex}\n{rug}\n{gecko}\n\n{filtering}\n{error}\n{lifetime}\n{timing}\n{header}",
+        header = header_line,
+        title = title,
+        cycle = cycle_line,
+        results = results_line,
+        status = status_line,
+        api_breakdown = api_breakdown_line,
+        dex = dex_line,
+        rug = rug_line,
+        gecko = gecko_line,
+        filtering = filtering_line,
+        error = error_line,
+        lifetime = lifetime_line,
+        timing = timing_line
+    );
+
+    log(LogTag::Discovery, "SUMMARY", &body);
 }
 
 // =============================================================================

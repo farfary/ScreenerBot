@@ -1110,43 +1110,57 @@ fn log_security_summary(summary: &SecuritySummary) {
         }
     };
 
-    log(
-        LogTag::Security,
-        "MONITOR",
-        &format!(
-            "\n🔐 Security (30s)\n\
-             SAFETY: 🛡️ {safe_cnt} ({safe_pct:.1}%) | ⛔ {unsafe_cnt} | ❓ {unknown_cnt}\n\
-             API: calls={api_total}, ok={api_ok} ({api_pct:.1}%), fail={api_fail}, last={last_api}\n\
-             CACHE: {cache_hits}/{cache_total} ({cache_rate:.1}%), size={cache_size} | DB: {db_hits}/{db_total} ({db_rate:.1}%), stored={db_tokens_safe}/{db_tokens_total}, unproc={db_unprocessed}\n\
-             MARKET: pump.fun={pump_cnt}, high_score={high_score_cnt}\n\
-             PLATFORMS: {platforms}\n\
-             REASONS: {reasons}\n\
-             🔐",
-            safe_cnt = summary.tokens_safe,
-            safe_pct = safe_percentage,
-            unsafe_cnt = summary.tokens_unsafe,
-            unknown_cnt = summary.tokens_unknown,
-            api_total = summary.api_calls_total,
-            api_ok = summary.api_calls_success,
-            api_pct = api_success_rate,
-            api_fail = summary.api_calls_failed,
-            last_api = last_api,
-            cache_hits = summary.cache_hits,
-            cache_total = summary.cache_hits + summary.cache_misses,
-            cache_rate = cache_hit_rate,
-            cache_size = summary.cache_size,
-            db_hits = summary.db_hits,
-            db_total = summary.db_hits + summary.db_misses,
-            db_rate = db_hit_rate,
-            db_tokens_total = summary.db_total_tokens,
-            db_tokens_safe = summary.db_safe_tokens,
-            db_unprocessed = summary.db_unprocessed_tokens,
-            pump_cnt = summary.pump_fun_tokens,
-            high_score_cnt = summary.db_high_score_tokens,
-            platforms = platforms_inline,
-            reasons = reasons_inline
-        )
+    let header_line = "════════════════════════════════════════════════════════════";
+    let title = "🔐 SECURITY SUMMARY (last ~30s)";
+    let safety_line = format!(
+        "  • Safety    🛡️  {} ({:.1}%)  |  ⛔ {}  |  ❓ {}",
+        summary.tokens_safe,
+        safe_percentage,
+        summary.tokens_unsafe,
+        summary.tokens_unknown
     );
+    let api_line = format!(
+        "  • API       �  calls={}, ok={} ({:.1}%), fail={}, last={}",
+        summary.api_calls_total,
+        summary.api_calls_success,
+        api_success_rate,
+        summary.api_calls_failed,
+        last_api
+    );
+    let cache_line = format!(
+        "  • Cache     🗄️  {}/{} ({:.1}%), size={}  |  DB: {}/{} ({:.1}%), stored={}/{}, unproc={}",
+        summary.cache_hits,
+        summary.cache_hits + summary.cache_misses,
+        cache_hit_rate,
+        summary.cache_size,
+        summary.db_hits,
+        summary.db_hits + summary.db_misses,
+        db_hit_rate,
+        summary.db_safe_tokens,
+        summary.db_total_tokens,
+        summary.db_unprocessed_tokens
+    );
+    let market_line = format!(
+        "  • Market    📊  pump.fun={}, high_score={}",
+        summary.pump_fun_tokens,
+        summary.db_high_score_tokens
+    );
+    let platforms_line = format!("  • Platforms 🏢  {}", platforms_inline);
+    let reasons_line = format!("  • Reasons   ⚠️  {}", reasons_inline);
+
+    let body = format!(
+        "\n{header}\n{title}\n{header}\n{safety}\n{api}\n{cache}\n{market}\n{platforms}\n{reasons}\n{header}",
+        header = header_line,
+        title = title,
+        safety = safety_line,
+        api = api_line,
+        cache = cache_line,
+        market = market_line,
+        platforms = platforms_line,
+        reasons = reasons_line
+    );
+
+    log(LogTag::Security, "MONITOR", &body);
 }
 
 fn format_top_reasons(top: &[(String, u64)], total_unsafe: u64) -> String {
