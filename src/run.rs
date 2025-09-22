@@ -220,6 +220,22 @@ pub async fn run_bot() -> Result<(), String> {
         log(LogTag::System, "SUCCESS", "Security analyzer initialized");
         // Start periodic security summary reporting
         tokens::security::start_security_summary_task();
+
+        // Start background security monitoring to fetch missing token security info
+        let shutdown_security = shutdown.clone();
+        match tokens::security::start_security_monitoring(shutdown_security).await {
+            Ok(security_handle) => {
+                log(LogTag::System, "SUCCESS", "Security monitoring task started");
+                // Store the handle if needed for shutdown coordination
+            }
+            Err(e) => {
+                log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to start security monitoring: {}", e)
+                );
+            }
+        }
     }
 
     // Start tokens system background tasks

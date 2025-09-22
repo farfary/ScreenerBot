@@ -1,6 +1,10 @@
 use screenerbot::{
     logger::{ init_file_logging, log, LogTag },
-    tokens::security::{ start_security_monitoring, get_security_analyzer },
+    tokens::security::{
+        start_security_monitoring,
+        get_security_analyzer,
+        initialize_security_analyzer,
+    },
 };
 
 use std::sync::Arc;
@@ -14,11 +18,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("=== Testing Security Background Service ===\n");
 
-    // Initialize security analyzer
+    // Initialize security analyzer first
+    if let Err(e) = initialize_security_analyzer() {
+        println!("❌ Failed to initialize security analyzer: {}", e);
+        return Err(e.into());
+    }
+    println!("✅ Security analyzer initialized successfully");
+
+    // Get security analyzer
     let analyzer = get_security_analyzer();
 
     // Check how many tokens need security analysis
-    match analyzer.database.count_tokens_without_security() {
+    let analyzer = match analyzer {
+        Some(a) => a,
+        None => {
+            println!("❌ Security analyzer not initialized");
+            return Err("Security analyzer not initialized".into());
+        }
+    };
+
+    match analyzer.count_tokens_without_security() {
         Ok(count) => {
             println!("✅ Found {} tokens without security info in database", count);
             log(LogTag::Security, "TEST_COUNT", &format!("Uncached tokens: {}", count));
@@ -30,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Get a few token examples
-    match analyzer.database.get_tokens_without_security() {
+    match analyzer.get_tokens_without_security() {
         Ok(tokens) => {
             let sample_size = std::cmp::min(5, tokens.len());
             if sample_size > 0 {
@@ -70,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::time::sleep(Duration::from_secs(15)).await;
 
     // Check progress
-    match analyzer.database.count_tokens_without_security() {
+    match analyzer.count_tokens_without_security() {
         Ok(remaining) => {
             println!("\n📊 Progress check: {} tokens still need security analysis", remaining);
         }

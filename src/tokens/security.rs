@@ -6,7 +6,7 @@ use reqwest::{ Client, StatusCode };
 use std::collections::{ HashMap, HashSet };
 use std::sync::{ Arc, Mutex };
 use std::sync::atomic::{ AtomicU64, Ordering };
-use tokio::sync::RwLock;
+use tokio::sync::{ RwLock, Notify };
 use tokio::time::{ sleep, Duration, Instant };
 
 const RUGCHECK_API_BASE: &str = "https://api.rugcheck.xyz/v1/tokens";
@@ -230,6 +230,19 @@ impl SecurityAnalyzer {
 
     fn get_db(&self) -> Result<SecurityDatabase, String> {
         SecurityDatabase::new(&self.db_path).map_err(|e| format!("Failed to open database: {}", e))
+    }
+
+    // Public methods for database operations used by test binaries
+    pub fn count_tokens_without_security(&self) -> Result<i64, String> {
+        self.get_db()?
+            .count_tokens_without_security()
+            .map_err(|e| format!("Database error: {}", e))
+    }
+
+    pub fn get_tokens_without_security(&self) -> Result<Vec<String>, String> {
+        self.get_db()?
+            .get_tokens_without_security()
+            .map_err(|e| format!("Database error: {}", e))
     }
 
     pub async fn analyze_token(&self, mint: &str) -> SecurityAnalysis {
@@ -988,6 +1001,95 @@ pub fn initialize_security_analyzer() -> Result<(), String> {
 pub fn get_security_analyzer() -> Option<Arc<SecurityAnalyzer>> {
     let global_analyzer = GLOBAL_SECURITY_ANALYZER.lock().ok()?;
     global_analyzer.clone()
+}
+
+// Start background security monitoring task that fetches security info for unprocessed tokens
+pub async fn start_security_monitoring(
+    shutdown: Arc<Notify>
+) -> Result<tokio::task::JoinHandle<()>, String> {
+    let analyzer = get_security_analyzer().ok_or_else(|| "Security analyzer not initialized")?;
+
+    let handle = tokio::spawn(async move {
+        log(LogTag::Security, "MONITOR_START", "Starting background security monitoring task");
+
+        let mut interval = tokio::time::interval(Duration::from_secs(10)); // Check every 10 seconds
+        let mut last_fetch = Instant::now() - Duration::from_secs(600); // Start immediately
+
+        loop {
+            tokio::select! {
+                _ = shutdown.notified() => {
+                    log(LogTag::Security, "MONITOR_SHUTDOWN", "Security monitoring task shutting down");
+                    break;
+                }
+                _ = interval.tick() => {
+                    // Only fetch if enough time has passed (rate limiting)
+                    if last_fetch.elapsed() >= Duration::from_millis(500) {
+                        // Get tokens that need security analysis
+                        match analyzer.get_db() {
+                            Ok(db) => {
+                                match db.get_tokens_without_security() {
+                                    Ok(tokens) => {
+                                        if !tokens.is_empty() {
+                                            log(LogTag::Security, "MONITOR_BATCH", 
+                                                &format!("Found {} tokens without security info, processing batch", tokens.len()));
+                                            
+                                            // Process tokens one by one to respect rate limits
+                                            for (i, mint) in tokens.iter().enumerate() {
+                                                tokio::select! {
+                                                    _ = shutdown.notified() => {
+                                                        log(LogTag::Security, "MONITOR_SHUTDOWN", 
+                                                            &format!("Shutdown during batch processing at token {}/{}", i+1, tokens.len()));
+                                                        return;
+                                                    }
+                                                    _ = async {
+                                                        // Fetch security info for this token (uses full analyze_token with API calls)
+                                                        let analysis = analyzer.analyze_token(mint).await;
+                                                        
+                                                        if is_debug_security_enabled() {
+                                                            log(LogTag::Security, "MONITOR_TOKEN", 
+                                                                &format!("Processed {} → safe: {}, score: {}", 
+                                                                mint, analysis.is_safe, analysis.score));
+                                                        }
+                                                        
+                                                        // Rate limit: wait 500ms between requests
+                                                        tokio::time::sleep(Duration::from_millis(500)).await;
+                                                    } => {}
+                                                }
+                                            }
+                                            
+                                            last_fetch = Instant::now();
+                                            log(LogTag::Security, "MONITOR_COMPLETE", 
+                                                &format!("Completed processing batch of {} tokens", tokens.len()));
+                                        } else {
+                                            // No tokens to process - less frequent logging
+                                            if last_fetch.elapsed() >= Duration::from_secs(300) { // Log every 5 minutes if nothing to do
+                                                log(LogTag::Security, "MONITOR_IDLE", "All tokens have security info - monitoring idle");
+                                                last_fetch = Instant::now();
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log(LogTag::Security, "MONITOR_ERROR", 
+                                            &format!("Failed to get tokens without security: {}", e));
+                                        // Back off on error
+                                        tokio::time::sleep(Duration::from_secs(30)).await;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log(LogTag::Security, "MONITOR_ERROR", 
+                                    &format!("Failed to open security database: {}", e));
+                                // Back off on error
+                                tokio::time::sleep(Duration::from_secs(30)).await;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    Ok(handle)
 }
 
 // Start periodic security summary reporting

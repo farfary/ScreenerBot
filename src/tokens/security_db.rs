@@ -469,6 +469,38 @@ impl SecurityDatabase {
         let _ = self.conn.execute("DETACH DATABASE tokensdb", []);
         Ok(count)
     }
+
+    /// Get list of token mints that don't have security info
+    /// Used by background monitoring task to fetch security data for unprocessed tokens
+    pub fn get_tokens_without_security(&self) -> SqliteResult<Vec<String>> {
+        // Attach tokens database under an alias for this query scope
+        let _ = self.conn.execute("DETACH DATABASE tokensdb", []);
+        self.conn.execute("ATTACH DATABASE 'data/tokens.db' AS tokensdb", [])?;
+
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT t.mint
+            FROM tokensdb.tokens t
+            LEFT JOIN security_info s ON s.mint = t.mint
+            WHERE s.mint IS NULL
+            ORDER BY t.mint
+            LIMIT 100
+            "#
+        )?;
+
+        let mut tokens = Vec::new();
+        let rows = stmt.query_map([], |row| {
+            let mint: String = row.get(0)?;
+            Ok(mint)
+        })?;
+
+        for row_result in rows {
+            tokens.push(row_result?);
+        }
+
+        let _ = self.conn.execute("DETACH DATABASE tokensdb", []);
+        Ok(tokens)
+    }
 }
 
 // Helper function to parse Rugcheck JSON response into SecurityInfo
