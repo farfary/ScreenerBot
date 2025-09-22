@@ -218,6 +218,8 @@ pub async fn run_bot() -> Result<(), String> {
         log(LogTag::System, "ERROR", &format!("Failed to initialize security analyzer: {}", e));
     } else {
         log(LogTag::System, "SUCCESS", "Security analyzer initialized");
+        // Start periodic security summary reporting
+        tokens::security::start_security_summary_task();
     }
 
     // Start tokens system background tasks

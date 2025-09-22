@@ -4,16 +4,102 @@ use once_cell::sync::Lazy;
 use reqwest::{ Client, StatusCode };
 use std::collections::HashMap;
 use std::sync::{ Arc, Mutex };
+use std::sync::atomic::{ AtomicU64, Ordering };
 use tokio::sync::RwLock;
-use tokio::time::{ sleep, Duration };
+use tokio::time::{ sleep, Duration, Instant };
 
 const RUGCHECK_API_BASE: &str = "https://api.rugcheck.xyz/v1/tokens";
 const MAX_CACHE_AGE_HOURS: i64 = 24; // Cache security data for 24 hours
+
+#[derive(Debug, Default)]
+pub struct SecurityMetrics {
+    pub api_calls_total: AtomicU64,
+    pub api_calls_success: AtomicU64,
+    pub api_calls_failed: AtomicU64,
+    pub cache_hits: AtomicU64,
+    pub cache_misses: AtomicU64,
+    pub db_hits: AtomicU64,
+    pub db_misses: AtomicU64,
+    pub tokens_analyzed: AtomicU64,
+    pub tokens_safe: AtomicU64,
+    pub tokens_unsafe: AtomicU64,
+    pub tokens_unknown: AtomicU64,
+    pub pump_fun_tokens: AtomicU64,
+    pub last_api_call: Arc<RwLock<Option<Instant>>>,
+}
+
+impl SecurityMetrics {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub async fn record_api_call(&self, success: bool) {
+        self.api_calls_total.fetch_add(1, Ordering::Relaxed);
+        if success {
+            self.api_calls_success.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.api_calls_failed.fetch_add(1, Ordering::Relaxed);
+        }
+        *self.last_api_call.write().await = Some(Instant::now());
+    }
+
+    pub fn record_cache_hit(&self) {
+        self.cache_hits.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_cache_miss(&self) {
+        self.cache_misses.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_db_hit(&self) {
+        self.db_hits.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_db_miss(&self) {
+        self.db_misses.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_analysis(&self, analysis: &SecurityAnalysis) {
+        self.tokens_analyzed.fetch_add(1, Ordering::Relaxed);
+        if analysis.is_safe {
+            self.tokens_safe.fetch_add(1, Ordering::Relaxed);
+        } else if analysis.risk_level == RiskLevel::Unknown {
+            self.tokens_unknown.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.tokens_unsafe.fetch_add(1, Ordering::Relaxed);
+        }
+        if analysis.pump_fun_token {
+            self.pump_fun_tokens.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
 
 pub struct SecurityAnalyzer {
     db_path: String,
     client: Client,
     cache: Arc<RwLock<HashMap<String, SecurityInfo>>>, // In-memory cache for fast access
+    metrics: Arc<SecurityMetrics>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SecuritySummary {
+    pub api_calls_total: u64,
+    pub api_calls_success: u64,
+    pub api_calls_failed: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub db_hits: u64,
+    pub db_misses: u64,
+    pub tokens_analyzed: u64,
+    pub tokens_safe: u64,
+    pub tokens_unsafe: u64,
+    pub tokens_unknown: u64,
+    pub pump_fun_tokens: u64,
+    pub cache_size: u64,
+    pub db_total_tokens: u64,
+    pub db_safe_tokens: u64,
+    pub db_high_score_tokens: u64,
+    pub last_api_call: Option<Instant>,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +141,7 @@ impl SecurityAnalyzer {
             db_path: db_path.to_string(),
             client,
             cache: Arc::new(RwLock::new(HashMap::new())),
+            metrics: Arc::new(SecurityMetrics::new()),
         })
     }
 
@@ -69,14 +156,18 @@ impl SecurityAnalyzer {
         {
             let cache = self.cache.read().await;
             if let Some(info) = cache.get(mint) {
+                self.metrics.record_cache_hit();
                 log(
                     LogTag::Security,
                     "CACHE_HIT",
                     &format!("Using cached security data for mint={}", mint)
                 );
-                return self.calculate_security_analysis(info);
+                let analysis = self.calculate_security_analysis(info);
+                self.metrics.record_analysis(&analysis);
+                return analysis;
             }
         }
+        self.metrics.record_cache_miss();
 
         // Try to get from database (single connection for read + staleness check)
         if let Ok(db) = self.get_db() {
@@ -84,6 +175,7 @@ impl SecurityAnalyzer {
                 Ok(Some(info)) => {
                     match db.is_stale(mint, MAX_CACHE_AGE_HOURS) {
                         Ok(false) => {
+                            self.metrics.record_db_hit();
                             log(
                                 LogTag::Security,
                                 "DB_HIT",
@@ -94,7 +186,9 @@ impl SecurityAnalyzer {
                                 let mut cache = self.cache.write().await;
                                 cache.insert(mint.to_string(), info.clone());
                             }
-                            return self.calculate_security_analysis(&info);
+                            let analysis = self.calculate_security_analysis(&info);
+                            self.metrics.record_analysis(&analysis);
+                            return analysis;
                         }
                         Ok(true) => {
                             log(
@@ -113,6 +207,7 @@ impl SecurityAnalyzer {
                     }
                 }
                 Ok(None) => {
+                    self.metrics.record_db_miss();
                     log(
                         LogTag::Security,
                         "DB_MISS",
@@ -132,6 +227,7 @@ impl SecurityAnalyzer {
         // Fetch fresh data from Rugcheck API
         match self.fetch_rugcheck_data(mint).await {
             Ok(info) => {
+                self.metrics.record_api_call(true).await;
                 // Store in database
                 if
                     let Err(e) = self
@@ -151,16 +247,19 @@ impl SecurityAnalyzer {
                     cache.insert(mint.to_string(), info.clone());
                 }
 
-                self.calculate_security_analysis(&info)
+                let analysis = self.calculate_security_analysis(&info);
+                self.metrics.record_analysis(&analysis);
+                analysis
             }
             Err(e) => {
+                self.metrics.record_api_call(false).await;
                 log(
                     LogTag::Security,
                     "API_ERROR",
                     &format!("Failed to fetch security data for mint={}: {}", mint, e)
                 );
                 // Return conservative analysis for unknown tokens
-                SecurityAnalysis {
+                let analysis = SecurityAnalysis {
                     is_safe: false,
                     score: 0,
                     score_normalized: 0,
@@ -172,7 +271,9 @@ impl SecurityAnalyzer {
                     pump_fun_token: false,
                     risks: vec!["Failed to fetch security data".to_string()],
                     summary: "Unable to analyze token security".to_string(),
-                }
+                };
+                self.metrics.record_analysis(&analysis);
+                analysis
             }
         }
     }
@@ -503,6 +604,40 @@ impl SecurityAnalyzer {
         }
         None
     }
+
+    pub async fn get_security_summary(&self) -> SecuritySummary {
+        let cache_size = self.cache.read().await.len();
+        let last_api_call = *self.metrics.last_api_call.read().await;
+
+        let db_stats = match self.get_security_stats().await {
+            Ok(stats) => stats,
+            Err(_) => HashMap::new(),
+        };
+
+        SecuritySummary {
+            api_calls_total: self.metrics.api_calls_total.load(Ordering::Relaxed),
+            api_calls_success: self.metrics.api_calls_success.load(Ordering::Relaxed),
+            api_calls_failed: self.metrics.api_calls_failed.load(Ordering::Relaxed),
+            cache_hits: self.metrics.cache_hits.load(Ordering::Relaxed),
+            cache_misses: self.metrics.cache_misses.load(Ordering::Relaxed),
+            db_hits: self.metrics.db_hits.load(Ordering::Relaxed),
+            db_misses: self.metrics.db_misses.load(Ordering::Relaxed),
+            tokens_analyzed: self.metrics.tokens_analyzed.load(Ordering::Relaxed),
+            tokens_safe: self.metrics.tokens_safe.load(Ordering::Relaxed),
+            tokens_unsafe: self.metrics.tokens_unsafe.load(Ordering::Relaxed),
+            tokens_unknown: self.metrics.tokens_unknown.load(Ordering::Relaxed),
+            pump_fun_tokens: self.metrics.pump_fun_tokens.load(Ordering::Relaxed),
+            cache_size: cache_size as u64,
+            db_total_tokens: db_stats.get("total").copied().unwrap_or(0) as u64,
+            db_safe_tokens: db_stats.get("safe").copied().unwrap_or(0) as u64,
+            db_high_score_tokens: db_stats.get("high_score").copied().unwrap_or(0) as u64,
+            last_api_call,
+        }
+    }
+
+    pub fn get_metrics(&self) -> Arc<SecurityMetrics> {
+        self.metrics.clone()
+    }
 }
 
 // Simplified public interface for token filtering
@@ -534,6 +669,148 @@ pub fn initialize_security_analyzer() -> Result<(), String> {
 pub fn get_security_analyzer() -> Option<Arc<SecurityAnalyzer>> {
     let global_analyzer = GLOBAL_SECURITY_ANALYZER.lock().ok()?;
     global_analyzer.clone()
+}
+
+// Start periodic security summary reporting
+pub fn start_security_summary_task() {
+    tokio::spawn(async {
+        let mut interval = tokio::time::interval(Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+
+            if let Some(analyzer) = get_security_analyzer() {
+                let summary = analyzer.get_security_summary().await;
+                log_security_summary(&summary);
+            }
+        }
+    });
+    log(LogTag::Security, "SUMMARY_TASK", "Started 30-second security summary task");
+}
+
+fn log_security_summary(summary: &SecuritySummary) {
+    let cache_hit_rate = if summary.cache_hits + summary.cache_misses > 0 {
+        ((summary.cache_hits as f64) / ((summary.cache_hits + summary.cache_misses) as f64)) * 100.0
+    } else {
+        0.0
+    };
+
+    let db_hit_rate = if summary.db_hits + summary.db_misses > 0 {
+        ((summary.db_hits as f64) / ((summary.db_hits + summary.db_misses) as f64)) * 100.0
+    } else {
+        0.0
+    };
+
+    let api_success_rate = if summary.api_calls_total > 0 {
+        ((summary.api_calls_success as f64) / (summary.api_calls_total as f64)) * 100.0
+    } else {
+        0.0
+    };
+
+    let safe_percentage = if summary.tokens_analyzed > 0 {
+        ((summary.tokens_safe as f64) / (summary.tokens_analyzed as f64)) * 100.0
+    } else {
+        0.0
+    };
+
+    let last_api = if let Some(instant) = summary.last_api_call {
+        format!("{:.1}s ago", instant.elapsed().as_secs_f64())
+    } else {
+        "never".to_string()
+    };
+
+    // Create status indicators with emojis
+    let api_status_icon = if api_success_rate >= 90.0 {
+        "🟢"
+    } else if api_success_rate >= 70.0 {
+        "🟡"
+    } else {
+        "🔴"
+    };
+
+    let cache_status_icon = if cache_hit_rate >= 80.0 {
+        "⚡"
+    } else if cache_hit_rate >= 50.0 {
+        "🟡"
+    } else {
+        "🔴"
+    };
+
+    let db_status_icon = if db_hit_rate >= 70.0 {
+        "💾"
+    } else if db_hit_rate >= 40.0 {
+        "🟡"
+    } else {
+        "🔴"
+    };
+
+    let safety_status_icon = if safe_percentage >= 50.0 {
+        "🛡️"
+    } else if safe_percentage >= 20.0 {
+        "⚠️"
+    } else {
+        "⛔"
+    };
+
+    // Create formatted sections
+    log(
+        LogTag::Security,
+        "MONITOR",
+        &format!(
+            "\n🔐 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════\n\
+             🔐 SECURITY ANALYZER STATUS - 30 Second Summary Report\n\
+             🔐 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════\n\
+             \n\
+             {} API Performance     │ {} Cache Performance   │ {} Database Performance │ {} Token Safety Overview\n\
+             ──────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────\n\
+             📞 Total: {:>6} calls  │ ⚡ Hits: {:>6}/{:<6}    │ 💾 Hits: {:>6}/{:<6}   │ 🛡️ Safe: {:>6} ({:>5.1}%)\n\
+             ✅ Success: {:>4} ({:>5.1}%) │ 🎯 Rate: {:>13.1}%     │ 🎯 Rate: {:>12.1}%    │ ⛔ Unsafe: {:>6} tokens\n\
+             ❌ Failed: {:>7} calls  │ 📦 Size: {:>6} tokens   │ 📊 Total: {:>5} tokens  │ ❓ Unknown: {:>5} tokens\n\
+             ⏰ Last: {:>12}      │                         │ 🟢 Safe: {:>6} tokens   │ 🔄 Pump.Fun: {:>4} tokens\n\
+             \n\
+             📈 Analysis Session Stats:\n\
+             ├─ Total Analyzed: {} tokens\n\
+             ├─ Success Rate: {:.1}% safe classification\n\
+             ├─ Database Coverage: {}/{} tokens (safe/high-score)\n\
+             └─ Cache Efficiency: {:.1}% hit rate (performance: {})\n\
+             \n\
+             🔐 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════",
+            api_status_icon,
+            cache_status_icon,
+            db_status_icon,
+            safety_status_icon,
+            summary.api_calls_total,
+            summary.cache_hits,
+            summary.cache_hits + summary.cache_misses,
+            summary.db_hits,
+            summary.db_hits + summary.db_misses,
+            summary.tokens_safe,
+            safe_percentage,
+            summary.api_calls_success,
+            api_success_rate,
+            cache_hit_rate,
+            db_hit_rate,
+            summary.tokens_unsafe,
+            summary.api_calls_failed,
+            summary.cache_size,
+            summary.db_total_tokens,
+            summary.tokens_unknown,
+            last_api,
+            summary.db_safe_tokens,
+            summary.pump_fun_tokens,
+            summary.tokens_analyzed,
+            safe_percentage,
+            summary.db_safe_tokens,
+            summary.db_high_score_tokens,
+            cache_hit_rate,
+            if cache_hit_rate >= 80.0 {
+                "EXCELLENT"
+            } else if cache_hit_rate >= 50.0 {
+                "GOOD"
+            } else {
+                "NEEDS IMPROVEMENT"
+            }
+        )
+    );
 }
 
 #[cfg(test)]
