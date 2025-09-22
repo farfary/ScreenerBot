@@ -7,6 +7,7 @@ use crate::global::is_debug_pool_service_enabled;
 use crate::arguments::is_debug_pool_fetcher_enabled;
 use crate::logger::{ log, LogTag };
 use crate::rpc::{ get_rpc_client, RpcClient };
+use crate::events::{ record_safe, Event, EventCategory, Severity };
 use super::types::PoolDescriptor;
 use crate::pools::service; // access global calculator
 use super::utils::is_sol_mint;
@@ -343,8 +344,41 @@ impl AccountFetcher {
 
         // Process in batches
         for batch in accounts_to_fetch.chunks(ACCOUNT_BATCH_SIZE) {
+            let batch_start = Instant::now();
+
+            record_safe(
+                Event::info(
+                    EventCategory::Pool,
+                    Some("rpc_batch_started".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
+                    "batch_size": batch.len(),
+                    "max_batch_size": ACCOUNT_BATCH_SIZE,
+                    "accounts": batch.iter().map(|p| p.to_string()).collect::<Vec<_>>()
+                })
+                )
+            ).await;
+
             match Self::fetch_account_batch(rpc_client, batch).await {
                 Ok(account_data_list) => {
+                    let batch_duration = batch_start.elapsed();
+
+                    record_safe(
+                        Event::info(
+                            EventCategory::Pool,
+                            Some("rpc_batch_completed".to_string()),
+                            None,
+                            None,
+                            serde_json::json!({
+                            "batch_size": batch.len(),
+                            "accounts_fetched": account_data_list.len(),
+                            "duration_ms": batch_duration.as_millis(),
+                            "success": true
+                        })
+                        )
+                    ).await;
+
                     // Update last fetch times
                     {
                         let mut last_fetch = account_last_fetch.write().unwrap();
@@ -369,11 +403,28 @@ impl AccountFetcher {
                     }
                 }
                 Err(e) => {
+                    let batch_duration = batch_start.elapsed();
+
                     log(
                         LogTag::PoolFetcher,
                         "ERROR",
                         &format!("Failed to fetch account batch: {}", e)
                     );
+
+                    record_safe(
+                        Event::error(
+                            EventCategory::Pool,
+                            Some("rpc_batch_failed".to_string()),
+                            None,
+                            None,
+                            serde_json::json!({
+                            "batch_size": batch.len(),
+                            "error": e,
+                            "duration_ms": batch_duration.as_millis(),
+                            "accounts": batch.iter().map(|p| p.to_string()).collect::<Vec<_>>()
+                        })
+                        )
+                    ).await;
                 }
             }
 
@@ -400,15 +451,58 @@ impl AccountFetcher {
         }
 
         // Fetch accounts using RPC client
-        let account_results = rpc_client.get_multiple_accounts(accounts).await?;
+        let rpc_start = Instant::now();
+        let account_results = match rpc_client.get_multiple_accounts(accounts).await {
+            Ok(results) => {
+                let rpc_duration = rpc_start.elapsed();
+
+                record_safe(
+                    Event::info(
+                        EventCategory::Rpc,
+                        Some("get_multiple_accounts_success".to_string()),
+                        None,
+                        None,
+                        serde_json::json!({
+                        "account_count": accounts.len(),
+                        "duration_ms": rpc_duration.as_millis(),
+                        "success": true
+                    })
+                    )
+                ).await;
+
+                results
+            }
+            Err(e) => {
+                let rpc_duration = rpc_start.elapsed();
+
+                record_safe(
+                    Event::error(
+                        EventCategory::Rpc,
+                        Some("get_multiple_accounts_failed".to_string()),
+                        None,
+                        None,
+                        serde_json::json!({
+                        "account_count": accounts.len(),
+                        "error": e.to_string(),
+                        "duration_ms": rpc_duration.as_millis(),
+                        "accounts": accounts.iter().map(|p| p.to_string()).collect::<Vec<_>>()
+                    })
+                    )
+                ).await;
+
+                return Err(e);
+            }
+        };
 
         let mut account_data_list = Vec::new();
+        let mut missing_accounts = Vec::new();
 
         for (i, account_opt) in account_results.iter().enumerate() {
             if let Some(account) = account_opt {
                 let account_data = AccountData::from_account(accounts[i], account.clone(), 0);
                 account_data_list.push(account_data);
             } else {
+                missing_accounts.push(accounts[i].to_string());
                 if is_debug_pool_fetcher_enabled() {
                     log(
                         LogTag::PoolFetcher,
@@ -417,6 +511,22 @@ impl AccountFetcher {
                     );
                 }
             }
+        }
+
+        if !missing_accounts.is_empty() {
+            record_safe(
+                Event::warn(
+                    EventCategory::Pool,
+                    Some("accounts_not_found".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
+                    "missing_count": missing_accounts.len(),
+                    "total_requested": accounts.len(),
+                    "missing_accounts": missing_accounts
+                })
+                )
+            ).await;
         }
 
         Ok(account_data_list)

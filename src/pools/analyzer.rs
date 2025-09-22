@@ -10,6 +10,7 @@ use crate::global::is_debug_pool_service_enabled;
 use crate::arguments::is_debug_pool_analyzer_enabled;
 use crate::logger::{ log, LogTag };
 use crate::rpc::RpcClient;
+use crate::events::{ record_safe, Event, EventCategory, Severity };
 use super::types::{ PoolDescriptor, ProgramKind };
 use super::utils::{ PoolMintVaultInfo, is_sol_mint };
 use super::decoders::{
@@ -252,6 +253,27 @@ impl PoolAnalyzer {
                     account.owner
                 }
                 Err(e) => {
+                    let target_mint = if is_sol_mint(&base_mint.to_string()) {
+                        quote_mint.to_string()
+                    } else {
+                        base_mint.to_string()
+                    };
+
+                    record_safe(
+                        Event::error(
+                            EventCategory::Pool,
+                            Some("pool_account_fetch_failed".to_string()),
+                            Some(target_mint.clone()),
+                            Some(pool_id.to_string()),
+                            serde_json::json!({
+                            "pool_id": pool_id.to_string(),
+                            "target_mint": target_mint,
+                            "error": e.to_string(),
+                            "action": "get_account"
+                        })
+                        )
+                    ).await;
+
                     if is_debug_pool_analyzer_enabled() {
                         log(
                             LogTag::PoolAnalyzer,
@@ -274,6 +296,29 @@ impl PoolAnalyzer {
         let program_kind = Self::classify_program_static(&actual_program_id);
 
         if program_kind == ProgramKind::Unknown {
+            let target_mint = if is_sol_mint(&base_mint.to_string()) {
+                quote_mint.to_string()
+            } else {
+                base_mint.to_string()
+            };
+
+            record_safe(
+                Event::warn(
+                    EventCategory::Pool,
+                    Some("unsupported_program".to_string()),
+                    Some(target_mint.clone()),
+                    Some(pool_id.to_string()),
+                    serde_json::json!({
+                    "pool_id": pool_id.to_string(),
+                    "program_id": actual_program_id.to_string(),
+                    "base_mint": base_mint.to_string(),
+                    "quote_mint": quote_mint.to_string(),
+                    "target_mint": target_mint,
+                    "error": "Unsupported DEX program - consider adding support"
+                })
+                )
+            ).await;
+
             if is_debug_pool_analyzer_enabled() {
                 log(
                     LogTag::PoolAnalyzer,
@@ -322,6 +367,37 @@ impl PoolAnalyzer {
                 )
             );
         }
+
+        let target_mint = if is_sol_mint(&base_mint.to_string()) {
+            quote_mint.to_string()
+        } else {
+            base_mint.to_string()
+        };
+
+        record_safe(
+            Event::info(
+                EventCategory::Pool,
+                Some(
+                    format!("{}_analyzed", program_kind.display_name().to_lowercase()).replace(
+                        " ",
+                        "_"
+                    )
+                ),
+                Some(target_mint.clone()),
+                Some(pool_id.to_string()),
+                serde_json::json!({
+                "pool_id": pool_id.to_string(),
+                "program_kind": program_kind.display_name(),
+                "program_id": actual_program_id.to_string(),
+                "target_mint": target_mint,
+                "base_mint": base_mint.to_string(),
+                "quote_mint": quote_mint.to_string(),
+                "reserve_accounts_count": reserve_accounts.len(),
+                "liquidity_usd": liquidity_usd,
+                "volume_h24_usd": volume_h24_usd
+            })
+            )
+        ).await;
 
         Some(PoolDescriptor {
             pool_id,

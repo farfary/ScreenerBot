@@ -6,6 +6,7 @@
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_pool_service_enabled;
 use crate::rpc::{ get_rpc_client, RpcClient };
+use crate::events::{ record_safe, Event, EventCategory, Severity };
 use super::{ PoolError, cache, db };
 use super::discovery::{ PoolDiscovery, ENABLE_DEXSCREENER_DISCOVERY };
 use super::analyzer::PoolAnalyzer;
@@ -60,9 +61,39 @@ pub(super) fn get_pool_analyzer() -> Option<Arc<PoolAnalyzer>> {
 ///
 /// Returns an error if the service is already running or if initialization fails.
 pub async fn start_pool_service() -> Result<(), PoolError> {
+    // Record service start attempt
+    record_safe(
+        Event::info(
+            EventCategory::System,
+            Some("pool_service_start_attempt".to_string()),
+            None,
+            None,
+            serde_json::json!({
+            "single_pool_mode": ENABLE_SINGLE_POOL_MODE,
+            "max_watched_tokens": MAX_WATCHED_TOKENS,
+            "refresh_interval_seconds": POOL_REFRESH_INTERVAL_SECONDS,
+            "dexscreener_enabled": ENABLE_DEXSCREENER_DISCOVERY
+        })
+        )
+    ).await;
+
     // Check if already running
     if SERVICE_RUNNING.swap(true, Ordering::SeqCst) {
         log(LogTag::PoolService, "WARN", "Pool service is already running");
+
+        record_safe(
+            Event::warn(
+                EventCategory::System,
+                Some("pool_service_already_running".to_string()),
+                None,
+                None,
+                serde_json::json!({
+                "error": "Service already running",
+                "action": "start_rejected"
+            })
+            )
+        ).await;
+
         return Err(PoolError::InitializationFailed("Service already running".to_string()));
     }
 
@@ -72,6 +103,21 @@ pub async fn start_pool_service() -> Result<(), PoolError> {
     if let Err(e) = db::initialize_database().await {
         log(LogTag::PoolService, "ERROR", &format!("Failed to initialize database: {}", e));
         SERVICE_RUNNING.store(false, Ordering::Relaxed);
+
+        record_safe(
+            Event::error(
+                EventCategory::System,
+                Some("pool_service_db_init_failed".to_string()),
+                None,
+                None,
+                serde_json::json!({
+                "error": e,
+                "component": "database",
+                "action": "initialize"
+            })
+            )
+        ).await;
+
         return Err(
             PoolError::InitializationFailed(format!("Database initialization failed: {}", e))
         );
@@ -98,6 +144,21 @@ pub async fn start_pool_service() -> Result<(), PoolError> {
             unsafe {
                 GLOBAL_SHUTDOWN_HANDLE = None;
             }
+
+            record_safe(
+                Event::error(
+                    EventCategory::System,
+                    Some("pool_service_component_init_failed".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
+                    "error": e,
+                    "component": "service_components",
+                    "action": "initialize"
+                })
+                )
+            ).await;
+
             return Err(
                 PoolError::InitializationFailed(format!("Component initialization failed: {}", e))
             );
@@ -123,6 +184,21 @@ pub async fn start_pool_service() -> Result<(), PoolError> {
     start_background_tasks(shutdown).await;
 
     log(LogTag::PoolService, "SUCCESS", "Pool service started successfully");
+
+    record_safe(
+        Event::info(
+            EventCategory::System,
+            Some("pool_service_started".to_string()),
+            None,
+            None,
+            serde_json::json!({
+            "status": "started",
+            "single_pool_mode": ENABLE_SINGLE_POOL_MODE,
+            "components_initialized": true
+        })
+        )
+    ).await;
+
     Ok(())
 }
 
@@ -131,8 +207,35 @@ pub async fn start_pool_service() -> Result<(), PoolError> {
 /// This function gracefully shuts down all background tasks and cleans up resources.
 /// It waits for tasks to complete within the specified timeout.
 pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
+    record_safe(
+        Event::info(
+            EventCategory::System,
+            Some("pool_service_stop_attempt".to_string()),
+            None,
+            None,
+            serde_json::json!({
+            "timeout_seconds": timeout_seconds,
+            "action": "stop_requested"
+        })
+        )
+    ).await;
+
     if !SERVICE_RUNNING.load(Ordering::Relaxed) {
         log(LogTag::PoolService, "WARN", "Pool service is not running");
+
+        record_safe(
+            Event::warn(
+                EventCategory::System,
+                Some("pool_service_not_running".to_string()),
+                None,
+                None,
+                serde_json::json!({
+                "warning": "Service not running",
+                "action": "stop_skipped"
+            })
+            )
+        ).await;
+
         return Ok(());
     }
 
@@ -172,10 +275,40 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
             }
 
             log(LogTag::PoolService, "SUCCESS", "✅ Pool service stopped successfully");
+
+            record_safe(
+                Event::info(
+                    EventCategory::System,
+                    Some("pool_service_stopped".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
+                    "status": "stopped",
+                    "clean_shutdown": true,
+                    "timeout_seconds": timeout_seconds
+                })
+                )
+            ).await;
+
             Ok(())
         }
         Err(_) => {
             log(LogTag::PoolService, "WARN", "Pool service shutdown timed out");
+
+            record_safe(
+                Event::error(
+                    EventCategory::System,
+                    Some("pool_service_stop_timeout".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
+                    "error": "Shutdown timeout",
+                    "timeout_seconds": timeout_seconds,
+                    "forced_cleanup": true
+                })
+                )
+            ).await;
+
             Err(PoolError::InitializationFailed("Shutdown timeout".to_string()))
         }
     }
@@ -212,10 +345,38 @@ async fn initialize_service_components() -> Result<(), String> {
         log(LogTag::PoolService, "DEBUG", "Initializing service components...");
     }
 
+    record_safe(
+        Event::info(
+            EventCategory::System,
+            Some("pool_components_init_start".to_string()),
+            None,
+            None,
+            serde_json::json!({
+            "dexscreener_enabled": ENABLE_DEXSCREENER_DISCOVERY,
+            "action": "component_initialization"
+        })
+        )
+    ).await;
+
     // Initialize external APIs required by discovery before starting background tasks
     if ENABLE_DEXSCREENER_DISCOVERY {
         if let Err(e) = crate::tokens::init_dexscreener_api().await {
             // Fail fast because discovery depends on this API when enabled
+
+            record_safe(
+                Event::error(
+                    EventCategory::System,
+                    Some("dexscreener_api_init_failed".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
+                    "error": e,
+                    "component": "dexscreener_api",
+                    "required": true
+                })
+                )
+            ).await;
+
             return Err(format!("Failed to initialize DexScreener API: {}", e));
         }
         // Verify global handle is available
@@ -228,8 +389,35 @@ async fn initialize_service_components() -> Result<(), String> {
                         "DexScreener API initialized and global handle acquired"
                     );
                 }
+
+                record_safe(
+                    Event::info(
+                        EventCategory::System,
+                        Some("dexscreener_api_initialized".to_string()),
+                        None,
+                        None,
+                        serde_json::json!({
+                        "component": "dexscreener_api",
+                        "status": "ready"
+                    })
+                    )
+                ).await;
             }
             Err(e) => {
+                record_safe(
+                    Event::error(
+                        EventCategory::System,
+                        Some("dexscreener_api_handle_unavailable".to_string()),
+                        None,
+                        None,
+                        serde_json::json!({
+                        "error": e,
+                        "component": "dexscreener_api",
+                        "stage": "handle_verification"
+                    })
+                    )
+                ).await;
+
                 return Err(format!("DexScreener API global handle unavailable after init: {}", e));
             }
         }
@@ -242,6 +430,7 @@ async fn initialize_service_components() -> Result<(), String> {
     // We need to create an owned RpcClient to wrap in Arc for sharing
     // For now, we'll create a clone or work around this design issue
     let rpc_urls = rpc_client_ref.get_all_urls();
+    let rpc_urls_count = rpc_urls.len(); // Store count before moving
     let owned_rpc_client = Arc::new(
         crate::rpc::RpcClient
             ::new_with_urls(rpc_urls)
@@ -259,7 +448,9 @@ async fn initialize_service_components() -> Result<(), String> {
     let account_fetcher = Arc::new(
         AccountFetcher::new(owned_rpc_client.clone(), pool_directory.clone())
     );
-    let price_calculator = Arc::new(PriceCalculator::new(pool_directory.clone())); // Store components globally
+    let price_calculator = Arc::new(PriceCalculator::new(pool_directory.clone()));
+
+    // Store components globally
     unsafe {
         POOL_DISCOVERY = Some(pool_discovery);
         POOL_ANALYZER = Some(pool_analyzer);
@@ -271,6 +462,19 @@ async fn initialize_service_components() -> Result<(), String> {
         log(LogTag::PoolService, "DEBUG", "Service components initialized");
     }
 
+    record_safe(
+        Event::info(
+            EventCategory::System,
+            Some("pool_components_initialized".to_string()),
+            None,
+            None,
+            serde_json::json!({
+                "components": ["pool_discovery", "pool_analyzer", "account_fetcher", "price_calculator"],
+                "rpc_urls_count": rpc_urls_count,
+                "status": "ready"
+            })
+        )
+    ).await;
     Ok(())
 }
 

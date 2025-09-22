@@ -29,6 +29,7 @@ pub const ENABLE_RAYDIUM_DISCOVERY: bool = false;
 
 use crate::global::is_debug_pool_discovery_enabled;
 use crate::logger::{ log, LogTag };
+use crate::events::{ record_safe, Event, EventCategory, Severity };
 use crate::tokens::dexscreener::{
     get_token_pools_from_dexscreener,
     get_batch_token_pools_from_dexscreener,
@@ -150,6 +151,22 @@ impl PoolDiscovery {
 
     /// Execute one batched discovery tick: fetch pools for all tokens via batch APIs and stream to analyzer
     async fn batched_discovery_tick() {
+        let tick_start = Instant::now();
+
+        record_safe(
+            Event::info(
+                EventCategory::Pool,
+                Some("discovery_tick_started".to_string()),
+                None,
+                None,
+                serde_json::json!({
+                "dexscreener_enabled": ENABLE_DEXSCREENER_DISCOVERY,
+                "geckoterminal_enabled": ENABLE_GECKOTERMINAL_DISCOVERY,
+                "raydium_enabled": ENABLE_RAYDIUM_DISCOVERY
+            })
+            )
+        ).await;
+
         // Check if any sources are enabled
         if
             !ENABLE_DEXSCREENER_DISCOVERY &&
@@ -163,6 +180,20 @@ impl PoolDiscovery {
                     "All pool discovery sources disabled - skipping tick"
                 );
             }
+
+            record_safe(
+                Event::warn(
+                    EventCategory::Pool,
+                    Some("discovery_sources_disabled".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
+                    "warning": "All discovery sources disabled",
+                    "action": "skipping_tick"
+                })
+                )
+            ).await;
+
             return;
         }
 
@@ -214,6 +245,20 @@ impl PoolDiscovery {
             if is_debug_pool_discovery_enabled() {
                 log(LogTag::PoolDiscovery, "DEBUG", "No tokens to discover this tick");
             }
+
+            record_safe(
+                Event::info(
+                    EventCategory::Pool,
+                    Some("discovery_tick_empty".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
+                    "reason": "no_tokens_to_discover",
+                    "duration_ms": tick_start.elapsed().as_millis()
+                })
+                )
+            ).await;
+
             return;
         }
 
@@ -261,6 +306,21 @@ impl PoolDiscovery {
                 &format!("Discovery tick: {} tokens queued", tokens.len())
             );
         }
+
+        record_safe(
+            Event::info(
+                EventCategory::Pool,
+                Some("discovery_tokens_prepared".to_string()),
+                None,
+                None,
+                serde_json::json!({
+                "token_count": tokens.len(),
+                "position_tokens": open_position_mints.len(),
+                "initial_filtered": initial_count,
+                "max_watched": MAX_WATCHED_TOKENS
+            })
+            )
+        ).await;
 
         // Run batch fetches for all sources concurrently (each handles rate limiting internally)
         // Using tokio::join! to minimize total tick latency vs sequential awaits
@@ -377,16 +437,36 @@ impl PoolDiscovery {
             if is_debug_pool_discovery_enabled() {
                 log(LogTag::PoolDiscovery, "DEBUG", "No pools discovered in this tick");
             }
+
+            record_safe(
+                Event::info(
+                    EventCategory::Pool,
+                    Some("discovery_tick_completed".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
+                    "pools_discovered": 0,
+                    "token_count": tokens.len(),
+                    "duration_ms": tick_start.elapsed().as_millis(),
+                    "result": "no_pools_found"
+                })
+                )
+            ).await;
+
             return;
         }
 
         // Deduplicate by pool_id and sort by liquidity desc
+        let descriptors_count = descriptors.len();
         let mut deduped = Self::deduplicate_discovered(descriptors);
+        let deduped_count = deduped.len();
 
         // If single pool mode, keep only highest-liquidity pool per token mint
         if is_single_pool_mode_enabled() {
             deduped = Self::select_highest_liquidity_per_token(deduped);
         }
+
+        let final_pool_count = deduped.len();
 
         // Stream to analyzer immediately
         if let Some(analyzer) = get_pool_analyzer() {
@@ -402,12 +482,47 @@ impl PoolDiscovery {
                     volume_h24_usd: pool.volume_h24_usd,
                 });
             }
-        } else if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "WARN",
-                "Analyzer not initialized; cannot stream discovered pools"
-            );
+
+            record_safe(
+                Event::info(
+                    EventCategory::Pool,
+                    Some("discovery_tick_completed".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
+                    "pools_discovered": descriptors_count,
+                    "pools_deduped": deduped_count,
+                    "pools_final": final_pool_count,
+                    "token_count": tokens.len(),
+                    "duration_ms": tick_start.elapsed().as_millis(),
+                    "single_pool_mode": is_single_pool_mode_enabled(),
+                    "result": "success"
+                })
+                )
+            ).await;
+        } else {
+            record_safe(
+                Event::error(
+                    EventCategory::Pool,
+                    Some("discovery_analyzer_unavailable".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
+                    "error": "Analyzer not initialized",
+                    "pools_discovered": final_pool_count,
+                    "token_count": tokens.len(),
+                    "duration_ms": tick_start.elapsed().as_millis()
+                })
+                )
+            ).await;
+
+            if is_debug_pool_discovery_enabled() {
+                log(
+                    LogTag::PoolDiscovery,
+                    "WARN",
+                    "Analyzer not initialized; cannot stream discovered pools"
+                );
+            }
         }
     }
 
