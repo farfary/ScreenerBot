@@ -233,21 +233,21 @@ pub const REENTRY_ADDITIONAL_DISCOUNT_PER_PRIOR_PCT: f64 = 2.5; // extra discoun
 pub const STOP_LOSS_PERCENT: f64 = -30.0; // Tighter stop loss for scalping (was -40.0)
 pub const EXTREME_LOSS_PERCENT: f64 = -45.0; // Emergency exit (was -55.0)
 
-// Time (minutes) - Shorter hold times for scalping
-pub const MAX_HOLD_MINUTES: f64 = 90.0; // Reduced from 120.0 for faster scalping
+// Time (minutes) - Extended for better position development
+pub const MAX_HOLD_MINUTES: f64 = 120.0; // Restored from 90.0 to allow longer runs
 
-// Profit ladders (percent) - Aggressive but allow runners
-pub const BASE_MIN_PROFIT_PERCENT: f64 = 5.0; // base min profit gate
-pub const INSTANT_EXIT_LEVEL_1: f64 = 20.0; // level 1 now conditional (needs context)
-pub const INSTANT_EXIT_LEVEL_2: f64 = 40.0; // slightly higher to avoid cutting strong early runners
+// Profit ladders (percent) - More aggressive targets for better risk/reward
+pub const BASE_MIN_PROFIT_PERCENT: f64 = 8.0; // Increased from 5.0 for better risk/reward
+pub const INSTANT_EXIT_LEVEL_1: f64 = 30.0; // Increased from 20.0 to avoid cutting off early runners
+pub const INSTANT_EXIT_LEVEL_2: f64 = 50.0; // Increased from 40.0 for better position development
 
-// Trailing stop dynamics (tighter for scalping)
-pub const TRAIL_MIN_GAP: f64 = 3.0; // Reduced from 5.0 for tighter trailing
-pub const TRAIL_MAX_GAP: f64 = 20.0; // Reduced from 35.0 for scalping
+// Trailing stop dynamics (improved for better risk/reward)
+pub const TRAIL_MIN_GAP: f64 = 5.0; // Increased from 3.0 to give winners breathing room
+pub const TRAIL_MAX_GAP: f64 = 30.0; // Increased from 20.0 to allow larger winners
 
-// Trailing tighten schedule (faster for scalping)
-pub const TRAIL_TIGHTEN_START: f64 = 30.0; // Reduced from 45.0
-pub const TRAIL_TIGHTEN_FULL: f64 = 60.0; // Reduced from 90.0
+// Trailing tighten schedule (improved for better risk/reward)
+pub const TRAIL_TIGHTEN_START: f64 = 45.0; // Increased from 30.0
+pub const TRAIL_TIGHTEN_FULL: f64 = 90.0; // Increased from 60.0
 
 // Odds model threshold (higher for scalping quality)
 pub const EXIT_ODDS_THRESHOLD: f64 = 0.7; // Increased from 0.65
@@ -742,7 +742,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     {
         let moderate_peak = peak_profit >= 15.0 && peak_profit < 40.0;
         let very_early = minutes_held <= 5.0; // very early in position lifecycle
-        let retain_frac = 0.4; // keep at least 40% of peak (less strict than strong peaks)
+        let retain_frac = 0.3; // Reduced from 0.4 to allow more volatility (keep 30% of peak)
         let must_retain = peak_profit * retain_frac;
         let significant_giveback = pnl_percent < must_retain;
         let meaningful_dd = peak_profit - pnl_percent >= 6.0; // smaller threshold for moderate peaks
@@ -773,7 +773,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     {
         let strong_peak = peak_profit >= 40.0; // "big first leg" heuristic
         let early_enough = minutes_held <= 15.0; // focus on the opening impulse
-        let retain_frac = if peak_profit >= 80.0 { 0.55 } else { 0.5 }; // keep at least 50-55%
+        let retain_frac = if peak_profit >= 80.0 { 0.45 } else { 0.4 }; // Reduced from 0.55/0.5 (keep 40-45%)
         let must_retain = peak_profit * retain_frac;
         let big_giveback = pnl_percent < must_retain;
         let decent_abs_dd = peak_profit - pnl_percent >= 10.0; // avoid triggering on tiny wobbles
@@ -804,9 +804,17 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         let meaningful_peak = peak_profit >= 30.0;
         if meaningful_peak {
             let retain_frac = if minutes_held <= 20.0 {
-                if peak_profit >= 80.0 { 0.6 } else { 0.5 }
+                if peak_profit >= 80.0 {
+                    0.45
+                } else {
+                    0.4
+                } // Reduced from 0.6/0.5
             } else {
-                if peak_profit >= 80.0 { 0.5 } else { 0.45 }
+                if peak_profit >= 80.0 {
+                    0.4
+                } else {
+                    0.35
+                } // Reduced from 0.5/0.45
             };
             let must_retain = peak_profit * retain_frac;
             let big_giveback = pnl_percent < must_retain;
