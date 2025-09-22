@@ -751,56 +751,64 @@ fn log_security_summary(summary: &SecuritySummary) {
         "⛔"
     };
 
-    // Create formatted sections
+    // Create formatted sections without table structure
     log(
         LogTag::Security,
         "MONITOR",
         &format!(
-            "\n🔐 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════\n\
+            "\n🔐 ════════════════════════════════════════════════════════════════════════\n\
              🔐 SECURITY ANALYZER STATUS - 30 Second Summary Report\n\
-             🔐 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════\n\
+             🔐 ════════════════════════════════════════════════════════════════════════\n\
              \n\
-             {} API Performance     │ {} Cache Performance   │ {} Database Performance │ {} Token Safety Overview\n\
-             ──────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────\n\
-             📞 Total: {:>6} calls  │ ⚡ Hits: {:>6}/{:<6}    │ 💾 Hits: {:>6}/{:<6}   │ 🛡️ Safe: {:>6} ({:>5.1}%)\n\
-             ✅ Success: {:>4} ({:>5.1}%) │ 🎯 Rate: {:>13.1}%     │ 🎯 Rate: {:>12.1}%    │ ⛔ Unsafe: {:>6} tokens\n\
-             ❌ Failed: {:>7} calls  │ 📦 Size: {:>6} tokens   │ 📊 Total: {:>5} tokens  │ ❓ Unknown: {:>5} tokens\n\
-             ⏰ Last: {:>12}      │                         │ 🟢 Safe: {:>6} tokens   │ 🔄 Pump.Fun: {:>4} tokens\n\
+             {} API PERFORMANCE:\n\
+             📞 Total Calls: {} | ✅ Success: {} ({:.1}%) | ❌ Failed: {} | ⏰ Last: {}\n\
              \n\
-             📈 Analysis Session Stats:\n\
+             {} CACHE PERFORMANCE:\n\
+             ⚡ Hits: {}/{} ({:.1}% hit rate) | � Cache Size: {} tokens\n\
+             \n\
+             {} DATABASE PERFORMANCE:\n\
+             💾 Hits: {}/{} ({:.1}% hit rate) | 📊 Total: {} tokens | 🟢 Safe: {} tokens\n\
+             \n\
+             {} TOKEN SAFETY OVERVIEW:\n\
+             🛡️ Safe: {} tokens ({:.1}%) | ⛔ Unsafe: {} tokens | ❓ Unknown: {} tokens\n\
+             🔄 Pump.Fun: {} tokens | 📈 High Score: {} tokens\n\
+             \n\
+             � SESSION SUMMARY:\n\
              ├─ Total Analyzed: {} tokens\n\
-             ├─ Success Rate: {:.1}% safe classification\n\
-             ├─ Database Coverage: {}/{} tokens (safe/high-score)\n\
-             └─ Cache Efficiency: {:.1}% hit rate (performance: {})\n\
+             ├─ Safety Rate: {:.1}% classified as safe\n\
+             ├─ API Success Rate: {:.1}% ({} successful calls)\n\
+             ├─ Cache Efficiency: {:.1}% hit rate ({})\n\
+             └─ Database Coverage: {}/{} tokens stored\n\
              \n\
-             🔐 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════",
+             🔐 ════════════════════════════════════════════════════════════════════════",
             api_status_icon,
-            cache_status_icon,
-            db_status_icon,
-            safety_status_icon,
             summary.api_calls_total,
-            summary.cache_hits,
-            summary.cache_hits + summary.cache_misses,
-            summary.db_hits,
-            summary.db_hits + summary.db_misses,
-            summary.tokens_safe,
-            safe_percentage,
             summary.api_calls_success,
             api_success_rate,
-            cache_hit_rate,
-            db_hit_rate,
-            summary.tokens_unsafe,
             summary.api_calls_failed,
-            summary.cache_size,
-            summary.db_total_tokens,
-            summary.tokens_unknown,
             last_api,
+            cache_status_icon,
+            summary.cache_hits,
+            summary.cache_hits + summary.cache_misses,
+            cache_hit_rate,
+            summary.cache_size,
+            db_status_icon,
+            summary.db_hits,
+            summary.db_hits + summary.db_misses,
+            db_hit_rate,
+            summary.db_total_tokens,
             summary.db_safe_tokens,
+            safety_status_icon,
+            summary.tokens_safe,
+            safe_percentage,
+            summary.tokens_unsafe,
+            summary.tokens_unknown,
             summary.pump_fun_tokens,
+            summary.db_high_score_tokens,
             summary.tokens_analyzed,
             safe_percentage,
-            summary.db_safe_tokens,
-            summary.db_high_score_tokens,
+            api_success_rate,
+            summary.api_calls_success,
             cache_hit_rate,
             if cache_hit_rate >= 80.0 {
                 "EXCELLENT"
@@ -808,7 +816,9 @@ fn log_security_summary(summary: &SecuritySummary) {
                 "GOOD"
             } else {
                 "NEEDS IMPROVEMENT"
-            }
+            },
+            summary.db_safe_tokens,
+            summary.db_total_tokens
         )
     );
 }
