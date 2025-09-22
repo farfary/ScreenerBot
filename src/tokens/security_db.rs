@@ -448,6 +448,34 @@ impl SecurityDatabase {
         Ok(stats)
     }
 
+    pub fn count_safe_tokens(&self) -> SqliteResult<i64> {
+        let mut stmt = self.conn.prepare(
+            "SELECT COUNT(*) FROM security_info WHERE score_normalised >= 70"
+        )?;
+        stmt.query_row([], |row| row.get(0))
+    }
+
+    pub fn count_warning_tokens(&self) -> SqliteResult<i64> {
+        let mut stmt = self.conn.prepare(
+            "SELECT COUNT(*) FROM security_info WHERE score_normalised >= 40 AND score_normalised < 70"
+        )?;
+        stmt.query_row([], |row| row.get(0))
+    }
+
+    pub fn count_danger_tokens(&self) -> SqliteResult<i64> {
+        let mut stmt = self.conn.prepare(
+            "SELECT COUNT(*) FROM security_info WHERE score_normalised < 40"
+        )?;
+        stmt.query_row([], |row| row.get(0))
+    }
+
+    pub fn count_pump_fun_tokens(&self) -> SqliteResult<i64> {
+        let mut stmt = self.conn.prepare(
+            "SELECT COUNT(*) FROM security_info WHERE raw_response LIKE '%pump.fun%'"
+        )?;
+        stmt.query_row([], |row| row.get(0))
+    }
+
     /// Count tokens present in tokens.db that do not have a corresponding row in security_info
     /// Uses separate connection to avoid ATTACH race conditions.
     pub fn count_tokens_without_security(&self) -> SqliteResult<i64> {

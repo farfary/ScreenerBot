@@ -1,82 +1,23 @@
 use crate::logger::{ log, LogTag };
 use crate::arguments::is_debug_security_enabled;
 use crate::tokens::security_db::{ SecurityDatabase, SecurityInfo, parse_rugcheck_response };
-use crate::tokens::patterns::{ categorize_token };
 use once_cell::sync::Lazy;
 use reqwest::{ Client, StatusCode };
-use std::collections::{ HashMap, HashSet };
+use std::collections::HashMap;
 use std::sync::{ Arc, Mutex };
 use std::sync::atomic::{ AtomicU64, Ordering };
 use tokio::sync::{ RwLock, Notify };
 use tokio::time::{ sleep, Duration, Instant };
 
 const RUGCHECK_API_BASE: &str = "https://api.rugcheck.xyz/v1/tokens";
-const MAX_CACHE_AGE_HOURS: i64 = 24; // Cache security data for 24 hours
-
-// Normalize raw risk strings into concise categories for aggregation
-fn normalize_reason(reason: &str) -> String {
-    let r = reason.to_lowercase();
-    if
-        r.contains("authorit") ||
-        r.contains("not revoked") ||
-        r.contains("mint authority") ||
-        r.contains("freeze authority")
-    {
-        return "Authorities not revoked".to_string();
-    }
-    if
-        r.contains("lp") &&
-        (r.contains("not") ||
-            r.contains("unlock") ||
-            r.contains("lock") ||
-            r.contains("locked") ||
-            r.contains("burn"))
-    {
-        return "LP not locked/burned".to_string();
-    }
-    if
-        r.contains("holder") ||
-        r.contains("concentration") ||
-        r.contains("top10") ||
-        r.contains("top1")
-    {
-        return "High holder concentration".to_string();
-    }
-    if r.contains("liquidity") || r.contains("low liquidity") {
-        return "Low liquidity".to_string();
-    }
-    if r.contains("pump") {
-        return "Pump.fun risk".to_string();
-    }
-    if r.contains("blacklist") {
-        return "Blacklisted".to_string();
-    }
-    if r.contains("danger") || r.contains("risk") {
-        return "Rugcheck risk: danger".to_string();
-    }
-    // Compact long strings
-    reason.chars().take(64).collect()
-}
+const MAX_CACHE_AGE_HOURS: i64 = 24;
 
 #[derive(Debug, Default)]
 pub struct SecurityMetrics {
     pub api_calls_total: AtomicU64,
     pub api_calls_success: AtomicU64,
     pub api_calls_failed: AtomicU64,
-    pub cache_hits: AtomicU64,
-    pub cache_misses: AtomicU64,
-    pub db_hits: AtomicU64,
-    pub db_misses: AtomicU64,
-    pub tokens_analyzed: AtomicU64,
-    pub tokens_safe: AtomicU64,
-    pub tokens_unsafe: AtomicU64,
-    pub tokens_unknown: AtomicU64,
-    pub pump_fun_tokens: AtomicU64,
     pub last_api_call: Arc<RwLock<Option<Instant>>>,
-    // Aggregated rejection reasons for unsafe classifications
-    pub rejection_reasons: Arc<Mutex<HashMap<String, u64>>>,
-    // Pattern categorization tracking
-    pub platform_categories: Arc<Mutex<HashMap<String, u64>>>,
 }
 
 impl SecurityMetrics {
@@ -85,18 +26,7 @@ impl SecurityMetrics {
             api_calls_total: AtomicU64::new(0),
             api_calls_success: AtomicU64::new(0),
             api_calls_failed: AtomicU64::new(0),
-            cache_hits: AtomicU64::new(0),
-            cache_misses: AtomicU64::new(0),
-            db_hits: AtomicU64::new(0),
-            db_misses: AtomicU64::new(0),
-            tokens_analyzed: AtomicU64::new(0),
-            tokens_safe: AtomicU64::new(0),
-            tokens_unsafe: AtomicU64::new(0),
-            tokens_unknown: AtomicU64::new(0),
-            pump_fun_tokens: AtomicU64::new(0),
             last_api_call: Arc::new(RwLock::new(None)),
-            rejection_reasons: Arc::new(Mutex::new(HashMap::new())),
-            platform_categories: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -108,71 +38,6 @@ impl SecurityMetrics {
             self.api_calls_failed.fetch_add(1, Ordering::Relaxed);
         }
         *self.last_api_call.write().await = Some(Instant::now());
-    }
-
-    pub fn record_cache_hit(&self) {
-        self.cache_hits.fetch_add(1, Ordering::Relaxed);
-    }
-
-    pub fn record_cache_miss(&self) {
-        self.cache_misses.fetch_add(1, Ordering::Relaxed);
-    }
-
-    pub fn record_db_hit(&self) {
-        self.db_hits.fetch_add(1, Ordering::Relaxed);
-    }
-
-    pub fn record_db_miss(&self) {
-        self.db_misses.fetch_add(1, Ordering::Relaxed);
-    }
-
-    pub fn record_analysis(&self, analysis: &SecurityAnalysis) {
-        self.tokens_analyzed.fetch_add(1, Ordering::Relaxed);
-
-        // Classify tokens based on risk level for statistics
-        match analysis.risk_level {
-            RiskLevel::Safe => {
-                self.tokens_safe.fetch_add(1, Ordering::Relaxed);
-            }
-            RiskLevel::Unknown => {
-                self.tokens_unknown.fetch_add(1, Ordering::Relaxed);
-            }
-            RiskLevel::Warning | RiskLevel::Danger => {
-                self.tokens_unsafe.fetch_add(1, Ordering::Relaxed);
-
-                // Record risk reasons for statistics
-                let mut categories: HashSet<String> = HashSet::new();
-                for r in &analysis.risks {
-                    categories.insert(normalize_reason(r));
-                }
-                if analysis.pump_fun_token {
-                    categories.insert("Pump.fun token".to_string());
-                }
-                if categories.is_empty() && analysis.risk_level == RiskLevel::Danger {
-                    categories.insert("Low Rugcheck score".to_string());
-                }
-
-                let mut map = self.rejection_reasons.lock().unwrap_or_else(|e| e.into_inner());
-                for cat in categories {
-                    *map.entry(cat).or_insert(0) += 1;
-                }
-            }
-        }
-        if analysis.pump_fun_token {
-            self.pump_fun_tokens.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-
-    /// Record pattern categorization for a token
-    pub fn record_pattern_categorization(&self, mint: &str, name: &str, symbol: &str) {
-        let categorizations = categorize_token(mint, name, symbol);
-
-        if !categorizations.is_empty() {
-            let mut map = self.platform_categories.lock().unwrap_or_else(|e| e.into_inner());
-            for cat in categorizations {
-                *map.entry(cat.category).or_insert(0) += 1;
-            }
-        }
     }
 }
 
@@ -188,23 +53,12 @@ pub struct SecuritySummary {
     pub api_calls_total: u64,
     pub api_calls_success: u64,
     pub api_calls_failed: u64,
-    pub cache_hits: u64,
-    pub cache_misses: u64,
-    pub db_hits: u64,
-    pub db_misses: u64,
-    pub tokens_analyzed: u64,
-    pub tokens_safe: u64,
-    pub tokens_unsafe: u64,
-    pub tokens_unknown: u64,
-    pub pump_fun_tokens: u64,
-    pub cache_size: u64,
-    pub db_total_tokens: u64,
-    pub db_safe_tokens: u64,
-    pub db_high_score_tokens: u64,
     pub last_api_call: Option<Instant>,
-    pub top_rejection_reasons: Vec<(String, u64)>,
-    pub top_platform_categories: Vec<(String, u64)>,
-    pub db_unprocessed_tokens: u64,
+    pub db_safe_tokens: u64,
+    pub db_warning_tokens: u64,
+    pub db_danger_tokens: u64,
+    pub db_missing_tokens: u64,
+    pub db_pump_fun_tokens: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -280,7 +134,6 @@ impl SecurityAnalyzer {
         {
             let cache = self.cache.read().await;
             if let Some(info) = cache.get(mint) {
-                self.metrics.record_cache_hit();
                 if is_debug_security_enabled() {
                     log(
                         LogTag::Security,
@@ -289,8 +142,6 @@ impl SecurityAnalyzer {
                     );
                 }
                 let analysis = self.calculate_security_analysis(info);
-                self.metrics.record_analysis(&analysis);
-                // One compact per-token log for full analysis paths (cache hit)
                 log(
                     LogTag::Security,
                     "ANALYSIS",
@@ -306,15 +157,12 @@ impl SecurityAnalyzer {
                 return analysis;
             }
         }
-        self.metrics.record_cache_miss();
 
-        // Try to get from database (single connection for read + staleness check)
         if let Ok(db) = self.get_db() {
             match db.get_security_info(mint) {
                 Ok(Some(info)) => {
                     match db.is_stale(mint, MAX_CACHE_AGE_HOURS) {
                         Ok(false) => {
-                            self.metrics.record_db_hit();
                             if is_debug_security_enabled() {
                                 log(
                                     LogTag::Security,
@@ -328,7 +176,6 @@ impl SecurityAnalyzer {
                                 cache.insert(mint.to_string(), info.clone());
                             }
                             let analysis = self.calculate_security_analysis(&info);
-                            self.metrics.record_analysis(&analysis);
                             log(
                                 LogTag::Security,
                                 "ANALYSIS",
@@ -364,7 +211,6 @@ impl SecurityAnalyzer {
                     }
                 }
                 Ok(None) => {
-                    self.metrics.record_db_miss();
                     if is_debug_security_enabled() {
                         log(
                             LogTag::Security,
@@ -411,7 +257,6 @@ impl SecurityAnalyzer {
                 }
 
                 let analysis = self.calculate_security_analysis(&info);
-                self.metrics.record_analysis(&analysis);
                 log(
                     LogTag::Security,
                     "ANALYSIS",
@@ -448,7 +293,6 @@ impl SecurityAnalyzer {
                     risks: vec!["Failed to fetch security data".to_string()],
                     summary: "Unable to analyze token security".to_string(),
                 };
-                self.metrics.record_analysis(&analysis);
                 log(
                     LogTag::Security,
                     "ANALYSIS",
@@ -732,15 +576,12 @@ impl SecurityAnalyzer {
             let cache = self.cache.read().await;
             if let Some(info) = cache.get(mint) {
                 // Record cache hit and analysis metrics for summary accuracy
-                self.metrics.record_cache_hit();
                 let analysis = self.calculate_security_analysis(info);
-                self.metrics.record_analysis(&analysis);
                 return Some(analysis);
             }
         }
 
         // Record a cache miss when not found in memory
-        self.metrics.record_cache_miss();
 
         // 2) Database non-stale path
         if let Ok(db) = self.get_db() {
@@ -749,33 +590,27 @@ impl SecurityAnalyzer {
                     match db.is_stale(mint, MAX_CACHE_AGE_HOURS) {
                         Ok(false) => {
                             // Count DB hit
-                            self.metrics.record_db_hit();
                             // Put into cache for next time
                             {
                                 let mut cache = self.cache.write().await;
                                 cache.insert(mint.to_string(), info.clone());
                             }
                             let analysis = self.calculate_security_analysis(&info);
-                            self.metrics.record_analysis(&analysis);
                             return Some(analysis);
                         }
                         Ok(true) => {
                             // Stale counts as a miss for hit-rate visibility
-                            self.metrics.record_db_miss();
                         }
                         Err(_) => {
                             // Error also treated as miss
-                            self.metrics.record_db_miss();
                         }
                     }
                 }
                 Ok(None) => {
                     // Not found counts as miss
-                    self.metrics.record_db_miss();
                 }
                 Err(_) => {
                     // Error counts as miss
-                    self.metrics.record_db_miss();
                 }
             }
         }
@@ -798,7 +633,6 @@ impl SecurityAnalyzer {
             if let Ok(Some(info)) = db.get_security_info(mint) {
                 // Use any available security data, regardless of age
                 let analysis = self.calculate_security_analysis(&info);
-                self.metrics.record_analysis(&analysis);
                 return Some(analysis);
             }
         }
@@ -807,68 +641,30 @@ impl SecurityAnalyzer {
     }
 
     pub async fn get_security_summary(&self) -> SecuritySummary {
-        let cache_size = self.cache.read().await.len();
         let last_api_call = *self.metrics.last_api_call.read().await;
 
-        let db_stats = match self.get_security_stats().await {
-            Ok(stats) => stats,
-            Err(_) => HashMap::new(),
-        };
-
-        // Count tokens present in tokens.db missing security_info (unprocessed)
-        let db_unprocessed_tokens: u64 = self
-            .get_db()
-            .ok()
-            .and_then(|db| db.count_tokens_without_security().ok())
-            .unwrap_or(0) as u64;
-
-        // Prepare top rejection reasons snapshot (top 5)
-        let top_rejection_reasons = {
-            let mut pairs: Vec<(String, u64)> = self.metrics.rejection_reasons
-                .lock()
-                .map(|m| m.clone())
-                .unwrap_or_default()
-                .into_iter()
-                .collect();
-            pairs.sort_by(|a, b| b.1.cmp(&a.1));
-            pairs.truncate(5);
-            pairs
-        };
-
-        // Prepare top platform categories snapshot (top 5)
-        let top_platform_categories = {
-            let mut pairs: Vec<(String, u64)> = self.metrics.platform_categories
-                .lock()
-                .map(|m| m.clone())
-                .unwrap_or_default()
-                .into_iter()
-                .collect();
-            pairs.sort_by(|a, b| b.1.cmp(&a.1));
-            pairs.truncate(5);
-            pairs
+        let (safe, warning, danger, pump_fun, missing) = match self.get_db() {
+            Ok(db) => {
+                let safe = db.count_safe_tokens().unwrap_or(0) as u64;
+                let warning = db.count_warning_tokens().unwrap_or(0) as u64;
+                let danger = db.count_danger_tokens().unwrap_or(0) as u64;
+                let pump_fun = db.count_pump_fun_tokens().unwrap_or(0) as u64;
+                let missing = db.count_tokens_without_security().unwrap_or(0) as u64;
+                (safe, warning, danger, pump_fun, missing)
+            }
+            Err(_) => (0, 0, 0, 0, 0),
         };
 
         SecuritySummary {
             api_calls_total: self.metrics.api_calls_total.load(Ordering::Relaxed),
             api_calls_success: self.metrics.api_calls_success.load(Ordering::Relaxed),
             api_calls_failed: self.metrics.api_calls_failed.load(Ordering::Relaxed),
-            cache_hits: self.metrics.cache_hits.load(Ordering::Relaxed),
-            cache_misses: self.metrics.cache_misses.load(Ordering::Relaxed),
-            db_hits: self.metrics.db_hits.load(Ordering::Relaxed),
-            db_misses: self.metrics.db_misses.load(Ordering::Relaxed),
-            tokens_analyzed: self.metrics.tokens_analyzed.load(Ordering::Relaxed),
-            tokens_safe: self.metrics.tokens_safe.load(Ordering::Relaxed),
-            tokens_unsafe: self.metrics.tokens_unsafe.load(Ordering::Relaxed),
-            tokens_unknown: self.metrics.tokens_unknown.load(Ordering::Relaxed),
-            pump_fun_tokens: self.metrics.pump_fun_tokens.load(Ordering::Relaxed),
-            cache_size: cache_size as u64,
-            db_total_tokens: db_stats.get("total").copied().unwrap_or(0) as u64,
-            db_safe_tokens: db_stats.get("safe").copied().unwrap_or(0) as u64,
-            db_high_score_tokens: db_stats.get("high_score").copied().unwrap_or(0) as u64,
             last_api_call,
-            top_rejection_reasons,
-            top_platform_categories,
-            db_unprocessed_tokens,
+            db_safe_tokens: safe,
+            db_warning_tokens: warning,
+            db_danger_tokens: danger,
+            db_pump_fun_tokens: pump_fun,
+            db_missing_tokens: missing,
         }
     }
 
@@ -1015,59 +811,9 @@ pub fn start_security_summary_task() {
     log(LogTag::Security, "SUMMARY_TASK", "Started 30-second security summary task");
 }
 
-/// Analyze and record pattern categorization for tokens in the database
-pub async fn analyze_token_patterns_for_security() -> Result<(), String> {
-    if let Some(analyzer) = get_security_analyzer() {
-        // Get token database to access token names and symbols
-        let token_db = crate::tokens::cache::TokenDatabase
-            ::new()
-            .map_err(|e| format!("Failed to create token database: {}", e))?;
-
-        let tokens = token_db
-            .get_all_tokens().await
-            .map_err(|e| format!("Failed to get tokens: {}", e))?;
-
-        log(
-            LogTag::Security,
-            "PATTERNS",
-            &format!("Analyzing patterns for {} tokens", tokens.len())
-        );
-
-        for token in tokens.iter().take(1000) {
-            // Limit to avoid performance issues
-            analyzer
-                .get_metrics()
-                .record_pattern_categorization(&token.mint, &token.name, &token.symbol);
-        }
-
-        log(LogTag::Security, "PATTERNS", "Pattern categorization analysis complete");
-        Ok(())
-    } else {
-        Err("Security analyzer not initialized".to_string())
-    }
-}
-
 fn log_security_summary(summary: &SecuritySummary) {
-    let cache_hit_rate = if summary.cache_hits + summary.cache_misses > 0 {
-        ((summary.cache_hits as f64) / ((summary.cache_hits + summary.cache_misses) as f64)) * 100.0
-    } else {
-        0.0
-    };
-
-    let db_hit_rate = if summary.db_hits + summary.db_misses > 0 {
-        ((summary.db_hits as f64) / ((summary.db_hits + summary.db_misses) as f64)) * 100.0
-    } else {
-        0.0
-    };
-
     let api_success_rate = if summary.api_calls_total > 0 {
         ((summary.api_calls_success as f64) / (summary.api_calls_total as f64)) * 100.0
-    } else {
-        0.0
-    };
-
-    let safe_percentage = if summary.tokens_analyzed > 0 {
-        ((summary.tokens_safe as f64) / (summary.tokens_analyzed as f64)) * 100.0
     } else {
         0.0
     };
@@ -1078,107 +824,39 @@ fn log_security_summary(summary: &SecuritySummary) {
         "never".to_string()
     };
 
-    // Compact summary: minimal emojis (header/footer + safety), concise single-line sections.
-    let reasons_inline = {
-        if summary.top_rejection_reasons.is_empty() {
-            "-".to_string()
-        } else {
-            let mut parts: Vec<String> = Vec::new();
-            for (idx, (reason, count)) in summary.top_rejection_reasons.iter().take(3).enumerate() {
-                let pct = if summary.tokens_unsafe > 0 {
-                    ((*count as f64) / (summary.tokens_unsafe as f64)) * 100.0
-                } else {
-                    0.0
-                };
-                parts.push(format!("{}. {} — {} ({:.1}%)", idx + 1, reason, count, pct));
-            }
-            parts.join(" | ")
-        }
-    };
-
-    let platforms_inline = {
-        if summary.top_platform_categories.is_empty() {
-            "-".to_string()
-        } else {
-            let mut parts: Vec<String> = Vec::new();
-            for (idx, (platform, count)) in summary.top_platform_categories
-                .iter()
-                .take(3)
-                .enumerate() {
-                parts.push(format!("{}. {} — {}", idx + 1, platform, count));
-            }
-            parts.join(" | ")
-        }
-    };
+    let total_with_data =
+        summary.db_safe_tokens + summary.db_warning_tokens + summary.db_danger_tokens;
 
     let header_line = "════════════════════════════════════════════════════════════";
-    let title = "🔐 SECURITY SUMMARY (last ~30s)";
-    let safety_line = format!(
-        "  • Safety    🛡️  {} ({:.1}%)  |  ⛔ {}  |  ❓ {}",
-        summary.tokens_safe,
-        safe_percentage,
-        summary.tokens_unsafe,
-        summary.tokens_unknown
-    );
+    let title = "🔐 SECURITY DATABASE STATE";
+
     let api_line = format!(
-        "  • API       �  calls={}, ok={} ({:.1}%), fail={}, last={}",
+        "  • API       📡  calls={}, ok={} ({:.1}%), fail={}, last={}",
         summary.api_calls_total,
         summary.api_calls_success,
         api_success_rate,
         summary.api_calls_failed,
         last_api
     );
-    let cache_line = format!(
-        "  • Cache     🗄️  {}/{} ({:.1}%), size={}  |  DB: {}/{} ({:.1}%), stored={}/{}, unproc={}",
-        summary.cache_hits,
-        summary.cache_hits + summary.cache_misses,
-        cache_hit_rate,
-        summary.cache_size,
-        summary.db_hits,
-        summary.db_hits + summary.db_misses,
-        db_hit_rate,
+
+    let tokens_line = format!(
+        "  • Tokens    �  safe={}, warning={}, danger={}, missing={}, pump.fun={}",
         summary.db_safe_tokens,
-        summary.db_total_tokens,
-        summary.db_unprocessed_tokens
+        summary.db_warning_tokens,
+        summary.db_danger_tokens,
+        summary.db_missing_tokens,
+        summary.db_pump_fun_tokens
     );
-    let market_line = format!(
-        "  • Market    📊  pump.fun={}, high_score={}",
-        summary.pump_fun_tokens,
-        summary.db_high_score_tokens
-    );
-    let platforms_line = format!("  • Platforms 🏢  {}", platforms_inline);
-    let reasons_line = format!("  • Reasons   ⚠️  {}", reasons_inline);
 
     let body = format!(
-        "\n{header}\n{title}\n{header}\n{safety}\n{api}\n{cache}\n{market}\n{platforms}\n{reasons}\n{header}",
+        "\n{header}\n{title}\n{header}\n{api}\n{tokens}\n{header}",
         header = header_line,
         title = title,
-        safety = safety_line,
         api = api_line,
-        cache = cache_line,
-        market = market_line,
-        platforms = platforms_line,
-        reasons = reasons_line
+        tokens = tokens_line
     );
 
     log(LogTag::Security, "MONITOR", &body);
-}
-
-fn format_top_reasons(top: &[(String, u64)], total_unsafe: u64) -> String {
-    if top.is_empty() {
-        return "(no unsafe tokens recorded)".to_string();
-    }
-    let mut out = String::new();
-    for (i, (reason, count)) in top.iter().enumerate() {
-        let pct = if total_unsafe > 0 {
-            ((*count as f64) / (total_unsafe as f64)) * 100.0
-        } else {
-            0.0
-        };
-        // Indented bullet points
-        out.push_str(&format!("   {}. {} — {} ({:.1}%)\n", i + 1, reason, count, pct));
-    }
-    out.trim_end().to_string()
 }
 
 #[cfg(test)]
