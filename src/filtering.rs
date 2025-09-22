@@ -55,19 +55,19 @@ const MAX_MARKET_CAP_USD: f64 = 100_000_000.0;
 
 // ===== MINIMAL SECURITY REQUIREMENTS (VERY PERMISSIVE) =====
 /// Minimum security score (0-100) - very low threshold for inclusion
-const MIN_SECURITY_SCORE: i32 = 0;
+const MIN_SECURITY_SCORE: i32 = 10;
 /// Maximum acceptable top holder percentage (very permissive)
-const MAX_TOP_HOLDER_PCT: f64 = 95.0;
+const MAX_TOP_HOLDER_PCT: f64 = 15.0;
 /// Maximum acceptable top 3 holders percentage (very permissive)
-const MAX_TOP_3_HOLDERS_PCT: f64 = 98.0;
+const MAX_TOP_3_HOLDERS_PCT: f64 = 30.0;
 /// Minimum LP lock percentage for pump.fun tokens (relaxed)
 const MIN_PUMPFUN_LP_LOCK_PCT: f64 = 50.0;
 /// Minimum LP lock percentage for regular tokens (very relaxed)
-const MIN_REGULAR_LP_LOCK_PCT: f64 = 0.0;
+const MIN_REGULAR_LP_LOCK_PCT: f64 = 50.0;
 /// Allow tokens with mint authority (trading focus over safety)
-const ALLOW_MINT_AUTHORITY: bool = true;
+const ALLOW_MINT_AUTHORITY: bool = false;
 /// Allow tokens with freeze authority (trading focus over safety)
-const ALLOW_FREEZE_AUTHORITY: bool = true;
+const ALLOW_FREEZE_AUTHORITY: bool = false;
 
 // =============================================================================
 // MAIN FILTERING FUNCTION
