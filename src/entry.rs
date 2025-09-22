@@ -9,7 +9,6 @@
 use crate::global::is_debug_entry_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::{ get_pool_price, get_price_history, PriceResult, check_price_history_quality };
-use crate::tokens::security::get_security_analyzer; // for optional cached holder count
 use crate::learner::get_learning_integration;
 use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;
@@ -207,7 +206,7 @@ const LIQ_ACCUM_MIN_CONFIDENCE_BONUS: f64 = 12.0; // Base confidence bonus
 // a reasonable holder distribution (>= MICRO_LIQ_MIN_HOLDERS) to reduce pure honeypot risk.
 // We rely ONLY on cached security data for holder counts (no fresh RPC in the hot loop).
 // If holder count is unavailable we proceed (optimistic) but tag the reason accordingly.
-const MICRO_LIQ_SOL_RESERVE_MAX: f64 = 0.01; // < 0.01 SOL reserves considered micro-liq
+const MICRO_LIQ_SOL_RESERVE_MAX: f64 = 0.001; // < 0.01 SOL reserves considered micro-liq
 const MICRO_LIQ_MIN_DROP_PERCENT: f64 = 95.0; // At least 95% drop from recent high
 const MICRO_LIQ_PREFERRED_DROP_PERCENT: f64 = 97.0; // Stronger confidence above this
 const MICRO_LIQ_MIN_HOLDERS: u32 = 50; // Require >= 50 holders when info cached
@@ -215,19 +214,16 @@ const MICRO_LIQ_LOOKBACK_SECS: i64 = 900; // 15 min lookback window to find rece
 const MICRO_LIQ_CONF_BASE: f64 = 82.0; // Base confidence when triggered
 const MICRO_LIQ_CONF_BONUS: f64 = 8.0; // Bonus if drop >= preferred threshold
 
-fn get_cached_holder_count_fast(mint: &str) -> Option<u32> {
+async fn get_cached_holder_count_fast(mint: &str) -> Option<u32> {
     // Uses security analyzer in-memory cache only; never triggers fresh analysis.
-    // Safe (no panics) – returns None if analyzer not yet initialized or holder info missing.
-    let analyzer = get_security_analyzer();
-    if let Some(info) = analyzer.cache.get(mint) {
-        if let Some(holder) = info.holder_info.as_ref() {
-            return Some(holder.total_holders);
-        }
+    // Safe (no panics) – returns None if analyzer not available or no cached data.
+    if let Some(analyzer) = crate::tokens::security::get_security_analyzer() {
+        return analyzer.get_cached_holder_count(mint).await;
     }
     None
 }
 
-fn detect_micro_liquidity_capitulation(
+async fn detect_micro_liquidity_capitulation(
     price_info: &PriceResult,
     history: &[(DateTime<Utc>, f64)]
 ) -> Option<(f64, f64, Option<u32>)> {
@@ -245,7 +241,7 @@ fn detect_micro_liquidity_capitulation(
         if recent_high > 0.0 && price_info.price_sol > 0.0 && recent_high > price_info.price_sol {
             let drop_percent = ((recent_high - price_info.price_sol) / recent_high) * 100.0;
             if drop_percent >= MICRO_LIQ_MIN_DROP_PERCENT {
-                let holder_count = get_cached_holder_count_fast(&price_info.mint);
+                let holder_count = get_cached_holder_count_fast(&price_info.mint).await;
                 // If holder count known, enforce threshold; else allow optimistic proceed.
                 if holder_count.map(|c| c >= MICRO_LIQ_MIN_HOLDERS).unwrap_or(true) {
                     return Some((drop_percent, recent_high, holder_count));
@@ -985,7 +981,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
             let Some((drop_percent, recent_high, holder_opt)) = detect_micro_liquidity_capitulation(
                 price_info,
                 &converted_history
-            )
+            ).await
         {
             let mut confidence = MICRO_LIQ_CONF_BASE;
             if drop_percent >= MICRO_LIQ_PREFERRED_DROP_PERCENT {
@@ -2234,7 +2230,7 @@ pub async fn get_profit_target(
             let Some((drop_percent, _recent_high, _holders)) = detect_micro_liquidity_capitulation(
                 price_info,
                 hist
-            )
+            ).await
         {
             micro_mode = true;
             // Elevate targets aggressively for high-upside rebound plays

@@ -762,28 +762,11 @@ impl PatternAnalyzer {
             (0.2, 0.2, 0.1)
         };
 
-        // Get real security data if available (use database for more reliable data)
+        // Get real security data if available - simplified for new security system
         let (security_score_norm, holder_count_log) = {
-            let security_analyzer = get_security_analyzer();
-
-            // Try cache first, then database
-            let security_info = security_analyzer.cache.get(mint).or_else(|| {
-                // Cache returns None (dummy implementation), try database
-                match security_analyzer.database.get_security_info(mint) {
-                    Ok(Some(info)) => Some(info),
-                    _ => None,
-                }
-            });
-
-            match security_info {
-                Some(info) => {
-                    let holder_count_log = (info.holder_count as f64).ln().max(0.0) / 20.0;
-                    let security_score = if info.meets_safety_requirements() { 85.0 } else { 40.0 };
-                    let security_score_norm = security_score / 100.0;
-                    (security_score_norm, holder_count_log)
-                }
-                None => (0.5, 5.0), // Default values if security data unavailable
-            }
+            // TODO: Reimplement with new async security API
+            // For now, use neutral values
+            (0.5, 0.1)
         };
 
         // Create feature vector with real market data

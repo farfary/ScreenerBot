@@ -213,30 +213,12 @@ pub async fn run_bot() -> Result<(), String> {
         debug_log(LogTag::System, "INFO", "Token monitoring service task ended");
     });
 
-    // Start security monitoring service for token security analysis
-    let shutdown_security = shutdown.clone();
-    let _security_monitor_handle = tokio::spawn(async move {
-        log(LogTag::System, "INFO", "Security monitoring service task started");
-        match tokens::security::start_security_monitoring(shutdown_security).await {
-            Ok(handle) => {
-                if let Err(e) = handle.await {
-                    debug_log(
-                        LogTag::System,
-                        "ERROR",
-                        &format!("Security monitoring task failed: {:?}", e)
-                    );
-                }
-            }
-            Err(e) => {
-                debug_log(
-                    LogTag::System,
-                    "ERROR",
-                    &format!("Failed to start security monitoring: {}", e)
-                );
-            }
-        }
-        debug_log(LogTag::System, "INFO", "Security monitoring service task ended");
-    });
+    // Initialize security analyzer
+    if let Err(e) = tokens::security::initialize_security_analyzer() {
+        log(LogTag::System, "ERROR", &format!("Failed to initialize security analyzer: {}", e));
+    } else {
+        log(LogTag::System, "SUCCESS", "Security analyzer initialized");
+    }
 
     // Start tokens system background tasks
     let tokens_handles = match tokens_system.start_background_tasks(shutdown_tokens).await {

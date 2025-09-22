@@ -16,6 +16,7 @@ pub mod ohlcv_db;
 pub mod ohlcvs;
 pub mod raydium;
 pub mod security;
+pub mod security_db;
 pub mod types;
 
 // Re-export main types and functions
@@ -53,17 +54,19 @@ pub use ohlcvs::{
     OhlcvService,
 };
 pub use security::{
-    analyze_multiple_tokens,
-    analyze_token_security,
-    check_api_status,
-    get_security_analyzer,
-    get_security_summary,
+    SecurityAnalyzer,
+    SecurityAnalysis,
+    RiskLevel,
     is_token_safe,
-    start_security_monitoring,
-    SecurityFlags,
-    SecurityRiskLevel,
-    TokenSecurityAnalyzer,
-    TokenSecurityInfo,
+    get_token_risk_level,
+};
+pub use security_db::{
+    SecurityDatabase,
+    SecurityInfo,
+    SecurityRisk,
+    MarketInfo,
+    HolderInfo,
+    parse_rugcheck_response,
 };
 pub use types::*;
 

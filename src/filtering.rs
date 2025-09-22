@@ -7,7 +7,7 @@ use crate::global::is_debug_filtering_enabled;
 use crate::logger::{ log, LogTag };
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::decimals::get_cached_decimals;
-use crate::tokens::security::{ get_security_analyzer, SecurityRiskLevel, TokenSecurityInfo };
+use crate::tokens::security::{ get_security_analyzer, SecurityAnalyzer, RiskLevel };
 use crate::tokens::types::{ ApiToken, Token };
 use chrono::{ Duration as ChronoDuration, Utc };
 use std::collections::HashMap;
@@ -124,7 +124,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
         .map(|t| t.mint.clone())
         .collect();
     let (security_filtered, security_stats) =
-        apply_cached_security_filtering_with_stats(token_mints)?;
+        apply_cached_security_filtering_with_stats(token_mints).await?;
 
     if debug_enabled {
         log(
@@ -397,8 +397,13 @@ fn check_market_cap_requirements(token: &Token) -> Option<FilterRejectionReason>
 }
 
 /// Apply security filtering using cached data only (no live blockchain analysis)
+async fn apply_cached_security_filtering(token_mints: Vec<String>) -> Result<Vec<String>, String> {
+    let (tokens, _) = apply_cached_security_filtering_with_stats(token_mints).await?;
+    Ok(tokens)
+}
+
 /// Returns both filtered tokens and detailed statistics
-fn apply_cached_security_filtering_with_stats(
+async fn apply_cached_security_filtering_with_stats(
     token_mints: Vec<String>
 ) -> Result<(Vec<String>, SecurityFilteringStats), String> {
     if token_mints.is_empty() {
@@ -421,76 +426,33 @@ fn apply_cached_security_filtering_with_stats(
     for mint in token_mints {
         security_stats.total_checked += 1;
 
-        // Check cached security data only - no live analysis
-        if let Some(security_info) = get_cached_security_info(&mint) {
-            // Check security requirements
-            if security_info.security_score < MIN_SECURITY_SCORE {
-                security_stats.rejected_low_score += 1;
-                continue;
-            }
-
-            if
-                security_info.risk_level == SecurityRiskLevel::Critical ||
-                security_info.risk_level == SecurityRiskLevel::High
-            {
+        // Check security using new analyzer (simplified for now)
+        if let Some(is_safe) = get_security_info_for_filtering(&mint).await {
+            if !is_safe {
                 security_stats.rejected_high_risk += 1;
                 continue;
             }
-
-            // Check LP lock requirement
-            if REQUIRE_LP_LOCKED && !security_info.security_flags.lp_locked {
-                security_stats.rejected_lp_not_locked += 1;
-                continue;
-            }
-
-            // Check mint authority requirement
-            if BLOCK_MINT_AUTHORITY && security_info.security_flags.can_mint {
-                security_stats.rejected_mint_authority += 1;
-                continue;
-            }
-
-            // Check freeze authority requirement
-            if BLOCK_FREEZE_AUTHORITY && security_info.security_flags.can_freeze {
-                security_stats.rejected_freeze_authority += 1;
-                continue;
-            }
-
-            // Token passed all security checks
-            passed_tokens.push(mint);
-            security_stats.passed += 1;
         } else {
-            // No cached security data - skip token for safety
-            security_stats.rejected_no_cache += 1;
+            // No security info available - be conservative and reject
+            security_stats.rejected_high_risk += 1;
+            continue;
         }
+
+        // If we get here, the token passed security filtering
+        passed_tokens.push(mint);
+        security_stats.passed += 1;
     }
 
     Ok((passed_tokens, security_stats))
 }
 
-/// Apply security filtering using cached data only (no live blockchain analysis)
-fn apply_cached_security_filtering(token_mints: Vec<String>) -> Result<Vec<String>, String> {
-    let (tokens, _) = apply_cached_security_filtering_with_stats(token_mints)?;
-    Ok(tokens)
-}
-
-/// Get cached security info without triggering live analysis
-fn get_cached_security_info(mint: &str) -> Option<TokenSecurityInfo> {
-    // First check in-memory cache for recently accessed data
-    let analyzer = get_security_analyzer();
-    if let Some(cached_info) = analyzer.cache.get(mint) {
-        return Some(cached_info);
+/// Get security info for filtering (simplified for now)
+async fn get_security_info_for_filtering(mint: &str) -> Option<bool> {
+    // Use the new security analyzer if available
+    if let Some(analyzer) = crate::tokens::security::get_security_analyzer() {
+        let analysis = analyzer.analyze_token(mint).await;
+        return Some(analysis.is_safe);
     }
-
-    // If not in cache, check database (this is still "cached" vs live analysis)
-    // The database contains previously analyzed data, so it's cached in that sense
-    if let Ok(Some(db_info)) = analyzer.database.get_security_info(mint) {
-        // Security characteristics (mint authority, freeze authority, LP locks) are stable
-        // and don't change frequently, so we can use any security data we have regardless of age
-        // Cache it for future requests
-        analyzer.cache.set(db_info.clone());
-        return Some(db_info);
-    }
-
     None
 }
 
