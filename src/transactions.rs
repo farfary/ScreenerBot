@@ -265,6 +265,20 @@ impl TransactionsManager {
                             TransactionStatus::Confirmed | TransactionStatus::Finalized
                         )
                     {
+                        // Record confirmation event
+                        let fee_lamports = if tx.fee_sol > 0.0 {
+                            Some((tx.fee_sol * 1_000_000_000.0) as u64)
+                        } else {
+                            None
+                        };
+                        crate::events::record_transaction_event(
+                            &signature,
+                            "confirmed",
+                            true,
+                            fee_lamports,
+                            tx.slot,
+                            None
+                        ).await;
                         confirmed_count += 1;
                         signatures_to_remove.push(signature.clone());
 
@@ -277,6 +291,19 @@ impl TransactionsManager {
                         }
                     } else if matches!(tx.status, TransactionStatus::Failed(_)) {
                         // Transaction failed, remove from pending
+                        let fee_lamports = if tx.fee_sol > 0.0 {
+                            Some((tx.fee_sol * 1_000_000_000.0) as u64)
+                        } else {
+                            None
+                        };
+                        crate::events::record_transaction_event(
+                            &signature,
+                            "failed",
+                            false,
+                            fee_lamports,
+                            tx.slot,
+                            tx.error_message.as_deref()
+                        ).await;
                         signatures_to_remove.push(signature.clone());
 
                         log(
@@ -296,6 +323,14 @@ impl TransactionsManager {
                             "PENDING_NOT_FOUND",
                             &format!("🗑️ Pending transaction {} not found, removing", &signature)
                         );
+                        crate::events::record_transaction_event(
+                            &signature,
+                            "not_found",
+                            false,
+                            None,
+                            None,
+                            Some(&e)
+                        ).await;
                     }
                     // For other errors, keep trying later
                 }
@@ -366,6 +401,15 @@ impl TransactionsManager {
                 // Process the transaction
                 match self.process_transaction(signature).await {
                     Ok(_) => {
+                        // Record detection event
+                        crate::events::record_transaction_event(
+                            signature,
+                            "detected_fallback",
+                            true,
+                            None,
+                            None,
+                            None
+                        ).await;
                         new_transaction_count += 1;
                     }
                     Err(e) => {
@@ -374,6 +418,14 @@ impl TransactionsManager {
                             "ERROR",
                             &format!("Failed to process fallback transaction {}: {}", &signature, e)
                         );
+                        crate::events::record_transaction_event(
+                            signature,
+                            "fallback_process_error",
+                            false,
+                            None,
+                            None,
+                            Some(&e)
+                        ).await;
                     }
                 }
             }

@@ -514,6 +514,17 @@ pub async fn execute_jupiter_swap(
         &format!("📝 Jupiter swap transaction completed: {}", &transaction_signature[..8])
     );
 
+    // Record swap event for durability
+    crate::events::record_swap_event(
+        &transaction_signature,
+        &swap_data.quote.input_mint,
+        &swap_data.quote.output_mint,
+        swap_data.quote.in_amount.parse().unwrap_or(0),
+        swap_data.quote.out_amount.parse().unwrap_or(0),
+        true,
+        None
+    ).await;
+
     // Return success result with quote data
     let execution_time = start_time.elapsed().as_secs_f64();
 

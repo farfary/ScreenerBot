@@ -58,6 +58,18 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         Ok(_) => {
                             effects.db_updated = true;
                             let _ = force_database_sync().await;
+                            // Record an entry verified event
+                            crate::events::record_position_event(
+                                &position_id.to_string(),
+                                &position.mint,
+                                "entry_verified",
+                                position.entry_transaction_signature.as_deref(),
+                                None,
+                                sol_size,
+                                token_amount_units,
+                                None,
+                                None
+                            ).await;
                         }
                         Err(e) => {
                             return Err(format!("Failed to update database: {}", e));
@@ -165,6 +177,31 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             // CRITICAL: Release global position permit when position is verified closed
                             // This allows new positions to be opened, fixing the MAX_OPEN_POSITIONS limit
                             release_global_position_permit();
+
+                            // Record an exit verified event with basic P&L if computable
+                            let pnl_sol = position.sol_received.map(
+                                |s| s - position.total_size_sol
+                            );
+                            let pnl_pct = position.effective_entry_price.and_then(|ep| {
+                                position.effective_exit_price.map(|xp| (
+                                    if ep > 0.0 {
+                                        ((xp - ep) / ep) * 100.0
+                                    } else {
+                                        0.0
+                                    }
+                                ))
+                            });
+                            crate::events::record_position_event(
+                                &position_id.to_string(),
+                                &position.mint,
+                                "exit_verified",
+                                position.entry_transaction_signature.as_deref(),
+                                position.exit_transaction_signature.as_deref(),
+                                position.total_size_sol,
+                                position.token_amount.unwrap_or(0),
+                                pnl_sol,
+                                pnl_pct
+                            ).await;
 
                             log(
                                 LogTag::Positions,

@@ -63,6 +63,39 @@ async fn perform_maintenance() -> Result<(), String> {
 // HELPER FUNCTIONS FOR COMMON EVENT RECORDING
 // =============================================================================
 
+/// Record a transaction event (submission/confirmation/failure)
+pub async fn record_transaction_event(
+    signature: &str,
+    confirmation_status: &str,
+    success: bool,
+    fee: Option<u64>,
+    slot: Option<u64>,
+    error_message: Option<&str>
+) {
+    let payload =
+        json!({
+        "signature": signature,
+        "confirmation_status": confirmation_status,
+        "fee": fee,
+        "slot": slot,
+        "success": success,
+        "error_message": error_message
+    });
+
+    let severity = if success { Severity::Info } else { Severity::Error };
+
+    let event = Event::new(
+        EventCategory::Transaction,
+        Some(confirmation_status.to_string()),
+        severity,
+        None,
+        Some(signature.to_string()),
+        payload
+    );
+
+    crate::events::record_safe(event).await;
+}
+
 /// Record a swap event with standardized payload
 pub async fn record_swap_event(
     signature: &str,

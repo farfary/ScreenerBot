@@ -56,6 +56,7 @@ pub use maintenance::{
     record_system_event,
     record_token_event,
     record_security_event,
+    record_transaction_event,
     get_events_summary,
     search_events,
 };

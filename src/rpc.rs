@@ -2662,6 +2662,16 @@ impl RpcClient {
         }
 
         // Build blocking client and send+confirm in blocking thread
+        // Record submission event (no signature yet)
+        crate::events::record_transaction_event(
+            "unknown",
+            "submitted",
+            true,
+            None,
+            None,
+            None
+        ).await;
+
         let join_res = tokio::task
             ::spawn_blocking(move || {
                 let client = SolanaRpcClient::new_with_commitment(url, commitment);
@@ -2676,10 +2686,28 @@ impl RpcClient {
         match join_res {
             Ok(signature) => {
                 log(LogTag::Rpc, "CONFIRMED", &format!("Transaction confirmed: {}", signature));
+                // Record success event
+                crate::events::record_transaction_event(
+                    &signature.to_string(),
+                    "confirmed",
+                    true,
+                    None,
+                    None,
+                    None
+                ).await;
                 Ok(signature.to_string())
             }
             Err(client_err) => {
                 log(LogTag::Rpc, "ERROR", &format!("send_and_confirm failed: {}", client_err));
+                // Record failure event
+                crate::events::record_transaction_event(
+                    "unknown",
+                    "failed",
+                    false,
+                    None,
+                    None,
+                    Some(&client_err.to_string())
+                ).await;
                 Err(
                     ScreenerBotError::Blockchain(
                         crate::errors::BlockchainError::TransactionDropped {
@@ -2734,6 +2762,15 @@ impl RpcClient {
         }
 
         // Build blocking client and send+confirm in blocking thread
+        // Record submission event (no signature yet)
+        crate::events::record_transaction_event(
+            "unknown",
+            "submitted",
+            true,
+            None,
+            None,
+            None
+        ).await;
         let signature = tokio::task::spawn_blocking(move || {
             let client = SolanaRpcClient::new_with_commitment(url, CommitmentConfig::confirmed());
 
@@ -2759,6 +2796,16 @@ impl RpcClient {
 
                 log(LogTag::Rpc, "SUCCESS", &format!("Transaction confirmed: {}", signature_str));
 
+                // Record success event
+                crate::events::record_transaction_event(
+                    &signature_str,
+                    "confirmed",
+                    true,
+                    None,
+                    None,
+                    None
+                ).await;
+
                 Ok(signature_str)
             }
             Ok(Err(client_err)) => {
@@ -2766,6 +2813,15 @@ impl RpcClient {
                     log(LogTag::Rpc, "ERROR", &format!("send_and_confirm failed: {}", client_err));
                 }
 
+                // Record failure event
+                crate::events::record_transaction_event(
+                    "unknown",
+                    "failed",
+                    false,
+                    None,
+                    None,
+                    Some(&client_err)
+                ).await;
                 Err(
                     ScreenerBotError::Blockchain(
                         crate::errors::BlockchainError::TransactionDropped {

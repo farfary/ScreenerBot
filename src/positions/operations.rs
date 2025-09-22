@@ -184,6 +184,19 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     _global_permit.forget();
     add_signature_to_index(&transaction_signature, &token.mint).await;
 
+    // Record a position opened event for durability
+    crate::events::record_position_event(
+        &format!("{}", position_id),
+        &token.mint,
+        "opened",
+        Some(&transaction_signature),
+        None,
+        TRADE_SIZE_SOL,
+        swap_result.output_amount.parse().unwrap_or(0),
+        None,
+        None
+    ).await;
+
     // Get block height for expiration
     let expiry_height = get_rpc_client()
         .get_block_height().await
@@ -415,11 +428,24 @@ pub async fn close_position_direct(
 
     add_signature_to_index(&transaction_signature, token_mint).await;
 
-    // Get position ID
+    // Get position ID (needed for event recording)
     let position_id = super::state
         ::get_position_by_mint(token_mint).await
         .and_then(|p| p.id)
         .unwrap_or(0);
+
+    // Record a position closing event (pending verification)
+    crate::events::record_position_event(
+        &format!("{}", position_id),
+        token_mint,
+        "closing_submitted",
+        None,
+        Some(&transaction_signature),
+        0.0,
+        sell_amount,
+        None,
+        None
+    ).await;
 
     // Get block height for expiration
     let expiry_height = get_rpc_client()

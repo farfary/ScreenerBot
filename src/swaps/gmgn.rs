@@ -533,6 +533,17 @@ pub async fn execute_gmgn_swap(
         &format!("🔵 GMGN transaction submitted! TX: {} - Now adding to monitoring service...", transaction_signature)
     );
 
+    // Record swap event for durability
+    crate::events::record_swap_event(
+        &transaction_signature,
+        input_mint,
+        output_mint,
+        swap_data.quote.in_amount.parse().unwrap_or(input_amount),
+        swap_data.quote.out_amount.parse().unwrap_or(0),
+        true,
+        None
+    ).await;
+
     // Return success result - verification handled by signature-only analysis
     let execution_time = start_time.elapsed().as_secs_f64();
 
