@@ -124,29 +124,34 @@ impl SecurityMetrics {
 
     pub fn record_analysis(&self, analysis: &SecurityAnalysis) {
         self.tokens_analyzed.fetch_add(1, Ordering::Relaxed);
-        if analysis.is_safe {
-            self.tokens_safe.fetch_add(1, Ordering::Relaxed);
-        } else if analysis.risk_level == RiskLevel::Unknown {
-            self.tokens_unknown.fetch_add(1, Ordering::Relaxed);
-        } else {
-            self.tokens_unsafe.fetch_add(1, Ordering::Relaxed);
-            // Aggregate rejection reasons per token (deduplicated categories per token)
-            let mut categories: HashSet<String> = HashSet::new();
-            for r in &analysis.risks {
-                categories.insert(normalize_reason(r));
-            }
-            // Consider Pump.fun nature as a reason category
-            if analysis.pump_fun_token {
-                categories.insert("Pump.fun risk".to_string());
-            }
-            // If still empty but token is unsafe, attribute to low score
-            if categories.is_empty() {
-                categories.insert("Low Rugcheck score".to_string());
-            }
 
-            let mut map = self.rejection_reasons.lock().unwrap_or_else(|e| e.into_inner());
-            for cat in categories {
-                *map.entry(cat).or_insert(0) += 1;
+        // Classify tokens based on risk level for statistics
+        match analysis.risk_level {
+            RiskLevel::Safe => {
+                self.tokens_safe.fetch_add(1, Ordering::Relaxed);
+            }
+            RiskLevel::Unknown => {
+                self.tokens_unknown.fetch_add(1, Ordering::Relaxed);
+            }
+            RiskLevel::Warning | RiskLevel::Danger => {
+                self.tokens_unsafe.fetch_add(1, Ordering::Relaxed);
+
+                // Record risk reasons for statistics
+                let mut categories: HashSet<String> = HashSet::new();
+                for r in &analysis.risks {
+                    categories.insert(normalize_reason(r));
+                }
+                if analysis.pump_fun_token {
+                    categories.insert("Pump.fun token".to_string());
+                }
+                if categories.is_empty() && analysis.risk_level == RiskLevel::Danger {
+                    categories.insert("Low Rugcheck score".to_string());
+                }
+
+                let mut map = self.rejection_reasons.lock().unwrap_or_else(|e| e.into_inner());
+                for cat in categories {
+                    *map.entry(cat).or_insert(0) += 1;
+                }
             }
         }
         if analysis.pump_fun_token {
@@ -187,7 +192,6 @@ pub struct SecuritySummary {
 
 #[derive(Debug, Clone)]
 pub struct SecurityAnalysis {
-    pub is_safe: bool,
     pub score: i32,
     pub score_normalized: i32,
     pub risk_level: RiskLevel,
@@ -274,9 +278,9 @@ impl SecurityAnalyzer {
                     LogTag::Security,
                     "ANALYSIS",
                     &format!(
-                        "mint={} safe={} score={} risks={} pump_fun={} source=cache",
+                        "mint={} risk_level={:?} score={} risks={} pump_fun={} source=cache",
                         mint,
-                        analysis.is_safe,
+                        analysis.risk_level,
                         analysis.score_normalized,
                         analysis.risks.len(),
                         analysis.pump_fun_token
@@ -312,9 +316,9 @@ impl SecurityAnalyzer {
                                 LogTag::Security,
                                 "ANALYSIS",
                                 &format!(
-                                    "mint={} safe={} score={} risks={} pump_fun={} source=db",
+                                    "mint={} risk_level={:?} score={} risks={} pump_fun={} source=db",
                                     mint,
-                                    analysis.is_safe,
+                                    analysis.risk_level,
                                     analysis.score_normalized,
                                     analysis.risks.len(),
                                     analysis.pump_fun_token
@@ -395,9 +399,9 @@ impl SecurityAnalyzer {
                     LogTag::Security,
                     "ANALYSIS",
                     &format!(
-                        "mint={} safe={} score={} risks={} pump_fun={} source=api",
+                        "mint={} risk_level={:?} score={} risks={} pump_fun={} source=api",
                         mint,
-                        analysis.is_safe,
+                        analysis.risk_level,
                         analysis.score_normalized,
                         analysis.risks.len(),
                         analysis.pump_fun_token
@@ -416,7 +420,6 @@ impl SecurityAnalyzer {
                 }
                 // Return conservative analysis for unknown tokens
                 let analysis = SecurityAnalysis {
-                    is_safe: false,
                     score: 0,
                     score_normalized: 0,
                     risk_level: RiskLevel::Unknown,
@@ -433,9 +436,9 @@ impl SecurityAnalyzer {
                     LogTag::Security,
                     "ANALYSIS",
                     &format!(
-                        "mint={} safe={} score={} risks={} pump_fun={} source=error",
+                        "mint={} risk_level={:?} score={} risks={} pump_fun={} source=error",
                         mint,
-                        analysis.is_safe,
+                        analysis.risk_level,
                         analysis.score_normalized,
                         analysis.risks.len(),
                         analysis.pump_fun_token
@@ -585,10 +588,9 @@ impl SecurityAnalyzer {
         Err(last_err.unwrap_or_else(|| "Unknown error during Rugcheck fetch".to_string()))
     }
 
-    // Pure calculation function - no database/API calls, just runtime analysis
+    // Security data extraction - no filtering decisions
     fn calculate_security_analysis(&self, info: &SecurityInfo) -> SecurityAnalysis {
         let mut risks = Vec::new();
-        let mut is_safe = true;
 
         // Check if it's a Pump.Fun token
         let pump_fun_token = info.markets
@@ -608,157 +610,14 @@ impl SecurityAnalyzer {
             info.freeze_authority.as_deref() == Some("11111111111111111111111111111111");
         let authorities_safe = mint_authority_safe && freeze_authority_safe;
 
-        if !authorities_safe {
-            risks.push("Token authorities not revoked".to_string());
-            is_safe = false;
-        }
-
-        // Analyze LP safety
-        let lp_safe = self.analyze_lp_safety(info, pump_fun_token);
-        if !lp_safe {
-            risks.push("LP not adequately locked".to_string());
-            is_safe = false;
-        }
-
-        // Analyze holder distribution
-        let holders_safe = self.analyze_holder_safety(info);
-        if !holders_safe {
-            risks.push("Concerning holder concentration".to_string());
-            is_safe = false;
-        }
-
-        // Check liquidity - lowered threshold for more inclusion
-        let liquidity_adequate = info.total_market_liquidity >= 500.0; // $500 minimum (was $1000)
-        if !liquidity_adequate {
-            risks.push(format!("Low liquidity: ${:.2}", info.total_market_liquidity));
-            is_safe = false;
-        }
-
-        // Add specific risks from Rugcheck
-        for risk in &info.risks {
-            if risk.level == "danger" {
-                risks.push(format!("{}: {}", risk.name, risk.description));
-                is_safe = false;
-            }
-        }
-
-        // Determine risk level - more realistic thresholds
-        let risk_level = match info.score_normalised {
-            60..=100 => RiskLevel::Safe, // Lowered from 70 to 60
-            35..=59 => RiskLevel::Warning, // Lowered from 40 to 35
-            0..=34 => RiskLevel::Danger, // Lowered from 39 to 34
-            _ => RiskLevel::Unknown,
-        };
-
-        // Override safety based on risk level - only fail on Danger, not Warning
-        if risk_level == RiskLevel::Danger {
-            is_safe = false;
-        }
-
-        // Create summary
-        let summary = if is_safe {
-            format!("Safe token (score: {}/100)", info.score_normalised)
-        } else {
-            format!("Risky token (score: {}/100, {} risks)", info.score_normalised, risks.len())
-        };
-
-        SecurityAnalysis {
-            is_safe,
-            score: info.score,
-            score_normalized: info.score_normalised,
-            risk_level,
-            authorities_safe,
-            lp_safe,
-            holders_safe,
-            liquidity_adequate,
-            pump_fun_token,
-            risks,
-            summary,
-        }
-    }
-
-    fn analyze_lp_safety(&self, info: &SecurityInfo, is_pump_fun: bool) -> bool {
-        if info.markets.is_empty() {
-            return false;
-        }
-
-        // For Pump.Fun tokens, check LP locked percentage directly
-        if is_pump_fun {
-            for market in &info.markets {
-                if market.lp_locked_pct >= 100.0 {
-                    if is_debug_security_enabled() {
-                        log(
-                            LogTag::Security,
-                            "LP_PUMP_SAFE",
-                            &format!(
-                                "Pump.Fun LP verified as safe: locked_pct={:.2}%, mint={}",
-                                market.lp_locked_pct,
-                                info.mint
-                            )
-                        );
-                    }
-                    return true;
-                }
-            }
-            if is_debug_security_enabled() {
-                log(
-                    LogTag::Security,
-                    "LP_PUMP_UNSAFE",
-                    &format!(
-                        "Pump.Fun LP not fully locked: max_locked={:.2}%, mint={}",
-                        info.markets
-                            .iter()
-                            .map(|m| m.lp_locked_pct)
-                            .fold(0.0, f64::max),
-                        info.mint
-                    )
-                );
-            }
-            return false;
-        }
-
-        // For established tokens with large liquidity, be more lenient
+        // Get LP lock percentage (raw data, no thresholds)
         let max_lp_locked = info.markets
             .iter()
             .map(|m| m.lp_locked_pct)
             .fold(0.0, f64::max);
+        let lp_safe = max_lp_locked > 0.0; // Just check if any LP is locked
 
-        // More realistic thresholds based on liquidity and market maturity
-        let is_safe = if info.total_market_liquidity >= 50_000_000.0 {
-            // Large established tokens (>$50M liquidity) - very lenient
-            max_lp_locked >= 10.0 || info.score_normalised >= 60
-        } else if info.total_market_liquidity >= 5_000_000.0 {
-            // Medium tokens ($5-50M liquidity) - moderate requirement
-            max_lp_locked >= 25.0 || info.score_normalised >= 65
-        } else {
-            // Smaller tokens (<$5M liquidity) - stricter requirement
-            max_lp_locked >= 50.0
-        };
-
-        if is_debug_security_enabled() {
-            log(
-                LogTag::Security,
-                "LP_CHECK",
-                &format!(
-                    "LP safety check: max_locked={:.2}%, liquidity=${:.0}, safe={}, mint={}",
-                    max_lp_locked,
-                    info.total_market_liquidity,
-                    is_safe,
-                    info.mint
-                )
-            );
-        }
-
-        is_safe
-    }
-
-    fn analyze_holder_safety(&self, info: &SecurityInfo) -> bool {
-        if info.top_holders.is_empty() {
-            // For tokens with good scores but no holder data, be lenient
-            return info.score_normalised >= 60;
-        }
-
-        // Check top holder concentration
+        // Get holder concentration data (raw percentages, no thresholds)
         let top_holder_pct = info.top_holders
             .first()
             .map(|h| h.pct)
@@ -773,33 +632,47 @@ impl SecurityAnalyzer {
             .take(10)
             .map(|h| h.pct)
             .sum();
+        let holders_safe = !info.top_holders.is_empty(); // Just check if we have holder data
 
-        // More realistic thresholds based on market maturity
-        let is_safe = if info.total_market_liquidity >= 10_000_000.0 {
-            // Large tokens - more lenient concentration limits
-            top_holder_pct < 70.0 && top_3_pct < 85.0 && top_10_pct < 95.0
-        } else {
-            // Smaller tokens - standard concentration limits
-            top_holder_pct < 60.0 && top_3_pct < 80.0 && top_10_pct < 92.0
-        };
+        // Basic liquidity check (just verify data exists)
+        let liquidity_adequate = info.total_market_liquidity > 0.0;
 
-        if is_debug_security_enabled() {
-            log(
-                LogTag::Security,
-                "HOLDER_CHECK",
-                &format!(
-                    "Holder distribution: top1={:.2}%, top3={:.2}%, top10={:.2}%, liquidity=${:.0}, safe={}, mint={}",
-                    top_holder_pct,
-                    top_3_pct,
-                    top_10_pct,
-                    info.total_market_liquidity,
-                    is_safe,
-                    info.mint
-                )
-            );
+        // Collect danger-level risks from Rugcheck
+        for risk in &info.risks {
+            if risk.level == "danger" {
+                risks.push(format!("{}: {}", risk.name, risk.description));
+            }
         }
 
-        is_safe
+        // Determine risk level based on score only
+        let risk_level = match info.score_normalised {
+            70..=100 => RiskLevel::Safe,
+            40..=69 => RiskLevel::Warning,
+            0..=39 => RiskLevel::Danger,
+            _ => RiskLevel::Unknown,
+        };
+
+        // Create summary
+        let summary = format!(
+            "Token analysis: score={}/100, LP={:.1}%, top_holder={:.1}%, liquidity=${:.0}",
+            info.score_normalised,
+            max_lp_locked,
+            top_holder_pct,
+            info.total_market_liquidity
+        );
+
+        SecurityAnalysis {
+            score: info.score,
+            score_normalized: info.score_normalised,
+            risk_level,
+            authorities_safe,
+            lp_safe,
+            holders_safe,
+            liquidity_adequate,
+            pump_fun_token,
+            risks,
+            summary,
+        }
     }
 
     pub async fn get_security_stats(&self) -> Result<HashMap<String, i64>, String> {
@@ -835,8 +708,8 @@ impl SecurityAnalyzer {
     }
 
     /// Lightweight cache-only security check for filtering: no API calls
-    /// Returns Some(is_safe) if cache or non-stale DB data exists, else None
-    pub async fn analyze_token_cached_only(&self, mint: &str) -> Option<bool> {
+    /// Returns Some(risk_level) if cache or non-stale DB data exists, else None
+    pub async fn analyze_token_cached_only(&self, mint: &str) -> Option<RiskLevel> {
         // 1) In-memory cache fast path
         {
             let cache = self.cache.read().await;
@@ -845,7 +718,7 @@ impl SecurityAnalyzer {
                 self.metrics.record_cache_hit();
                 let analysis = self.calculate_security_analysis(info);
                 self.metrics.record_analysis(&analysis);
-                return Some(analysis.is_safe);
+                return Some(analysis.risk_level);
             }
         }
 
@@ -867,7 +740,7 @@ impl SecurityAnalyzer {
                             }
                             let analysis = self.calculate_security_analysis(&info);
                             self.metrics.record_analysis(&analysis);
-                            return Some(analysis.is_safe);
+                            return Some(analysis.risk_level);
                         }
                         Ok(true) => {
                             // Stale counts as a miss for hit-rate visibility
@@ -896,10 +769,10 @@ impl SecurityAnalyzer {
     /// Analyze token using ANY available security data (including stale) for filtering
     /// This is more inclusive than cached_only - uses any DB data we have, even if old
     /// Still avoids API calls for performance in filtering context
-    pub async fn analyze_token_any_cached(&self, mint: &str) -> Option<bool> {
+    pub async fn analyze_token_any_cached(&self, mint: &str) -> Option<RiskLevel> {
         // First try the standard cache/fresh DB path
-        if let Some(is_safe) = self.analyze_token_cached_only(mint).await {
-            return Some(is_safe);
+        if let Some(risk_level) = self.analyze_token_cached_only(mint).await {
+            return Some(risk_level);
         }
 
         // If that fails, try ANY security data in DB, even if stale
@@ -908,7 +781,7 @@ impl SecurityAnalyzer {
                 // Use any available security data, regardless of age
                 let analysis = self.calculate_security_analysis(&info);
                 self.metrics.record_analysis(&analysis);
-                return Some(analysis.is_safe);
+                return Some(analysis.risk_level);
             }
         }
 
@@ -972,15 +845,17 @@ impl SecurityAnalyzer {
     }
 }
 
-// Simplified public interface for token filtering
-pub async fn is_token_safe(analyzer: &SecurityAnalyzer, mint: &str) -> bool {
-    let analysis = analyzer.analyze_token(mint).await;
-    analysis.is_safe
-}
-
+// Public interface for getting security analysis data
 pub async fn get_token_risk_level(analyzer: &SecurityAnalyzer, mint: &str) -> RiskLevel {
     let analysis = analyzer.analyze_token(mint).await;
     analysis.risk_level
+}
+
+pub async fn get_token_security_analysis(
+    analyzer: &SecurityAnalyzer,
+    mint: &str
+) -> SecurityAnalysis {
+    analyzer.analyze_token(mint).await
 }
 
 // Global security analyzer singleton
@@ -1047,8 +922,8 @@ pub async fn start_security_monitoring(
                                                         
                                                         if is_debug_security_enabled() {
                                                             log(LogTag::Security, "MONITOR_TOKEN", 
-                                                                &format!("Processed {} → safe: {}, score: {}", 
-                                                                mint, analysis.is_safe, analysis.score));
+                                                                &format!("Processed {} → risk_level: {:?}, score: {}", 
+                                                                mint, analysis.risk_level, analysis.score));
                                                         }
                                                         
                                                         // Rate limit: wait 500ms between requests

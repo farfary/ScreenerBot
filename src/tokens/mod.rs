@@ -57,8 +57,8 @@ pub use security::{
     SecurityAnalyzer,
     SecurityAnalysis,
     RiskLevel,
-    is_token_safe,
     get_token_risk_level,
+    get_token_security_analysis,
     // Re-export helpers used by bins/tools
     get_security_analyzer,
     initialize_security_analyzer,
