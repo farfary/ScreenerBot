@@ -21,11 +21,7 @@ pub mod summary;
 pub mod swaps;
 pub mod tokens;
 pub mod trader;
-pub mod transactions;
-pub mod transactions_db; // New database module
-pub mod transactions_debug; // Transaction debugging utilities
-pub mod transactions_lib; // Transaction analysis library
-pub mod transactions_types; // Transaction type definitions
+pub mod transactions; // New modular transactions system
 pub mod utils;
 pub mod wallet; // Wallet balance monitoring
 pub mod websocket; // WebSocket client for real-time transaction monitoring // Learning system for pattern recognition and auto-improvement

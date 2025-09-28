@@ -838,7 +838,7 @@ fn log_security_summary(summary: &SecuritySummary) {
     );
 
     let tokens_line = format!(
-        "  • Tokens    �  safe={}, warning={}, danger={}, missing={}, pump.fun={}",
+        "  • Tokens     safe={}, warning={}, danger={}, missing={}, pump.fun={}",
         summary.db_safe_tokens,
         summary.db_warning_tokens,
         summary.db_danger_tokens,
