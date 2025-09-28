@@ -8,51 +8,38 @@
 /// - get_pool_price(mint) -> Get current price for a token
 /// - get_available_tokens() -> Get list of tokens with available prices
 /// - get_price_history(mint) -> Get price history for a token
-
 use std::sync::Arc;
 use tokio::sync::Notify;
 
+mod api;
+mod cache;
+mod db; // Database module for price history persistence
 mod service;
 pub mod types; // Make types public
-mod cache;
-mod api;
-mod db; // Database module for price history persistence
 pub mod utils; // Utility functions for SOL detection and vault pairing
 
 // Re-export only the public API
 pub use api::{
-    get_pool_price,
-    get_available_tokens,
-    get_price_history,
-    get_cache_stats,
-    get_extended_price_history,
-    load_token_history_into_cache,
-    check_price_history_quality,
-    get_price_history_stats,
+    check_price_history_quality, get_available_tokens, get_cache_stats, get_extended_price_history,
+    get_pool_price, get_price_history, get_price_history_stats, load_token_history_into_cache,
     PriceHistoryStats,
 };
-pub use service::{
-    start_pool_service,
-    stop_pool_service,
-    is_pool_service_running,
-    set_debug_token_override,
-    get_debug_token_override,
-};
-pub use types::{ PriceResult, PoolError };
 pub use discovery::{
-    PoolDiscovery,
-    ENABLE_DEXSCREENER_DISCOVERY,
-    ENABLE_GECKOTERMINAL_DISCOVERY,
-    ENABLE_RAYDIUM_DISCOVERY,
-    get_canonical_pool_address,
-}; // Expose for configuration access
+    get_canonical_pool_address, PoolDiscovery, ENABLE_DEXSCREENER_DISCOVERY,
+    ENABLE_GECKOTERMINAL_DISCOVERY, ENABLE_RAYDIUM_DISCOVERY,
+};
+pub use service::{
+    get_debug_token_override, is_pool_service_running, set_debug_token_override,
+    start_pool_service, stop_pool_service,
+};
+pub use types::{PoolError, PriceResult}; // Expose for configuration access
 
 // Internal modules (not exposed)
-pub mod discovery;
 mod analyzer;
-pub mod fetcher; // Public for debug tooling
 pub mod calculator; // Public for debug tooling
-pub mod decoders; // Temporarily public for debug tooling (consider gating with feature flag)
+pub mod decoders;
+pub mod discovery;
+pub mod fetcher; // Public for debug tooling // Temporarily public for debug tooling (consider gating with feature flag)
 
 // Direct swap module - modular direct swap system
 pub mod swap;
@@ -67,7 +54,7 @@ pub use fetcher::AccountData;
 ///
 /// Returns a handle that can be used to monitor the service lifecycle.
 pub async fn init_pool_service(
-    shutdown: Arc<Notify>
+    shutdown: Arc<Notify>,
 ) -> Result<tokio::task::JoinHandle<()>, PoolError> {
     start_pool_service().await?;
 

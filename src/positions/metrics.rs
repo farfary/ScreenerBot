@@ -1,7 +1,7 @@
-use serde::{ Deserialize, Serialize };
-use std::sync::atomic::{ AtomicU64, Ordering };
-use std::sync::LazyLock;
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::LazyLock;
 
 #[derive(Debug, Clone, Default)]
 pub struct ProceedsMetricsSnapshot {
@@ -60,7 +60,8 @@ impl ProceedsMetricsInternal {
 
     pub fn record_accepted_quote(&self, is_loss: bool, shortfall_bps: Option<u64>) {
         self.accepted_quotes.fetch_add(1, Ordering::Relaxed);
-        self.last_update_unix.store(Utc::now().timestamp() as u64, Ordering::Relaxed);
+        self.last_update_unix
+            .store(Utc::now().timestamp() as u64, Ordering::Relaxed);
 
         if is_loss {
             self.accepted_loss_quotes.fetch_add(1, Ordering::Relaxed);
@@ -68,7 +69,8 @@ impl ProceedsMetricsInternal {
             self.accepted_profit_quotes.fetch_add(1, Ordering::Relaxed);
 
             if let Some(shortfall) = shortfall_bps {
-                self.total_shortfall_bps_sum.fetch_add(shortfall, Ordering::Relaxed);
+                self.total_shortfall_bps_sum
+                    .fetch_add(shortfall, Ordering::Relaxed);
 
                 // Update worst shortfall
                 loop {
@@ -76,15 +78,15 @@ impl ProceedsMetricsInternal {
                     if shortfall <= current_worst {
                         break;
                     }
-                    if
-                        self.worst_shortfall_bps
-                            .compare_exchange(
-                                current_worst,
-                                shortfall,
-                                Ordering::Relaxed,
-                                Ordering::Relaxed
-                            )
-                            .is_ok()
+                    if self
+                        .worst_shortfall_bps
+                        .compare_exchange(
+                            current_worst,
+                            shortfall,
+                            Ordering::Relaxed,
+                            Ordering::Relaxed,
+                        )
+                        .is_ok()
                     {
                         break;
                     }
@@ -95,13 +97,13 @@ impl ProceedsMetricsInternal {
 
     pub fn record_rejected_quote(&self) {
         self.rejected_quotes.fetch_add(1, Ordering::Relaxed);
-        self.last_update_unix.store(Utc::now().timestamp() as u64, Ordering::Relaxed);
+        self.last_update_unix
+            .store(Utc::now().timestamp() as u64, Ordering::Relaxed);
     }
 }
 
-static PROCEEDS_METRICS: LazyLock<ProceedsMetricsInternal> = LazyLock::new(||
-    ProceedsMetricsInternal::new()
-);
+static PROCEEDS_METRICS: LazyLock<ProceedsMetricsInternal> =
+    LazyLock::new(|| ProceedsMetricsInternal::new());
 
 /// Get current proceeds metrics snapshot
 pub async fn get_proceeds_metrics_snapshot() -> ProceedsMetricsSnapshot {

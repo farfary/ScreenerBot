@@ -8,15 +8,14 @@
 /// - Farm and reward information
 /// - Real-time pricing and volume data
 /// - TVL and liquidity metrics
-
 use crate::global::is_debug_api_enabled;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
+use chrono::Utc;
 use reqwest::StatusCode;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::timeout;
-use chrono::Utc;
 
 // =============================================================================
 // RAYDIUM API CONFIGURATION
@@ -156,13 +155,15 @@ pub async fn get_token_pools_from_raydium(token_mint: &str) -> Result<Vec<Raydiu
         log(
             LogTag::Pool,
             "RAYDIUM_API_START",
-            &format!("🟡 Fetching pools for token {} from Raydium API", &token_mint[..8])
+            &format!(
+                "🟡 Fetching pools for token {} from Raydium API",
+                &token_mint[..8]
+            ),
         );
     }
 
     // Create HTTP client
-    let client = reqwest::Client
-        ::builder()
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECONDS))
         .user_agent("ScreenerBot/1.0")
         .build()
@@ -180,23 +181,27 @@ pub async fn get_token_pools_from_raydium(token_mint: &str) -> Result<Vec<Raydiu
     // Make the API request
     let response = timeout(
         Duration::from_secs(REQUEST_TIMEOUT_SECONDS),
-        client.get(&url).send()
-    ).await
-        .map_err(|_| "Raydium API request timed out".to_string())?
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
+        client.get(&url).send(),
+    )
+    .await
+    .map_err(|_| "Raydium API request timed out".to_string())?
+    .map_err(|e| format!("HTTP request failed: {}", e))?;
 
     // Check response status
     if !response.status().is_success() {
-        return Err(format!("Raydium API returned status: {}", response.status()));
+        return Err(format!(
+            "Raydium API returned status: {}",
+            response.status()
+        ));
     }
 
     // Parse the response
     let response_text = response
-        .text().await
+        .text()
+        .await
         .map_err(|e| format!("Failed to read response body: {}", e))?;
 
-    let api_response: RaydiumApiResponse = serde_json
-        ::from_str(&response_text)
+    let api_response: RaydiumApiResponse = serde_json::from_str(&response_text)
         .map_err(|e| format!("Failed to parse JSON response: {}", e))?;
 
     if !api_response.success {
@@ -204,7 +209,9 @@ pub async fn get_token_pools_from_raydium(token_mint: &str) -> Result<Vec<Raydiu
     }
 
     // Convert to normalized pool format
-    let pools: Vec<RaydiumPool> = api_response.data.data
+    let pools: Vec<RaydiumPool> = api_response
+        .data
+        .data
         .into_iter()
         .map(|pool_info| parse_raydium_pool(pool_info, token_mint))
         .collect();
@@ -220,7 +227,7 @@ pub async fn get_token_pools_from_raydium(token_mint: &str) -> Result<Vec<Raydiu
                 pools.len(),
                 &token_mint[..8],
                 elapsed.as_secs_f64()
-            )
+            ),
         );
     }
 
@@ -235,7 +242,10 @@ pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> Raydi
         log(
             LogTag::Pool,
             "RAYDIUM_BATCH_START",
-            &format!("🟡 Starting Raydium batch pool fetch for {} tokens", token_mints.len())
+            &format!(
+                "🟡 Starting Raydium batch pool fetch for {} tokens",
+                token_mints.len()
+            ),
         );
     }
 
@@ -261,7 +271,7 @@ pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> Raydi
                             "✅ {}: {} pools from Raydium",
                             &token_mint[..8],
                             token_pools.len()
-                        )
+                        ),
                     );
                 }
                 pools.insert(token_mint.clone(), token_pools);
@@ -272,7 +282,7 @@ pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> Raydi
                     log(
                         LogTag::Pool,
                         "RAYDIUM_BATCH_TOKEN_ERROR",
-                        &format!("❌ {}: Raydium error - {}", &token_mint[..8], e)
+                        &format!("❌ {}: Raydium error - {}", &token_mint[..8], e),
                     );
                 }
                 errors.insert(token_mint.clone(), e);
@@ -292,7 +302,7 @@ pub async fn get_batch_token_pools_from_raydium(token_mints: &[String]) -> Raydi
                 successful_tokens,
                 token_mints.len(),
                 elapsed.as_secs_f64()
-            )
+            ),
         );
     }
 
@@ -325,7 +335,11 @@ fn parse_raydium_pool(pool_info: RaydiumPoolInfo, target_token: &str) -> Raydium
             price_in_quote // Assume other quote tokens are already in USD terms
         };
 
-        (pool_info.mint_a.address.clone(), pool_info.mint_b.address.clone(), price_usd)
+        (
+            pool_info.mint_a.address.clone(),
+            pool_info.mint_b.address.clone(),
+            price_usd,
+        )
     } else {
         // Target token is mintB, price is mintA/mintB, so we need mintB/mintA
         let price_in_quote = 1.0 / pool_info.price;
@@ -337,25 +351,24 @@ fn parse_raydium_pool(pool_info: RaydiumPoolInfo, target_token: &str) -> Raydium
             price_in_quote // Assume other quote tokens are already in USD terms
         };
 
-        (pool_info.mint_b.address.clone(), pool_info.mint_a.address.clone(), price_usd)
+        (
+            pool_info.mint_b.address.clone(),
+            pool_info.mint_a.address.clone(),
+            price_usd,
+        )
     };
 
     // Calculate 24h volume
-    let volume_24h = pool_info.day
-        .as_ref()
-        .map(|day| day.volume)
-        .unwrap_or(0.0);
+    let volume_24h = pool_info.day.as_ref().map(|day| day.volume).unwrap_or(0.0);
 
     // Calculate APR
-    let apr = pool_info.day
-        .as_ref()
-        .map(|day| day.apr)
-        .unwrap_or(0.0);
+    let apr = pool_info.day.as_ref().map(|day| day.apr).unwrap_or(0.0);
 
     // Create pool name
-    let pool_name = Some(
-        format!("{}-{} ({})", pool_info.mint_a.symbol, pool_info.mint_b.symbol, pool_info.pool_type)
-    );
+    let pool_name = Some(format!(
+        "{}-{} ({})",
+        pool_info.mint_a.symbol, pool_info.mint_b.symbol, pool_info.pool_type
+    ));
 
     RaydiumPool {
         pool_address: pool_info.id,

@@ -14,40 +14,34 @@ use chrono::Local;
 /// - Color-coded status indicators
 /// - Clean exit handling with terminal restoration
 use crossterm::{
-    cursor::{ Hide, MoveTo, Show },
-    event::{ self, Event, KeyCode, KeyEvent, KeyModifiers },
+    cursor::{Hide, MoveTo, Show},
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
-    style::{ Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor },
+    style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
     terminal::{
-        self,
-        Clear,
-        ClearType,
-        DisableLineWrap,
-        EnableLineWrap,
-        EnterAlternateScreen,
-        LeaveAlternateScreen,
-        SetTitle,
+        self, Clear, ClearType, DisableLineWrap, EnableLineWrap, EnterAlternateScreen,
+        LeaveAlternateScreen, SetTitle,
     },
     QueueableCommand,
 };
 use once_cell::sync::Lazy;
 use std::collections::VecDeque;
-use std::io::{ self, stdout, Write };
-use std::sync::atomic::{ AtomicBool, Ordering };
-use std::sync::{ Arc, Mutex };
-use std::time::{ Duration, Instant };
+use std::io::{self, stdout, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 use tokio::time::sleep;
-use unicode_width::{ UnicodeWidthChar, UnicodeWidthStr };
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::logger::LogTag;
-use crate::positions::{ get_closed_positions, get_open_positions };
+use crate::pools::{get_cache_stats, get_pool_price};
 use crate::positions::calculate_position_pnl;
+use crate::positions::{get_closed_positions, get_open_positions};
 use crate::rpc::get_global_rpc_stats;
-use crate::pools::{ get_pool_price, get_cache_stats };
 use crate::transactions::TransactionsManager;
 use crate::transactions_types::TransactionStats;
-use crate::utils::{ get_sol_balance, get_wallet_address };
+use crate::utils::{get_sol_balance, get_wallet_address};
 
 /// Dashboard configuration constants
 const REFRESH_RATE_MS: u64 = 250; // Faster incremental refresh for real-time feel
@@ -69,7 +63,7 @@ struct RenderLine {
     text: String,
     color: Color, // content color
     bold: bool,
-    is_wrapped: bool, // line contains vertical borders at both ends
+    is_wrapped: bool,     // line contains vertical borders at both ends
     is_border_only: bool, // line is a pure border line (top/bottom/separator)
 }
 
@@ -171,7 +165,10 @@ impl BorderChars {
         }
         let left_pad = " ".repeat(inset_each);
         let right_pad = " ".repeat(inset_each);
-        format!("{}{}{}{}{}", self.vertical, left_pad, acc, right_pad, self.vertical)
+        format!(
+            "{}{}{}{}{}",
+            self.vertical, left_pad, acc, right_pad, self.vertical
+        )
     }
 }
 
@@ -242,12 +239,12 @@ impl Dashboard {
         if width < MIN_TERMINAL_WIDTH || height < MIN_TERMINAL_HEIGHT {
             eprintln!(
                 "Terminal too small! Minimum size: {}x{}, Current: {}x{}",
-                MIN_TERMINAL_WIDTH,
-                MIN_TERMINAL_HEIGHT,
-                width,
-                height
+                MIN_TERMINAL_WIDTH, MIN_TERMINAL_HEIGHT, width, height
             );
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Terminal too small"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Terminal too small",
+            ));
         }
 
         self.terminal_size = (width, height);
@@ -274,7 +271,7 @@ impl Dashboard {
     pub async fn run(
         &mut self,
         shutdown: Arc<Notify>,
-        services_completed: Arc<Notify>
+        services_completed: Arc<Notify>,
     ) -> io::Result<()> {
         let mut last_draw = Instant::now();
         let mut services_finished = false;
@@ -365,7 +362,8 @@ impl Dashboard {
                 // In shutdown phase, wait for services to complete before considering exit
                 if services_finished {
                     // Services are done, wait a bit for user to see final status then exit
-                    let grace_period_elapsed = self.shutdown_started_at
+                    let grace_period_elapsed = self
+                        .shutdown_started_at
                         .map(|t| t.elapsed() >= Duration::from_millis(3000)) // 3 second grace period
                         .unwrap_or(true);
 
@@ -390,7 +388,8 @@ impl Dashboard {
 
                     // Extended timeout when waiting for critical services
                     let max_wait_time = Duration::from_millis(SHUTDOWN_MAX_WAIT_MS * 3); // 60 seconds
-                    let timed_out = self.shutdown_started_at
+                    let timed_out = self
+                        .shutdown_started_at
                         .map(|t| t.elapsed() >= max_wait_time)
                         .unwrap_or(false);
 
@@ -398,7 +397,7 @@ impl Dashboard {
                         self.add_log(
                             "SYSTEM",
                             "WARN",
-                            "⚠️  Force exit: services taking too long to shutdown"
+                            "⚠️  Force exit: services taking too long to shutdown",
                         );
                         break;
                     }
@@ -496,7 +495,7 @@ impl Dashboard {
                 current_row,
                 width,
                 &pos_lines,
-                &mut self.prev_positions
+                &mut self.prev_positions,
             )?;
             current_row = current_row.saturating_add(sec_h);
         }
@@ -510,7 +509,7 @@ impl Dashboard {
                 current_row,
                 width,
                 &stats_lines,
-                &mut self.prev_stats
+                &mut self.prev_stats,
             )?;
             current_row = current_row.saturating_add(sec_h);
         }
@@ -519,7 +518,13 @@ impl Dashboard {
         if current_row < max_content_height {
             let sec_h = logs_height.min(max_content_height.saturating_sub(current_row));
             let log_lines = self.build_logs_lines(width, sec_h).await;
-            Self::draw_section(&mut stdout, current_row, width, &log_lines, &mut self.prev_logs)?;
+            Self::draw_section(
+                &mut stdout,
+                current_row,
+                width,
+                &log_lines,
+                &mut self.prev_logs,
+            )?;
         }
 
         // Draw footer incrementally in last two visible rows
@@ -531,7 +536,7 @@ impl Dashboard {
                 footer_start,
                 width,
                 &footer_lines,
-                &mut self.prev_footer
+                &mut self.prev_footer,
             )?;
         }
 
@@ -568,7 +573,7 @@ impl Dashboard {
         start_row: u16,
         width: u16,
         lines: &Vec<RenderLine>,
-        prev_cache: &mut Vec<String>
+        prev_cache: &mut Vec<String>,
     ) -> io::Result<()> {
         for (i, rl) in lines.iter().enumerate() {
             let row = start_row.saturating_add(i as u16);
@@ -679,8 +684,12 @@ impl Dashboard {
                 self.spinner()
             );
             let wrapped = border.wrap_content(
-                &format!("{:^width$}", title, width = width.saturating_sub(2) as usize),
-                width
+                &format!(
+                    "{:^width$}",
+                    title,
+                    width = width.saturating_sub(2) as usize
+                ),
+                width,
             );
             v.push(RenderLine {
                 text: wrapped,
@@ -693,8 +702,12 @@ impl Dashboard {
         if height >= 3 {
             let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
             let wrapped = border.wrap_content(
-                &format!("{:^width$}", timestamp, width = width.saturating_sub(2) as usize),
-                width
+                &format!(
+                    "{:^width$}",
+                    timestamp,
+                    width = width.saturating_sub(2) as usize
+                ),
+                width,
             );
             v.push(RenderLine {
                 text: wrapped,
@@ -764,7 +777,11 @@ impl Dashboard {
         // Column layout: left (open), right (closed)
         let inner_w = width.saturating_sub(2) as usize; // exclude vertical borders
         let col_gap = 2usize; // spaces between columns
-        let col_w = if inner_w > col_gap { (inner_w - col_gap) / 2 } else { inner_w / 2 };
+        let col_w = if inner_w > col_gap {
+            (inner_w - col_gap) / 2
+        } else {
+            inner_w / 2
+        };
 
         // Titles row
         if rows_left > 0 {
@@ -793,11 +810,7 @@ impl Dashboard {
         if rows_left > 0 {
             let hdr = format!(
                 "{:<12} {:>11} {:>11} {:>11} {:>7}",
-                "Symbol",
-                "Entry",
-                "Current",
-                "P&L SOL",
-                "P&L %"
+                "Symbol", "Entry", "Current", "P&L SOL", "P&L %"
             );
             let row = format!(
                 "{:<lw$}{:gap$}{:<rw$}",
@@ -851,11 +864,7 @@ impl Dashboard {
                 };
                 let row = format!(
                     "{:<12} {:>11.9} {:>11.9} {:>11.9} {:>6.2}%",
-                    sym,
-                    position.entry_price,
-                    current_price,
-                    pnl_sol,
-                    pnl_percent
+                    sym, position.entry_price, current_price, pnl_sol, pnl_percent
                 );
                 left_rows.push(Self::pad_truncate(&row, col_w as u16));
             }
@@ -888,14 +897,8 @@ impl Dashboard {
 
             let max_rows = left_rows.len().max(right_rows.len()).min(rows_left);
             for i in 0..max_rows {
-                let left = left_rows
-                    .get(i)
-                    .cloned()
-                    .unwrap_or_else(|| "".to_string());
-                let right = right_rows
-                    .get(i)
-                    .cloned()
-                    .unwrap_or_else(|| "".to_string());
+                let left = left_rows.get(i).cloned().unwrap_or_else(|| "".to_string());
+                let right = right_rows.get(i).cloned().unwrap_or_else(|| "".to_string());
                 // Determine color by left side P&L only to keep simple; borders stay light gray due to renderer
                 let color = Color::White;
                 let row = format!(
@@ -965,11 +968,11 @@ impl Dashboard {
 
         // Wallet balance (fast, with timeout)
         let wallet_balance = if let Ok(wallet_addr) = get_wallet_address() {
-            if
-                let Ok(balance) = tokio::time::timeout(
-                    Duration::from_millis(200),
-                    get_sol_balance(&wallet_addr.to_string())
-                ).await
+            if let Ok(balance) = tokio::time::timeout(
+                Duration::from_millis(200),
+                get_sol_balance(&wallet_addr.to_string()),
+            )
+            .await
             {
                 balance.unwrap_or(0.0)
             } else {
@@ -1011,11 +1014,11 @@ impl Dashboard {
         let pricing_stats = "Price Cache: Disabled".to_string();
 
         // Get transaction stats (non-blocking with timeout)
-        let tx_stats = if
-            let Ok(stats) = tokio::time::timeout(
-                Duration::from_millis(100),
-                TransactionsManager::get_transaction_stats()
-            ).await
+        let tx_stats = if let Ok(stats) = tokio::time::timeout(
+            Duration::from_millis(100),
+            TransactionsManager::get_transaction_stats(),
+        )
+        .await
         {
             stats
         } else {
@@ -1027,9 +1030,10 @@ impl Dashboard {
         };
 
         // Get pool service stats (non-blocking with timeout)
-        let pool_stats = tokio::time
-            ::timeout(Duration::from_millis(100), async { get_cache_stats() }).await
-            .unwrap_or_else(|_| get_cache_stats());
+        let pool_stats =
+            tokio::time::timeout(Duration::from_millis(100), async { get_cache_stats() })
+                .await
+                .unwrap_or_else(|_| get_cache_stats());
 
         // Multi-row display for comprehensive stats
         let mut current_line = 3usize; // Account for header + top border
@@ -1166,11 +1170,10 @@ impl Dashboard {
         if current_line < (height as usize) {
             let col1 = format!("History Entries: {}", pool_stats.history_entries);
             let col2 = format!("Active Tokens: {}", pool_stats.fresh_prices);
-            let col3 = format!("Cache Health: {}%", if pool_stats.fresh_prices > 0 {
-                100
-            } else {
-                0
-            });
+            let col3 = format!(
+                "Cache Health: {}%",
+                if pool_stats.fresh_prices > 0 { 100 } else { 0 }
+            );
             let content_width = width.saturating_sub(2) as usize;
             let col_w = content_width / 3;
             let row_content = format!(
@@ -1193,7 +1196,11 @@ impl Dashboard {
         // Row 6: Price Service Summary (compact)
         if current_line < (height as usize) {
             let price_summary = if pricing_stats.len() > (width.saturating_sub(4) as usize) {
-                format!("{:.width$}...", pricing_stats, width = width.saturating_sub(7) as usize)
+                format!(
+                    "{:.width$}...",
+                    pricing_stats,
+                    width = width.saturating_sub(7) as usize
+                )
             } else {
                 pricing_stats
             };
@@ -1387,26 +1394,22 @@ impl Dashboard {
 
         if height >= 3 {
             let status = match self.phase {
-                DashboardPhase::Startup =>
-                    format!(
-                        "Starting services... | Last Update: {} | Terminal: {}x{}",
-                        Local::now().format("%H:%M:%S"),
-                        width,
-                        terminal
-                            ::size()
-                            .map(|(_, h)| h)
-                            .unwrap_or(self.terminal_size.1)
-                    ),
-                DashboardPhase::Running =>
-                    format!(
-                        "Dashboard Running | Last Update: {} | Terminal: {}x{}",
-                        Local::now().format("%H:%M:%S"),
-                        width,
-                        terminal
-                            ::size()
-                            .map(|(_, h)| h)
-                            .unwrap_or(self.terminal_size.1)
-                    ),
+                DashboardPhase::Startup => format!(
+                    "Starting services... | Last Update: {} | Terminal: {}x{}",
+                    Local::now().format("%H:%M:%S"),
+                    width,
+                    terminal::size()
+                        .map(|(_, h)| h)
+                        .unwrap_or(self.terminal_size.1)
+                ),
+                DashboardPhase::Running => format!(
+                    "Dashboard Running | Last Update: {} | Terminal: {}x{}",
+                    Local::now().format("%H:%M:%S"),
+                    width,
+                    terminal::size()
+                        .map(|(_, h)| h)
+                        .unwrap_or(self.terminal_size.1)
+                ),
                 DashboardPhase::ShuttingDown => {
                     if self.services_completed {
                         format!(
@@ -1419,7 +1422,8 @@ impl Dashboard {
                                 .unwrap_or(self.terminal_size.1)
                         )
                     } else {
-                        let elapsed = self.shutdown_started_at
+                        let elapsed = self
+                            .shutdown_started_at
                             .map(|t| t.elapsed().as_secs())
                             .unwrap_or(0);
                         format!(
@@ -1505,7 +1509,7 @@ impl Dashboard {
 /// Initialize and run the dashboard
 pub async fn run_dashboard(
     shutdown: Arc<Notify>,
-    services_completed: Arc<Notify>
+    services_completed: Arc<Notify>,
 ) -> io::Result<()> {
     let mut dashboard = Dashboard::new();
 
@@ -1525,9 +1529,8 @@ pub async fn run_dashboard(
 }
 
 /// Global dashboard instance for log forwarding
-static GLOBAL_DASHBOARD: Lazy<Arc<Mutex<Option<Arc<Dashboard>>>>> = Lazy::new(||
-    Arc::new(Mutex::new(None))
-);
+static GLOBAL_DASHBOARD: Lazy<Arc<Mutex<Option<Arc<Dashboard>>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
 
 /// Set the global dashboard instance
 pub fn set_global_dashboard(dashboard: Arc<Dashboard>) {

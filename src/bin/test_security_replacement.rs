@@ -2,7 +2,6 @@
 ///
 /// This tests the replaced security.rs module to ensure the Rugcheck API integration
 /// works correctly and maintains backward compatibility.
-
 use screenerbot::tokens::security::*;
 
 #[tokio::main]
@@ -38,10 +37,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  - Security Score: {}", security_info.security_score);
             println!("  - Risk Level: {}", security_info.risk_level.as_str());
             println!("  - Can Mint: {}", security_info.security_flags.can_mint);
-            println!("  - Can Freeze: {}", security_info.security_flags.can_freeze);
+            println!(
+                "  - Can Freeze: {}",
+                security_info.security_flags.can_freeze
+            );
             println!("  - LP Locked: {}", security_info.security_flags.lp_locked);
             println!("  - Holder Info: {:?}", security_info.holder_info.is_some());
-            println!("  - Timestamps: Last Updated = {}", security_info.timestamps.last_updated);
+            println!(
+                "  - Timestamps: Last Updated = {}",
+                security_info.timestamps.last_updated
+            );
         }
         Err(e) => {
             println!("❌ Security analysis failed: {}", e);

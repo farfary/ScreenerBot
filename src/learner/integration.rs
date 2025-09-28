@@ -12,13 +12,13 @@
 //! * Conservative: Prefer false negatives over false positives
 //! * Transparent: Log decisions for debugging
 
-use crate::learner::types::*;
+use crate::global::is_debug_learning_enabled;
 use crate::learner::analyzer::PatternAnalyzer;
 use crate::learner::model::ModelManager;
-use crate::logger::{ log, LogTag };
-use crate::global::is_debug_learning_enabled;
+use crate::learner::types::*;
+use crate::logger::{log, LogTag};
 use std::sync::Arc;
-use std::time::{ Duration, Instant };
+use std::time::{Duration, Instant};
 use tokio::time::timeout;
 
 /// Learning system integration interface
@@ -49,14 +49,16 @@ impl LearningIntegration {
         mint: &str,
         current_price: f64,
         drop_percent: f64,
-        ath_proximity: f64
+        ath_proximity: f64,
     ) -> f64 {
         let start_time = Instant::now();
 
         // Timeout protection
         let result = timeout(Duration::from_millis(5), async {
-            self.compute_entry_adjustment(mint, current_price, drop_percent, ath_proximity).await
-        }).await;
+            self.compute_entry_adjustment(mint, current_price, drop_percent, ath_proximity)
+                .await
+        })
+        .await;
 
         match result {
             Ok(adjustment) => {
@@ -67,10 +69,8 @@ impl LearningIntegration {
                         "DEBUG",
                         &format!(
                             "Entry adjustment for {} computed in {:?}: {:.3}",
-                            mint,
-                            elapsed,
-                            adjustment
-                        )
+                            mint, elapsed, adjustment
+                        ),
                     );
                 }
                 adjustment
@@ -79,7 +79,7 @@ impl LearningIntegration {
                 log(
                     LogTag::Learning,
                     "WARN",
-                    &format!("Entry adjustment timeout for {}, using fallback", mint)
+                    &format!("Entry adjustment timeout for {}, using fallback", mint),
                 );
                 1.0 // Fallback: no adjustment
             }
@@ -99,19 +99,16 @@ impl LearningIntegration {
         mint: &str,
         current_price: f64,
         entry_price: f64,
-        position_duration_mins: u32
+        position_duration_mins: u32,
     ) -> f64 {
         let start_time = Instant::now();
 
         // Timeout protection
         let result = timeout(Duration::from_millis(5), async {
-            self.compute_exit_adjustment(
-                mint,
-                current_price,
-                entry_price,
-                position_duration_mins
-            ).await
-        }).await;
+            self.compute_exit_adjustment(mint, current_price, entry_price, position_duration_mins)
+                .await
+        })
+        .await;
 
         match result {
             Ok(adjustment) => {
@@ -122,10 +119,8 @@ impl LearningIntegration {
                         "DEBUG",
                         &format!(
                             "Exit adjustment for {} computed in {:?}: {:.3}",
-                            mint,
-                            elapsed,
-                            adjustment
-                        )
+                            mint, elapsed, adjustment
+                        ),
                     );
                 }
                 adjustment
@@ -134,7 +129,7 @@ impl LearningIntegration {
                 log(
                     LogTag::Learning,
                     "WARN",
-                    &format!("Exit adjustment timeout for {}, using fallback", mint)
+                    &format!("Exit adjustment timeout for {}, using fallback", mint),
                 );
                 1.0 // Fallback: no adjustment
             }
@@ -147,16 +142,13 @@ impl LearningIntegration {
         mint: &str,
         current_price: f64,
         drop_percent: f64,
-        ath_proximity: f64
+        ath_proximity: f64,
     ) -> f64 {
         // Extract features for this potential entry
-        let features = match
-            self.analyzer.extract_features_for_entry(
-                mint,
-                current_price,
-                drop_percent,
-                ath_proximity
-            ).await
+        let features = match self
+            .analyzer
+            .extract_features_for_entry(mint, current_price, drop_percent, ath_proximity)
+            .await
         {
             Ok(f) => f,
             Err(e) => {
@@ -164,7 +156,7 @@ impl LearningIntegration {
                     log(
                         LogTag::Learning,
                         "DEBUG",
-                        &format!("Feature extraction failed for {}: {}", mint, e)
+                        &format!("Feature extraction failed for {}: {}", mint, e),
                     );
                 }
                 return 1.0; // No adjustment if can't extract features
@@ -179,7 +171,7 @@ impl LearningIntegration {
                     log(
                         LogTag::Learning,
                         "DEBUG",
-                        &format!("Prediction failed for {}: {}", mint, e)
+                        &format!("Prediction failed for {}: {}", mint, e),
                     );
                 }
                 return 1.0; // No adjustment if prediction fails
@@ -210,7 +202,7 @@ impl LearningIntegration {
                     prediction.success_probability,
                     prediction.risk_probability,
                     prediction.confidence
-                )
+                ),
             );
         }
 
@@ -223,16 +215,13 @@ impl LearningIntegration {
         mint: &str,
         current_price: f64,
         entry_price: f64,
-        position_duration_mins: u32
+        position_duration_mins: u32,
     ) -> f64 {
         // Extract features for this exit decision
-        let features = match
-            self.analyzer.extract_features_for_exit(
-                mint,
-                current_price,
-                entry_price,
-                position_duration_mins
-            ).await
+        let features = match self
+            .analyzer
+            .extract_features_for_exit(mint, current_price, entry_price, position_duration_mins)
+            .await
         {
             Ok(f) => f,
             Err(e) => {
@@ -240,7 +229,7 @@ impl LearningIntegration {
                     log(
                         LogTag::Learning,
                         "DEBUG",
-                        &format!("Exit feature extraction failed for {}: {}", mint, e)
+                        &format!("Exit feature extraction failed for {}: {}", mint, e),
                     );
                 }
                 return 1.0; // No adjustment if can't extract features
@@ -255,7 +244,7 @@ impl LearningIntegration {
                     log(
                         LogTag::Learning,
                         "DEBUG",
-                        &format!("Exit prediction failed for {}: {}", mint, e)
+                        &format!("Exit prediction failed for {}: {}", mint, e),
                     );
                 }
                 return 1.0; // No adjustment if prediction fails
@@ -305,16 +294,13 @@ pub async fn get_entry_confidence_boost(
     mint: &str,
     current_price: f64,
     drop_percent: f64,
-    ath_proximity: f64
+    ath_proximity: f64,
 ) -> f64 {
     match learning_integration {
         Some(integration) => {
-            integration.get_entry_confidence_adjustment(
-                mint,
-                current_price,
-                drop_percent,
-                ath_proximity
-            ).await
+            integration
+                .get_entry_confidence_adjustment(mint, current_price, drop_percent, ath_proximity)
+                .await
         }
         None => 1.0, // No learning system available
     }
@@ -329,16 +315,13 @@ pub async fn get_exit_urgency_multiplier(
     mint: &str,
     current_price: f64,
     entry_price: f64,
-    position_duration_mins: u32
+    position_duration_mins: u32,
 ) -> f64 {
     match learning_integration {
         Some(integration) => {
-            integration.get_exit_score_adjustment(
-                mint,
-                current_price,
-                entry_price,
-                position_duration_mins
-            ).await
+            integration
+                .get_exit_score_adjustment(mint, current_price, entry_price, position_duration_mins)
+                .await
         }
         None => 1.0, // No learning system available
     }
@@ -367,7 +350,7 @@ pub fn get_entry_confidence_sync_fallback(drop_percent: f64, ath_proximity: f64)
 /// based on simple rules derived from historical patterns.
 pub fn get_exit_urgency_sync_fallback(
     current_profit_percent: f64,
-    position_duration_mins: u32
+    position_duration_mins: u32,
 ) -> f64 {
     // Simple heuristic: quick profits good, long losses bad
     if current_profit_percent > 15.0 && position_duration_mins < 30 {

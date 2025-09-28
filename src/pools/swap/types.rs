@@ -1,8 +1,7 @@
 /// Swap types and common structures
 ///
 /// This module defines the core types used across the swap system.
-
-use solana_sdk::{ pubkey::Pubkey, signature::Signature, transaction::Transaction };
+use solana_sdk::{pubkey::Pubkey, signature::Signature, transaction::Transaction};
 use std::fmt;
 
 /// Direction of the swap operation

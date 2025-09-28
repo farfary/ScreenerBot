@@ -17,14 +17,14 @@
 
 use clap::Parser;
 use screenerbot::arguments::set_cmd_args;
-use screenerbot::logger::{ log, LogTag };
+use screenerbot::logger::{log, LogTag};
 use screenerbot::pools::decoders::orca_whirlpool::OrcaWhirlpoolDecoder;
 use screenerbot::pools::decoders::PoolDecoder;
 use screenerbot::pools::fetcher::AccountData;
-use screenerbot::pools::types::{ SOL_MINT, ORCA_WHIRLPOOL_PROGRAM_ID };
-use screenerbot::rpc::{ get_rpc_client, parse_pubkey };
-use screenerbot::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
-use screenerbot::tokens::dexscreener::{ init_dexscreener_api, get_global_dexscreener_api };
+use screenerbot::pools::types::{ORCA_WHIRLPOOL_PROGRAM_ID, SOL_MINT};
+use screenerbot::rpc::{get_rpc_client, parse_pubkey};
+use screenerbot::tokens::dexscreener::{get_global_dexscreener_api, init_dexscreener_api};
+use screenerbot::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
@@ -95,7 +95,7 @@ impl ExpectedValues {
 fn parse_pool_data_verbose(
     data: &[u8],
     expected: &ExpectedValues,
-    show_hex: bool
+    show_hex: bool,
 ) -> Option<(String, String, String, String)> {
     println!("\n🔍 DETAILED POOL DATA ANALYSIS");
     println!("==============================");
@@ -138,7 +138,14 @@ fn parse_pool_data_verbose(
     let config_str = config_pubkey.to_string();
     println!("Parsed: {}", config_str);
     println!("Expected: {}", expected.whirlpools_config);
-    println!("Match: {}", if config_str == expected.whirlpools_config { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if config_str == expected.whirlpools_config {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 32;
 
     // Whirlpool Bump (1 byte)
@@ -147,7 +154,14 @@ fn parse_pool_data_verbose(
     let bump = data[offset];
     println!("Parsed: {}", bump);
     println!("Expected: {}", expected.whirlpool_bump);
-    println!("Match: {}", if bump == expected.whirlpool_bump { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if bump == expected.whirlpool_bump {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 1;
 
     // Tick Spacing (2 bytes)
@@ -156,7 +170,14 @@ fn parse_pool_data_verbose(
     let tick_spacing = u16::from_le_bytes(data[offset..offset + 2].try_into().ok()?);
     println!("Parsed: {}", tick_spacing);
     println!("Expected: {}", expected.tick_spacing);
-    println!("Match: {}", if tick_spacing == expected.tick_spacing { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if tick_spacing == expected.tick_spacing {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 2;
 
     // Fee Tier Index Seed (2 bytes)
@@ -173,7 +194,14 @@ fn parse_pool_data_verbose(
     let fee_rate = u16::from_le_bytes(data[offset..offset + 2].try_into().ok()?);
     println!("Parsed: {}", fee_rate);
     println!("Expected: {}", expected.fee_rate);
-    println!("Match: {}", if fee_rate == expected.fee_rate { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if fee_rate == expected.fee_rate {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 2;
 
     // Protocol Fee Rate (2 bytes)
@@ -182,11 +210,14 @@ fn parse_pool_data_verbose(
     let protocol_fee_rate = u16::from_le_bytes(data[offset..offset + 2].try_into().ok()?);
     println!("Parsed: {}", protocol_fee_rate);
     println!("Expected: {}", expected.protocol_fee_rate);
-    println!("Match: {}", if protocol_fee_rate == expected.protocol_fee_rate {
-        "✅"
-    } else {
-        "❌"
-    });
+    println!(
+        "Match: {}",
+        if protocol_fee_rate == expected.protocol_fee_rate {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 2;
 
     // Liquidity (16 bytes)
@@ -195,7 +226,14 @@ fn parse_pool_data_verbose(
     let liquidity = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
     println!("Parsed: {}", liquidity);
     println!("Expected: {}", expected.liquidity);
-    println!("Match: {}", if liquidity == expected.liquidity { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if liquidity == expected.liquidity {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 16;
 
     // Sqrt Price (16 bytes) - CRITICAL for price calculation
@@ -204,7 +242,14 @@ fn parse_pool_data_verbose(
     let sqrt_price = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
     println!("Parsed: {}", sqrt_price);
     println!("Expected: {}", expected.sqrt_price);
-    println!("Match: {}", if sqrt_price == expected.sqrt_price { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if sqrt_price == expected.sqrt_price {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
 
     // Calculate price from sqrt_price
     if sqrt_price > 0 {
@@ -228,7 +273,14 @@ fn parse_pool_data_verbose(
     let tick_current = i32::from_le_bytes(data[offset..offset + 4].try_into().ok()?);
     println!("Parsed: {}", tick_current);
     println!("Expected: {}", expected.tick_current_index);
-    println!("Match: {}", if tick_current == expected.tick_current_index { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if tick_current == expected.tick_current_index {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 4;
 
     // Protocol Fee Owed A (8 bytes)
@@ -237,7 +289,14 @@ fn parse_pool_data_verbose(
     let fee_owed_a = u64::from_le_bytes(data[offset..offset + 8].try_into().ok()?);
     println!("Parsed: {}", fee_owed_a);
     println!("Expected: {}", expected.protocol_fee_owed_a);
-    println!("Match: {}", if fee_owed_a == expected.protocol_fee_owed_a { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if fee_owed_a == expected.protocol_fee_owed_a {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 8;
 
     // Protocol Fee Owed B (8 bytes)
@@ -246,7 +305,14 @@ fn parse_pool_data_verbose(
     let fee_owed_b = u64::from_le_bytes(data[offset..offset + 8].try_into().ok()?);
     println!("Parsed: {}", fee_owed_b);
     println!("Expected: {}", expected.protocol_fee_owed_b);
-    println!("Match: {}", if fee_owed_b == expected.protocol_fee_owed_b { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if fee_owed_b == expected.protocol_fee_owed_b {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 8;
 
     // Token Mint A (32 bytes)
@@ -257,8 +323,18 @@ fn parse_pool_data_verbose(
     let mint_a_str = mint_a_pubkey.to_string();
     println!("Parsed: {}", mint_a_str);
     println!("Expected: {}", expected.token_mint_a);
-    println!("Match: {}", if mint_a_str == expected.token_mint_a { "✅" } else { "❌" });
-    println!("Is SOL: {}", if mint_a_str == SOL_MINT { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if mint_a_str == expected.token_mint_a {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
+    println!(
+        "Is SOL: {}",
+        if mint_a_str == SOL_MINT { "✅" } else { "❌" }
+    );
     offset += 32;
 
     // Token Vault A (32 bytes)
@@ -269,7 +345,14 @@ fn parse_pool_data_verbose(
     let vault_a_str = vault_a_pubkey.to_string();
     println!("Parsed: {}", vault_a_str);
     println!("Expected: {}", expected.token_vault_a);
-    println!("Match: {}", if vault_a_str == expected.token_vault_a { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if vault_a_str == expected.token_vault_a {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 32;
 
     // Fee Growth Global A (16 bytes)
@@ -278,7 +361,14 @@ fn parse_pool_data_verbose(
     let fee_growth_a = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
     println!("Parsed: {}", fee_growth_a);
     println!("Expected: {}", expected.fee_growth_global_a);
-    println!("Match: {}", if fee_growth_a == expected.fee_growth_global_a { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if fee_growth_a == expected.fee_growth_global_a {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 16;
 
     // Token Mint B (32 bytes)
@@ -289,8 +379,18 @@ fn parse_pool_data_verbose(
     let mint_b_str = mint_b_pubkey.to_string();
     println!("Parsed: {}", mint_b_str);
     println!("Expected: {}", expected.token_mint_b);
-    println!("Match: {}", if mint_b_str == expected.token_mint_b { "✅" } else { "❌" });
-    println!("Is SOL: {}", if mint_b_str == SOL_MINT { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if mint_b_str == expected.token_mint_b {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
+    println!(
+        "Is SOL: {}",
+        if mint_b_str == SOL_MINT { "✅" } else { "❌" }
+    );
     offset += 32;
 
     // Token Vault B (32 bytes)
@@ -301,7 +401,14 @@ fn parse_pool_data_verbose(
     let vault_b_str = vault_b_pubkey.to_string();
     println!("Parsed: {}", vault_b_str);
     println!("Expected: {}", expected.token_vault_b);
-    println!("Match: {}", if vault_b_str == expected.token_vault_b { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if vault_b_str == expected.token_vault_b {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 32;
 
     // Fee Growth Global B (16 bytes)
@@ -310,7 +417,14 @@ fn parse_pool_data_verbose(
     let fee_growth_b = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
     println!("Parsed: {}", fee_growth_b);
     println!("Expected: {}", expected.fee_growth_global_b);
-    println!("Match: {}", if fee_growth_b == expected.fee_growth_global_b { "✅" } else { "❌" });
+    println!(
+        "Match: {}",
+        if fee_growth_b == expected.fee_growth_global_b {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
     offset += 16;
 
     println!("\n✅ PARSING SUMMARY");
@@ -408,7 +522,7 @@ async fn analyze_token_account(vault_address: &str, vault_name: &str) -> Option<
 /// Test the Orca decoder with verbose debugging
 async fn test_orca_decoder_verbose(
     pool_accounts: &HashMap<String, AccountData>,
-    target_token_mint: &str
+    target_token_mint: &str,
 ) {
     println!("\n🧪 TESTING ORCA DECODER");
     println!("========================");
@@ -428,7 +542,7 @@ async fn test_orca_decoder_verbose(
     let result1 = OrcaWhirlpoolDecoder::decode_and_calculate(
         pool_accounts,
         target_token_mint, // Target as base
-        SOL_MINT // SOL as quote
+        SOL_MINT,          // SOL as quote
     );
 
     match result1 {
@@ -447,8 +561,8 @@ async fn test_orca_decoder_verbose(
     println!("\n🔄 Testing SOL/TOKEN orientation...");
     let result2 = OrcaWhirlpoolDecoder::decode_and_calculate(
         pool_accounts,
-        SOL_MINT, // SOL as base
-        target_token_mint // Target as quote
+        SOL_MINT,          // SOL as base
+        target_token_mint, // Target as quote
     );
 
     match result2 {
@@ -515,22 +629,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Owner: {}", pool_account.owner);
     println!("Data size: {} bytes", pool_account.data.len());
     println!("Expected owner: {}", ORCA_WHIRLPOOL_PROGRAM_ID);
-    println!("Owner match: {}", if pool_account.owner.to_string() == ORCA_WHIRLPOOL_PROGRAM_ID {
-        "✅"
-    } else {
-        "❌"
-    });
+    println!(
+        "Owner match: {}",
+        if pool_account.owner.to_string() == ORCA_WHIRLPOOL_PROGRAM_ID {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
 
     // Parse pool data with extreme verbosity and capture parsed keys
-    let (mint_a, mint_b, vault_a, vault_b) = match
-        parse_pool_data_verbose(&pool_account.data, &expected, args.show_hex)
-    {
-        Some(t) => t,
-        None => {
-            println!("❌ ERROR: Failed to parse pool core fields");
-            std::process::exit(1);
-        }
-    };
+    let (mint_a, mint_b, vault_a, vault_b) =
+        match parse_pool_data_verbose(&pool_account.data, &expected, args.show_hex) {
+            Some(t) => t,
+            None => {
+                println!("❌ ERROR: Failed to parse pool core fields");
+                std::process::exit(1);
+            }
+        };
 
     // Fetch vault accounts
     println!("\n🏦 FETCHING VAULT ACCOUNTS");
@@ -551,39 +667,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create accounts map for decoder testing
     let mut pool_accounts = HashMap::new();
-    pool_accounts.insert(pool_address.clone(), AccountData {
-        pubkey: pool_pubkey,
-        data: pool_account.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: pool_account.lamports,
-        owner: pool_account.owner,
-    });
+    pool_accounts.insert(
+        pool_address.clone(),
+        AccountData {
+            pubkey: pool_pubkey,
+            data: pool_account.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: pool_account.lamports,
+            owner: pool_account.owner,
+        },
+    );
 
     // Add vault accounts if fetched successfully
     if let Ok(vault_a_pubkey) = parse_pubkey(&vault_a) {
         if let Ok(vault_a_account) = rpc_client.client().get_account(&vault_a_pubkey) {
-            pool_accounts.insert(vault_a.clone(), AccountData {
-                pubkey: vault_a_pubkey,
-                data: vault_a_account.data,
-                slot: 0,
-                fetched_at: std::time::Instant::now(),
-                lamports: vault_a_account.lamports,
-                owner: vault_a_account.owner,
-            });
+            pool_accounts.insert(
+                vault_a.clone(),
+                AccountData {
+                    pubkey: vault_a_pubkey,
+                    data: vault_a_account.data,
+                    slot: 0,
+                    fetched_at: std::time::Instant::now(),
+                    lamports: vault_a_account.lamports,
+                    owner: vault_a_account.owner,
+                },
+            );
         }
     }
 
     if let Ok(vault_b_pubkey) = parse_pubkey(&vault_b) {
         if let Ok(vault_b_account) = rpc_client.client().get_account(&vault_b_pubkey) {
-            pool_accounts.insert(vault_b.clone(), AccountData {
-                pubkey: vault_b_pubkey,
-                data: vault_b_account.data,
-                slot: 0,
-                fetched_at: std::time::Instant::now(),
-                lamports: vault_b_account.lamports,
-                owner: vault_b_account.owner,
-            });
+            pool_accounts.insert(
+                vault_b.clone(),
+                AccountData {
+                    pubkey: vault_b_pubkey,
+                    data: vault_b_account.data,
+                    slot: 0,
+                    fetched_at: std::time::Instant::now(),
+                    lamports: vault_b_account.lamports,
+                    owner: vault_b_account.owner,
+                },
+            );
         }
     }
 
@@ -618,11 +743,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("===========================");
 
     // Reuse the same accounts to compute decoder price (TOKEN/SOL orientation)
-    let decoded_price_opt = OrcaWhirlpoolDecoder::decode_and_calculate(
-        &pool_accounts,
-        &target_token_mint,
-        SOL_MINT
-    );
+    let decoded_price_opt =
+        OrcaWhirlpoolDecoder::decode_and_calculate(&pool_accounts, &target_token_mint, SOL_MINT);
 
     match decoded_price_opt {
         Some(decoded) => {

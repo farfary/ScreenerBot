@@ -1,10 +1,10 @@
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
-use r2d2::{ Pool, PooledConnection };
+use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{ params, Connection, OptionalExtension, Result as SqliteResult };
-use serde::{ Deserialize, Serialize };
-use std::collections::{ HashMap, HashSet };
+use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 /// Wallet Balance Monitoring Module
 ///
 /// This module provides wallet balance monitoring with historical snapshots stored in SQLite database.
@@ -19,12 +19,12 @@ use std::collections::{ HashMap, HashSet };
 /// - Pure wallet monitoring without position management interference
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{ Duration, Instant };
-use tokio::sync::{ Mutex, Notify };
+use std::time::{Duration, Instant};
+use tokio::sync::{Mutex, Notify};
 
 use crate::global::is_debug_wallet_enabled;
-use crate::logger::{ log, LogTag };
-use crate::rpc::{ get_rpc_client, TokenAccountInfo };
+use crate::logger::{log, LogTag};
+use crate::rpc::{get_rpc_client, TokenAccountInfo};
 use crate::utils::get_wallet_address;
 
 // Database schema version
@@ -34,8 +34,7 @@ const WALLET_SCHEMA_VERSION: u32 = 1;
 // DATABASE SCHEMA DEFINITIONS
 // =============================================================================
 
-const SCHEMA_WALLET_SNAPSHOTS: &str =
-    r#"
+const SCHEMA_WALLET_SNAPSHOTS: &str = r#"
 CREATE TABLE IF NOT EXISTS wallet_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     wallet_address TEXT NOT NULL,
@@ -47,8 +46,7 @@ CREATE TABLE IF NOT EXISTS wallet_snapshots (
 );
 "#;
 
-const SCHEMA_TOKEN_BALANCES: &str =
-    r#"
+const SCHEMA_TOKEN_BALANCES: &str = r#"
 CREATE TABLE IF NOT EXISTS token_balances (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_id INTEGER NOT NULL,
@@ -62,8 +60,7 @@ CREATE TABLE IF NOT EXISTS token_balances (
 );
 "#;
 
-const SCHEMA_WALLET_METADATA: &str =
-    r#"
+const SCHEMA_WALLET_METADATA: &str = r#"
 CREATE TABLE IF NOT EXISTS wallet_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -102,7 +99,7 @@ pub struct TokenBalance {
     pub id: Option<i64>,
     pub snapshot_id: Option<i64>,
     pub mint: String,
-    pub balance: u64, // Raw token amount
+    pub balance: u64,    // Raw token amount
     pub balance_ui: f64, // UI amount (adjusted for decimals)
     pub decimals: Option<u8>,
     pub is_token_2022: bool,
@@ -139,8 +136,7 @@ impl WalletDatabase {
 
         // Ensure data directory exists
         if !data_dir.exists() {
-            std::fs
-                ::create_dir_all(&data_dir)
+            std::fs::create_dir_all(&data_dir)
                 .map_err(|e| format!("Failed to create data directory: {}", e))?;
         }
 
@@ -151,7 +147,7 @@ impl WalletDatabase {
             log(
                 LogTag::Wallet,
                 "INIT",
-                &format!("Initializing wallet database at: {}", database_path_str)
+                &format!("Initializing wallet database at: {}", database_path_str),
             );
         }
 
@@ -174,7 +170,11 @@ impl WalletDatabase {
         // Initialize database schema
         db.initialize_schema().await?;
 
-        log(LogTag::Wallet, "READY", "Wallet database initialized successfully");
+        log(
+            LogTag::Wallet,
+            "READY",
+            "Wallet database initialized successfully",
+        );
         Ok(db)
     }
 
@@ -183,49 +183,41 @@ impl WalletDatabase {
         let conn = self.get_connection()?;
 
         // Configure database settings
-        conn
-            .pragma_update(None, "journal_mode", "WAL")
+        conn.pragma_update(None, "journal_mode", "WAL")
             .map_err(|e| format!("Failed to set WAL mode: {}", e))?;
-        conn
-            .pragma_update(None, "foreign_keys", true)
+        conn.pragma_update(None, "foreign_keys", true)
             .map_err(|e| format!("Failed to enable foreign keys: {}", e))?;
-        conn
-            .pragma_update(None, "synchronous", "NORMAL")
+        conn.pragma_update(None, "synchronous", "NORMAL")
             .map_err(|e| format!("Failed to set synchronous mode: {}", e))?;
 
         // Create all tables
-        conn
-            .execute(SCHEMA_WALLET_SNAPSHOTS, [])
+        conn.execute(SCHEMA_WALLET_SNAPSHOTS, [])
             .map_err(|e| format!("Failed to create wallet_snapshots table: {}", e))?;
 
-        conn
-            .execute(SCHEMA_TOKEN_BALANCES, [])
+        conn.execute(SCHEMA_TOKEN_BALANCES, [])
             .map_err(|e| format!("Failed to create token_balances table: {}", e))?;
 
-        conn
-            .execute(SCHEMA_WALLET_METADATA, [])
+        conn.execute(SCHEMA_WALLET_METADATA, [])
             .map_err(|e| format!("Failed to create wallet_metadata table: {}", e))?;
 
         // Create all indexes
         for index_sql in WALLET_INDEXES {
-            conn
-                .execute(index_sql, [])
+            conn.execute(index_sql, [])
                 .map_err(|e| format!("Failed to create wallet index: {}", e))?;
         }
 
         // Set schema version
-        conn
-            .execute(
-                "INSERT OR REPLACE INTO wallet_metadata (key, value) VALUES ('schema_version', ?1)",
-                params![self.schema_version.to_string()]
-            )
-            .map_err(|e| format!("Failed to set wallet schema version: {}", e))?;
+        conn.execute(
+            "INSERT OR REPLACE INTO wallet_metadata (key, value) VALUES ('schema_version', ?1)",
+            params![self.schema_version.to_string()],
+        )
+        .map_err(|e| format!("Failed to set wallet schema version: {}", e))?;
 
         if is_debug_wallet_enabled() {
             log(
                 LogTag::Wallet,
                 "SCHEMA",
-                "Wallet database schema initialized with all tables and indexes"
+                "Wallet database schema initialized with all tables and indexes",
             );
         }
 
@@ -234,7 +226,9 @@ impl WalletDatabase {
 
     /// Get database connection from pool
     fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.pool.get().map_err(|e| format!("Failed to get wallet database connection: {}", e))
+        self.pool
+            .get()
+            .map_err(|e| format!("Failed to get wallet database connection: {}", e))
     }
 
     /// Save wallet snapshot with token balances (synchronous version)
@@ -256,29 +250,28 @@ impl WalletDatabase {
                     snapshot.sol_balance_lamports as i64,
                     snapshot.total_tokens_count as i64
                 ],
-                |row| row.get::<_, i64>(0)
+                |row| row.get::<_, i64>(0),
             )
             .map_err(|e| format!("Failed to insert wallet snapshot: {}", e))?;
 
         // Insert token balances
         for token_balance in &snapshot.token_balances {
-            conn
-                .execute(
-                    r#"
+            conn.execute(
+                r#"
                 INSERT INTO token_balances (
                     snapshot_id, mint, balance, balance_ui, decimals, is_token_2022
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 "#,
-                    params![
-                        snapshot_id,
-                        token_balance.mint,
-                        token_balance.balance as i64,
-                        token_balance.balance_ui,
-                        token_balance.decimals,
-                        token_balance.is_token_2022
-                    ]
-                )
-                .map_err(|e| format!("Failed to insert token balance: {}", e))?;
+                params![
+                    snapshot_id,
+                    token_balance.mint,
+                    token_balance.balance as i64,
+                    token_balance.balance_ui,
+                    token_balance.decimals,
+                    token_balance.is_token_2022
+                ],
+            )
+            .map_err(|e| format!("Failed to insert token balance: {}", e))?;
         }
 
         if is_debug_wallet_enabled() {
@@ -290,7 +283,7 @@ impl WalletDatabase {
                     snapshot_id,
                     snapshot.token_balances.len(),
                     &snapshot.wallet_address[..8]
-                )
+                ),
             );
         }
 
@@ -316,29 +309,28 @@ impl WalletDatabase {
                     snapshot.sol_balance_lamports as i64,
                     snapshot.total_tokens_count as i64
                 ],
-                |row| row.get::<_, i64>(0)
+                |row| row.get::<_, i64>(0),
             )
             .map_err(|e| format!("Failed to insert wallet snapshot: {}", e))?;
 
         // Insert token balances
         for token_balance in &snapshot.token_balances {
-            conn
-                .execute(
-                    r#"
+            conn.execute(
+                r#"
                 INSERT INTO token_balances (
                     snapshot_id, mint, balance, balance_ui, decimals, is_token_2022
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 "#,
-                    params![
-                        snapshot_id,
-                        token_balance.mint,
-                        token_balance.balance as i64,
-                        token_balance.balance_ui,
-                        token_balance.decimals,
-                        token_balance.is_token_2022
-                    ]
-                )
-                .map_err(|e| format!("Failed to insert token balance: {}", e))?;
+                params![
+                    snapshot_id,
+                    token_balance.mint,
+                    token_balance.balance as i64,
+                    token_balance.balance_ui,
+                    token_balance.decimals,
+                    token_balance.is_token_2022
+                ],
+            )
+            .map_err(|e| format!("Failed to insert token balance: {}", e))?;
         }
 
         if is_debug_wallet_enabled() {
@@ -350,7 +342,7 @@ impl WalletDatabase {
                     snapshot_id,
                     snapshot.token_balances.len(),
                     &snapshot.wallet_address[..8]
-                )
+                ),
             );
         }
 
@@ -380,7 +372,7 @@ impl WalletDatabase {
                         rusqlite::Error::InvalidColumnType(
                             2,
                             "Invalid snapshot_time".to_string(),
-                            rusqlite::types::Type::Text
+                            rusqlite::types::Type::Text,
                         )
                     })?
                     .with_timezone(&Utc);
@@ -399,9 +391,8 @@ impl WalletDatabase {
 
         let mut snapshots = Vec::new();
         for snapshot_result in snapshot_iter {
-            snapshots.push(
-                snapshot_result.map_err(|e| format!("Failed to parse snapshot row: {}", e))?
-            );
+            snapshots
+                .push(snapshot_result.map_err(|e| format!("Failed to parse snapshot row: {}", e))?);
         }
 
         Ok(snapshots)
@@ -430,7 +421,7 @@ impl WalletDatabase {
                         rusqlite::Error::InvalidColumnType(
                             2,
                             "Invalid snapshot_time".to_string(),
-                            rusqlite::types::Type::Text
+                            rusqlite::types::Type::Text,
                         )
                     })?
                     .with_timezone(&Utc);
@@ -449,9 +440,8 @@ impl WalletDatabase {
 
         let mut snapshots = Vec::new();
         for snapshot_result in snapshot_iter {
-            snapshots.push(
-                snapshot_result.map_err(|e| format!("Failed to parse snapshot row: {}", e))?
-            );
+            snapshots
+                .push(snapshot_result.map_err(|e| format!("Failed to parse snapshot row: {}", e))?);
         }
 
         Ok(snapshots)
@@ -462,7 +452,9 @@ impl WalletDatabase {
         let conn = self.get_connection()?;
 
         let total_snapshots: i64 = conn
-            .query_row("SELECT COUNT(*) FROM wallet_snapshots", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM wallet_snapshots", [], |row| {
+                row.get(0)
+            })
             .map_err(|e| format!("Failed to count snapshots: {}", e))?;
 
         // Get latest snapshot info
@@ -475,25 +467,23 @@ impl WalletDatabase {
             LIMIT 1
             "#,
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .optional()
             .map_err(|e| format!("Failed to get latest snapshot: {}", e))?;
 
-        let (wallet_address, latest_snapshot_time, current_sol_balance, current_tokens_count) = if
-            let Some((addr, time_str, balance, count)) = latest_info
-        {
-            let time = DateTime::parse_from_rfc3339(&time_str)
-                .map_err(|e| format!("Failed to parse latest snapshot time: {}", e))?
-                .with_timezone(&Utc);
-            (addr, Some(time), Some(balance), Some(count as u32))
-        } else {
-            ("Unknown".to_string(), None, None, None)
-        };
+        let (wallet_address, latest_snapshot_time, current_sol_balance, current_tokens_count) =
+            if let Some((addr, time_str, balance, count)) = latest_info {
+                let time = DateTime::parse_from_rfc3339(&time_str)
+                    .map_err(|e| format!("Failed to parse latest snapshot time: {}", e))?
+                    .with_timezone(&Utc);
+                (addr, Some(time), Some(balance), Some(count as u32))
+            } else {
+                ("Unknown".to_string(), None, None, None)
+            };
 
         // Get database file size
-        let database_size = std::fs
-            ::metadata(&self.database_path)
+        let database_size = std::fs::metadata(&self.database_path)
             .map(|m| m.len())
             .unwrap_or(0);
 
@@ -513,7 +503,9 @@ impl WalletDatabase {
         let conn = self.get_connection()?;
 
         let total_snapshots: i64 = conn
-            .query_row("SELECT COUNT(*) FROM wallet_snapshots", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM wallet_snapshots", [], |row| {
+                row.get(0)
+            })
             .map_err(|e| format!("Failed to count snapshots: {}", e))?;
 
         // Get latest snapshot info
@@ -526,25 +518,23 @@ impl WalletDatabase {
             LIMIT 1
             "#,
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .optional()
             .map_err(|e| format!("Failed to get latest snapshot: {}", e))?;
 
-        let (wallet_address, latest_snapshot_time, current_sol_balance, current_tokens_count) = if
-            let Some((addr, time_str, balance, count)) = latest_info
-        {
-            let time = DateTime::parse_from_rfc3339(&time_str)
-                .map_err(|e| format!("Failed to parse latest snapshot time: {}", e))?
-                .with_timezone(&Utc);
-            (addr, Some(time), Some(balance), Some(count as u32))
-        } else {
-            ("Unknown".to_string(), None, None, None)
-        };
+        let (wallet_address, latest_snapshot_time, current_sol_balance, current_tokens_count) =
+            if let Some((addr, time_str, balance, count)) = latest_info {
+                let time = DateTime::parse_from_rfc3339(&time_str)
+                    .map_err(|e| format!("Failed to parse latest snapshot time: {}", e))?
+                    .with_timezone(&Utc);
+                (addr, Some(time), Some(balance), Some(count as u32))
+            } else {
+                ("Unknown".to_string(), None, None, None)
+            };
 
         // Get database file size
-        let database_size = std::fs
-            ::metadata(&self.database_path)
+        let database_size = std::fs::metadata(&self.database_path)
             .map(|m| m.len())
             .unwrap_or(0);
 
@@ -570,7 +560,7 @@ impl WalletDatabase {
             FROM token_balances 
             WHERE snapshot_id = ?1
             ORDER BY balance_ui DESC
-            "#
+            "#,
             )
             .map_err(|e| format!("Failed to prepare token balances query: {}", e))?;
 
@@ -591,7 +581,7 @@ impl WalletDatabase {
         let mut balances = Vec::new();
         for balance_result in balances_iter {
             balances.push(
-                balance_result.map_err(|e| format!("Failed to parse token balance row: {}", e))?
+                balance_result.map_err(|e| format!("Failed to parse token balance row: {}", e))?,
             );
         }
 
@@ -609,7 +599,7 @@ impl WalletDatabase {
             FROM token_balances 
             WHERE snapshot_id = ?1
             ORDER BY balance_ui DESC
-            "#
+            "#,
             )
             .map_err(|e| format!("Failed to prepare token balances query: {}", e))?;
 
@@ -630,7 +620,7 @@ impl WalletDatabase {
         let mut balances = Vec::new();
         for balance_result in balances_iter {
             balances.push(
-                balance_result.map_err(|e| format!("Failed to parse token balance row: {}", e))?
+                balance_result.map_err(|e| format!("Failed to parse token balance row: {}", e))?,
             );
         }
 
@@ -651,7 +641,7 @@ impl WalletDatabase {
                 LIMIT 1000
             )
             "#,
-                []
+                [],
             )
             .map_err(|e| format!("Failed to cleanup old snapshots: {}", e))?;
 
@@ -659,7 +649,7 @@ impl WalletDatabase {
             log(
                 LogTag::Wallet,
                 "CLEANUP",
-                &format!("Cleaned up {} old wallet snapshots", deleted_count)
+                &format!("Cleaned up {} old wallet snapshots", deleted_count),
             );
         }
 
@@ -680,7 +670,7 @@ impl WalletDatabase {
                 LIMIT 1000
             )
             "#,
-                []
+                [],
             )
             .map_err(|e| format!("Failed to cleanup old snapshots: {}", e))?;
 
@@ -688,7 +678,7 @@ impl WalletDatabase {
             log(
                 LogTag::Wallet,
                 "CLEANUP",
-                &format!("Cleaned up {} old wallet snapshots", deleted_count)
+                &format!("Cleaned up {} old wallet snapshots", deleted_count),
             );
         }
 
@@ -701,9 +691,8 @@ impl WalletDatabase {
 // =============================================================================
 
 /// Global wallet database instance
-static GLOBAL_WALLET_DB: Lazy<Arc<Mutex<Option<WalletDatabase>>>> = Lazy::new(||
-    Arc::new(Mutex::new(None))
-);
+static GLOBAL_WALLET_DB: Lazy<Arc<Mutex<Option<WalletDatabase>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
 
 /// Initialize the global wallet database
 pub async fn initialize_wallet_database() -> Result<(), String> {
@@ -715,7 +704,11 @@ pub async fn initialize_wallet_database() -> Result<(), String> {
     let db = WalletDatabase::new().await?;
     *db_lock = Some(db);
 
-    log(LogTag::Wallet, "INIT", "Global wallet database initialized successfully");
+    log(
+        LogTag::Wallet,
+        "INIT",
+        "Global wallet database initialized successfully",
+    );
     Ok(())
 }
 
@@ -728,9 +721,8 @@ pub async fn initialize_wallet_database() -> Result<(), String> {
 /// Collect current wallet balance and token balances
 async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
     // Get wallet address
-    let wallet_address = get_wallet_address().map_err(|e|
-        format!("Failed to get wallet address: {}", e)
-    )?;
+    let wallet_address =
+        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
 
     let rpc_client = get_rpc_client();
     let snapshot_time = Utc::now();
@@ -739,7 +731,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
         log(
             LogTag::Wallet,
             "COLLECT",
-            &format!("Collecting wallet snapshot for {}", &wallet_address[..8])
+            &format!("Collecting wallet snapshot for {}", &wallet_address[..8]),
         );
     }
 
@@ -748,7 +740,8 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
 
     // Get SOL balance
     let sol_balance = rpc_client
-        .get_sol_balance(&wallet_address).await
+        .get_sol_balance(&wallet_address)
+        .await
         .map_err(|e| format!("Failed to get SOL balance: {}", e))?;
 
     let sol_balance_lamports = crate::utils::sol_to_lamports(sol_balance);
@@ -758,7 +751,8 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
 
     // Get all token accounts
     let token_accounts = rpc_client
-        .get_all_token_accounts(&wallet_address).await
+        .get_all_token_accounts(&wallet_address)
+        .await
         .map_err(|e| format!("Failed to get token accounts: {}", e))?;
 
     // Convert to TokenBalance format
@@ -769,8 +763,8 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
             continue;
         }
 
-        let balance_ui = if
-            let Some(decimals) = crate::tokens::decimals::get_cached_decimals(&account_info.mint)
+        let balance_ui = if let Some(decimals) =
+            crate::tokens::decimals::get_cached_decimals(&account_info.mint)
         {
             (account_info.balance as f64) / (10_f64).powi(decimals as i32)
         } else {
@@ -794,7 +788,10 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
         log(
             LogTag::Wallet,
             "SNAPSHOT",
-            &format!("Collected snapshot: SOL {:.6}, {} tokens", sol_balance, total_tokens_count)
+            &format!(
+                "Collected snapshot: SOL {:.6}, {} tokens",
+                sol_balance, total_tokens_count
+            ),
         );
     }
 
@@ -816,7 +813,11 @@ pub async fn start_wallet_monitoring_service(shutdown: Arc<Notify>) -> tokio::ta
 
         // Initialize database
         if let Err(e) = initialize_wallet_database().await {
-            log(LogTag::Wallet, "ERROR", &format!("Failed to initialize wallet database: {}", e));
+            log(
+                LogTag::Wallet,
+                "ERROR",
+                &format!("Failed to initialize wallet database: {}", e),
+            );
             return;
         }
 
@@ -888,7 +889,11 @@ pub async fn start_wallet_monitoring_service(shutdown: Arc<Notify>) -> tokio::ta
             }
         }
 
-        log(LogTag::Wallet, "STOPPED", "Wallet monitoring service stopped");
+        log(
+            LogTag::Wallet,
+            "STOPPED",
+            "Wallet monitoring service stopped",
+        );
     })
 }
 

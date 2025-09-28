@@ -14,14 +14,14 @@
 //! * Backward compatible schema evolution
 //! * Automatic cleanup of old data
 
-use crate::learner::types::*;
-use crate::logger::{ log, LogTag };
 use crate::global::is_debug_learning_enabled;
-use chrono::{ DateTime, Utc };
-use rusqlite::{ params, Connection, OptionalExtension, Row };
+use crate::learner::types::*;
+use crate::logger::{log, LogTag};
+use chrono::{DateTime, Utc};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use std::path::Path;
-use tokio::sync::Mutex;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// Learning database manager
 pub struct LearningDatabase {
@@ -35,14 +35,12 @@ impl LearningDatabase {
 
         // Ensure data directory exists
         if let Some(parent) = Path::new(db_path).parent() {
-            std::fs
-                ::create_dir_all(parent)
+            std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create data directory: {}", e))?;
         }
 
-        let connection = Connection::open(db_path).map_err(|e|
-            format!("Failed to open learning database: {}", e)
-        )?;
+        let connection = Connection::open(db_path)
+            .map_err(|e| format!("Failed to open learning database: {}", e))?;
 
         let db = Self {
             connection: Arc::new(Mutex::new(connection)),
@@ -52,7 +50,11 @@ impl LearningDatabase {
         db.initialize_schema().await?;
 
         if is_debug_learning_enabled() {
-            log(LogTag::Learning, "INFO", &format!("Learning database initialized: {}", db_path));
+            log(
+                LogTag::Learning,
+                "INFO",
+                &format!("Learning database initialized: {}", db_path),
+            );
         }
 
         Ok(db)
@@ -63,14 +65,12 @@ impl LearningDatabase {
         let conn = self.connection.lock().await;
 
         // Enable foreign keys
-        conn
-            .execute("PRAGMA foreign_keys = ON", [])
+        conn.execute("PRAGMA foreign_keys = ON", [])
             .map_err(|e| format!("Failed to enable foreign keys: {}", e))?;
 
         // Create trades table
-        conn
-            .execute(
-                "CREATE TABLE IF NOT EXISTS trades (
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS trades (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 mint TEXT NOT NULL,
                 symbol TEXT NOT NULL,
@@ -118,14 +118,13 @@ impl LearningDatabase {
                 features_extracted BOOLEAN NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             )",
-                []
-            )
-            .map_err(|e| format!("Failed to create trades table: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create trades table: {}", e))?;
 
         // Create features table
-        conn
-            .execute(
-                "CREATE TABLE IF NOT EXISTS features (
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS features (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 trade_id INTEGER NOT NULL,
                 
@@ -167,14 +166,13 @@ impl LearningDatabase {
                 
                 FOREIGN KEY (trade_id) REFERENCES trades (id) ON DELETE CASCADE
             )",
-                []
-            )
-            .map_err(|e| format!("Failed to create features table: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create features table: {}", e))?;
 
         // Create models table
-        conn
-            .execute(
-                "CREATE TABLE IF NOT EXISTS models (
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS models (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 version INTEGER NOT NULL,
                 model_type TEXT NOT NULL,
@@ -194,14 +192,13 @@ impl LearningDatabase {
                 created_at TEXT NOT NULL,
                 trained_on_trades INTEGER NOT NULL
             )",
-                []
-            )
-            .map_err(|e| format!("Failed to create models table: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create models table: {}", e))?;
 
         // Create patterns table
-        conn
-            .execute(
-                "CREATE TABLE IF NOT EXISTS patterns (
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS patterns (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 pattern_id TEXT UNIQUE NOT NULL,
                 pattern_type TEXT NOT NULL,
@@ -221,18 +218,22 @@ impl LearningDatabase {
                 
                 last_updated TEXT NOT NULL
             )",
-                []
-            )
-            .map_err(|e| format!("Failed to create patterns table: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create patterns table: {}", e))?;
 
         // Create indexes for performance
-        conn
-            .execute("CREATE INDEX IF NOT EXISTS idx_trades_mint ON trades(mint)", [])
-            .map_err(|e| format!("Failed to create trades mint index: {}", e))?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_trades_mint ON trades(mint)",
+            [],
+        )
+        .map_err(|e| format!("Failed to create trades mint index: {}", e))?;
 
-        conn
-            .execute("CREATE INDEX IF NOT EXISTS idx_trades_created_at ON trades(created_at)", [])
-            .map_err(|e| format!("Failed to create trades created_at index: {}", e))?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_trades_created_at ON trades(created_at)",
+            [],
+        )
+        .map_err(|e| format!("Failed to create trades created_at index: {}", e))?;
 
         conn
             .execute(
@@ -241,16 +242,24 @@ impl LearningDatabase {
             )
             .map_err(|e| format!("Failed to create trades features_extracted index: {}", e))?;
 
-        conn
-            .execute("CREATE INDEX IF NOT EXISTS idx_features_trade_id ON features(trade_id)", [])
-            .map_err(|e| format!("Failed to create features trade_id index: {}", e))?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_features_trade_id ON features(trade_id)",
+            [],
+        )
+        .map_err(|e| format!("Failed to create features trade_id index: {}", e))?;
 
-        conn
-            .execute("CREATE INDEX IF NOT EXISTS idx_models_version ON models(version)", [])
-            .map_err(|e| format!("Failed to create models version index: {}", e))?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_models_version ON models(version)",
+            [],
+        )
+        .map_err(|e| format!("Failed to create models version index: {}", e))?;
 
         if is_debug_learning_enabled() {
-            log(LogTag::Learning, "INFO", "Learning database schema initialized");
+            log(
+                LogTag::Learning,
+                "INFO",
+                "Learning database schema initialized",
+            );
         }
 
         Ok(())
@@ -322,7 +331,7 @@ impl LearningDatabase {
                     trade.forced_exit,
                     trade.features_extracted,
                     trade.created_at.to_rfc3339()
-                ]
+                ],
             )
             .map_err(|e| format!("Failed to store trade: {}", e))?;
 
@@ -334,11 +343,8 @@ impl LearningDatabase {
                 "INFO",
                 &format!(
                     "Stored trade {}: {} {} -> {:.2}%",
-                    trade_id,
-                    trade.symbol,
-                    trade.mint,
-                    trade.pnl_pct
-                )
+                    trade_id, trade.symbol, trade.mint, trade.pnl_pct
+                ),
             );
         }
 
@@ -408,19 +414,15 @@ impl LearningDatabase {
     pub async fn store_model_weights(&self, weights: &ModelWeights) -> Result<(), String> {
         let conn = self.connection.lock().await;
 
-        let success_weights_json = serde_json
-            ::to_string(&weights.success_weights)
+        let success_weights_json = serde_json::to_string(&weights.success_weights)
             .map_err(|e| format!("Failed to serialize success weights: {}", e))?;
-        let risk_weights_json = serde_json
-            ::to_string(&weights.risk_weights)
+        let risk_weights_json = serde_json::to_string(&weights.risk_weights)
             .map_err(|e| format!("Failed to serialize risk weights: {}", e))?;
-        let feature_importance_json = serde_json
-            ::to_string(&weights.feature_importance)
+        let feature_importance_json = serde_json::to_string(&weights.feature_importance)
             .map_err(|e| format!("Failed to serialize feature importance: {}", e))?;
 
-        conn
-            .execute(
-                "INSERT INTO models (
+        conn.execute(
+            "INSERT INTO models (
                 version, model_type,
                 success_weights, success_intercept, success_threshold,
                 risk_weights, risk_intercept, risk_threshold,
@@ -429,23 +431,23 @@ impl LearningDatabase {
             ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13
             )",
-                params![
-                    weights.version,
-                    weights.model_type,
-                    success_weights_json,
-                    weights.success_intercept,
-                    weights.success_threshold,
-                    risk_weights_json,
-                    weights.risk_intercept,
-                    weights.risk_threshold,
-                    weights.training_samples,
-                    weights.validation_accuracy,
-                    feature_importance_json,
-                    weights.created_at.to_rfc3339(),
-                    weights.trained_on_trades
-                ]
-            )
-            .map_err(|e| format!("Failed to store model weights: {}", e))?;
+            params![
+                weights.version,
+                weights.model_type,
+                success_weights_json,
+                weights.success_intercept,
+                weights.success_threshold,
+                risk_weights_json,
+                weights.risk_intercept,
+                weights.risk_threshold,
+                weights.training_samples,
+                weights.validation_accuracy,
+                feature_importance_json,
+                weights.created_at.to_rfc3339(),
+                weights.trained_on_trades
+            ],
+        )
+        .map_err(|e| format!("Failed to store model weights: {}", e))?;
 
         if is_debug_learning_enabled() {
             log(
@@ -456,7 +458,7 @@ impl LearningDatabase {
                     weights.version,
                     weights.training_samples,
                     weights.validation_accuracy * 100.0
-                )
+                ),
             );
         }
 
@@ -474,7 +476,7 @@ impl LearningDatabase {
             .map_err(|e| format!("Failed to prepare unprocessed trades query: {}", e))?;
 
         let trade_iter = stmt
-            .query_map([], |row| { Ok(self.row_to_trade_record(row)?) })
+            .query_map([], |row| Ok(self.row_to_trade_record(row)?))
             .map_err(|e| format!("Failed to query unprocessed trades: {}", e))?;
 
         let mut trades = Vec::new();
@@ -489,9 +491,11 @@ impl LearningDatabase {
     pub async fn mark_trade_processed(&self, trade_id: i64) -> Result<(), String> {
         let conn = self.connection.lock().await;
 
-        conn
-            .execute("UPDATE trades SET features_extracted = 1 WHERE id = ?1", params![trade_id])
-            .map_err(|e| format!("Failed to mark trade as processed: {}", e))?;
+        conn.execute(
+            "UPDATE trades SET features_extracted = 1 WHERE id = ?1",
+            params![trade_id],
+        )
+        .map_err(|e| format!("Failed to mark trade as processed: {}", e))?;
 
         Ok(())
     }
@@ -505,13 +509,13 @@ impl LearningDatabase {
             .map_err(|e| format!("Failed to prepare features query: {}", e))?;
 
         let feature_iter = stmt
-            .query_map([], |row| { Ok(self.row_to_feature_vector(row)?) })
+            .query_map([], |row| Ok(self.row_to_feature_vector(row)?))
             .map_err(|e| format!("Failed to query features: {}", e))?;
 
         let mut features = Vec::new();
         for feature_result in feature_iter {
             features.push(
-                feature_result.map_err(|e| format!("Failed to parse feature vector: {}", e))?
+                feature_result.map_err(|e| format!("Failed to parse feature vector: {}", e))?,
             );
         }
 
@@ -523,8 +527,10 @@ impl LearningDatabase {
         let conn = self.connection.lock().await;
 
         let result = conn
-            .query_row("SELECT * FROM models ORDER BY version DESC LIMIT 1", [], |row|
-                Ok(self.row_to_model_weights(row)?)
+            .query_row(
+                "SELECT * FROM models ORDER BY version DESC LIMIT 1",
+                [],
+                |row| Ok(self.row_to_model_weights(row)?),
             )
             .optional()
             .map_err(|e| format!("Failed to query latest model weights: {}", e))?;
@@ -546,7 +552,7 @@ impl LearningDatabase {
     /// Get new trades since timestamp
     pub async fn get_new_trades_since(
         &self,
-        since: DateTime<Utc>
+        since: DateTime<Utc>,
     ) -> Result<Vec<TradeRecord>, String> {
         let conn = self.connection.lock().await;
 
@@ -555,7 +561,9 @@ impl LearningDatabase {
             .map_err(|e| format!("Failed to prepare new trades query: {}", e))?;
 
         let trade_iter = stmt
-            .query_map(params![since.to_rfc3339()], |row| { Ok(self.row_to_trade_record(row)?) })
+            .query_map(params![since.to_rfc3339()], |row| {
+                Ok(self.row_to_trade_record(row)?)
+            })
             .map_err(|e| format!("Failed to query new trades: {}", e))?;
 
         let mut trades = Vec::new();
@@ -575,7 +583,7 @@ impl LearningDatabase {
             .map_err(|e| format!("Failed to prepare mint trades query: {}", e))?;
 
         let trade_iter = stmt
-            .query_map(params![mint], |row| { Ok(self.row_to_trade_record(row)?) })
+            .query_map(params![mint], |row| Ok(self.row_to_trade_record(row)?))
             .map_err(|e| format!("Failed to query mint trades: {}", e))?;
 
         let mut trades = Vec::new();
@@ -614,22 +622,22 @@ impl LearningDatabase {
             symbol: row.get("symbol")?,
             name: row.get("name")?,
             entry_time: DateTime::parse_from_rfc3339(&row.get::<_, String>("entry_time")?)
-                .map_err(|_|
+                .map_err(|_| {
                     rusqlite::Error::InvalidColumnType(
                         0,
                         "entry_time".to_string(),
-                        rusqlite::types::Type::Text
+                        rusqlite::types::Type::Text,
                     )
-                )?
+                })?
                 .with_timezone(&Utc),
             exit_time: DateTime::parse_from_rfc3339(&row.get::<_, String>("exit_time")?)
-                .map_err(|_|
+                .map_err(|_| {
                     rusqlite::Error::InvalidColumnType(
                         0,
                         "exit_time".to_string(),
-                        rusqlite::types::Type::Text
+                        rusqlite::types::Type::Text,
                     )
-                )?
+                })?
                 .with_timezone(&Utc),
             entry_price: row.get("entry_price")?,
             exit_price: row.get("exit_price")?,
@@ -662,13 +670,13 @@ impl LearningDatabase {
             forced_exit: row.get("forced_exit")?,
             features_extracted: row.get("features_extracted")?,
             created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>("created_at")?)
-                .map_err(|_|
+                .map_err(|_| {
                     rusqlite::Error::InvalidColumnType(
                         0,
                         "created_at".to_string(),
-                        rusqlite::types::Type::Text
+                        rusqlite::types::Type::Text,
                     )
-                )?
+                })?
                 .with_timezone(&Utc),
         })
     }
@@ -706,46 +714,43 @@ impl LearningDatabase {
             risk_label: row.get("risk_label")?,
             peak_time_label: row.get("peak_time_label")?,
             created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>("created_at")?)
-                .map_err(|_|
+                .map_err(|_| {
                     rusqlite::Error::InvalidColumnType(
                         0,
                         "created_at".to_string(),
-                        rusqlite::types::Type::Text
+                        rusqlite::types::Type::Text,
                     )
-                )?
+                })?
                 .with_timezone(&Utc),
         })
     }
 
     /// Helper: Convert database row to ModelWeights
     fn row_to_model_weights(&self, row: &Row) -> Result<ModelWeights, rusqlite::Error> {
-        let success_weights: Vec<f64> = serde_json
-            ::from_str(&row.get::<_, String>("success_weights")?)
-            .map_err(|_|
+        let success_weights: Vec<f64> =
+            serde_json::from_str(&row.get::<_, String>("success_weights")?).map_err(|_| {
                 rusqlite::Error::InvalidColumnType(
                     0,
                     "success_weights".to_string(),
-                    rusqlite::types::Type::Text
+                    rusqlite::types::Type::Text,
                 )
-            )?;
-        let risk_weights: Vec<f64> = serde_json
-            ::from_str(&row.get::<_, String>("risk_weights")?)
-            .map_err(|_|
-                rusqlite::Error::InvalidColumnType(
-                    0,
-                    "risk_weights".to_string(),
-                    rusqlite::types::Type::Text
-                )
-            )?;
-        let feature_importance: Vec<f64> = serde_json
-            ::from_str(&row.get::<_, String>("feature_importance")?)
-            .map_err(|_|
+            })?;
+        let risk_weights: Vec<f64> = serde_json::from_str(&row.get::<_, String>("risk_weights")?)
+            .map_err(|_| {
+            rusqlite::Error::InvalidColumnType(
+                0,
+                "risk_weights".to_string(),
+                rusqlite::types::Type::Text,
+            )
+        })?;
+        let feature_importance: Vec<f64> =
+            serde_json::from_str(&row.get::<_, String>("feature_importance")?).map_err(|_| {
                 rusqlite::Error::InvalidColumnType(
                     0,
                     "feature_importance".to_string(),
-                    rusqlite::types::Type::Text
+                    rusqlite::types::Type::Text,
                 )
-            )?;
+            })?;
 
         Ok(ModelWeights {
             version: row.get("version")?,
@@ -760,13 +765,13 @@ impl LearningDatabase {
             validation_accuracy: row.get("validation_accuracy")?,
             feature_importance,
             created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>("created_at")?)
-                .map_err(|_|
+                .map_err(|_| {
                     rusqlite::Error::InvalidColumnType(
                         0,
                         "created_at".to_string(),
-                        rusqlite::types::Type::Text
+                        rusqlite::types::Type::Text,
                     )
-                )?
+                })?
                 .with_timezone(&Utc),
             trained_on_trades: row.get("trained_on_trades")?,
         })

@@ -1,8 +1,8 @@
-use chrono::{ DateTime, Utc, Duration as ChronoDuration };
-use serde::{ Deserialize, Serialize };
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use tokio::sync::RwLock;
 use std::sync::LazyLock;
+use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VerificationKind {
@@ -29,7 +29,7 @@ impl VerificationItem {
         mint: String,
         position_id: Option<i64>,
         kind: VerificationKind,
-        expiry_height: Option<u64>
+        expiry_height: Option<u64>,
     ) -> Self {
         Self {
             signature,
@@ -68,7 +68,7 @@ impl VerificationItem {
         let jitter_fraction: f64 = 0.1;
         let jitter = {
             // Simple deterministic jitter based on signature hash and attempt number
-            use std::hash::{ Hash, Hasher };
+            use std::hash::{Hash, Hasher};
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             self.signature.hash(&mut hasher);
             next_attempts.hash(&mut hasher);
@@ -101,12 +101,17 @@ impl VerificationItem {
                 VerificationKind::Entry => 600,
                 VerificationKind::Exit => 180,
             };
-            Utc::now().signed_duration_since(self.created_at).num_seconds() > fallback_secs
+            Utc::now()
+                .signed_duration_since(self.created_at)
+                .num_seconds()
+                > fallback_secs
         }
     }
 
     pub fn age_seconds(&self) -> i64 {
-        Utc::now().signed_duration_since(self.created_at).num_seconds()
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds()
     }
 
     pub fn is_due(&self) -> bool {
@@ -220,9 +225,8 @@ impl VerificationQueue {
 }
 
 /// Global verification queue
-static VERIFICATION_QUEUE: LazyLock<RwLock<VerificationQueue>> = LazyLock::new(||
-    RwLock::new(VerificationQueue::new())
-);
+static VERIFICATION_QUEUE: LazyLock<RwLock<VerificationQueue>> =
+    LazyLock::new(|| RwLock::new(VerificationQueue::new()));
 
 /// Enqueue verification item
 pub async fn enqueue_verification(item: VerificationItem) {
@@ -258,10 +262,7 @@ pub async fn gc_expired_verifications(current_height: Option<u64>) -> Vec<Verifi
 pub async fn get_queue_status() -> (usize, Vec<String>) {
     let queue = VERIFICATION_QUEUE.read().await;
     let size = queue.len();
-    let signatures: Vec<String> = queue.items
-        .iter()
-        .map(|i| i.signature.clone())
-        .collect();
+    let signatures: Vec<String> = queue.items.iter().map(|i| i.signature.clone()).collect();
     (size, signatures)
 }
 

@@ -9,6 +9,7 @@ pub mod errors; // New structured error handling
 pub mod events; // Event recording system for analytics and debugging
 pub mod filtering;
 pub mod global;
+pub mod learner;
 pub mod logger;
 pub mod pools; // New modular pool system
 pub mod positions;
@@ -27,5 +28,4 @@ pub mod transactions_lib; // Transaction analysis library
 pub mod transactions_types; // Transaction type definitions
 pub mod utils;
 pub mod wallet; // Wallet balance monitoring
-pub mod websocket; // WebSocket client for real-time transaction monitoring
-pub mod learner; // Learning system for pattern recognition and auto-improvement
+pub mod websocket; // WebSocket client for real-time transaction monitoring // Learning system for pattern recognition and auto-improvement

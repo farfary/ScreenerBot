@@ -1,5 +1,5 @@
+use screenerbot::logger::{init_file_logging, log, LogTag};
 use screenerbot::tokens::geckoterminal::get_ohlcv_data_from_geckoterminal;
-use screenerbot::logger::{ init_file_logging, log, LogTag };
 use std::env;
 
 #[tokio::main]
@@ -7,7 +7,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     init_file_logging();
 
-    log(LogTag::Api, "TEST_START", "🧪 Testing OHLCV API with token parameter fix");
+    log(
+        LogTag::Api,
+        "TEST_START",
+        "🧪 Testing OHLCV API with token parameter fix",
+    );
 
     // Get test parameters from command line
     let args: Vec<String> = env::args().collect();
@@ -25,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(
         LogTag::Api,
         "TEST_PARAMS",
-        &format!("Testing pool: {}, token: {}", pool_address, token_mint)
+        &format!("Testing pool: {}, token: {}", pool_address, token_mint),
     );
 
     // Test the OHLCV API call with our token parameter fix
@@ -34,7 +38,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             log(
                 LogTag::Api,
                 "TEST_SUCCESS",
-                &format!("✅ Successfully fetched {} OHLCV data points", ohlcv_data.len())
+                &format!(
+                    "✅ Successfully fetched {} OHLCV data points",
+                    ohlcv_data.len()
+                ),
             );
 
             if !ohlcv_data.is_empty() {
@@ -70,7 +77,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            log(LogTag::Api, "TEST_ERROR", &format!("❌ OHLCV API call failed: {}", e));
+            log(
+                LogTag::Api,
+                "TEST_ERROR",
+                &format!("❌ OHLCV API call failed: {}", e),
+            );
             println!("❌ Test failed: {}", e);
         }
     }

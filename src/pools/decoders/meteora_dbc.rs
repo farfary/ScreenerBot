@@ -14,13 +14,12 @@
 /// - partner_quote_fee (u64)
 /// - sqrt_price (u128)
 /// ... plus metadata. We compute price from live vault balances minus fees.
-
-use super::{ PoolDecoder, AccountData };
+use super::{AccountData, PoolDecoder};
 use crate::arguments::is_debug_pool_decoders_enabled;
-use crate::logger::{ log, LogTag };
-use crate::pools::types::{ ProgramKind, PriceResult, METEORA_DBC_PROGRAM_ID, SOL_MINT };
-use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
-use crate::pools::utils::{ read_pubkey_at, read_token_account_amount };
+use crate::logger::{log, LogTag};
+use crate::pools::types::{PriceResult, ProgramKind, METEORA_DBC_PROGRAM_ID, SOL_MINT};
+use crate::pools::utils::{read_pubkey_at, read_token_account_amount};
+use crate::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
 use std::collections::HashMap;
 
 pub struct MeteoraDbcDecoder;
@@ -33,16 +32,18 @@ impl PoolDecoder for MeteoraDbcDecoder {
     fn decode_and_calculate(
         accounts: &HashMap<String, AccountData>,
         base_mint: &str,
-        quote_mint: &str
+        quote_mint: &str,
     ) -> Option<PriceResult> {
         // Find the DBC pool account by owner
-        let pool_acc = accounts.values().find(|a| a.owner.to_string() == METEORA_DBC_PROGRAM_ID)?;
+        let pool_acc = accounts
+            .values()
+            .find(|a| a.owner.to_string() == METEORA_DBC_PROGRAM_ID)?;
 
         if is_debug_pool_decoders_enabled() {
             log(
                 LogTag::Pool,
                 "DBC_PARSE",
-                &format!("Pool {} bytes:{}", pool_acc.pubkey, pool_acc.data.len())
+                &format!("Pool {} bytes:{}", pool_acc.pubkey, pool_acc.data.len()),
             );
         }
 
@@ -126,11 +127,8 @@ impl PoolDecoder for MeteoraDbcDecoder {
                 "DBC_PRICE_CALC",
                 &format!(
                     "sqrt_price_f64: {}, raw_ratio: {}, decimals_scale: {}, price_per_token: {}",
-                    sqrt_price_f64,
-                    raw_ratio,
-                    decimals_scale,
-                    price_per_token
-                )
+                    sqrt_price_f64, raw_ratio, decimals_scale, price_per_token
+                ),
             );
         }
 
@@ -152,7 +150,7 @@ impl PoolDecoder for MeteoraDbcDecoder {
             price_per_token,
             sol,
             tok,
-            pool_acc.pubkey.to_string()
+            pool_acc.pubkey.to_string(),
         );
         pr.source_pool = Some(ProgramKind::MeteoraDbc.display_name().to_string());
         pr.slot = sol_vault.slot.min(token_vault.slot).min(pool_acc.slot);
@@ -173,18 +171,15 @@ impl MeteoraDbcDecoder {
         // Look for two consecutive pubkeys that look like vault addresses
         for offset in (32..200).step_by(32) {
             if offset + 64 <= pool_data.len() {
-                if
-                    let (Some(vault1), Some(vault2)) = (
-                        read_pubkey_at(pool_data, offset),
-                        read_pubkey_at(pool_data, offset + 32),
-                    )
-                {
+                if let (Some(vault1), Some(vault2)) = (
+                    read_pubkey_at(pool_data, offset),
+                    read_pubkey_at(pool_data, offset + 32),
+                ) {
                     // Basic validation - valid pubkeys that aren't all zeros
-                    if
-                        vault1 != "11111111111111111111111111111111" &&
-                        vault2 != "11111111111111111111111111111111" &&
-                        vault1.len() == 44 &&
-                        vault2.len() == 44
+                    if vault1 != "11111111111111111111111111111111"
+                        && vault2 != "11111111111111111111111111111111"
+                        && vault1.len() == 44
+                        && vault2.len() == 44
                     {
                         return Some(vec![vault1, vault2]);
                     }
@@ -203,7 +198,11 @@ fn extract_sqrt_price_from_pool_data(data: &[u8]) -> Option<u128> {
     if data.len() >= 296 {
         if let Ok(val) = read_u128_le(&data[280..296]) {
             if is_debug_pool_decoders_enabled() {
-                log(LogTag::Pool, "DBC_SQRT_PRICE", &format!("Found sqrt_price: {}", val));
+                log(
+                    LogTag::Pool,
+                    "DBC_SQRT_PRICE",
+                    &format!("Found sqrt_price: {}", val),
+                );
             }
             return Some(val);
         }
@@ -211,7 +210,11 @@ fn extract_sqrt_price_from_pool_data(data: &[u8]) -> Option<u128> {
 
     // Fallback: scan entire account for any plausible u128 (very permissive)
     if is_debug_pool_decoders_enabled() {
-        log(LogTag::Pool, "DBC_SQRT_SEARCH", "Scanning for sqrt_price u128 value (fallback)");
+        log(
+            LogTag::Pool,
+            "DBC_SQRT_SEARCH",
+            "Scanning for sqrt_price u128 value (fallback)",
+        );
     }
     for offset in (0..data.len().saturating_sub(16)).step_by(8) {
         if let Ok(val) = read_u128_le(&data[offset..offset + 16]) {
@@ -221,7 +224,7 @@ fn extract_sqrt_price_from_pool_data(data: &[u8]) -> Option<u128> {
                     log(
                         LogTag::Pool,
                         "DBC_SQRT_FOUND",
-                        &format!("Candidate sqrt_price @{}: {}", offset, val)
+                        &format!("Candidate sqrt_price @{}: {}", offset, val),
                     );
                 }
                 return Some(val);
@@ -236,26 +239,10 @@ fn read_u128_le(bytes: &[u8]) -> Result<u128, &'static str> {
     if bytes.len() < 16 {
         return Err("Insufficient bytes for u128");
     }
-    Ok(
-        u128::from_le_bytes([
-            bytes[0],
-            bytes[1],
-            bytes[2],
-            bytes[3],
-            bytes[4],
-            bytes[5],
-            bytes[6],
-            bytes[7],
-            bytes[8],
-            bytes[9],
-            bytes[10],
-            bytes[11],
-            bytes[12],
-            bytes[13],
-            bytes[14],
-            bytes[15],
-        ])
-    )
+    Ok(u128::from_le_bytes([
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8],
+        bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
+    ]))
 }
 
 /// Read u64 from little-endian bytes
@@ -263,18 +250,9 @@ fn read_u64_le(bytes: &[u8]) -> Result<u64, &'static str> {
     if bytes.len() < 8 {
         return Err("Insufficient bytes for u64");
     }
-    Ok(
-        u64::from_le_bytes([
-            bytes[0],
-            bytes[1],
-            bytes[2],
-            bytes[3],
-            bytes[4],
-            bytes[5],
-            bytes[6],
-            bytes[7],
-        ])
-    )
+    Ok(u64::from_le_bytes([
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+    ]))
 }
 
 /// Try to locate fee fields in pool data. Returns (protocol_quote_fee, partner_quote_fee)

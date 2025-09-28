@@ -10,14 +10,14 @@
 
 use clap::Parser;
 use screenerbot::arguments::set_cmd_args;
-use screenerbot::logger::{ log, LogTag };
+use screenerbot::logger::{log, LogTag};
 use screenerbot::pools::decoders::raydium_clmm::RaydiumClmmDecoder;
 use screenerbot::pools::decoders::PoolDecoder;
 use screenerbot::pools::fetcher::AccountData;
-use screenerbot::pools::types::{ RAYDIUM_CLMM_PROGRAM_ID, SOL_MINT };
-use screenerbot::rpc::{ get_rpc_client, parse_pubkey };
-use screenerbot::tokens::{ decimals::SOL_DECIMALS, get_token_decimals_sync };
-use screenerbot::tokens::dexscreener::{ init_dexscreener_api, get_global_dexscreener_api };
+use screenerbot::pools::types::{RAYDIUM_CLMM_PROGRAM_ID, SOL_MINT};
+use screenerbot::rpc::{get_rpc_client, parse_pubkey};
+use screenerbot::tokens::dexscreener::{get_global_dexscreener_api, init_dexscreener_api};
+use screenerbot::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
@@ -45,9 +45,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Enable decoder debug logs from library
-    set_cmd_args(
-        vec!["debug_raydium_clmm_specific".to_string(), "--debug-pool-decoders".to_string()]
-    );
+    set_cmd_args(vec![
+        "debug_raydium_clmm_specific".to_string(),
+        "--debug-pool-decoders".to_string(),
+    ]);
 
     println!("\n🔍 RAYDIUM CLMM SPECIFIC DEBUGGER");
     println!("=================================");
@@ -72,11 +73,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("==============");
     println!("Owner: {}", pool_acc.owner);
     println!("Data size: {} bytes", pool_acc.data.len());
-    println!("Owner is Raydium CLMM: {}", if pool_acc.owner.to_string() == RAYDIUM_CLMM_PROGRAM_ID {
-        "✅"
-    } else {
-        "❌"
-    });
+    println!(
+        "Owner is Raydium CLMM: {}",
+        if pool_acc.owner.to_string() == RAYDIUM_CLMM_PROGRAM_ID {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
 
     if args.show_hex {
         println!("\n📄 RAW HEX (first 192 bytes)");
@@ -123,42 +127,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         decode_token_amount(&vault1_acc.data).unwrap_or(0),
     );
 
-    println!("vault_0 mint: {}", read_pubkey(&vault0_acc.data, 0).unwrap_or_default());
-    println!("vault_1 mint: {}", read_pubkey(&vault1_acc.data, 0).unwrap_or_default());
+    println!(
+        "vault_0 mint: {}",
+        read_pubkey(&vault0_acc.data, 0).unwrap_or_default()
+    );
+    println!(
+        "vault_1 mint: {}",
+        read_pubkey(&vault1_acc.data, 0).unwrap_or_default()
+    );
     println!("vault_0 amount(raw): {}", amt0);
     println!("vault_1 amount(raw): {}", amt1);
 
     // Build accounts map for decoder test
     let mut accounts = HashMap::new();
-    accounts.insert(args.pool.clone(), AccountData {
-        pubkey: pool_pk,
-        data: pool_acc.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: pool_acc.lamports,
-        owner: pool_acc.owner,
-    });
-    accounts.insert(info.token_vault_0.clone(), AccountData {
-        pubkey: vault0_pk,
-        data: vault0_acc.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: vault0_acc.lamports,
-        owner: vault0_acc.owner,
-    });
-    accounts.insert(info.token_vault_1.clone(), AccountData {
-        pubkey: vault1_pk,
-        data: vault1_acc.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: vault1_acc.lamports,
-        owner: vault1_acc.owner,
-    });
+    accounts.insert(
+        args.pool.clone(),
+        AccountData {
+            pubkey: pool_pk,
+            data: pool_acc.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: pool_acc.lamports,
+            owner: pool_acc.owner,
+        },
+    );
+    accounts.insert(
+        info.token_vault_0.clone(),
+        AccountData {
+            pubkey: vault0_pk,
+            data: vault0_acc.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: vault0_acc.lamports,
+            owner: vault0_acc.owner,
+        },
+    );
+    accounts.insert(
+        info.token_vault_1.clone(),
+        AccountData {
+            pubkey: vault1_pk,
+            data: vault1_acc.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: vault1_acc.lamports,
+            owner: vault1_acc.owner,
+        },
+    );
 
     // Decide orientation relative to SOL (if present)
     let has_sol = info.token_mint_0 == SOL_MINT || info.token_mint_1 == SOL_MINT;
     let target_mint = if has_sol {
-        if info.token_mint_0 == SOL_MINT { &info.token_mint_1 } else { &info.token_mint_0 }
+        if info.token_mint_0 == SOL_MINT {
+            &info.token_mint_1
+        } else {
+            &info.token_mint_0
+        }
     } else {
         // Fallback: use token_mint_0 for target when no SOL in pair
         &info.token_mint_0
@@ -168,24 +191,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🧪 DECODER CHECK\n================");
     let res1 = RaydiumClmmDecoder::decode_and_calculate(&accounts, target_mint, &SOL_MINT);
     match &res1 {
-        Some(r) =>
-            println!(
-                "Orientation TOKEN/SOL → price_sol={:.12} mint={} pool={}",
-                r.price_sol,
-                r.mint,
-                r.pool_address
-            ),
+        Some(r) => println!(
+            "Orientation TOKEN/SOL → price_sol={:.12} mint={} pool={}",
+            r.price_sol, r.mint, r.pool_address
+        ),
         None => println!("Orientation TOKEN/SOL → None"),
     }
     let res2 = RaydiumClmmDecoder::decode_and_calculate(&accounts, &SOL_MINT, target_mint);
     match &res2 {
-        Some(r) =>
-            println!(
-                "Orientation SOL/TOKEN → price_sol={:.12} mint={} pool={}",
-                r.price_sol,
-                r.mint,
-                r.pool_address
-            ),
+        Some(r) => println!(
+            "Orientation SOL/TOKEN → price_sol={:.12} mint={} pool={}",
+            r.price_sol, r.mint, r.pool_address
+        ),
         None => println!("Orientation SOL/TOKEN → None"),
     }
 
@@ -201,7 +218,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         get_token_decimals_sync(&info.token_mint_0).unwrap_or(info.mint_decimals_0 as u8),
         get_token_decimals_sync(&info.token_mint_1).unwrap_or(info.mint_decimals_1 as u8),
     );
-    println!("decimals (cached or pool): token0={} token1={}", token0_dec, token1_dec);
+    println!(
+        "decimals (cached or pool): token0={} token1={}",
+        token0_dec, token1_dec
+    );
 
     // Compute base token (token_mint_0) price in: quote token units, and SOL if available
     let price_quote_per_base = raw * (10_f64).powi((token0_dec as i32) - (token1_dec as i32));
@@ -217,10 +237,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             raw * (10_f64).powi((token0_dec as i32) - (SOL_DECIMALS as i32))
         } else {
             // t0=SOL, t1=token → raw is token/SOL, invert
-            (1.0 / raw) *
-                (10_f64).powi(
-                    ((if info.token_mint_1 == SOL_MINT { token0_dec } else { token1_dec }) as i32) -
-                        (SOL_DECIMALS as i32)
+            (1.0 / raw)
+                * (10_f64).powi(
+                    ((if info.token_mint_1 == SOL_MINT {
+                        token0_dec
+                    } else {
+                        token1_dec
+                    }) as i32)
+                        - (SOL_DECIMALS as i32),
                 )
         };
         println!("SOL per target (manual): {:.12}", price_sol);
@@ -317,33 +341,13 @@ fn parse_clmm_minimal(data: &[u8]) -> Option<MinimalClmmInfo> {
     off += 1;
     let mint_decimals_1 = *data.get(off)?;
     off += 1;
-    let tick_spacing = u16::from_le_bytes(
-        data
-            .get(off..off + 2)?
-            .try_into()
-            .ok()?
-    );
+    let tick_spacing = u16::from_le_bytes(data.get(off..off + 2)?.try_into().ok()?);
     off += 2;
-    let _liquidity = u128::from_le_bytes(
-        data
-            .get(off..off + 16)?
-            .try_into()
-            .ok()?
-    );
+    let _liquidity = u128::from_le_bytes(data.get(off..off + 16)?.try_into().ok()?);
     off += 16;
-    let sqrt_price_x64 = u128::from_le_bytes(
-        data
-            .get(off..off + 16)?
-            .try_into()
-            .ok()?
-    );
+    let sqrt_price_x64 = u128::from_le_bytes(data.get(off..off + 16)?.try_into().ok()?);
     off += 16;
-    let tick_current = i32::from_le_bytes(
-        data
-            .get(off..off + 4)?
-            .try_into()
-            .ok()?
-    );
+    let tick_current = i32::from_le_bytes(data.get(off..off + 4)?.try_into().ok()?);
 
     Some(MinimalClmmInfo {
         token_mint_0,
@@ -359,10 +363,7 @@ fn parse_clmm_minimal(data: &[u8]) -> Option<MinimalClmmInfo> {
 }
 
 fn read_pubkey(data: &[u8], off: usize) -> Option<String> {
-    let bytes: [u8; 32] = data
-        .get(off..off + 32)?
-        .try_into()
-        .ok()?;
+    let bytes: [u8; 32] = data.get(off..off + 32)?.try_into().ok()?;
     Some(Pubkey::new_from_array(bytes).to_string())
 }
 
@@ -370,12 +371,7 @@ fn decode_token_amount(data: &[u8]) -> Option<u64> {
     if data.len() < 72 {
         return None;
     }
-    let amt = u64::from_le_bytes(
-        data
-            .get(64..72)?
-            .try_into()
-            .ok()?
-    );
+    let amt = u64::from_le_bytes(data.get(64..72)?.try_into().ok()?);
     Some(amt)
 }
 

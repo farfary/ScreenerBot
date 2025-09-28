@@ -1,9 +1,7 @@
 use screenerbot::{
-    logger::{ init_file_logging, log, LogTag },
+    logger::{init_file_logging, log, LogTag},
     tokens::security::{
-        start_security_monitoring,
-        get_security_analyzer,
-        initialize_security_analyzer,
+        get_security_analyzer, initialize_security_analyzer, start_security_monitoring,
     },
 };
 
@@ -39,8 +37,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match analyzer.count_tokens_without_security() {
         Ok(count) => {
-            println!("✅ Found {} tokens without security info in database", count);
-            log(LogTag::Security, "TEST_COUNT", &format!("Uncached tokens: {}", count));
+            println!(
+                "✅ Found {} tokens without security info in database",
+                count
+            );
+            log(
+                LogTag::Security,
+                "TEST_COUNT",
+                &format!("Uncached tokens: {}", count),
+            );
         }
         Err(e) => {
             println!("❌ Failed to count uncached tokens: {}", e);
@@ -91,7 +96,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Check progress
     match analyzer.count_tokens_without_security() {
         Ok(remaining) => {
-            println!("\n📊 Progress check: {} tokens still need security analysis", remaining);
+            println!(
+                "\n📊 Progress check: {} tokens still need security analysis",
+                remaining
+            );
         }
         Err(e) => {
             println!("\n⚠️  Failed to check progress: {}", e);

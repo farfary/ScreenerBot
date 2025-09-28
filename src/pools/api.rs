@@ -3,11 +3,10 @@
 /// This module provides the clean public interface for the pools system.
 /// Only these functions should be used by other modules - all internal
 /// implementation details are hidden.
-
 use super::cache;
-use super::service;
 use super::db;
-use super::types::{ PriceResult, PoolError };
+use super::service;
+use super::types::{PoolError, PriceResult};
 
 /// Get current price for a token
 ///
@@ -103,7 +102,7 @@ pub fn get_cache_stats() -> cache::CacheStats {
 pub async fn get_extended_price_history(
     mint: &str,
     limit: Option<usize>,
-    since_timestamp: Option<i64>
+    since_timestamp: Option<i64>,
 ) -> Result<Vec<PriceResult>, String> {
     if !service::is_pool_service_running() {
         return Err("Pool service not running".to_string());
@@ -148,7 +147,7 @@ pub async fn load_token_history_into_cache(mint: &str) -> Result<(), String> {
 pub fn check_price_history_quality(
     mint: &str,
     min_points: usize,
-    max_age_seconds: u64
+    max_age_seconds: u64,
 ) -> Result<bool, String> {
     if !service::is_pool_service_running() {
         return Err("Pool service not running".to_string());
@@ -258,10 +257,7 @@ pub fn get_price_history_stats(mint: &str) -> Result<PriceHistoryStats, String> 
     };
 
     // Calculate price range
-    let prices: Vec<f64> = history
-        .iter()
-        .map(|p| p.price_sol)
-        .collect();
+    let prices: Vec<f64> = history.iter().map(|p| p.price_sol).collect();
     let min_price = prices.iter().cloned().fold(f64::INFINITY, f64::min);
     let max_price = prices.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 

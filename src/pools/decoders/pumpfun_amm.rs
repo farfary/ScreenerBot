@@ -1,14 +1,14 @@
+use super::{AccountData, PoolDecoder};
+use crate::arguments::is_debug_pool_decoders_enabled;
+use crate::logger::{log, LogTag};
+use crate::pools::types::{PriceResult, ProgramKind, SOL_MINT};
+use crate::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
+use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::time::Instant;
-use solana_sdk::pubkey::Pubkey;
-use super::{ PoolDecoder, AccountData };
-use crate::arguments::is_debug_pool_decoders_enabled;
-use crate::logger::{ log, LogTag };
-use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
-use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 
 // Import centralized utilities
-use super::super::utils::{ validate_sol_pool, read_pubkey_at_offset, PoolMintVaultInfo };
+use super::super::utils::{read_pubkey_at_offset, validate_sol_pool, PoolMintVaultInfo};
 
 /// PumpFun AMM pool decoder and calculator
 pub struct PumpFunAmmDecoder;
@@ -23,13 +23,16 @@ impl PoolDecoder for PumpFunAmmDecoder {
     fn decode_and_calculate(
         accounts: &HashMap<String, AccountData>,
         base_mint: &str,
-        quote_mint: &str
+        quote_mint: &str,
     ) -> Option<PriceResult> {
         if is_debug_pool_decoders_enabled() {
             log(
                 LogTag::PoolDecoder,
                 "DEBUG",
-                &format!("PumpFun AMM: Processing for {} vs {}", base_mint, quote_mint)
+                &format!(
+                    "PumpFun AMM: Processing for {} vs {}",
+                    base_mint, quote_mint
+                ),
             );
         }
 
@@ -53,22 +56,19 @@ impl PoolDecoder for PumpFunAmmDecoder {
                         "DEBUG",
                         &format!(
                             "Successfully decoded PumpFun pool: {} -> {}",
-                            pool_info.base_mint,
-                            pool_info.quote_mint
-                        )
+                            pool_info.base_mint, pool_info.quote_mint
+                        ),
                     );
                 }
 
                 // Calculate price using the extracted pool info
-                if
-                    let Some(price_result) = Self::calculate_pump_fun_amm_price(
-                        &pool_info,
-                        accounts,
-                        base_mint,
-                        quote_mint,
-                        pool_account
-                    )
-                {
+                if let Some(price_result) = Self::calculate_pump_fun_amm_price(
+                    &pool_info,
+                    accounts,
+                    base_mint,
+                    quote_mint,
+                    pool_account,
+                ) {
                     return Some(price_result);
                 }
             }
@@ -88,7 +88,7 @@ impl PumpFunAmmDecoder {
                 log(
                     LogTag::PoolDecoder,
                     "ERROR",
-                    &format!("PumpFun pool data too short: {} bytes", data.len())
+                    &format!("PumpFun pool data too short: {} bytes", data.len()),
                 );
             }
             return None;
@@ -98,7 +98,7 @@ impl PumpFunAmmDecoder {
             log(
                 LogTag::PoolDecoder,
                 "DEBUG",
-                &format!("Extracting PumpFun pool data ({} bytes)", data.len())
+                &format!("Extracting PumpFun pool data ({} bytes)", data.len()),
             );
         }
 
@@ -127,7 +127,7 @@ impl PumpFunAmmDecoder {
                     &mint2[..8],
                     &vault1[..8],
                     &vault2[..8]
-                )
+                ),
             );
         }
 
@@ -145,7 +145,7 @@ impl PumpFunAmmDecoder {
             log(
                 LogTag::PoolDecoder,
                 "DEBUG",
-                &format!("Decoding PumpFun pool data ({} bytes)", data.len())
+                &format!("Decoding PumpFun pool data ({} bytes)", data.len()),
             );
         }
 
@@ -160,7 +160,7 @@ impl PumpFunAmmDecoder {
                     log(
                         LogTag::PoolDecoder,
                         "WARN",
-                        &format!("PumpFun pool validation failed: {}", e)
+                        &format!("PumpFun pool validation failed: {}", e),
                     );
                 }
                 return None;
@@ -199,7 +199,7 @@ impl PumpFunAmmDecoder {
         accounts: &HashMap<String, AccountData>,
         base_mint: &str,
         quote_mint: &str,
-        pool_account: &str
+        pool_account: &str,
     ) -> Option<PriceResult> {
         if is_debug_pool_decoders_enabled() {
             log(
@@ -207,9 +207,8 @@ impl PumpFunAmmDecoder {
                 "DEBUG",
                 &format!(
                     "Calculating PumpFun price for token {} with quote {}",
-                    base_mint,
-                    quote_mint
-                )
+                    base_mint, quote_mint
+                ),
             );
         }
 
@@ -223,7 +222,7 @@ impl PumpFunAmmDecoder {
                     &format!(
                         "PumpFun pool does not contain SOL as quote. Quote: {}",
                         pool_info.quote_mint
-                    )
+                    ),
                 );
             }
             return None;
@@ -233,24 +232,27 @@ impl PumpFunAmmDecoder {
         let target_mint = pool_info.base_mint.clone();
 
         if is_debug_pool_decoders_enabled() {
-            log(LogTag::PoolDecoder, "DEBUG", &format!("Using target mint: {}", target_mint));
+            log(
+                LogTag::PoolDecoder,
+                "DEBUG",
+                &format!("Using target mint: {}", target_mint),
+            );
         }
 
         // Get token reserves from vault accounts
-        let token_reserve = Self::get_vault_balance_from_accounts(
-            accounts,
-            &pool_info.pool_base_token_account
-        )?;
-        let sol_reserve = Self::get_vault_balance_from_accounts(
-            accounts,
-            &pool_info.pool_quote_token_account
-        )?;
+        let token_reserve =
+            Self::get_vault_balance_from_accounts(accounts, &pool_info.pool_base_token_account)?;
+        let sol_reserve =
+            Self::get_vault_balance_from_accounts(accounts, &pool_info.pool_quote_token_account)?;
 
         if is_debug_pool_decoders_enabled() {
             log(
                 LogTag::PoolDecoder,
                 "DEBUG",
-                &format!("Raw reserves - Token: {}, SOL: {}", token_reserve, sol_reserve)
+                &format!(
+                    "Raw reserves - Token: {}, SOL: {}",
+                    token_reserve, sol_reserve
+                ),
             );
         }
 
@@ -262,9 +264,8 @@ impl PumpFunAmmDecoder {
                     "ERROR",
                     &format!(
                         "Zero reserves detected - Token: {}, SOL: {}",
-                        token_reserve,
-                        sol_reserve
-                    )
+                        token_reserve, sol_reserve
+                    ),
                 );
             }
             return None;
@@ -278,7 +279,10 @@ impl PumpFunAmmDecoder {
                     log(
                         LogTag::PoolDecoder,
                         "ERROR",
-                        &format!("No decimals found for PumpFun token: {}, skipping pool calculation", target_mint)
+                        &format!(
+                            "No decimals found for PumpFun token: {}, skipping pool calculation",
+                            target_mint
+                        ),
                     );
                 }
                 return None;
@@ -292,7 +296,11 @@ impl PumpFunAmmDecoder {
 
         if token_adjusted <= 0.0 {
             if is_debug_pool_decoders_enabled() {
-                log(LogTag::PoolDecoder, "ERROR", "Token adjusted amount is zero or negative");
+                log(
+                    LogTag::PoolDecoder,
+                    "ERROR",
+                    "Token adjusted amount is zero or negative",
+                );
             }
             return None;
         }
@@ -305,7 +313,7 @@ impl PumpFunAmmDecoder {
                 log(
                     LogTag::PoolDecoder,
                     "ERROR",
-                    &format!("Invalid price calculated: {:.12} SOL", price_sol)
+                    &format!("Invalid price calculated: {:.12} SOL", price_sol),
                 );
             }
             return None;
@@ -329,7 +337,7 @@ impl PumpFunAmmDecoder {
                     token_adjusted,
                     price_sol,
                     target_mint
-                )
+                ),
             );
         }
 
@@ -350,7 +358,7 @@ impl PumpFunAmmDecoder {
     /// Get token balance from vault account
     fn get_vault_balance_from_accounts(
         accounts: &HashMap<String, AccountData>,
-        vault_account: &str
+        vault_account: &str,
     ) -> Option<u64> {
         let vault_data = accounts.get(vault_account)?;
 
@@ -363,7 +371,7 @@ impl PumpFunAmmDecoder {
                         "Vault account {} has insufficient data: {} bytes",
                         &vault_account[..8],
                         vault_data.data.len()
-                    )
+                    ),
                 );
             }
             return None;
@@ -375,7 +383,7 @@ impl PumpFunAmmDecoder {
                     log(
                         LogTag::PoolDecoder,
                         "DEBUG",
-                        &format!("Vault {} balance: {}", &vault_account[..8], amount)
+                        &format!("Vault {} balance: {}", &vault_account[..8], amount),
                     );
                 }
                 Some(amount)
@@ -385,7 +393,7 @@ impl PumpFunAmmDecoder {
                     log(
                         LogTag::PoolDecoder,
                         "ERROR",
-                        &format!("Failed to decode vault balance for {}", &vault_account[..8])
+                        &format!("Failed to decode vault balance for {}", &vault_account[..8]),
                     );
                 }
                 None
@@ -413,14 +421,13 @@ fn extract_lp_supply(data: &[u8]) -> Option<u64> {
     // base_mint(32) + quote_mint(32) + lp_mint(32) + vault1(32) + vault2(32) = 235 bytes
     let lp_supply_offset = 8 + 1 + 2 + 32 + 32 + 32 + 32 + 32 + 32 + 32; // 235
 
-    (
-        if data.len() >= lp_supply_offset + 8 {
-            let lp_supply_bytes = &data[lp_supply_offset..lp_supply_offset + 8];
-            u64::from_le_bytes(lp_supply_bytes.try_into().ok()?)
-        } else {
-            0
-        }
-    ).into()
+    (if data.len() >= lp_supply_offset + 8 {
+        let lp_supply_bytes = &data[lp_supply_offset..lp_supply_offset + 8];
+        u64::from_le_bytes(lp_supply_bytes.try_into().ok()?)
+    } else {
+        0
+    })
+    .into()
 }
 
 /// PumpFun AMM pool information extracted from account data

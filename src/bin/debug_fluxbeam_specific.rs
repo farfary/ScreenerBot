@@ -8,13 +8,13 @@
 
 use clap::Parser;
 use screenerbot::arguments::set_cmd_args;
-use screenerbot::logger::{ log, LogTag };
-use screenerbot::pools::decoders::{ fluxbeam_amm::FluxbeamAmmDecoder, PoolDecoder };
-use screenerbot::pools::types::{ FLUXBEAM_AMM_PROGRAM_ID, SOL_MINT };
+use screenerbot::logger::{log, LogTag};
+use screenerbot::pools::decoders::{fluxbeam_amm::FluxbeamAmmDecoder, PoolDecoder};
 use screenerbot::pools::fetcher::AccountData;
-use screenerbot::rpc::{ get_rpc_client, init_rpc_client, parse_pubkey };
-use screenerbot::tokens::{ decimals::SOL_DECIMALS, get_token_decimals_sync };
-use screenerbot::tokens::dexscreener::{ init_dexscreener_api, get_global_dexscreener_api };
+use screenerbot::pools::types::{FLUXBEAM_AMM_PROGRAM_ID, SOL_MINT};
+use screenerbot::rpc::{get_rpc_client, init_rpc_client, parse_pubkey};
+use screenerbot::tokens::dexscreener::{get_global_dexscreener_api, init_dexscreener_api};
+use screenerbot::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
@@ -36,7 +36,10 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    set_cmd_args(vec!["debug_fluxbeam_specific".to_string(), "--debug-pool-decoders".to_string()]);
+    set_cmd_args(vec![
+        "debug_fluxbeam_specific".to_string(),
+        "--debug-pool-decoders".to_string(),
+    ]);
 
     println!("\n🔍 FLUXBEAM AMM SPECIFIC DEBUGGER\n=================================");
     println!("Pool address: {}", args.pool);
@@ -51,11 +54,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📦 POOL ACCOUNT\n==============");
     println!("Owner: {}", pool_acc.owner);
     println!("Data size: {} bytes", pool_acc.data.len());
-    println!("Owner is FluxBeam AMM: {}", if pool_acc.owner.to_string() == FLUXBEAM_AMM_PROGRAM_ID {
-        "✅"
-    } else {
-        "❌"
-    });
+    println!(
+        "Owner is FluxBeam AMM: {}",
+        if pool_acc.owner.to_string() == FLUXBEAM_AMM_PROGRAM_ID {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
 
     if args.show_hex {
         println!("\n📄 RAW HEX (first 324 bytes)");
@@ -111,8 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         found_vaults.push((0, pool_info.token_a_vault.clone(), mint_a.clone()));
                         println!(
                             "  ✅ Vault A verified: {} (mint: {})",
-                            pool_info.token_a_vault,
-                            mint_a
+                            pool_info.token_a_vault, mint_a
                         );
 
                         // Check vault balance
@@ -130,8 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         found_vaults.push((0, pool_info.token_b_vault.clone(), mint_b.clone()));
                         println!(
                             "  ✅ Vault B verified: {} (mint: {})",
-                            pool_info.token_b_vault,
-                            mint_b
+                            pool_info.token_b_vault, mint_b
                         );
 
                         // Check vault balance
@@ -147,16 +151,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     *manual_a == pool_info.token_a_mint || *manual_a == pool_info.token_b_mint;
                 let b_match =
                     *manual_b == pool_info.token_a_mint || *manual_b == pool_info.token_b_mint;
-                println!("  Manual mint extraction matches decoder: {}", if a_match && b_match {
-                    "✅"
-                } else {
-                    "❌"
-                });
+                println!(
+                    "  Manual mint extraction matches decoder: {}",
+                    if a_match && b_match { "✅" } else { "❌" }
+                );
             }
 
             // Check if this is a SOL pair (check pool token mints directly)
             let has_sol = pool_info.token_a_mint == SOL_MINT || pool_info.token_b_mint == SOL_MINT;
-            println!("  Contains SOL: {}", if has_sol { "✅" } else { "❌ (Token-Token pair)" });
+            println!(
+                "  Contains SOL: {}",
+                if has_sol {
+                    "✅"
+                } else {
+                    "❌ (Token-Token pair)"
+                }
+            );
 
             if vault_a_valid && vault_b_valid {
                 println!("\n📊 PAIR ANALYSIS\n===============");
@@ -169,8 +179,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Token vault: {} (Token A)", pool_info.token_a_vault);
                     println!("Token mint: {}", vault_a_mint);
                 } else {
-                    println!("Token A: {} (vault: {})", vault_a_mint, pool_info.token_a_vault);
-                    println!("Token B: {} (vault: {})", vault_b_mint, pool_info.token_b_vault);
+                    println!(
+                        "Token A: {} (vault: {})",
+                        vault_a_mint, pool_info.token_a_vault
+                    );
+                    println!(
+                        "Token B: {} (vault: {})",
+                        vault_b_mint, pool_info.token_b_vault
+                    );
                     println!("This is a token-token pair, not SOL pair");
                 }
             }
@@ -240,11 +256,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 // SPL token account size (165 bytes for Token2022)
                                 if let Some(mint) = read_pubkey(&vault_acc.data, 0) {
                                     // Check if this mint matches one of our pool's token mints
-                                    if
-                                        let (Some(ref mint_a), Some(ref mint_b)) = (
-                                            &token_a_mint,
-                                            &token_b_mint,
-                                        )
+                                    if let (Some(ref mint_a), Some(ref mint_b)) =
+                                        (&token_a_mint, &token_b_mint)
                                     {
                                         if mint == *mint_a || mint == *mint_b {
                                             found_vaults.push((
@@ -254,9 +267,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             ));
                                             println!(
                                                 "Found vault @ offset {}: {} (mint: {})",
-                                                offset,
-                                                potential_pubkey,
-                                                mint
+                                                offset, potential_pubkey, mint
                                             );
                                         }
                                     }
@@ -270,39 +281,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if found_vaults.len() < 2 {
-        println!("⚠️ Found {} vaults, need at least 2 for token pair", found_vaults.len());
+        println!(
+            "⚠️ Found {} vaults, need at least 2 for token pair",
+            found_vaults.len()
+        );
         println!("❌ Cannot proceed with detailed analysis");
 
         // Still try to test the decoder with dummy accounts
         println!("\n🧪 TESTING DECODER WITH POOL ONLY\n=================================");
         let mut test_accounts = HashMap::new();
-        test_accounts.insert(args.pool.clone(), AccountData {
-            pubkey: pool_pk,
-            data: pool_acc.data.clone(),
-            slot: 0,
-            fetched_at: std::time::Instant::now(),
-            lamports: pool_acc.lamports,
-            owner: pool_acc.owner,
-        });
+        test_accounts.insert(
+            args.pool.clone(),
+            AccountData {
+                pubkey: pool_pk,
+                data: pool_acc.data.clone(),
+                slot: 0,
+                fetched_at: std::time::Instant::now(),
+                lamports: pool_acc.lamports,
+                owner: pool_acc.owner,
+            },
+        );
 
         if let (Some(ref mint_a), Some(ref mint_b)) = (&token_a_mint, &token_b_mint) {
             let result1 = FluxbeamAmmDecoder::decode_and_calculate(&test_accounts, mint_a, mint_b);
             let result2 = FluxbeamAmmDecoder::decode_and_calculate(&test_accounts, mint_b, mint_a);
 
-            println!("Decoder test {} → {}", format!("{}/{}", &mint_a[..8], &mint_b[..8]), if
-                result1.is_some()
-            {
-                "Success"
-            } else {
-                "Expected failure (no SOL pair)"
-            });
-            println!("Decoder test {} → {}", format!("{}/{}", &mint_b[..8], &mint_a[..8]), if
-                result2.is_some()
-            {
-                "Success"
-            } else {
-                "Expected failure (no SOL pair)"
-            });
+            println!(
+                "Decoder test {} → {}",
+                format!("{}/{}", &mint_a[..8], &mint_b[..8]),
+                if result1.is_some() {
+                    "Success"
+                } else {
+                    "Expected failure (no SOL pair)"
+                }
+            );
+            println!(
+                "Decoder test {} → {}",
+                format!("{}/{}", &mint_b[..8], &mint_a[..8]),
+                if result2.is_some() {
+                    "Success"
+                } else {
+                    "Expected failure (no SOL pair)"
+                }
+            );
 
             println!("\n✅ DECODER VALIDATION COMPLETE");
             println!("The FluxBeam decoder successfully:");
@@ -310,9 +331,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  • Extracted token mints at correct offsets (131, 163)");
             println!("  • Extracted vault addresses at correct offsets (35, 67)");
 
-            if
-                (token_a_mint.is_some() && token_a_mint.as_ref().unwrap() == SOL_MINT) ||
-                (token_b_mint.is_some() && token_b_mint.as_ref().unwrap() == SOL_MINT)
+            if (token_a_mint.is_some() && token_a_mint.as_ref().unwrap() == SOL_MINT)
+                || (token_b_mint.is_some() && token_b_mint.as_ref().unwrap() == SOL_MINT)
             {
                 println!("  • Correctly identified this as a SOL pair");
                 println!(
@@ -402,8 +422,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let token_amount = (token_balance_raw as f64) / (10f64).powi(token_decimals as i32);
 
     println!("\n🧮 CALCULATED AMOUNTS\n====================");
-    println!("SOL/Quote amount: {:.9} (decimals: {})", sol_amount, sol_decimals);
-    println!("Token amount: {:.9} (decimals: {})", token_amount, token_decimals);
+    println!(
+        "SOL/Quote amount: {:.9} (decimals: {})",
+        sol_amount, sol_decimals
+    );
+    println!(
+        "Token amount: {:.9} (decimals: {})",
+        token_amount, token_decimals
+    );
 
     if token_amount > 0.0 {
         let manual_price = sol_amount / token_amount;
@@ -422,32 +448,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🧪 FULL DECODER TEST\n===================");
     let mut accounts = HashMap::new();
 
-    accounts.insert(args.pool.clone(), AccountData {
-        pubkey: pool_pk,
-        data: pool_acc.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: pool_acc.lamports,
-        owner: pool_acc.owner,
-    });
+    accounts.insert(
+        args.pool.clone(),
+        AccountData {
+            pubkey: pool_pk,
+            data: pool_acc.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: pool_acc.lamports,
+            owner: pool_acc.owner,
+        },
+    );
 
-    accounts.insert(sol_vault.clone(), AccountData {
-        pubkey: sol_vault_pk,
-        data: sol_vault_acc.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: sol_vault_acc.lamports,
-        owner: sol_vault_acc.owner,
-    });
+    accounts.insert(
+        sol_vault.clone(),
+        AccountData {
+            pubkey: sol_vault_pk,
+            data: sol_vault_acc.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: sol_vault_acc.lamports,
+            owner: sol_vault_acc.owner,
+        },
+    );
 
-    accounts.insert(token_vault.clone(), AccountData {
-        pubkey: token_vault_pk,
-        data: token_vault_acc.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: token_vault_acc.lamports,
-        owner: token_vault_acc.owner,
-    });
+    accounts.insert(
+        token_vault.clone(),
+        AccountData {
+            pubkey: token_vault_pk,
+            data: token_vault_acc.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: token_vault_acc.lamports,
+            owner: token_vault_acc.owner,
+        },
+    );
 
     // Test both orientations if we have a SOL pair
     if sol_mint == SOL_MINT {
@@ -457,8 +492,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(r) = &result1 {
             println!(
                 "Orientation TOKEN/SOL → {:.12} SOL/token (pool {})",
-                r.price_sol,
-                r.pool_address
+                r.price_sol, r.pool_address
             );
         } else {
             println!("Orientation TOKEN/SOL → None");
@@ -467,8 +501,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(r) = &result2 {
             println!(
                 "Orientation SOL/TOKEN → {:.12} SOL/token (pool {})",
-                r.price_sol,
-                r.pool_address
+                r.price_sol, r.pool_address
             );
         } else {
             println!("Orientation SOL/TOKEN → None");
@@ -483,10 +516,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match api.get_token_data(&token_mint).await {
                 Ok(Some(api_token)) => {
                     if let Some(api_sol_price) = api_token.price_sol {
-                        let decoder_price = result1
-                            .as_ref()
-                            .or(result2.as_ref())
-                            .map(|r| r.price_sol);
+                        let decoder_price =
+                            result1.as_ref().or(result2.as_ref()).map(|r| r.price_sol);
 
                         if let Some(decoded_price) = decoder_price {
                             let diff_abs = (decoded_price - api_sol_price).abs();
@@ -531,7 +562,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 r.pool_address
             );
         } else {
-            println!("Orientation {} → None", format!("{}/{}", &token_mint[..8], &sol_mint[..8]));
+            println!(
+                "Orientation {} → None",
+                format!("{}/{}", &token_mint[..8], &sol_mint[..8])
+            );
         }
 
         if let Some(r) = &result2 {
@@ -542,7 +576,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 r.pool_address
             );
         } else {
-            println!("Orientation {} → None", format!("{}/{}", &sol_mint[..8], &token_mint[..8]));
+            println!(
+                "Orientation {} → None",
+                format!("{}/{}", &sol_mint[..8], &token_mint[..8])
+            );
         }
     }
 

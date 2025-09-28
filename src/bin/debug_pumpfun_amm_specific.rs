@@ -8,13 +8,13 @@
 
 use clap::Parser;
 use screenerbot::arguments::set_cmd_args;
-use screenerbot::logger::{ log, LogTag };
-use screenerbot::pools::decoders::{ pumpfun_amm::PumpFunAmmDecoder, PoolDecoder };
-use screenerbot::pools::types::{ PUMP_FUN_AMM_PROGRAM_ID, SOL_MINT };
+use screenerbot::logger::{log, LogTag};
+use screenerbot::pools::decoders::{pumpfun_amm::PumpFunAmmDecoder, PoolDecoder};
 use screenerbot::pools::fetcher::AccountData;
-use screenerbot::rpc::{ get_rpc_client, init_rpc_client, parse_pubkey };
-use screenerbot::tokens::{ decimals::SOL_DECIMALS, get_token_decimals_sync };
-use screenerbot::tokens::dexscreener::{ init_dexscreener_api, get_global_dexscreener_api };
+use screenerbot::pools::types::{PUMP_FUN_AMM_PROGRAM_ID, SOL_MINT};
+use screenerbot::rpc::{get_rpc_client, init_rpc_client, parse_pubkey};
+use screenerbot::tokens::dexscreener::{get_global_dexscreener_api, init_dexscreener_api};
+use screenerbot::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
@@ -36,9 +36,10 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    set_cmd_args(
-        vec!["debug_pumpfun_amm_specific".to_string(), "--debug-pool-decoders".to_string()]
-    );
+    set_cmd_args(vec![
+        "debug_pumpfun_amm_specific".to_string(),
+        "--debug-pool-decoders".to_string(),
+    ]);
 
     println!("\n🔍 PUMPFUN AMM SPECIFIC DEBUGGER\n===============================");
     println!("Pool address: {}", args.pool);
@@ -53,11 +54,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📦 POOL ACCOUNT\n==============");
     println!("Owner: {}", pool_acc.owner);
     println!("Data size: {} bytes", pool_acc.data.len());
-    println!("Owner is PumpFun AMM: {}", if pool_acc.owner.to_string() == PUMP_FUN_AMM_PROGRAM_ID {
-        "✅"
-    } else {
-        "❌"
-    });
+    println!(
+        "Owner is PumpFun AMM: {}",
+        if pool_acc.owner.to_string() == PUMP_FUN_AMM_PROGRAM_ID {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
 
     if args.show_hex {
         println!("\n📄 RAW HEX (first 256 bytes)");
@@ -93,26 +97,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("LP supply: {:?}", lp_supply);
 
         // Identify SOL and token sides
-        let (sol_mint, token_mint, sol_vault, token_vault) = if
-            let (Some(base), Some(quote), Some(v1), Some(v2)) = (
+        let (sol_mint, token_mint, sol_vault, token_vault) =
+            if let (Some(base), Some(quote), Some(v1), Some(v2)) = (
                 base_mint.as_ref(),
                 quote_mint.as_ref(),
                 vault1.as_ref(),
                 vault2.as_ref(),
-            )
-        {
-            if base == SOL_MINT {
-                (base.clone(), quote.clone(), v1.clone(), v2.clone())
-            } else if quote == SOL_MINT {
-                (quote.clone(), base.clone(), v2.clone(), v1.clone())
+            ) {
+                if base == SOL_MINT {
+                    (base.clone(), quote.clone(), v1.clone(), v2.clone())
+                } else if quote == SOL_MINT {
+                    (quote.clone(), base.clone(), v2.clone(), v1.clone())
+                } else {
+                    println!("⚠️ Neither token is SOL");
+                    return Ok(());
+                }
             } else {
-                println!("⚠️ Neither token is SOL");
+                println!("⚠️ Could not extract all required fields");
                 return Ok(());
-            }
-        } else {
-            println!("⚠️ Could not extract all required fields");
-            return Ok(());
-        };
+            };
 
         println!("\n🏦 IDENTIFIED VAULTS\n===================");
         println!("SOL mint: {}", sol_mint);
@@ -159,7 +162,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("\n🧮 CALCULATED AMOUNTS\n====================");
         println!("SOL amount: {:.9} SOL", sol_amount);
-        println!("Token amount: {:.9} tokens (decimals: {})", token_amount, token_decimals);
+        println!(
+            "Token amount: {:.9} tokens (decimals: {})",
+            token_amount, token_decimals
+        );
 
         if token_amount > 0.0 {
             let vault_price = sol_amount / token_amount;
@@ -174,32 +180,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\n🧪 DECODER TEST\n===============");
         let mut accounts = HashMap::new();
 
-        accounts.insert(args.pool.clone(), AccountData {
-            pubkey: pool_pk,
-            data: pool_acc.data.clone(),
-            slot: 0,
-            fetched_at: std::time::Instant::now(),
-            lamports: pool_acc.lamports,
-            owner: pool_acc.owner,
-        });
+        accounts.insert(
+            args.pool.clone(),
+            AccountData {
+                pubkey: pool_pk,
+                data: pool_acc.data.clone(),
+                slot: 0,
+                fetched_at: std::time::Instant::now(),
+                lamports: pool_acc.lamports,
+                owner: pool_acc.owner,
+            },
+        );
 
-        accounts.insert(sol_vault.clone(), AccountData {
-            pubkey: sol_vault_pk,
-            data: sol_vault_acc.data.clone(),
-            slot: 0,
-            fetched_at: std::time::Instant::now(),
-            lamports: sol_vault_acc.lamports,
-            owner: sol_vault_acc.owner,
-        });
+        accounts.insert(
+            sol_vault.clone(),
+            AccountData {
+                pubkey: sol_vault_pk,
+                data: sol_vault_acc.data.clone(),
+                slot: 0,
+                fetched_at: std::time::Instant::now(),
+                lamports: sol_vault_acc.lamports,
+                owner: sol_vault_acc.owner,
+            },
+        );
 
-        accounts.insert(token_vault.clone(), AccountData {
-            pubkey: token_vault_pk,
-            data: token_vault_acc.data.clone(),
-            slot: 0,
-            fetched_at: std::time::Instant::now(),
-            lamports: token_vault_acc.lamports,
-            owner: token_vault_acc.owner,
-        });
+        accounts.insert(
+            token_vault.clone(),
+            AccountData {
+                pubkey: token_vault_pk,
+                data: token_vault_acc.data.clone(),
+                slot: 0,
+                fetched_at: std::time::Instant::now(),
+                lamports: token_vault_acc.lamports,
+                owner: token_vault_acc.owner,
+            },
+        );
 
         // Test both orientations
         let result1 = PumpFunAmmDecoder::decode_and_calculate(&accounts, &token_mint, SOL_MINT);
@@ -208,8 +223,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(r) = &result1 {
             println!(
                 "Orientation TOKEN/SOL → {:.12} SOL/token (pool {})",
-                r.price_sol,
-                r.pool_address
+                r.price_sol, r.pool_address
             );
         } else {
             println!("Orientation TOKEN/SOL → None");
@@ -218,8 +232,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(r) = &result2 {
             println!(
                 "Orientation SOL/TOKEN → {:.12} SOL/token (pool {})",
-                r.price_sol,
-                r.pool_address
+                r.price_sol, r.pool_address
             );
         } else {
             println!("Orientation SOL/TOKEN → None");
@@ -234,10 +247,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match api.get_token_data(&token_mint).await {
                 Ok(Some(api_token)) => {
                     if let Some(api_sol_price) = api_token.price_sol {
-                        let decoder_price = result1
-                            .as_ref()
-                            .or(result2.as_ref())
-                            .map(|r| r.price_sol);
+                        let decoder_price =
+                            result1.as_ref().or(result2.as_ref()).map(|r| r.price_sol);
 
                         if let Some(decoded_price) = decoder_price {
                             let diff_abs = (decoded_price - api_sol_price).abs();

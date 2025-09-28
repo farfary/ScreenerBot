@@ -41,30 +41,21 @@
 /// ## Integration:
 /// Events complement but do not replace the logging system. Logs are for real-time
 /// monitoring and debugging; events are for persistent analysis and metrics.
-
 pub mod db;
-pub mod types;
 pub mod maintenance;
+pub mod types;
 
-pub use types::{ Event, EventCategory, Severity };
-pub use maintenance::{
-    start_maintenance_task,
-    record_swap_event,
-    record_pool_event,
-    record_position_event,
-    record_entry_event,
-    record_system_event,
-    record_token_event,
-    record_security_event,
-    record_transaction_event,
-    get_events_summary,
-    search_events,
-};
+use crate::logger::{log, LogTag};
 use db::EventsDatabase;
-use crate::logger::{ log, LogTag };
+pub use maintenance::{
+    get_events_summary, record_entry_event, record_pool_event, record_position_event,
+    record_security_event, record_swap_event, record_system_event, record_token_event,
+    record_transaction_event, search_events, start_maintenance_task,
+};
 use once_cell::sync::Lazy;
 use std::sync::Arc;
-use tokio::sync::{ mpsc, Mutex };
+use tokio::sync::{mpsc, Mutex};
+pub use types::{Event, EventCategory, Severity};
 
 // =============================================================================
 // GLOBAL EVENT SYSTEM
@@ -80,9 +71,8 @@ struct EventWriter {
 }
 
 /// Global event writer instance
-static EVENT_WRITER: Lazy<Arc<Mutex<Option<EventWriter>>>> = Lazy::new(|| {
-    Arc::new(Mutex::new(None))
-});
+static EVENT_WRITER: Lazy<Arc<Mutex<Option<EventWriter>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
 
 // =============================================================================
 // PUBLIC API
@@ -98,9 +88,9 @@ pub async fn init() -> Result<(), String> {
     }
 
     // Initialize database
-    let db = EventsDatabase::new().await.map_err(|e|
-        format!("Failed to initialize events database: {}", e)
-    )?;
+    let db = EventsDatabase::new()
+        .await
+        .map_err(|e| format!("Failed to initialize events database: {}", e))?;
 
     // Create channel for async event recording
     let (sender, receiver) = mpsc::channel::<Event>(EVENT_CHANNEL_CAPACITY);
@@ -116,7 +106,11 @@ pub async fn init() -> Result<(), String> {
         _handle: handle,
     });
 
-    log(LogTag::System, "READY", "Events system initialized successfully");
+    log(
+        LogTag::System,
+        "READY",
+        "Events system initialized successfully",
+    );
     Ok(())
 }
 
@@ -126,7 +120,11 @@ pub async fn record(event: Event) -> Result<(), String> {
     let writer_guard = EVENT_WRITER.lock().await;
 
     if let Some(ref writer) = *writer_guard {
-        writer.sender.send(event).await.map_err(|_| "Event channel closed".to_string())?;
+        writer
+            .sender
+            .send(event)
+            .await
+            .map_err(|_| "Event channel closed".to_string())?;
         Ok(())
     } else {
         Err("Events system not initialized".to_string())
@@ -137,62 +135,66 @@ pub async fn record(event: Event) -> Result<(), String> {
 /// Logs errors instead of propagating them to avoid disrupting main operations
 pub async fn record_safe(event: Event) {
     if let Err(e) = record(event).await {
-        log(LogTag::System, "WARN", &format!("Failed to record event: {}", e));
+        log(
+            LogTag::System,
+            "WARN",
+            &format!("Failed to record event: {}", e),
+        );
     }
 }
 
 /// Get recent events by category
 pub async fn recent(category: EventCategory, limit: usize) -> Result<Vec<Event>, String> {
-    let db = EventsDatabase::new().await.map_err(|e|
-        format!("Failed to connect to events database: {}", e)
-    )?;
+    let db = EventsDatabase::new()
+        .await
+        .map_err(|e| format!("Failed to connect to events database: {}", e))?;
 
     db.get_recent_events(Some(category), limit).await
 }
 
 /// Get recent events across all categories
 pub async fn recent_all(limit: usize) -> Result<Vec<Event>, String> {
-    let db = EventsDatabase::new().await.map_err(|e|
-        format!("Failed to connect to events database: {}", e)
-    )?;
+    let db = EventsDatabase::new()
+        .await
+        .map_err(|e| format!("Failed to connect to events database: {}", e))?;
 
     db.get_recent_events(None, limit).await
 }
 
 /// Get event counts by category for the last N hours
 pub async fn count_by_category(
-    since_hours: u64
+    since_hours: u64,
 ) -> Result<std::collections::HashMap<String, u64>, String> {
-    let db = EventsDatabase::new().await.map_err(|e|
-        format!("Failed to connect to events database: {}", e)
-    )?;
+    let db = EventsDatabase::new()
+        .await
+        .map_err(|e| format!("Failed to connect to events database: {}", e))?;
 
     db.get_event_counts_by_category(since_hours).await
 }
 
 /// Get events for a specific reference ID (e.g., transaction signature, pool address)
 pub async fn by_reference(reference_id: &str, limit: usize) -> Result<Vec<Event>, String> {
-    let db = EventsDatabase::new().await.map_err(|e|
-        format!("Failed to connect to events database: {}", e)
-    )?;
+    let db = EventsDatabase::new()
+        .await
+        .map_err(|e| format!("Failed to connect to events database: {}", e))?;
 
     db.get_events_by_reference(reference_id, limit).await
 }
 
 /// Get events for a specific token mint
 pub async fn by_mint(mint: &str, limit: usize) -> Result<Vec<Event>, String> {
-    let db = EventsDatabase::new().await.map_err(|e|
-        format!("Failed to connect to events database: {}", e)
-    )?;
+    let db = EventsDatabase::new()
+        .await
+        .map_err(|e| format!("Failed to connect to events database: {}", e))?;
 
     db.get_events_by_mint(mint, limit).await
 }
 
 /// Force cleanup of old events (normally handled automatically)
 pub async fn cleanup_old_events() -> Result<usize, String> {
-    let db = EventsDatabase::new().await.map_err(|e|
-        format!("Failed to connect to events database: {}", e)
-    )?;
+    let db = EventsDatabase::new()
+        .await
+        .map_err(|e| format!("Failed to connect to events database: {}", e))?;
 
     db.cleanup_old_events().await
 }
@@ -211,8 +213,9 @@ macro_rules! event_info {
             $crate::events::Severity::Info,
             $mint.map(|m| m.to_string()),
             $reference_id.map(|r| r.to_string()),
-            $payload
-        )).await
+            $payload,
+        ))
+        .await
     };
 }
 
@@ -226,8 +229,9 @@ macro_rules! event_warn {
             $crate::events::Severity::Warn,
             $mint.map(|m| m.to_string()),
             $reference_id.map(|r| r.to_string()),
-            $payload
-        )).await
+            $payload,
+        ))
+        .await
     };
 }
 
@@ -241,8 +245,9 @@ macro_rules! event_error {
             $crate::events::Severity::Error,
             $mint.map(|m| m.to_string()),
             $reference_id.map(|r| r.to_string()),
-            $payload
-        )).await
+            $payload,
+        ))
+        .await
     };
 }
 
@@ -266,7 +271,7 @@ async fn event_writer_task(mut receiver: mpsc::Receiver<Event>, db: EventsDataba
                 match maybe_event {
                     Some(event) => {
                         batch.push(event);
-                        
+
                         // Write batch when full
                         if batch.len() >= BATCH_SIZE {
                             write_batch(&db, &mut batch).await;
@@ -281,7 +286,7 @@ async fn event_writer_task(mut receiver: mpsc::Receiver<Event>, db: EventsDataba
                     }
                 }
             }
-            
+
             // Timeout: flush any pending events
             _ = interval.tick() => {
                 if !batch.is_empty() {
@@ -301,7 +306,11 @@ async fn write_batch(db: &EventsDatabase, batch: &mut Vec<Event>) {
     }
 
     if let Err(e) = db.insert_events(batch).await {
-        log(LogTag::System, "ERROR", &format!("Failed to write event batch: {}", e));
+        log(
+            LogTag::System,
+            "ERROR",
+            &format!("Failed to write event batch: {}", e),
+        );
     }
 
     batch.clear();

@@ -1,20 +1,21 @@
 /// Test program for route failure blacklist functionality
 use screenerbot::{
+    logger::{init_file_logging, log, LogTag},
     tokens::blacklist::{
-        track_route_failure_db,
-        is_token_blacklisted,
-        get_blacklist_stats_db,
-        initialize_blacklist_system,
-        MAX_NO_ROUTE_FAILURES,
+        get_blacklist_stats_db, initialize_blacklist_system, is_token_blacklisted,
+        track_route_failure_db, MAX_NO_ROUTE_FAILURES,
     },
-    logger::{ init_file_logging, log, LogTag },
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logger
     init_file_logging();
 
-    log(LogTag::System, "TEST_START", "🧪 Testing route failure blacklist functionality");
+    log(
+        LogTag::System,
+        "TEST_START",
+        "🧪 Testing route failure blacklist functionality",
+    );
 
     // Initialize blacklist system
     initialize_blacklist_system()?;
@@ -26,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(
         LogTag::System,
         "TEST_SETUP",
-        &format!("Testing with token: {} ({})", test_symbol, test_mint)
+        &format!("Testing with token: {} ({})", test_symbol, test_mint),
     );
 
     // Check initial blacklist status
@@ -34,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(
         LogTag::System,
         "INITIAL_STATUS",
-        &format!("Initially blacklisted: {}", initially_blacklisted)
+        &format!("Initially blacklisted: {}", initially_blacklisted),
     );
 
     // Simulate multiple route failures
@@ -42,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         log(
             LogTag::System,
             "SIMULATE_FAILURE",
-            &format!("Simulating route failure #{} for {}", i, test_symbol)
+            &format!("Simulating route failure #{} for {}", i, test_symbol),
         );
 
         let still_allowed = track_route_failure_db(test_mint, test_symbol, "no_route");
@@ -50,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         log(
             LogTag::System,
             "TRACK_RESULT",
-            &format!("After failure #{}: still_allowed = {}", i, still_allowed)
+            &format!("After failure #{}: still_allowed = {}", i, still_allowed),
         );
 
         // Check if token is now blacklisted
@@ -58,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         log(
             LogTag::System,
             "BLACKLIST_CHECK",
-            &format!("After failure #{}: blacklisted = {}", i, is_blacklisted)
+            &format!("After failure #{}: blacklisted = {}", i, is_blacklisted),
         );
 
         if i >= MAX_NO_ROUTE_FAILURES {
@@ -66,10 +67,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 log(
                     LogTag::System,
                     "TEST_SUCCESS",
-                    "✅ Token correctly blacklisted after 5 failures"
+                    "✅ Token correctly blacklisted after 5 failures",
                 );
             } else {
-                log(LogTag::System, "TEST_FAILURE", "❌ Token should be blacklisted but is not");
+                log(
+                    LogTag::System,
+                    "TEST_FAILURE",
+                    "❌ Token should be blacklisted but is not",
+                );
             }
         }
     }
@@ -81,17 +86,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "FINAL_STATS",
             &format!(
                 "Final blacklist stats: {} total blacklisted, {} tracked",
-                stats.total_blacklisted,
-                stats.total_tracked
-            )
+                stats.total_blacklisted, stats.total_tracked
+            ),
         );
 
         for (reason, count) in stats.reason_breakdown {
-            log(LogTag::System, "REASON_BREAKDOWN", &format!("  {}: {}", reason, count));
+            log(
+                LogTag::System,
+                "REASON_BREAKDOWN",
+                &format!("  {}: {}", reason, count),
+            );
         }
     }
 
-    log(LogTag::System, "TEST_COMPLETE", "🧪 Route failure blacklist test completed");
+    log(
+        LogTag::System,
+        "TEST_COMPLETE",
+        "🧪 Route failure blacklist test completed",
+    );
 
     Ok(())
 }

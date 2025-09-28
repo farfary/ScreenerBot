@@ -2,11 +2,10 @@
 ///
 /// This file contains all the essential data structures used throughout the pools system.
 /// These types are designed to be minimal, efficient, and focused on the core functionality.
-
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
-use std::time::{ Instant, SystemTime, UNIX_EPOCH };
 use std::collections::VecDeque;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 /// The main price result structure - this is the primary data exchange format
 ///
@@ -62,7 +61,7 @@ impl PriceResult {
         price_sol: f64,
         sol_reserves: f64,
         token_reserves: f64,
-        pool_address: String
+        pool_address: String,
     ) -> Self {
         Self {
             mint,
@@ -107,11 +106,12 @@ impl PriceResult {
 
 /// Custom serde module for Instant serialization
 mod instant_serde {
-    use serde::{ Deserialize, Deserializer, Serialize, Serializer };
-    use std::time::{ Duration, Instant, SystemTime, UNIX_EPOCH };
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
     pub fn serialize<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
-        where S: Serializer
+    where
+        S: Serializer,
     {
         // Convert Instant to unix timestamp (this is an approximation)
         let elapsed = instant.elapsed();
@@ -121,7 +121,8 @@ mod instant_serde {
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Instant, D::Error>
-        where D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         let timestamp = u64::deserialize(deserializer)?;
         // This is an approximation - we just return current Instant
@@ -133,16 +134,20 @@ mod instant_serde {
 /// Pool service error types
 #[derive(Debug, thiserror::Error)]
 pub enum PoolError {
-    #[error("Pool service initialization failed: {0}")] InitializationFailed(String),
+    #[error("Pool service initialization failed: {0}")]
+    InitializationFailed(String),
 
     #[error("Pool service not running")]
     ServiceNotRunning,
 
-    #[error("Price not available for token: {0}")] PriceNotAvailable(String),
+    #[error("Price not available for token: {0}")]
+    PriceNotAvailable(String),
 
-    #[error("RPC error: {0}")] RpcError(String),
+    #[error("RPC error: {0}")]
+    RpcError(String),
 
-    #[error("Decode error: {0}")] DecodeError(String),
+    #[error("Decode error: {0}")]
+    DecodeError(String),
 }
 
 /// Program types for different DEX implementations

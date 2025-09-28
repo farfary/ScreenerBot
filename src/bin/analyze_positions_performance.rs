@@ -1,25 +1,19 @@
-use clap::{ Arg, Command };
-use chrono::{ DateTime, Duration as ChronoDuration, Utc };
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use clap::{Arg, Command};
 use screenerbot::arguments::set_cmd_args;
-use screenerbot::logger::{ log, LogTag };
+use screenerbot::logger::{log, LogTag};
+use screenerbot::pools::{init_pool_service, set_debug_token_override, stop_pool_service};
 use screenerbot::positions::{
-    get_db_closed_positions,
-    get_db_open_positions,
-    initialize_positions_database,
-    Position,
+    get_db_closed_positions, get_db_open_positions, initialize_positions_database, Position,
 };
 use screenerbot::tokens::{
-    get_latest_ohlcv,
-    get_ohlcv_service_clone,
-    get_security_analyzer,
-    init_ohlcv_service,
+    get_latest_ohlcv, get_ohlcv_service_clone, get_security_analyzer, init_ohlcv_service,
     OhlcvDataPoint,
 };
-use screenerbot::pools::{ init_pool_service, stop_pool_service, set_debug_token_override };
-use std::sync::Arc;
-use std::fs::{ self, OpenOptions };
+use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::{ Path, PathBuf };
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 // CSV export (lightweight, single dependency)
 use csv::WriterBuilder;
@@ -37,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .value_name("N")
                 .help("Number of most recent closed positions to analyze")
                 .required(false)
-                .default_value("20")
+                .default_value("20"),
         )
         .arg(
             Arg::new("lookahead-mins")
@@ -45,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .value_name("MIN")
                 .help("Minutes after exit to search for post-exit peak for missed profit calc")
                 .required(false)
-                .default_value("180")
+                .default_value("180"),
         )
         .arg(
             Arg::new("ohlcv-limit")
@@ -53,71 +47,71 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .value_name("N")
                 .help("1m OHLCV candles to fetch (recent history window)")
                 .required(false)
-                .default_value("2000")
+                .default_value("2000"),
         )
         .arg(
             Arg::new("export-csv-dir")
                 .long("export-csv-dir")
                 .value_name("PATH")
                 .help("Directory to export CSV files (open/closed diagnostics)")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::new("csv-append")
                 .long("csv-append")
                 .help("Append to existing CSVs instead of overwriting")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             Arg::new("lookahead-all")
                 .long("lookahead-all")
                 .help("Also compute missed-profit for multiple windows [15,30,60,120,180,360]")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             Arg::new("force-fetch")
                 .long("force-fetch")
                 .help("Force fetch missing OHLCV data for better analysis")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             Arg::new("mint")
                 .long("mint")
                 .value_name("MINT")
                 .help("Analyze a single token mint only")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::new("verbose")
                 .short('v')
                 .long("verbose")
                 .help("Verbose per-position diagnostics")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         // Pass-through debug flags so this binary can turn on module debug logs like others
         .arg(
             Arg::new("debug-ohlcv")
                 .long("debug-ohlcv")
                 .help("Enable detailed OHLCV system debug logs")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             Arg::new("debug-api")
                 .long("debug-api")
                 .help("Enable external API debug logs (DexScreener/GeckoTerminal/Raydium)")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             Arg::new("debug-pool-service")
                 .long("debug-pool-service")
                 .help("Enable pool service supervisor debug logs")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             Arg::new("debug-pool-discovery")
                 .long("debug-pool-discovery")
                 .help("Enable pool discovery debug logs (DexScreener/Gecko/Raydium)")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .get_matches();
 
@@ -146,11 +140,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let force_fetch = matches.get_flag("force-fetch");
     let verbose = matches.get_flag("verbose");
 
-    log(LogTag::System, "INFO", "📊 Starting positions performance analysis");
+    log(
+        LogTag::System,
+        "INFO",
+        "📊 Starting positions performance analysis",
+    );
 
     // Initialize positions database first (we need mints to configure pool service)
     if let Err(e) = initialize_positions_database().await {
-        log(LogTag::Positions, "ERROR", &format!("Failed to initialize positions database: {}", e));
+        log(
+            LogTag::Positions,
+            "ERROR",
+            &format!("Failed to initialize positions database: {}", e),
+        );
         return Err(format!("Positions database initialization failed: {}", e).into());
     }
 
@@ -163,7 +165,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             v
         }
         Err(e) => {
-            log(LogTag::Positions, "ERROR", &format!("Failed to load open positions: {}", e));
+            log(
+                LogTag::Positions,
+                "ERROR",
+                &format!("Failed to load open positions: {}", e),
+            );
             Vec::new()
         }
     };
@@ -180,7 +186,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             v
         }
         Err(e) => {
-            log(LogTag::Positions, "ERROR", &format!("Failed to load closed positions: {}", e));
+            log(
+                LogTag::Positions,
+                "ERROR",
+                &format!("Failed to load closed positions: {}", e),
+            );
             Vec::new()
         }
     };
@@ -203,7 +213,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start the pool service (DexScreener discovery enabled) so OHLCV can resolve pool addresses
     let shutdown_pools = Arc::new(Notify::new());
     if let Err(e) = init_pool_service(shutdown_pools.clone()).await {
-        log(LogTag::PoolService, "ERROR", &format!("Failed to start pool service: {}", e));
+        log(
+            LogTag::PoolService,
+            "ERROR",
+            &format!("Failed to start pool service: {}", e),
+        );
         return Err(format!("Pool service start failed: {}", e).into());
     }
 
@@ -212,13 +226,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize OHLCV service for missed profit analysis (uses pool service to resolve pool addresses)
     if let Err(e) = init_ohlcv_service().await {
-        log(LogTag::Ohlcv, "WARN", &format!("OHLCV service initialization failed: {}", e));
-        log(LogTag::Ohlcv, "WARN", "Missed profit analysis will be unavailable");
+        log(
+            LogTag::Ohlcv,
+            "WARN",
+            &format!("OHLCV service initialization failed: {}", e),
+        );
+        log(
+            LogTag::Ohlcv,
+            "WARN",
+            "Missed profit analysis will be unavailable",
+        );
     }
 
     // Warm up OHLCV service to ensure DB initialized
     if let Err(e) = get_ohlcv_service_clone().await {
-        log(LogTag::Ohlcv, "WARN", &format!("OHLCV service not available: {}", e));
+        log(
+            LogTag::Ohlcv,
+            "WARN",
+            &format!("OHLCV service not available: {}", e),
+        );
     }
     // closed_positions already loaded above
 
@@ -236,8 +262,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         force_fetch,
         verbose,
         export_csv_dir.as_deref(),
-        csv_append
-    ).await;
+        csv_append,
+    )
+    .await;
 
     // Analyze closed positions: compute missed profit
     analyze_closed_positions(
@@ -248,13 +275,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         verbose,
         export_csv_dir.as_deref(),
         csv_append,
-        lookahead_all
-    ).await;
+        lookahead_all,
+    )
+    .await;
 
     // Gracefully stop pool service before exit to clean up background tasks
     let stop_res = stop_pool_service(3).await;
     if let Err(e) = stop_res {
-        log(LogTag::PoolService, "WARN", &format!("Pool service stop warning: {}", e));
+        log(
+            LogTag::PoolService,
+            "WARN",
+            &format!("Pool service stop warning: {}", e),
+        );
     }
 
     Ok(())
@@ -266,7 +298,7 @@ async fn analyze_open_positions(
     force_fetch: bool,
     verbose: bool,
     export_dir: Option<&Path>,
-    csv_append: bool
+    csv_append: bool,
 ) {
     if open_positions.is_empty() {
         println!("\n🟢 No open positions to analyze.");
@@ -293,45 +325,50 @@ async fn analyze_open_positions(
     let mut open_writer: Option<csv::Writer<Box<dyn std::io::Write>>> = None;
     if let Some(dir) = export_dir {
         if let Err(e) = fs::create_dir_all(dir) {
-            log(LogTag::System, "WARN", &format!("Failed to create export dir {:?}: {}", dir, e));
+            log(
+                LogTag::System,
+                "WARN",
+                &format!("Failed to create export dir {:?}: {}", dir, e),
+            );
         } else {
             let path = dir.join("open_positions_diagnostics.csv");
-            match
-                create_csv_writer_with_header(
-                    &path,
-                    csv_append,
-                    &[
-                        "mint",
-                        "symbol",
-                        "entry_time",
-                        "current_time",
-                        "entry_price_sol",
-                        "current_price_sol",
-                        "pnl_pct",
-                        "age_min",
-                        "mdd_10m_pct",
-                        "mdd_30m_pct",
-                        "mru_10m_pct",
-                        "mru_30m_pct",
-                        "trend_5m_pct_per_min",
-                        "trend_15m_pct_per_min",
-                        "trend_60m_pct_per_min",
-                        "price_fresh_secs",
-                        "mint_auth_disabled",
-                        "freeze_auth_disabled",
-                        "lp_is_safe",
-                        "holder_count",
-                        "early_dump_10m",
-                        "early_dump_30m",
-                        "v_recovery_candidate",
-                    ]
-                )
-            {
+            match create_csv_writer_with_header(
+                &path,
+                csv_append,
+                &[
+                    "mint",
+                    "symbol",
+                    "entry_time",
+                    "current_time",
+                    "entry_price_sol",
+                    "current_price_sol",
+                    "pnl_pct",
+                    "age_min",
+                    "mdd_10m_pct",
+                    "mdd_30m_pct",
+                    "mru_10m_pct",
+                    "mru_30m_pct",
+                    "trend_5m_pct_per_min",
+                    "trend_15m_pct_per_min",
+                    "trend_60m_pct_per_min",
+                    "price_fresh_secs",
+                    "mint_auth_disabled",
+                    "freeze_auth_disabled",
+                    "lp_is_safe",
+                    "holder_count",
+                    "early_dump_10m",
+                    "early_dump_30m",
+                    "v_recovery_candidate",
+                ],
+            ) {
                 Ok(w) => {
                     open_writer = Some(w);
                 }
-                Err(e) =>
-                    log(LogTag::System, "WARN", &format!("CSV open failed {:?}: {}", path, e)),
+                Err(e) => log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("CSV open failed {:?}: {}", path, e),
+                ),
             }
         }
     }
@@ -375,18 +412,10 @@ async fn analyze_open_positions(
                 if let Some(entry_candle) = nearest_at_or_before(&candles, p.entry_time) {
                     let t10 = p.entry_time + ChronoDuration::minutes(10);
                     let t30 = p.entry_time + ChronoDuration::minutes(30);
-                    let dd10 = percent_drawdown_from(
-                        &candles,
-                        p.entry_time,
-                        t10,
-                        entry_candle.close
-                    );
-                    let dd30 = percent_drawdown_from(
-                        &candles,
-                        p.entry_time,
-                        t30,
-                        entry_candle.close
-                    );
+                    let dd10 =
+                        percent_drawdown_from(&candles, p.entry_time, t10, entry_candle.close);
+                    let dd30 =
+                        percent_drawdown_from(&candles, p.entry_time, t30, entry_candle.close);
                     mdd_10m = dd10;
                     mdd_30m = dd30;
                     mru_10m = percent_runup_from(&candles, p.entry_time, t10, entry_candle.close);
@@ -399,17 +428,17 @@ async fn analyze_open_positions(
                     trend_5m = slope_pct_per_min(
                         &candles,
                         p.entry_time,
-                        p.entry_time + ChronoDuration::minutes(5)
+                        p.entry_time + ChronoDuration::minutes(5),
                     );
                     trend_15m = slope_pct_per_min(
                         &candles,
                         p.entry_time,
-                        p.entry_time + ChronoDuration::minutes(15)
+                        p.entry_time + ChronoDuration::minutes(15),
                     );
                     trend_60m = slope_pct_per_min(
                         &candles,
                         p.entry_time,
-                        p.entry_time + ChronoDuration::minutes(60)
+                        p.entry_time + ChronoDuration::minutes(60),
                     );
                 }
             }
@@ -419,7 +448,7 @@ async fn analyze_open_positions(
                     log(
                         LogTag::Ohlcv,
                         "FORCE_FETCH",
-                        &format!("🔄 Force fetching OHLCV for {}", mint)
+                        &format!("🔄 Force fetching OHLCV for {}", mint),
                     );
                     ohlcv_service.add_to_watch_list(mint, true).await;
 
@@ -427,11 +456,7 @@ async fn analyze_open_positions(
                     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                     if let Ok(candles) = get_latest_ohlcv(mint, ohlcv_limit).await {
                         if !candles.is_empty() {
-                            if
-                                let Some(entry_candle) = nearest_at_or_before(
-                                    &candles,
-                                    p.entry_time
-                                )
+                            if let Some(entry_candle) = nearest_at_or_before(&candles, p.entry_time)
                             {
                                 let t10 = p.entry_time + ChronoDuration::minutes(10);
                                 let t30 = p.entry_time + ChronoDuration::minutes(30);
@@ -439,13 +464,13 @@ async fn analyze_open_positions(
                                     &candles,
                                     p.entry_time,
                                     t10,
-                                    entry_candle.close
+                                    entry_candle.close,
                                 );
                                 let dd30 = percent_drawdown_from(
                                     &candles,
                                     p.entry_time,
                                     t30,
-                                    entry_candle.close
+                                    entry_candle.close,
                                 );
                                 mdd_10m = dd10;
                                 mdd_30m = dd30;
@@ -453,35 +478,34 @@ async fn analyze_open_positions(
                                     &candles,
                                     p.entry_time,
                                     t10,
-                                    entry_candle.close
+                                    entry_candle.close,
                                 );
                                 mru_30m = percent_runup_from(
                                     &candles,
                                     p.entry_time,
                                     t30,
-                                    entry_candle.close
+                                    entry_candle.close,
                                 );
                                 had_early_dump_10m = dd10 <= -30.0;
                                 had_early_dump_30m = dd30 <= -50.0;
 
                                 let now = Utc::now();
-                                price_fresh_secs = candles
-                                    .last()
-                                    .map(|c| now.timestamp() - c.timestamp);
+                                price_fresh_secs =
+                                    candles.last().map(|c| now.timestamp() - c.timestamp);
                                 trend_5m = slope_pct_per_min(
                                     &candles,
                                     p.entry_time,
-                                    p.entry_time + ChronoDuration::minutes(5)
+                                    p.entry_time + ChronoDuration::minutes(5),
                                 );
                                 trend_15m = slope_pct_per_min(
                                     &candles,
                                     p.entry_time,
-                                    p.entry_time + ChronoDuration::minutes(15)
+                                    p.entry_time + ChronoDuration::minutes(15),
                                 );
                                 trend_60m = slope_pct_per_min(
                                     &candles,
                                     p.entry_time,
-                                    p.entry_time + ChronoDuration::minutes(60)
+                                    p.entry_time + ChronoDuration::minutes(60),
                                 );
                             }
                         }
@@ -546,39 +570,38 @@ async fn analyze_open_positions(
         if let Some(w) = open_writer.as_mut() {
             let now = Utc::now();
             let age_min = (now - p.entry_time).num_minutes();
-            let pnl_pct = p.current_price
+            let pnl_pct = p
+                .current_price
                 .map(|cur| ((cur - p.entry_price) / p.entry_price) * 100.0)
                 .unwrap_or(0.0);
             let v_recovery = mdd_30m <= -30.0 && trend_60m.unwrap_or(0.0) > 0.0;
-            let _ = w.write_record(
-                &[
-                    mint,
-                    p.symbol.as_str(),
-                    &p.entry_time.to_rfc3339(),
-                    &now.to_rfc3339(),
-                    &format!("{:.10}", p.entry_price),
-                    &p.current_price
-                        .map(|v| format!("{:.10}", v))
-                        .unwrap_or_else(|| "".to_string()),
-                    &format!("{:.2}", pnl_pct),
-                    &age_min.to_string(),
-                    &format!("{:.2}", mdd_10m),
-                    &format!("{:.2}", mdd_30m),
-                    &format!("{:.2}", mru_10m),
-                    &format!("{:.2}", mru_30m),
-                    &trend_5m.map(|v| format!("{:.4}", v)).unwrap_or_default(),
-                    &trend_15m.map(|v| format!("{:.4}", v)).unwrap_or_default(),
-                    &trend_60m.map(|v| format!("{:.4}", v)).unwrap_or_default(),
-                    &price_fresh_secs.map(|s| s.to_string()).unwrap_or_default(),
-                    &(!can_mint).to_string(),
-                    &(!can_freeze).to_string(),
-                    &lp_locked.to_string(),
-                    &holder_count.to_string(),
-                    &had_early_dump_10m.to_string(),
-                    &had_early_dump_30m.to_string(),
-                    &v_recovery.to_string(),
-                ]
-            );
+            let _ = w.write_record(&[
+                mint,
+                p.symbol.as_str(),
+                &p.entry_time.to_rfc3339(),
+                &now.to_rfc3339(),
+                &format!("{:.10}", p.entry_price),
+                &p.current_price
+                    .map(|v| format!("{:.10}", v))
+                    .unwrap_or_else(|| "".to_string()),
+                &format!("{:.2}", pnl_pct),
+                &age_min.to_string(),
+                &format!("{:.2}", mdd_10m),
+                &format!("{:.2}", mdd_30m),
+                &format!("{:.2}", mru_10m),
+                &format!("{:.2}", mru_30m),
+                &trend_5m.map(|v| format!("{:.4}", v)).unwrap_or_default(),
+                &trend_15m.map(|v| format!("{:.4}", v)).unwrap_or_default(),
+                &trend_60m.map(|v| format!("{:.4}", v)).unwrap_or_default(),
+                &price_fresh_secs.map(|s| s.to_string()).unwrap_or_default(),
+                &(!can_mint).to_string(),
+                &(!can_freeze).to_string(),
+                &lp_locked.to_string(),
+                &holder_count.to_string(),
+                &had_early_dump_10m.to_string(),
+                &had_early_dump_30m.to_string(),
+                &v_recovery.to_string(),
+            ]);
         }
     }
 
@@ -599,7 +622,10 @@ async fn analyze_open_positions(
                 lp_unlocked_count,
                 low_holders_count
             );
-            println!("- Early dumps: 10m {} | 30m {}", early_dump_10m, early_dump_30m);
+            println!(
+                "- Early dumps: 10m {} | 30m {}",
+                early_dump_10m, early_dump_30m
+            );
         }
     }
 }
@@ -612,14 +638,17 @@ async fn analyze_closed_positions(
     verbose: bool,
     export_dir: Option<&Path>,
     csv_append: bool,
-    lookahead_all: bool
+    lookahead_all: bool,
 ) {
     if closed_positions.is_empty() {
         println!("\n📗 No recent closed positions to analyze.");
         return;
     }
 
-    println!("\n📈 Recently Closed: Missed Profit Analysis (lookahead {}m)", lookahead_mins);
+    println!(
+        "\n📈 Recently Closed: Missed Profit Analysis (lookahead {}m)",
+        lookahead_mins
+    );
     println!("----------------------------------------------------------");
 
     let mut total = 0usize;
@@ -636,7 +665,11 @@ async fn analyze_closed_positions(
     };
     if let Some(dir) = export_dir {
         if let Err(e) = fs::create_dir_all(dir) {
-            log(LogTag::System, "WARN", &format!("Failed to create export dir {:?}: {}", dir, e));
+            log(
+                LogTag::System,
+                "WARN",
+                &format!("Failed to create export dir {:?}: {}", dir, e),
+            );
         } else {
             let path = dir.join("closed_positions_missed_profit.csv");
             // Build headers dynamically for windows
@@ -650,22 +683,32 @@ async fn analyze_closed_positions(
                 "exit_pnl_pct",
                 "time_in_position_min",
                 "pre_exit_trend_15m_pct_per_min",
-                "pre_exit_vol_15m_pct"
+                "pre_exit_vol_15m_pct",
             ];
             for w in &windows {
-                headers.push(Box::leak(format!("missed_peak_pct_{}m", w).into_boxed_str()));
-                headers.push(Box::leak(format!("time_to_peak_min_{}m", w).into_boxed_str()));
+                headers.push(Box::leak(
+                    format!("missed_peak_pct_{}m", w).into_boxed_str(),
+                ));
+                headers.push(Box::leak(
+                    format!("time_to_peak_min_{}m", w).into_boxed_str(),
+                ));
             }
-            headers.extend_from_slice(
-                &["holder_count", "lp_is_safe", "mint_auth_disabled", "freeze_auth_disabled"]
-            );
+            headers.extend_from_slice(&[
+                "holder_count",
+                "lp_is_safe",
+                "mint_auth_disabled",
+                "freeze_auth_disabled",
+            ]);
 
             match create_csv_writer_with_header(&path, csv_append, &headers) {
                 Ok(w) => {
                     closed_writer = Some(w);
                 }
-                Err(e) =>
-                    log(LogTag::System, "WARN", &format!("CSV open failed {:?}: {}", path, e)),
+                Err(e) => log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("CSV open failed {:?}: {}", path, e),
+                ),
             }
         }
     }
@@ -684,13 +727,16 @@ async fn analyze_closed_positions(
             Err(e) if force_fetch => {
                 // Force fetch: try to add token to watch list and fetch new data
                 if verbose {
-                    println!("- 🔄 {} | mint {} | Force fetching OHLCV: {}", p.symbol, mint, e);
+                    println!(
+                        "- 🔄 {} | mint {} | Force fetching OHLCV: {}",
+                        p.symbol, mint, e
+                    );
                 }
                 if let Ok(ohlcv_service) = get_ohlcv_service_clone().await {
                     log(
                         LogTag::Ohlcv,
                         "FORCE_FETCH",
-                        &format!("🔄 Force fetching OHLCV for {}", mint)
+                        &format!("🔄 Force fetching OHLCV for {}", mint),
                     );
                     ohlcv_service.add_to_watch_list(mint, false).await;
 
@@ -721,20 +767,29 @@ async fn analyze_closed_positions(
                     }
                 } else {
                     if verbose {
-                        println!("- ⚠️  {} | mint {} | OHLCV unavailable: {}", p.symbol, mint, e);
+                        println!(
+                            "- ⚠️  {} | mint {} | OHLCV unavailable: {}",
+                            p.symbol, mint, e
+                        );
                     }
                     continue;
                 }
             }
             Err(e) => {
                 if verbose {
-                    println!("- ⚠️  {} | mint {} | OHLCV unavailable: {}", p.symbol, mint, e);
+                    println!(
+                        "- ⚠️  {} | mint {} | OHLCV unavailable: {}",
+                        p.symbol, mint, e
+                    );
                 }
                 continue;
             }
             Ok(_) => {
                 if verbose {
-                    println!("- ⚠️  {} | mint {} | No OHLCV data points found", p.symbol, mint);
+                    println!(
+                        "- ⚠️  {} | mint {} | No OHLCV data points found",
+                        p.symbol, mint
+                    );
                 }
                 continue;
             }
@@ -746,12 +801,11 @@ async fn analyze_closed_positions(
                 if verbose {
                     let earliest_candle_time = candles
                         .first()
-                        .map(|c|
-                            DateTime::<Utc>
-                                ::from_timestamp(c.timestamp, 0)
+                        .map(|c| {
+                            DateTime::<Utc>::from_timestamp(c.timestamp, 0)
                                 .map(|dt| dt.to_rfc3339())
                                 .unwrap_or_else(|| "invalid".to_string())
-                        )
+                        })
                         .unwrap_or_else(|| "none".to_string());
                     println!(
                         "- ⚠️  {} | mint {} | No candle near exit time {} (earliest OHLCV: {})",
@@ -773,7 +827,10 @@ async fn analyze_closed_positions(
         } else {
             0.0
         };
-        let time_in_pos = p.exit_time.map(|et| (et - p.entry_time).num_minutes()).unwrap_or(0);
+        let time_in_pos = p
+            .exit_time
+            .map(|et| (et - p.entry_time).num_minutes())
+            .unwrap_or(0);
 
         // Pre-exit metrics (15m)
         let pre_start = exit_time - ChronoDuration::minutes(15);
@@ -785,7 +842,7 @@ async fn analyze_closed_positions(
         let (max_high_primary, _) = max_high_after(
             &candles,
             exit_time,
-            exit_time + ChronoDuration::minutes(primary_window)
+            exit_time + ChronoDuration::minutes(primary_window),
         );
         if max_high_primary <= 0.0 {
             continue;
@@ -801,11 +858,7 @@ async fn analyze_closed_positions(
         if verbose {
             println!(
                 "- {} | mint {} | exit_close={:.10} SOL | missed_peak(+{}m) +{:.2}%",
-                p.symbol,
-                mint,
-                exit_candle.close,
-                primary_window,
-                missed_pct_primary
+                p.symbol, mint, exit_candle.close, primary_window, missed_pct_primary
             );
         }
 
@@ -836,13 +889,13 @@ async fn analyze_closed_positions(
                 format!("{:.2}", exit_pnl_pct),
                 time_in_pos.to_string(),
                 format!("{:.4}", pre_trend),
-                format!("{:.4}", pre_vol)
+                format!("{:.4}", pre_vol),
             ];
             for wmin in &windows {
                 let (mx, mxt) = max_high_after(
                     &candles,
                     exit_time,
-                    exit_time + ChronoDuration::minutes(*wmin)
+                    exit_time + ChronoDuration::minutes(*wmin),
                 );
                 if mx > 0.0 {
                     let miss = ((mx - exit_candle.close) / exit_candle.close) * 100.0;
@@ -881,7 +934,7 @@ async fn analyze_closed_positions(
 
 fn nearest_at_or_before<'a>(
     candles: &'a [OhlcvDataPoint],
-    ts: DateTime<Utc>
+    ts: DateTime<Utc>,
 ) -> Option<&'a OhlcvDataPoint> {
     let target = ts.timestamp();
     candles
@@ -894,7 +947,7 @@ fn percent_drawdown_from(
     candles: &[OhlcvDataPoint],
     start: DateTime<Utc>,
     end: DateTime<Utc>,
-    ref_price: f64
+    ref_price: f64,
 ) -> f64 {
     if ref_price <= 0.0 {
         return 0.0;
@@ -919,7 +972,7 @@ fn percent_runup_from(
     candles: &[OhlcvDataPoint],
     start: DateTime<Utc>,
     end: DateTime<Utc>,
-    ref_price: f64
+    ref_price: f64,
 ) -> f64 {
     if ref_price <= 0.0 {
         return 0.0;
@@ -943,7 +996,7 @@ fn percent_runup_from(
 fn max_high_after(
     candles: &[OhlcvDataPoint],
     start: DateTime<Utc>,
-    end: DateTime<Utc>
+    end: DateTime<Utc>,
 ) -> (f64, Option<DateTime<Utc>>) {
     let start_ts = start.timestamp();
     let end_ts = end.timestamp();
@@ -964,7 +1017,7 @@ fn max_high_after(
 fn slope_pct_per_min(
     candles: &[OhlcvDataPoint],
     start: DateTime<Utc>,
-    end: DateTime<Utc>
+    end: DateTime<Utc>,
 ) -> Option<f64> {
     let start_ts = start.timestamp();
     let end_ts = end.timestamp();
@@ -994,7 +1047,7 @@ fn slope_pct_per_min(
 fn realized_volatility_pct(
     candles: &[OhlcvDataPoint],
     start: DateTime<Utc>,
-    end: DateTime<Utc>
+    end: DateTime<Utc>,
 ) -> Option<f64> {
     let start_ts = start.timestamp();
     let end_ts = end.timestamp();
@@ -1015,18 +1068,14 @@ fn realized_volatility_pct(
         return None;
     }
     let mean: f64 = rets.iter().sum::<f64>() / (rets.len() as f64);
-    let var: f64 =
-        rets
-            .iter()
-            .map(|r| (r - mean).powi(2))
-            .sum::<f64>() / ((rets.len() - 1) as f64);
+    let var: f64 = rets.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / ((rets.len() - 1) as f64);
     Some(var.sqrt())
 }
 
 fn create_csv_writer_with_header(
     path: &Path,
     append: bool,
-    headers: &[&str]
+    headers: &[&str],
 ) -> Result<csv::Writer<Box<dyn std::io::Write>>, String> {
     let file_exists = path.exists();
     let mut file = OpenOptions::new()
@@ -1049,7 +1098,8 @@ fn create_csv_writer_with_header(
         .has_headers(false)
         .from_writer(Box::new(file) as Box<dyn std::io::Write>);
     if need_header {
-        w.write_record(headers).map_err(|e| format!("csv header: {}", e))?;
+        w.write_record(headers)
+            .map_err(|e| format!("csv header: {}", e))?;
     }
     Ok(w)
 }

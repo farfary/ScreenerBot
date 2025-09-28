@@ -9,7 +9,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let filtered_tokens = get_filtered_tokens().await?;
 
-    println!("✅ Filtering complete: {} tokens returned", filtered_tokens.len());
+    println!(
+        "✅ Filtering complete: {} tokens returned",
+        filtered_tokens.len()
+    );
 
     // Show first 10 tokens
     for (i, mint) in filtered_tokens.iter().take(10).enumerate() {

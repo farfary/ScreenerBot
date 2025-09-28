@@ -5,30 +5,19 @@ use crate::global::is_debug_api_enabled;
 /// for every token. No position-aware branching, no extended TTL paths.
 /// Always attempt to return cached data if still fresh; otherwise fetch,
 /// cache and return. This reduces complexity and duplicate logic.
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::swaps::config::SOL_MINT;
 use crate::tokens::types::{
-    ApiStats,
-    ApiToken,
-    BoostInfo,
-    DiscoverySourceType,
-    LiquidityInfo,
-    PriceChangeStats,
-    SocialInfo,
-    Token,
-    TokenInfo,
-    TxnPeriod,
-    TxnStats,
-    VolumeStats,
-    WebsiteInfo,
+    ApiStats, ApiToken, BoostInfo, DiscoverySourceType, LiquidityInfo, PriceChangeStats,
+    SocialInfo, Token, TokenInfo, TxnPeriod, TxnStats, VolumeStats, WebsiteInfo,
 };
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde_json;
 use std::collections::HashMap;
-use std::sync::{ Arc, LazyLock };
-use std::time::{ Duration, Instant };
-use tokio::sync::{ Mutex, OnceCell, RwLock, Semaphore };
+use std::sync::{Arc, LazyLock};
+use std::time::{Duration, Instant};
+use tokio::sync::{Mutex, OnceCell, RwLock, Semaphore};
 use tokio::time::timeout;
 
 // (Removed internal FetchMode enum – not needed after simplification)
@@ -61,9 +50,8 @@ pub struct CachedTokenData {
 }
 
 /// Global cache for token data (separate from the API client instance)
-static TOKEN_CACHE: LazyLock<RwLock<HashMap<String, CachedTokenData>>> = LazyLock::new(||
-    RwLock::new(HashMap::new())
-);
+static TOKEN_CACHE: LazyLock<RwLock<HashMap<String, CachedTokenData>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// Cache TTL in seconds (1 minute maximum for price data)
 const PRICE_CACHE_TTL_SECS: i64 = 60; // 1 minute TTL for all token data
@@ -83,9 +71,8 @@ pub struct CachedPoolData {
 }
 
 /// Global cache for pool data (5 minute TTL)
-static POOL_CACHE: LazyLock<RwLock<HashMap<String, CachedPoolData>>> = LazyLock::new(||
-    RwLock::new(HashMap::new())
-);
+static POOL_CACHE: LazyLock<RwLock<HashMap<String, CachedPoolData>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 // (Removed has_open_position – no position-aware logic)
 
@@ -107,10 +94,8 @@ async fn get_cached_token_data(mint: &str) -> Option<ApiToken> {
                     "CACHE_HIT",
                     &format!(
                         "Using cached data for {} (age: {}s, TTL: {}s)",
-                        mint,
-                        age_seconds,
-                        ttl_seconds
-                    )
+                        mint, age_seconds, ttl_seconds
+                    ),
                 );
             }
             return Some(cached_data.token.clone());
@@ -122,10 +107,8 @@ async fn get_cached_token_data(mint: &str) -> Option<ApiToken> {
                     "CACHE_EXPIRED",
                     &format!(
                         "Cache expired for {} (age: {}s > TTL: {}s) - will fetch fresh data",
-                        mint,
-                        age_seconds,
-                        ttl_seconds
-                    )
+                        mint, age_seconds, ttl_seconds
+                    ),
                 );
             }
         }
@@ -140,7 +123,9 @@ async fn get_cached_pool_data(mint: &str) -> Option<Vec<TokenPair>> {
 
     if let Some(cached_data) = cache.get(mint) {
         let now = Utc::now();
-        let cache_age = now.signed_duration_since(cached_data.cached_at).num_seconds();
+        let cache_age = now
+            .signed_duration_since(cached_data.cached_at)
+            .num_seconds();
 
         if cache_age < POOL_CACHE_TTL_SECS {
             if is_debug_api_enabled() {
@@ -152,7 +137,7 @@ async fn get_cached_pool_data(mint: &str) -> Option<Vec<TokenPair>> {
                         &mint[..8],
                         cached_data.pools.len(),
                         cache_age
-                    )
+                    ),
                 );
             }
             return Some(cached_data.pools.clone());
@@ -161,7 +146,11 @@ async fn get_cached_pool_data(mint: &str) -> Option<Vec<TokenPair>> {
                 log(
                     LogTag::Api,
                     "POOL_CACHE_EXPIRED",
-                    &format!("⏰ Pool cache expired for {} ({}s old)", &mint[..8], cache_age)
+                    &format!(
+                        "⏰ Pool cache expired for {} ({}s old)",
+                        &mint[..8],
+                        cache_age
+                    ),
                 );
             }
         }
@@ -173,16 +162,19 @@ async fn get_cached_pool_data(mint: &str) -> Option<Vec<TokenPair>> {
 /// Store pool data in cache
 async fn cache_pool_data(mint: &str, pools: &[TokenPair]) {
     let mut cache = POOL_CACHE.write().await;
-    cache.insert(mint.to_string(), CachedPoolData {
-        pools: pools.to_vec(),
-        cached_at: Utc::now(),
-    });
+    cache.insert(
+        mint.to_string(),
+        CachedPoolData {
+            pools: pools.to_vec(),
+            cached_at: Utc::now(),
+        },
+    );
 
     if is_debug_api_enabled() {
         log(
             LogTag::Api,
             "POOL_CACHE_STORE",
-            &format!("💾 Cached {} pools for {}", pools.len(), &mint[..8])
+            &format!("💾 Cached {} pools for {}", pools.len(), &mint[..8]),
         );
     }
 }
@@ -224,7 +216,7 @@ pub async fn cleanup_expired_pool_cache_entries() {
         log(
             LogTag::Api,
             "POOL_CACHE_CLEANUP",
-            &format!("🧹 Cleaned up {} expired pool cache entries", removed_count)
+            &format!("🧹 Cleaned up {} expired pool cache entries", removed_count),
         );
     }
 }
@@ -232,13 +224,20 @@ pub async fn cleanup_expired_pool_cache_entries() {
 /// Store token data in cache
 async fn cache_token_data(mint: &str, token: &ApiToken) {
     let mut cache = TOKEN_CACHE.write().await;
-    cache.insert(mint.to_string(), CachedTokenData {
-        token: token.clone(),
-        cached_at: Utc::now(),
-    });
+    cache.insert(
+        mint.to_string(),
+        CachedTokenData {
+            token: token.clone(),
+            cached_at: Utc::now(),
+        },
+    );
 
     if is_debug_api_enabled() {
-        log(LogTag::Api, "CACHE_STORE", &format!("Cached data for token {}", mint));
+        log(
+            LogTag::Api,
+            "CACHE_STORE",
+            &format!("Cached data for token {}", mint),
+        );
     }
 }
 
@@ -280,7 +279,10 @@ pub async fn cleanup_expired_cache_entries() {
         log(
             LogTag::Api,
             "CACHE_CLEANUP",
-            &format!("Cleaned up {} expired cache entries (older than 1 minute)", removed_count)
+            &format!(
+                "Cleaned up {} expired cache entries (older than 1 minute)",
+                removed_count
+            ),
         );
     }
 }
@@ -293,9 +295,7 @@ pub async fn get_cache_effectiveness_summary() -> String {
     let (total_entries, valid_entries) = get_cache_stats().await;
     format!(
         "DexScreener Cache | Entries: {} total, {} valid (TTL {}s)",
-        total_entries,
-        valid_entries,
-        PRICE_CACHE_TTL_SECS
+        total_entries, valid_entries, PRICE_CACHE_TTL_SECS
     )
 }
 
@@ -311,8 +311,7 @@ impl DexScreenerApi {
     /// Create new DexScreener API client
     pub fn new() -> Self {
         Self {
-            client: reqwest::Client
-                ::builder()
+            client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(30))
                 .user_agent("ScreenerBot/1.0")
                 .build()
@@ -326,13 +325,21 @@ impl DexScreenerApi {
     /// Initialize the API client
     pub async fn initialize(&mut self) -> Result<(), String> {
         if is_debug_api_enabled() {
-            log(LogTag::Api, "INIT", "Initializing DexScreener API client...");
+            log(
+                LogTag::Api,
+                "INIT",
+                "Initializing DexScreener API client...",
+            );
         }
 
         // Simplified caching – no config status to log
 
         if is_debug_api_enabled() {
-            log(LogTag::Api, "SUCCESS", "DexScreener API client initialized successfully");
+            log(
+                LogTag::Api,
+                "SUCCESS",
+                "DexScreener API client initialized successfully",
+            );
         }
         Ok(())
     }
@@ -358,17 +365,20 @@ impl DexScreenerApi {
             log(
                 LogTag::Api,
                 "DEBUG",
-                &format!("🚀 Starting batch price fetch for {} tokens", mints.len())
+                &format!("🚀 Starting batch price fetch for {} tokens", mints.len()),
             );
         }
 
         // First pass: Check positions and cache for all mints
         for mint in mints {
-            if
-                is_debug_api_enabled() &&
-                cached_count + position_skipped_count + api_call_mints.len() < 5
+            if is_debug_api_enabled()
+                && cached_count + position_skipped_count + api_call_mints.len() < 5
             {
-                log(LogTag::Api, "DEBUG", &format!("🔍 Checking token {}", &mint[..8]));
+                log(
+                    LogTag::Api,
+                    "DEBUG",
+                    &format!("🔍 Checking token {}", &mint[..8]),
+                );
             }
 
             if let Some(cached_token) = get_cached_token_data(mint).await {
@@ -379,7 +389,7 @@ impl DexScreenerApi {
                         log(
                             LogTag::Api,
                             "DEBUG",
-                            &format!("💾 Cache hit for {}: ${:.8}", &mint[..8], price)
+                            &format!("💾 Cache hit for {}: ${:.8}", &mint[..8], price),
                         );
                     }
                 }
@@ -398,7 +408,7 @@ impl DexScreenerApi {
                     "📊 Batch analysis: {} cached, {} need API calls",
                     cached_count,
                     api_call_mints.len()
-                )
+                ),
             );
         }
 
@@ -408,7 +418,7 @@ impl DexScreenerApi {
                 log(
                     LogTag::Api,
                     "DEBUG",
-                    &format!("🌐 Making API calls for {} tokens", api_call_mints.len())
+                    &format!("🌐 Making API calls for {} tokens", api_call_mints.len()),
                 );
             }
 
@@ -422,7 +432,7 @@ impl DexScreenerApi {
                             "📦 Processing chunk {} with {} tokens",
                             chunk_idx + 1,
                             chunk.len()
-                        )
+                        ),
                     );
                 }
 
@@ -436,7 +446,7 @@ impl DexScreenerApi {
                                     "✅ Chunk {} returned {} tokens",
                                     chunk_idx + 1,
                                     tokens.len()
-                                )
+                                ),
                             );
                         }
 
@@ -454,7 +464,7 @@ impl DexScreenerApi {
                                             "💰 Got price for {}: ${:.8}",
                                             &token.mint[..8],
                                             price
-                                        )
+                                        ),
                                     );
                                 }
                             }
@@ -473,7 +483,7 @@ impl DexScreenerApi {
                                     chunk_idx * 30 + 1,
                                     chunk_idx * MAX_TOKENS_PER_API_CALL + chunk.len(),
                                     e
-                                )
+                                ),
                             );
                         }
                     }
@@ -487,7 +497,7 @@ impl DexScreenerApi {
                 log(
                     LogTag::Api,
                     "DEBUG",
-                    "🚫 No API calls needed - all tokens cached or skipped due to positions"
+                    "🚫 No API calls needed - all tokens cached or skipped due to positions",
                 );
             }
         }
@@ -506,7 +516,7 @@ impl DexScreenerApi {
                     cached_count,
                     api_call_mints.len(),
                     total_errors
-                )
+                ),
             );
         }
 
@@ -543,19 +553,21 @@ impl DexScreenerApi {
     pub async fn get_tokens_info(&mut self, mints: &[String]) -> Result<Vec<ApiToken>, String> {
         if mints.is_empty() {
             if is_debug_api_enabled() {
-                log(LogTag::Api, "DEBUG", "get_tokens_info called with empty mints array");
+                log(
+                    LogTag::Api,
+                    "DEBUG",
+                    "get_tokens_info called with empty mints array",
+                );
             }
             return Ok(Vec::new());
         }
 
         if mints.len() > MAX_TOKENS_PER_API_CALL {
-            return Err(
-                format!(
-                    "Too many tokens requested: {}. Maximum is {}",
-                    mints.len(),
-                    MAX_TOKENS_PER_API_CALL
-                )
-            );
+            return Err(format!(
+                "Too many tokens requested: {}. Maximum is {}",
+                mints.len(),
+                MAX_TOKENS_PER_API_CALL
+            ));
         }
 
         let mint_list = mints.join(",");
@@ -565,28 +577,38 @@ impl DexScreenerApi {
             log(
                 LogTag::Api,
                 "DEBUG",
-                &format!("🔍 DexScreener API request: {} tokens, URL: {}", mints.len(), if
-                    url.len() > 100
-                {
-                    format!("{}...", &url[..100])
-                } else {
-                    url.clone()
-                })
+                &format!(
+                    "🔍 DexScreener API request: {} tokens, URL: {}",
+                    mints.len(),
+                    if url.len() > 100 {
+                        format!("{}...", &url[..100])
+                    } else {
+                        url.clone()
+                    }
+                ),
             );
-            log(LogTag::Api, "DEBUG", &format!("📋 Mint addresses: {:?}", mints));
+            log(
+                LogTag::Api,
+                "DEBUG",
+                &format!("📋 Mint addresses: {:?}", mints),
+            );
         }
 
         let start_time = Instant::now();
 
         // Rate limiting
-        let permit = self.rate_limiter
+        let permit = self
+            .rate_limiter
             .clone()
-            .acquire_owned().await
+            .acquire_owned()
+            .await
             .map_err(|e| format!("Failed to acquire rate limit permit: {}", e))?;
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
-            .send().await
+            .send()
+            .await
             .map_err(|e| format!("HTTP request failed: {}", e))?;
 
         drop(permit);
@@ -602,7 +624,8 @@ impl DexScreenerApi {
         }
 
         let data: serde_json::Value = response
-            .json().await
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse JSON response: {}", e))?;
 
         if is_debug_api_enabled() {
@@ -612,23 +635,25 @@ impl DexScreenerApi {
             } else if data.is_object() {
                 format!(
                     "📥 API response: object with keys: {:?}",
-                    data
-                        .as_object()
+                    data.as_object()
                         .map(|obj| obj.keys().collect::<Vec<_>>())
                         .unwrap_or_default()
                 )
             } else if data.is_null() {
                 "📥 API response: null".to_string()
             } else {
-                format!("📥 API response: {} type", if data.is_string() {
-                    "string"
-                } else if data.is_number() {
-                    "number"
-                } else if data.is_boolean() {
-                    "boolean"
-                } else {
-                    "unknown"
-                })
+                format!(
+                    "📥 API response: {} type",
+                    if data.is_string() {
+                        "string"
+                    } else if data.is_number() {
+                        "number"
+                    } else if data.is_boolean() {
+                        "boolean"
+                    } else {
+                        "unknown"
+                    }
+                )
             };
             log(LogTag::Api, "DEBUG", &response_info);
         }
@@ -642,7 +667,10 @@ impl DexScreenerApi {
                 log(
                     LogTag::Api,
                     "DEBUG",
-                    &format!("🔄 Processing {} pairs from API response", pairs_array.len())
+                    &format!(
+                        "🔄 Processing {} pairs from API response",
+                        pairs_array.len()
+                    ),
                 );
 
                 if pairs_array.is_empty() {
@@ -672,7 +700,7 @@ impl DexScreenerApi {
                         log(
                             LogTag::Api,
                             "DEBUG",
-                            &format!("🪙 Pair {}: {} ({})", idx + 1, symbol, &mint[..8])
+                            &format!("🪙 Pair {}: {} ({})", idx + 1, symbol, &mint[..8]),
                         );
                     }
                 }
@@ -687,7 +715,7 @@ impl DexScreenerApi {
                                     "✅ Successfully parsed token: {} ({})",
                                     token.symbol,
                                     &token.mint[..8]
-                                )
+                                ),
                             );
                         }
                         tokens.push(token);
@@ -704,7 +732,7 @@ impl DexScreenerApi {
                                 log(
                                     LogTag::Api,
                                     "WARN",
-                                    &format!("Failed to parse token from batch: {}", e)
+                                    &format!("Failed to parse token from batch: {}", e),
                                 );
                             }
                         }
@@ -716,7 +744,7 @@ impl DexScreenerApi {
                 log(
                     LogTag::Api,
                     "WARN",
-                    "⚠️ API response is not an array - this might be the issue!"
+                    "⚠️ API response is not an array - this might be the issue!",
                 );
             }
         }
@@ -739,7 +767,10 @@ impl DexScreenerApi {
                 log(
                     LogTag::Api,
                     "SOL_FILTER",
-                    &format!("Filtered out {} non-SOL pairs from batch", rejected_non_sol_pairs)
+                    &format!(
+                        "Filtered out {} non-SOL pairs from batch",
+                        rejected_non_sol_pairs
+                    ),
                 );
             }
         }
@@ -749,7 +780,9 @@ impl DexScreenerApi {
 
     /// Parse token data from DexScreener pair response
     fn parse_token_from_pair(&self, pair_data: &serde_json::Value) -> Result<ApiToken, String> {
-        let base_token = pair_data.get("baseToken").ok_or("Missing baseToken field")?;
+        let base_token = pair_data
+            .get("baseToken")
+            .ok_or("Missing baseToken field")?;
 
         let mint = base_token
             .get("address")
@@ -758,7 +791,11 @@ impl DexScreenerApi {
             .to_string();
 
         if is_debug_api_enabled() {
-            log(LogTag::Api, "DEBUG", &format!("🔍 Parsing token: {}", &mint[..8]));
+            log(
+                LogTag::Api,
+                "DEBUG",
+                &format!("🔍 Parsing token: {}", &mint[..8]),
+            );
         }
 
         let symbol = base_token
@@ -781,7 +818,7 @@ impl DexScreenerApi {
                     log(
                         LogTag::Api,
                         "DEBUG",
-                        &format!("🔗 Token {} quote address: {}", &mint[..8], quote_address)
+                        &format!("🔗 Token {} quote address: {}", &mint[..8], quote_address),
                     );
                 }
 
@@ -804,7 +841,7 @@ impl DexScreenerApi {
                                 "✅ Token {} is SOL pair with price: {}",
                                 &mint[..8],
                                 price_native
-                            )
+                            ),
                         );
                     }
 
@@ -819,19 +856,20 @@ impl DexScreenerApi {
                                 "❌ Token {} rejected - not SOL pair (quote: {})",
                                 &mint[..8],
                                 quote_address
-                            )
+                            ),
                         );
                     }
-                    return Err(
-                        format!("Token {} is not paired with SOL (quote: {})", mint, quote_address)
-                    );
+                    return Err(format!(
+                        "Token {} is not paired with SOL (quote: {})",
+                        mint, quote_address
+                    ));
                 }
             } else {
                 if is_debug_api_enabled() {
                     log(
                         LogTag::Api,
                         "DEBUG",
-                        &format!("❌ Token {} rejected - no quote address", &mint[..8])
+                        &format!("❌ Token {} rejected - no quote address", &mint[..8]),
                     );
                 }
                 return Err(format!("Token {} has no quote address", mint));
@@ -841,7 +879,7 @@ impl DexScreenerApi {
                 log(
                     LogTag::Api,
                     "DEBUG",
-                    &format!("❌ Token {} rejected - no quote token", &mint[..8])
+                    &format!("❌ Token {} rejected - no quote token", &mint[..8]),
                 );
             }
             return Err(format!("Token {} has no quote token", mint));
@@ -982,7 +1020,7 @@ impl DexScreenerApi {
         value: Option<&serde_json::Value>,
         address: &str,
         name: &str,
-        symbol: &str
+        symbol: &str,
     ) -> Option<TokenInfo> {
         value.map(|v| TokenInfo {
             address: address.to_string(),
@@ -998,43 +1036,37 @@ impl DexScreenerApi {
     }
 
     fn parse_websites(&self, value: Option<&serde_json::Value>) -> Option<Vec<WebsiteInfo>> {
-        value
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|item| {
-                        item.get("url")
-                            .and_then(|url| url.as_str())
-                            .map(|url| WebsiteInfo {
-                                url: url.to_string(),
-                            })
-                    })
-                    .collect()
-            })
+        value.and_then(|v| v.as_array()).map(|arr| {
+            arr.iter()
+                .filter_map(|item| {
+                    item.get("url")
+                        .and_then(|url| url.as_str())
+                        .map(|url| WebsiteInfo {
+                            url: url.to_string(),
+                        })
+                })
+                .collect()
+        })
     }
 
     fn parse_socials(&self, value: Option<&serde_json::Value>) -> Option<Vec<SocialInfo>> {
-        value
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|item| {
-                        let platform = item.get("platform")?.as_str()?.to_string();
-                        let handle = item.get("handle")?.as_str()?.to_string();
-                        Some(SocialInfo { platform, handle })
-                    })
-                    .collect()
-            })
+        value.and_then(|v| v.as_array()).map(|arr| {
+            arr.iter()
+                .filter_map(|item| {
+                    let platform = item.get("platform")?.as_str()?.to_string();
+                    let handle = item.get("handle")?.as_str()?.to_string();
+                    Some(SocialInfo { platform, handle })
+                })
+                .collect()
+        })
     }
 
     fn parse_labels(&self, value: Option<&serde_json::Value>) -> Option<Vec<String>> {
-        value
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|item| item.as_str().map(|s| s.to_string()))
-                    .collect()
-            })
+        value.and_then(|v| v.as_array()).map(|arr| {
+            arr.iter()
+                .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                .collect()
+        })
     }
 
     /// Get API statistics
@@ -1045,7 +1077,7 @@ impl DexScreenerApi {
     /// Get token information from specific mints (batch processing for discovery.rs)
     pub async fn get_multiple_token_data(
         &mut self,
-        mints: &[String]
+        mints: &[String],
     ) -> Result<Vec<ApiToken>, String> {
         self.get_tokens_info(mints).await
     }
@@ -1054,7 +1086,7 @@ impl DexScreenerApi {
     pub async fn discover_and_fetch_tokens(
         &mut self,
         source: DiscoverySourceType,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<ApiToken>, String> {
         let url = match source {
             DiscoverySourceType::DexScreenerBoosts => {
@@ -1068,17 +1100,23 @@ impl DexScreenerApi {
             }
         };
 
-        let response = self.client
+        let response = self
+            .client
             .get(url)
-            .send().await
+            .send()
+            .await
             .map_err(|e| format!("Discovery request failed: {}", e))?;
 
         if !response.status().is_success() {
-            return Err(format!("Discovery API returned status: {}", response.status()));
+            return Err(format!(
+                "Discovery API returned status: {}",
+                response.status()
+            ));
         }
 
         let data: serde_json::Value = response
-            .json().await
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse discovery response: {}", e))?;
 
         let mut mints = Vec::new();
@@ -1103,32 +1141,36 @@ impl DexScreenerApi {
     pub async fn get_top_tokens(&mut self, limit: usize) -> Result<Vec<String>, String> {
         let url = "https://api.dexscreener.com/latest/dex/pairs/solana";
 
-        let response = self.client
+        let response = self
+            .client
             .get(url)
-            .send().await
+            .send()
+            .await
             .map_err(|e| format!("Request failed: {}", e))?;
 
         if !response.status().is_success() {
             return Err(format!("HTTP error: {}", response.status()));
         }
 
-        let text = response.text().await.map_err(|e| format!("Failed to read response: {}", e))?;
+        let text = response
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response: {}", e))?;
 
-        let json: serde_json::Value = serde_json
-            ::from_str(&text)
-            .map_err(|e| format!("JSON parsing failed: {}", e))?;
+        let json: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("JSON parsing failed: {}", e))?;
 
         let mut mints = Vec::new();
         if let Some(pairs) = json.get("pairs").and_then(|v| v.as_array()) {
             for pair in pairs.iter().take(limit) {
                 if let Some(base_token) = pair.get("baseToken") {
                     if let Some(mint) = base_token.get("address").and_then(|v| v.as_str()) {
-                        if
-                            !mint.is_empty() &&
-                            base_token
+                        if !mint.is_empty()
+                            && base_token
                                 .get("symbol")
                                 .and_then(|v| v.as_str())
-                                .unwrap_or("") != "SOL"
+                                .unwrap_or("")
+                                != "SOL"
                         {
                             mints.push(mint.to_string());
                         }
@@ -1187,30 +1229,37 @@ impl DexScreenerApi {
     pub async fn get_token_pairs(
         &mut self,
         chain_id: &str,
-        token_address: &str
+        token_address: &str,
     ) -> Result<Vec<TokenPair>, String> {
         let url = format!(
             "https://api.dexscreener.com/token-pairs/v1/{}/{}",
-            chain_id,
-            token_address
+            chain_id, token_address
         );
 
         if is_debug_api_enabled() {
-            log(LogTag::Api, "REQUEST", &format!("Fetching pools for token: {}", token_address));
+            log(
+                LogTag::Api,
+                "REQUEST",
+                &format!("Fetching pools for token: {}", token_address),
+            );
         }
 
         let start_time = Instant::now();
 
         // Rate limiting
-        let permit = self.rate_limiter
+        let permit = self
+            .rate_limiter
             .clone()
-            .acquire_owned().await
+            .acquire_owned()
+            .await
             .map_err(|e| format!("Failed to acquire rate limit permit: {}", e))?;
 
         // Make HTTP request
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
-            .send().await
+            .send()
+            .await
             .map_err(|e| format!("Failed to fetch token pairs: {}", e))?;
 
         drop(permit);
@@ -1230,11 +1279,11 @@ impl DexScreenerApi {
 
         // Parse response
         let response_text = response
-            .text().await
+            .text()
+            .await
             .map_err(|e| format!("Failed to read response: {}", e))?;
 
-        let pairs: Vec<TokenPair> = serde_json
-            ::from_str(&response_text)
+        let pairs: Vec<TokenPair> = serde_json::from_str(&response_text)
             .map_err(|e| format!("Failed to parse token pairs response: {}", e))?;
 
         if is_debug_api_enabled() {
@@ -1246,7 +1295,7 @@ impl DexScreenerApi {
                     pairs.len(),
                     token_address,
                     response_time
-                )
+                ),
             );
         }
 
@@ -1259,7 +1308,7 @@ impl DexScreenerApi {
     /// Get token pairs for Solana specifically
     pub async fn get_solana_token_pairs(
         &mut self,
-        token_address: &str
+        token_address: &str,
     ) -> Result<Vec<TokenPair>, String> {
         self.get_token_pairs("solana", token_address).await
     }
@@ -1267,46 +1316,51 @@ impl DexScreenerApi {
     /// Get token pairs for multiple Solana tokens using batch endpoint (up to 30 tokens)
     pub async fn get_batch_solana_token_pairs(
         &mut self,
-        token_addresses: &[String]
+        token_addresses: &[String],
     ) -> Result<Vec<TokenPair>, String> {
         if token_addresses.is_empty() {
             return Ok(Vec::new());
         }
 
         if token_addresses.len() > MAX_TOKENS_PER_API_CALL {
-            return Err(
-                format!(
-                    "Too many tokens for batch request: {}. Maximum is {}",
-                    token_addresses.len(),
-                    MAX_TOKENS_PER_API_CALL
-                )
-            );
+            return Err(format!(
+                "Too many tokens for batch request: {}. Maximum is {}",
+                token_addresses.len(),
+                MAX_TOKENS_PER_API_CALL
+            ));
         }
 
         // Join token addresses with commas for batch endpoint
         let token_list = token_addresses.join(",");
-        let url = format!("https://api.dexscreener.com/tokens/v1/solana/{}", token_list);
+        let url = format!(
+            "https://api.dexscreener.com/tokens/v1/solana/{}",
+            token_list
+        );
 
         if is_debug_api_enabled() {
             log(
                 LogTag::Api,
                 "REQUEST",
-                &format!("Batch fetching pools for {} tokens", token_addresses.len())
+                &format!("Batch fetching pools for {} tokens", token_addresses.len()),
             );
         }
 
         let start_time = Instant::now();
 
         // Rate limiting
-        let permit = self.rate_limiter
+        let permit = self
+            .rate_limiter
             .clone()
-            .acquire_owned().await
+            .acquire_owned()
+            .await
             .map_err(|e| format!("Failed to acquire rate limit permit: {}", e))?;
 
         // Make HTTP request
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
-            .send().await
+            .send()
+            .await
             .map_err(|e| format!("Failed to fetch batch token pairs: {}", e))?;
 
         drop(permit);
@@ -1317,7 +1371,10 @@ impl DexScreenerApi {
         self.stats.record_request(success, response_time);
 
         if !success {
-            let error_msg = format!("Batch API request failed with status: {}", response.status());
+            let error_msg = format!(
+                "Batch API request failed with status: {}",
+                response.status()
+            );
             if is_debug_api_enabled() {
                 log(LogTag::Api, "ERROR", &error_msg);
             }
@@ -1326,11 +1383,11 @@ impl DexScreenerApi {
 
         // Parse response - the batch endpoint returns an array of pairs directly
         let response_text = response
-            .text().await
+            .text()
+            .await
             .map_err(|e| format!("Failed to read batch response: {}", e))?;
 
-        let pairs: Vec<TokenPair> = serde_json
-            ::from_str(&response_text)
+        let pairs: Vec<TokenPair> = serde_json::from_str(&response_text)
             .map_err(|e| format!("Failed to parse batch token pairs response: {}", e))?;
 
         if is_debug_api_enabled() {
@@ -1342,7 +1399,7 @@ impl DexScreenerApi {
                     pairs.len(),
                     token_addresses.len(),
                     response_time
-                )
+                ),
             );
         }
 
@@ -1389,7 +1446,7 @@ pub async fn get_token_pairs_from_api(token_address: &str) -> Result<Vec<TokenPa
 
 /// Get token pools from DexScreener API (consistent naming with GeckoTerminal and Raydium)
 pub async fn get_token_pools_from_dexscreener(
-    token_address: &str
+    token_address: &str,
 ) -> Result<Vec<TokenPair>, String> {
     get_token_pairs_from_api(token_address).await
 }
@@ -1402,14 +1459,18 @@ pub async fn get_cached_pools_for_token(token_address: &str) -> Option<Vec<Token
 
 /// Get token pairs for multiple tokens using the batch API endpoint
 async fn get_batch_token_pairs_from_api(
-    token_addresses: &[String]
+    token_addresses: &[String],
 ) -> Result<Vec<TokenPair>, String> {
     let api = get_global_dexscreener_api().await?;
 
     // Use longer timeout to reduce timeout errors during system stress
     let result = timeout(Duration::from_secs(15), api.lock()).await;
     match result {
-        Ok(mut api_instance) => api_instance.get_batch_solana_token_pairs(token_addresses).await,
+        Ok(mut api_instance) => {
+            api_instance
+                .get_batch_solana_token_pairs(token_addresses)
+                .await
+        }
         Err(_) => {
             // Reduce log level to INFO since timeouts can be normal during shutdown
             if is_debug_api_enabled() {
@@ -1434,7 +1495,7 @@ pub struct DexScreenerBatchResult {
 
 /// Get pools for multiple tokens in batch from DexScreener API using proper batch endpoint
 pub async fn get_batch_token_pools_from_dexscreener(
-    token_addresses: &[String]
+    token_addresses: &[String],
 ) -> DexScreenerBatchResult {
     let start_time = std::time::Instant::now();
 
@@ -1445,7 +1506,7 @@ pub async fn get_batch_token_pools_from_dexscreener(
             &format!(
                 "🟡 Starting DexScreener batch pool fetch for {} tokens using batch endpoint",
                 token_addresses.len()
-            )
+            ),
         );
     }
 
@@ -1465,7 +1526,11 @@ pub async fn get_batch_token_pools_from_dexscreener(
             log(
                 LogTag::Api,
                 "DEXSCREENER_BATCH_CHUNK",
-                &format!("📦 Processing chunk {}: {} tokens", chunk_idx + 1, chunk.len())
+                &format!(
+                    "📦 Processing chunk {}: {} tokens",
+                    chunk_idx + 1,
+                    chunk.len()
+                ),
             );
         }
 
@@ -1502,7 +1567,7 @@ pub async fn get_batch_token_pools_from_dexscreener(
                                     "✅ DexScreener batch: {} found {} pools",
                                     &token_addr[..8],
                                     token_pools.len()
-                                )
+                                ),
                             );
                         }
                         pools.insert(token_addr.clone(), token_pools);
@@ -1521,7 +1586,7 @@ pub async fn get_batch_token_pools_from_dexscreener(
                         log(
                             LogTag::Api,
                             "DEXSCREENER_BATCH_ERROR",
-                            &format!("❌ DexScreener batch: {} failed: {}", &token_addr[..8], e)
+                            &format!("❌ DexScreener batch: {} failed: {}", &token_addr[..8], e),
                         );
                     }
                     errors.insert(token_addr.clone(), e.clone());
@@ -1543,7 +1608,7 @@ pub async fn get_batch_token_pools_from_dexscreener(
                 token_addresses.len(),
                 elapsed.as_secs_f64(),
                 (token_addresses.len() + MAX_TOKENS_PER_API_CALL - 1) / MAX_TOKENS_PER_API_CALL
-            )
+            ),
         );
     }
 
@@ -1579,16 +1644,20 @@ pub async fn init_dexscreener_api() -> Result<(), String> {
             }
             Err(_) => {
                 if is_debug_api_enabled() {
-                    log(LogTag::Api, "ERROR", "DexScreener API lock timeout during initialization");
+                    log(
+                        LogTag::Api,
+                        "ERROR",
+                        "DexScreener API lock timeout during initialization",
+                    );
                 }
                 return Err("API initialization lock timeout".to_string());
             }
         }
     }
 
-    GLOBAL_DEXSCREENER_API.set(api).map_err(
-        |_| "Failed to initialize global DexScreener API state"
-    )?;
+    GLOBAL_DEXSCREENER_API
+        .set(api)
+        .map_err(|_| "Failed to initialize global DexScreener API state")?;
 
     // Initialization already logged inside DexScreenerApi::initialize(); avoid duplicate success log here
     Ok(())
@@ -1596,7 +1665,8 @@ pub async fn init_dexscreener_api() -> Result<(), String> {
 
 /// Get reference to the global DexScreener API client
 pub async fn get_global_dexscreener_api() -> Result<Arc<Mutex<DexScreenerApi>>, String> {
-    GLOBAL_DEXSCREENER_API.get()
+    GLOBAL_DEXSCREENER_API
+        .get()
         .ok_or_else(|| {
             "DexScreener API not initialized. Call init_dexscreener_api() first.".to_string()
         })

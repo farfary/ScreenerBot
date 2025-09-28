@@ -5,15 +5,14 @@
 /// - ATH prevention using multi-timeframe analysis
 /// - Database-driven confidence scoring with stability weighting
 /// - Higher confidence thresholds for quality entries
-
 use crate::global::is_debug_entry_enabled;
-use crate::logger::{ log, LogTag };
-use crate::pools::{ get_pool_price, get_price_history, PriceResult, check_price_history_quality };
 use crate::learner::get_learning_integration;
-use chrono::{ DateTime, Utc };
+use crate::logger::{log, LogTag};
+use crate::pools::{check_price_history_quality, get_pool_price, get_price_history, PriceResult};
+use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock as AsyncRwLock; // switched from StdRwLock
-use std::time::{ Instant, Duration };
 
 // Lightweight TTL cache for recent exit prices to reduce DB pressure.
 struct ExitPriceCacheEntry {
@@ -21,7 +20,7 @@ struct ExitPriceCacheEntry {
     fetched_at: Instant,
 }
 static RECENT_EXIT_PRICE_CACHE: Lazy<
-    AsyncRwLock<std::collections::HashMap<String, ExitPriceCacheEntry>>
+    AsyncRwLock<std::collections::HashMap<String, ExitPriceCacheEntry>>,
 > = Lazy::new(|| AsyncRwLock::new(std::collections::HashMap::new()));
 const EXIT_PRICE_CACHE_TTL: Duration = Duration::from_secs(30);
 const EXIT_PRICE_CACHE_MAX_ENTRIES: usize = 1024; // prune safeguard
@@ -34,7 +33,7 @@ struct LiqSnap {
     t: Instant,
 }
 static RECENT_LIQ_CACHE: Lazy<
-    AsyncRwLock<std::collections::HashMap<String, std::collections::VecDeque<LiqSnap>>>
+    AsyncRwLock<std::collections::HashMap<String, std::collections::VecDeque<LiqSnap>>>,
 > = Lazy::new(|| AsyncRwLock::new(std::collections::HashMap::new()));
 const LIQ_CACHE_MAX_SNAPS: usize = 5;
 const LIQ_CACHE_MAX_AGE: Duration = Duration::from_secs(5 * 60); // keep ~5 minutes
@@ -79,11 +78,9 @@ pub async fn preload_exit_prices_batch(mints: &[String]) -> Result<(), String> {
         if let Some(ref db) = *guard {
             // Batch load all exit prices in one query (implement in positions_db if needed)
             for mint in &mints_to_load {
-                if
-                    let Ok(rows) = db.get_recent_closed_exit_prices_for_mint(
-                        mint,
-                        REENTRY_LOOKBACK_MAX
-                    ).await
+                if let Ok(rows) = db
+                    .get_recent_closed_exit_prices_for_mint(mint, REENTRY_LOOKBACK_MAX)
+                    .await
                 {
                     let mut prices = Vec::new();
                     for (exit_p, eff_p) in rows.into_iter() {
@@ -96,10 +93,13 @@ pub async fn preload_exit_prices_batch(mints: &[String]) -> Result<(), String> {
 
                     // Store in cache
                     let mut mapw = RECENT_EXIT_PRICE_CACHE.write().await;
-                    mapw.insert(mint.clone(), ExitPriceCacheEntry {
-                        prices,
-                        fetched_at: Instant::now(),
-                    });
+                    mapw.insert(
+                        mint.clone(),
+                        ExitPriceCacheEntry {
+                            prices,
+                            fetched_at: Instant::now(),
+                        },
+                    );
 
                     // Simple pruning: remove excess entries
                     if mapw.len() > EXIT_PRICE_CACHE_MAX_ENTRIES {
@@ -225,7 +225,7 @@ async fn get_cached_holder_count_fast(mint: &str) -> Option<u32> {
 
 async fn detect_micro_liquidity_capitulation(
     price_info: &PriceResult,
-    history: &[(DateTime<Utc>, f64)]
+    history: &[(DateTime<Utc>, f64)],
 ) -> Option<(f64, f64, Option<u32>)> {
     if price_info.sol_reserves > 0.0 && price_info.sol_reserves <= MICRO_LIQ_SOL_RESERVE_MAX {
         // Determine recent high within lookback
@@ -243,7 +243,10 @@ async fn detect_micro_liquidity_capitulation(
             if drop_percent >= MICRO_LIQ_MIN_DROP_PERCENT {
                 let holder_count = get_cached_holder_count_fast(&price_info.mint).await;
                 // If holder count known, enforce threshold; else allow optimistic proceed.
-                if holder_count.map(|c| c >= MICRO_LIQ_MIN_HOLDERS).unwrap_or(true) {
+                if holder_count
+                    .map(|c| c >= MICRO_LIQ_MIN_HOLDERS)
+                    .unwrap_or(true)
+                {
                     return Some((drop_percent, recent_high, holder_count));
                 }
             }
@@ -282,7 +285,7 @@ fn dynamic_min_drop_percent(sol_reserves: f64, price_history: &[(DateTime<Utc>, 
         let lo = prices_2m.iter().fold(f64::INFINITY, |a, b| a.min(*b));
         if hi > 0.0 && lo.is_finite() && lo > 0.0 {
             let hl = ((hi - lo) / hi) * 100.0; // % range
-            // Map 0..20% → 1.0..0.8 (more volatile → slightly lower min drop)
+                                               // Map 0..20% → 1.0..0.8 (more volatile → slightly lower min drop)
             (1.0 - (hl / 100.0).clamp(0.0, 0.2) * 1.0).max(0.8)
         } else {
             1.0
@@ -337,7 +340,7 @@ struct SimpleDropSignal {
 /// Returns (local_low, local_high, stabilization_score[0..1], intrarange_pct)
 fn analyze_local_structure(
     price_history: &[(DateTime<Utc>, f64)],
-    seconds: i64
+    seconds: i64,
 ) -> (f64, f64, f64, f64) {
     if seconds <= 5 {
         return (0.0, 0.0, 0.0, 0.0);
@@ -371,9 +374,8 @@ fn analyze_local_structure(
         s[s.len() / 2]
     };
     // Score favors tight range & median recovery in upper half.
-    let tight_factor = (
-        1.0 - (intrarange_pct / REENTRY_LOCAL_MAX_VOLATILITY_PCT).clamp(0.0, 1.0)
-    ).max(0.0);
+    let tight_factor =
+        (1.0 - (intrarange_pct / REENTRY_LOCAL_MAX_VOLATILITY_PCT).clamp(0.0, 1.0)).max(0.0);
     let recovery_factor = if local_high > local_low {
         ((median_after - local_low) / (local_high - local_low)).clamp(0.0, 1.0)
     } else {
@@ -433,7 +435,7 @@ fn detect_breakout_retest(
     price_history: &[(DateTime<Utc>, f64)],
     current_price: f64,
     stabilization_score: f64,
-    intrarange_pct: f64
+    intrarange_pct: f64,
 ) -> (bool, f64, &'static str, bool) {
     if price_history.len() < TREND_MIN_HISTORY_POINTS || current_price <= 0.0 {
         return (false, 0.0, "", false);
@@ -496,7 +498,7 @@ fn detect_breakout_retest(
 fn detect_sma_reclaim(
     price_history: &[(DateTime<Utc>, f64)],
     current_price: f64,
-    stabilization_score: f64
+    stabilization_score: f64,
 ) -> (bool, f64, &'static str) {
     if price_history.len() < TREND_MIN_HISTORY_POINTS || current_price <= 0.0 {
         return (false, 0.0, "");
@@ -534,7 +536,7 @@ fn detect_sma_reclaim(
 // Returns (detected, confidence_bonus, reason)
 fn detect_vcp_breakout(
     price_history: &[(DateTime<Utc>, f64)],
-    current_price: f64
+    current_price: f64,
 ) -> (bool, f64, &'static str) {
     if price_history.len() < VCP_MIN_SAMPLES || current_price <= 0.0 || !current_price.is_finite() {
         return (false, 0.0, "");
@@ -547,8 +549,8 @@ fn detect_vcp_breakout(
         .iter()
         .filter(|(ts, _)| {
             let age_sec = (now - *ts).num_seconds();
-            age_sec > VCP_LOOKBACK_WINDOW_SEC &&
-                age_sec <= VCP_BASE_WINDOW_SEC + VCP_LOOKBACK_WINDOW_SEC
+            age_sec > VCP_LOOKBACK_WINDOW_SEC
+                && age_sec <= VCP_BASE_WINDOW_SEC + VCP_LOOKBACK_WINDOW_SEC
         })
         .map(|(_, p)| *p)
         .filter(|p| *p > 0.0 && p.is_finite())
@@ -568,12 +570,13 @@ fn detect_vcp_breakout(
 
     // Contraction volatility
     let contraction_high = contraction_prices.iter().fold(0.0f64, |a, b| a.max(*b));
-    let contraction_low = contraction_prices.iter().fold(f64::INFINITY, |a, b| a.min(*b));
-    if
-        !contraction_high.is_finite() ||
-        !contraction_low.is_finite() ||
-        contraction_high <= 0.0 ||
-        contraction_low <= 0.0
+    let contraction_low = contraction_prices
+        .iter()
+        .fold(f64::INFINITY, |a, b| a.min(*b));
+    if !contraction_high.is_finite()
+        || !contraction_low.is_finite()
+        || contraction_high <= 0.0
+        || contraction_low <= 0.0
     {
         return (false, 0.0, "");
     }
@@ -587,8 +590,8 @@ fn detect_vcp_breakout(
         .iter()
         .filter(|(ts, _)| {
             let age_sec = (now - *ts).num_seconds();
-            age_sec > VCP_BASE_WINDOW_SEC + VCP_LOOKBACK_WINDOW_SEC &&
-                age_sec <= 2 * VCP_BASE_WINDOW_SEC + VCP_LOOKBACK_WINDOW_SEC
+            age_sec > VCP_BASE_WINDOW_SEC + VCP_LOOKBACK_WINDOW_SEC
+                && age_sec <= 2 * VCP_BASE_WINDOW_SEC + VCP_LOOKBACK_WINDOW_SEC
         })
         .map(|(_, p)| *p)
         .filter(|p| *p > 0.0 && p.is_finite())
@@ -608,10 +611,8 @@ fn detect_vcp_breakout(
     let breakout_high = breakout_prices.iter().fold(0.0f64, |a, b| a.max(*b));
     let min_breakout_price = contraction_high * (1.0 + VCP_BREAKOUT_MIN_PCT / 100.0);
     if current_price >= min_breakout_price && breakout_high >= min_breakout_price {
-        let volatility_quality = (1.0 - contraction_volatility / VCP_MAX_VOLATILITY_PCT).clamp(
-            0.0,
-            1.0
-        );
+        let volatility_quality =
+            (1.0 - contraction_volatility / VCP_MAX_VOLATILITY_PCT).clamp(0.0, 1.0);
         let breakout_strength =
             ((current_price / contraction_high - 1.0) * 100.0).clamp(3.0, 20.0) / 17.0;
         let confidence_bonus =
@@ -626,22 +627,20 @@ fn detect_vcp_breakout(
 // Returns (detected, confidence_bonus, reason)
 fn detect_oversold_reversal(
     price_history: &[(DateTime<Utc>, f64)],
-    current_price: f64
+    current_price: f64,
 ) -> (bool, f64, &'static str) {
-    if
-        price_history.len() < OVERSOLD_MIN_SAMPLES ||
-        current_price <= 0.0 ||
-        !current_price.is_finite()
+    if price_history.len() < OVERSOLD_MIN_SAMPLES
+        || current_price <= 0.0
+        || !current_price.is_finite()
     {
         return (false, 0.0, "");
     }
     let now = Utc::now();
     let window: Vec<(DateTime<Utc>, f64)> = price_history
         .iter()
-        .filter(
-            |(ts, p)|
-                (now - *ts).num_seconds() <= OVERSOLD_MAX_TIME_SEC && *p > 0.0 && p.is_finite()
-        )
+        .filter(|(ts, p)| {
+            (now - *ts).num_seconds() <= OVERSOLD_MAX_TIME_SEC && *p > 0.0 && p.is_finite()
+        })
         .cloned()
         .collect();
     if window.len() < OVERSOLD_MIN_SAMPLES {
@@ -688,11 +687,10 @@ fn detect_oversold_reversal(
     let drop_quality = (drop_pct / 50.0).clamp(0.5, 1.5);
     let recovery_quality = (recovery_pct / OVERSOLD_MAX_FROM_LOW_PCT).clamp(0.3, 0.9);
     let time_quality = 1.0 - (((now - low_ts).num_seconds() as f64) / 120.0).clamp(0.0, 0.8);
-    let confidence_bonus =
-        OVERSOLD_MIN_CONFIDENCE_BONUS +
-        10.0 * drop_quality +
-        5.0 * recovery_quality +
-        8.0 * time_quality;
+    let confidence_bonus = OVERSOLD_MIN_CONFIDENCE_BONUS
+        + 10.0 * drop_quality
+        + 5.0 * recovery_quality
+        + 8.0 * time_quality;
     (true, confidence_bonus, "OVERSOLD_REVERSAL")
 }
 
@@ -706,7 +704,10 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 log(
                     LogTag::Entry,
                     "INFO",
-                    &format!("✅ Price history quality check passed for {}", price_info.mint)
+                    &format!(
+                        "✅ Price history quality check passed for {}",
+                        price_info.mint
+                    ),
                 );
             }
         }
@@ -715,7 +716,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 log(
                     LogTag::Entry,
                     "WARN",
-                    &format!("❌ {} insufficient price history quality", price_info.mint)
+                    &format!("❌ {} insufficient price history quality", price_info.mint),
                 );
             }
             return (false, 0.0, "Insufficient price history quality".to_string());
@@ -725,7 +726,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 log(
                     LogTag::Entry,
                     "ERROR",
-                    &format!("❌ {} price history check error: {}", price_info.mint, e)
+                    &format!("❌ {} price history check error: {}", price_info.mint, e),
                 );
             }
             return (false, 0.0, format!("Price history check error: {}", e));
@@ -736,7 +737,11 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
     if price_info.is_stale(120) {
         // 2 minutes max age - consistent with quality check
         if is_debug_entry_enabled() {
-            log(LogTag::Entry, "WARN", &format!("❌ {} price is stale", price_info.mint));
+            log(
+                LogTag::Entry,
+                "WARN",
+                &format!("❌ {} price is stale", price_info.mint),
+            );
         }
         return (false, 0.0, "Price data is stale".to_string());
     }
@@ -744,7 +749,11 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
     let price_history = get_price_history(&price_info.mint);
 
     if is_debug_entry_enabled() {
-        log(LogTag::Entry, "DEBUG", &format!("� Using pool price for {}", price_info.mint));
+        log(
+            LogTag::Entry,
+            "DEBUG",
+            &format!("� Using pool price for {}", price_info.mint),
+        );
     }
 
     let prior_exit_prices = get_cached_recent_exit_prices_fast(&price_info.mint).await;
@@ -758,7 +767,10 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
             log(
                 LogTag::Entry,
                 "WARN",
-                &format!("❌ {} invalid price: {:.9}", price_info.mint, price_info.price_sol)
+                &format!(
+                    "❌ {} invalid price: {:.9}",
+                    price_info.mint, price_info.price_sol
+                ),
             );
         }
         return (false, 0.0, "Invalid price".to_string());
@@ -782,7 +794,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         log(
             LogTag::Entry,
             "HISTORY_REQUEST",
-            &format!("📈 Using price history for {}", price_info.mint)
+            &format!("📈 Using price history for {}", price_info.mint),
         );
     }
 
@@ -828,10 +840,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         };
 
         // Micro-structure MDD/MRU over last 3m
-        let (mdd_3m, mru_3m) = compute_mdd_mru(
-            &converted_history,
-            CASCADE_MDD_WINDOW_SEC
-        ).unwrap_or((0.0, 0.0));
+        let (mdd_3m, mru_3m) =
+            compute_mdd_mru(&converted_history, CASCADE_MDD_WINDOW_SEC).unwrap_or((0.0, 0.0));
 
         // Liquidity checks
         let liq_falling = is_liquidity_falling(&price_info.mint).await;
@@ -865,11 +875,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 10.0,
                 format!(
                     "Cascade guard: m15={:.1}% h1={:.1}% mdd3m={:.1}% mru3m={:.1}% liq={:.1} SOL",
-                    m15_change,
-                    h1_change,
-                    mdd_3m,
-                    mru_3m,
-                    price_info.sol_reserves
+                    m15_change, h1_change, mdd_3m, mru_3m, price_info.sol_reserves
                 ),
             );
         }
@@ -877,10 +883,9 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
 
     // Pump Fun near-20 SOL band guard — lighter drop conditions + sell dominance corroboration
     // Only engages inside a tight SOL-quote band to avoid broad DB lookups.
-    if
-        price_info.sol_reserves >= PF_BAND_MIN_SOL &&
-        price_info.sol_reserves <= PF_BAND_MAX_SOL &&
-        converted_history.len() >= 6
+    if price_info.sol_reserves >= PF_BAND_MIN_SOL
+        && price_info.sol_reserves <= PF_BAND_MAX_SOL
+        && converted_history.len() >= 6
     {
         let now = Utc::now();
         let (mut first_15, mut last_15) = (None, None);
@@ -909,10 +914,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
             (Some(f), Some(l)) => pct_change(f, l),
             _ => 0.0,
         };
-        let (mdd_3m, mru_3m) = compute_mdd_mru(
-            &converted_history,
-            CASCADE_MDD_WINDOW_SEC
-        ).unwrap_or((0.0, 0.0));
+        let (mdd_3m, mru_3m) =
+            compute_mdd_mru(&converted_history, CASCADE_MDD_WINDOW_SEC).unwrap_or((0.0, 0.0));
 
         // Optional token market snapshot (price_change_h24 + txns_h1)
         let mut h24_change_opt: Option<f64> = None;
@@ -925,12 +928,18 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         }
         let total_h1 = h1_buys.saturating_add(h1_sells);
         let sell_dom = if h1_buys <= 0 {
-            if h1_sells > 0 { 10.0 } else { 0.0 }
+            if h1_sells > 0 {
+                10.0
+            } else {
+                0.0
+            }
         } else {
             (h1_sells as f64) / (h1_buys as f64)
         };
 
-        let long_lookback_bad = h24_change_opt.map(|c| c <= PF_H24_DROP_EXTREME).unwrap_or(false);
+        let long_lookback_bad = h24_change_opt
+            .map(|c| c <= PF_H24_DROP_EXTREME)
+            .unwrap_or(false);
         let recent_drop_bad = m15_change <= -PF_M15_DROP_MIN || h1_change <= -PF_H1_DROP_MIN;
         let micro_weak = mdd_3m >= PF_MDD3M_MIN && mru_3m <= PF_MRU3M_MAX;
         let sell_pressure_ok = total_h1 >= PF_TXNS_H1_MIN_TOTAL && sell_dom >= PF_SELL_DOM_H1_MIN;
@@ -977,11 +986,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
     // Micro-liquidity capitulation fast-path (before standard insufficient/history gates)
     if converted_history.len() >= 5 {
         // need minimal structure
-        if
-            let Some((drop_percent, recent_high, holder_opt)) = detect_micro_liquidity_capitulation(
-                price_info,
-                &converted_history
-            ).await
+        if let Some((drop_percent, recent_high, holder_opt)) =
+            detect_micro_liquidity_capitulation(price_info, &converted_history).await
         {
             let mut confidence = MICRO_LIQ_CONF_BASE;
             if drop_percent >= MICRO_LIQ_PREFERRED_DROP_PERCENT {
@@ -996,12 +1002,14 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
             // Apply learner confidence boost for micro-liquidity scenarios
             let learning = get_learning_integration();
             let original_confidence = confidence;
-            let adjustment = learning.get_entry_confidence_adjustment(
-                &price_info.mint,
-                current_price,
-                drop_percent,
-                0.0 // ath_proximity not available in this context
-            ).await;
+            let adjustment = learning
+                .get_entry_confidence_adjustment(
+                    &price_info.mint,
+                    current_price,
+                    drop_percent,
+                    0.0, // ath_proximity not available in this context
+                )
+                .await;
             confidence = (confidence * adjustment).clamp(60.0, 95.0);
 
             if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
@@ -1010,11 +1018,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     "LEARNER_MICRO_LIQ_BOOST",
                     &format!(
                         "🧠 {} micro-liq learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                        price_info.mint,
-                        original_confidence,
-                        confidence,
-                        adjustment
-                    )
+                        price_info.mint, original_confidence, confidence, adjustment
+                    ),
                 );
             }
 
@@ -1064,7 +1069,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     price_info.mint,
                     converted_history.len(),
                     MIN_PRICE_POINTS
-                )
+                ),
             );
         }
 
@@ -1079,12 +1084,14 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
 
                     // Apply learner confidence boost for instant drop scenarios
                     let learning = get_learning_integration();
-                    let adjustment = learning.get_entry_confidence_adjustment(
-                        &price_info.mint,
-                        current_price,
-                        instant_drop,
-                        0.0 // ath_proximity not available in this context
-                    ).await;
+                    let adjustment = learning
+                        .get_entry_confidence_adjustment(
+                            &price_info.mint,
+                            current_price,
+                            instant_drop,
+                            0.0, // ath_proximity not available in this context
+                        )
+                        .await;
                     final_confidence = (final_confidence * adjustment).clamp(0.0, 95.0);
 
                     if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
@@ -1108,10 +1115,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                                 "INSTANT_DROP_FALLBACK",
                                 &format!(
                                     "🎯 {} instant drop -{:.1}% → conf {:.0}% → APPROVE",
-                                    price_info.mint,
-                                    instant_drop,
-                                    final_confidence
-                                )
+                                    price_info.mint, instant_drop, final_confidence
+                                ),
                             );
                         }
                         return (
@@ -1136,10 +1141,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
     }
 
     // Local structure before selecting best drop (short horizon for stabilization)
-    let (_ll, _lh, stabilization_score, intrarange_pct) = analyze_local_structure(
-        &converted_history,
-        REENTRY_LOCAL_STABILITY_SECS
-    );
+    let (_ll, _lh, stabilization_score, intrarange_pct) =
+        analyze_local_structure(&converted_history, REENTRY_LOCAL_STABILITY_SECS);
 
     // ============================= Trend entries (conservative) =============================
     // Try to catch high-quality trend setups before standard drop-based logic.
@@ -1148,11 +1151,11 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         &converted_history,
         current_price,
         stabilization_score,
-        intrarange_pct
+        intrarange_pct,
     );
     if brk_ok {
         let mut confidence = 30.0 + brk_conf; // strong base for quality trend
-        // Activity boost (single use): conservative scaling
+                                              // Activity boost (single use): conservative scaling
         confidence += activity_score * 12.0;
         confidence = confidence.clamp(0.0, 95.0);
 
@@ -1165,10 +1168,9 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 .map(|(_, p)| *p)
                 .collect();
 
-            if
-                let Some(&recent_high) = recent_prices
-                    .iter()
-                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+            if let Some(&recent_high) = recent_prices
+                .iter()
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
             {
                 if recent_high > current_price && recent_high > 0.0 {
                     ((recent_high - current_price) / recent_high) * 100.0
@@ -1185,12 +1187,14 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         // Apply learner confidence boost for trend entries
         let learning = get_learning_integration();
         let original_confidence = confidence;
-        let adjustment = learning.get_entry_confidence_adjustment(
-            &price_info.mint,
-            current_price,
-            trend_drop_percent, // Use calculated drop instead of 0.0
-            0.0 // ath_proximity not available in this context
-        ).await;
+        let adjustment = learning
+            .get_entry_confidence_adjustment(
+                &price_info.mint,
+                current_price,
+                trend_drop_percent, // Use calculated drop instead of 0.0
+                0.0,                // ath_proximity not available in this context
+            )
+            .await;
         confidence = (confidence * adjustment).clamp(0.0, 95.0);
 
         if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
@@ -1199,11 +1203,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 "LEARNER_TREND_BOOST",
                 &format!(
                     "🧠 {} trend learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                    price_info.mint,
-                    original_confidence,
-                    confidence,
-                    adjustment
-                )
+                    price_info.mint, original_confidence, confidence, adjustment
+                ),
             );
         }
 
@@ -1220,10 +1221,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     "TREND_ATH_BLOCK",
                     &format!(
                         "❌ {} {} blocked by ATH: {:.1}%",
-                        price_info.mint,
-                        brk_tag,
-                        max_ath_pct
-                    )
+                        price_info.mint, brk_tag, max_ath_pct
+                    ),
                 );
             }
         } else {
@@ -1233,12 +1232,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     brk_tag,
                     &format!(
                         "🎯 {} trend entry → conf {:.1}% (stab:{:.2} intrarange:{:.1}% ath_ok:{})",
-                        price_info.mint,
-                        confidence,
-                        stabilization_score,
-                        intrarange_pct,
-                        ath_safe
-                    )
+                        price_info.mint, confidence, stabilization_score, intrarange_pct, ath_safe
+                    ),
                 );
             }
             let approved = confidence >= 43.0; // slightly lower than conservative dip threshold
@@ -1255,11 +1250,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
     }
 
     // 2) SMA reclaim continuation
-    let (rec_ok, rec_conf, rec_tag) = detect_sma_reclaim(
-        &converted_history,
-        current_price,
-        stabilization_score
-    );
+    let (rec_ok, rec_conf, rec_tag) =
+        detect_sma_reclaim(&converted_history, current_price, stabilization_score);
     if rec_ok {
         let mut confidence = 26.0 + rec_conf;
         confidence += activity_score * 10.0;
@@ -1268,12 +1260,14 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         // Apply learner confidence boost for SMA reclaim entries
         let learning = get_learning_integration();
         let original_confidence = confidence;
-        let adjustment = learning.get_entry_confidence_adjustment(
-            &price_info.mint,
-            current_price,
-            0.0, // drop_percent not directly available in SMA reclaim context
-            0.0 // ath_proximity not available in this context
-        ).await;
+        let adjustment = learning
+            .get_entry_confidence_adjustment(
+                &price_info.mint,
+                current_price,
+                0.0, // drop_percent not directly available in SMA reclaim context
+                0.0, // ath_proximity not available in this context
+            )
+            .await;
         confidence = (confidence * adjustment).clamp(0.0, 95.0);
 
         if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
@@ -1282,11 +1276,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 "LEARNER_SMA_RECLAIM_BOOST",
                 &format!(
                     "🧠 {} SMA reclaim learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                    price_info.mint,
-                    original_confidence,
-                    confidence,
-                    adjustment
-                )
+                    price_info.mint, original_confidence, confidence, adjustment
+                ),
             );
         }
 
@@ -1298,10 +1289,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     "SMA_RECLAIM_ATH_BLOCK",
                     &format!(
                         "❌ {} {} blocked by ATH: {:.1}%",
-                        price_info.mint,
-                        rec_tag,
-                        max_ath_pct
-                    )
+                        price_info.mint, rec_tag, max_ath_pct
+                    ),
                 );
             }
         } else {
@@ -1311,10 +1300,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     rec_tag,
                     &format!(
                         "🎯 {} trend SMA reclaim → conf {:.1}% (stab:{:.2})",
-                        price_info.mint,
-                        confidence,
-                        stabilization_score
-                    )
+                        price_info.mint, confidence, stabilization_score
+                    ),
                 );
             }
             let approved = confidence >= 43.0;
@@ -1342,12 +1329,9 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
             // Learner adjustment
             let learning = get_learning_integration();
             let original_confidence = confidence;
-            let adjustment = learning.get_entry_confidence_adjustment(
-                &price_info.mint,
-                current_price,
-                0.0,
-                0.0
-            ).await;
+            let adjustment = learning
+                .get_entry_confidence_adjustment(&price_info.mint, current_price, 0.0, 0.0)
+                .await;
             confidence = (confidence * adjustment).clamp(0.0, 95.0);
 
             if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
@@ -1356,11 +1340,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     "LEARNER_VCP_BOOST",
                     &format!(
                         "🧠 {} VCP learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                        price_info.mint,
-                        original_confidence,
-                        confidence,
-                        adjustment
-                    )
+                        price_info.mint, original_confidence, confidence, adjustment
+                    ),
                 );
             }
 
@@ -1373,10 +1354,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                         "VCP_ATH_BLOCK",
                         &format!(
                             "❌ {} {} blocked by ATH: {:.1}%",
-                            price_info.mint,
-                            vcp_tag,
-                            max_ath_pct
-                        )
+                            price_info.mint, vcp_tag, max_ath_pct
+                        ),
                     );
                 }
             } else {
@@ -1384,7 +1363,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     log(
                         LogTag::Entry,
                         vcp_tag,
-                        &format!("🎯 {} VCP entry → conf {:.1}%", price_info.mint, confidence)
+                        &format!("🎯 {} VCP entry → conf {:.1}%", price_info.mint, confidence),
                     );
                 }
                 let approved = confidence >= 42.0;
@@ -1403,10 +1382,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
 
     // 2) Mean-reversion oversold entry
     {
-        let (oversold_ok, oversold_conf, oversold_tag) = detect_oversold_reversal(
-            &converted_history,
-            current_price
-        );
+        let (oversold_ok, oversold_conf, oversold_tag) =
+            detect_oversold_reversal(&converted_history, current_price);
         if oversold_ok {
             let mut confidence = 25.0 + oversold_conf; // Base confidence
             confidence += activity_score * 8.0; // reduced weight
@@ -1415,12 +1392,9 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
             // Learner adjustment
             let learning = get_learning_integration();
             let original_confidence = confidence;
-            let adjustment = learning.get_entry_confidence_adjustment(
-                &price_info.mint,
-                current_price,
-                0.0,
-                0.0
-            ).await;
+            let adjustment = learning
+                .get_entry_confidence_adjustment(&price_info.mint, current_price, 0.0, 0.0)
+                .await;
             confidence = (confidence * adjustment).clamp(0.0, 95.0);
             if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
                 log(
@@ -1445,10 +1419,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                         "OVERSOLD_ATH_BLOCK",
                         &format!(
                             "❌ {} {} blocked by extreme ATH: {:.1}%",
-                            price_info.mint,
-                            oversold_tag,
-                            max_ath_pct
-                        )
+                            price_info.mint, oversold_tag, max_ath_pct
+                        ),
                     );
                 }
             } else {
@@ -1458,9 +1430,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                         oversold_tag,
                         &format!(
                             "🎯 {} Oversold reversal entry → conf {:.1} pct (lenient ATH)",
-                            price_info.mint,
-                            confidence
-                        )
+                            price_info.mint, confidence
+                        ),
                     );
                 }
                 let approved = confidence >= 40.0;
@@ -1479,11 +1450,9 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
 
     // 3) Liquidity accumulation entry
     {
-        let (liq_ok, liq_conf, liq_tag, liq_accum_pct) = detect_liquidity_accumulation(
-            &price_info.mint,
-            current_price,
-            price_info.sol_reserves
-        ).await;
+        let (liq_ok, liq_conf, liq_tag, liq_accum_pct) =
+            detect_liquidity_accumulation(&price_info.mint, current_price, price_info.sol_reserves)
+                .await;
         if liq_ok {
             let mut confidence = 26.0 + liq_conf;
             confidence += activity_score * 6.0;
@@ -1491,12 +1460,9 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
 
             let learning = get_learning_integration();
             let original_confidence = confidence;
-            let adjustment = learning.get_entry_confidence_adjustment(
-                &price_info.mint,
-                current_price,
-                0.0,
-                0.0
-            ).await;
+            let adjustment = learning
+                .get_entry_confidence_adjustment(&price_info.mint, current_price, 0.0, 0.0)
+                .await;
             confidence = (confidence * adjustment).clamp(0.0, 95.0);
             if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
                 log(
@@ -1520,10 +1486,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                         "LIQ_ACCUM_ATH_BLOCK",
                         &format!(
                             "❌ {} {} blocked by ATH: {:.1}%",
-                            price_info.mint,
-                            liq_tag,
-                            max_ath_pct
-                        )
+                            price_info.mint, liq_tag, max_ath_pct
+                        ),
                     );
                 }
             } else {
@@ -1533,11 +1497,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                         liq_tag,
                         &format!(
                             "🎯 {} Liquidity accumulation +{:.1}% → conf {:.1}% (sol:{:.3})",
-                            price_info.mint,
-                            liq_accum_pct,
-                            confidence,
-                            price_info.sol_reserves
-                        )
+                            price_info.mint, liq_accum_pct, confidence, price_info.sol_reserves
+                        ),
                     );
                 }
                 let approved = confidence >= 42.0;
@@ -1552,9 +1513,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     } else {
                         format!(
                             "{}: confidence {:.1}% < 42%, accum +{:.1}%",
-                            liq_tag,
-                            confidence,
-                            liq_accum_pct
+                            liq_tag, confidence, liq_accum_pct
                         )
                     },
                 );
@@ -1567,9 +1526,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
     let dyn_min_drop = dynamic_min_drop_percent(price_info.sol_reserves, &converted_history);
     let mut adaptive_min_drop = dyn_min_drop;
     if prior_count > 0 {
-        let extra = ((prior_count as f64) * REENTRY_DROP_EXTRA_PER_ENTRY_PCT).min(
-            REENTRY_DROP_EXTRA_MAX_PCT
-        );
+        let extra = ((prior_count as f64) * REENTRY_DROP_EXTRA_PER_ENTRY_PCT)
+            .min(REENTRY_DROP_EXTRA_MAX_PCT);
         adaptive_min_drop += extra; // require deeper fresh drop
         if let Some(last_exit) = last_exit_price {
             // Ensure current price meaningfully below last exit to avoid chasing
@@ -1596,8 +1554,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                         18.0,
                         format!(
                             "Re-entry discount too small {:.2}% < {:.2}%",
-                            discount_pct,
-                            REENTRY_MIN_DISCOUNT_TO_LAST_EXIT_PCT
+                            discount_pct, REENTRY_MIN_DISCOUNT_TO_LAST_EXIT_PCT
                         ),
                     );
                 }
@@ -1613,11 +1570,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 "ADAPT_MIN_DROP_TOO_HIGH",
                 &format!(
                     "{} adaptive_min_drop {:.1}% exceeds MAX {:.1}% prior_exits:{}",
-                    price_info.mint,
-                    adaptive_min_drop,
-                    MAX_DROP_PERCENT,
-                    prior_count
-                )
+                    price_info.mint, adaptive_min_drop, MAX_DROP_PERCENT, prior_count
+                ),
             );
         }
     }
@@ -1647,12 +1601,15 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                     "ATH_PREVENTION_SCALP",
                     &format!(
                         "❌ {} ATH prevention: {:.1}% of recent high - blocking entry",
-                        price_info.mint,
-                        max_ath_pct
-                    )
+                        price_info.mint, max_ath_pct
+                    ),
                 );
             }
-            return (false, 15.0, format!("ATH prevention: {:.1}% of recent high", max_ath_pct));
+            return (
+                false,
+                15.0,
+                format!("ATH prevention: {:.1}% of recent high", max_ath_pct),
+            );
         }
 
         // ATH safety bonus (conservative)
@@ -1665,8 +1622,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
 
         // Window preference (favor longer-term drops for stability)
         confidence += match sig.window_sec {
-            30 => 20.0, // Short-term but not too aggressive
-            60 => 25.0, // 1-minute window (good balance)
+            30 => 20.0,  // Short-term but not too aggressive
+            60 => 25.0,  // 1-minute window (good balance)
             120 => 30.0, // 2-minute window (preferred)
             180 => 28.0, // 3-minute window (good)
             300 => 25.0, // 5-minute window (standard)
@@ -1683,13 +1640,12 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         }
 
         // Conservative entry conditions (adaptive)
-        let is_good_entry =
-            sig.drop_percent >= adaptive_min_drop &&
-            sig.drop_percent <= 20.0 + ((prior_count as f64) * 3.0).min(15.0) &&
-            sig.window_sec >= 60 &&
-            activity_score >= 0.6 &&
-            ath_safe &&
-            stabilization_score >= 0.25; // require some stabilization
+        let is_good_entry = sig.drop_percent >= adaptive_min_drop
+            && sig.drop_percent <= 20.0 + ((prior_count as f64) * 3.0).min(15.0)
+            && sig.window_sec >= 60
+            && activity_score >= 0.6
+            && ath_safe
+            && stabilization_score >= 0.25; // require some stabilization
         if is_good_entry {
             confidence *= 1.25; // 25% boost for good conservative conditions
         }
@@ -1709,12 +1665,14 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         // Apply learner confidence boost
         let learning = get_learning_integration();
         let original_confidence = confidence;
-        let adjustment = learning.get_entry_confidence_adjustment(
-            &price_info.mint,
-            current_price,
-            sig.drop_percent,
-            max_ath_pct
-        ).await;
+        let adjustment = learning
+            .get_entry_confidence_adjustment(
+                &price_info.mint,
+                current_price,
+                sig.drop_percent,
+                max_ath_pct,
+            )
+            .await;
         confidence = (confidence * adjustment).clamp(0.0, 95.0);
 
         if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
@@ -1723,11 +1681,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 "LEARNER_CONFIDENCE_BOOST",
                 &format!(
                     "🧠 {} learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                    price_info.mint,
-                    original_confidence,
-                    confidence,
-                    adjustment
-                )
+                    price_info.mint, original_confidence, confidence, adjustment
+                ),
             );
         }
 
@@ -1768,15 +1723,12 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 let reason = if is_good_entry {
                     format!(
                         "Conservative entry: -{:.1}%/{}s, ATH-safe, good activity",
-                        sig.drop_percent,
-                        sig.window_sec
+                        sig.drop_percent, sig.window_sec
                     )
                 } else {
                     format!(
                         "Standard entry: -{:.1}%/{}s, ATH-safe (conf: {:.1}%)",
-                        sig.drop_percent,
-                        sig.window_sec,
-                        confidence
+                        sig.drop_percent, sig.window_sec, confidence
                     )
                 };
                 reason
@@ -1816,7 +1768,11 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 )
             );
         }
-        return (false, 20.0, "No entry opportunity detected in conservative windows".to_string());
+        return (
+            false,
+            20.0,
+            "No entry opportunity detected in conservative windows".to_string(),
+        );
     }
 }
 
@@ -1912,7 +1868,7 @@ async fn record_liquidity_snapshot(mint: &str, sol_reserves: f64, price: f64) {
     let mut map = RECENT_LIQ_CACHE.write().await;
     let q = map
         .entry(mint.to_string())
-        .or_insert_with(|| { std::collections::VecDeque::with_capacity(LIQ_CACHE_MAX_SNAPS) });
+        .or_insert_with(|| std::collections::VecDeque::with_capacity(LIQ_CACHE_MAX_SNAPS));
     let now = Instant::now();
     // prune old
     while let Some(front) = q.front() {
@@ -1926,7 +1882,11 @@ async fn record_liquidity_snapshot(mint: &str, sol_reserves: f64, price: f64) {
     if q.len() == LIQ_CACHE_MAX_SNAPS {
         q.pop_front();
     }
-    q.push_back(LiqSnap { sol: sol_reserves.max(0.0), price: price.max(0.0), t: now });
+    q.push_back(LiqSnap {
+        sol: sol_reserves.max(0.0),
+        price: price.max(0.0),
+        t: now,
+    });
 }
 
 // Determine if liquidity is falling across recent snapshots (strict: monotonic decrease at least N steps)
@@ -1952,12 +1912,11 @@ async fn is_liquidity_falling(mint: &str) -> bool {
 async fn detect_liquidity_accumulation(
     mint: &str,
     current_price: f64,
-    current_sol_reserves: f64
+    current_sol_reserves: f64,
 ) -> (bool, f64, &'static str, f64) {
-    if
-        current_price <= 0.0 ||
-        !current_price.is_finite() ||
-        current_sol_reserves < LIQ_ACCUM_MIN_SOL_RESERVES
+    if current_price <= 0.0
+        || !current_price.is_finite()
+        || current_sol_reserves < LIQ_ACCUM_MIN_SOL_RESERVES
     {
         return (false, 0.0, "", 0.0);
     }
@@ -1987,12 +1946,16 @@ async fn detect_liquidity_accumulation(
         let liq_quality = (accum_percent / 50.0).clamp(0.4, 1.2);
         let price_quality = (price_change_pct / 10.0).clamp(0.2, 1.0);
         let size_quality = (current_sol_reserves / 20.0).clamp(0.1, 1.0);
-        let confidence_bonus =
-            LIQ_ACCUM_MIN_CONFIDENCE_BONUS +
-            12.0 * liq_quality +
-            8.0 * price_quality +
-            6.0 * size_quality;
-        return (true, confidence_bonus, "LIQUIDITY_ACCUMULATION", accum_percent);
+        let confidence_bonus = LIQ_ACCUM_MIN_CONFIDENCE_BONUS
+            + 12.0 * liq_quality
+            + 8.0 * price_quality
+            + 6.0 * size_quality;
+        return (
+            true,
+            confidence_bonus,
+            "LIQUIDITY_ACCUMULATION",
+            accum_percent,
+        );
     }
     (false, 0.0, "", 0.0)
 }
@@ -2031,11 +1994,16 @@ struct TokenMarketSnapshot {
 async fn get_token_market_snapshot(mint: &str) -> Option<TokenMarketSnapshot> {
     let token = crate::tokens::get_token_from_db(mint).await?;
     let price_change_h24 = token.price_change.as_ref().and_then(|pc| pc.h24);
-    let (txns_h1_buys, txns_h1_sells) = token.txns
+    let (txns_h1_buys, txns_h1_sells) = token
+        .txns
         .as_ref()
         .and_then(|t| t.h1.as_ref().map(|p| (p.buys, p.sells)))
         .unwrap_or((None, None));
-    Some(TokenMarketSnapshot { price_change_h24, txns_h1_buys, txns_h1_sells })
+    Some(TokenMarketSnapshot {
+        price_change_h24,
+        txns_h1_buys,
+        txns_h1_sells,
+    })
 }
 
 /// Calculate enhanced drop magnitude score (balanced approach for various drop sizes)
@@ -2100,11 +2068,8 @@ fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
             "VELOCITY_CALC",
             &format!(
                 "Velocity calc: first={:.9}, last={:.9}, change={:.2}%/min over {:.1}min",
-                first,
-                last,
-                velocity_per_minute,
-                minutes
-            )
+                first, last, velocity_per_minute, minutes
+            ),
         );
     }
 
@@ -2114,7 +2079,7 @@ fn calculate_velocity(prices: &[f64], window_seconds: i64) -> f64 {
 // Simple best-drop detector over predefined windows
 fn detect_best_drop(
     price_history: &[(DateTime<Utc>, f64)],
-    current_price: f64
+    current_price: f64,
 ) -> Option<SimpleDropSignal> {
     let now = Utc::now();
     let mut best: Option<SimpleDropSignal> = None;
@@ -2180,7 +2145,7 @@ fn detect_best_drop(
 /// OPTIMIZED: Accept price_history to avoid redundant fetches
 pub async fn get_profit_target(
     price_info: &PriceResult,
-    price_history_opt: Option<&[(DateTime<Utc>, f64)]>
+    price_history_opt: Option<&[(DateTime<Utc>, f64)]>,
 ) -> (f64, f64) {
     let current_price_opt = Some(price_info.price_sol);
 
@@ -2208,11 +2173,10 @@ pub async fn get_profit_target(
             if prices_5min.len() >= 3 {
                 let high_5min = prices_5min.iter().fold(0.0f64, |a, b| a.max(*b));
                 let low_5min = prices_5min.iter().fold(f64::INFINITY, |a, b| a.min(*b));
-                if
-                    high_5min.is_finite() &&
-                    low_5min.is_finite() &&
-                    high_5min > 0.0 &&
-                    low_5min > 0.0
+                if high_5min.is_finite()
+                    && low_5min.is_finite()
+                    && high_5min > 0.0
+                    && low_5min > 0.0
                 {
                     let hl_range_5min = ((high_5min - low_5min) / high_5min) * 100.0;
                     let scale = (hl_range_5min / 50.0).clamp(0.0, 0.4); // Reduced scaling
@@ -2226,21 +2190,16 @@ pub async fn get_profit_target(
     // Micro-liquidity capitulation profit expansion (re-detect cheaply)
     let mut micro_mode = false;
     if let Some(hist) = price_history_opt {
-        if
-            let Some((drop_percent, _recent_high, _holders)) = detect_micro_liquidity_capitulation(
-                price_info,
-                hist
-            ).await
+        if let Some((drop_percent, _recent_high, _holders)) =
+            detect_micro_liquidity_capitulation(price_info, hist).await
         {
             micro_mode = true;
             // Elevate targets aggressively for high-upside rebound plays
             // Keep base min profit at least 40%, max 120%+ (subject to clamps below)
             min_profit = min_profit.max(40.0).min(80.0);
             // Scale max by severity
-            let severity_factor = ((drop_percent - MICRO_LIQ_MIN_DROP_PERCENT) / 5.0).clamp(
-                0.0,
-                1.0
-            );
+            let severity_factor =
+                ((drop_percent - MICRO_LIQ_MIN_DROP_PERCENT) / 5.0).clamp(0.0, 1.0);
             let desired_max = 110.0 + severity_factor * 40.0; // 110% .. 150%
             max_profit = max_profit.max(desired_max).min(200.0);
         }
@@ -2268,10 +2227,8 @@ pub async fn get_profit_target(
             "MICRO_LIQ_TARGETS",
             &format!(
                 "🎯 Micro-liq profit targets set: min {:.1}% max {:.1}% (sol_reserves {:.5})",
-                min_profit,
-                max_profit,
-                price_info.sol_reserves
-            )
+                min_profit, max_profit, price_info.sol_reserves
+            ),
         );
     }
 

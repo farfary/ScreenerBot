@@ -7,18 +7,14 @@
 ///
 /// Usage examples:
 /// cargo run --bin debug_entry_single_token -- --token <MINT> --duration 60 --interval 5 --debug-entry --debug-pool-service
-
 use clap::Parser;
 use screenerbot::arguments::set_cmd_args;
-use screenerbot::logger::{ log, LogTag };
+use screenerbot::logger::{log, LogTag};
 use screenerbot::pools::{
-    start_pool_service,
-    stop_pool_service,
-    set_debug_token_override,
-    get_pool_price,
+    get_pool_price, set_debug_token_override, start_pool_service, stop_pool_service,
 };
 use screenerbot::tokens::decimals::get_token_decimals_from_chain;
-use screenerbot::tokens::dexscreener::{ init_dexscreener_api };
+use screenerbot::tokens::dexscreener::init_dexscreener_api;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -82,17 +78,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     set_cmd_args(cmd_args.clone());
 
-    log(LogTag::Entry, "START", &format!("Starting entry test for token {}", args.token));
+    log(
+        LogTag::Entry,
+        "START",
+        &format!("Starting entry test for token {}", args.token),
+    );
 
     // Initialize external APIs used by discovery/fetchers
     if let Err(e) = init_dexscreener_api().await {
-        log(LogTag::Entry, "ERROR", &format!("DexScreener init failed: {}", e));
+        log(
+            LogTag::Entry,
+            "ERROR",
+            &format!("DexScreener init failed: {}", e),
+        );
     }
 
     // Ensure decimals are cached to allow any token math elsewhere if needed
     match get_token_decimals_from_chain(&args.token).await {
         Ok(dec) => log(LogTag::Entry, "INIT", &format!("Token decimals: {}", dec)),
-        Err(e) => log(LogTag::Entry, "WARN", &format!("Failed to fetch decimals: {}", e)),
+        Err(e) => log(
+            LogTag::Entry,
+            "WARN",
+            &format!("Failed to fetch decimals: {}", e),
+        ),
     }
 
     // Focus everything on our single token
@@ -100,7 +108,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Start pool service (single-pool mode for debug override)
     start_pool_service().await?;
-    log(LogTag::Entry, "READY", &format!("Pool service started, running for {}s", args.duration));
+    log(
+        LogTag::Entry,
+        "READY",
+        &format!("Pool service started, running for {}s", args.duration),
+    );
 
     // Periodic checks
     let mut tick = tokio::time::interval(std::time::Duration::from_secs(args.interval));
@@ -118,15 +130,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "ENTRY_TEST",
                 &format!(
                     "mint={} price={:.12} SOL should_buy={} conf={:.1}% reason={}",
-                    price.mint,
-                    price.price_sol,
-                    approved,
-                    confidence,
-                    reason
-                )
+                    price.mint, price.price_sol, approved, confidence, reason
+                ),
             );
         } else {
-            log(LogTag::Entry, "WAIT", "Price not yet available from pool service");
+            log(
+                LogTag::Entry,
+                "WAIT",
+                "Price not yet available from pool service",
+            );
         }
     }
 

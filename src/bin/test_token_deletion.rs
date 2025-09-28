@@ -1,5 +1,5 @@
 // Test token deletion functionality with foreign key constraints
-use screenerbot::logger::{ init_file_logging, log, LogTag };
+use screenerbot::logger::{init_file_logging, log, LogTag};
 use screenerbot::tokens::cache::TokenDatabase;
 use std::env;
 
@@ -10,7 +10,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         println!("Usage: {} <mint_address1> [mint_address2] ...", args[0]);
-        println!("Example: {} EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", args[0]);
+        println!(
+            "Example: {} EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            args[0]
+        );
         return Ok(());
     }
 
@@ -45,23 +48,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for mint in &test_mints {
         let liquidity_count: i64 = connection
-            .query_row("SELECT COUNT(*) FROM liquidity_tracking WHERE mint = ?", &[mint], |row|
-                row.get(0)
+            .query_row(
+                "SELECT COUNT(*) FROM liquidity_tracking WHERE mint = ?",
+                &[mint],
+                |row| row.get(0),
             )
             .unwrap_or(0);
 
         let route_failure_count: i64 = connection
-            .query_row("SELECT COUNT(*) FROM route_failure_tracking WHERE mint = ?", &[mint], |row|
-                row.get(0)
+            .query_row(
+                "SELECT COUNT(*) FROM route_failure_tracking WHERE mint = ?",
+                &[mint],
+                |row| row.get(0),
             )
             .unwrap_or(0);
 
         if liquidity_count > 0 || route_failure_count > 0 {
             println!(
                 "  {} has {} liquidity_tracking + {} route_failure_tracking records",
-                mint,
-                liquidity_count,
-                route_failure_count
+                mint, liquidity_count, route_failure_count
             );
         } else {
             println!("  {} has no foreign key references", mint);

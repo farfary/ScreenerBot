@@ -5,9 +5,8 @@
 /// - Query events by various criteria
 /// - View database statistics
 /// - Test event recording performance
-
-use screenerbot::events::{ self, Event, EventCategory, Severity };
-use screenerbot::logger::{ init_file_logging, log, LogTag };
+use screenerbot::events::{self, Event, EventCategory, Severity};
+use screenerbot::logger::{init_file_logging, log, LogTag};
 use serde_json::json;
 use std::time::Instant;
 
@@ -80,11 +79,12 @@ async fn test_event_recording() -> Result<(), Box<dyn std::error::Error>> {
         test_signature,
         test_mint,
         "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
-        1000000000, // 1 SOL
-        1000000, // 1 USDC (6 decimals)
+        1000000000,                                     // 1 SOL
+        1000000,                                        // 1 USDC (6 decimals)
         true,
-        None
-    ).await;
+        None,
+    )
+    .await;
 
     // Test pool event
     events::record_pool_event(
@@ -100,8 +100,9 @@ async fn test_event_recording() -> Result<(), Box<dyn std::error::Error>> {
                 "token_a": 1000000,
                 "token_b": 2000000
             }
-        })
-    ).await;
+        }),
+    )
+    .await;
 
     // Test position event
     events::record_position_event(
@@ -110,11 +111,12 @@ async fn test_event_recording() -> Result<(), Box<dyn std::error::Error>> {
         "opened",
         Some(test_signature),
         None,
-        1.5, // 1.5 SOL
+        1.5,     // 1.5 SOL
         1000000, // 1M tokens
         None,
-        None
-    ).await;
+        None,
+    )
+    .await;
 
     // Test entry signal event
     events::record_entry_event(
@@ -124,24 +126,24 @@ async fn test_event_recording() -> Result<(), Box<dyn std::error::Error>> {
         0.00001234, // Price in SOL
         "5m",
         0.85, // Signal strength
-        Some("Strong momentum with volume confirmation")
-    ).await;
+        Some("Strong momentum with volume confirmation"),
+    )
+    .await;
 
     // Test system event
     events::record_system_event(
         "trader",
         "started",
         Severity::Info,
-        Some(
-            json!({
+        Some(json!({
             "version": "1.0.0",
             "config": {
                 "dry_run": false,
                 "max_positions": 10
             }
-        })
-        )
-    ).await;
+        })),
+    )
+    .await;
 
     // Test token event
     events::record_token_event(
@@ -152,8 +154,9 @@ async fn test_event_recording() -> Result<(), Box<dyn std::error::Error>> {
             "reason": "suspicious_activity",
             "details": "Rapid mint authority changes detected",
             "analyzer": "security_scanner"
-        })
-    ).await;
+        }),
+    )
+    .await;
 
     // Test security event
     events::record_security_event(
@@ -166,8 +169,9 @@ async fn test_event_recording() -> Result<(), Box<dyn std::error::Error>> {
             "lp_locked": false,
             "holder_count": 1250,
             "risk_factors": ["freeze_authority_enabled", "lp_not_locked"]
-        })
-    ).await;
+        }),
+    )
+    .await;
 
     // Test error event
     let error_event = Event::error(
@@ -179,7 +183,7 @@ async fn test_event_recording() -> Result<(), Box<dyn std::error::Error>> {
             "account": test_pool,
             "error": "RPC timeout after 30s",
             "retry_count": 3
-        })
+        }),
     );
     events::record(error_event).await?;
 
@@ -203,7 +207,11 @@ async fn query_events(args: &[String]) -> Result<(), Box<dyn std::error::Error>>
 
     match args[0].as_str() {
         "recent" => {
-            let limit = if args.len() > 1 { args[1].parse().unwrap_or(20) } else { 20 };
+            let limit = if args.len() > 1 {
+                args[1].parse().unwrap_or(20)
+            } else {
+                20
+            };
             println!("📋 Recent {} events:", limit);
 
             let events = events::recent_all(limit).await?;
@@ -217,7 +225,11 @@ async fn query_events(args: &[String]) -> Result<(), Box<dyn std::error::Error>>
             }
 
             let category = EventCategory::from_string(&args[1]);
-            let limit = if args.len() > 2 { args[2].parse().unwrap_or(20) } else { 20 };
+            let limit = if args.len() > 2 {
+                args[2].parse().unwrap_or(20)
+            } else {
+                20
+            };
 
             println!("📋 Recent {} events in category '{}':", limit, args[1]);
             let events = events::recent(category, limit).await?;
@@ -230,7 +242,11 @@ async fn query_events(args: &[String]) -> Result<(), Box<dyn std::error::Error>>
                 return Ok(());
             }
 
-            let limit = if args.len() > 2 { args[2].parse().unwrap_or(20) } else { 20 };
+            let limit = if args.len() > 2 {
+                args[2].parse().unwrap_or(20)
+            } else {
+                20
+            };
 
             println!("📋 Recent {} events for mint {}:", limit, args[1]);
             let events = events::by_mint(&args[1], limit).await?;
@@ -243,7 +259,11 @@ async fn query_events(args: &[String]) -> Result<(), Box<dyn std::error::Error>>
                 return Ok(());
             }
 
-            let limit = if args.len() > 2 { args[2].parse().unwrap_or(20) } else { 20 };
+            let limit = if args.len() > 2 {
+                args[2].parse().unwrap_or(20)
+            } else {
+                20
+            };
 
             println!("📋 Recent {} events for reference {}:", limit, args[1]);
             let events = events::by_reference(&args[1], limit).await?;
@@ -315,7 +335,7 @@ async fn test_performance() -> Result<(), Box<dyn std::error::Error>> {
                 "test_id": i,
                 "batch": "performance_test",
                 "timestamp": chrono::Utc::now().to_rfc3339()
-            })
+            }),
         );
 
         events::record_safe(event).await;
@@ -323,7 +343,10 @@ async fn test_performance() -> Result<(), Box<dyn std::error::Error>> {
 
     let duration = start.elapsed();
     println!("✅ Recorded {} events in {:?}", test_count, duration);
-    println!("   Rate: {:.2} events/second", (test_count as f64) / duration.as_secs_f64());
+    println!(
+        "   Rate: {:.2} events/second",
+        (test_count as f64) / duration.as_secs_f64()
+    );
 
     // Wait for background processing
     println!("⏳ Waiting for background processing...");
@@ -333,7 +356,11 @@ async fn test_performance() -> Result<(), Box<dyn std::error::Error>> {
     let recent_events = events::recent_all(50).await?;
     let test_events = recent_events
         .iter()
-        .filter(|e| e.subtype.as_ref().map_or(false, |s| s == "performance_test"))
+        .filter(|e| {
+            e.subtype
+                .as_ref()
+                .map_or(false, |s| s == "performance_test")
+        })
         .count();
 
     println!("✅ Verified {} test events in database", test_events);

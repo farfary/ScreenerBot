@@ -1,7 +1,6 @@
 /// Comprehensive error handling system for ScreenerBot
 /// Replaces old ScreenerBotError with structured blockchain-aware error types
-
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 
 pub mod blockchain;
 pub use blockchain::*;
@@ -85,10 +84,21 @@ pub enum NetworkError {
 impl std::fmt::Display for NetworkError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            NetworkError::ConnectionTimeout { endpoint, timeout_ms } => {
-                write!(f, "Connection timeout to {} after {}ms", endpoint, timeout_ms)
+            NetworkError::ConnectionTimeout {
+                endpoint,
+                timeout_ms,
+            } => {
+                write!(
+                    f,
+                    "Connection timeout to {} after {}ms",
+                    endpoint, timeout_ms
+                )
             }
-            NetworkError::HttpStatusError { endpoint, status, body } => {
+            NetworkError::HttpStatusError {
+                endpoint,
+                status,
+                body,
+            } => {
                 write!(
                     f,
                     "HTTP {} from {}: {}",
@@ -135,10 +145,16 @@ pub enum RpcProviderError {
 impl std::fmt::Display for RpcProviderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RpcProviderError::ProviderDown { provider_name, since } => {
+            RpcProviderError::ProviderDown {
+                provider_name,
+                since,
+            } => {
                 write!(f, "Provider {} down since {}", provider_name, since)
             }
-            RpcProviderError::Generic { provider_name, message } => {
+            RpcProviderError::Generic {
+                provider_name,
+                message,
+            } => {
                 write!(f, "Provider {} error: {}", provider_name, message)
             }
             _ => write!(f, "{:?}", self),
@@ -152,30 +168,13 @@ impl std::fmt::Display for RpcProviderError {
 
 #[derive(Debug, Clone)]
 pub enum ConfigurationError {
-    InvalidConfig {
-        field: String,
-        reason: String,
-    },
-    MissingConfig {
-        field: String,
-    },
-    InvalidPrivateKey {
-        error: String,
-    },
-    InvalidWalletAddress {
-        address: String,
-        error: String,
-    },
-    InvalidUrl {
-        url: String,
-        error: String,
-    },
-    FileNotFound {
-        path: String,
-    },
-    Generic {
-        message: String,
-    },
+    InvalidConfig { field: String, reason: String },
+    MissingConfig { field: String },
+    InvalidPrivateKey { error: String },
+    InvalidWalletAddress { address: String, error: String },
+    InvalidUrl { url: String, error: String },
+    FileNotFound { path: String },
+    Generic { message: String },
 }
 
 impl std::fmt::Display for ConfigurationError {
@@ -267,12 +266,14 @@ pub enum PositionError {
 impl std::fmt::Display for PositionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PositionError::PositionNotFound { token_mint, signature } => {
+            PositionError::PositionNotFound {
+                token_mint,
+                signature,
+            } => {
                 write!(
                     f,
                     "Position not found for token {} with signature {}",
-                    token_mint,
-                    signature
+                    token_mint, signature
                 )
             }
             PositionError::Generic { message } => write!(f, "{}", message),
@@ -304,13 +305,15 @@ pub enum RateLimitError {
 impl std::fmt::Display for RateLimitError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RateLimitError::ExceededLimit { limit_type, current_rate, limit } => {
+            RateLimitError::ExceededLimit {
+                limit_type,
+                current_rate,
+                limit,
+            } => {
                 write!(
                     f,
                     "Rate limit exceeded for {}: {}/s > {}/s",
-                    limit_type,
-                    current_rate,
-                    limit
+                    limit_type, current_rate, limit
                 )
             }
             RateLimitError::Generic { message } => write!(f, "{}", message),

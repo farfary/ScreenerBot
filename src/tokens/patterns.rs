@@ -7,17 +7,15 @@
 ///
 /// The system dynamically identifies patterns without hardcoding, providing insights
 /// into token creation platforms and ecosystem relationships.
-
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::tokens::cache::TokenDatabase;
-use std::collections::HashMap;
-use std::sync::{ Arc, Mutex };
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 // Global pattern analyzer instance
-static PATTERN_ANALYZER: Lazy<Arc<Mutex<Option<TokenPatternAnalyzer>>>> = Lazy::new(||
-    Arc::new(Mutex::new(None))
-);
+static PATTERN_ANALYZER: Lazy<Arc<Mutex<Option<TokenPatternAnalyzer>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
 
 /// Minimum occurrence count for a pattern to be considered significant
 const MIN_PATTERN_OCCURRENCES: usize = 3;
@@ -85,18 +83,33 @@ impl TokenPatternAnalyzer {
     pub async fn analyze_patterns(&mut self) -> Result<(), String> {
         let start_time = std::time::Instant::now();
 
-        log(LogTag::Discovery, "START", "Starting dynamic token pattern analysis");
+        log(
+            LogTag::Discovery,
+            "START",
+            "Starting dynamic token pattern analysis",
+        );
 
         // Get all tokens from database
         let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
-        let tokens = db.get_all_tokens().await.map_err(|e| format!("Failed to get tokens: {}", e))?;
+        let tokens = db
+            .get_all_tokens()
+            .await
+            .map_err(|e| format!("Failed to get tokens: {}", e))?;
 
         if tokens.is_empty() {
-            log(LogTag::Discovery, "WARN", "No tokens found for pattern analysis");
+            log(
+                LogTag::Discovery,
+                "WARN",
+                "No tokens found for pattern analysis",
+            );
             return Ok(());
         }
 
-        log(LogTag::Discovery, "INFO", &format!("Analyzing patterns for {} tokens", tokens.len()));
+        log(
+            LogTag::Discovery,
+            "INFO",
+            &format!("Analyzing patterns for {} tokens", tokens.len()),
+        );
 
         // Clear previous analysis
         self.patterns.clear();
@@ -149,7 +162,7 @@ impl TokenPatternAnalyzer {
                 self.patterns.len(),
                 self.platforms.len(),
                 elapsed.as_millis()
-            )
+            ),
         );
 
         Ok(())
@@ -160,7 +173,7 @@ impl TokenPatternAnalyzer {
         &self,
         text: &str,
         suffixes: &mut HashMap<String, Vec<String>>,
-        prefixes: &mut HashMap<String, Vec<String>>
+        prefixes: &mut HashMap<String, Vec<String>>,
     ) {
         let clean_text = text.trim();
         if clean_text.chars().count() < MIN_PATTERN_LENGTH {
@@ -174,7 +187,10 @@ impl TokenPatternAnalyzer {
         for len in MIN_PATTERN_LENGTH..=MAX_PATTERN_LENGTH.min(char_count) {
             if len <= char_count {
                 let suffix: String = chars[char_count - len..].iter().collect();
-                suffixes.entry(suffix).or_insert_with(Vec::new).push(text.to_string());
+                suffixes
+                    .entry(suffix)
+                    .or_insert_with(Vec::new)
+                    .push(text.to_string());
             }
         }
 
@@ -182,7 +198,10 @@ impl TokenPatternAnalyzer {
         for len in MIN_PATTERN_LENGTH..=MAX_PATTERN_LENGTH.min(char_count) {
             if len <= char_count {
                 let prefix: String = chars[..len].iter().collect();
-                prefixes.entry(prefix).or_insert_with(Vec::new).push(text.to_string());
+                prefixes
+                    .entry(prefix)
+                    .or_insert_with(Vec::new)
+                    .push(text.to_string());
             }
         }
     }
@@ -191,16 +210,13 @@ impl TokenPatternAnalyzer {
     fn build_patterns(
         &mut self,
         pattern_map: HashMap<String, Vec<String>>,
-        pattern_type: PatternType
+        pattern_type: PatternType,
     ) {
         for (pattern, examples) in pattern_map {
             if examples.len() >= MIN_PATTERN_OCCURRENCES {
                 // Calculate confidence score based on frequency and pattern characteristics
-                let confidence = self.calculate_confidence_score(
-                    &pattern,
-                    examples.len(),
-                    &pattern_type
-                );
+                let confidence =
+                    self.calculate_confidence_score(&pattern, examples.len(), &pattern_type);
 
                 let token_pattern = TokenPattern {
                     pattern: pattern.clone(),
@@ -221,7 +237,7 @@ impl TokenPatternAnalyzer {
         &self,
         pattern: &str,
         count: usize,
-        pattern_type: &PatternType
+        pattern_type: &PatternType,
     ) -> f64 {
         let mut score = 0.0;
 
@@ -229,7 +245,10 @@ impl TokenPatternAnalyzer {
         score += (count as f64).ln() * 10.0;
 
         // Bonus for mint address patterns (more reliable for platform identification)
-        if matches!(pattern_type, PatternType::MintSuffix | PatternType::MintPrefix) {
+        if matches!(
+            pattern_type,
+            PatternType::MintSuffix | PatternType::MintPrefix
+        ) {
             score += 20.0;
         }
 
@@ -260,7 +279,7 @@ impl TokenPatternAnalyzer {
             ("Bonk Ecosystem", "bonk", PatternType::MintSuffix),
             ("Jupiter Ecosystem", "jups", PatternType::MintSuffix),
             ("BAGS Platform", "BAGS", PatternType::MintSuffix),
-            ("Moon Platform", "moon", PatternType::MintSuffix)
+            ("Moon Platform", "moon", PatternType::MintSuffix),
         ];
 
         for (platform_name, indicator, pattern_type) in platform_indicators {
@@ -279,13 +298,13 @@ impl TokenPatternAnalyzer {
 
         // Auto-detect additional platforms from high-confidence patterns
         for (key, pattern) in &self.patterns {
-            if
-                pattern.confidence_score > 60.0 &&
-                pattern.count > 50 &&
-                matches!(pattern.pattern_type, PatternType::MintSuffix)
+            if pattern.confidence_score > 60.0
+                && pattern.count > 50
+                && matches!(pattern.pattern_type, PatternType::MintSuffix)
             {
                 // Check if this pattern isn't already categorized
-                let already_categorized = self.platforms
+                let already_categorized = self
+                    .platforms
                     .values()
                     .any(|p| p.identification_pattern == pattern.pattern);
 
@@ -317,16 +336,14 @@ impl TokenPatternAnalyzer {
     /// Get pattern analysis summary
     pub fn get_analysis_summary(&self) -> PatternAnalysisSummary {
         let total_patterns = self.patterns.len();
-        let high_confidence_patterns = self.patterns
+        let high_confidence_patterns = self
+            .patterns
             .values()
             .filter(|p| p.confidence_score > 70.0)
             .count();
 
         let platform_count = self.platforms.len();
-        let total_categorized_tokens: usize = self.platforms
-            .values()
-            .map(|p| p.token_count)
-            .sum();
+        let total_categorized_tokens: usize = self.platforms.values().map(|p| p.token_count).sum();
 
         PatternAnalysisSummary {
             total_patterns,
@@ -343,7 +360,7 @@ impl TokenPatternAnalyzer {
         &self,
         mint: &str,
         name: &str,
-        symbol: &str
+        symbol: &str,
     ) -> Vec<TokenCategorization> {
         let mut categorizations = Vec::new();
 
@@ -360,13 +377,13 @@ impl TokenPatternAnalyzer {
 
             if matches {
                 // Check if this pattern corresponds to a known platform
-                let platform = self.platforms
+                let platform = self
+                    .platforms
                     .values()
-                    .find(
-                        |p|
-                            p.identification_pattern == pattern.pattern &&
-                            p.pattern_type == pattern.pattern_type
-                    )
+                    .find(|p| {
+                        p.identification_pattern == pattern.pattern
+                            && p.pattern_type == pattern.pattern_type
+                    })
                     .map(|p| p.platform_name.clone());
 
                 categorizations.push(TokenCategorization {
@@ -414,9 +431,8 @@ pub async fn initialize_pattern_analyzer() -> Result<(), String> {
 }
 
 /// Get the global pattern analyzer instance
-pub fn get_pattern_analyzer() -> Option<
-    std::sync::MutexGuard<'static, Option<TokenPatternAnalyzer>>
-> {
+pub fn get_pattern_analyzer() -> Option<std::sync::MutexGuard<'static, Option<TokenPatternAnalyzer>>>
+{
     PATTERN_ANALYZER.lock().ok()
 }
 
@@ -476,7 +492,7 @@ pub fn log_pattern_analysis_results() {
                         platform.platform_name,
                         platform.token_count,
                         platform.identification_pattern
-                    )
+                    ),
                 );
             }
         }

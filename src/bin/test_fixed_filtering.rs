@@ -1,6 +1,6 @@
 // Test the fixed security filtering logic
-use screenerbot::logger::init_file_logging;
 use screenerbot::filtering::get_filtered_tokens;
+use screenerbot::logger::init_file_logging;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -16,7 +16,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match get_filtered_tokens().await {
         Ok(filtered_tokens) => {
             println!("✅ Filtering successful!");
-            println!("📊 Total tokens passed filtering: {}", filtered_tokens.len());
+            println!(
+                "📊 Total tokens passed filtering: {}",
+                filtered_tokens.len()
+            );
 
             if filtered_tokens.len() > 100 {
                 println!("🎉 SUCCESS: Significantly more tokens now available!");

@@ -5,9 +5,8 @@
 /// - Determining token pair orientation (TOKEN/SOL vs SOL/TOKEN)
 /// - Pairing vaults correctly based on mint types
 /// - Handling all possible base/quote token combinations
-
 use crate::global::is_debug_pool_service_enabled;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 
@@ -50,7 +49,11 @@ impl TokenPairInfo {
     /// Create a new TokenPairInfo for invalid pairs (non-SOL)
     pub fn invalid(reason: String) -> Self {
         if is_debug_pool_service_enabled() {
-            log(LogTag::PoolService, "DEBUG", &format!("Invalid token pair: {}", reason));
+            log(
+                LogTag::PoolService,
+                "DEBUG",
+                &format!("Invalid token pair: {}", reason),
+            );
         }
 
         Self {
@@ -76,7 +79,11 @@ pub fn is_stablecoin_mint(mint: &str) -> bool {
 
 /// Normalize SOL mint to wrapped SOL format
 pub fn normalize_sol_mint(mint: &str) -> String {
-    if is_sol_mint(mint) { WRAPPED_SOL_MINT.to_string() } else { mint.to_string() }
+    if is_sol_mint(mint) {
+        WRAPPED_SOL_MINT.to_string()
+    } else {
+        mint.to_string()
+    }
 }
 
 /// Determine if a token pair is SOL-based and extract the correct token/vault pairing
@@ -104,7 +111,7 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
                 &mint2[..8],
                 &vault1[..8],
                 &vault2[..8]
-            )
+            ),
         );
     }
 
@@ -141,9 +148,11 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
         )
     } else {
         // Neither mint is SOL - not a SOL-based pair
-        return TokenPairInfo::invalid(
-            format!("No SOL mint found: mint1={}, mint2={}", &mint1[..8], &mint2[..8])
-        );
+        return TokenPairInfo::invalid(format!(
+            "No SOL mint found: mint1={}, mint2={}",
+            &mint1[..8],
+            &mint2[..8]
+        ));
     };
 
     if is_debug_pool_service_enabled() {
@@ -156,7 +165,7 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
                 sol_is_first,
                 &token_vault[..8],
                 &sol_vault[..8]
-            )
+            ),
         );
     }
 
@@ -178,7 +187,7 @@ pub fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo
             log(
                 LogTag::PoolService,
                 "ERROR",
-                &format!("PumpFun pool data too short: {} bytes", data.len())
+                &format!("PumpFun pool data too short: {} bytes", data.len()),
             );
         }
         return None;
@@ -188,7 +197,7 @@ pub fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo
         log(
             LogTag::PoolService,
             "DEBUG",
-            &format!("Extracting PumpFun pool data ({} bytes)", data.len())
+            &format!("Extracting PumpFun pool data ({} bytes)", data.len()),
         );
     }
 
@@ -217,7 +226,7 @@ pub fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo
                 &mint2[..8],
                 &vault1[..8],
                 &vault2[..8]
-            )
+            ),
         );
     }
 
@@ -235,14 +244,20 @@ pub fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo
 /// Read a pubkey from data at given offset, advancing the offset
 pub fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, String> {
     if *offset + 32 > data.len() {
-        return Err(format!("Offset {} + 32 exceeds data length {}", *offset, data.len()));
+        return Err(format!(
+            "Offset {} + 32 exceeds data length {}",
+            *offset,
+            data.len()
+        ));
     }
 
     let pubkey_bytes = &data[*offset..*offset + 32];
     *offset += 32;
 
     let pubkey = Pubkey::new_from_array(
-        pubkey_bytes.try_into().map_err(|_| "Invalid pubkey bytes".to_string())?
+        pubkey_bytes
+            .try_into()
+            .map_err(|_| "Invalid pubkey bytes".to_string())?,
     );
 
     Ok(pubkey.to_string())
@@ -260,7 +275,7 @@ pub fn read_pubkey_at(data: &[u8], offset: usize) -> Option<String> {
 /// Read a pubkey as Pubkey struct from data at given offset, advancing the offset
 pub fn read_pubkey_struct_at_offset(
     data: &[u8],
-    offset: &mut usize
+    offset: &mut usize,
 ) -> Result<Pubkey, &'static str> {
     if data.len() < *offset + 32 {
         return Err("Insufficient data for pubkey");
@@ -290,7 +305,9 @@ pub fn read_u16_at_offset(data: &[u8], offset: &mut usize) -> Result<u16, String
     let value_bytes = &data[*offset..*offset + 2];
     *offset += 2;
     let value = u16::from_le_bytes(
-        value_bytes.try_into().map_err(|_| "Failed to parse u16".to_string())?
+        value_bytes
+            .try_into()
+            .map_err(|_| "Failed to parse u16".to_string())?,
     );
     Ok(value)
 }
@@ -304,7 +321,9 @@ pub fn read_u32_at_offset(data: &[u8], offset: &mut usize) -> Result<u32, String
     let value_bytes = &data[*offset..*offset + 4];
     *offset += 4;
     let value = u32::from_le_bytes(
-        value_bytes.try_into().map_err(|_| "Failed to parse u32".to_string())?
+        value_bytes
+            .try_into()
+            .map_err(|_| "Failed to parse u32".to_string())?,
     );
     Ok(value)
 }
@@ -318,7 +337,9 @@ pub fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, String
     let value_bytes = &data[*offset..*offset + 8];
     *offset += 8;
     let value = u64::from_le_bytes(
-        value_bytes.try_into().map_err(|_| "Failed to parse u64".to_string())?
+        value_bytes
+            .try_into()
+            .map_err(|_| "Failed to parse u64".to_string())?,
     );
     Ok(value)
 }
@@ -332,7 +353,9 @@ pub fn read_u128_at_offset(data: &[u8], offset: &mut usize) -> Result<u128, Stri
     let value_bytes = &data[*offset..*offset + 16];
     *offset += 16;
     let value = u128::from_le_bytes(
-        value_bytes.try_into().map_err(|_| "Failed to parse u128".to_string())?
+        value_bytes
+            .try_into()
+            .map_err(|_| "Failed to parse u128".to_string())?,
     );
     Ok(value)
 }

@@ -1,27 +1,26 @@
+use super::types::PoolDescriptor;
+use super::utils::is_sol_mint;
+use crate::arguments::is_debug_pool_fetcher_enabled;
+use crate::events::{record_safe, Event, EventCategory, Severity};
 /// Account fetcher module
 ///
 /// This module handles efficient batched fetching of pool account data from RPC.
 /// It optimizes RPC usage by batching requests and managing rate limits.
-
 use crate::global::is_debug_pool_service_enabled;
-use crate::arguments::is_debug_pool_fetcher_enabled;
-use crate::logger::{ log, LogTag };
-use crate::rpc::{ get_rpc_client, RpcClient };
-use crate::events::{ record_safe, Event, EventCategory, Severity };
-use super::types::PoolDescriptor;
+use crate::logger::{log, LogTag};
 use crate::pools::service; // access global calculator
-use super::utils::is_sol_mint;
-use solana_sdk::{ account::Account, pubkey::Pubkey };
-use std::collections::{ HashMap, HashSet };
-use std::sync::{ Arc, RwLock };
+use crate::rpc::{get_rpc_client, RpcClient};
+use solana_sdk::{account::Account, pubkey::Pubkey};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
-use tokio::sync::{ mpsc, Notify };
+use tokio::sync::{mpsc, Notify};
 
 /// Constants for batch processing
 const ACCOUNT_BATCH_SIZE: usize = 50; // Optimal batch size for RPC calls
 const FETCH_INTERVAL_MS: u64 = 500; // Fetch every 1 second
 const ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 30; // Default stale threshold for inactive tokens
-// Faster refresh threshold for pools backing currently open positions (tighter P&L responsiveness)
+                                                 // Faster refresh threshold for pools backing currently open positions (tighter P&L responsiveness)
 const OPEN_POSITION_ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 5;
 
 /// Message types for fetcher communication
@@ -33,9 +32,7 @@ pub enum FetcherMessage {
         accounts: Vec<Pubkey>,
     },
     /// Request to fetch specific accounts
-    FetchAccounts {
-        accounts: Vec<Pubkey>,
-    },
+    FetchAccounts { accounts: Vec<Pubkey> },
     /// Signal shutdown
     Shutdown,
 }
@@ -105,7 +102,9 @@ impl PoolAccountBundle {
 
     /// Check if bundle is complete (has all required accounts)
     pub fn is_complete(&self, required_accounts: &[Pubkey]) -> bool {
-        required_accounts.iter().all(|key| self.accounts.contains_key(key))
+        required_accounts
+            .iter()
+            .all(|key| self.accounts.contains_key(key))
     }
 
     /// Check if bundle is complete and calculation not yet requested
@@ -144,7 +143,7 @@ impl AccountFetcher {
     /// Create new account fetcher
     pub fn new(
         rpc_client: Arc<RpcClient>,
-        pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>
+        pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
     ) -> Self {
         let (fetcher_tx, fetcher_rx) = mpsc::unbounded_channel();
 
@@ -186,9 +185,8 @@ impl AccountFetcher {
         };
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(
-                tokio::time::Duration::from_millis(FETCH_INTERVAL_MS)
-            );
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_millis(FETCH_INTERVAL_MS));
             let mut pending_accounts: HashSet<Pubkey> = HashSet::new();
 
             if is_debug_pool_fetcher_enabled() {
@@ -267,7 +265,11 @@ impl AccountFetcher {
             }
 
             if is_debug_pool_fetcher_enabled() {
-                log(LogTag::PoolFetcher, "INFO", "Account fetcher task completed");
+                log(
+                    LogTag::PoolFetcher,
+                    "INFO",
+                    "Account fetcher task completed",
+                );
             }
         });
     }
@@ -276,7 +278,7 @@ impl AccountFetcher {
     async fn add_stale_accounts_to_pending(
         pool_directory: &Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
         account_last_fetch: &Arc<RwLock<HashMap<Pubkey, Instant>>>,
-        pending_accounts: &mut HashSet<Pubkey>
+        pending_accounts: &mut HashSet<Pubkey>,
     ) {
         // Snapshot pools & last fetch times under locks (minimize lock duration)
         let (pools, last_fetch_map) = {
@@ -287,10 +289,11 @@ impl AccountFetcher {
         };
 
         // Collect open position mints once (async call) to avoid per-pool await cost
-        let open_mints: std::collections::HashSet<String> = crate::positions::state
-            ::get_open_mints().await
-            .into_iter()
-            .collect();
+        let open_mints: std::collections::HashSet<String> =
+            crate::positions::state::get_open_mints()
+                .await
+                .into_iter()
+                .collect();
 
         for pool in pools {
             // Determine the tracked (non-SOL) token mint for this pool
@@ -325,7 +328,7 @@ impl AccountFetcher {
         pool_directory: &Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
         account_bundles: &Arc<RwLock<HashMap<Pubkey, PoolAccountBundle>>>,
         account_last_fetch: &Arc<RwLock<HashMap<Pubkey, Instant>>>,
-        pending_accounts: &mut HashSet<Pubkey>
+        pending_accounts: &mut HashSet<Pubkey>,
     ) {
         if pending_accounts.is_empty() {
             return;
@@ -338,7 +341,7 @@ impl AccountFetcher {
             log(
                 LogTag::PoolFetcher,
                 "INFO",
-                &format!("Processing {} pending accounts", accounts_to_fetch.len())
+                &format!("Processing {} pending accounts", accounts_to_fetch.len()),
             );
         }
 
@@ -346,38 +349,36 @@ impl AccountFetcher {
         for batch in accounts_to_fetch.chunks(ACCOUNT_BATCH_SIZE) {
             let batch_start = Instant::now();
 
-            record_safe(
-                Event::info(
-                    EventCategory::Pool,
-                    Some("rpc_batch_started".to_string()),
-                    None,
-                    None,
-                    serde_json::json!({
+            record_safe(Event::info(
+                EventCategory::Pool,
+                Some("rpc_batch_started".to_string()),
+                None,
+                None,
+                serde_json::json!({
                     "batch_size": batch.len(),
                     "max_batch_size": ACCOUNT_BATCH_SIZE,
                     "accounts": batch.iter().map(|p| p.to_string()).collect::<Vec<_>>()
-                })
-                )
-            ).await;
+                }),
+            ))
+            .await;
 
             match Self::fetch_account_batch(rpc_client, batch).await {
                 Ok(account_data_list) => {
                     let batch_duration = batch_start.elapsed();
 
-                    record_safe(
-                        Event::info(
-                            EventCategory::Pool,
-                            Some("rpc_batch_completed".to_string()),
-                            None,
-                            None,
-                            serde_json::json!({
+                    record_safe(Event::info(
+                        EventCategory::Pool,
+                        Some("rpc_batch_completed".to_string()),
+                        None,
+                        None,
+                        serde_json::json!({
                             "batch_size": batch.len(),
                             "accounts_fetched": account_data_list.len(),
                             "duration_ms": batch_duration.as_millis(),
                             "success": true
-                        })
-                        )
-                    ).await;
+                        }),
+                    ))
+                    .await;
 
                     // Update last fetch times
                     {
@@ -391,14 +392,15 @@ impl AccountFetcher {
                     Self::organize_accounts_into_bundles(
                         &account_data_list,
                         pool_directory,
-                        account_bundles
-                    ).await;
+                        account_bundles,
+                    )
+                    .await;
 
                     if is_debug_pool_fetcher_enabled() {
                         log(
                             LogTag::PoolFetcher,
                             "SUCCESS",
-                            &format!("Successfully fetched {} accounts", account_data_list.len())
+                            &format!("Successfully fetched {} accounts", account_data_list.len()),
                         );
                     }
                 }
@@ -408,23 +410,22 @@ impl AccountFetcher {
                     log(
                         LogTag::PoolFetcher,
                         "ERROR",
-                        &format!("Failed to fetch account batch: {}", e)
+                        &format!("Failed to fetch account batch: {}", e),
                     );
 
-                    record_safe(
-                        Event::error(
-                            EventCategory::Pool,
-                            Some("rpc_batch_failed".to_string()),
-                            None,
-                            None,
-                            serde_json::json!({
+                    record_safe(Event::error(
+                        EventCategory::Pool,
+                        Some("rpc_batch_failed".to_string()),
+                        None,
+                        None,
+                        serde_json::json!({
                             "batch_size": batch.len(),
                             "error": e,
                             "duration_ms": batch_duration.as_millis(),
                             "accounts": batch.iter().map(|p| p.to_string()).collect::<Vec<_>>()
-                        })
-                        )
-                    ).await;
+                        }),
+                    ))
+                    .await;
                 }
             }
 
@@ -436,7 +437,7 @@ impl AccountFetcher {
     /// Fetch a batch of accounts
     async fn fetch_account_batch(
         rpc_client: &Arc<RpcClient>,
-        accounts: &[Pubkey]
+        accounts: &[Pubkey],
     ) -> Result<Vec<AccountData>, String> {
         if accounts.is_empty() {
             return Ok(Vec::new());
@@ -446,7 +447,7 @@ impl AccountFetcher {
             log(
                 LogTag::PoolFetcher,
                 "DEBUG",
-                &format!("Fetching batch of {} accounts", accounts.len())
+                &format!("Fetching batch of {} accounts", accounts.len()),
             );
         }
 
@@ -456,39 +457,37 @@ impl AccountFetcher {
             Ok(results) => {
                 let rpc_duration = rpc_start.elapsed();
 
-                record_safe(
-                    Event::info(
-                        EventCategory::Rpc,
-                        Some("get_multiple_accounts_success".to_string()),
-                        None,
-                        None,
-                        serde_json::json!({
+                record_safe(Event::info(
+                    EventCategory::Rpc,
+                    Some("get_multiple_accounts_success".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
                         "account_count": accounts.len(),
                         "duration_ms": rpc_duration.as_millis(),
                         "success": true
-                    })
-                    )
-                ).await;
+                    }),
+                ))
+                .await;
 
                 results
             }
             Err(e) => {
                 let rpc_duration = rpc_start.elapsed();
 
-                record_safe(
-                    Event::error(
-                        EventCategory::Rpc,
-                        Some("get_multiple_accounts_failed".to_string()),
-                        None,
-                        None,
-                        serde_json::json!({
+                record_safe(Event::error(
+                    EventCategory::Rpc,
+                    Some("get_multiple_accounts_failed".to_string()),
+                    None,
+                    None,
+                    serde_json::json!({
                         "account_count": accounts.len(),
                         "error": e.to_string(),
                         "duration_ms": rpc_duration.as_millis(),
                         "accounts": accounts.iter().map(|p| p.to_string()).collect::<Vec<_>>()
-                    })
-                    )
-                ).await;
+                    }),
+                ))
+                .await;
 
                 return Err(e);
             }
@@ -507,26 +506,25 @@ impl AccountFetcher {
                     log(
                         LogTag::PoolFetcher,
                         "WARN",
-                        &format!("Account not found: {}", accounts[i])
+                        &format!("Account not found: {}", accounts[i]),
                     );
                 }
             }
         }
 
         if !missing_accounts.is_empty() {
-            record_safe(
-                Event::warn(
-                    EventCategory::Pool,
-                    Some("accounts_not_found".to_string()),
-                    None,
-                    None,
-                    serde_json::json!({
+            record_safe(Event::warn(
+                EventCategory::Pool,
+                Some("accounts_not_found".to_string()),
+                None,
+                None,
+                serde_json::json!({
                     "missing_count": missing_accounts.len(),
                     "total_requested": accounts.len(),
                     "missing_accounts": missing_accounts
-                })
-                )
-            ).await;
+                }),
+            ))
+            .await;
         }
 
         Ok(account_data_list)
@@ -539,7 +537,7 @@ impl AccountFetcher {
     async fn organize_accounts_into_bundles(
         account_data_list: &[AccountData],
         pool_directory: &Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
-        account_bundles: &Arc<RwLock<HashMap<Pubkey, PoolAccountBundle>>>
+        account_bundles: &Arc<RwLock<HashMap<Pubkey, PoolAccountBundle>>>,
     ) {
         let pools = {
             let directory = pool_directory.read().unwrap();
@@ -551,7 +549,10 @@ impl AccountFetcher {
         // For each account, find which pools it belongs to
         for account_data in account_data_list {
             for (pool_id, pool_descriptor) in &pools {
-                if pool_descriptor.reserve_accounts.contains(&account_data.pubkey) {
+                if pool_descriptor
+                    .reserve_accounts
+                    .contains(&account_data.pubkey)
+                {
                     let bundle = bundles
                         .entry(*pool_id)
                         .or_insert_with(|| PoolAccountBundle::new(*pool_id));
@@ -579,10 +580,8 @@ impl AccountFetcher {
                             "DEBUG",
                             &format!(
                                 "Added account {} to bundle for token {} in pool {}",
-                                account_data.pubkey,
-                                target_token,
-                                pool_id
-                            )
+                                account_data.pubkey, target_token, pool_id
+                            ),
                         );
                     }
 
@@ -591,13 +590,11 @@ impl AccountFetcher {
                         bundle.mark_calculation_requested();
 
                         if let Some(calculator) = service::get_price_calculator() {
-                            if
-                                let Err(e) = calculator.request_calculation(
-                                    *pool_id,
-                                    pool_descriptor.clone(),
-                                    bundle.clone()
-                                )
-                            {
+                            if let Err(e) = calculator.request_calculation(
+                                *pool_id,
+                                pool_descriptor.clone(),
+                                bundle.clone(),
+                            ) {
                                 log(
                                     LogTag::PoolFetcher,
                                     "WARN",
@@ -610,16 +607,15 @@ impl AccountFetcher {
                                         },
                                         pool_id,
                                         e
-                                    )
+                                    ),
                                 );
                             } else if is_debug_pool_fetcher_enabled() {
-                                let target_token = if
-                                    is_sol_mint(&pool_descriptor.base_mint.to_string())
-                                {
-                                    pool_descriptor.quote_mint
-                                } else {
-                                    pool_descriptor.base_mint
-                                };
+                                let target_token =
+                                    if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
+                                        pool_descriptor.quote_mint
+                                    } else {
+                                        pool_descriptor.base_mint
+                                    };
                                 log(
                                     LogTag::PoolFetcher,
                                     "INFO",
@@ -640,14 +636,18 @@ impl AccountFetcher {
     /// Public interface: Request fetching of accounts for a pool
     pub fn request_pool_fetch(&self, pool_id: Pubkey, accounts: Vec<Pubkey>) -> Result<(), String> {
         let message = FetcherMessage::FetchPool { pool_id, accounts };
-        self.fetcher_tx.send(message).map_err(|e| format!("Failed to send fetch request: {}", e))?;
+        self.fetcher_tx
+            .send(message)
+            .map_err(|e| format!("Failed to send fetch request: {}", e))?;
         Ok(())
     }
 
     /// Public interface: Request fetching of specific accounts
     pub fn request_accounts_fetch(&self, accounts: Vec<Pubkey>) -> Result<(), String> {
         let message = FetcherMessage::FetchAccounts { accounts };
-        self.fetcher_tx.send(message).map_err(|e| format!("Failed to send fetch request: {}", e))?;
+        self.fetcher_tx
+            .send(message)
+            .map_err(|e| format!("Failed to send fetch request: {}", e))?;
         Ok(())
     }
 
@@ -683,7 +683,7 @@ impl AccountFetcher {
                 log(
                     LogTag::PoolFetcher,
                     "DEBUG",
-                    &format!("Removing stale bundle for pool: {}", pool_id)
+                    &format!("Removing stale bundle for pool: {}", pool_id),
                 );
             }
             should_keep
@@ -698,10 +698,7 @@ impl AccountFetcher {
         FetchStats {
             total_bundles: bundles.len(),
             total_accounts_tracked: last_fetch.len(),
-            bundles_with_data: bundles
-                .values()
-                .filter(|b| !b.accounts.is_empty())
-                .count(),
+            bundles_with_data: bundles.values().filter(|b| !b.accounts.is_empty()).count(),
         }
     }
 }

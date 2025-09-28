@@ -1,31 +1,34 @@
-use crate::{ utils::safe_truncate, logger::{ log, LogTag }, arguments::is_debug_positions_enabled };
 use super::types::Position;
-use chrono::{ DateTime, Utc };
-use std::{ collections::HashMap, sync::{ Arc, LazyLock } };
-use tokio::sync::{ Mutex, OwnedMutexGuard, RwLock };
+use crate::{
+    arguments::is_debug_positions_enabled,
+    logger::{log, LogTag},
+    utils::safe_truncate,
+};
+use chrono::{DateTime, Utc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, LazyLock},
+};
+use tokio::sync::{Mutex, OwnedMutexGuard, RwLock};
 
 // Global state containers
 pub static POSITIONS: LazyLock<RwLock<Vec<Position>>> = LazyLock::new(|| RwLock::new(Vec::new()));
 
 // Constant-time indexes
-pub static SIG_TO_MINT_INDEX: LazyLock<RwLock<HashMap<String, String>>> = LazyLock::new(||
-    RwLock::new(HashMap::new())
-);
+pub static SIG_TO_MINT_INDEX: LazyLock<RwLock<HashMap<String, String>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
-pub static MINT_TO_POSITION_INDEX: LazyLock<RwLock<HashMap<String, usize>>> = LazyLock::new(||
-    RwLock::new(HashMap::new())
-);
+pub static MINT_TO_POSITION_INDEX: LazyLock<RwLock<HashMap<String, usize>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 // Per-position locks
-static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> = LazyLock::new(||
-    RwLock::new(HashMap::new())
-);
+static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 // Pending open-swap registry: guards against duplicate opens when the first swap lands on-chain
 // but local flow fails before persisting a position. Keys are token mints; values are expiry times.
-static PENDING_OPEN_SWAPS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> = LazyLock::new(||
-    RwLock::new(HashMap::new())
-);
+static PENDING_OPEN_SWAPS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 // Global position creation semaphore to enforce MAX_OPEN_POSITIONS atomically
 static GLOBAL_POSITION_SEMAPHORE: LazyLock<tokio::sync::Semaphore> = LazyLock::new(|| {
@@ -34,9 +37,8 @@ static GLOBAL_POSITION_SEMAPHORE: LazyLock<tokio::sync::Semaphore> = LazyLock::n
 });
 
 // Optional: global last open timestamp (cooldown)
-pub static LAST_OPEN_TIME: LazyLock<RwLock<Option<DateTime<Utc>>>> = LazyLock::new(||
-    RwLock::new(None)
-);
+pub static LAST_OPEN_TIME: LazyLock<RwLock<Option<DateTime<Utc>>>> =
+    LazyLock::new(|| RwLock::new(None));
 
 // Cooldown seconds (small to mitigate duplicate bursts; align with previous backup constant 5s)
 pub const POSITION_OPEN_COOLDOWN_SECS: i64 = 5;
@@ -57,7 +59,10 @@ impl Drop for PositionLockGuard {
             log(
                 LogTag::Positions,
                 "DEBUG",
-                &format!("🔓 Released position lock for mint: {}", safe_truncate(&self.mint, 8))
+                &format!(
+                    "🔓 Released position lock for mint: {}",
+                    safe_truncate(&self.mint, 8)
+                ),
             );
         }
     }
@@ -90,7 +95,10 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
         log(
             LogTag::Positions,
             "DEBUG",
-            &format!("🔒 Acquired position lock for mint: {}", safe_truncate(&mint_key, 8))
+            &format!(
+                "🔒 Acquired position lock for mint: {}",
+                safe_truncate(&mint_key, 8)
+            ),
         );
     }
 
@@ -102,10 +110,8 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
 
 /// Acquire a global position creation permit to enforce MAX_OPEN_POSITIONS atomically
 /// This must be called BEFORE any position creation to prevent race conditions
-pub async fn acquire_global_position_permit() -> Result<
-    tokio::sync::SemaphorePermit<'static>,
-    String
-> {
+pub async fn acquire_global_position_permit(
+) -> Result<tokio::sync::SemaphorePermit<'static>, String> {
     match GLOBAL_POSITION_SEMAPHORE.try_acquire() {
         Ok(permit) => {
             if is_debug_positions_enabled() {
@@ -115,14 +121,17 @@ pub async fn acquire_global_position_permit() -> Result<
                     &format!(
                         "🟢 Acquired global position permit (available: {})",
                         GLOBAL_POSITION_SEMAPHORE.available_permits()
-                    )
+                    ),
                 );
             }
             Ok(permit)
         }
         Err(_) => {
             let available = GLOBAL_POSITION_SEMAPHORE.available_permits();
-            Err(format!("No position slots available (permits: {})", available))
+            Err(format!(
+                "No position slots available (permits: {})",
+                available
+            ))
         }
     }
 }
@@ -138,7 +147,7 @@ pub fn release_global_position_permit() {
             &format!(
                 "🔴 Released global position permit (available: {})",
                 GLOBAL_POSITION_SEMAPHORE.available_permits()
-            )
+            ),
         );
     }
 }
@@ -151,12 +160,21 @@ pub async fn add_position(position: Position) -> usize {
 
     // Update indexes
     if let Some(ref sig) = position.entry_transaction_signature {
-        SIG_TO_MINT_INDEX.write().await.insert(sig.clone(), position.mint.clone());
+        SIG_TO_MINT_INDEX
+            .write()
+            .await
+            .insert(sig.clone(), position.mint.clone());
     }
     if let Some(ref sig) = position.exit_transaction_signature {
-        SIG_TO_MINT_INDEX.write().await.insert(sig.clone(), position.mint.clone());
+        SIG_TO_MINT_INDEX
+            .write()
+            .await
+            .insert(sig.clone(), position.mint.clone());
     }
-    MINT_TO_POSITION_INDEX.write().await.insert(position.mint.clone(), index);
+    MINT_TO_POSITION_INDEX
+        .write()
+        .await
+        .insert(position.mint.clone(), index);
 
     // Clear any pending-open flag for this mint now that the position exists
     {
@@ -165,7 +183,10 @@ pub async fn add_position(position: Position) -> usize {
             log(
                 LogTag::Positions,
                 "DEBUG",
-                &format!("🧹 Cleared pending-open after position add for mint: {}", &position.mint)
+                &format!(
+                    "🧹 Cleared pending-open after position add for mint: {}",
+                    &position.mint
+                ),
             );
         }
     }
@@ -207,7 +228,10 @@ pub async fn remove_position(mint: &str) -> Option<Position> {
                 log(
                     LogTag::Positions,
                     "DEBUG",
-                    &format!("🧹 Cleared pending-open on removal for mint: {}", &removed.mint)
+                    &format!(
+                        "🧹 Cleared pending-open on removal for mint: {}",
+                        &removed.mint
+                    ),
                 );
             }
         }
@@ -234,10 +258,7 @@ async fn rebuild_position_indexes(positions: &[Position]) {
 /// Get position by mint
 pub async fn get_position_by_mint(mint: &str) -> Option<Position> {
     let positions = POSITIONS.read().await;
-    positions
-        .iter()
-        .find(|p| p.mint == mint)
-        .cloned()
+    positions.iter().find(|p| p.mint == mint).cloned()
 }
 
 /// Get all open positions
@@ -246,9 +267,9 @@ pub async fn get_open_positions() -> Vec<Position> {
     positions
         .iter()
         .filter(|p| {
-            p.position_type == "buy" &&
-                p.exit_time.is_none() &&
-                (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
+            p.position_type == "buy"
+                && p.exit_time.is_none()
+                && (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
         })
         .cloned()
         .collect()
@@ -274,16 +295,12 @@ pub async fn is_open_position(mint: &str) -> bool {
     // Check existing open position first
     {
         let positions = POSITIONS.read().await;
-        if
-            positions
-                .iter()
-                .any(|p| {
-                    p.mint == mint &&
-                        p.position_type == "buy" &&
-                        p.exit_time.is_none() &&
-                        (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
-                })
-        {
+        if positions.iter().any(|p| {
+            p.mint == mint
+                && p.position_type == "buy"
+                && p.exit_time.is_none()
+                && (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
+        }) {
             return true;
         }
     }
@@ -310,7 +327,7 @@ pub async fn is_open_position(mint: &str) -> bool {
                     log(
                         LogTag::Positions,
                         "DEBUG",
-                        &format!("⏳ Pending-open expired for mint: {}", m)
+                        &format!("⏳ Pending-open expired for mint: {}", m),
                     );
                 }
             }
@@ -321,7 +338,10 @@ pub async fn is_open_position(mint: &str) -> bool {
                 log(
                     LogTag::Positions,
                     "DEBUG",
-                    &format!("🚫 is_open_position pending-open lock active for mint: {}", mint)
+                    &format!(
+                        "🚫 is_open_position pending-open lock active for mint: {}",
+                        mint
+                    ),
                 );
             }
             return true;
@@ -333,7 +353,8 @@ pub async fn is_open_position(mint: &str) -> bool {
 
 /// Get list of open position mints
 pub async fn get_open_mints() -> Vec<String> {
-    get_open_positions().await
+    get_open_positions()
+        .await
         .iter()
         .map(|p| p.mint.clone())
         .collect()
@@ -353,7 +374,10 @@ pub async fn get_mint_by_signature(signature: &str) -> Option<String> {
 
 /// Add signature to index
 pub async fn add_signature_to_index(signature: &str, mint: &str) {
-    SIG_TO_MINT_INDEX.write().await.insert(signature.to_string(), mint.to_string());
+    SIG_TO_MINT_INDEX
+        .write()
+        .await
+        .insert(signature.to_string(), mint.to_string());
 }
 
 /// Remove signature from index (used when clearing failed exit for retry)
@@ -372,10 +396,8 @@ pub async fn set_pending_open(mint: &str, ttl_secs: i64) {
             "DEBUG",
             &format!(
                 "⏳ Set pending-open for mint: {} (ttl {}s, until {})",
-                mint,
-                ttl_secs,
-                expires_at
-            )
+                mint, ttl_secs, expires_at
+            ),
         );
     }
 }
@@ -384,7 +406,11 @@ pub async fn set_pending_open(mint: &str, ttl_secs: i64) {
 pub async fn clear_pending_open(mint: &str) {
     let mut pending = PENDING_OPEN_SWAPS.write().await;
     if pending.remove(mint).is_some() && is_debug_positions_enabled() {
-        log(LogTag::Positions, "DEBUG", &format!("🧹 Cleared pending-open for mint: {}", mint));
+        log(
+            LogTag::Positions,
+            "DEBUG",
+            &format!("🧹 Cleared pending-open for mint: {}", mint),
+        );
     }
 }
 
@@ -394,8 +420,8 @@ pub async fn clear_pending_open(mint: &str) {
 /// permit per open position (up to capacity). If there are more open positions than
 /// MAX_OPEN_POSITIONS we log a warning and consume all available permits.
 pub async fn reconcile_global_position_semaphore(max_open: usize) {
-    use crate::logger::{ log, LogTag };
     use crate::arguments::is_debug_positions_enabled;
+    use crate::logger::{log, LogTag};
 
     let open_positions = get_open_positions().await; // clones but infrequent (startup)
     let open_count = open_positions.len();
@@ -403,7 +429,11 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
 
     if open_count == 0 {
         if is_debug_positions_enabled() {
-            log(LogTag::Positions, "DEBUG", "Semaphore reconcile: no open positions");
+            log(
+                LogTag::Positions,
+                "DEBUG",
+                "Semaphore reconcile: no open positions",
+            );
         }
         return;
     }
@@ -440,11 +470,8 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
             "DEBUG",
             &format!(
                 "Semaphore reconcile: consumed {} permits for {} open positions (avail {} -> {})",
-                consumed,
-                open_count,
-                available_before,
-                available_after
-            )
+                consumed, open_count, available_before, available_after
+            ),
         );
     }
 }
@@ -458,18 +485,16 @@ pub async fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
 /// Check if a token was recently closed and is in cooldown period
 /// Returns true if the token should be blocked from re-entry
 pub async fn is_token_in_cooldown(mint: &str) -> bool {
-    use chrono::{ Utc, Duration as ChronoDuration };
     use crate::trader::POSITION_CLOSE_COOLDOWN_MINUTES;
+    use chrono::{Duration as ChronoDuration, Utc};
 
     let now = Utc::now();
     let cutoff = now - ChronoDuration::minutes(POSITION_CLOSE_COOLDOWN_MINUTES);
 
     let positions = POSITIONS.read().await;
-    positions
-        .iter()
-        .any(|p| {
-            p.mint == mint &&
-                p.transaction_exit_verified &&
-                p.exit_time.map_or(false, |exit_time| exit_time > cutoff)
-        })
+    positions.iter().any(|p| {
+        p.mint == mint
+            && p.transaction_exit_verified
+            && p.exit_time.map_or(false, |exit_time| exit_time > cutoff)
+    })
 }

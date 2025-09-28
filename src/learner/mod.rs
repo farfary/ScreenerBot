@@ -21,27 +21,27 @@
 //! * Cold-start safe: Works from first trade, improves over time
 //! * Fail-safe: Falls back to existing heuristics on errors
 
-pub mod types;
-pub mod database;
 pub mod analyzer;
-pub mod model;
+pub mod database;
 pub mod integration;
+pub mod model;
+pub mod types;
 
-use crate::global::*;
-use crate::logger::{ log, LogTag };
 use crate::global::is_debug_learning_enabled;
+use crate::global::*;
+use crate::logger::{log, LogTag};
 use crate::positions::Position;
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use std::sync::Arc;
-use tokio::sync::{ RwLock as AsyncRwLock, Notify };
-use std::time::{ Duration, Instant };
+use std::time::{Duration, Instant};
+use tokio::sync::{Notify, RwLock as AsyncRwLock};
 
-use types::*;
-use database::LearningDatabase;
 use analyzer::PatternAnalyzer;
-use model::ModelManager;
+use database::LearningDatabase;
 use integration::LearningIntegration;
+use model::ModelManager;
+use types::*;
 
 // =============================================================================
 // LEARNING SYSTEM CONFIGURATION
@@ -73,9 +73,7 @@ const MAX_PREDICTION_MS: u64 = 5;
 // =============================================================================
 
 /// Global learning system instance
-static LEARNING_SYSTEM: Lazy<Arc<LearningSystem>> = Lazy::new(|| {
-    Arc::new(LearningSystem::new())
-});
+static LEARNING_SYSTEM: Lazy<Arc<LearningSystem>> = Lazy::new(|| Arc::new(LearningSystem::new()));
 
 /// Main learning system coordinator
 pub struct LearningSystem {
@@ -95,9 +93,10 @@ impl LearningSystem {
         let database = Arc::new(AsyncRwLock::new(None));
         let analyzer = Arc::new(PatternAnalyzer::new());
         let model_manager = Arc::new(ModelManager::new());
-        let integration = Arc::new(
-            LearningIntegration::new(analyzer.clone(), model_manager.clone())
-        );
+        let integration = Arc::new(LearningIntegration::new(
+            analyzer.clone(),
+            model_manager.clone(),
+        ));
 
         Self {
             database,
@@ -135,7 +134,11 @@ impl LearningSystem {
         system.spawn_background_tasks().await;
 
         if is_debug_learning_enabled() {
-            log(LogTag::Learning, "INFO", "Learning system initialized successfully");
+            log(
+                LogTag::Learning,
+                "INFO",
+                "Learning system initialized successfully",
+            );
         }
 
         Ok(())
@@ -148,9 +151,8 @@ impl LearningSystem {
 
         // Feature building task
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(
-                Duration::from_secs(FEATURE_BUILD_INTERVAL_SEC)
-            );
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(FEATURE_BUILD_INTERVAL_SEC));
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -173,9 +175,8 @@ impl LearningSystem {
 
         // Model training task
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(
-                Duration::from_secs(MODEL_TRAINING_INTERVAL_SEC)
-            );
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(MODEL_TRAINING_INTERVAL_SEC));
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -197,7 +198,9 @@ impl LearningSystem {
     /// Run feature building cycle
     async fn run_feature_building(&self) -> Result<(), String> {
         let database_guard = self.database.read().await;
-        let database = database_guard.as_ref().ok_or("Learning database not initialized")?;
+        let database = database_guard
+            .as_ref()
+            .ok_or("Learning database not initialized")?;
 
         // Check if we need to build features
         let last_build = *self.last_feature_build.read().await;
@@ -222,7 +225,7 @@ impl LearningSystem {
             log(
                 LogTag::Learning,
                 "INFO",
-                &format!("Building features for {} trades", unprocessed_trades.len())
+                &format!("Building features for {} trades", unprocessed_trades.len()),
             );
         }
 
@@ -239,7 +242,7 @@ impl LearningSystem {
                     log(
                         LogTag::Learning,
                         "ERROR",
-                        &format!("Feature extraction failed for trade {}: {}", trade.id, e)
+                        &format!("Feature extraction failed for trade {}: {}", trade.id, e),
                     );
                 }
             }
@@ -255,7 +258,7 @@ impl LearningSystem {
                     "Feature building completed: {} features built in {}ms",
                     features_built,
                     start_time.elapsed().as_millis()
-                )
+                ),
             );
         }
 
@@ -265,7 +268,9 @@ impl LearningSystem {
     /// Run model training cycle
     async fn run_model_training(&self) -> Result<(), String> {
         let database_guard = self.database.read().await;
-        let database = database_guard.as_ref().ok_or("Learning database not initialized")?;
+        let database = database_guard
+            .as_ref()
+            .ok_or("Learning database not initialized")?;
 
         // Check if we have enough trades
         let total_trades = database.get_total_trade_count().await?;
@@ -326,7 +331,7 @@ impl LearningSystem {
                     "Model training completed: {} samples processed in {}ms",
                     training_data.len(),
                     start_time.elapsed().as_millis()
-                )
+                ),
             );
         }
 
@@ -337,12 +342,14 @@ impl LearningSystem {
     pub async fn record_trade(
         position: &Position,
         max_up_pct: f64,
-        max_down_pct: f64
+        max_down_pct: f64,
     ) -> Result<(), String> {
         let system = &*LEARNING_SYSTEM;
 
         let database_guard = system.database.read().await;
-        let database = database_guard.as_ref().ok_or("Learning database not initialized")?;
+        let database = database_guard
+            .as_ref()
+            .ok_or("Learning database not initialized")?;
 
         let trade_record = TradeRecord::from_position(position, max_up_pct, max_down_pct).await?;
 
@@ -359,7 +366,7 @@ impl LearningSystem {
                     trade_record.pnl_pct,
                     max_up_pct,
                     max_down_pct
-                )
+                ),
             );
         }
 
@@ -378,7 +385,11 @@ impl LearningSystem {
         system.shutdown_notify.notify_waiters();
 
         if is_debug_learning_enabled() {
-            log(LogTag::Learning, "INFO", "Learning system shutdown complete");
+            log(
+                LogTag::Learning,
+                "INFO",
+                "Learning system shutdown complete",
+            );
         }
     }
 
@@ -419,7 +430,7 @@ pub async fn initialize_learning_system() -> Result<(), String> {
 pub async fn record_completed_trade(
     position: &Position,
     max_up_pct: f64,
-    max_down_pct: f64
+    max_down_pct: f64,
 ) -> Result<(), String> {
     LearningSystem::record_trade(position, max_up_pct, max_down_pct).await
 }

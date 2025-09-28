@@ -2,9 +2,8 @@
 ///
 /// Defines the core types used by the events system for categorizing
 /// and structuring event data.
-
-use chrono::{ DateTime, Utc };
-use serde::{ Deserialize, Serialize };
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 // =============================================================================
@@ -176,7 +175,7 @@ impl Event {
         severity: Severity,
         mint: Option<String>,
         reference_id: Option<String>,
-        payload: Value
+        payload: Value,
     ) -> Self {
         Self {
             id: None,
@@ -197,9 +196,16 @@ impl Event {
         subtype: Option<String>,
         mint: Option<String>,
         reference_id: Option<String>,
-        payload: Value
+        payload: Value,
     ) -> Self {
-        Self::new(category, subtype, Severity::Info, mint, reference_id, payload)
+        Self::new(
+            category,
+            subtype,
+            Severity::Info,
+            mint,
+            reference_id,
+            payload,
+        )
     }
 
     /// Create a warning-level event
@@ -208,9 +214,16 @@ impl Event {
         subtype: Option<String>,
         mint: Option<String>,
         reference_id: Option<String>,
-        payload: Value
+        payload: Value,
     ) -> Self {
-        Self::new(category, subtype, Severity::Warn, mint, reference_id, payload)
+        Self::new(
+            category,
+            subtype,
+            Severity::Warn,
+            mint,
+            reference_id,
+            payload,
+        )
     }
 
     /// Create an error-level event
@@ -219,9 +232,16 @@ impl Event {
         subtype: Option<String>,
         mint: Option<String>,
         reference_id: Option<String>,
-        payload: Value
+        payload: Value,
     ) -> Self {
-        Self::new(category, subtype, Severity::Error, mint, reference_id, payload)
+        Self::new(
+            category,
+            subtype,
+            Severity::Error,
+            mint,
+            reference_id,
+            payload,
+        )
     }
 
     /// Create a debug-level event
@@ -230,9 +250,16 @@ impl Event {
         subtype: Option<String>,
         mint: Option<String>,
         reference_id: Option<String>,
-        payload: Value
+        payload: Value,
     ) -> Self {
-        Self::new(category, subtype, Severity::Debug, mint, reference_id, payload)
+        Self::new(
+            category,
+            subtype,
+            Severity::Debug,
+            mint,
+            reference_id,
+            payload,
+        )
     }
 }
 
@@ -312,8 +339,8 @@ pub struct PositionEventPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntryEventPayload {
     pub signal_type: String, // "momentum", "volume_spike", "price_drop", etc.
-    pub timeframe: String, // "5m", "15m", "1h", etc.
-    pub strength: f64, // Signal strength 0.0-1.0
+    pub timeframe: String,   // "5m", "15m", "1h", etc.
+    pub strength: f64,       // Signal strength 0.0-1.0
     pub price_sol: f64,
     pub volume_24h: Option<f64>,
     pub market_cap: Option<f64>,
@@ -325,7 +352,7 @@ pub struct EntryEventPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemEventPayload {
     pub component: String, // "trader", "pool_service", "wallet", etc.
-    pub action: String, // "started", "stopped", "error", "config_changed"
+    pub action: String,    // "started", "stopped", "error", "config_changed"
     pub details: Option<Value>,
     pub memory_mb: Option<f64>,
     pub cpu_percent: Option<f64>,

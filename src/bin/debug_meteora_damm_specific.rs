@@ -8,13 +8,13 @@
 
 use clap::Parser;
 use screenerbot::arguments::set_cmd_args;
-use screenerbot::logger::{ log, LogTag };
-use screenerbot::pools::decoders::{ meteora_damm::MeteoraDammDecoder, PoolDecoder };
-use screenerbot::pools::types::{ METEORA_DAMM_PROGRAM_ID, SOL_MINT };
+use screenerbot::logger::{log, LogTag};
+use screenerbot::pools::decoders::{meteora_damm::MeteoraDammDecoder, PoolDecoder};
 use screenerbot::pools::fetcher::AccountData;
-use screenerbot::rpc::{ get_rpc_client, init_rpc_client, parse_pubkey };
-use screenerbot::tokens::{ decimals::SOL_DECIMALS, get_token_decimals_sync };
-use screenerbot::tokens::dexscreener::{ init_dexscreener_api, get_global_dexscreener_api };
+use screenerbot::pools::types::{METEORA_DAMM_PROGRAM_ID, SOL_MINT};
+use screenerbot::rpc::{get_rpc_client, init_rpc_client, parse_pubkey};
+use screenerbot::tokens::dexscreener::{get_global_dexscreener_api, init_dexscreener_api};
+use screenerbot::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
@@ -36,9 +36,10 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    set_cmd_args(
-        vec!["debug_meteora_damm_specific".to_string(), "--debug-pool-decoders".to_string()]
-    );
+    set_cmd_args(vec![
+        "debug_meteora_damm_specific".to_string(),
+        "--debug-pool-decoders".to_string(),
+    ]);
 
     println!("\n🔍 METEORA DAMM v2 SPECIFIC DEBUGGER\n====================================");
     println!("Pool address: {}", args.pool);
@@ -53,11 +54,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📦 POOL ACCOUNT\n==============");
     println!("Owner: {}", pool_acc.owner);
     println!("Data size: {} bytes", pool_acc.data.len());
-    println!("Owner is Meteora DAMM: {}", if pool_acc.owner.to_string() == METEORA_DAMM_PROGRAM_ID {
-        "✅"
-    } else {
-        "❌"
-    });
+    println!(
+        "Owner is Meteora DAMM: {}",
+        if pool_acc.owner.to_string() == METEORA_DAMM_PROGRAM_ID {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
 
     if args.show_hex {
         println!("\n📄 RAW HEX (first 256 bytes)");
@@ -89,10 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("token_b_vault: {}", token_b_vault);
     println!(
         "fees: protocol_a={} protocol_b={} partner_a={} partner_b={}",
-        protocol_a_fee,
-        protocol_b_fee,
-        partner_a_fee,
-        partner_b_fee
+        protocol_a_fee, protocol_b_fee, partner_a_fee, partner_b_fee
     );
     println!("sqrt_price@456: {}", sqrt_456);
     println!("sqrt_price@464: {}", sqrt_464);
@@ -106,38 +107,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let b_amt_raw = decode_token_amount(&b_vault_acc.data).unwrap_or(0);
 
     println!("\n🏦 VAULTS\n=========");
-    println!("a_vault mint: {}", read_pubkey(&a_vault_acc.data, 0).unwrap_or_default());
-    println!("b_vault mint: {}", read_pubkey(&b_vault_acc.data, 0).unwrap_or_default());
+    println!(
+        "a_vault mint: {}",
+        read_pubkey(&a_vault_acc.data, 0).unwrap_or_default()
+    );
+    println!(
+        "b_vault mint: {}",
+        read_pubkey(&b_vault_acc.data, 0).unwrap_or_default()
+    );
     println!("a_vault amount(raw): {}", a_amt_raw);
     println!("b_vault amount(raw): {}", b_amt_raw);
 
     // Orient relative to SOL
-    let (token_mint, sol_vault_pk, token_vault_pk, sol_fees, token_fees) = if
-        token_b_mint == SOL_MINT
-    {
-        (
-            token_a_mint.clone(),
-            b_vault_pk,
-            a_vault_pk,
-            protocol_b_fee + partner_b_fee,
-            protocol_a_fee + partner_a_fee,
-        )
-    } else if token_a_mint == SOL_MINT {
-        (
-            token_b_mint.clone(),
-            a_vault_pk,
-            b_vault_pk,
-            protocol_a_fee + partner_a_fee,
-            protocol_b_fee + partner_b_fee,
-        )
-    } else {
-        println!("Pool has no SOL side; aborting");
-        return Ok(());
-    };
+    let (token_mint, sol_vault_pk, token_vault_pk, sol_fees, token_fees) =
+        if token_b_mint == SOL_MINT {
+            (
+                token_a_mint.clone(),
+                b_vault_pk,
+                a_vault_pk,
+                protocol_b_fee + partner_b_fee,
+                protocol_a_fee + partner_a_fee,
+            )
+        } else if token_a_mint == SOL_MINT {
+            (
+                token_b_mint.clone(),
+                a_vault_pk,
+                b_vault_pk,
+                protocol_a_fee + partner_a_fee,
+                protocol_b_fee + partner_b_fee,
+            )
+        } else {
+            println!("Pool has no SOL side; aborting");
+            return Ok(());
+        };
 
     // Effective reserves (minus fees)
-    let sol_acc = if sol_vault_pk == a_vault_pk { &a_vault_acc } else { &b_vault_acc };
-    let tok_acc = if token_vault_pk == a_vault_pk { &a_vault_acc } else { &b_vault_acc };
+    let sol_acc = if sol_vault_pk == a_vault_pk {
+        &a_vault_acc
+    } else {
+        &b_vault_acc
+    };
+    let tok_acc = if token_vault_pk == a_vault_pk {
+        &a_vault_acc
+    } else {
+        &b_vault_acc
+    };
     let sol_raw = decode_token_amount(&sol_acc.data).unwrap_or(0);
     let tok_raw = decode_token_amount(&tok_acc.data).unwrap_or(0);
     let sol_eff = sol_raw.saturating_sub(sol_fees);
@@ -164,48 +178,63 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tok_dec,
         sol_dec,
         &token_a_mint,
-        &token_b_mint
+        &token_b_mint,
     );
     println!("sqrt selected offset: {}", sqrt_sel);
     println!("Sqrt-based price: {:.12} SOL/token", sqrt_based_price);
 
     // Build accounts map and run decoder (both orientations)
     let mut accounts = HashMap::new();
-    accounts.insert(args.pool.clone(), AccountData {
-        pubkey: pool_pk,
-        data: pool_acc.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: pool_acc.lamports,
-        owner: pool_acc.owner,
-    });
-    accounts.insert(token_a_vault.clone(), AccountData {
-        pubkey: a_vault_pk,
-        data: a_vault_acc.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: a_vault_acc.lamports,
-        owner: a_vault_acc.owner,
-    });
-    accounts.insert(token_b_vault.clone(), AccountData {
-        pubkey: b_vault_pk,
-        data: b_vault_acc.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: b_vault_acc.lamports,
-        owner: b_vault_acc.owner,
-    });
+    accounts.insert(
+        args.pool.clone(),
+        AccountData {
+            pubkey: pool_pk,
+            data: pool_acc.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: pool_acc.lamports,
+            owner: pool_acc.owner,
+        },
+    );
+    accounts.insert(
+        token_a_vault.clone(),
+        AccountData {
+            pubkey: a_vault_pk,
+            data: a_vault_acc.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: a_vault_acc.lamports,
+            owner: a_vault_acc.owner,
+        },
+    );
+    accounts.insert(
+        token_b_vault.clone(),
+        AccountData {
+            pubkey: b_vault_pk,
+            data: b_vault_acc.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: b_vault_acc.lamports,
+            owner: b_vault_acc.owner,
+        },
+    );
 
     println!("\n🧪 DECODER CHECK\n================");
     let d1 = MeteoraDammDecoder::decode_and_calculate(&accounts, &token_mint, &SOL_MINT);
     if let Some(r) = &d1 {
-        println!("Orientation TOKEN/SOL → {:.12} (pool {})", r.price_sol, r.pool_address);
+        println!(
+            "Orientation TOKEN/SOL → {:.12} (pool {})",
+            r.price_sol, r.pool_address
+        );
     } else {
         println!("Orientation TOKEN/SOL → None");
     }
     let d2 = MeteoraDammDecoder::decode_and_calculate(&accounts, &SOL_MINT, &token_mint);
     if let Some(r) = &d2 {
-        println!("Orientation SOL/TOKEN → {:.12} (pool {})", r.price_sol, r.pool_address);
+        println!(
+            "Orientation SOL/TOKEN → {:.12} (pool {})",
+            r.price_sol, r.pool_address
+        );
     } else {
         println!("Orientation SOL/TOKEN → None");
     }
@@ -253,26 +282,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn read_pubkey(data: &[u8], off: usize) -> Option<String> {
-    let bytes: [u8; 32] = data
-        .get(off..off + 32)?
-        .try_into()
-        .ok()?;
+    let bytes: [u8; 32] = data.get(off..off + 32)?.try_into().ok()?;
     Some(Pubkey::new_from_array(bytes).to_string())
 }
 
 fn read_u64(data: &[u8], off: usize) -> Option<u64> {
-    let bytes: [u8; 8] = data
-        .get(off..off + 8)?
-        .try_into()
-        .ok()?;
+    let bytes: [u8; 8] = data.get(off..off + 8)?.try_into().ok()?;
     Some(u64::from_le_bytes(bytes))
 }
 
 fn read_u128(data: &[u8], off: usize) -> Option<u128> {
-    let bytes: [u8; 16] = data
-        .get(off..off + 16)?
-        .try_into()
-        .ok()?;
+    let bytes: [u8; 16] = data.get(off..off + 16)?.try_into().ok()?;
     Some(u128::from_le_bytes(bytes))
 }
 
@@ -280,12 +300,7 @@ fn decode_token_amount(data: &[u8]) -> Option<u64> {
     if data.len() < 72 {
         return None;
     }
-    let amt = u64::from_le_bytes(
-        data
-            .get(64..72)?
-            .try_into()
-            .ok()?
-    );
+    let amt = u64::from_le_bytes(data.get(64..72)?.try_into().ok()?);
     Some(amt)
 }
 
@@ -295,12 +310,9 @@ fn select_sqrt_and_price(
     token_decimals: u8,
     sol_decimals: u8,
     token_a_mint: &str,
-    _token_b_mint: &str
+    _token_b_mint: &str,
 ) -> (&'static str, f64) {
-    let cands = [
-        ("456", sqrt_456),
-        ("464", sqrt_464),
-    ];
+    let cands = [("456", sqrt_456), ("464", sqrt_464)];
     for (lab, val) in cands {
         if val == 0 {
             continue;

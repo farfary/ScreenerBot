@@ -1,13 +1,17 @@
 use screenerbot::{
-    logger::{ init_file_logging, log, LogTag },
-    tokens::security::{ initialize_security_analyzer, get_security_analyzer },
+    logger::{init_file_logging, log, LogTag},
+    tokens::security::{get_security_analyzer, initialize_security_analyzer},
 };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_file_logging();
 
-    log(LogTag::System, "START", "Testing new simplified security summary");
+    log(
+        LogTag::System,
+        "START",
+        "Testing new simplified security summary",
+    );
 
     // Initialize security analyzer
     initialize_security_analyzer()?;
@@ -18,9 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\n=== NEW SIMPLIFIED SECURITY SUMMARY ===");
         println!(
             "API calls: {} total, {} success, {} failed",
-            summary.api_calls_total,
-            summary.api_calls_success,
-            summary.api_calls_failed
+            summary.api_calls_total, summary.api_calls_success, summary.api_calls_failed
         );
         println!("Safe tokens: {}", summary.db_safe_tokens);
         println!("Warning tokens: {}", summary.db_warning_tokens);

@@ -15,11 +15,11 @@
 //!
 //! Design focuses on simplicity and reliability over sophistication.
 
-use crate::learner::types::*;
-use crate::learner::database::LearningDatabase;
-use crate::learner::analyzer::PatternAnalyzer;
-use crate::logger::{ log, LogTag };
 use crate::global::is_debug_learning_enabled;
+use crate::learner::analyzer::PatternAnalyzer;
+use crate::learner::database::LearningDatabase;
+use crate::learner::types::*;
+use crate::logger::{log, LogTag};
 use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::RwLock as AsyncRwLock;
@@ -67,7 +67,7 @@ impl ModelManager {
             risk_intercept_gradient: 0.0,
             sample_count: 0,
             learning_rate: 0.01, // Conservative learning rate
-            l2_lambda: 0.001, // Light regularization
+            l2_lambda: 0.001,    // Light regularization
         };
 
         Self {
@@ -92,7 +92,7 @@ impl ModelManager {
                             weights.version,
                             weights.training_samples,
                             weights.validation_accuracy * 100.0
-                        )
+                        ),
                     );
                 }
             }
@@ -111,14 +111,18 @@ impl ModelManager {
         *self.weights.write().await = Some(weights);
 
         if is_debug_learning_enabled() {
-            log(LogTag::Learning, "INFO", "Model weights updated via hot-swap");
+            log(
+                LogTag::Learning,
+                "INFO",
+                "Model weights updated via hot-swap",
+            );
         }
     }
 
     /// Train incremental model with new feature data
     pub async fn train_incremental(
         &self,
-        features: &[FeatureVector]
+        features: &[FeatureVector],
     ) -> Result<ModelWeights, String> {
         if features.is_empty() {
             return Err("No training data provided".to_string());
@@ -127,8 +131,10 @@ impl ModelManager {
         let start_time = std::time::Instant::now();
 
         // Get current weights or initialize new ones
-        let mut current_weights = self.weights
-            .read().await
+        let mut current_weights = self
+            .weights
+            .read()
+            .await
             .clone()
             .unwrap_or_else(|| ModelWeights::new("logistic_regression".to_string()));
 
@@ -140,28 +146,29 @@ impl ModelManager {
         }
 
         // Train success model
-        let (success_weights, success_intercept) = self.train_logistic_regression(
-            &X,
-            &y_success,
-            &current_weights.success_weights,
-            current_weights.success_intercept
-        ).await?;
+        let (success_weights, success_intercept) = self
+            .train_logistic_regression(
+                &X,
+                &y_success,
+                &current_weights.success_weights,
+                current_weights.success_intercept,
+            )
+            .await?;
 
         // Train risk model
-        let (risk_weights, risk_intercept) = self.train_logistic_regression(
-            &X,
-            &y_risk,
-            &current_weights.risk_weights,
-            current_weights.risk_intercept
-        ).await?;
+        let (risk_weights, risk_intercept) = self
+            .train_logistic_regression(
+                &X,
+                &y_risk,
+                &current_weights.risk_weights,
+                current_weights.risk_intercept,
+            )
+            .await?;
 
         // Calculate validation accuracy
-        let validation_accuracy = self.calculate_validation_accuracy(
-            &X,
-            &y_success,
-            &success_weights,
-            success_intercept
-        ).await;
+        let validation_accuracy = self
+            .calculate_validation_accuracy(&X, &y_success, &success_weights, success_intercept)
+            .await;
 
         // Calculate feature importance (simplified)
         let feature_importance = self.calculate_feature_importance(&success_weights, &risk_weights);
@@ -192,7 +199,7 @@ impl ModelManager {
                     X.len(),
                     validation_accuracy * 100.0,
                     start_time.elapsed().as_millis()
-                )
+                ),
             );
         }
 
@@ -211,7 +218,7 @@ impl ModelManager {
         let logit = self.calculate_logit(
             features,
             &weights.success_weights,
-            weights.success_intercept
+            weights.success_intercept,
         );
         let probability = self.sigmoid(logit);
 
@@ -241,15 +248,16 @@ impl ModelManager {
     /// Get current model metadata
     pub async fn get_model_info(&self) -> Option<(i64, usize, f64)> {
         self.weights
-            .read().await
+            .read()
+            .await
             .as_ref()
-            .map(|w| { (w.version, w.training_samples, w.validation_accuracy) })
+            .map(|w| (w.version, w.training_samples, w.validation_accuracy))
     }
 
     /// Prepare training data from feature vectors
     fn prepare_training_data(
         &self,
-        features: &[FeatureVector]
+        features: &[FeatureVector],
     ) -> Result<(Vec<Vec<f64>>, Vec<f64>, Vec<f64>), String> {
         let mut X = Vec::new();
         let mut y_success = Vec::new();
@@ -257,11 +265,8 @@ impl ModelManager {
 
         for feature in features {
             // Only use samples with labels
-            if
-                let (Some(success_label), Some(risk_label)) = (
-                    feature.success_label,
-                    feature.risk_label,
-                )
+            if let (Some(success_label), Some(risk_label)) =
+                (feature.success_label, feature.risk_label)
             {
                 X.push(feature.to_array());
                 y_success.push(success_label);
@@ -278,7 +283,7 @@ impl ModelManager {
         X: &[Vec<f64>],
         y: &[f64],
         initial_weights: &[f64],
-        initial_intercept: f64
+        initial_intercept: f64,
     ) -> Result<(Vec<f64>, f64), String> {
         if X.is_empty() || y.is_empty() || X.len() != y.len() {
             return Err("Invalid training data".to_string());
@@ -338,7 +343,7 @@ impl ModelManager {
         X: &[Vec<f64>],
         y: &[f64],
         weights: &[f64],
-        intercept: f64
+        intercept: f64,
     ) -> f64 {
         if X.is_empty() {
             return 0.0;
@@ -364,7 +369,7 @@ impl ModelManager {
     fn calculate_feature_importance(
         &self,
         success_weights: &[f64],
-        risk_weights: &[f64]
+        risk_weights: &[f64],
     ) -> Vec<f64> {
         let mut importance = vec![0.0; success_weights.len()];
 
@@ -408,7 +413,7 @@ impl ModelManager {
         mint: &str,
         features: &[f64],
         current_profit: Option<f64>,
-        hold_duration: Option<i64>
+        hold_duration: Option<i64>,
     ) -> Result<EntryPrediction, String> {
         if features.len() != FeatureVector::FEATURE_COUNT {
             return Err("Invalid feature vector size".to_string());
@@ -424,18 +429,12 @@ impl ModelManager {
         let confidence = self.calculate_prediction_confidence(success_prob, risk_prob);
 
         // Generate recommendation
-        let entry_recommendation = self.generate_entry_recommendation(
-            success_prob,
-            risk_prob,
-            confidence
-        );
+        let entry_recommendation =
+            self.generate_entry_recommendation(success_prob, risk_prob, confidence);
 
         // Calculate confidence adjustment for existing entry system
-        let confidence_adjustment = self.calculate_confidence_adjustment(
-            success_prob,
-            risk_prob,
-            confidence
-        );
+        let confidence_adjustment =
+            self.calculate_confidence_adjustment(success_prob, risk_prob, confidence);
 
         Ok(EntryPrediction {
             mint: mint.to_string(),
@@ -448,7 +447,8 @@ impl ModelManager {
             expected_max_drawdown: risk_prob * 20.0, // Rough estimate
             risk_score: risk_prob,
             matching_patterns: self
-                .find_matching_patterns_for_prediction(database, mint, features, success_prob).await
+                .find_matching_patterns_for_prediction(database, mint, features, success_prob)
+                .await
                 .into_iter()
                 .map(|p| p.pattern_id)
                 .collect(),
@@ -506,7 +506,7 @@ impl ModelManager {
         &self,
         success_prob: f64,
         risk_prob: f64,
-        confidence: f64
+        confidence: f64,
     ) -> EntryRecommendation {
         // Combine success and risk into overall score
         let score = success_prob - risk_prob;
@@ -529,7 +529,7 @@ impl ModelManager {
         &self,
         success_prob: f64,
         risk_prob: f64,
-        confidence: f64
+        confidence: f64,
     ) -> f64 {
         if confidence < 0.4 {
             return 0.0; // Not confident enough to adjust
@@ -547,7 +547,7 @@ impl ModelManager {
     /// Predict entry success (used by integration.rs)
     pub async fn predict_entry_success(
         &self,
-        features: &FeatureVector
+        features: &FeatureVector,
     ) -> Result<EntryPrediction, String> {
         let feature_array = features.to_array();
 
@@ -580,18 +580,10 @@ impl ModelManager {
             confidence,
             success_probability: success_prob,
             quick_profit_probability: success_prob * 0.6, // Estimate
-            expected_profit: if success_prob > 0.5 {
-                25.0
-            } else {
-                5.0
-            },
+            expected_profit: if success_prob > 0.5 { 25.0 } else { 5.0 },
             expected_duration: 1800, // 30 minutes default
             risk_probability: risk_prob,
-            expected_max_drawdown: if risk_prob > 0.5 {
-                15.0
-            } else {
-                8.0
-            },
+            expected_max_drawdown: if risk_prob > 0.5 { 15.0 } else { 8.0 },
             risk_score: risk_prob,
             matching_patterns: vec![],
             pattern_confidence: confidence,
@@ -599,7 +591,7 @@ impl ModelManager {
             confidence_adjustment: self.calculate_confidence_adjustment(
                 success_prob,
                 risk_prob,
-                confidence
+                confidence,
             ),
             created_at: chrono::Utc::now(),
         })
@@ -608,7 +600,7 @@ impl ModelManager {
     /// Predict exit outcome (used by integration.rs)
     pub async fn predict_exit_outcome(
         &self,
-        features: &FeatureVector
+        features: &FeatureVector,
     ) -> Result<ExitPrediction, String> {
         let feature_array = features.to_array();
 
@@ -637,24 +629,12 @@ impl ModelManager {
         Ok(ExitPrediction {
             mint: "unknown".to_string(),
             current_profit: 0.0, // Will be set by caller
-            hold_duration: 0, // Will be set by caller
-            peak_reached_probability: if success_prob < 0.4 {
-                0.8
-            } else {
-                0.3
-            },
+            hold_duration: 0,    // Will be set by caller
+            peak_reached_probability: if success_prob < 0.4 { 0.8 } else { 0.3 },
             further_upside_probability: success_prob,
             reversal_probability: risk_prob,
-            recommended_trailing_stop: if risk_prob > 0.6 {
-                5.0
-            } else {
-                10.0
-            },
-            recommended_profit_target: if success_prob > 0.6 {
-                30.0
-            } else {
-                15.0
-            },
+            recommended_trailing_stop: if risk_prob > 0.6 { 5.0 } else { 10.0 },
+            recommended_profit_target: if success_prob > 0.6 { 30.0 } else { 15.0 },
             urgency_score: risk_prob,
             drawdown_risk: risk_prob,
             time_pressure: 0.2, // Low default
@@ -662,7 +642,7 @@ impl ModelManager {
             exit_score_adjustment: self.calculate_confidence_adjustment(
                 success_prob,
                 risk_prob,
-                confidence
+                confidence,
             ),
             created_at: chrono::Utc::now(),
         })
@@ -674,7 +654,7 @@ impl ModelManager {
         database: &LearningDatabase,
         mint: &str,
         features: &[f64],
-        success_prob: f64
+        success_prob: f64,
     ) -> Vec<TradingPattern> {
         // Extract drop pattern from features
         // Assuming drop features are at positions 14-18 based on feature extraction
@@ -696,8 +676,9 @@ impl ModelManager {
         };
 
         // Try to find patterns, but don't fail the prediction if pattern search fails
-        match
-            self.analyzer.find_matching_patterns(
+        match self
+            .analyzer
+            .find_matching_patterns(
                 database,
                 mint,
                 drop_10s,
@@ -705,8 +686,9 @@ impl ModelManager {
                 drop_60s,
                 drop_120s,
                 drop_320s,
-                confidence_threshold
-            ).await
+                confidence_threshold,
+            )
+            .await
         {
             Ok(patterns) => {
                 // Limit to top 5 most confident patterns
@@ -717,7 +699,7 @@ impl ModelManager {
                     log(
                         LogTag::Learning,
                         "pattern_error",
-                        &format!("Failed to find patterns for mint {}: {}", mint, e)
+                        &format!("Failed to find patterns for mint {}: {}", mint, e),
                     );
                 }
                 Vec::new()
@@ -733,10 +715,7 @@ impl ModelManager {
 
         // Factor in drop pattern strength
         let drop_features = &features[14..19];
-        let drop_magnitude = drop_features
-            .iter()
-            .map(|&d| d.abs())
-            .fold(0.0, f64::max);
+        let drop_magnitude = drop_features.iter().map(|&d| d.abs()).fold(0.0, f64::max);
 
         // Factor in market context
         let liquidity = features.get(7).unwrap_or(&0.0).max(1.0); // Avoid log(0)
@@ -751,12 +730,13 @@ impl ModelManager {
 
         // Weighted average
         let weights = [0.4, 0.3, 0.2, 0.1]; // Drop, liquidity, activity, ATH
-        let values = [drop_confidence, liquidity_confidence, activity_confidence, ath_confidence];
+        let values = [
+            drop_confidence,
+            liquidity_confidence,
+            activity_confidence,
+            ath_confidence,
+        ];
 
-        weights
-            .iter()
-            .zip(values.iter())
-            .map(|(w, v)| w * v)
-            .sum()
+        weights.iter().zip(values.iter()).map(|(w, v)| w * v).sum()
     }
 }

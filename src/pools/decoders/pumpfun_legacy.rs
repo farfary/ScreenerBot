@@ -1,21 +1,17 @@
+use super::{AccountData, PoolDecoder};
+use crate::arguments::is_debug_pool_decoders_enabled;
+use crate::logger::{log, LogTag};
+use crate::pools::types::{PriceResult, ProgramKind, SOL_MINT};
+use crate::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
+use solana_sdk::pubkey::Pubkey;
 /// PumpFun Legacy decoder for the original PumpFun program
 /// Handles pool decoding and price calculation for the legacy PumpFun program (6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P)
-
 use std::collections::HashMap;
 use std::time::Instant;
-use solana_sdk::pubkey::Pubkey;
-use super::{ PoolDecoder, AccountData };
-use crate::arguments::is_debug_pool_decoders_enabled;
-use crate::logger::{ log, LogTag };
-use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
-use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
 
 // Import centralized utilities
 use super::super::utils::{
-    is_sol_mint,
-    analyze_token_pair,
-    PoolMintVaultInfo,
-    read_pubkey_at_offset,
+    analyze_token_pair, is_sol_mint, read_pubkey_at_offset, PoolMintVaultInfo,
 };
 
 const PUMP_FUN_LEGACY_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
@@ -33,13 +29,16 @@ impl PoolDecoder for PumpFunLegacyDecoder {
     fn decode_and_calculate(
         accounts: &HashMap<String, AccountData>,
         base_mint: &str,
-        quote_mint: &str
+        quote_mint: &str,
     ) -> Option<PriceResult> {
         if is_debug_pool_decoders_enabled() {
             log(
                 LogTag::PoolDecoder,
                 "DEBUG",
-                &format!("PumpFun Legacy: Processing for {} vs {}", base_mint, quote_mint)
+                &format!(
+                    "PumpFun Legacy: Processing for {} vs {}",
+                    base_mint, quote_mint
+                ),
             );
         }
 
@@ -62,22 +61,19 @@ impl PoolDecoder for PumpFunLegacyDecoder {
                         "DEBUG",
                         &format!(
                             "Successfully decoded PumpFun Legacy pool: {} -> {}",
-                            pool_info.base_mint,
-                            pool_info.quote_mint
-                        )
+                            pool_info.base_mint, pool_info.quote_mint
+                        ),
                     );
                 }
 
                 // Calculate price using the extracted pool info
-                if
-                    let Some(price_result) = Self::calculate_pump_fun_legacy_price(
-                        &pool_info,
-                        accounts,
-                        base_mint,
-                        quote_mint,
-                        pool_account
-                    )
-                {
+                if let Some(price_result) = Self::calculate_pump_fun_legacy_price(
+                    &pool_info,
+                    accounts,
+                    base_mint,
+                    quote_mint,
+                    pool_account,
+                ) {
                     return Some(price_result);
                 }
             }
@@ -97,7 +93,7 @@ impl PumpFunLegacyDecoder {
                 log(
                     LogTag::PoolDecoder,
                     "ERROR",
-                    &format!("PumpFun Legacy pool data too short: {} bytes", data.len())
+                    &format!("PumpFun Legacy pool data too short: {} bytes", data.len()),
                 );
             }
             return None;
@@ -107,7 +103,7 @@ impl PumpFunLegacyDecoder {
             log(
                 LogTag::PoolDecoder,
                 "DEBUG",
-                &format!("Extracting PumpFun Legacy pool data ({} bytes)", data.len())
+                &format!("Extracting PumpFun Legacy pool data ({} bytes)", data.len()),
             );
         }
 
@@ -136,7 +132,7 @@ impl PumpFunLegacyDecoder {
                     &mint2[..8],
                     &vault1[..8],
                     &vault2[..8]
-                )
+                ),
             );
         }
 
@@ -154,7 +150,7 @@ impl PumpFunLegacyDecoder {
             log(
                 LogTag::PoolDecoder,
                 "DEBUG",
-                &format!("Decoding PumpFun Legacy pool data ({} bytes)", data.len())
+                &format!("Decoding PumpFun Legacy pool data ({} bytes)", data.len()),
             );
         }
 
@@ -218,7 +214,7 @@ impl PumpFunLegacyDecoder {
         accounts: &HashMap<String, AccountData>,
         base_mint: &str,
         quote_mint: &str,
-        pool_account: &str
+        pool_account: &str,
     ) -> Option<PriceResult> {
         if is_debug_pool_decoders_enabled() {
             log(
@@ -226,37 +222,50 @@ impl PumpFunLegacyDecoder {
                 "DEBUG",
                 &format!(
                     "Calculating PumpFun Legacy price for token {} with quote {}",
-                    base_mint,
-                    quote_mint
-                )
+                    base_mint, quote_mint
+                ),
             );
         }
 
         // Determine which mint is our target
-        let target_mint = if is_sol_mint(base_mint) { quote_mint } else { base_mint };
+        let target_mint = if is_sol_mint(base_mint) {
+            quote_mint
+        } else {
+            base_mint
+        };
 
         if is_debug_pool_decoders_enabled() {
-            log(LogTag::PoolDecoder, "DEBUG", &format!("Using target mint: {}", target_mint));
+            log(
+                LogTag::PoolDecoder,
+                "DEBUG",
+                &format!("Using target mint: {}", target_mint),
+            );
         }
 
         // Get vault balances
-        let token_vault_balance = accounts.get(&pool_info.pool_base_token_account).and_then(|acc| {
-            if acc.data.len() >= 72 {
-                let balance_bytes = &acc.data[64..72];
-                Some(u64::from_le_bytes(balance_bytes.try_into().ok()?))
-            } else {
-                None
-            }
-        })?;
+        let token_vault_balance =
+            accounts
+                .get(&pool_info.pool_base_token_account)
+                .and_then(|acc| {
+                    if acc.data.len() >= 72 {
+                        let balance_bytes = &acc.data[64..72];
+                        Some(u64::from_le_bytes(balance_bytes.try_into().ok()?))
+                    } else {
+                        None
+                    }
+                })?;
 
-        let sol_vault_balance = accounts.get(&pool_info.pool_quote_token_account).and_then(|acc| {
-            if acc.data.len() >= 72 {
-                let balance_bytes = &acc.data[64..72];
-                Some(u64::from_le_bytes(balance_bytes.try_into().ok()?))
-            } else {
-                None
-            }
-        })?;
+        let sol_vault_balance =
+            accounts
+                .get(&pool_info.pool_quote_token_account)
+                .and_then(|acc| {
+                    if acc.data.len() >= 72 {
+                        let balance_bytes = &acc.data[64..72];
+                        Some(u64::from_le_bytes(balance_bytes.try_into().ok()?))
+                    } else {
+                        None
+                    }
+                })?;
 
         if is_debug_pool_decoders_enabled() {
             log(
@@ -266,7 +275,7 @@ impl PumpFunLegacyDecoder {
                     "Vault {} balance: {}",
                     &pool_info.pool_base_token_account[..8],
                     token_vault_balance
-                )
+                ),
             );
             log(
                 LogTag::PoolDecoder,
@@ -275,7 +284,7 @@ impl PumpFunLegacyDecoder {
                     "Vault {} balance: {}",
                     &pool_info.pool_quote_token_account[..8],
                     sol_vault_balance
-                )
+                ),
             );
         }
 
@@ -288,9 +297,8 @@ impl PumpFunLegacyDecoder {
                 "DEBUG",
                 &format!(
                     "Raw reserves - Token: {}, SOL: {}",
-                    token_vault_balance,
-                    sol_vault_balance
-                )
+                    token_vault_balance, sol_vault_balance
+                ),
             );
         }
 

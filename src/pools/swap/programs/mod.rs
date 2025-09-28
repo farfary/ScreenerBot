@@ -2,19 +2,18 @@
 ///
 /// This module contains the actual swap logic for different DEX programs.
 /// Each program has its own module with a standardized interface.
-
-use crate::pools::swap::types::{ SwapRequest, SwapResult, SwapError };
+use crate::pools::swap::types::{SwapError, SwapRequest, SwapResult};
 use crate::pools::AccountData;
 
 // Program implementations
-pub mod raydium_cpmm;
 pub mod raydium_clmm;
+pub mod raydium_cpmm;
 
 /// Common trait for all program swap implementations
 pub trait ProgramSwap {
     /// Execute a swap for this specific program
     async fn execute_swap(
         request: SwapRequest,
-        pool_data: AccountData
+        pool_data: AccountData,
     ) -> Result<SwapResult, SwapError>;
 }

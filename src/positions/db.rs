@@ -1,9 +1,9 @@
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
-use r2d2::{ Pool, PooledConnection };
+use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{ params, Connection, OptionalExtension, Result as SqliteResult };
-use serde::{ Deserialize, Serialize };
+use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
+use serde::{Deserialize, Serialize};
 /// Database module for positions management
 /// Replaces JSON file-based storage with high-performance SQLite database
 ///
@@ -13,12 +13,12 @@ use serde::{ Deserialize, Serialize };
 /// - High-performance batch operations
 /// - Comprehensive position state management
 use std::path::Path;
-use std::sync::atomic::{ AtomicBool, Ordering };
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::arguments::is_debug_positions_enabled;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::positions::types::Position;
 
 // Static flag to track if database has been initialized (to reduce log noise)
@@ -31,8 +31,7 @@ const POSITIONS_SCHEMA_VERSION: u32 = 1;
 // DATABASE SCHEMA DEFINITIONS
 // =============================================================================
 
-const SCHEMA_POSITIONS: &str =
-    r#"
+const SCHEMA_POSITIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS positions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     mint TEXT NOT NULL,
@@ -78,8 +77,7 @@ CREATE TABLE IF NOT EXISTS positions (
 );
 "#;
 
-const SCHEMA_POSITION_STATES: &str =
-    r#"
+const SCHEMA_POSITION_STATES: &str = r#"
 CREATE TABLE IF NOT EXISTS position_states (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     position_id INTEGER NOT NULL,
@@ -90,8 +88,7 @@ CREATE TABLE IF NOT EXISTS position_states (
 );
 "#;
 
-const SCHEMA_POSITION_TRACKING: &str =
-    r#"
+const SCHEMA_POSITION_TRACKING: &str = r#"
 CREATE TABLE IF NOT EXISTS position_tracking (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     position_id INTEGER NOT NULL,
@@ -105,8 +102,7 @@ CREATE TABLE IF NOT EXISTS position_tracking (
 );
 "#;
 
-const SCHEMA_POSITION_METADATA: &str =
-    r#"
+const SCHEMA_POSITION_METADATA: &str = r#"
 CREATE TABLE IF NOT EXISTS position_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -114,8 +110,7 @@ CREATE TABLE IF NOT EXISTS position_metadata (
 );
 "#;
 
-const SCHEMA_TOKEN_SNAPSHOTS: &str =
-    r#"
+const SCHEMA_TOKEN_SNAPSHOTS: &str = r#"
 CREATE TABLE IF NOT EXISTS token_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     position_id INTEGER NOT NULL,
@@ -196,12 +191,12 @@ const POSITIONS_INDEXES: &[&str] = &[
 /// Position state enum with comprehensive lifecycle tracking
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PositionState {
-    Open, // No exit transaction, actively trading
-    Closing, // Exit transaction submitted but not yet verified
-    Closed, // Exit transaction verified and exit_price set
+    Open,        // No exit transaction, actively trading
+    Closing,     // Exit transaction submitted but not yet verified
+    Closed,      // Exit transaction verified and exit_price set
     ExitPending, // Exit transaction in verification queue (similar to Closing but more explicit)
-    ExitFailed, // Exit transaction failed and needs retry
-    Phantom, // Position exists but wallet has zero tokens (needs reconciliation)
+    ExitFailed,  // Exit transaction failed and needs retry
+    Phantom,     // Position exists but wallet has zero tokens (needs reconciliation)
     Reconciling, // Auto-healing in progress for phantom positions
 }
 
@@ -305,7 +300,7 @@ pub struct TokenSnapshot {
 pub struct PositionTracking {
     pub position_id: i64,
     pub price: f64,
-    pub price_source: String, // "pool", "api", "cache"
+    pub price_source: String,      // "pool", "api", "cache"
     pub pool_type: Option<String>, // e.g., "RAYDIUM CPMM"
     pub pool_address: Option<String>,
     pub api_price: Option<f64>,
@@ -345,8 +340,7 @@ impl PositionsDatabase {
 
         // Ensure data directory exists
         if !data_dir.exists() {
-            std::fs
-                ::create_dir_all(&data_dir)
+            std::fs::create_dir_all(&data_dir)
                 .map_err(|e| format!("Failed to create data directory: {}", e))?;
         }
 
@@ -359,7 +353,7 @@ impl PositionsDatabase {
             log(
                 LogTag::Positions,
                 "INIT",
-                &format!("Initializing positions database at: {}", database_path_str)
+                &format!("Initializing positions database at: {}", database_path_str),
             );
         }
 
@@ -383,7 +377,11 @@ impl PositionsDatabase {
         db.initialize_schema(is_first_init).await?;
 
         if is_first_init {
-            log(LogTag::Positions, "READY", "Positions database initialized successfully");
+            log(
+                LogTag::Positions,
+                "READY",
+                "Positions database initialized successfully",
+            );
             POSITIONS_DB_INITIALIZED.store(true, Ordering::Relaxed);
         }
 
@@ -395,57 +393,47 @@ impl PositionsDatabase {
         let conn = self.get_connection()?;
 
         // Configure database settings
-        conn
-            .pragma_update(None, "journal_mode", "WAL")
+        conn.pragma_update(None, "journal_mode", "WAL")
             .map_err(|e| format!("Failed to set WAL mode: {}", e))?;
-        conn
-            .pragma_update(None, "foreign_keys", true)
+        conn.pragma_update(None, "foreign_keys", true)
             .map_err(|e| format!("Failed to enable foreign keys: {}", e))?;
-        conn
-            .pragma_update(None, "synchronous", "NORMAL")
+        conn.pragma_update(None, "synchronous", "NORMAL")
             .map_err(|e| format!("Failed to set synchronous mode: {}", e))?;
 
         // Create all tables
-        conn
-            .execute(SCHEMA_POSITIONS, [])
+        conn.execute(SCHEMA_POSITIONS, [])
             .map_err(|e| format!("Failed to create positions table: {}", e))?;
 
-        conn
-            .execute(SCHEMA_POSITION_STATES, [])
+        conn.execute(SCHEMA_POSITION_STATES, [])
             .map_err(|e| format!("Failed to create position_states table: {}", e))?;
 
-        conn
-            .execute(SCHEMA_POSITION_TRACKING, [])
+        conn.execute(SCHEMA_POSITION_TRACKING, [])
             .map_err(|e| format!("Failed to create position_tracking table: {}", e))?;
 
-        conn
-            .execute(SCHEMA_POSITION_METADATA, [])
+        conn.execute(SCHEMA_POSITION_METADATA, [])
             .map_err(|e| format!("Failed to create position_metadata table: {}", e))?;
 
-        conn
-            .execute(SCHEMA_TOKEN_SNAPSHOTS, [])
+        conn.execute(SCHEMA_TOKEN_SNAPSHOTS, [])
             .map_err(|e| format!("Failed to create token_snapshots table: {}", e))?;
 
         // Create all indexes
         for index_sql in POSITIONS_INDEXES {
-            conn
-                .execute(index_sql, [])
+            conn.execute(index_sql, [])
                 .map_err(|e| format!("Failed to create positions index: {}", e))?;
         }
 
         // Set schema version
-        conn
-            .execute(
-                "INSERT OR REPLACE INTO position_metadata (key, value) VALUES ('schema_version', ?1)",
-                params![self.schema_version.to_string()]
-            )
-            .map_err(|e| format!("Failed to set positions schema version: {}", e))?;
+        conn.execute(
+            "INSERT OR REPLACE INTO position_metadata (key, value) VALUES ('schema_version', ?1)",
+            params![self.schema_version.to_string()],
+        )
+        .map_err(|e| format!("Failed to set positions schema version: {}", e))?;
 
         if log_initialization {
             log(
                 LogTag::Positions,
                 "SCHEMA",
-                "Positions database schema initialized with all tables and indexes"
+                "Positions database schema initialized with all tables and indexes",
             );
         }
 
@@ -454,7 +442,9 @@ impl PositionsDatabase {
 
     /// Get database connection from pool
     fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.pool.get().map_err(|e| format!("Failed to get positions database connection: {}", e))
+        self.pool
+            .get()
+            .map_err(|e| format!("Failed to get positions database connection: {}", e))
     }
 
     /// Insert new position and return the assigned ID
@@ -465,9 +455,8 @@ impl PositionsDatabase {
                 "DEBUG",
                 &format!(
                     "Inserting new position for mint {} with entry price {:.6} SOL",
-                    position.mint,
-                    position.entry_price
-                )
+                    position.mint, position.entry_price
+                ),
             );
         }
 
@@ -523,12 +512,13 @@ impl PositionsDatabase {
                     position.synthetic_exit,
                     position.closed_reason
                 ],
-                |row| row.get::<_, i64>(0)
+                |row| row.get::<_, i64>(0),
             )
             .map_err(|e| format!("Failed to insert position: {}", e))?;
 
         // Record initial state as Open
-        self.record_state_change(position_id, PositionState::Open, Some("Position created")).await?;
+        self.record_state_change(position_id, PositionState::Open, Some("Position created"))
+            .await?;
 
         if is_debug_positions_enabled() {
             log(
@@ -538,15 +528,21 @@ impl PositionsDatabase {
                     "Successfully inserted position ID {} for mint {} with entry signature {}",
                     position_id,
                     position.mint,
-                    position.entry_transaction_signature.as_deref().unwrap_or("None")
-                )
+                    position
+                        .entry_transaction_signature
+                        .as_deref()
+                        .unwrap_or("None")
+                ),
             );
         }
 
         log(
             LogTag::Positions,
             "INSERT",
-            &format!("Inserted new position ID {} for mint {}", position_id, position.mint)
+            &format!(
+                "Inserted new position ID {} for mint {}",
+                position_id, position.mint
+            ),
         );
 
         Ok(position_id)
@@ -569,7 +565,7 @@ impl PositionsDatabase {
                     position_id,
                     position.mint,
                     position.current_price.unwrap_or(0.0)
-                )
+                ),
             );
         }
 
@@ -638,9 +634,8 @@ impl PositionsDatabase {
                 "DEBUG",
                 &format!(
                     "Successfully updated position ID {} ({} rows affected)",
-                    position_id,
-                    rows_affected
-                )
+                    position_id, rows_affected
+                ),
             );
         }
 
@@ -689,7 +684,7 @@ impl PositionsDatabase {
             FROM positions WHERE id = ?1
             "#,
                 params![id],
-                |row| self.row_to_position(row)
+                |row| self.row_to_position(row),
             )
             .optional()
             .map_err(|e| format!("Failed to get position by ID: {}", e))?;
@@ -715,7 +710,7 @@ impl PositionsDatabase {
             FROM positions WHERE mint = ?1 ORDER BY entry_time DESC LIMIT 1
             "#,
                 params![mint],
-                |row| self.row_to_position(row)
+                |row| self.row_to_position(row),
             )
             .optional()
             .map_err(|e| format!("Failed to get position by mint: {}", e))?;
@@ -726,7 +721,7 @@ impl PositionsDatabase {
     /// Get position by entry transaction signature
     pub async fn get_position_by_entry_signature(
         &self,
-        signature: &str
+        signature: &str,
     ) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
 
@@ -744,7 +739,7 @@ impl PositionsDatabase {
             FROM positions WHERE entry_transaction_signature = ?1
             "#,
                 params![signature],
-                |row| self.row_to_position(row)
+                |row| self.row_to_position(row),
             )
             .optional()
             .map_err(|e| format!("Failed to get position by entry signature: {}", e))?;
@@ -755,7 +750,7 @@ impl PositionsDatabase {
     /// Get position by exit transaction signature
     pub async fn get_position_by_exit_signature(
         &self,
-        signature: &str
+        signature: &str,
     ) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
 
@@ -773,7 +768,7 @@ impl PositionsDatabase {
             FROM positions WHERE exit_transaction_signature = ?1
             "#,
                 params![signature],
-                |row| self.row_to_position(row)
+                |row| self.row_to_position(row),
             )
             .optional()
             .map_err(|e| format!("Failed to get position by exit signature: {}", e))?;
@@ -785,12 +780,11 @@ impl PositionsDatabase {
     pub async fn get_positions(
         &self,
         limit: Option<usize>,
-        offset: Option<usize>
+        offset: Option<usize>,
     ) -> Result<Vec<Position>, String> {
         let conn = self.get_connection()?;
 
-        let mut query =
-            r#"
+        let mut query = r#"
             SELECT id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
                    position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
                    entry_transaction_signature, exit_transaction_signature, token_amount,
@@ -800,7 +794,8 @@ impl PositionsDatabase {
                    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
                    phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
             FROM positions ORDER BY entry_time DESC
-        "#.to_string();
+        "#
+        .to_string();
 
         if let Some(limit) = limit {
             query.push_str(&format!(" LIMIT {}", limit));
@@ -819,9 +814,8 @@ impl PositionsDatabase {
 
         let mut positions = Vec::new();
         for position_result in position_iter {
-            positions.push(
-                position_result.map_err(|e| format!("Failed to parse position row: {}", e))?
-            );
+            positions
+                .push(position_result.map_err(|e| format!("Failed to parse position row: {}", e))?);
         }
 
         Ok(positions)
@@ -843,7 +837,7 @@ impl PositionsDatabase {
                    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
                    phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
             FROM positions WHERE transaction_exit_verified = 0 ORDER BY entry_time DESC
-            "#
+            "#,
             )
             .map_err(|e| format!("Failed to prepare open positions query: {}", e))?;
 
@@ -853,9 +847,8 @@ impl PositionsDatabase {
 
         let mut positions = Vec::new();
         for position_result in position_iter {
-            positions.push(
-                position_result.map_err(|e| format!("Failed to parse position row: {}", e))?
-            );
+            positions
+                .push(position_result.map_err(|e| format!("Failed to parse position row: {}", e))?);
         }
 
         Ok(positions)
@@ -877,7 +870,7 @@ impl PositionsDatabase {
                    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
                    phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
             FROM positions WHERE transaction_exit_verified = 1 ORDER BY exit_time DESC
-            "#
+            "#,
             )
             .map_err(|e| format!("Failed to prepare closed positions query: {}", e))?;
 
@@ -887,9 +880,8 @@ impl PositionsDatabase {
 
         let mut positions = Vec::new();
         for position_result in position_iter {
-            positions.push(
-                position_result.map_err(|e| format!("Failed to parse position row: {}", e))?
-            );
+            positions
+                .push(position_result.map_err(|e| format!("Failed to parse position row: {}", e))?);
         }
 
         Ok(positions)
@@ -900,7 +892,7 @@ impl PositionsDatabase {
     pub async fn get_recent_closed_positions_for_mint(
         &self,
         mint: &str,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<Position>, String> {
         let conn = self.get_connection()?;
         let mut stmt = conn
@@ -918,7 +910,7 @@ impl PositionsDatabase {
               AND exit_price IS NOT NULL AND exit_time IS NOT NULL
             ORDER BY datetime(exit_time) DESC
             LIMIT ?2
-            "#
+            "#,
             )
             .map_err(|e| format!("Failed to prepare recent closed positions query: {}", e))?;
 
@@ -940,7 +932,7 @@ impl PositionsDatabase {
     pub async fn get_recent_closed_exit_prices_for_mint(
         &self,
         mint: &str,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<(Option<f64>, Option<f64>)>, String> {
         let conn = self.get_connection()?;
         let mut stmt = conn
@@ -952,7 +944,7 @@ impl PositionsDatabase {
               AND exit_price IS NOT NULL AND exit_time IS NOT NULL
             ORDER BY datetime(exit_time) DESC
             LIMIT ?2
-            "#
+            "#,
             )
             .map_err(|e| format!("Failed to prepare recent closed exit prices query: {}", e))?;
 
@@ -975,7 +967,7 @@ impl PositionsDatabase {
     /// Get positions by state
     pub async fn get_positions_by_state(
         &self,
-        state: &PositionState
+        state: &PositionState,
     ) -> Result<Vec<Position>, String> {
         // This requires joining with position_states to get current state
         let conn = self.get_connection()?;
@@ -1009,9 +1001,8 @@ impl PositionsDatabase {
 
         let mut positions = Vec::new();
         for position_result in position_iter {
-            positions.push(
-                position_result.map_err(|e| format!("Failed to parse position row: {}", e))?
-            );
+            positions
+                .push(position_result.map_err(|e| format!("Failed to parse position row: {}", e))?);
         }
 
         Ok(positions)
@@ -1036,7 +1027,7 @@ impl PositionsDatabase {
             WHERE transaction_entry_verified = false 
                OR (exit_transaction_signature IS NOT NULL AND transaction_exit_verified = false)
             ORDER BY entry_time DESC
-            "#
+            "#,
             )
             .map_err(|e| format!("Failed to prepare unverified positions query: {}", e))?;
 
@@ -1046,9 +1037,8 @@ impl PositionsDatabase {
 
         let mut positions = Vec::new();
         for position_result in position_iter {
-            positions.push(
-                position_result.map_err(|e| format!("Failed to parse position row: {}", e))?
-            );
+            positions
+                .push(position_result.map_err(|e| format!("Failed to parse position row: {}", e))?);
         }
 
         Ok(positions)
@@ -1068,14 +1058,14 @@ impl PositionsDatabase {
     /// Delete position by entry signature
     pub async fn delete_position_by_entry_signature(
         &self,
-        signature: &str
+        signature: &str,
     ) -> Result<bool, String> {
         let conn = self.get_connection()?;
 
         let rows_affected = conn
             .execute(
                 "DELETE FROM positions WHERE entry_transaction_signature = ?1",
-                params![signature]
+                params![signature],
             )
             .map_err(|e| format!("Failed to delete position by entry signature: {}", e))?;
 
@@ -1083,7 +1073,7 @@ impl PositionsDatabase {
             log(
                 LogTag::Positions,
                 "DELETE",
-                &format!("Deleted position with entry signature: {}", signature)
+                &format!("Deleted position with entry signature: {}", signature),
             );
         }
 
@@ -1095,7 +1085,7 @@ impl PositionsDatabase {
         &self,
         position_id: i64,
         state: PositionState,
-        reason: Option<&str>
+        reason: Option<&str>,
     ) -> Result<(), String> {
         if is_debug_positions_enabled() {
             log(
@@ -1106,18 +1096,17 @@ impl PositionsDatabase {
                     position_id,
                     state,
                     reason.unwrap_or("None")
-                )
+                ),
             );
         }
 
         let conn = self.get_connection()?;
 
-        conn
-            .execute(
-                "INSERT INTO position_states (position_id, state, reason) VALUES (?1, ?2, ?3)",
-                params![position_id, state.to_string(), reason]
-            )
-            .map_err(|e| format!("Failed to record state change: {}", e))?;
+        conn.execute(
+            "INSERT INTO position_states (position_id, state, reason) VALUES (?1, ?2, ?3)",
+            params![position_id, state.to_string(), reason],
+        )
+        .map_err(|e| format!("Failed to record state change: {}", e))?;
 
         if is_debug_positions_enabled() {
             log(
@@ -1125,9 +1114,8 @@ impl PositionsDatabase {
                 "DEBUG",
                 &format!(
                     "Successfully recorded state change for position ID {}: {}",
-                    position_id,
-                    state
-                )
+                    position_id, state
+                ),
             );
         }
 
@@ -1137,7 +1125,7 @@ impl PositionsDatabase {
     /// Get position state history
     pub async fn get_position_state_history(
         &self,
-        position_id: i64
+        position_id: i64,
     ) -> Result<Vec<PositionStateHistory>, String> {
         let conn = self.get_connection()?;
 
@@ -1150,15 +1138,13 @@ impl PositionsDatabase {
         let history_iter = stmt
             .query_map(params![position_id], |row| {
                 let state_str: String = row.get(1)?;
-                let state = state_str
-                    .parse::<PositionState>()
-                    .map_err(|e| {
-                        rusqlite::Error::InvalidColumnType(
-                            1,
-                            "Invalid state".to_string(),
-                            rusqlite::types::Type::Text
-                        )
-                    })?;
+                let state = state_str.parse::<PositionState>().map_err(|e| {
+                    rusqlite::Error::InvalidColumnType(
+                        1,
+                        "Invalid state".to_string(),
+                        rusqlite::types::Type::Text,
+                    )
+                })?;
 
                 let changed_at_str: String = row.get(2)?;
                 let changed_at = DateTime::parse_from_rfc3339(&changed_at_str)
@@ -1166,7 +1152,7 @@ impl PositionsDatabase {
                         rusqlite::Error::InvalidColumnType(
                             2,
                             "Invalid datetime".to_string(),
-                            rusqlite::types::Type::Text
+                            rusqlite::types::Type::Text,
                         )
                     })?
                     .with_timezone(&Utc);
@@ -1183,7 +1169,7 @@ impl PositionsDatabase {
         let mut history = Vec::new();
         for history_result in history_iter {
             history.push(
-                history_result.map_err(|e| format!("Failed to parse state history row: {}", e))?
+                history_result.map_err(|e| format!("Failed to parse state history row: {}", e))?,
             );
         }
 
@@ -1193,7 +1179,7 @@ impl PositionsDatabase {
     /// Record position tracking data
     pub async fn record_position_tracking(
         &self,
-        tracking: &PositionTracking
+        tracking: &PositionTracking,
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
 
@@ -1222,7 +1208,7 @@ impl PositionsDatabase {
     pub async fn get_recent_position_tracking(
         &self,
         position_id: i64,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<PositionTracking>, String> {
         let conn = self.get_connection()?;
 
@@ -1234,7 +1220,7 @@ impl PositionsDatabase {
             WHERE position_id = ?1 
             ORDER BY tracked_at DESC 
             LIMIT ?2
-            "#
+            "#,
             )
             .map_err(|e| format!("Failed to prepare tracking query: {}", e))?;
 
@@ -1246,7 +1232,7 @@ impl PositionsDatabase {
                         rusqlite::Error::InvalidColumnType(
                             6,
                             "Invalid datetime".to_string(),
-                            rusqlite::types::Type::Text
+                            rusqlite::types::Type::Text,
                         )
                     })?
                     .with_timezone(&Utc);
@@ -1265,9 +1251,8 @@ impl PositionsDatabase {
 
         let mut tracking_data = Vec::new();
         for tracking_result in tracking_iter {
-            tracking_data.push(
-                tracking_result.map_err(|e| format!("Failed to parse tracking row: {}", e))?
-            );
+            tracking_data
+                .push(tracking_result.map_err(|e| format!("Failed to parse tracking row: {}", e))?);
         }
 
         Ok(tracking_data)
@@ -1285,7 +1270,7 @@ impl PositionsDatabase {
             .query_row(
                 "SELECT COUNT(*) FROM positions WHERE transaction_exit_verified = 0",
                 [],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .map_err(|e| format!("Failed to count open positions: {}", e))?;
 
@@ -1293,13 +1278,15 @@ impl PositionsDatabase {
             .query_row(
                 "SELECT COUNT(*) FROM positions WHERE transaction_exit_verified = 1",
                 [],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .map_err(|e| format!("Failed to count closed positions: {}", e))?;
 
         let phantom_positions: i64 = conn
-            .query_row("SELECT COUNT(*) FROM positions WHERE phantom_confirmations > 0", [], |row|
-                row.get(0)
+            .query_row(
+                "SELECT COUNT(*) FROM positions WHERE phantom_confirmations > 0",
+                [],
+                |row| row.get(0),
             )
             .map_err(|e| format!("Failed to count phantom positions: {}", e))?;
 
@@ -1308,12 +1295,13 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to count state history: {}", e))?;
 
         let total_tracking_records: i64 = conn
-            .query_row("SELECT COUNT(*) FROM position_tracking", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM position_tracking", [], |row| {
+                row.get(0)
+            })
             .map_err(|e| format!("Failed to count tracking records: {}", e))?;
 
         // Get database file size
-        let database_size = std::fs
-            ::metadata(&self.database_path)
+        let database_size = std::fs::metadata(&self.database_path)
             .map(|m| m.len())
             .unwrap_or(0);
 
@@ -1331,14 +1319,21 @@ impl PositionsDatabase {
 
     /// Vacuum database to reclaim space and optimize performance
     pub async fn vacuum_database(&self) -> Result<(), String> {
-        log(LogTag::Positions, "VACUUM", "Starting positions database vacuum operation...");
+        log(
+            LogTag::Positions,
+            "VACUUM",
+            "Starting positions database vacuum operation...",
+        );
 
         let conn = self.get_connection()?;
-        conn
-            .execute("VACUUM", [])
+        conn.execute("VACUUM", [])
             .map_err(|e| format!("Failed to vacuum positions database: {}", e))?;
 
-        log(LogTag::Positions, "VACUUM", "Positions database vacuum completed successfully");
+        log(
+            LogTag::Positions,
+            "VACUUM",
+            "Positions database vacuum completed successfully",
+        );
         Ok(())
     }
 
@@ -1347,15 +1342,18 @@ impl PositionsDatabase {
         log(
             LogTag::Positions,
             "ANALYZE",
-            "Running positions database analysis for optimization..."
+            "Running positions database analysis for optimization...",
         );
 
         let conn = self.get_connection()?;
-        conn
-            .execute("ANALYZE", [])
+        conn.execute("ANALYZE", [])
             .map_err(|e| format!("Failed to analyze positions database: {}", e))?;
 
-        log(LogTag::Positions, "ANALYZE", "Positions database analysis completed successfully");
+        log(
+            LogTag::Positions,
+            "ANALYZE",
+            "Positions database analysis completed successfully",
+        );
         Ok(())
     }
 
@@ -1370,7 +1368,7 @@ impl PositionsDatabase {
                     snapshot.position_id,
                     snapshot.snapshot_type,
                     snapshot.price_sol.unwrap_or(0.0)
-                )
+                ),
             );
         }
 
@@ -1450,10 +1448,8 @@ impl PositionsDatabase {
                 "DEBUG",
                 &format!(
                     "Successfully saved token snapshot ID {} for position ID {} (type: {})",
-                    snapshot_id,
-                    snapshot.position_id,
-                    snapshot.snapshot_type
-                )
+                    snapshot_id, snapshot.position_id, snapshot.snapshot_type
+                ),
             );
         }
 
@@ -1463,7 +1459,7 @@ impl PositionsDatabase {
     /// Get token snapshots for a position
     pub async fn get_token_snapshots(
         &self,
-        position_id: i64
+        position_id: i64,
     ) -> Result<Vec<TokenSnapshot>, String> {
         let conn = self.get_connection()?;
 
@@ -1493,7 +1489,8 @@ impl PositionsDatabase {
         let mut snapshots = Vec::new();
         for snapshot_result in snapshot_iter {
             snapshots.push(
-                snapshot_result.map_err(|e| format!("Failed to parse token snapshot row: {}", e))?
+                snapshot_result
+                    .map_err(|e| format!("Failed to parse token snapshot row: {}", e))?,
             );
         }
 
@@ -1504,7 +1501,7 @@ impl PositionsDatabase {
     pub async fn get_token_snapshot(
         &self,
         position_id: i64,
-        snapshot_type: &str
+        snapshot_type: &str,
     ) -> Result<Option<TokenSnapshot>, String> {
         let conn = self.get_connection()?;
 
@@ -1546,7 +1543,7 @@ impl PositionsDatabase {
                 rusqlite::Error::InvalidColumnType(
                     0,
                     "Invalid snapshot_time".to_string(),
-                    rusqlite::types::Type::Text
+                    rusqlite::types::Type::Text,
                 )
             })?
             .with_timezone(&Utc);
@@ -1557,7 +1554,7 @@ impl PositionsDatabase {
                 rusqlite::Error::InvalidColumnType(
                     0,
                     "Invalid api_fetch_time".to_string(),
-                    rusqlite::types::Type::Text
+                    rusqlite::types::Type::Text,
                 )
             })?
             .with_timezone(&Utc);
@@ -1617,7 +1614,7 @@ impl PositionsDatabase {
                 rusqlite::Error::InvalidColumnType(
                     5,
                     "Invalid entry_time".to_string(),
-                    rusqlite::types::Type::Text
+                    rusqlite::types::Type::Text,
                 )
             })?
             .with_timezone(&Utc);
@@ -1629,50 +1626,48 @@ impl PositionsDatabase {
                         rusqlite::Error::InvalidColumnType(
                             7,
                             "Invalid exit_time".to_string(),
-                            rusqlite::types::Type::Text
+                            rusqlite::types::Type::Text,
                         )
                     })?
-                    .with_timezone(&Utc)
+                    .with_timezone(&Utc),
             )
         } else {
             None
         };
 
-        let current_price_updated = if
-            let Some(updated_str) = row.get::<_, Option<String>>("current_price_updated")?
-        {
-            Some(
-                DateTime::parse_from_rfc3339(&updated_str)
-                    .map_err(|e| {
-                        rusqlite::Error::InvalidColumnType(
-                            27,
-                            "Invalid current_price_updated".to_string(),
-                            rusqlite::types::Type::Text
-                        )
-                    })?
-                    .with_timezone(&Utc)
-            )
-        } else {
-            None
-        };
+        let current_price_updated =
+            if let Some(updated_str) = row.get::<_, Option<String>>("current_price_updated")? {
+                Some(
+                    DateTime::parse_from_rfc3339(&updated_str)
+                        .map_err(|e| {
+                            rusqlite::Error::InvalidColumnType(
+                                27,
+                                "Invalid current_price_updated".to_string(),
+                                rusqlite::types::Type::Text,
+                            )
+                        })?
+                        .with_timezone(&Utc),
+                )
+            } else {
+                None
+            };
 
-        let phantom_first_seen = if
-            let Some(seen_str) = row.get::<_, Option<String>>("phantom_first_seen")?
-        {
-            Some(
-                DateTime::parse_from_rfc3339(&seen_str)
-                    .map_err(|e| {
-                        rusqlite::Error::InvalidColumnType(
-                            29,
-                            "Invalid phantom_first_seen".to_string(),
-                            rusqlite::types::Type::Text
-                        )
-                    })?
-                    .with_timezone(&Utc)
-            )
-        } else {
-            None
-        };
+        let phantom_first_seen =
+            if let Some(seen_str) = row.get::<_, Option<String>>("phantom_first_seen")? {
+                Some(
+                    DateTime::parse_from_rfc3339(&seen_str)
+                        .map_err(|e| {
+                            rusqlite::Error::InvalidColumnType(
+                                29,
+                                "Invalid phantom_first_seen".to_string(),
+                                rusqlite::types::Type::Text,
+                            )
+                        })?
+                        .with_timezone(&Utc),
+                )
+            } else {
+                None
+            };
 
         Ok(Position {
             id: Some(row.get("id")?),
@@ -1699,8 +1694,12 @@ impl PositionsDatabase {
             liquidity_tier: row.get("liquidity_tier")?,
             transaction_entry_verified: row.get("transaction_entry_verified")?,
             transaction_exit_verified: row.get("transaction_exit_verified")?,
-            entry_fee_lamports: row.get::<_, Option<i64>>("entry_fee_lamports")?.map(|f| f as u64),
-            exit_fee_lamports: row.get::<_, Option<i64>>("exit_fee_lamports")?.map(|f| f as u64),
+            entry_fee_lamports: row
+                .get::<_, Option<i64>>("entry_fee_lamports")?
+                .map(|f| f as u64),
+            exit_fee_lamports: row
+                .get::<_, Option<i64>>("exit_fee_lamports")?
+                .map(|f| f as u64),
             current_price: row.get("current_price")?,
             current_price_updated,
             phantom_remove: false, // This is not persisted
@@ -1717,9 +1716,8 @@ impl PositionsDatabase {
 // =============================================================================
 
 /// Global positions database instance
-static GLOBAL_POSITIONS_DB: Lazy<Arc<Mutex<Option<PositionsDatabase>>>> = Lazy::new(||
-    Arc::new(Mutex::new(None))
-);
+static GLOBAL_POSITIONS_DB: Lazy<Arc<Mutex<Option<PositionsDatabase>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
 
 /// Initialize the global positions database
 pub async fn initialize_positions_database() -> Result<(), String> {
@@ -1731,7 +1729,11 @@ pub async fn initialize_positions_database() -> Result<(), String> {
     let db = PositionsDatabase::new().await?;
     *db_lock = Some(db);
 
-    log(LogTag::Positions, "INIT", "Global positions database initialized successfully");
+    log(
+        LogTag::Positions,
+        "INIT",
+        "Global positions database initialized successfully",
+    );
     Ok(())
 }
 
@@ -1742,7 +1744,8 @@ pub async fn get_positions_database() -> Result<Arc<Mutex<Option<PositionsDataba
 
 /// Execute operation with global database
 pub async fn with_positions_database<F, R>(operation: F) -> Result<R, String>
-    where F: FnOnce(&PositionsDatabase) -> Result<R, String>
+where
+    F: FnOnce(&PositionsDatabase) -> Result<R, String>,
 {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
@@ -1753,7 +1756,9 @@ pub async fn with_positions_database<F, R>(operation: F) -> Result<R, String>
 
 /// Execute async operation with global database
 pub async fn with_positions_database_async<F, Fut, R>(operation: F) -> Result<R, String>
-    where F: FnOnce(&PositionsDatabase) -> Fut, Fut: std::future::Future<Output = Result<R, String>>
+where
+    F: FnOnce(&PositionsDatabase) -> Fut,
+    Fut: std::future::Future<Output = Result<R, String>>,
 {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
@@ -1786,10 +1791,8 @@ pub async fn save_position(position: &Position) -> Result<i64, String> {
             "DEBUG",
             &format!(
                 "Saving position for mint {} (ID: {:?}) with entry price {:.6} SOL",
-                position.mint,
-                position.id,
-                position.entry_price
-            )
+                position.mint, position.id, position.entry_price
+            ),
         );
     }
 
@@ -1802,7 +1805,10 @@ pub async fn save_position(position: &Position) -> Result<i64, String> {
                     log(
                         LogTag::Positions,
                         "DEBUG",
-                        &format!("Updated existing position ID {} for mint {}", id, position.mint)
+                        &format!(
+                            "Updated existing position ID {} for mint {}",
+                            id, position.mint
+                        ),
                     );
                 }
                 Ok(id)
@@ -1812,7 +1818,10 @@ pub async fn save_position(position: &Position) -> Result<i64, String> {
                     log(
                         LogTag::Positions,
                         "DEBUG",
-                        &format!("Created new position ID {} for mint {}", new_id, position.mint)
+                        &format!(
+                            "Created new position ID {} for mint {}",
+                            new_id, position.mint
+                        ),
                     );
                 }
                 Ok(new_id)
@@ -1842,7 +1851,7 @@ pub async fn update_position(position: &Position) -> Result<(), String> {
                 position.id,
                 position.mint,
                 position.current_price.unwrap_or(0.0)
-            )
+            ),
         );
     }
 
@@ -1852,27 +1861,22 @@ pub async fn update_position(position: &Position) -> Result<(), String> {
             let result = db.update_position(position).await;
             if is_debug_positions_enabled() {
                 match &result {
-                    Ok(_) =>
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!(
-                                "Successfully updated position ID {:?} for mint {}",
-                                position.id,
-                                position.mint
-                            )
+                    Ok(_) => log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!(
+                            "Successfully updated position ID {:?} for mint {}",
+                            position.id, position.mint
                         ),
-                    Err(e) =>
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!(
-                                "Failed to update position ID {:?} for mint {}: {}",
-                                position.id,
-                                position.mint,
-                                e
-                            )
+                    ),
+                    Err(e) => log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!(
+                            "Failed to update position ID {:?} for mint {}: {}",
+                            position.id, position.mint, e
                         ),
+                    ),
                 }
             }
             result
@@ -1884,7 +1888,11 @@ pub async fn update_position(position: &Position) -> Result<(), String> {
 /// Force database synchronization after critical updates
 pub async fn force_database_sync() -> Result<(), String> {
     if is_debug_positions_enabled() {
-        log(LogTag::Positions, "DEBUG", "Forcing database synchronization...");
+        log(
+            LogTag::Positions,
+            "DEBUG",
+            "Forcing database synchronization...",
+        );
     }
 
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
@@ -1893,18 +1901,16 @@ pub async fn force_database_sync() -> Result<(), String> {
             let result = db.force_sync().await;
             if is_debug_positions_enabled() {
                 match &result {
-                    Ok(_) =>
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            "Database synchronization completed successfully"
-                        ),
-                    Err(e) =>
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!("Database synchronization failed: {}", e)
-                        ),
+                    Ok(_) => log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        "Database synchronization completed successfully",
+                    ),
+                    Err(e) => log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!("Database synchronization failed: {}", e),
+                    ),
                 }
             }
             result
@@ -1957,10 +1963,8 @@ pub async fn save_token_snapshot(snapshot: &TokenSnapshot) -> Result<i64, String
             "DEBUG",
             &format!(
                 "Saving token snapshot for position ID {} (type: {}) with mint {}",
-                snapshot.position_id,
-                snapshot.snapshot_type,
-                snapshot.mint
-            )
+                snapshot.position_id, snapshot.snapshot_type, snapshot.mint
+            ),
         );
     }
 
@@ -1970,28 +1974,22 @@ pub async fn save_token_snapshot(snapshot: &TokenSnapshot) -> Result<i64, String
             let result = db.save_token_snapshot(snapshot).await;
             if is_debug_positions_enabled() {
                 match &result {
-                    Ok(snapshot_id) =>
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!(
-                                "Successfully saved token snapshot ID {} for position ID {} (type: {})",
-                                snapshot_id,
-                                snapshot.position_id,
-                                snapshot.snapshot_type
-                            )
+                    Ok(snapshot_id) => log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!(
+                            "Successfully saved token snapshot ID {} for position ID {} (type: {})",
+                            snapshot_id, snapshot.position_id, snapshot.snapshot_type
                         ),
-                    Err(e) =>
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!(
-                                "Failed to save token snapshot for position ID {} (type: {}): {}",
-                                snapshot.position_id,
-                                snapshot.snapshot_type,
-                                e
-                            )
+                    ),
+                    Err(e) => log(
+                        LogTag::Positions,
+                        "DEBUG",
+                        &format!(
+                            "Failed to save token snapshot for position ID {} (type: {}): {}",
+                            snapshot.position_id, snapshot.snapshot_type, e
                         ),
+                    ),
                 }
             }
             result
@@ -2012,7 +2010,7 @@ pub async fn get_token_snapshots(position_id: i64) -> Result<Vec<TokenSnapshot>,
 /// Get specific token snapshot by type
 pub async fn get_token_snapshot(
     position_id: i64,
-    snapshot_type: &str
+    snapshot_type: &str,
 ) -> Result<Option<TokenSnapshot>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
@@ -2024,7 +2022,7 @@ pub async fn get_token_snapshot(
 /// Get recent closed positions for a specific mint
 pub async fn get_recent_closed_positions_for_mint(
     mint: &str,
-    limit: usize
+    limit: usize,
 ) -> Result<Vec<Position>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {

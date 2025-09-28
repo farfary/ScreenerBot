@@ -11,10 +11,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📊 DATABASE TIME COMPARISON:");
 
     // Most recent token update from our database query
-    let last_token_update = chrono::DateTime
-        ::parse_from_rfc3339("2025-09-10T23:38:48.479718+00:00")
-        .unwrap()
-        .with_timezone(&chrono::Utc);
+    let last_token_update =
+        chrono::DateTime::parse_from_rfc3339("2025-09-10T23:38:48.479718+00:00")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
 
     println!("  Last token update: {}", last_token_update);
 

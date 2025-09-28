@@ -1,11 +1,11 @@
-use clap::{ Arg, Command };
+use clap::{Arg, Command};
 use screenerbot::{
     arguments::set_cmd_args,
-    logger::{ log, LogTag },
-    positions::{ get_db_open_positions, get_db_closed_positions },
+    logger::{log, LogTag},
     positions::Position,
+    positions::{get_db_closed_positions, get_db_open_positions},
     tokens::get_token_decimals,
-    transactions::{ get_transaction, get_global_transaction_manager },
+    transactions::{get_global_transaction_manager, get_transaction},
     utils::safe_truncate,
 };
 use std::collections::HashMap;
@@ -22,27 +22,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .long("signature")
                 .value_name("SIGNATURE")
                 .help("Check specific transaction signature")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::new("mint")
                 .long("mint")
                 .value_name("MINT")
                 .help("Check positions for specific token mint")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::new("all-positions")
                 .long("all-positions")
                 .help("Check all positions for token amount accuracy")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             Arg::new("verbose")
                 .short('v')
                 .long("verbose")
                 .help("Enable verbose output")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .get_matches();
 
@@ -51,7 +51,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let verbose = matches.get_flag("verbose");
 
-    log(LogTag::System, "INFO", "🔍 Starting position token amount verification");
+    log(
+        LogTag::System,
+        "INFO",
+        "🔍 Starting position token amount verification",
+    );
 
     if let Some(signature) = matches.get_one::<String>("signature") {
         verify_single_transaction(signature, verbose).await?;
@@ -70,9 +74,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// Verify token amounts for a specific transaction
 async fn verify_single_transaction(
     signature: &str,
-    verbose: bool
+    verbose: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    log(LogTag::System, "INFO", &format!("🔍 Verifying transaction: {}", signature));
+    log(
+        LogTag::System,
+        "INFO",
+        &format!("🔍 Verifying transaction: {}", signature),
+    );
 
     // Get transaction from system
     let transaction = match get_transaction(signature).await {
@@ -92,13 +100,19 @@ async fn verify_single_transaction(
     println!("Signature: {}", transaction.signature);
     println!("Success: {}", transaction.success);
     println!("Type: {:?}", transaction.transaction_type);
-    println!("SOL Balance Change: {:.9} SOL", transaction.sol_balance_change);
+    println!(
+        "SOL Balance Change: {:.9} SOL",
+        transaction.sol_balance_change
+    );
 
     if !transaction.token_balance_changes.is_empty() {
         println!("\n🪙 TOKEN BALANCE CHANGES:");
         for (i, change) in transaction.token_balance_changes.iter().enumerate() {
             println!("  {}. Mint: {}", i + 1, safe_truncate(&change.mint, 12));
-            println!("     Change: {:.9} tokens (decimals: {})", change.change, change.decimals);
+            println!(
+                "     Change: {:.9} tokens (decimals: {})",
+                change.change, change.decimals
+            );
             if let Some(pre) = change.pre_balance {
                 println!("     Pre: {:.9}", pre);
             }
@@ -126,12 +140,8 @@ async fn verify_single_transaction(
         let manager = global_manager.lock().await;
         if let Some(ref manager) = *manager {
             let empty_cache = HashMap::new();
-            if
-                let Some(swap_info) = manager.convert_to_swap_pnl_info(
-                    &transaction,
-                    &empty_cache,
-                    false
-                )
+            if let Some(swap_info) =
+                manager.convert_to_swap_pnl_info(&transaction, &empty_cache, false)
             {
                 println!("\n📈 SWAP ANALYSIS (SwapPnLInfo):");
                 println!("  Type: {}", swap_info.swap_type);
@@ -145,12 +155,11 @@ async fn verify_single_transaction(
 
                 // Check decimal conversion
                 if let Some(decimals) = get_token_decimals(&swap_info.token_mint).await {
-                    let token_amount_units = (swap_info.token_amount.abs() *
-                        (10_f64).powi(decimals as i32)) as u64;
+                    let token_amount_units =
+                        (swap_info.token_amount.abs() * (10_f64).powi(decimals as i32)) as u64;
                     println!(
                         "  Token Amount (units): {} (with {} decimals)",
-                        token_amount_units,
-                        decimals
+                        token_amount_units, decimals
                     );
 
                     // Verify the reverse conversion
@@ -184,9 +193,8 @@ async fn verify_single_transaction(
 
     // Check open positions
     for position in &open_positions {
-        if
-            position.entry_transaction_signature.as_deref() == Some(signature) ||
-            position.exit_transaction_signature.as_deref() == Some(signature)
+        if position.entry_transaction_signature.as_deref() == Some(signature)
+            || position.exit_transaction_signature.as_deref() == Some(signature)
         {
             found_positions = true;
             print_position_token_info(&position, verbose).await;
@@ -195,9 +203,8 @@ async fn verify_single_transaction(
 
     // Check closed positions
     for position in &closed_positions {
-        if
-            position.entry_transaction_signature.as_deref() == Some(signature) ||
-            position.exit_transaction_signature.as_deref() == Some(signature)
+        if position.entry_transaction_signature.as_deref() == Some(signature)
+            || position.exit_transaction_signature.as_deref() == Some(signature)
         {
             found_positions = true;
             print_position_token_info(&position, verbose).await;
@@ -214,12 +221,15 @@ async fn verify_single_transaction(
 /// Verify token amounts for all positions for a specific mint
 async fn verify_positions_for_mint(
     mint: &str,
-    verbose: bool
+    verbose: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     log(
         LogTag::System,
         "INFO",
-        &format!("🔍 Verifying positions for mint: {}", safe_truncate(mint, 12))
+        &format!(
+            "🔍 Verifying positions for mint: {}",
+            safe_truncate(mint, 12)
+        ),
     );
 
     let open_positions = get_db_open_positions().await.unwrap_or_default();
@@ -246,7 +256,10 @@ async fn verify_positions_for_mint(
     }
 
     if !found_positions {
-        println!("❌ No positions found for mint: {}", safe_truncate(mint, 12));
+        println!(
+            "❌ No positions found for mint: {}",
+            safe_truncate(mint, 12)
+        );
     }
 
     Ok(())
@@ -254,7 +267,11 @@ async fn verify_positions_for_mint(
 
 /// Verify token amounts for all positions
 async fn verify_all_positions(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
-    log(LogTag::System, "INFO", "🔍 Verifying all positions for token amount accuracy");
+    log(
+        LogTag::System,
+        "INFO",
+        "🔍 Verifying all positions for token amount accuracy",
+    );
 
     let open_positions = get_db_open_positions().await.unwrap_or_default();
     let closed_positions = get_db_closed_positions().await.unwrap_or_default();
@@ -304,14 +321,20 @@ async fn verify_all_positions(verbose: bool) -> Result<(), Box<dyn std::error::E
     println!("Total positions: {}", total_positions);
     println!("Verified OK: {}", verified_positions);
     println!("Problematic: {}", problematic_positions);
-    println!("Success rate: {:.1}%", if total_positions > 0 {
-        ((verified_positions as f64) / (total_positions as f64)) * 100.0
-    } else {
-        0.0
-    });
+    println!(
+        "Success rate: {:.1}%",
+        if total_positions > 0 {
+            ((verified_positions as f64) / (total_positions as f64)) * 100.0
+        } else {
+            0.0
+        }
+    );
 
     if problematic_positions > 0 {
-        println!("\n⚠️  Found {} positions with potential token amount issues", problematic_positions);
+        println!(
+            "\n⚠️  Found {} positions with potential token amount issues",
+            problematic_positions
+        );
     } else {
         println!("\n✅ All positions have correct token amounts");
     }
@@ -322,7 +345,7 @@ async fn verify_all_positions(verbose: bool) -> Result<(), Box<dyn std::error::E
 /// Verify token amounts for a specific position
 async fn verify_position_token_amounts(
     position: &Position,
-    verbose: bool
+    verbose: bool,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     if verbose {
         print_position_token_info(position, verbose).await;
@@ -337,21 +360,17 @@ async fn verify_position_token_amounts(
                 let manager = global_manager.lock().await;
                 if let Some(ref manager) = *manager {
                     let empty_cache = HashMap::new();
-                    if
-                        let Some(swap_info) = manager.convert_to_swap_pnl_info(
-                            &entry_tx,
-                            &empty_cache,
-                            true
-                        )
+                    if let Some(swap_info) =
+                        manager.convert_to_swap_pnl_info(&entry_tx, &empty_cache, true)
                     {
                         // Compare stored token amount with calculated amount
                         if let Some(stored_amount) = position.token_amount {
                             if let Some(decimals) = get_token_decimals(&position.mint).await {
-                                let calculated_units = (swap_info.token_amount.abs() *
-                                    (10_f64).powi(decimals as i32)) as u64;
-                                let difference = (
-                                    (stored_amount as i64) - (calculated_units as i64)
-                                ).abs();
+                                let calculated_units = (swap_info.token_amount.abs()
+                                    * (10_f64).powi(decimals as i32))
+                                    as u64;
+                                let difference =
+                                    ((stored_amount as i64) - (calculated_units as i64)).abs();
                                 let tolerance = ((calculated_units as f64) * 0.001) as i64; // 0.1% tolerance
 
                                 if difference > tolerance.max(1) {
@@ -389,7 +408,10 @@ async fn print_position_token_info(position: &Position, verbose: bool) {
 
         if let Some(decimals) = get_token_decimals(&position.mint).await {
             let ui_amount = (token_amount as f64) / (10_f64).powi(decimals as i32);
-            println!("  Token Amount (UI): {:.9} tokens (decimals: {})", ui_amount, decimals);
+            println!(
+                "  Token Amount (UI): {:.9} tokens (decimals: {})",
+                ui_amount, decimals
+            );
 
             if ui_amount > 0.0 {
                 let calculated_price = position.entry_size_sol / ui_amount;
@@ -400,8 +422,7 @@ async fn print_position_token_info(position: &Position, verbose: bool) {
                     if price_diff > effective_price * 0.01 {
                         println!(
                             "  ⚠️  Price mismatch: stored={:.12}, calculated={:.12}",
-                            effective_price,
-                            calculated_price
+                            effective_price, calculated_price
                         );
                     }
                 }
@@ -424,8 +445,7 @@ async fn print_position_token_info(position: &Position, verbose: bool) {
     if verbose {
         println!(
             "  Verified: entry={}, exit={}",
-            position.transaction_entry_verified,
-            position.transaction_exit_verified
+            position.transaction_entry_verified, position.transaction_exit_verified
         );
     }
 

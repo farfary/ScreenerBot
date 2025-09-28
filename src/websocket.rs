@@ -1,11 +1,11 @@
-use serde::{ Deserialize, Serialize };
+use futures_util::{SinkExt, StreamExt};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::{ mpsc, Notify };
-use tokio_tungstenite::{ connect_async, tungstenite::Message };
-use futures_util::{ SinkExt, StreamExt };
+use tokio::sync::{mpsc, Notify};
+use tokio_tungstenite::{connect_async, tungstenite::Message};
 
-use crate::logger::{ log, LogTag };
 use crate::arguments::is_debug_websocket_enabled;
+use crate::logger::{log, LogTag};
 
 /// WebSocket client for real-time Solana transaction monitoring
 ///
@@ -102,20 +102,23 @@ impl SolanaWebSocketClient {
     pub async fn start_monitoring(
         &self,
         ws_url: &str,
-        shutdown: Arc<Notify>
+        shutdown: Arc<Notify>,
     ) -> Result<(), String> {
         if is_debug_websocket_enabled() {
             log(
                 LogTag::Websocket,
                 "START",
-                &format!("🔌 Starting WebSocket monitoring for wallet: {}", &self.wallet_address)
+                &format!(
+                    "🔌 Starting WebSocket monitoring for wallet: {}",
+                    &self.wallet_address
+                ),
             );
         }
 
         // Connect to WebSocket endpoint
-        let (ws_stream, _) = connect_async(ws_url).await.map_err(|e|
-            format!("Failed to connect to WebSocket: {}", e)
-        )?;
+        let (ws_stream, _) = connect_async(ws_url)
+            .await
+            .map_err(|e| format!("Failed to connect to WebSocket: {}", e))?;
 
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
@@ -131,25 +134,28 @@ impl SolanaWebSocketClient {
                 }),
                 serde_json::json!({
                     "commitment": "confirmed"
-                })
+                }),
             ],
         };
 
-        let subscribe_text = serde_json
-            ::to_string(&subscribe_message)
+        let subscribe_text = serde_json::to_string(&subscribe_message)
             .map_err(|e| format!("Failed to serialize subscription: {}", e))?;
 
         if is_debug_websocket_enabled() {
             log(
                 LogTag::Websocket,
                 "SUBSCRIBE",
-                &format!("📡 Subscribing to logs for wallet: {}", &self.wallet_address)
+                &format!(
+                    "📡 Subscribing to logs for wallet: {}",
+                    &self.wallet_address
+                ),
             );
         }
 
         // Send subscription
         ws_sender
-            .send(Message::Text(subscribe_text)).await
+            .send(Message::Text(subscribe_text))
+            .await
             .map_err(|e| format!("Failed to send subscription: {}", e))?;
 
         // Create heartbeat timer (ping every 30 seconds to prevent server timeout)
@@ -157,7 +163,11 @@ impl SolanaWebSocketClient {
         heartbeat_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         if is_debug_websocket_enabled() {
-            log(LogTag::Websocket, "HEARTBEAT", "📡 Heartbeat timer initialized (30s interval)");
+            log(
+                LogTag::Websocket,
+                "HEARTBEAT",
+                "📡 Heartbeat timer initialized (30s interval)",
+            );
         }
 
         // Listen for messages with shutdown and heartbeat handling
@@ -167,14 +177,14 @@ impl SolanaWebSocketClient {
                     if is_debug_websocket_enabled() {
                         log(LogTag::Websocket, "SHUTDOWN", "WebSocket monitoring received shutdown signal");
                     }
-                    
+
                     // Send close message to server
                     if let Err(e) = ws_sender.send(Message::Close(None)).await {
                         if is_debug_websocket_enabled() {
                             log(LogTag::Websocket, "CLOSE_ERROR", &format!("Failed to send close message: {}", e));
                         }
                     }
-                    
+
                     break;
                 }
                 _ = heartbeat_interval.tick() => {
@@ -271,16 +281,14 @@ impl SolanaWebSocketClient {
                         if let Some(result) = params.get("result") {
                             if let Some(value) = result.get("value") {
                                 // Extract signature from the logs notification
-                                if
-                                    let Some(signature) = value
-                                        .get("signature")
-                                        .and_then(|v| v.as_str())
+                                if let Some(signature) =
+                                    value.get("signature").and_then(|v| v.as_str())
                                 {
                                     if is_debug_websocket_enabled() {
                                         log(
                                             LogTag::Websocket,
                                             "NEW_TX",
-                                            &format!("🆕 New transaction detected: {}", signature)
+                                            &format!("🆕 New transaction detected: {}", signature),
                                         );
                                     }
 
@@ -311,7 +319,7 @@ impl SolanaWebSocketClient {
                         log(
                             LogTag::Websocket,
                             "SUBSCRIBED",
-                            &format!("✅ WebSocket subscription confirmed: {}", result)
+                            &format!("✅ WebSocket subscription confirmed: {}", result),
                         );
                     }
                     return Ok(());
@@ -339,7 +347,7 @@ impl SolanaWebSocketClient {
 pub async fn start_websocket_monitoring(
     wallet_address: String,
     ws_url: Option<String>,
-    shutdown: Arc<Notify>
+    shutdown: Arc<Notify>,
 ) -> Result<mpsc::UnboundedReceiver<String>, String> {
     let (client, tx_receiver) = SolanaWebSocketClient::new(wallet_address.clone());
 
@@ -376,7 +384,7 @@ pub async fn start_websocket_monitoring(
                         "🔄 Connecting to WebSocket: {} (attempt {})",
                         ws_url_clone,
                         reconnect_attempts + 1
-                    )
+                    ),
                 );
             }
 
@@ -391,7 +399,10 @@ pub async fn start_websocket_monitoring(
                 connection_shutdown_clone.notify_waiters();
             });
 
-            match monitoring_client.start_monitoring(&ws_url_clone, connection_shutdown).await {
+            match monitoring_client
+                .start_monitoring(&ws_url_clone, connection_shutdown)
+                .await
+            {
                 Ok(_) => {
                     // Normal exit (shutdown received) or successful long-running connection
                     reconnect_attempts = 0; // Reset attempt counter on successful connection
@@ -399,7 +410,7 @@ pub async fn start_websocket_monitoring(
                         log(
                             LogTag::Websocket,
                             "NORMAL_EXIT",
-                            "WebSocket monitoring exited normally"
+                            "WebSocket monitoring exited normally",
                         );
                     }
                     break;
@@ -410,7 +421,7 @@ pub async fn start_websocket_monitoring(
                     // Exponential backoff: 2^attempt seconds, capped at max_reconnect_delay
                     let delay_seconds = std::cmp::min(
                         (2u64).pow(std::cmp::min(reconnect_attempts, 6)), // Cap at 2^6 = 64, but we'll limit to max_reconnect_delay
-                        max_reconnect_delay
+                        max_reconnect_delay,
                     );
 
                     if is_debug_websocket_enabled() {
@@ -419,10 +430,8 @@ pub async fn start_websocket_monitoring(
                             "RECONNECT",
                             &format!(
                                 "WebSocket disconnected: {} - Reconnecting in {}s (attempt {})",
-                                e,
-                                delay_seconds,
-                                reconnect_attempts
-                            )
+                                e, delay_seconds, reconnect_attempts
+                            ),
                         );
                     }
 
@@ -443,7 +452,11 @@ pub async fn start_websocket_monitoring(
         }
 
         if is_debug_websocket_enabled() {
-            log(LogTag::Websocket, "TASK_EXIT", "WebSocket background task exiting");
+            log(
+                LogTag::Websocket,
+                "TASK_EXIT",
+                "WebSocket background task exiting",
+            );
         }
     });
 

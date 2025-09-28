@@ -10,14 +10,14 @@
 
 use clap::Parser;
 use screenerbot::arguments::set_cmd_args;
-use screenerbot::logger::{ log, LogTag };
+use screenerbot::logger::{log, LogTag};
 use screenerbot::pools::decoders::raydium_legacy_amm::RaydiumLegacyAmmDecoder;
 use screenerbot::pools::decoders::PoolDecoder;
 use screenerbot::pools::fetcher::AccountData;
-use screenerbot::pools::types::{ RAYDIUM_LEGACY_AMM_PROGRAM_ID, SOL_MINT };
-use screenerbot::rpc::{ get_rpc_client, parse_pubkey };
-use screenerbot::tokens::{ decimals::SOL_DECIMALS, get_token_decimals_sync };
-use screenerbot::tokens::dexscreener::{ init_dexscreener_api, get_global_dexscreener_api };
+use screenerbot::pools::types::{RAYDIUM_LEGACY_AMM_PROGRAM_ID, SOL_MINT};
+use screenerbot::rpc::{get_rpc_client, parse_pubkey};
+use screenerbot::tokens::dexscreener::{get_global_dexscreener_api, init_dexscreener_api};
+use screenerbot::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
@@ -45,9 +45,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Enable decoder debug logs from library
-    set_cmd_args(
-        vec!["debug_raydium_legacy_amm_specific".to_string(), "--debug-pool-decoders".to_string()]
-    );
+    set_cmd_args(vec![
+        "debug_raydium_legacy_amm_specific".to_string(),
+        "--debug-pool-decoders".to_string(),
+    ]);
 
     println!("\n🔍 RAYDIUM LEGACY AMM SPECIFIC DEBUGGER");
     println!("======================================");
@@ -72,13 +73,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("==============");
     println!("Owner: {}", pool_acc.owner);
     println!("Data size: {} bytes", pool_acc.data.len());
-    println!("Owner is Raydium Legacy AMM: {}", if
-        pool_acc.owner.to_string() == RAYDIUM_LEGACY_AMM_PROGRAM_ID
-    {
-        "✅"
-    } else {
-        "❌"
-    });
+    println!(
+        "Owner is Raydium Legacy AMM: {}",
+        if pool_acc.owner.to_string() == RAYDIUM_LEGACY_AMM_PROGRAM_ID {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
 
     if args.show_hex {
         println!("\n📄 RAW HEX (first 192 bytes)");
@@ -180,35 +182,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Build accounts map for decoder test
     let mut accounts = HashMap::new();
-    accounts.insert(args.pool.clone(), AccountData {
-        pubkey: pool_pk,
-        data: pool_acc.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: pool_acc.lamports,
-        owner: pool_acc.owner,
-    });
-    accounts.insert(coin_vault_pk.to_string(), AccountData {
-        pubkey: coin_vault_pk,
-        data: coin_vault_acc.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: coin_vault_acc.lamports,
-        owner: coin_vault_acc.owner,
-    });
-    accounts.insert(pc_vault_pk.to_string(), AccountData {
-        pubkey: pc_vault_pk,
-        data: pc_vault_acc.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: pc_vault_acc.lamports,
-        owner: pc_vault_acc.owner,
-    });
+    accounts.insert(
+        args.pool.clone(),
+        AccountData {
+            pubkey: pool_pk,
+            data: pool_acc.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: pool_acc.lamports,
+            owner: pool_acc.owner,
+        },
+    );
+    accounts.insert(
+        coin_vault_pk.to_string(),
+        AccountData {
+            pubkey: coin_vault_pk,
+            data: coin_vault_acc.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: coin_vault_acc.lamports,
+            owner: coin_vault_acc.owner,
+        },
+    );
+    accounts.insert(
+        pc_vault_pk.to_string(),
+        AccountData {
+            pubkey: pc_vault_pk,
+            data: pc_vault_acc.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: pc_vault_acc.lamports,
+            owner: pc_vault_acc.owner,
+        },
+    );
 
     // Decide orientation relative to SOL (if present)
     let has_sol = info.coin_mint == SOL_MINT || info.pc_mint == SOL_MINT;
     let target_mint = if has_sol {
-        if info.coin_mint == SOL_MINT { &info.pc_mint } else { &info.coin_mint }
+        if info.coin_mint == SOL_MINT {
+            &info.pc_mint
+        } else {
+            &info.coin_mint
+        }
     } else {
         &info.coin_mint
     };
@@ -217,24 +232,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🧪 DECODER CHECK\n================");
     let res1 = RaydiumLegacyAmmDecoder::decode_and_calculate(&accounts, target_mint, &SOL_MINT);
     match &res1 {
-        Some(r) =>
-            println!(
-                "Orientation TOKEN/SOL → price_sol={:.12} mint={} pool={}",
-                r.price_sol,
-                r.mint,
-                r.pool_address
-            ),
+        Some(r) => println!(
+            "Orientation TOKEN/SOL → price_sol={:.12} mint={} pool={}",
+            r.price_sol, r.mint, r.pool_address
+        ),
         None => println!("Orientation TOKEN/SOL → None"),
     }
     let res2 = RaydiumLegacyAmmDecoder::decode_and_calculate(&accounts, &SOL_MINT, target_mint);
     match &res2 {
-        Some(r) =>
-            println!(
-                "Orientation SOL/TOKEN → price_sol={:.12} mint={} pool={}",
-                r.price_sol,
-                r.mint,
-                r.pool_address
-            ),
+        Some(r) => println!(
+            "Orientation SOL/TOKEN → price_sol={:.12} mint={} pool={}",
+            r.price_sol, r.mint, r.pool_address
+        ),
         None => println!("Orientation SOL/TOKEN → None"),
     }
 
@@ -242,9 +251,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🧮 MANUAL RESERVES PRICE\n========================");
     if has_sol {
         let (sol_raw, tok_raw, tok_dec) = if info.pc_mint == SOL_MINT {
-            (pc_amt, coin_amt, get_token_decimals_sync(&info.coin_mint).unwrap_or(6))
+            (
+                pc_amt,
+                coin_amt,
+                get_token_decimals_sync(&info.coin_mint).unwrap_or(6),
+            )
         } else {
-            (coin_amt, pc_amt, get_token_decimals_sync(&info.pc_mint).unwrap_or(6))
+            (
+                coin_amt,
+                pc_amt,
+                get_token_decimals_sync(&info.pc_mint).unwrap_or(6),
+            )
         };
         let sol = (sol_raw as f64) / (10f64).powi(SOL_DECIMALS as i32);
         let tok = (tok_raw as f64) / (10f64).powi(tok_dec as i32);
@@ -337,14 +354,16 @@ fn parse_legacy_minimal(data: &[u8]) -> Option<MinimalLegacyInfo> {
         (mint_a, mint_b, coin_vault, pc_vault)
     };
 
-    Some(MinimalLegacyInfo { coin_mint, pc_mint, coin_vault, pc_vault })
+    Some(MinimalLegacyInfo {
+        coin_mint,
+        pc_mint,
+        coin_vault,
+        pc_vault,
+    })
 }
 
 fn read_pubkey(data: &[u8], off: usize) -> Option<String> {
-    let bytes: [u8; 32] = data
-        .get(off..off + 32)?
-        .try_into()
-        .ok()?;
+    let bytes: [u8; 32] = data.get(off..off + 32)?.try_into().ok()?;
     Some(Pubkey::new_from_array(bytes).to_string())
 }
 
@@ -352,11 +371,6 @@ fn decode_token_amount(data: &[u8]) -> Option<u64> {
     if data.len() < 72 {
         return None;
     }
-    let amt = u64::from_le_bytes(
-        data
-            .get(64..72)?
-            .try_into()
-            .ok()?
-    );
+    let amt = u64::from_le_bytes(data.get(64..72)?.try_into().ok()?);
     Some(amt)
 }

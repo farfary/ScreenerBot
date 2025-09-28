@@ -1,3 +1,4 @@
+use super::super::utils::read_pubkey_at;
 /// Raydium Legacy AMM decoder
 ///
 /// Ported minimal working logic from old pool system (pool_old.rs) lines ~6885-7210.
@@ -7,12 +8,11 @@
 /// - Parse vault + mint pubkeys at legacy offsets
 /// - Fetch vault token account balances from provided accounts map
 /// - Compute SOL price for target token
-use super::{ PoolDecoder, AccountData };
-use super::super::utils::{ read_pubkey_at };
+use super::{AccountData, PoolDecoder};
 use crate::arguments::is_debug_pool_decoders_enabled;
-use crate::logger::{ log, LogTag };
-use crate::pools::types::{ ProgramKind, PriceResult, SOL_MINT };
-use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
+use crate::logger::{log, LogTag};
+use crate::pools::types::{PriceResult, ProgramKind, SOL_MINT};
+use crate::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
@@ -26,7 +26,7 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
     fn decode_and_calculate(
         accounts: &HashMap<String, AccountData>,
         base_mint: &str,
-        quote_mint: &str
+        quote_mint: &str,
     ) -> Option<PriceResult> {
         // Pick pool account (largest length heuristic)
         let pool_account = accounts.values().max_by_key(|a| a.data.len())?;
@@ -36,7 +36,7 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
                 log(
                     LogTag::PoolDecoder,
                     "ERROR",
-                    &format!("Legacy AMM pool data too small: {}", pool_data.len())
+                    &format!("Legacy AMM pool data too small: {}", pool_data.len()),
                 );
             }
             return None;
@@ -66,7 +66,7 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
                     log(
                         LogTag::PoolDecoder,
                         "INFO",
-                        &format!("Using vault reserves: coin={} pc={}", c, p)
+                        &format!("Using vault reserves: coin={} pc={}", c, p),
                     );
                 }
                 (c, p)
@@ -76,7 +76,7 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
                     log(
                         LogTag::PoolDecoder,
                         "WARN",
-                        "Vault fetch failed, extracting reserves from pool data"
+                        "Vault fetch failed, extracting reserves from pool data",
                     );
                 }
                 extract_reserves_from_pool_data(pool_data)?
@@ -123,7 +123,11 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             (coin_reserve, pc_reserve, decimals)
         } else {
             if is_debug_pool_decoders_enabled() {
-                log(LogTag::PoolDecoder, "ERROR", "Legacy AMM pool missing SOL mint");
+                log(
+                    LogTag::PoolDecoder,
+                    "ERROR",
+                    "Legacy AMM pool missing SOL mint",
+                );
             }
             return None;
         };
@@ -157,16 +161,14 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             );
         }
 
-        Some(
-            PriceResult::new(
-                target_mint.to_string(),
-                0.0,
-                price_sol,
-                sol_adjusted,
-                token_adjusted,
-                pool_account.pubkey.to_string()
-            )
-        )
+        Some(PriceResult::new(
+            target_mint.to_string(),
+            0.0,
+            price_sol,
+            sol_adjusted,
+            token_adjusted,
+            pool_account.pubkey.to_string(),
+        ))
     }
 }
 
@@ -223,7 +225,12 @@ impl LegacyPoolInfo {
             (mint_a, mint_b, vault_a, vault_b)
         };
 
-        Some(Self { coin_mint, pc_mint, coin_vault, pc_vault })
+        Some(Self {
+            coin_mint,
+            pc_mint,
+            coin_vault,
+            pc_vault,
+        })
     }
 }
 
@@ -238,7 +245,7 @@ fn get_token_account_amount(accounts: &HashMap<String, AccountData>, key: &str) 
 
 fn adjust_vaults(
     info: &LegacyPoolInfo,
-    accounts: &HashMap<String, AccountData>
+    accounts: &HashMap<String, AccountData>,
 ) -> Option<LegacyPoolInfo> {
     let mut coin_vault = info.coin_vault.clone();
     let mut pc_vault = info.pc_vault.clone();
@@ -262,10 +269,8 @@ fn adjust_vaults(
                                 "WARN",
                                 &format!(
                                     "coin_vault {} has wrong mint {} expected {}",
-                                    coin_vault,
-                                    mint,
-                                    info.coin_mint
-                                )
+                                    coin_vault, mint, info.coin_mint
+                                ),
                             );
                         }
                     }
@@ -287,10 +292,8 @@ fn adjust_vaults(
                                 "WARN",
                                 &format!(
                                     "pc_vault {} has wrong mint {} expected {}",
-                                    pc_vault,
-                                    mint,
-                                    info.pc_mint
-                                )
+                                    pc_vault, mint, info.pc_mint
+                                ),
                             );
                         }
                     }
@@ -314,7 +317,7 @@ fn adjust_vaults(
                 need_pc || pc_vault_wrong_mint,
                 coin_vault_wrong_mint,
                 pc_vault_wrong_mint
-            )
+            ),
         );
     }
 
@@ -330,14 +333,18 @@ fn adjust_vaults(
                         log(
                             LogTag::PoolDecoder,
                             "DEBUG",
-                            &format!("Found coin_vault: {}", coin_vault)
+                            &format!("Found coin_vault: {}", coin_vault),
                         );
                     }
                 }
                 if mint == info.pc_mint && (need_pc || pc_vault_wrong_mint) {
                     pc_vault = k.clone();
                     if is_debug_pool_decoders_enabled() {
-                        log(LogTag::PoolDecoder, "DEBUG", &format!("Found pc_vault: {}", pc_vault));
+                        log(
+                            LogTag::PoolDecoder,
+                            "DEBUG",
+                            &format!("Found pc_vault: {}", pc_vault),
+                        );
                     }
                 }
             }
@@ -350,7 +357,7 @@ fn adjust_vaults(
             log(
                 LogTag::PoolDecoder,
                 "ERROR",
-                "Same vault found for both coin and pc - this will cause incorrect pricing"
+                "Same vault found for both coin and pc - this will cause incorrect pricing",
             );
         }
         return None;
@@ -360,7 +367,10 @@ fn adjust_vaults(
         log(
             LogTag::PoolDecoder,
             "INFO",
-            &format!("Adjusted vaults: coin_vault={} pc_vault={}", coin_vault, pc_vault)
+            &format!(
+                "Adjusted vaults: coin_vault={} pc_vault={}",
+                coin_vault, pc_vault
+            ),
         );
     }
 
@@ -384,21 +394,18 @@ fn extract_reserves_from_pool_data(data: &[u8]) -> Option<(u64, u64)> {
 
     for &(offset1, offset2) in &promising_offsets {
         if offset1 + 8 <= data.len() && offset2 + 8 <= data.len() {
-            if
-                let (Ok(reserve1_bytes), Ok(reserve2_bytes)) = (
-                    data[offset1..offset1 + 8].try_into(),
-                    data[offset2..offset2 + 8].try_into(),
-                )
-            {
+            if let (Ok(reserve1_bytes), Ok(reserve2_bytes)) = (
+                data[offset1..offset1 + 8].try_into(),
+                data[offset2..offset2 + 8].try_into(),
+            ) {
                 let reserve1 = u64::from_le_bytes(reserve1_bytes);
                 let reserve2 = u64::from_le_bytes(reserve2_bytes);
 
                 // For Raydium Legacy with substantial liquidity, reserves should be significant
-                if
-                    reserve1 > 10_000_000 &&
-                    reserve1 < 1_000_000_000_000_000 &&
-                    reserve2 > 10_000_000 &&
-                    reserve2 < 1_000_000_000_000_000
+                if reserve1 > 10_000_000
+                    && reserve1 < 1_000_000_000_000_000
+                    && reserve2 > 10_000_000
+                    && reserve2 < 1_000_000_000_000_000
                 {
                     if is_debug_pool_decoders_enabled() {
                         log(
@@ -406,11 +413,8 @@ fn extract_reserves_from_pool_data(data: &[u8]) -> Option<(u64, u64)> {
                             "INFO",
                             &format!(
                                 "Found pool data reserves at offsets {} and {}: {} and {}",
-                                offset1,
-                                offset2,
-                                reserve1,
-                                reserve2
-                            )
+                                offset1, offset2, reserve1, reserve2
+                            ),
                         );
                     }
                     // Return (coin_reserve, pc_reserve) - token first, SOL second based on size heuristic

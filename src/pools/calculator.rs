@@ -1,3 +1,8 @@
+use super::cache;
+use super::decoders;
+use super::fetcher::{AccountData, PoolAccountBundle};
+use super::types::{PoolDescriptor, PriceResult, ProgramKind, SOL_MINT};
+use crate::events::{record_safe, Event, EventCategory, Severity};
 /// Price calculator module
 ///
 /// This module handles the core price calculation logic:
@@ -5,21 +10,15 @@
 /// - Calculates token prices from pool reserves (SOL-based pricing only)
 /// - Handles price triangulation for indirect pairs
 /// - Updates price cache and history
-
 use crate::global::is_debug_pool_calculator_enabled;
-use crate::logger::{ log, LogTag };
-use crate::tokens::{ get_token_decimals_sync, decimals::SOL_DECIMALS };
-use crate::events::{ record_safe, Event, EventCategory, Severity };
-use super::cache;
-use super::decoders;
-use super::fetcher::{ AccountData, PoolAccountBundle };
-use super::types::{ PriceResult, ProgramKind, PoolDescriptor, SOL_MINT };
+use crate::logger::{log, LogTag};
+use crate::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::{ Arc, RwLock };
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
-use tokio::sync::{ mpsc, Notify };
+use tokio::sync::{mpsc, Notify};
 
 /// Message types for calculator communication
 #[derive(Debug, Clone)]
@@ -75,7 +74,11 @@ impl PriceCalculator {
     /// Start calculator background task
     pub async fn start_calculator_task(&self, shutdown: Arc<Notify>) {
         if is_debug_pool_calculator_enabled() {
-            log(LogTag::PoolCalculator, "INFO", "Starting price calculator task");
+            log(
+                LogTag::PoolCalculator,
+                "INFO",
+                "Starting price calculator task",
+            );
         }
 
         let pool_directory = self.pool_directory.clone();
@@ -89,7 +92,11 @@ impl PriceCalculator {
 
         tokio::spawn(async move {
             if is_debug_pool_calculator_enabled() {
-                log(LogTag::PoolCalculator, "INFO", "Price calculator task started");
+                log(
+                    LogTag::PoolCalculator,
+                    "INFO",
+                    "Price calculator task started",
+                );
             }
 
             loop {
@@ -103,18 +110,18 @@ impl PriceCalculator {
 
                     message = calculator_rx.recv() => {
                         match message {
-                            Some(CalculatorMessage::CalculatePool { 
-                                pool_id, 
-                                pool_descriptor, 
-                                account_bundle 
+                            Some(CalculatorMessage::CalculatePool {
+                                pool_id,
+                                pool_descriptor,
+                                account_bundle
                             }) => {
                                 let calculation_start = Instant::now();
-                                let token_mint = if pool_descriptor.base_mint.to_string() != SOL_MINT { 
+                                let token_mint = if pool_descriptor.base_mint.to_string() != SOL_MINT {
                                     pool_descriptor.base_mint.to_string()
-                                } else { 
+                                } else {
                                     pool_descriptor.quote_mint.to_string()
                                 };
-                                
+
                                 record_safe(Event::info(
                                     EventCategory::Pool,
                                     Some("price_calculation_started".to_string()),
@@ -127,7 +134,7 @@ impl PriceCalculator {
                                         "quote_mint": pool_descriptor.quote_mint.to_string()
                                     })
                                 )).await;
-                                
+
                                 let result = Self::calculate_pool_price_static(
                                     pool_id,
                                     &pool_descriptor,
@@ -184,13 +191,13 @@ impl PriceCalculator {
                                             "account_count": account_bundle.accounts.len()
                                         })
                                     )).await;
-                                    
+
                                     log(
                                         LogTag::PoolCalculator,
                                         "WARN",
-                                        &format!("Failed to calculate price for token {} in pool {}: {}", 
+                                        &format!("Failed to calculate price for token {} in pool {}: {}",
                                             token_mint,
-                                            pool_id, 
+                                            pool_id,
                                             error)
                                     );
                                 }
@@ -215,7 +222,11 @@ impl PriceCalculator {
             }
 
             if is_debug_pool_calculator_enabled() {
-                log(LogTag::PoolCalculator, "INFO", "Price calculator task completed");
+                log(
+                    LogTag::PoolCalculator,
+                    "INFO",
+                    "Price calculator task completed",
+                );
             }
         });
     }
@@ -225,7 +236,7 @@ impl PriceCalculator {
         pool_id: Pubkey,
         pool_descriptor: &PoolDescriptor,
         account_bundle: &PoolAccountBundle,
-        sol_reference_price: &Arc<RwLock<f64>>
+        sol_reference_price: &Arc<RwLock<f64>>,
     ) -> PoolCalculationResult {
         if is_debug_pool_calculator_enabled() {
             let target_token = if pool_descriptor.base_mint.to_string() != SOL_MINT {
@@ -243,7 +254,7 @@ impl PriceCalculator {
                     pool_descriptor.base_mint,
                     pool_descriptor.quote_mint,
                     target_token
-                )
+                ),
             );
         }
 
@@ -255,22 +266,21 @@ impl PriceCalculator {
                 pool_descriptor.quote_mint.to_string()
             };
 
-            record_safe(
-                Event::warn(
-                    EventCategory::Pool,
-                    Some("incomplete_account_bundle".to_string()),
-                    Some(target_mint.clone()),
-                    Some(pool_id.to_string()),
-                    serde_json::json!({
+            record_safe(Event::warn(
+                EventCategory::Pool,
+                Some("incomplete_account_bundle".to_string()),
+                Some(target_mint.clone()),
+                Some(pool_id.to_string()),
+                serde_json::json!({
                     "pool_id": pool_id.to_string(),
                     "program_kind": format!("{:?}", pool_descriptor.program_kind),
                     "target_mint": target_mint,
                     "required_accounts": pool_descriptor.reserve_accounts.len(),
                     "available_accounts": account_bundle.accounts.len(),
                     "error": "Missing required pool accounts"
-                })
-                )
-            ).await;
+                }),
+            ))
+            .await;
 
             return PoolCalculationResult {
                 pool_id,
@@ -301,7 +311,7 @@ impl PriceCalculator {
             pool_descriptor.program_kind,
             &accounts_map,
             &target_mint_str,
-            &sol_mint_str
+            &sol_mint_str,
         );
 
         match decoded_result {
@@ -322,22 +332,21 @@ impl PriceCalculator {
                 }
             }
             None => {
-                record_safe(
-                    Event::error(
-                        EventCategory::Pool,
-                        Some("decoder_failed".to_string()),
-                        Some(target_mint.to_string()),
-                        Some(pool_id.to_string()),
-                        serde_json::json!({
+                record_safe(Event::error(
+                    EventCategory::Pool,
+                    Some("decoder_failed".to_string()),
+                    Some(target_mint.to_string()),
+                    Some(pool_id.to_string()),
+                    serde_json::json!({
                         "pool_id": pool_id.to_string(),
                         "program_kind": format!("{:?}", pool_descriptor.program_kind),
                         "target_mint": target_mint.to_string(),
                         "account_count": accounts_map.len(),
                         "required_accounts": pool_descriptor.reserve_accounts.len(),
                         "error": "Decoder failed to parse pool data"
-                    })
-                    )
-                ).await;
+                    }),
+                ))
+                .await;
 
                 PoolCalculationResult {
                     pool_id,
@@ -350,7 +359,8 @@ impl PriceCalculator {
 
     /// Convert PoolAccountBundle to the format expected by decoders
     fn convert_bundle_to_accounts_map(bundle: &PoolAccountBundle) -> HashMap<String, AccountData> {
-        bundle.accounts
+        bundle
+            .accounts
             .iter()
             .map(|(pubkey, account_data)| (pubkey.to_string(), account_data.clone()))
             .collect()
@@ -385,7 +395,7 @@ impl PriceCalculator {
         &self,
         pool_id: Pubkey,
         pool_descriptor: PoolDescriptor,
-        account_bundle: PoolAccountBundle
+        account_bundle: PoolAccountBundle,
     ) -> Result<(), String> {
         let message = CalculatorMessage::CalculatePool {
             pool_id,
@@ -407,7 +417,7 @@ impl PriceCalculator {
         program_kind: ProgramKind,
         base_mint: &str,
         quote_mint: &str,
-        pool_id: &str
+        pool_id: &str,
     ) -> Option<PriceResult> {
         if is_debug_pool_calculator_enabled() {
             log(
@@ -418,17 +428,13 @@ impl PriceCalculator {
                     base_mint,
                     pool_id,
                     program_kind.display_name()
-                )
+                ),
             );
         }
 
         // Use decoder to parse and calculate
-        let mut price_result = decoders::decode_pool(
-            program_kind,
-            pool_accounts,
-            base_mint,
-            quote_mint
-        )?;
+        let mut price_result =
+            decoders::decode_pool(program_kind, pool_accounts, base_mint, quote_mint)?;
 
         // Set pool address
         price_result.pool_address = pool_id.to_string();
@@ -473,7 +479,7 @@ impl PriceCalculator {
             log(
                 LogTag::PoolCalculator,
                 "DEBUG",
-                &format!("Updated SOL reference price to ${:.2}", sol_price_usd)
+                &format!("Updated SOL reference price to ${:.2}", sol_price_usd),
             );
         }
     }

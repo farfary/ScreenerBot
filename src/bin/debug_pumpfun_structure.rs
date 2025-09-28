@@ -1,8 +1,8 @@
-use std::env;
 use anyhow::Result;
+use screenerbot::rpc::init_rpc_client;
 use solana_sdk::pubkey::Pubkey;
+use std::env;
 use std::str::FromStr;
-use screenerbot::rpc::{ init_rpc_client };
 
 const PUMP_FUN_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
 const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
@@ -26,18 +26,16 @@ fn read_pubkey(data: &[u8], offset: usize) -> Option<String> {
 
 fn read_u64(data: &[u8], offset: usize) -> Option<u64> {
     if offset + 8 <= data.len() {
-        Some(
-            u64::from_le_bytes([
-                data[offset],
-                data[offset + 1],
-                data[offset + 2],
-                data[offset + 3],
-                data[offset + 4],
-                data[offset + 5],
-                data[offset + 6],
-                data[offset + 7],
-            ])
-        )
+        Some(u64::from_le_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
+        ]))
     } else {
         None
     }
@@ -46,19 +44,17 @@ fn read_u64(data: &[u8], offset: usize) -> Option<u64> {
 fn try_extract_fields(
     data: &[u8],
     offset_pattern: &str,
-    start_offset: usize
+    start_offset: usize,
 ) -> Option<(String, String, String, String, String)> {
     let mut offset = start_offset;
 
-    if
-        let (Some(field1), Some(field2), Some(field3), Some(field4), Some(field5)) = (
-            read_pubkey(data, offset),
-            read_pubkey(data, offset + 32),
-            read_pubkey(data, offset + 64),
-            read_pubkey(data, offset + 96),
-            read_pubkey(data, offset + 128),
-        )
-    {
+    if let (Some(field1), Some(field2), Some(field3), Some(field4), Some(field5)) = (
+        read_pubkey(data, offset),
+        read_pubkey(data, offset + 32),
+        read_pubkey(data, offset + 64),
+        read_pubkey(data, offset + 96),
+        read_pubkey(data, offset + 128),
+    ) {
         Some((field1, field2, field3, field4, field5))
     } else {
         None
@@ -86,11 +82,14 @@ fn main() -> Result<()> {
     println!("📦 POOL ACCOUNT INFO");
     println!("Owner: {}", pool_acc.owner);
     println!("Data size: {} bytes", pool_acc.data.len());
-    println!("Owner is PumpFun AMM: {}\n", if pool_acc.owner.to_string() == PUMP_FUN_AMM_PROGRAM_ID {
-        "✅"
-    } else {
-        "❌"
-    });
+    println!(
+        "Owner is PumpFun AMM: {}\n",
+        if pool_acc.owner.to_string() == PUMP_FUN_AMM_PROGRAM_ID {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
 
     if pool_acc.data.len() < 200 {
         println!("❌ Data too short for PumpFun pool");
@@ -105,65 +104,61 @@ fn main() -> Result<()> {
     println!(
         "\n📋 Pattern 1: disc(8) + bump(1) + index(2) + creator(32) + base(32) + quote(32) + lp(32) + vault1(32) + vault2(32)"
     );
-    if
-        let Some((base, quote, lp, vault1, vault2)) = try_extract_fields(
-            &pool_acc.data,
-            "standard",
-            43
-        )
+    if let Some((base, quote, lp, vault1, vault2)) =
+        try_extract_fields(&pool_acc.data, "standard", 43)
     {
         println!("  Base mint: {}", base);
         println!("  Quote mint: {}", quote);
         println!("  LP mint: {}", lp);
         println!("  Vault 1: {}", vault1);
         println!("  Vault 2: {}", vault2);
-        println!("  SOL detection: Base={}, Quote={}", base == SOL_MINT, quote == SOL_MINT);
+        println!(
+            "  SOL detection: Base={}, Quote={}",
+            base == SOL_MINT,
+            quote == SOL_MINT
+        );
     }
 
     // Pattern 2: With duplicate creator (discriminator + bump + index + creator + creator + base + quote + lp + vault1 + vault2)
     println!(
         "\n📋 Pattern 2: disc(8) + bump(1) + index(2) + creator(32) + creator(32) + base(32) + quote(32) + lp(32) + vault1(32) + vault2(32)"
     );
-    if
-        let Some((base, quote, lp, vault1, vault2)) = try_extract_fields(
-            &pool_acc.data,
-            "duplicate_creator",
-            75
-        )
+    if let Some((base, quote, lp, vault1, vault2)) =
+        try_extract_fields(&pool_acc.data, "duplicate_creator", 75)
     {
         println!("  Base mint: {}", base);
         println!("  Quote mint: {}", quote);
         println!("  LP mint: {}", lp);
         println!("  Vault 1: {}", vault1);
         println!("  Vault 2: {}", vault2);
-        println!("  SOL detection: Base={}, Quote={}", base == SOL_MINT, quote == SOL_MINT);
+        println!(
+            "  SOL detection: Base={}, Quote={}",
+            base == SOL_MINT,
+            quote == SOL_MINT
+        );
     }
 
     // Pattern 3: Reverse field order
     println!("\n📋 Pattern 3: quote(32) + base(32) + lp(32) + vault1(32) + vault2(32)");
-    if
-        let Some((quote, base, lp, vault1, vault2)) = try_extract_fields(
-            &pool_acc.data,
-            "reverse",
-            43
-        )
+    if let Some((quote, base, lp, vault1, vault2)) =
+        try_extract_fields(&pool_acc.data, "reverse", 43)
     {
         println!("  Base mint: {}", base);
         println!("  Quote mint: {}", quote);
         println!("  LP mint: {}", lp);
         println!("  Vault 1: {}", vault1);
         println!("  Vault 2: {}", vault2);
-        println!("  SOL detection: Base={}, Quote={}", base == SOL_MINT, quote == SOL_MINT);
+        println!(
+            "  SOL detection: Base={}, Quote={}",
+            base == SOL_MINT,
+            quote == SOL_MINT
+        );
     }
 
     // Pattern 4: Different starting offset
     println!("\n📋 Pattern 4: Starting at offset 11 (disc(8) + bump(1) + index(2))");
-    if
-        let Some((field1, field2, field3, field4, field5)) = try_extract_fields(
-            &pool_acc.data,
-            "offset_11",
-            11
-        )
+    if let Some((field1, field2, field3, field4, field5)) =
+        try_extract_fields(&pool_acc.data, "offset_11", 11)
     {
         println!("  Field 1: {}", field1);
         println!("  Field 2: {}", field2);

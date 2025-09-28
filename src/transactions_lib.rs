@@ -1,19 +1,19 @@
 // Implementation file for TransactionsManager - Transaction analysis methods
-use crate::errors::blockchain::{ is_permanent_failure, parse_structured_solana_error };
+use crate::errors::blockchain::{is_permanent_failure, parse_structured_solana_error};
 use crate::global::is_debug_transactions_enabled;
-use crate::logger::{ log, LogTag };
-use crate::pools::{ get_pool_price };
-use crate::pools::types::{ PUMP_FUN_AMM_PROGRAM_ID, PUMP_FUN_LEGACY_PROGRAM_ID };
+use crate::logger::{log, LogTag};
+use crate::pools::get_pool_price;
+use crate::pools::types::{PUMP_FUN_AMM_PROGRAM_ID, PUMP_FUN_LEGACY_PROGRAM_ID};
 use crate::rpc::get_rpc_client;
-use crate::tokens::decimals::{ lamports_to_sol, raw_to_ui_amount, sol_to_lamports };
-use crate::tokens::{ get_token_decimals, get_token_decimals_safe, TokenDatabase };
+use crate::tokens::decimals::{lamports_to_sol, raw_to_ui_amount, sol_to_lamports};
+use crate::tokens::{get_token_decimals, get_token_decimals_safe, TokenDatabase};
 use crate::transactions::TransactionsManager;
 use crate::transactions_types::*;
-use crate::utils::{ get_wallet_address, safe_truncate };
-use chrono::{ DateTime, Utc };
-use serde::{ Deserialize, Serialize };
+use crate::utils::{get_wallet_address, safe_truncate};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
-use std::collections::{ HashMap, HashSet };
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use tokio::time::Duration;
 
@@ -81,11 +81,13 @@ impl TransactionsManager {
                 &retry.next_retry_at,
                 retry.remaining_attempts,
                 retry.current_delay_secs,
-                retry.last_error.as_deref()
-            ).await?;
+                retry.last_error.as_deref(),
+            )
+            .await?;
         } else {
             // Fallback to in-memory HashMap
-            self.deferred_retries.insert(retry.signature.clone(), retry.clone());
+            self.deferred_retries
+                .insert(retry.signature.clone(), retry.clone());
         }
         Ok(())
     }
@@ -114,7 +116,8 @@ impl TransactionsManager {
         } else {
             // Fallback to in-memory HashMap - filter for ready retries
             let now = Utc::now();
-            let ready_retries: Vec<DeferredRetry> = self.deferred_retries
+            let ready_retries: Vec<DeferredRetry> = self
+                .deferred_retries
                 .values()
                 .filter(|retry| retry.next_retry_at <= now && retry.remaining_attempts > 0)
                 .cloned()
@@ -160,10 +163,15 @@ impl TransactionsManager {
         } else {
             // Cleanup in-memory HashMap - simple size-based cleanup
             if self.deferred_retries.len() > 1000 {
-                let expired_signatures: Vec<String> = self.deferred_retries
+                let expired_signatures: Vec<String> = self
+                    .deferred_retries
                     .iter()
                     .filter_map(|(signature, retry)| {
-                        if retry.remaining_attempts <= 0 { Some(signature.clone()) } else { None }
+                        if retry.remaining_attempts <= 0 {
+                            Some(signature.clone())
+                        } else {
+                            None
+                        }
                     })
                     .take(100) // Remove up to 100 at a time
                     .collect();
@@ -179,7 +187,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "CLEANUP",
-                &format!("Cleaned up {} expired deferred retries", cleaned_count)
+                &format!("Cleaned up {} expired deferred retries", cleaned_count),
             );
         }
 
@@ -189,7 +197,7 @@ impl TransactionsManager {
     /// Store processed transaction analysis in database (if available)
     pub async fn cache_processed_transaction(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<(), String> {
         if let Some(ref db) = self.transaction_database {
             // Use the new store_full_transaction_analysis method for complete data
@@ -202,7 +210,7 @@ impl TransactionsManager {
                     &format!(
                         "Cached processed transaction analysis {} to database",
                         &transaction.signature[..8]
-                    )
+                    ),
                 );
             }
         }
@@ -214,27 +222,30 @@ impl TransactionsManager {
     pub async fn save_failed_transaction_state(
         &self,
         signature: &str,
-        error: &str
+        error: &str,
     ) -> Result<(), String> {
         if let Some(ref db) = self.transaction_database {
             // Store minimal raw transaction record with failed status
             let now = Utc::now();
 
             // Try to store raw transaction record if it doesn't exist
-            let raw_result = db.store_raw_transaction(
-                signature,
-                None, // no slot
-                None, // no block_time
-                &now,
-                "Failed",
-                false, // not successful
-                Some(error),
-                None // no raw data
-            ).await;
+            let raw_result = db
+                .store_raw_transaction(
+                    signature,
+                    None, // no slot
+                    None, // no block_time
+                    &now,
+                    "Failed",
+                    false, // not successful
+                    Some(error),
+                    None, // no raw data
+                )
+                .await;
 
             if raw_result.is_err() {
                 // Raw transaction might already exist, try to update status only
-                db.update_transaction_status(signature, "Failed", false, Some(error)).await?;
+                db.update_transaction_status(signature, "Failed", false, Some(error))
+                    .await?;
             }
 
             if self.debug_enabled {
@@ -243,9 +254,8 @@ impl TransactionsManager {
                     "FAILED_STATE_SAVED",
                     &format!(
                         "Saved failed transaction state for {} to database: {}",
-                        signature,
-                        error
-                    )
+                        signature, error
+                    ),
                 );
             }
         }
@@ -263,14 +273,15 @@ impl TransactionsManager {
                 &format!(
                     "Checking for new transactions (known: {}, using latest 50)",
                     self.get_known_signatures_count().await
-                )
+                ),
             );
         }
 
         // Get recent signatures from wallet
         // IMPORTANT: Always fetch most recent page (no 'before' cursor) to avoid missing new txs
         let signatures = rpc_client
-            .get_wallet_signatures_main_rpc(&self.wallet_pubkey, 50, None).await
+            .get_wallet_signatures_main_rpc(&self.wallet_pubkey, 50, None)
+            .await
             .map_err(|e| format!("Failed to fetch wallet signatures: {}", e))?;
 
         let mut new_signatures = Vec::new();
@@ -297,7 +308,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "NEW",
-                    &format!("Found {} new transactions to process", new_signatures.len())
+                    &format!("Found {} new transactions to process", new_signatures.len()),
                 );
             }
         }
@@ -311,7 +322,7 @@ impl TransactionsManager {
         log(
             LogTag::Transactions,
             "GAP_DETECTION",
-            "🕵️ Starting periodic gap detection and backfill"
+            "🕵️ Starting periodic gap detection and backfill",
         );
 
         let rpc_client = get_rpc_client();
@@ -327,7 +338,10 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "GAP_DETECTION",
-                    &format!("📦 Checking gap detection batch {} (1000 signatures)", batch_number)
+                    &format!(
+                        "📦 Checking gap detection batch {} (1000 signatures)",
+                        batch_number
+                    ),
                 );
             }
 
@@ -336,10 +350,14 @@ impl TransactionsManager {
                 .get_wallet_signatures_main_rpc(
                     &self.wallet_pubkey,
                     1000,
-                    before_signature.as_deref()
-                ).await
+                    before_signature.as_deref(),
+                )
+                .await
                 .map_err(|e| {
-                    format!("Failed to fetch gap detection batch {}: {}", batch_number, e)
+                    format!(
+                        "Failed to fetch gap detection batch {}: {}",
+                        batch_number, e
+                    )
                 })?;
 
             if signatures.is_empty() {
@@ -347,7 +365,7 @@ impl TransactionsManager {
                     log(
                         LogTag::Transactions,
                         "GAP_DETECTION",
-                        "📭 No more signatures found - gap detection complete"
+                        "📭 No more signatures found - gap detection complete",
                     );
                 }
                 break;
@@ -378,11 +396,8 @@ impl TransactionsManager {
                         log(LogTag::Transactions, "WARN", &error_msg);
 
                         // Save failed state to database for gap-fill processing
-                        if
-                            let Err(db_err) = self.save_failed_transaction_state(
-                                &signature,
-                                &e
-                            ).await
+                        if let Err(db_err) =
+                            self.save_failed_transaction_state(&signature, &e).await
                         {
                             log(
                                 LogTag::Transactions,
@@ -391,7 +406,7 @@ impl TransactionsManager {
                                     "Failed to save gap-fill transaction failure state for {}: {}",
                                     &signature[..8],
                                     db_err
-                                )
+                                ),
                             );
                         }
                     }
@@ -405,7 +420,10 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "GAP_DETECTION",
-                    &format!("📊 Batch {} complete: {} gaps filled", batch_number, new_in_batch)
+                    &format!(
+                        "📊 Batch {} complete: {} gaps filled",
+                        batch_number, new_in_batch
+                    ),
                 );
             }
 
@@ -415,7 +433,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "GAP_DETECTION",
-                    "✅ No more gaps found - backfill complete"
+                    "✅ No more gaps found - backfill complete",
                 );
                 break;
             } else if batch_number >= 5 {
@@ -423,7 +441,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "GAP_DETECTION",
-                    "⚠️ Reached safety limit of 5 batches - stopping gap detection"
+                    "⚠️ Reached safety limit of 5 batches - stopping gap detection",
                 );
                 break;
             }
@@ -436,7 +454,10 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "GAP_DETECTION",
-                &format!("🔧 Gap detection complete: backfilled {} missing transactions", total_backfilled)
+                &format!(
+                    "🔧 Gap detection complete: backfilled {} missing transactions",
+                    total_backfilled
+                ),
             );
 
             // Update statistics
@@ -445,7 +466,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "GAP_DETECTION",
-                "✨ No gaps found - transaction history is complete"
+                "✨ No gaps found - transaction history is complete",
             );
         }
 
@@ -455,7 +476,7 @@ impl TransactionsManager {
     /// Analyze Jupiter swap transactions
     async fn analyze_jupiter_swap(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
 
@@ -469,20 +490,21 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "PUMP_ANALYSIS",
-                &format!("{} - Analyzing Jupiter swap", &transaction.signature[..8])
+                &format!("{} - Analyzing Jupiter swap", &transaction.signature[..8]),
             );
         }
 
         // Extract token mint from the transaction data
-        let target_token_mint = self.extract_target_token_mint_from_jupiter(transaction).await;
+        let target_token_mint = self
+            .extract_target_token_mint_from_jupiter(transaction)
+            .await;
 
         let has_wsol_operations = log_text.contains("So11111111111111111111111111111111111111112");
-        let has_token_operations =
-            log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") ||
-            log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-        let has_jupiter_route =
-            log_text.contains("Instruction: Route") ||
-            log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4");
+        let has_token_operations = log_text
+            .contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+            || log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+        let has_jupiter_route = log_text.contains("Instruction: Route")
+            || log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4");
 
         // Extract actual SOL amount from transfer instructions or balance changes
         let sol_amount = self.extract_sol_amount_from_jupiter(transaction).await;
@@ -563,7 +585,7 @@ impl TransactionsManager {
     /// - Fallback to raw data parsing if token_balance_changes is empty
     async fn extract_target_token_mint_from_jupiter(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Option<String> {
         let epsilon = 1e-12f64;
 
@@ -574,13 +596,15 @@ impl TransactionsManager {
 
             if is_sell {
                 // Find token with largest decrease (most negative change)
-                if
-                    let Some(token_change) = transaction.token_balance_changes
-                        .iter()
-                        .filter(|tc| tc.mint != WSOL_MINT && tc.change < -epsilon)
-                        .min_by(|a, b|
-                            a.change.partial_cmp(&b.change).unwrap_or(std::cmp::Ordering::Equal)
-                        )
+                if let Some(token_change) = transaction
+                    .token_balance_changes
+                    .iter()
+                    .filter(|tc| tc.mint != WSOL_MINT && tc.change < -epsilon)
+                    .min_by(|a, b| {
+                        a.change
+                            .partial_cmp(&b.change)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
                 {
                     if self.debug_enabled {
                         log(
@@ -597,13 +621,15 @@ impl TransactionsManager {
                 }
             } else if is_buy {
                 // Find token with largest increase (most positive change)
-                if
-                    let Some(token_change) = transaction.token_balance_changes
-                        .iter()
-                        .filter(|tc| tc.mint != WSOL_MINT && tc.change > epsilon)
-                        .max_by(|a, b|
-                            a.change.partial_cmp(&b.change).unwrap_or(std::cmp::Ordering::Equal)
-                        )
+                if let Some(token_change) = transaction
+                    .token_balance_changes
+                    .iter()
+                    .filter(|tc| tc.mint != WSOL_MINT && tc.change > epsilon)
+                    .max_by(|a, b| {
+                        a.change
+                            .partial_cmp(&b.change)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
                 {
                     if self.debug_enabled {
                         log(
@@ -621,16 +647,16 @@ impl TransactionsManager {
             }
 
             // If direction is unclear, pick the largest absolute change
-            if
-                let Some(token_change) = transaction.token_balance_changes
-                    .iter()
-                    .filter(|tc| tc.mint != WSOL_MINT)
-                    .max_by(|a, b|
-                        a.change
-                            .abs()
-                            .partial_cmp(&b.change.abs())
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    )
+            if let Some(token_change) = transaction
+                .token_balance_changes
+                .iter()
+                .filter(|tc| tc.mint != WSOL_MINT)
+                .max_by(|a, b| {
+                    a.change
+                        .abs()
+                        .partial_cmp(&b.change.abs())
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
             {
                 if self.debug_enabled {
                     log(
@@ -638,9 +664,8 @@ impl TransactionsManager {
                         "JUPITER_MINT",
                         &format!(
                             "🎯 Found token mint by largest change: {} (change: {})",
-                            token_change.mint,
-                            token_change.change
-                        )
+                            token_change.mint, token_change.change
+                        ),
                     );
                 }
                 return Some(token_change.mint.clone());
@@ -652,12 +677,10 @@ impl TransactionsManager {
 
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
-                if
-                    let (Some(pre_balances), Some(post_balances)) = (
-                        meta.get("preTokenBalances").and_then(|v| v.as_array()),
-                        meta.get("postTokenBalances").and_then(|v| v.as_array()),
-                    )
-                {
+                if let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                    meta.get("postTokenBalances").and_then(|v| v.as_array()),
+                ) {
                     // Gather deltas for wallet-owned token accounts (exclude WSOL)
                     let mut candidates: Vec<(String, f64)> = Vec::new();
                     for post_balance in post_balances {
@@ -668,14 +691,13 @@ impl TransactionsManager {
                                 if mint_str == WSOL_MINT {
                                     continue;
                                 }
-                                let account_index = post_balance
-                                    .get("accountIndex")
-                                    .and_then(|v| v.as_u64());
+                                let account_index =
+                                    post_balance.get("accountIndex").and_then(|v| v.as_u64());
                                 let pre_amount = pre_balances
                                     .iter()
                                     .find(|pre| {
-                                        pre.get("accountIndex").and_then(|v| v.as_u64()) ==
-                                            account_index
+                                        pre.get("accountIndex").and_then(|v| v.as_u64())
+                                            == account_index
                                     })
                                     .and_then(|pre| pre.get("uiTokenAmount"))
                                     .and_then(|ui| ui.get("uiAmount"))
@@ -701,41 +723,34 @@ impl TransactionsManager {
 
                         if is_sell {
                             // Pick most negative delta (largest token decrease)
-                            if
-                                let Some((mint, _)) = candidates
-                                    .iter()
-                                    .filter(|(_, d)| *d < -epsilon)
-                                    .min_by(|a, b| {
-                                        a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
-                                    })
+                            if let Some((mint, _)) = candidates
+                                .iter()
+                                .filter(|(_, d)| *d < -epsilon)
+                                .min_by(|a, b| {
+                                    a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+                                })
                             {
                                 return Some(mint.clone());
                             }
                         } else if is_buy {
                             // Pick most positive delta (largest token increase)
-                            if
-                                let Some((mint, _)) = candidates
-                                    .iter()
-                                    .filter(|(_, d)| *d > epsilon)
-                                    .max_by(|a, b| {
-                                        a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
-                                    })
+                            if let Some((mint, _)) = candidates
+                                .iter()
+                                .filter(|(_, d)| *d > epsilon)
+                                .max_by(|a, b| {
+                                    a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+                                })
                             {
                                 return Some(mint.clone());
                             }
                         }
 
                         // Fallback: pick largest absolute delta if direction unclear
-                        if
-                            let Some((mint, _)) = candidates
-                                .iter()
-                                .max_by(|a, b| {
-                                    a.1
-                                        .abs()
-                                        .partial_cmp(&b.1.abs())
-                                        .unwrap_or(std::cmp::Ordering::Equal)
-                                })
-                        {
+                        if let Some((mint, _)) = candidates.iter().max_by(|a, b| {
+                            a.1.abs()
+                                .partial_cmp(&b.1.abs())
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        }) {
                             return Some(mint.clone());
                         }
                     }
@@ -746,24 +761,18 @@ impl TransactionsManager {
         // 2) Fallback: Look for ATA creation instructions for non-WSOL tokens
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
-                if
-                    let Some(inner_instructions) = meta
-                        .get("innerInstructions")
-                        .and_then(|v| v.as_array())
+                if let Some(inner_instructions) =
+                    meta.get("innerInstructions").and_then(|v| v.as_array())
                 {
                     for inner_group in inner_instructions {
-                        if
-                            let Some(instructions) = inner_group
-                                .get("instructions")
-                                .and_then(|v| v.as_array())
+                        if let Some(instructions) =
+                            inner_group.get("instructions").and_then(|v| v.as_array())
                         {
                             for instruction in instructions {
                                 if let Some(parsed) = instruction.get("parsed") {
                                     if let Some(info) = parsed.get("info") {
-                                        if
-                                            let Some(mint) = info
-                                                .get("mint")
-                                                .and_then(|v| v.as_str())
+                                        if let Some(mint) =
+                                            info.get("mint").and_then(|v| v.as_str())
                                         {
                                             if mint != WSOL_MINT {
                                                 return Some(mint.to_string());
@@ -786,18 +795,14 @@ impl TransactionsManager {
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(transaction_data) = raw_data.get("transaction") {
                 if let Some(message) = transaction_data.get("message") {
-                    if
-                        let Some(instructions) = message
-                            .get("instructions")
-                            .and_then(|v| v.as_array())
+                    if let Some(instructions) =
+                        message.get("instructions").and_then(|v| v.as_array())
                     {
                         for instruction in instructions {
                             if let Some(parsed) = instruction.get("parsed") {
                                 if let Some(info) = parsed.get("info") {
-                                    if
-                                        let Some(lamports) = info
-                                            .get("lamports")
-                                            .and_then(|v| v.as_u64())
+                                    if let Some(lamports) =
+                                        info.get("lamports").and_then(|v| v.as_u64())
                                     {
                                         return crate::utils::lamports_to_sol(lamports);
                                         // Convert to SOL
@@ -830,7 +835,10 @@ impl TransactionsManager {
                     log(
                         LogTag::Transactions,
                         "JUPITER_TOKEN",
-                        &format!("🔢 Jupiter token amount from token_balance_changes: {}", largest_change)
+                        &format!(
+                            "🔢 Jupiter token amount from token_balance_changes: {}",
+                            largest_change
+                        ),
                     );
                 }
                 return largest_change;
@@ -856,7 +864,7 @@ impl TransactionsManager {
                     "⚠️ No token amount found for Jupiter transaction {}{}",
                     &transaction.signature[..8],
                     status_info
-                )
+                ),
             );
         }
 
@@ -867,27 +875,26 @@ impl TransactionsManager {
     /// GMGN is an external router that shows token balance changes but doesn't match standard program IDs
     async fn analyze_gmgn_swap(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         if self.debug_enabled {
             log(
                 LogTag::Transactions,
                 "GMGN_ANALYSIS",
-                &format!("{} - Analyzing GMGN swap", &transaction.signature[..8])
+                &format!("{} - Analyzing GMGN swap", &transaction.signature[..8]),
             );
         }
 
         // CRITICAL FIX: Exclude obvious ATA closures from GMGN detection
         // Check for closeAccount instructions with minimal token amounts
-        let has_close_account =
-            transaction.instructions
-                .iter()
-                .any(|instruction| {
-                    (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" ||
-                        instruction.program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") &&
-                        instruction.instruction_type == "closeAccount"
-                }) ||
-            transaction.log_messages.iter().any(|log| log.contains("Instruction: CloseAccount"));
+        let has_close_account = transaction.instructions.iter().any(|instruction| {
+            (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                || instruction.program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
+                && instruction.instruction_type == "closeAccount"
+        }) || transaction
+            .log_messages
+            .iter()
+            .any(|log| log.contains("Instruction: CloseAccount"));
 
         if has_close_account {
             // Check if this looks like an ATA closure (small SOL recovery, minimal tokens)
@@ -895,7 +902,8 @@ impl TransactionsManager {
             let is_rent_like =
                 rent_recovery > 0.0 && rent_recovery >= 0.002 && rent_recovery <= 0.0025;
 
-            let max_token_amount = transaction.token_transfers
+            let max_token_amount = transaction
+                .token_transfers
                 .iter()
                 .map(|transfer| transfer.amount.abs())
                 .fold(0.0, f64::max);
@@ -906,18 +914,16 @@ impl TransactionsManager {
         }
 
         // For GMGN swaps, we primarily rely on balance changes since program IDs may vary
-        let has_token_operations =
-            !transaction.token_transfers.is_empty() ||
-            transaction.log_messages
-                .iter()
-                .any(|msg| {
-                    msg.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") ||
-                        msg.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
-                });
+        let has_token_operations = !transaction.token_transfers.is_empty()
+            || transaction.log_messages.iter().any(|msg| {
+                msg.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+                    || msg.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+            });
 
         // Extract token mint from transaction
         let target_token_mint = self
-            .extract_target_token_mint_from_gmgn(transaction).await
+            .extract_target_token_mint_from_gmgn(transaction)
+            .await
             .unwrap_or_else(|| "Unknown".to_string());
 
         // Extract amounts
@@ -933,7 +939,7 @@ impl TransactionsManager {
                     transaction.sol_balance_change,
                     token_amount,
                     has_token_operations
-                )
+                ),
             );
         }
 
@@ -969,7 +975,7 @@ impl TransactionsManager {
     /// Extract target token mint from GMGN transaction
     async fn extract_target_token_mint_from_gmgn(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Option<String> {
         // First check token transfers
         if !transaction.token_transfers.is_empty() {
@@ -979,25 +985,19 @@ impl TransactionsManager {
         // Check pre/post token balance changes similar to Jupiter
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
-                if
-                    let (Some(pre_balances), Some(post_balances)) = (
-                        meta.get("preTokenBalances").and_then(|v| v.as_array()),
-                        meta.get("postTokenBalances").and_then(|v| v.as_array()),
-                    )
-                {
+                if let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                    meta.get("postTokenBalances").and_then(|v| v.as_array()),
+                ) {
                     let wallet_str = self.wallet_pubkey.to_string();
 
                     // First, look for token balance changes for our wallet in post-balances (excluding WSOL)
                     for post_balance in post_balances {
-                        if
-                            let Some(post_owner) = post_balance
-                                .get("owner")
-                                .and_then(|v| v.as_str())
+                        if let Some(post_owner) = post_balance.get("owner").and_then(|v| v.as_str())
                         {
                             if let Some(mint) = post_balance.get("mint").and_then(|v| v.as_str()) {
-                                if
-                                    post_owner == wallet_str &&
-                                    mint != "So11111111111111111111111111111111111111112"
+                                if post_owner == wallet_str
+                                    && mint != "So11111111111111111111111111111111111111112"
                                 {
                                     return Some(mint.to_string());
                                 }
@@ -1009,9 +1009,8 @@ impl TransactionsManager {
                     for pre_balance in pre_balances {
                         if let Some(pre_owner) = pre_balance.get("owner").and_then(|v| v.as_str()) {
                             if let Some(mint) = pre_balance.get("mint").and_then(|v| v.as_str()) {
-                                if
-                                    pre_owner == wallet_str &&
-                                    mint != "So11111111111111111111111111111111111111112"
+                                if pre_owner == wallet_str
+                                    && mint != "So11111111111111111111111111111111111111112"
                                 {
                                     // Check if this token's ATA was closed (not in post-balances)
                                     let account_index = pre_balance
@@ -1019,12 +1018,10 @@ impl TransactionsManager {
                                         .and_then(|v| v.as_u64())
                                         .unwrap_or(999);
 
-                                    let still_exists = post_balances
-                                        .iter()
-                                        .any(|post| {
-                                            post.get("accountIndex").and_then(|v| v.as_u64()) ==
-                                                Some(account_index)
-                                        });
+                                    let still_exists = post_balances.iter().any(|post| {
+                                        post.get("accountIndex").and_then(|v| v.as_u64())
+                                            == Some(account_index)
+                                    });
 
                                     if !still_exists {
                                         return Some(mint.to_string());
@@ -1050,20 +1047,15 @@ impl TransactionsManager {
         // Check pre/post token balance changes similar to Jupiter method
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
-                if
-                    let (Some(pre_balances), Some(post_balances)) = (
-                        meta.get("preTokenBalances").and_then(|v| v.as_array()),
-                        meta.get("postTokenBalances").and_then(|v| v.as_array()),
-                    )
-                {
+                if let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                    meta.get("postTokenBalances").and_then(|v| v.as_array()),
+                ) {
                     let wallet_str = self.wallet_pubkey.to_string();
 
                     // First check for token balance changes in post-balances
                     for (post_idx, post_balance) in post_balances.iter().enumerate() {
-                        if
-                            let Some(post_owner) = post_balance
-                                .get("owner")
-                                .and_then(|v| v.as_str())
+                        if let Some(post_owner) = post_balance.get("owner").and_then(|v| v.as_str())
                         {
                             let mint_str = post_balance
                                 .get("mint")
@@ -1085,8 +1077,8 @@ impl TransactionsManager {
                                 let pre_amount = pre_balances
                                     .iter()
                                     .find(|pre| {
-                                        pre.get("accountIndex").and_then(|v| v.as_u64()) ==
-                                            Some(account_index)
+                                        pre.get("accountIndex").and_then(|v| v.as_u64())
+                                            == Some(account_index)
                                     })
                                     .and_then(|pre| pre.get("uiTokenAmount"))
                                     .and_then(|ui| ui.get("uiAmount"))
@@ -1144,12 +1136,10 @@ impl TransactionsManager {
                                     .unwrap_or(999);
 
                                 // Check if this token's ATA was closed (not in post-balances)
-                                let still_exists = post_balances
-                                    .iter()
-                                    .any(|post| {
-                                        post.get("accountIndex").and_then(|v| v.as_u64()) ==
-                                            Some(account_index)
-                                    });
+                                let still_exists = post_balances.iter().any(|post| {
+                                    post.get("accountIndex").and_then(|v| v.as_u64())
+                                        == Some(account_index)
+                                });
 
                                 if !still_exists {
                                     // ATA was closed, return the pre-balance amount
@@ -1187,7 +1177,7 @@ impl TransactionsManager {
     /// Analyze Raydium swap transactions (both AMM and CPMM)
     async fn analyze_raydium_swap(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
 
@@ -1197,9 +1187,8 @@ impl TransactionsManager {
         // 3. SOL balance changes indicating SOL involvement
         // 4. CPMM or AMM program instructions
 
-        let has_token_operations =
-            log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") ||
-            log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+        let has_token_operations = log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+            || log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
         // Extract actual token information from Raydium swap
         let (token_mint, token_symbol, token_amount, mut sol_amount) =
@@ -1212,28 +1201,22 @@ impl TransactionsManager {
                     if let Some(inner) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
                         let mut wsol_sum = 0.0f64;
                         for group in inner {
-                            if
-                                let Some(instructions) = group
-                                    .get("instructions")
-                                    .and_then(|v| v.as_array())
+                            if let Some(instructions) =
+                                group.get("instructions").and_then(|v| v.as_array())
                             {
                                 for instr in instructions {
                                     if let Some(parsed) = instr.get("parsed") {
                                         if let Some(info) = parsed.get("info") {
-                                            if
-                                                let (Some(mint), Some(token_amount)) = (
-                                                    info.get("mint").and_then(|v| v.as_str()),
-                                                    info.get("tokenAmount"),
-                                                )
-                                            {
-                                                if
-                                                    mint ==
-                                                    "So11111111111111111111111111111111111111112"
+                                            if let (Some(mint), Some(token_amount)) = (
+                                                info.get("mint").and_then(|v| v.as_str()),
+                                                info.get("tokenAmount"),
+                                            ) {
+                                                if mint
+                                                    == "So11111111111111111111111111111111111111112"
                                                 {
-                                                    if
-                                                        let Some(ui) = token_amount
-                                                            .get("uiAmount")
-                                                            .and_then(|v| v.as_f64())
+                                                    if let Some(ui) = token_amount
+                                                        .get("uiAmount")
+                                                        .and_then(|v| v.as_f64())
                                                     {
                                                         if ui > 0.0 {
                                                             wsol_sum += ui;
@@ -1264,9 +1247,8 @@ impl TransactionsManager {
                 router: self.determine_raydium_router(transaction),
             });
         } else if
-            // Check for Token to SOL swap (SOL received)
-            transaction.sol_balance_change > 0.000001
-        {
+        // Check for Token to SOL swap (SOL received)
+        transaction.sol_balance_change > 0.000001 {
             // Received more than 0.000001 SOL
             return Ok(TransactionType::SwapTokenToSol {
                 token_mint: token_mint.clone(),
@@ -1275,10 +1257,8 @@ impl TransactionsManager {
                 router: self.determine_raydium_router(transaction),
             });
         } else if
-            // Check for Token to Token swap (minimal SOL change but has token operations)
-            has_token_operations &&
-            !transaction.token_transfers.is_empty()
-        {
+        // Check for Token to Token swap (minimal SOL change but has token operations)
+        has_token_operations && !transaction.token_transfers.is_empty() {
             return Ok(TransactionType::SwapTokenToToken {
                 from_mint: token_mint.clone(),
                 to_mint: "Unknown".to_string(), // For now, handle as single token
@@ -1287,9 +1267,8 @@ impl TransactionsManager {
                 router: self.determine_raydium_router(transaction),
             });
         } else if
-            // Detect based on program presence even if no clear balance change
-            has_token_operations
-        {
+        // Detect based on program presence even if no clear balance change
+        has_token_operations {
             return Ok(TransactionType::SwapSolToToken {
                 token_mint: token_mint.clone(),
                 sol_amount: sol_amount.unwrap_or_else(|| transaction.sol_balance_change.abs()),
@@ -1304,29 +1283,27 @@ impl TransactionsManager {
     /// Extract token information from Raydium swap transaction
     async fn extract_raydium_swap_info(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> (String, String, f64, Option<f64>) {
         // Method 1: Check pre/post token balance changes (most reliable for Raydium)
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
-                if
-                    let (Some(pre_balances), Some(post_balances)) = (
-                        meta.get("preTokenBalances").and_then(|v| v.as_array()),
-                        meta.get("postTokenBalances").and_then(|v| v.as_array()),
-                    )
-                {
+                if let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                    meta.get("postTokenBalances").and_then(|v| v.as_array()),
+                ) {
                     let wallet_str = self.wallet_pubkey.to_string();
                     log(
                         LogTag::Transactions,
                         "RAYDIUM_TOKEN",
-                        &format!("🔍 Analyzing Raydium token balance changes for wallet: {}", wallet_str)
+                        &format!(
+                            "🔍 Analyzing Raydium token balance changes for wallet: {}",
+                            wallet_str
+                        ),
                     );
 
                     for (post_idx, post_balance) in post_balances.iter().enumerate() {
-                        if
-                            let Some(post_owner) = post_balance
-                                .get("owner")
-                                .and_then(|v| v.as_str())
+                        if let Some(post_owner) = post_balance.get("owner").and_then(|v| v.as_str())
                         {
                             if post_owner == wallet_str {
                                 let account_index = post_balance
@@ -1338,8 +1315,8 @@ impl TransactionsManager {
                                 let pre_amount = pre_balances
                                     .iter()
                                     .find(|pre| {
-                                        pre.get("accountIndex").and_then(|v| v.as_u64()) ==
-                                            Some(account_index)
+                                        pre.get("accountIndex").and_then(|v| v.as_u64())
+                                            == Some(account_index)
                                     })
                                     .and_then(|pre| pre.get("uiTokenAmount"))
                                     .and_then(|ui| ui.get("uiAmount"))
@@ -1355,10 +1332,8 @@ impl TransactionsManager {
 
                                 let token_change = post_amount - pre_amount;
 
-                                if
-                                    let Some(mint) = post_balance
-                                        .get("mint")
-                                        .and_then(|v| v.as_str())
+                                if let Some(mint) =
+                                    post_balance.get("mint").and_then(|v| v.as_str())
                                 {
                                     // Skip SOL/WSOL
                                     if mint == "So11111111111111111111111111111111111111112" {
@@ -1381,8 +1356,7 @@ impl TransactionsManager {
                                         );
 
                                         // Get token symbol from database
-                                        let token_symbol = if
-                                            let Some(ref db) = self.token_database
+                                        let token_symbol = if let Some(ref db) = self.token_database
                                         {
                                             match db.get_token_by_mint(mint) {
                                                 Ok(Some(token_info)) => token_info.symbol,
@@ -1423,7 +1397,12 @@ impl TransactionsManager {
         }
 
         // Method 3: Final fallback
-        ("Unknown".to_string(), "TOKEN_Unknown".to_string(), 0.0, None)
+        (
+            "Unknown".to_string(),
+            "TOKEN_Unknown".to_string(),
+            0.0,
+            None,
+        )
     }
 
     /// Determine the specific Raydium router being used
@@ -1447,7 +1426,7 @@ impl TransactionsManager {
     /// Analyze Orca swap transactions
     async fn analyze_orca_swap(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
 
@@ -1485,25 +1464,34 @@ impl TransactionsManager {
     /// Analyze generic DEX swap transactions (Meteora, Aldrin, etc.)
     async fn analyze_generic_dex_swap(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
 
         // Check for common swap indicators
-        if
-            log_text.contains("swap") ||
-            log_text.contains("Swap") ||
-            log_text.contains("exchange") ||
-            log_text.contains("trade")
+        if log_text.contains("swap")
+            || log_text.contains("Swap")
+            || log_text.contains("exchange")
+            || log_text.contains("trade")
         {
             // Identify DEX by program IDs
-            let router = if
-                transaction.instructions.iter().any(|i| i.program_id.contains("meteor"))
+            let router = if transaction
+                .instructions
+                .iter()
+                .any(|i| i.program_id.contains("meteor"))
             {
                 "Meteora"
-            } else if transaction.instructions.iter().any(|i| i.program_id.contains("aldrin")) {
+            } else if transaction
+                .instructions
+                .iter()
+                .any(|i| i.program_id.contains("aldrin"))
+            {
                 "Aldrin"
-            } else if transaction.instructions.iter().any(|i| i.program_id.contains("saber")) {
+            } else if transaction
+                .instructions
+                .iter()
+                .any(|i| i.program_id.contains("saber"))
+            {
                 "Saber"
             } else {
                 "Unknown DEX"
@@ -1547,16 +1535,12 @@ impl TransactionsManager {
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
                 if let Some(pre_balances) = meta.get("preBalances").and_then(|v| v.as_array()) {
-                    if
-                        let Some(post_balances) = meta
-                            .get("postBalances")
-                            .and_then(|v| v.as_array())
+                    if let Some(post_balances) = meta.get("postBalances").and_then(|v| v.as_array())
                     {
                         // Compare pre and post balances to detect ATA rent flows
-                        for (index, (pre, post)) in pre_balances
-                            .iter()
-                            .zip(post_balances.iter())
-                            .enumerate() {
+                        for (index, (pre, post)) in
+                            pre_balances.iter().zip(post_balances.iter()).enumerate()
+                        {
                             if let (Some(pre_val), Some(post_val)) = (pre.as_u64(), post.as_u64()) {
                                 let change = (post_val as i64) - (pre_val as i64);
 
@@ -1565,7 +1549,8 @@ impl TransactionsManager {
                                 // Also check for partial ATA rent amounts
                                 if change.abs() >= 1000000 && change.abs() <= 3000000 {
                                     // Check if this involves CloseAccount instructions
-                                    let has_close_account = transaction.log_messages
+                                    let has_close_account = transaction
+                                        .log_messages
                                         .iter()
                                         .any(|log| log.contains("Instruction: CloseAccount"));
 
@@ -1585,17 +1570,14 @@ impl TransactionsManager {
                                                 );
                                             }
                                         } else if
-                                            // If account went from 0 to some amount and then back, it's temporary ATA
-                                            pre_val == 0 &&
-                                            post_val == 0
-                                        {
+                                        // If account went from 0 to some amount and then back, it's temporary ATA
+                                        pre_val == 0 && post_val == 0 {
                                             // Check if this account was created and closed in the same transaction
                                             // by looking for both CreateAccount and CloseAccount patterns
-                                            let has_create_account = transaction.log_messages
-                                                .iter()
-                                                .any(|log| {
-                                                    log.contains("createAccount") ||
-                                                        log.contains("CreateIdempotent")
+                                            let has_create_account =
+                                                transaction.log_messages.iter().any(|log| {
+                                                    log.contains("createAccount")
+                                                        || log.contains("CreateIdempotent")
                                                 });
 
                                             if has_create_account {
@@ -1625,7 +1607,7 @@ impl TransactionsManager {
     /// Analyze NFT operations (DISABLED - no longer detected)
     async fn analyze_nft_operations(
         &self,
-        _transaction: &Transaction
+        _transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         Err("NFT operations no longer detected".to_string())
     }
@@ -1633,7 +1615,7 @@ impl TransactionsManager {
     /// Analyze wrapped SOL operations
     async fn analyze_wsol_operations(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
         let wsol_mint = "So11111111111111111111111111111111111111112";
@@ -1641,7 +1623,11 @@ impl TransactionsManager {
         // Check for WSOL wrapping (SOL -> WSOL)
         if log_text.contains(wsol_mint) && transaction.sol_balance_change < 0.0 {
             // Look for token account creation and transfer to WSOL account
-            if transaction.instructions.iter().any(|i| i.instruction_type == "transfer") {
+            if transaction
+                .instructions
+                .iter()
+                .any(|i| i.instruction_type == "transfer")
+            {
                 return Ok(TransactionType::SwapSolToToken {
                     token_mint: wsol_mint.to_string(),
                     sol_amount: transaction.sol_balance_change.abs(),
@@ -1653,7 +1639,11 @@ impl TransactionsManager {
 
         // Check for WSOL unwrapping (WSOL -> SOL)
         if log_text.contains(wsol_mint) && transaction.sol_balance_change > 0.0 {
-            if transaction.instructions.iter().any(|i| i.instruction_type == "closeAccount") {
+            if transaction
+                .instructions
+                .iter()
+                .any(|i| i.instruction_type == "closeAccount")
+            {
                 return Ok(TransactionType::SwapTokenToSol {
                     token_mint: wsol_mint.to_string(),
                     token_amount: transaction.sol_balance_change.abs(),
@@ -1669,7 +1659,7 @@ impl TransactionsManager {
     /// Analyze Pump.fun swap operations
     async fn analyze_pump_fun_swap(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
 
@@ -1677,23 +1667,22 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "PUMP_ANALYSIS",
-                &format!("{} - Analyzing Pump.fun swap", &transaction.signature[..8])
+                &format!("{} - Analyzing Pump.fun swap", &transaction.signature[..8]),
             );
         }
 
         // Extract token mint from Pump.fun transaction
-        let target_token_mint = self.extract_target_token_mint_from_pumpfun(transaction).await;
+        let target_token_mint = self
+            .extract_target_token_mint_from_pumpfun(transaction)
+            .await;
 
         // Check for Pump.fun specific patterns - both program IDs and logs
-        let has_pumpfun_program =
-            log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") ||
-            log_text.contains("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA") ||
-            transaction.instructions
-                .iter()
-                .any(|i| {
-                    i.program_id == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" ||
-                        i.program_id == "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
-                });
+        let has_pumpfun_program = log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
+            || log_text.contains("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA")
+            || transaction.instructions.iter().any(|i| {
+                i.program_id == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+                    || i.program_id == "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
+            });
 
         let has_buy_instruction = log_text.contains("Instruction: Buy");
         let has_sell_instruction = log_text.contains("Instruction: Sell");
@@ -1709,7 +1698,7 @@ impl TransactionsManager {
                     log(
                         LogTag::Transactions,
                         "PUMP_MINT_EXTRACT_SUCCESS",
-                        &format!("{} mint={}", &transaction.signature[..8], m)
+                        &format!("{} mint={}", &transaction.signature[..8], m),
                     );
                     Some(m)
                 }
@@ -1720,7 +1709,7 @@ impl TransactionsManager {
                         &format!(
                             "{} could not extract Pump.fun mint yet",
                             &transaction.signature[..8]
-                        )
+                        ),
                     );
                     return Err("PumpFunMissingMint".to_string());
                 }
@@ -1776,29 +1765,23 @@ impl TransactionsManager {
     /// Extract target token mint from Pump.fun transaction
     async fn extract_target_token_mint_from_pumpfun(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Option<String> {
         // Prefer inner instructions parsed mint (non-WSOL)
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
-                if
-                    let Some(inner_instructions) = meta
-                        .get("innerInstructions")
-                        .and_then(|v| v.as_array())
+                if let Some(inner_instructions) =
+                    meta.get("innerInstructions").and_then(|v| v.as_array())
                 {
                     for inner_group in inner_instructions {
-                        if
-                            let Some(instructions) = inner_group
-                                .get("instructions")
-                                .and_then(|v| v.as_array())
+                        if let Some(instructions) =
+                            inner_group.get("instructions").and_then(|v| v.as_array())
                         {
                             for instruction in instructions {
                                 if let Some(parsed) = instruction.get("parsed") {
                                     if let Some(info) = parsed.get("info") {
-                                        if
-                                            let Some(mint) = info
-                                                .get("mint")
-                                                .and_then(|v| v.as_str())
+                                        if let Some(mint) =
+                                            info.get("mint").and_then(|v| v.as_str())
                                         {
                                             if mint != WSOL_MINT {
                                                 return Some(mint.to_string());
@@ -1863,23 +1846,19 @@ impl TransactionsManager {
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
                 let owner = self.wallet_pubkey.to_string();
-                if
-                    let (Some(pre), Some(post)) = (
-                        meta.get("preTokenBalances").and_then(|v| v.as_array()),
-                        meta.get("postTokenBalances").and_then(|v| v.as_array()),
-                    )
-                {
+                if let (Some(pre), Some(post)) = (
+                    meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                    meta.get("postTokenBalances").and_then(|v| v.as_array()),
+                ) {
                     // Build map of mint -> (pre, post) for our owner only
                     use std::collections::HashMap;
                     let mut agg: HashMap<String, (f64, f64)> = HashMap::new();
 
                     for b in pre {
-                        if
-                            let (Some(mint), Some(o)) = (
-                                b.get("mint").and_then(|v| v.as_str()),
-                                b.get("owner").and_then(|v| v.as_str()),
-                            )
-                        {
+                        if let (Some(mint), Some(o)) = (
+                            b.get("mint").and_then(|v| v.as_str()),
+                            b.get("owner").and_then(|v| v.as_str()),
+                        ) {
                             if o == owner && mint != WSOL_MINT {
                                 let ui = b
                                     .get("uiTokenAmount")
@@ -1891,12 +1870,10 @@ impl TransactionsManager {
                         }
                     }
                     for b in post {
-                        if
-                            let (Some(mint), Some(o)) = (
-                                b.get("mint").and_then(|v| v.as_str()),
-                                b.get("owner").and_then(|v| v.as_str()),
-                            )
-                        {
+                        if let (Some(mint), Some(o)) = (
+                            b.get("mint").and_then(|v| v.as_str()),
+                            b.get("owner").and_then(|v| v.as_str()),
+                        ) {
                             if o == owner && mint != WSOL_MINT {
                                 let ui = b
                                     .get("uiTokenAmount")
@@ -1965,35 +1942,26 @@ impl TransactionsManager {
         // Sum all WSOL transferChecked uiAmounts found in inner instructions (covers splits to fees/referrals)
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
-                if
-                    let Some(inner_instructions) = meta
-                        .get("innerInstructions")
-                        .and_then(|v| v.as_array())
+                if let Some(inner_instructions) =
+                    meta.get("innerInstructions").and_then(|v| v.as_array())
                 {
                     let mut wsol_sum = 0.0f64;
                     for inner_group in inner_instructions {
-                        if
-                            let Some(instructions) = inner_group
-                                .get("instructions")
-                                .and_then(|v| v.as_array())
+                        if let Some(instructions) =
+                            inner_group.get("instructions").and_then(|v| v.as_array())
                         {
                             for instruction in instructions {
                                 if let Some(parsed) = instruction.get("parsed") {
                                     if let Some(info) = parsed.get("info") {
-                                        if
-                                            let (Some(mint), Some(token_amount)) = (
-                                                info.get("mint").and_then(|v| v.as_str()),
-                                                info.get("tokenAmount"),
-                                            )
-                                        {
-                                            if
-                                                mint ==
-                                                "So11111111111111111111111111111111111111112"
+                                        if let (Some(mint), Some(token_amount)) = (
+                                            info.get("mint").and_then(|v| v.as_str()),
+                                            info.get("tokenAmount"),
+                                        ) {
+                                            if mint == "So11111111111111111111111111111111111111112"
                                             {
-                                                if
-                                                    let Some(ui_amount) = token_amount
-                                                        .get("uiAmount")
-                                                        .and_then(|v| v.as_f64())
+                                                if let Some(ui_amount) = token_amount
+                                                    .get("uiAmount")
+                                                    .and_then(|v| v.as_f64())
                                                 {
                                                     // Include even micro amounts; they'll round correctly in display
                                                     if ui_amount > 0.0 {
@@ -2015,7 +1983,10 @@ impl TransactionsManager {
         }
 
         // Calculate ATA rent to exclude from balance change as a fallback
-        let ata_rent = self.analyze_ata_operations(transaction).await.unwrap_or(0.0);
+        let ata_rent = self
+            .analyze_ata_operations(transaction)
+            .await
+            .unwrap_or(0.0);
 
         // Use balance change minus ATA rent as fallback
         let adjusted_balance_change = transaction.sol_balance_change.abs() - ata_rent;
@@ -2028,7 +1999,7 @@ impl TransactionsManager {
                     "Excluding ATA rent: {:.9} SOL from balance change {:.9} SOL",
                     ata_rent,
                     transaction.sol_balance_change.abs()
-                )
+                ),
             );
         }
 
@@ -2041,16 +2012,12 @@ impl TransactionsManager {
         // Look for token transfer amounts in inner instructions (non-WSOL only)
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
-                if
-                    let Some(inner_instructions) = meta
-                        .get("innerInstructions")
-                        .and_then(|v| v.as_array())
+                if let Some(inner_instructions) =
+                    meta.get("innerInstructions").and_then(|v| v.as_array())
                 {
                     for inner_group in inner_instructions {
-                        if
-                            let Some(instructions) = inner_group
-                                .get("instructions")
-                                .and_then(|v| v.as_array())
+                        if let Some(instructions) =
+                            inner_group.get("instructions").and_then(|v| v.as_array())
                         {
                             for instruction in instructions {
                                 if let Some(parsed) = instruction.get("parsed") {
@@ -2062,10 +2029,9 @@ impl TransactionsManager {
                                             }
                                         }
                                         if let Some(token_amount) = info.get("tokenAmount") {
-                                            if
-                                                let Some(ui_amount) = token_amount
-                                                    .get("uiAmount")
-                                                    .and_then(|v| v.as_f64())
+                                            if let Some(ui_amount) = token_amount
+                                                .get("uiAmount")
+                                                .and_then(|v| v.as_f64())
                                             {
                                                 if ui_amount > 0.0 {
                                                     return ui_amount;
@@ -2083,16 +2049,16 @@ impl TransactionsManager {
 
         // Fallback to the largest absolute non-WSOL token transfer amount
         if !transaction.token_transfers.is_empty() {
-            if
-                let Some(best) = transaction.token_transfers
-                    .iter()
-                    .filter(|t| t.mint != WSOL_MINT)
-                    .max_by(|a, b|
-                        a.amount
-                            .abs()
-                            .partial_cmp(&b.amount.abs())
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    )
+            if let Some(best) = transaction
+                .token_transfers
+                .iter()
+                .filter(|t| t.mint != WSOL_MINT)
+                .max_by(|a, b| {
+                    a.amount
+                        .abs()
+                        .partial_cmp(&b.amount.abs())
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
             {
                 return best.amount.abs();
             }
@@ -2100,16 +2066,16 @@ impl TransactionsManager {
 
         // Fallback to token_balance_changes
         if !transaction.token_balance_changes.is_empty() {
-            if
-                let Some(best) = transaction.token_balance_changes
-                    .iter()
-                    .filter(|c| c.mint != WSOL_MINT)
-                    .max_by(|a, b|
-                        a.change
-                            .abs()
-                            .partial_cmp(&b.change.abs())
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    )
+            if let Some(best) = transaction
+                .token_balance_changes
+                .iter()
+                .filter(|c| c.mint != WSOL_MINT)
+                .max_by(|a, b| {
+                    a.change
+                        .abs()
+                        .partial_cmp(&b.change.abs())
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
             {
                 return best.change.abs();
             }
@@ -2121,7 +2087,7 @@ impl TransactionsManager {
     /// Analyze Serum/OpenBook swap operations
     async fn analyze_serum_swap(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
 
@@ -2129,7 +2095,10 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "SERUM_ANALYSIS",
-                &format!("{} - Analyzing Serum/OpenBook swap", &transaction.signature[..8])
+                &format!(
+                    "{} - Analyzing Serum/OpenBook swap",
+                    &transaction.signature[..8]
+                ),
             );
         }
 
@@ -2161,7 +2130,7 @@ impl TransactionsManager {
     /// Extract SOL transfer data
     async fn extract_sol_transfer_data(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         // Only detect simple SOL transfers with very specific criteria:
         // 1. Must be 1-3 instructions maximum (simple transfers)
@@ -2179,16 +2148,18 @@ impl TransactionsManager {
         }
 
         // Check if it's primarily system program transfers
-        let system_transfer_count = transaction.instructions
+        let system_transfer_count = transaction
+            .instructions
             .iter()
             .filter(|i| {
-                i.program_id == "11111111111111111111111111111111" &&
-                    i.instruction_type == "transfer"
+                i.program_id == "11111111111111111111111111111111"
+                    && i.instruction_type == "transfer"
             })
             .count();
 
         // Must have at least one system transfer and it should be the majority of instructions
-        if system_transfer_count == 0 || system_transfer_count < transaction.instructions.len() / 2 {
+        if system_transfer_count == 0 || system_transfer_count < transaction.instructions.len() / 2
+        {
             return Err("Not primarily system program transfers".to_string());
         }
 
@@ -2202,15 +2173,14 @@ impl TransactionsManager {
     /// Extract ATA close operation data (standalone ATA closures)
     async fn extract_ata_close_data(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         // More robust ATA closure detection:
         // 1. Look for closeAccount instructions in Token Programs
         // 2. Check for characteristic rent recovery amounts
         // 3. Verify no actual token trading occurred
 
-        let has_close_account =
-            transaction.instructions
+        let has_close_account = transaction.instructions
                 .iter()
                 .any(|instruction| {
                     (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" ||
@@ -2235,13 +2205,14 @@ impl TransactionsManager {
 
         // Additional verification: ensure no significant token trading occurred
         // ATA closures should have minimal or zero token amounts
-        let has_significant_token_trading = transaction.token_transfers
+        let has_significant_token_trading = transaction
+            .token_transfers
             .iter()
             .any(|transfer| transfer.amount.abs() > 100.0); // More than 100 tokens indicates real trading
 
         if has_significant_token_trading {
             return Err(
-                "Transaction has significant token trading, not a simple ATA closure".to_string()
+                "Transaction has significant token trading, not a simple ATA closure".to_string(),
             );
         }
 
@@ -2259,7 +2230,7 @@ impl TransactionsManager {
                     &transaction.signature[..8],
                     token_mint,
                     rent_recovery
-                )
+                ),
             );
         }
 
@@ -2288,10 +2259,8 @@ impl TransactionsManager {
         // Method 2: Extract from raw transaction data (preTokenBalances)
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
-                if
-                    let Some(pre_token_balances) = meta
-                        .get("preTokenBalances")
-                        .and_then(|v| v.as_array())
+                if let Some(pre_token_balances) =
+                    meta.get("preTokenBalances").and_then(|v| v.as_array())
                 {
                     for balance in pre_token_balances {
                         if let Some(mint) = balance.get("mint").and_then(|v| v.as_str()) {
@@ -2339,10 +2308,11 @@ impl TransactionsManager {
     /// Extract bulk operation data (spam detection) - DISABLED
     async fn extract_bulk_operation_data(
         &self,
-        _transaction: &Transaction
+        _transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         Err(
-            "Bulk operation detection disabled - only core transaction types are detected".to_string()
+            "Bulk operation detection disabled - only core transaction types are detected"
+                .to_string(),
         )
     }
 
@@ -2353,14 +2323,19 @@ impl TransactionsManager {
     /// Detect Jupiter swap transactions
     async fn detect_jupiter_swap(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<Option<TransactionType>, String> {
         let jupiter_program_id = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 
         // Check if transaction involves Jupiter
-        if
-            !transaction.instructions.iter().any(|i| i.program_id == jupiter_program_id) &&
-            !transaction.log_messages.iter().any(|log| log.contains(jupiter_program_id))
+        if !transaction
+            .instructions
+            .iter()
+            .any(|i| i.program_id == jupiter_program_id)
+            && !transaction
+                .log_messages
+                .iter()
+                .any(|log| log.contains(jupiter_program_id))
         {
             return Ok(None);
         }
@@ -2372,19 +2347,20 @@ impl TransactionsManager {
     /// Detect Raydium swap transactions
     async fn detect_raydium_swap(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<Option<TransactionType>, String> {
         let raydium_program_ids = [
             "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", // Raydium AMM
-            "routeUGWgWzqBWFcrCfv8tritsqukccJPu3q5GPP3xS", // Raydium Router
+            "routeUGWgWzqBWFcrCfv8tritsqukccJPu3q5GPP3xS",  // Raydium Router
         ];
 
         // Check if transaction involves Raydium
-        if
-            !transaction.instructions
-                .iter()
-                .any(|i| raydium_program_ids.contains(&i.program_id.as_str())) &&
-            !transaction.log_messages
+        if !transaction
+            .instructions
+            .iter()
+            .any(|i| raydium_program_ids.contains(&i.program_id.as_str()))
+            && !transaction
+                .log_messages
                 .iter()
                 .any(|log| raydium_program_ids.iter().any(|id| log.contains(id)))
         {
@@ -2398,19 +2374,20 @@ impl TransactionsManager {
     /// Detect Orca swap transactions
     async fn detect_orca_swap(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<Option<TransactionType>, String> {
         let orca_program_ids = [
             "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP", // Orca V1
-            "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc", // Orca Whirlpool
+            "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",  // Orca Whirlpool
         ];
 
         // Check if transaction involves Orca
-        if
-            !transaction.instructions
-                .iter()
-                .any(|i| orca_program_ids.contains(&i.program_id.as_str())) &&
-            !transaction.log_messages
+        if !transaction
+            .instructions
+            .iter()
+            .any(|i| orca_program_ids.contains(&i.program_id.as_str()))
+            && !transaction
+                .log_messages
                 .iter()
                 .any(|log| orca_program_ids.iter().any(|id| log.contains(id)))
         {
@@ -2424,19 +2401,20 @@ impl TransactionsManager {
     /// Detect Serum/OpenBook swap transactions
     async fn detect_serum_swap(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<Option<TransactionType>, String> {
         let serum_program_ids = [
             "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin", // Serum DEX
-            "srmqPiDkJMShKEGHHJG3w4dWnGr5Hge6F3H5HKpVYuN", // Serum V3
+            "srmqPiDkJMShKEGHHJG3w4dWnGr5Hge6F3H5HKpVYuN",  // Serum V3
         ];
 
         // Check if transaction involves Serum
-        if
-            !transaction.instructions
-                .iter()
-                .any(|i| serum_program_ids.contains(&i.program_id.as_str())) &&
-            !transaction.log_messages
+        if !transaction
+            .instructions
+            .iter()
+            .any(|i| serum_program_ids.contains(&i.program_id.as_str()))
+            && !transaction
+                .log_messages
                 .iter()
                 .any(|log| serum_program_ids.iter().any(|id| log.contains(id)))
         {
@@ -2450,25 +2428,14 @@ impl TransactionsManager {
     /// Detect Pump.fun swap transactions
     async fn detect_pump_fun_swap(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<Option<TransactionType>, String> {
         // Check if transaction involves Pump.fun (both current and legacy program IDs)
-        if
-            !transaction.instructions
-                .iter()
-                .any(
-                    |i|
-                        i.program_id == PUMP_FUN_AMM_PROGRAM_ID ||
-                        i.program_id == PUMP_FUN_LEGACY_PROGRAM_ID
-                ) &&
-            !transaction.log_messages
-                .iter()
-                .any(
-                    |log|
-                        log.contains(PUMP_FUN_AMM_PROGRAM_ID) ||
-                        log.contains(PUMP_FUN_LEGACY_PROGRAM_ID)
-                )
-        {
+        if !transaction.instructions.iter().any(|i| {
+            i.program_id == PUMP_FUN_AMM_PROGRAM_ID || i.program_id == PUMP_FUN_LEGACY_PROGRAM_ID
+        }) && !transaction.log_messages.iter().any(|log| {
+            log.contains(PUMP_FUN_AMM_PROGRAM_ID) || log.contains(PUMP_FUN_LEGACY_PROGRAM_ID)
+        }) {
             return Ok(None);
         }
 
@@ -2479,15 +2446,14 @@ impl TransactionsManager {
     /// Detect SOL transfer transactions
     async fn detect_sol_transfer(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<Option<TransactionType>, String> {
         // Look for system program transfers
         let system_program_id = "11111111111111111111111111111111";
 
         for instruction in &transaction.instructions {
-            if
-                instruction.program_id == system_program_id &&
-                instruction.instruction_type.contains("transfer")
+            if instruction.program_id == system_program_id
+                && instruction.instruction_type.contains("transfer")
             {
                 return self.extract_sol_transfer_data(transaction).await.map(Some);
             }
@@ -2499,16 +2465,18 @@ impl TransactionsManager {
     /// Detect token transfer transactions
     async fn detect_token_transfer(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<Option<TransactionType>, String> {
         let token_program_id = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
         for instruction in &transaction.instructions {
-            if
-                instruction.program_id == token_program_id &&
-                instruction.instruction_type.contains("transfer")
+            if instruction.program_id == token_program_id
+                && instruction.instruction_type.contains("transfer")
             {
-                return self.extract_token_transfer_data(transaction).await.map(Some);
+                return self
+                    .extract_token_transfer_data(transaction)
+                    .await
+                    .map(Some);
             }
         }
 
@@ -2518,7 +2486,7 @@ impl TransactionsManager {
     /// Detect ATA operations (creation/closure) - DISABLED
     async fn detect_ata_operations(
         &self,
-        _transaction: &Transaction
+        _transaction: &Transaction,
     ) -> Result<Option<TransactionType>, String> {
         Ok(None)
     }
@@ -2526,7 +2494,7 @@ impl TransactionsManager {
     /// Detect staking operations - DISABLED
     async fn detect_staking_operations(
         &self,
-        _transaction: &Transaction
+        _transaction: &Transaction,
     ) -> Result<Option<TransactionType>, String> {
         Ok(None)
     }
@@ -2534,7 +2502,7 @@ impl TransactionsManager {
     /// Detect spam/bulk transactions - DISABLED
     async fn detect_spam_bulk_transactions(
         &self,
-        _transaction: &Transaction
+        _transaction: &Transaction,
     ) -> Result<Option<TransactionType>, String> {
         Ok(None)
     }
@@ -2542,7 +2510,7 @@ impl TransactionsManager {
     /// Extract ATA operation data - DISABLED
     async fn extract_ata_operation_data(
         &self,
-        _transaction: &Transaction
+        _transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         Err("ATA operations no longer detected as transaction types".to_string())
     }
@@ -2550,7 +2518,7 @@ impl TransactionsManager {
     /// Extract staking operation data - DISABLED
     async fn extract_staking_operation_data(
         &self,
-        _transaction: &Transaction
+        _transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         Err("Staking operations no longer detected as transaction types".to_string())
     }
@@ -2558,7 +2526,7 @@ impl TransactionsManager {
     /// Extract token transfer data
     async fn extract_token_transfer_data(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         if transaction.token_transfers.is_empty() {
             return Err("No token transfer found".to_string());
@@ -2568,7 +2536,8 @@ impl TransactionsManager {
         let wsol_mint = "So11111111111111111111111111111111111111112";
 
         // 1) Prefer transfers involving the wallet (sender or recipient)
-        let mut candidates: Vec<&TokenTransfer> = transaction.token_transfers
+        let mut candidates: Vec<&TokenTransfer> = transaction
+            .token_transfers
             .iter()
             .filter(|t| (t.from == wallet || t.to == wallet))
             .collect();
@@ -2587,7 +2556,8 @@ impl TransactionsManager {
 
         // 3) If still none (wallet not directly in transfers), fall back to all non-WSOL transfers
         if non_wsol.is_empty() {
-            non_wsol = transaction.token_transfers
+            non_wsol = transaction
+                .token_transfers
                 .iter()
                 .filter(|t| t.mint != wsol_mint)
                 .collect();
@@ -2599,13 +2569,11 @@ impl TransactionsManager {
         }
 
         // Choose the transfer with the largest absolute amount (UI amount already normalized)
-        if
-            let Some(best) = non_wsol
-                .into_iter()
-                .max_by(|a, b| {
-                    a.amount.partial_cmp(&b.amount).unwrap_or(std::cmp::Ordering::Equal)
-                })
-        {
+        if let Some(best) = non_wsol.into_iter().max_by(|a, b| {
+            a.amount
+                .partial_cmp(&b.amount)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }) {
             if self.debug_enabled && transaction.token_transfers.len() > 1 {
                 log(
                     LogTag::Transactions,
@@ -2618,7 +2586,7 @@ impl TransactionsManager {
                         &best.from,
                         &best.to,
                         transaction.token_transfers.len()
-                    )
+                    ),
                 );
             }
             return Ok(TransactionType::TokenTransfer {
@@ -2674,35 +2642,31 @@ impl TransactionsManager {
     /// Force recalculation of transaction analysis (for priority/fallback requests)
     pub async fn force_recalculate_analysis(
         &mut self,
-        transaction: &mut Transaction
+        transaction: &mut Transaction,
     ) -> Result<(), String> {
         // Validate transaction is ready for analysis
-        if
-            !matches!(
-                transaction.status,
-                TransactionStatus::Confirmed | TransactionStatus::Finalized
-            )
-        {
-            return Err(
-                format!(
-                    "Transaction {} not confirmed - status: {:?}",
-                    &transaction.signature,
-                    transaction.status
-                )
-            );
+        if !matches!(
+            transaction.status,
+            TransactionStatus::Confirmed | TransactionStatus::Finalized
+        ) {
+            return Err(format!(
+                "Transaction {} not confirmed - status: {:?}",
+                &transaction.signature, transaction.status
+            ));
         }
 
         if !transaction.success {
-            return Err(format!("Transaction {} failed - cannot analyze", &transaction.signature));
+            return Err(format!(
+                "Transaction {} failed - cannot analyze",
+                &transaction.signature
+            ));
         }
 
         if transaction.log_messages.is_empty() {
-            return Err(
-                format!(
-                    "Transaction {} has no log messages - cannot analyze",
-                    &transaction.signature
-                )
-            );
+            return Err(format!(
+                "Transaction {} has no log messages - cannot analyze",
+                &transaction.signature
+            ));
         }
 
         log(
@@ -2712,7 +2676,7 @@ impl TransactionsManager {
                 "Force recalculating analysis for {} (confirmed, successful, {} logs)",
                 &transaction.signature,
                 transaction.log_messages.len()
-            )
+            ),
         );
 
         // Ensure transaction type is properly set
@@ -2720,10 +2684,8 @@ impl TransactionsManager {
             // Need to re-analyze raw transaction data to classify type
             if transaction.raw_transaction_data.is_some() {
                 // Re-run classification logic here (simplified)
-                self.classify_transaction_from_raw_data(
-                    transaction,
-                    &serde_json::Value::Null
-                ).await?;
+                self.classify_transaction_from_raw_data(transaction, &serde_json::Value::Null)
+                    .await?;
             }
         }
 
@@ -2746,7 +2708,7 @@ impl TransactionsManager {
                 &transaction.signature,
                 transaction.transaction_type,
                 transaction.sol_balance_change
-            )
+            ),
         );
 
         Ok(())
@@ -2756,13 +2718,16 @@ impl TransactionsManager {
     async fn classify_transaction_from_raw_data(
         &self,
         transaction: &mut Transaction,
-        raw_data: &serde_json::Value
+        raw_data: &serde_json::Value,
     ) -> Result<(), String> {
         if self.debug_enabled {
             log(
                 LogTag::Transactions,
                 "FORCE_CLASSIFY",
-                &format!("Force classifying transaction type for {}", &transaction.signature[..8])
+                &format!(
+                    "Force classifying transaction type for {}",
+                    &transaction.signature[..8]
+                ),
             );
         }
 
@@ -2775,21 +2740,20 @@ impl TransactionsManager {
             let log_text = transaction.log_messages.join(" ");
 
             // Force GMGN detection if we have token operations and SOL changes
-            if
-                transaction.sol_balance_change.abs() > 0.001 &&
-                (log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") ||
-                    log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") ||
-                    transaction.instructions
-                        .iter()
-                        .any(|i| {
-                            i.program_id.starts_with("ATokenGP") ||
-                                i.program_id.starts_with("Tokenkeg")
-                        }))
+            if transaction.sol_balance_change.abs() > 0.001
+                && (log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+                    || log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+                    || transaction.instructions.iter().any(|i| {
+                        i.program_id.starts_with("ATokenGP") || i.program_id.starts_with("Tokenkeg")
+                    }))
             {
                 log(
                     LogTag::Transactions,
                     "FORCE_GMGN_DETECT",
-                    &format!("{} - Force detecting GMGN swap pattern", &transaction.signature[..8])
+                    &format!(
+                        "{} - Force detecting GMGN swap pattern",
+                        &transaction.signature[..8]
+                    ),
                 );
 
                 if let Ok(swap_type) = self.analyze_gmgn_swap(transaction).await {
@@ -2804,7 +2768,7 @@ impl TransactionsManager {
     /// Integrate token information from tokens module
     async fn integrate_token_information(
         &mut self,
-        transaction: &mut Transaction
+        transaction: &mut Transaction,
     ) -> Result<(), String> {
         let token_mint = match self.extract_token_mint_from_transaction(transaction) {
             Some(mint) => mint,
@@ -2817,7 +2781,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "TOKEN_INFO",
-                &format!("Integrating token info for mint: {}", &token_mint[..8])
+                &format!("Integrating token info for mint: {}", &token_mint[..8]),
             );
         }
 
@@ -2848,9 +2812,8 @@ impl TransactionsManager {
                             "PRICE",
                             &format!(
                                 "Market price for {}: {:.12} SOL",
-                                symbol,
-                                price_info.price_sol
-                            )
+                                symbol, price_info.price_sol
+                            ),
                         );
                     }
                 }
@@ -2859,7 +2822,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to get market price for {}", symbol)
+                    &format!("Failed to get market price for {}", symbol),
                 );
             }
         }
@@ -2887,7 +2850,11 @@ impl TransactionsManager {
                 // Exclude swaps with zero or negligible token amounts (likely misclassified ATA closures)
                 *token_amount > 0.0001 // Must have meaningful token amount
             }
-            TransactionType::SwapTokenToToken { from_amount, to_amount, .. } => {
+            TransactionType::SwapTokenToToken {
+                from_amount,
+                to_amount,
+                ..
+            } => {
                 // Both amounts must be meaningful for token-to-token swaps
                 *from_amount > 0.0001 && *to_amount > 0.0001
             }
@@ -2898,12 +2865,19 @@ impl TransactionsManager {
     /// Check if transaction involves specific token
     pub fn involves_token(&self, transaction: &Transaction, token_mint: &str) -> bool {
         match &transaction.transaction_type {
-            | TransactionType::SwapSolToToken { token_mint: mint, .. }
-            | TransactionType::SwapTokenToSol { token_mint: mint, .. } => mint == token_mint,
-            TransactionType::SwapTokenToToken { from_mint, to_mint, .. } =>
-                from_mint == token_mint || to_mint == token_mint,
+            TransactionType::SwapSolToToken {
+                token_mint: mint, ..
+            }
+            | TransactionType::SwapTokenToSol {
+                token_mint: mint, ..
+            } => mint == token_mint,
+            TransactionType::SwapTokenToToken {
+                from_mint, to_mint, ..
+            } => from_mint == token_mint || to_mint == token_mint,
             TransactionType::TokenTransfer { mint, .. } => mint == token_mint,
-            TransactionType::AtaClose { token_mint: mint, .. } => mint == token_mint,
+            TransactionType::AtaClose {
+                token_mint: mint, ..
+            } => mint == token_mint,
             _ => false,
         }
     }
@@ -2911,7 +2885,7 @@ impl TransactionsManager {
     /// Extract basic transaction information (slot, time, fee, success)
     pub async fn extract_basic_transaction_info(
         &self,
-        transaction: &mut Transaction
+        transaction: &mut Transaction,
     ) -> Result<(), String> {
         if let Some(raw_data) = &transaction.raw_transaction_data {
             // Extract slot directly from the transaction details
@@ -2923,9 +2897,8 @@ impl TransactionsManager {
             if let Some(block_time) = raw_data.get("blockTime").and_then(|v| v.as_i64()) {
                 transaction.block_time = Some(block_time);
                 // Update timestamp to use blockchain time instead of processing time
-                transaction.timestamp = DateTime::<Utc>
-                    ::from_timestamp(block_time, 0)
-                    .unwrap_or(transaction.timestamp);
+                transaction.timestamp =
+                    DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or(transaction.timestamp);
             }
 
             // Extract meta information
@@ -2936,12 +2909,10 @@ impl TransactionsManager {
                 }
 
                 // Calculate SOL balance change from pre/post balances (signed!)
-                if
-                    let (Some(pre_balances), Some(post_balances)) = (
-                        meta.get("preBalances").and_then(|v| v.as_array()),
-                        meta.get("postBalances").and_then(|v| v.as_array()),
-                    )
-                {
+                if let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preBalances").and_then(|v| v.as_array()),
+                    meta.get("postBalances").and_then(|v| v.as_array()),
+                ) {
                     if !pre_balances.is_empty() && !post_balances.is_empty() {
                         // First account is always the main wallet account
                         let pre_balance_lamports = pre_balances[0].as_i64().unwrap_or(0);
@@ -2965,53 +2936,44 @@ impl TransactionsManager {
                                     &transaction.signature[..8],
                                     balance_change_lamports,
                                     transaction.sol_balance_change
-                                )
+                                ),
                             );
                         }
                     }
                 }
 
                 // Extract token balance changes from pre/post token balances
-                if
-                    let (Some(pre_token_balances), Some(post_token_balances)) = (
-                        meta.get("preTokenBalances").and_then(|v| v.as_array()),
-                        meta.get("postTokenBalances").and_then(|v| v.as_array()),
-                    )
-                {
+                if let (Some(pre_token_balances), Some(post_token_balances)) = (
+                    meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                    meta.get("postTokenBalances").and_then(|v| v.as_array()),
+                ) {
                     let wallet_str = self.wallet_pubkey.to_string();
 
                     // Process token balance changes for wallet-owned accounts
                     for post_balance in post_token_balances {
                         if let Some(owner) = post_balance.get("owner").and_then(|v| v.as_str()) {
                             if owner == wallet_str {
-                                if
-                                    let Some(account_index) = post_balance
-                                        .get("accountIndex")
-                                        .and_then(|v| v.as_u64())
+                                if let Some(account_index) =
+                                    post_balance.get("accountIndex").and_then(|v| v.as_u64())
                                 {
                                     // Find corresponding pre-balance
-                                    let pre_balance = pre_token_balances
-                                        .iter()
-                                        .find(
-                                            |pre|
-                                                pre.get("accountIndex").and_then(|v| v.as_u64()) ==
-                                                Some(account_index)
-                                        );
+                                    let pre_balance = pre_token_balances.iter().find(|pre| {
+                                        pre.get("accountIndex").and_then(|v| v.as_u64())
+                                            == Some(account_index)
+                                    });
 
                                     // Extract token balance data
-                                    if
-                                        let Some(mint) = post_balance
-                                            .get("mint")
-                                            .and_then(|v| v.as_str())
+                                    if let Some(mint) =
+                                        post_balance.get("mint").and_then(|v| v.as_str())
                                     {
-                                        if
-                                            let Some(post_ui_token) =
-                                                post_balance.get("uiTokenAmount")
+                                        if let Some(post_ui_token) =
+                                            post_balance.get("uiTokenAmount")
                                         {
                                             let decimals = post_ui_token
                                                 .get("decimals")
                                                 .and_then(|v| v.as_u64())
-                                                .unwrap_or(9) as u8;
+                                                .unwrap_or(9)
+                                                as u8;
                                             let post_amount = post_ui_token
                                                 .get("uiAmount")
                                                 .and_then(|v| v.as_f64())
@@ -3042,7 +3004,7 @@ impl TransactionsManager {
                                                         post_balance: Some(post_amount),
                                                         change,
                                                         usd_value: None, // Will be calculated later if needed
-                                                    }
+                                                    },
                                                 );
 
                                                 // Also populate token_transfers for compatibility
@@ -3093,21 +3055,19 @@ impl TransactionsManager {
                 if let Some(err) = meta.get("err") {
                     // Parse structured blockchain error for comprehensive error handling
 
-                    let structured_error = parse_structured_solana_error(
-                        err,
-                        Some(&transaction.signature)
-                    );
+                    let structured_error =
+                        parse_structured_solana_error(err, Some(&transaction.signature));
 
                     // Store detailed error information
-                    transaction.error_message = Some(
-                        format!(
-                            "[{}] {}: {} (code: {})",
-                            structured_error.error_type_name(),
-                            structured_error.error_name,
-                            structured_error.description,
-                            structured_error.error_code.map_or("N/A".to_string(), |c| c.to_string())
-                        )
-                    );
+                    transaction.error_message = Some(format!(
+                        "[{}] {}: {} (code: {})",
+                        structured_error.error_type_name(),
+                        structured_error.error_name,
+                        structured_error.description,
+                        structured_error
+                            .error_code
+                            .map_or("N/A".to_string(), |c| c.to_string())
+                    ));
 
                     // Log permanent failures for immediate attention
                     if is_permanent_failure(&structured_error) {
@@ -3119,7 +3079,7 @@ impl TransactionsManager {
                                 transaction.signature,
                                 structured_error.error_name,
                                 structured_error.description
-                            )
+                            ),
                         );
                     }
                 }
@@ -3139,7 +3099,7 @@ impl TransactionsManager {
                                 "Found {} log messages for {}",
                                 transaction.log_messages.len(),
                                 &transaction.signature[..8]
-                            )
+                            ),
                         );
                     }
                 }
@@ -3148,12 +3108,10 @@ impl TransactionsManager {
                 // If a wallet-owned token account appears in preTokenBalances but NOT in postTokenBalances,
                 // we treat it as a negative change equal to its entire pre balance. This captures full sells
                 // where the ATA is closed and avoids token_amount=0.0 in swap classification.
-                if
-                    let (Some(pre_token_balances), Some(post_token_balances)) = (
-                        meta.get("preTokenBalances").and_then(|v| v.as_array()),
-                        meta.get("postTokenBalances").and_then(|v| v.as_array()),
-                    )
-                {
+                if let (Some(pre_token_balances), Some(post_token_balances)) = (
+                    meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                    meta.get("postTokenBalances").and_then(|v| v.as_array()),
+                ) {
                     let wallet_str = self.wallet_pubkey.to_string();
                     let post_indices: std::collections::HashSet<u64> = post_token_balances
                         .iter()
@@ -3191,14 +3149,9 @@ impl TransactionsManager {
 
                         // Extract pre balance details
                         let (decimals, pre_amount) = if let Some(ui) = pre.get("uiTokenAmount") {
-                            let dec = ui
-                                .get("decimals")
-                                .and_then(|v| v.as_u64())
-                                .unwrap_or(9) as u8;
-                            let amt = ui
-                                .get("uiAmount")
-                                .and_then(|v| v.as_f64())
-                                .unwrap_or(0.0);
+                            let dec =
+                                ui.get("decimals").and_then(|v| v.as_u64()).unwrap_or(9) as u8;
+                            let amt = ui.get("uiAmount").and_then(|v| v.as_f64()).unwrap_or(0.0);
                             (dec, amt)
                         } else {
                             (9u8, 0.0)
@@ -3221,7 +3174,8 @@ impl TransactionsManager {
                                 amount: pre_amount, // absolute amount moved out
                                 from: wallet_str.clone(),
                                 to: "external".to_string(),
-                                program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
+                                program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                                    .to_string(),
                             });
 
                             if self.debug_enabled {
@@ -3244,174 +3198,144 @@ impl TransactionsManager {
                 // Extract instruction information for program ID detection
                 if let Some(transaction_data) = raw_data.get("transaction") {
                     if let Some(message) = transaction_data.get("message") {
-                        if
-                            let Some(instructions) = message
-                                .get("instructions")
-                                .and_then(|v| v.as_array())
+                        if let Some(instructions) =
+                            message.get("instructions").and_then(|v| v.as_array())
                         {
                             for (index, instruction) in instructions.iter().enumerate() {
                                 // Handle both parsed and raw instruction formats
-                                let (program_id_str, instruction_type, accounts) = if
-                                    let Some(program_id) = instruction
-                                        .get("programId")
-                                        .and_then(|v| v.as_str())
-                                {
-                                    // Parsed instruction format
-                                    let instruction_type = if
-                                        let Some(parsed) = instruction.get("parsed")
+                                let (program_id_str, instruction_type, accounts) =
+                                    if let Some(program_id) =
+                                        instruction.get("programId").and_then(|v| v.as_str())
                                     {
-                                        if
-                                            let Some(type_name) = parsed
-                                                .get("type")
-                                                .and_then(|v| v.as_str())
-                                        {
-                                            type_name.to_string()
-                                        } else {
-                                            "parsed".to_string()
-                                        }
-                                    } else {
-                                        format!("instruction_{}", index)
-                                    };
+                                        // Parsed instruction format
+                                        let instruction_type =
+                                            if let Some(parsed) = instruction.get("parsed") {
+                                                if let Some(type_name) =
+                                                    parsed.get("type").and_then(|v| v.as_str())
+                                                {
+                                                    type_name.to_string()
+                                                } else {
+                                                    "parsed".to_string()
+                                                }
+                                            } else {
+                                                format!("instruction_{}", index)
+                                            };
 
-                                    // Extract account information from parsed instruction
-                                    let accounts = if let Some(parsed) = instruction.get("parsed") {
-                                        if let Some(info) = parsed.get("info") {
-                                            let mut acc_list = Vec::new();
-                                            // Extract common account fields
-                                            if
-                                                let Some(source) = info
-                                                    .get("source")
-                                                    .and_then(|v| v.as_str())
-                                            {
-                                                acc_list.push(source.to_string());
+                                        // Extract account information from parsed instruction
+                                        let accounts = if let Some(parsed) =
+                                            instruction.get("parsed")
+                                        {
+                                            if let Some(info) = parsed.get("info") {
+                                                let mut acc_list = Vec::new();
+                                                // Extract common account fields
+                                                if let Some(source) =
+                                                    info.get("source").and_then(|v| v.as_str())
+                                                {
+                                                    acc_list.push(source.to_string());
+                                                }
+                                                if let Some(destination) =
+                                                    info.get("destination").and_then(|v| v.as_str())
+                                                {
+                                                    acc_list.push(destination.to_string());
+                                                }
+                                                if let Some(owner) =
+                                                    info.get("owner").and_then(|v| v.as_str())
+                                                {
+                                                    acc_list.push(owner.to_string());
+                                                }
+                                                if let Some(mint) =
+                                                    info.get("mint").and_then(|v| v.as_str())
+                                                {
+                                                    acc_list.push(mint.to_string());
+                                                }
+                                                if let Some(wallet) =
+                                                    info.get("wallet").and_then(|v| v.as_str())
+                                                {
+                                                    acc_list.push(wallet.to_string());
+                                                }
+                                                if let Some(account) =
+                                                    info.get("account").and_then(|v| v.as_str())
+                                                {
+                                                    acc_list.push(account.to_string());
+                                                }
+                                                if let Some(authority) =
+                                                    info.get("authority").and_then(|v| v.as_str())
+                                                {
+                                                    acc_list.push(authority.to_string());
+                                                }
+                                                acc_list
+                                            } else {
+                                                Vec::new()
                                             }
-                                            if
-                                                let Some(destination) = info
-                                                    .get("destination")
-                                                    .and_then(|v| v.as_str())
-                                            {
-                                                acc_list.push(destination.to_string());
-                                            }
-                                            if
-                                                let Some(owner) = info
-                                                    .get("owner")
-                                                    .and_then(|v| v.as_str())
-                                            {
-                                                acc_list.push(owner.to_string());
-                                            }
-                                            if
-                                                let Some(mint) = info
-                                                    .get("mint")
-                                                    .and_then(|v| v.as_str())
-                                            {
-                                                acc_list.push(mint.to_string());
-                                            }
-                                            if
-                                                let Some(wallet) = info
-                                                    .get("wallet")
-                                                    .and_then(|v| v.as_str())
-                                            {
-                                                acc_list.push(wallet.to_string());
-                                            }
-                                            if
-                                                let Some(account) = info
-                                                    .get("account")
-                                                    .and_then(|v| v.as_str())
-                                            {
-                                                acc_list.push(account.to_string());
-                                            }
-                                            if
-                                                let Some(authority) = info
-                                                    .get("authority")
-                                                    .and_then(|v| v.as_str())
-                                            {
-                                                acc_list.push(authority.to_string());
-                                            }
-                                            acc_list
                                         } else {
                                             Vec::new()
-                                        }
-                                    } else {
-                                        Vec::new()
-                                    };
+                                        };
 
-                                    (program_id.to_string(), instruction_type, accounts)
-                                } else if
-                                    let Some(program_id_index) = instruction
-                                        .get("programIdIndex")
-                                        .and_then(|v| v.as_u64())
-                                {
-                                    // Raw instruction format - need to resolve program_id from account keys
-                                    let program_id_str = if
-                                        let Some(account_keys) = message
-                                            .get("accountKeys")
-                                            .and_then(|v| v.as_array())
+                                        (program_id.to_string(), instruction_type, accounts)
+                                    } else if let Some(program_id_index) =
+                                        instruction.get("programIdIndex").and_then(|v| v.as_u64())
                                     {
-                                        if
-                                            let Some(account_obj) = account_keys.get(
-                                                program_id_index as usize
-                                            )
+                                        // Raw instruction format - need to resolve program_id from account keys
+                                        let program_id_str = if let Some(account_keys) =
+                                            message.get("accountKeys").and_then(|v| v.as_array())
                                         {
-                                            if
-                                                let Some(pubkey) = account_obj
+                                            if let Some(account_obj) =
+                                                account_keys.get(program_id_index as usize)
+                                            {
+                                                if let Some(pubkey) = account_obj
                                                     .get("pubkey")
                                                     .and_then(|v| v.as_str())
-                                            {
-                                                pubkey.to_string()
+                                                {
+                                                    pubkey.to_string()
+                                                } else {
+                                                    "unknown".to_string()
+                                                }
                                             } else {
                                                 "unknown".to_string()
                                             }
                                         } else {
                                             "unknown".to_string()
-                                        }
-                                    } else {
-                                        "unknown".to_string()
-                                    };
+                                        };
 
-                                    // Extract accounts from instruction
-                                    let accounts = if
-                                        let Some(accounts_array) = instruction
-                                            .get("accounts")
-                                            .and_then(|v| v.as_array())
-                                    {
-                                        accounts_array
-                                            .iter()
-                                            .filter_map(|v| v.as_u64())
-                                            .filter_map(|idx| {
-                                                if
-                                                    let Some(account_keys) = message
+                                        // Extract accounts from instruction
+                                        let accounts = if let Some(accounts_array) =
+                                            instruction.get("accounts").and_then(|v| v.as_array())
+                                        {
+                                            accounts_array
+                                                .iter()
+                                                .filter_map(|v| v.as_u64())
+                                                .filter_map(|idx| {
+                                                    if let Some(account_keys) = message
                                                         .get("accountKeys")
                                                         .and_then(|v| v.as_array())
-                                                {
-                                                    if
-                                                        let Some(account_obj) = account_keys.get(
-                                                            idx as usize
-                                                        )
                                                     {
-                                                        account_obj
-                                                            .get("pubkey")
-                                                            .and_then(|v| v.as_str())
-                                                            .map(|s| s.to_string())
+                                                        if let Some(account_obj) =
+                                                            account_keys.get(idx as usize)
+                                                        {
+                                                            account_obj
+                                                                .get("pubkey")
+                                                                .and_then(|v| v.as_str())
+                                                                .map(|s| s.to_string())
+                                                        } else {
+                                                            None
+                                                        }
                                                     } else {
                                                         None
                                                     }
-                                                } else {
-                                                    None
-                                                }
-                                            })
-                                            .collect()
-                                    } else {
-                                        Vec::new()
-                                    };
+                                                })
+                                                .collect()
+                                        } else {
+                                            Vec::new()
+                                        };
 
-                                    (program_id_str, format!("instruction_{}", index), accounts)
-                                } else {
-                                    (
-                                        "unknown".to_string(),
-                                        format!("instruction_{}", index),
-                                        Vec::new(),
-                                    )
-                                };
+                                        (program_id_str, format!("instruction_{}", index), accounts)
+                                    } else {
+                                        (
+                                            "unknown".to_string(),
+                                            format!("instruction_{}", index),
+                                            Vec::new(),
+                                        )
+                                    };
 
                                 transaction.instructions.push(InstructionInfo {
                                     program_id: program_id_str,
@@ -3433,7 +3357,7 @@ impl TransactionsManager {
                                     "Extracted {} instructions for {}",
                                     transaction.instructions.len(),
                                     &transaction.signature[..8]
-                                )
+                                ),
                             );
                         }
                     }
@@ -3449,7 +3373,7 @@ impl TransactionsManager {
     /// Analyze transaction type based on instructions and log messages
     pub async fn analyze_transaction_type(
         &self,
-        transaction: &mut Transaction
+        transaction: &mut Transaction,
     ) -> Result<(), String> {
         // Analyze log messages to detect swap patterns
         let log_text = transaction.log_messages.join(" ");
@@ -3462,7 +3386,7 @@ impl TransactionsManager {
                     "Analyzing {} with {} log messages",
                     &transaction.signature[..8],
                     transaction.log_messages.len()
-                )
+                ),
             );
             if !log_text.is_empty() {
                 log(
@@ -3471,7 +3395,7 @@ impl TransactionsManager {
                     &format!(
                         "Log preview (first 200 chars): {}",
                         &log_text.chars().take(200).collect::<String>()
-                    )
+                    ),
                 );
             }
         }
@@ -3485,21 +3409,22 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "STEP_1",
-                    &format!("{} - ATA close detected", &transaction.signature[..8])
+                    &format!("{} - ATA close detected", &transaction.signature[..8]),
                 );
             }
             return Ok(());
         }
 
         // 2. Check for Pump.fun swaps (most common for meme coins)
-        if
-            log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") ||
-            log_text.contains("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA") ||
-            log_text.contains("Pump.fun") ||
-            transaction.instructions
+        if log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
+            || log_text.contains("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA")
+            || log_text.contains("Pump.fun")
+            || transaction
+                .instructions
                 .iter()
-                .any(|i| i.program_id == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") ||
-            transaction.instructions
+                .any(|i| i.program_id == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
+            || transaction
+                .instructions
                 .iter()
                 .any(|i| i.program_id == "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA")
         {
@@ -3507,7 +3432,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "STEP_2",
-                    &format!("{} - Pump.fun swap detected", &transaction.signature[..8])
+                    &format!("{} - Pump.fun swap detected", &transaction.signature[..8]),
                 );
             }
 
@@ -3525,17 +3450,19 @@ impl TransactionsManager {
                             &format!(
                                 "{} attempting second pass mint extraction",
                                 &transaction.signature[..8]
-                            )
+                            ),
                         );
                     }
                     // Force re-derive instructions (already parsed) and call extraction directly
-                    let re_mint = self.extract_target_token_mint_from_pumpfun(transaction).await;
+                    let re_mint = self
+                        .extract_target_token_mint_from_pumpfun(transaction)
+                        .await;
                     if let Some(_m) = re_mint {
                         if self.debug_enabled {
                             log(
                                 LogTag::Transactions,
                                 "PUMP_MINT_SECOND_PASS_SUCCESS",
-                                &format!("{} mint now resolved", &transaction.signature[..8])
+                                &format!("{} mint now resolved", &transaction.signature[..8]),
                             );
                         }
                         if let Ok(swap_type2) = self.analyze_pump_fun_swap(transaction).await {
@@ -3546,17 +3473,16 @@ impl TransactionsManager {
                         log(
                             LogTag::Transactions,
                             "PUMP_MINT_SECOND_PASS_FAIL",
-                            &format!("{} still missing mint", &transaction.signature[..8])
+                            &format!("{} still missing mint", &transaction.signature[..8]),
                         );
                     }
                 }
-                Err(_e) => {/* continue cascade */}
+                Err(_e) => { /* continue cascade */ }
             }
         }
 
         // 3. Check for GMGN swaps (external router with token balance changes)
-        if
-            log_text.contains("GMGN") ||
+        if log_text.contains("GMGN") ||
             log_text.contains("GMGNreQcJFufBiCTLDBgKhYEfEe9B454UjpDr5CaSLA1") ||
             transaction.instructions
                 .iter()
@@ -3583,7 +3509,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "STEP_3",
-                    &format!("{} - GMGN swap detected", &transaction.signature[..8])
+                    &format!("{} - GMGN swap detected", &transaction.signature[..8]),
                 );
             }
 
@@ -3594,10 +3520,10 @@ impl TransactionsManager {
         }
 
         // 4. Check for Jupiter swaps (most common aggregator)
-        if
-            log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") ||
-            log_text.contains("Jupiter") ||
-            transaction.instructions
+        if log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4")
+            || log_text.contains("Jupiter")
+            || transaction
+                .instructions
                 .iter()
                 .any(|i| i.program_id == "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4")
         {
@@ -3605,7 +3531,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "STEP_4",
-                    &format!("{} - Jupiter swap detected", &transaction.signature[..8])
+                    &format!("{} - Jupiter swap detected", &transaction.signature[..8]),
                 );
             }
 
@@ -3616,22 +3542,19 @@ impl TransactionsManager {
         }
 
         // 5. Check for Raydium swaps (both AMM and CPMM)
-        if
-            log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") ||
-            log_text.contains("CPMMoo8L3VgkEru3h4j8mu4baRUeJBmK7nfD5fC2pXg") ||
-            log_text.contains("Raydium") ||
-            transaction.instructions
-                .iter()
-                .any(|i| {
-                    i.program_id == "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" ||
-                        i.program_id.starts_with("CPMMoo8L")
-                })
+        if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8")
+            || log_text.contains("CPMMoo8L3VgkEru3h4j8mu4baRUeJBmK7nfD5fC2pXg")
+            || log_text.contains("Raydium")
+            || transaction.instructions.iter().any(|i| {
+                i.program_id == "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
+                    || i.program_id.starts_with("CPMMoo8L")
+            })
         {
             if self.debug_enabled {
                 log(
                     LogTag::Transactions,
                     "STEP_5",
-                    &format!("{} - Raydium swap detected", &transaction.signature[..8])
+                    &format!("{} - Raydium swap detected", &transaction.signature[..8]),
                 );
             }
 
@@ -3640,7 +3563,8 @@ impl TransactionsManager {
 
                 // Set token symbol for Raydium transactions
                 if let Some(ref db) = self.token_database {
-                    if let Some(token_mint) = self.extract_token_mint_from_transaction(transaction) {
+                    if let Some(token_mint) = self.extract_token_mint_from_transaction(transaction)
+                    {
                         if let Ok(Some(token_info)) = db.get_token_by_mint(&token_mint) {
                             transaction.token_symbol = Some(token_info.symbol);
                         }
@@ -3652,10 +3576,10 @@ impl TransactionsManager {
         }
 
         // 6. Check for Orca swaps
-        if
-            log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") ||
-            log_text.contains("Orca") ||
-            transaction.instructions
+        if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP")
+            || log_text.contains("Orca")
+            || transaction
+                .instructions
                 .iter()
                 .any(|i| i.program_id == "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP")
         {
@@ -3663,7 +3587,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "STEP_6",
-                    &format!("{} - Orca swap detected", &transaction.signature[..8])
+                    &format!("{} - Orca swap detected", &transaction.signature[..8]),
                 );
             }
 
@@ -3674,10 +3598,10 @@ impl TransactionsManager {
         }
 
         // 7. Check for Serum/OpenBook swaps
-        if
-            log_text.contains("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin") ||
-            log_text.contains("Serum") ||
-            transaction.instructions
+        if log_text.contains("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin")
+            || log_text.contains("Serum")
+            || transaction
+                .instructions
                 .iter()
                 .any(|i| i.program_id == "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin")
         {
@@ -3685,7 +3609,10 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "STEP_7",
-                    &format!("{} - Serum/OpenBook swap detected", &transaction.signature[..8])
+                    &format!(
+                        "{} - Serum/OpenBook swap detected",
+                        &transaction.signature[..8]
+                    ),
                 );
             }
 
@@ -3702,7 +3629,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "STEP_8",
-                    &format!("{} - SOL transfer detected", &transaction.signature[..8])
+                    &format!("{} - SOL transfer detected", &transaction.signature[..8]),
                 );
             }
             return Ok(());
@@ -3715,7 +3642,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "STEP_9",
-                    &format!("{} - Token transfer detected", &transaction.signature[..8])
+                    &format!("{} - Token transfer detected", &transaction.signature[..8]),
                 );
             }
             return Ok(());
@@ -3728,7 +3655,10 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "STEP_10",
-                    &format!("{} - Token-to-token swap detected", &transaction.signature[..8])
+                    &format!(
+                        "{} - Token-to-token swap detected",
+                        &transaction.signature[..8]
+                    ),
                 );
             }
             return Ok(());
@@ -3741,7 +3671,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "STEP_11",
-                    &format!("{} - Other pattern detected", &transaction.signature[..8])
+                    &format!("{} - Other pattern detected", &transaction.signature[..8]),
                 );
             }
             return Ok(());
@@ -3754,7 +3684,10 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "STEP_12",
-                    &format!("{} - Failed DEX transaction detected", &transaction.signature[..8])
+                    &format!(
+                        "{} - Failed DEX transaction detected",
+                        &transaction.signature[..8]
+                    ),
                 );
             }
             return Ok(());
@@ -3770,7 +3703,7 @@ impl TransactionsManager {
                 &format!(
                     "{} - Remains Unknown (no core type detected)",
                     &transaction.signature[..8]
-                )
+                ),
             );
         }
 
@@ -3782,7 +3715,7 @@ impl TransactionsManager {
     /// - Estimates rent spent/recovered and net impact
     pub async fn compute_and_set_ata_analysis(
         &self,
-        transaction: &mut Transaction
+        transaction: &mut Transaction,
     ) -> Result<(), String> {
         // Determine token mint context if available
         let token_mint_ctx = self.extract_token_mint_from_transaction(transaction);
@@ -3808,7 +3741,8 @@ impl TransactionsManager {
         if let Some(raw) = &transaction.raw_transaction_data {
             let meta = raw.get("meta");
             // Detect closeAccount occurrences from logs
-            let has_close = transaction.log_messages
+            let has_close = transaction
+                .log_messages
                 .iter()
                 .any(|l| (l.contains("Instruction: CloseAccount") || l.contains("closeAccount")));
 
@@ -3822,15 +3756,12 @@ impl TransactionsManager {
                         if let Some(instrs) = group.get("instructions").and_then(|v| v.as_array()) {
                             for instr in instrs {
                                 if let Some(parsed) = instr.get("parsed") {
-                                    let itype = parsed
-                                        .get("type")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("");
+                                    let itype =
+                                        parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
                                     let info = parsed.get("info");
                                     // CreateIdempotent often indicates ATA creation
-                                    if
-                                        itype.eq_ignore_ascii_case("createIdempotent") ||
-                                        itype.eq_ignore_ascii_case("create")
+                                    if itype.eq_ignore_ascii_case("createIdempotent")
+                                        || itype.eq_ignore_ascii_case("create")
                                     {
                                         if let Some(i) = info {
                                             let ata = i
@@ -3842,10 +3773,8 @@ impl TransactionsManager {
                                                 .and_then(|v| v.as_str())
                                                 .unwrap_or("");
                                             if !ata.is_empty() && !mint.is_empty() {
-                                                creation_accounts.insert(
-                                                    ata.to_string(),
-                                                    mint.to_string()
-                                                );
+                                                creation_accounts
+                                                    .insert(ata.to_string(), mint.to_string());
                                             }
                                         }
                                     }
@@ -3862,15 +3791,11 @@ impl TransactionsManager {
                                             if !ata.is_empty() {
                                                 // If mint missing, leave empty; we'll try infer later
                                                 if !mint.is_empty() {
-                                                    closure_accounts.insert(
-                                                        ata.to_string(),
-                                                        mint.to_string()
-                                                    );
+                                                    closure_accounts
+                                                        .insert(ata.to_string(), mint.to_string());
                                                 } else {
-                                                    closure_accounts.insert(
-                                                        ata.to_string(),
-                                                        String::new()
-                                                    );
+                                                    closure_accounts
+                                                        .insert(ata.to_string(), String::new());
                                                 }
                                             }
                                         }
@@ -3882,21 +3807,18 @@ impl TransactionsManager {
                 }
 
                 // Use pre/post balances to identify rent-sized deltas
-                if
-                    let (Some(pre), Some(post)) = (
-                        m.get("preBalances").and_then(|v| v.as_array()),
-                        m.get("postBalances").and_then(|v| v.as_array()),
-                    )
-                {
+                if let (Some(pre), Some(post)) = (
+                    m.get("preBalances").and_then(|v| v.as_array()),
+                    m.get("postBalances").and_then(|v| v.as_array()),
+                ) {
                     for (idx, (pre_v, post_v)) in pre.iter().zip(post.iter()).enumerate() {
                         if let (Some(pre_l), Some(post_l)) = (pre_v.as_u64(), post_v.as_u64()) {
                             let delta = (post_l as i64) - (pre_l as i64);
                             // Heuristic band for ATA rent amounts
                             if delta.abs() >= 1_500_000 && delta.abs() <= 3_000_000 {
                                 // Use the actual lamport delta instead of a fixed constant
-                                let rent_amount_sol = crate::utils::lamports_to_sol(
-                                    delta.unsigned_abs()
-                                );
+                                let rent_amount_sol =
+                                    crate::utils::lamports_to_sol(delta.unsigned_abs());
                                 // Try infer the account pubkey from message accountKeys
                                 let account_pubkey = raw
                                     .get("transaction")
@@ -4008,7 +3930,7 @@ impl TransactionsManager {
                     token_creations,
                     token_closures,
                     ata_analysis.token_net_rent_impact
-                )
+                ),
             );
         }
 
@@ -4133,7 +4055,7 @@ impl TransactionsManager {
     /// Extract transfer data from transaction
     async fn extract_transfer_data(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
 
@@ -4151,7 +4073,7 @@ impl TransactionsManager {
     /// Enhanced: Token-to-token swap detection based on multiple token transfers
     async fn extract_token_to_token_swap_data(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         // Look for token-to-token swaps where SOL change is minimal (mostly fees)
         // but there are significant token movements in both directions
@@ -4188,7 +4110,7 @@ impl TransactionsManager {
                                 &from_token.mint[..8],
                                 to_token.amount,
                                 &to_token.mint[..8]
-                            )
+                            ),
                         );
                     }
 
@@ -4212,20 +4134,24 @@ impl TransactionsManager {
     /// Detect bulk transfers and other spam-like transaction patterns
     async fn detect_other_transaction_patterns(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         // 1. Detect bulk SOL transfers to many addresses (spam/airdrop pattern)
         let system_transfers = self.count_system_sol_transfers(transaction);
 
         if system_transfers >= 3 {
-            let total_amount: f64 = transaction.sol_balance_changes
+            let total_amount: f64 = transaction
+                .sol_balance_changes
                 .iter()
                 .filter(|change| change.change < 0.0) // Only outgoing transfers
                 .map(|change| change.change.abs())
                 .sum();
 
             let description = format!("Bulk SOL Transfer");
-            let details = format!("{} transfers, {:.6} SOL total", system_transfers, total_amount);
+            let details = format!(
+                "{} transfers, {:.6} SOL total",
+                system_transfers, total_amount
+            );
 
             if self.debug_enabled {
                 log(
@@ -4236,7 +4162,7 @@ impl TransactionsManager {
                         &transaction.signature[..8],
                         description,
                         system_transfers
-                    )
+                    ),
                 );
             }
 
@@ -4255,7 +4181,10 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "COMPUTE_BUDGET",
-                    &format!("{} - Compute budget only transaction", &transaction.signature[..8])
+                    &format!(
+                        "{} - Compute budget only transaction",
+                        &transaction.signature[..8]
+                    ),
                 );
             }
 
@@ -4267,10 +4196,10 @@ impl TransactionsManager {
 
         // 3. Detect NFT minting operations (Bubblegum compressed NFTs)
         let log_text = transaction.log_messages.join(" ");
-        if
-            log_text.contains("MintToCollectionV1") ||
-            log_text.contains("Leaf asset ID:") ||
-            transaction.instructions
+        if log_text.contains("MintToCollectionV1")
+            || log_text.contains("Leaf asset ID:")
+            || transaction
+                .instructions
                 .iter()
                 .any(|i| i.program_id == "BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY")
         {
@@ -4281,7 +4210,10 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "NFT_MINT",
-                    &format!("{} - Bubblegum NFT minting detected", &transaction.signature[..8])
+                    &format!(
+                        "{} - Bubblegum NFT minting detected",
+                        &transaction.signature[..8]
+                    ),
                 );
             }
 
@@ -4293,7 +4225,8 @@ impl TransactionsManager {
 
         // 4. Detect transactions with many small token transfers (dust/spam)
         if transaction.token_transfers.len() >= 10 {
-            let small_transfers = transaction.token_transfers
+            let small_transfers = transaction
+                .token_transfers
                 .iter()
                 .filter(|t| t.amount.abs() < 0.001)
                 .count();
@@ -4309,7 +4242,7 @@ impl TransactionsManager {
                         &format!(
                             "{} - Many small token transfers detected",
                             &transaction.signature[..8]
-                        )
+                        ),
                     );
                 }
 
@@ -4327,7 +4260,7 @@ impl TransactionsManager {
     /// This is a fallback to catch transactions that failed but still involved DEX programs
     async fn detect_failed_dex_transactions(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
 
@@ -4348,9 +4281,9 @@ impl TransactionsManager {
                 if instruction.program_id == *program_id {
                     // Found a DEX program - classify as failed swap
                     let has_wsol = log_text.contains("So11111111111111111111111111111111111111112");
-                    let has_token_ops =
-                        log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") ||
-                        log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+                    let has_token_ops = log_text
+                        .contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+                        || log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
                     if self.debug_enabled {
                         log(
@@ -4361,13 +4294,14 @@ impl TransactionsManager {
                                 &transaction.signature[..8],
                                 router_name,
                                 &program_id[..8]
-                            )
+                            ),
                         );
                     }
 
                     // Extract token mint if possible
                     let token_mint = self
-                        .extract_token_mint_from_failed_tx(transaction).await
+                        .extract_token_mint_from_failed_tx(transaction)
+                        .await
                         .unwrap_or_else(|| "Unknown".to_string());
 
                     // Default to SOL->Token swap for failed DEX transactions
@@ -4392,12 +4326,13 @@ impl TransactionsManager {
                             "{} - Failed {} transaction detected in logs",
                             &transaction.signature[..8],
                             router_name
-                        )
+                        ),
                     );
                 }
 
                 let token_mint = self
-                    .extract_token_mint_from_failed_tx(transaction).await
+                    .extract_token_mint_from_failed_tx(transaction)
+                    .await
                     .unwrap_or_else(|| "Unknown".to_string());
 
                 return Ok(TransactionType::SwapSolToToken {
@@ -4417,28 +4352,20 @@ impl TransactionsManager {
         // Method 1: Check ATA creation instructions for non-WSOL mints
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
-                if
-                    let Some(inner_instructions) = meta
-                        .get("innerInstructions")
-                        .and_then(|v| v.as_array())
+                if let Some(inner_instructions) =
+                    meta.get("innerInstructions").and_then(|v| v.as_array())
                 {
                     for inner_group in inner_instructions {
-                        if
-                            let Some(instructions) = inner_group
-                                .get("instructions")
-                                .and_then(|v| v.as_array())
+                        if let Some(instructions) =
+                            inner_group.get("instructions").and_then(|v| v.as_array())
                         {
                             for instruction in instructions {
                                 if let Some(parsed) = instruction.get("parsed") {
                                     if let Some(info) = parsed.get("info") {
-                                        if
-                                            let Some(mint) = info
-                                                .get("mint")
-                                                .and_then(|v| v.as_str())
+                                        if let Some(mint) =
+                                            info.get("mint").and_then(|v| v.as_str())
                                         {
-                                            if
-                                                mint !=
-                                                "So11111111111111111111111111111111111111112"
+                                            if mint != "So11111111111111111111111111111111111111112"
                                             {
                                                 return Some(mint.to_string());
                                             }
@@ -4456,10 +4383,9 @@ impl TransactionsManager {
         for instruction in &transaction.instructions {
             for account in &instruction.accounts {
                 // Token mints are typically 44 characters long and not WSOL
-                if
-                    account.len() == 44 &&
-                    account != "So11111111111111111111111111111111111111112" &&
-                    account != "11111111111111111111111111111111"
+                if account.len() == 44
+                    && account != "So11111111111111111111111111111111111111112"
+                    && account != "11111111111111111111111111111111"
                 {
                     return Some(account.clone());
                 }
@@ -4470,10 +4396,9 @@ impl TransactionsManager {
         let log_text = transaction.log_messages.join(" ");
         let words: Vec<&str> = log_text.split_whitespace().collect();
         for word in words {
-            if
-                word.len() == 44 &&
-                word != "So11111111111111111111111111111111111111112" &&
-                word != "11111111111111111111111111111111"
+            if word.len() == 44
+                && word != "So11111111111111111111111111111111111111112"
+                && word != "11111111111111111111111111111111"
             {
                 // Basic validation - check if it looks like a Solana address
                 if word.chars().all(|c| c.is_alphanumeric()) {
@@ -4488,12 +4413,11 @@ impl TransactionsManager {
     /// Count system SOL transfers in a transaction
     fn count_system_sol_transfers(&self, transaction: &Transaction) -> usize {
         if let Some(tx_data) = &transaction.raw_transaction_data {
-            if
-                let Some(instructions) = tx_data
-                    .get("transaction")
-                    .and_then(|t| t.get("message"))
-                    .and_then(|m| m.get("instructions"))
-                    .and_then(|i| i.as_array())
+            if let Some(instructions) = tx_data
+                .get("transaction")
+                .and_then(|t| t.get("message"))
+                .and_then(|m| m.get("instructions"))
+                .and_then(|i| i.as_array())
             {
                 return instructions
                     .iter()
@@ -4503,8 +4427,8 @@ impl TransactionsManager {
                             .get("programId")
                             .and_then(|pid| pid.as_str())
                             .map(|pid| pid == "11111111111111111111111111111111")
-                            .unwrap_or(false) &&
-                            instr
+                            .unwrap_or(false)
+                            && instr
                                 .get("parsed")
                                 .and_then(|p| p.get("type"))
                                 .and_then(|t| t.as_str())
@@ -4520,12 +4444,11 @@ impl TransactionsManager {
     /// Check if transaction only contains compute budget instructions
     fn is_compute_budget_only_transaction(&self, transaction: &Transaction) -> bool {
         if let Some(tx_data) = &transaction.raw_transaction_data {
-            if
-                let Some(instructions) = tx_data
-                    .get("transaction")
-                    .and_then(|t| t.get("message"))
-                    .and_then(|m| m.get("instructions"))
-                    .and_then(|i| i.as_array())
+            if let Some(instructions) = tx_data
+                .get("transaction")
+                .and_then(|t| t.get("message"))
+                .and_then(|m| m.get("instructions"))
+                .and_then(|i| i.as_array())
             {
                 // Check if all instructions are compute budget related
                 let all_compute_budget = instructions.iter().all(|instr| {
@@ -4546,7 +4469,7 @@ impl TransactionsManager {
     /// Extract staking operations (DISABLED - no longer detected)
     async fn extract_staking_operations(
         &self,
-        _transaction: &Transaction
+        _transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         Err("Staking operations no longer detected".to_string())
     }
@@ -4554,7 +4477,7 @@ impl TransactionsManager {
     /// Extract program deployment/upgrade operations (DISABLED - no longer detected)
     async fn extract_program_operations(
         &self,
-        _transaction: &Transaction
+        _transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         Err("Program operations no longer detected".to_string())
     }
@@ -4562,7 +4485,7 @@ impl TransactionsManager {
     /// Extract compute budget operations
     async fn extract_compute_budget_operations(
         &self,
-        _transaction: &Transaction
+        _transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         Err("Compute budget operations no longer detected".to_string())
     }
@@ -4570,7 +4493,7 @@ impl TransactionsManager {
     /// Extract spam bulk operations (DISABLED - no longer detected)
     async fn extract_spam_bulk_operations(
         &self,
-        _transaction: &Transaction
+        _transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         Err("Spam bulk operations no longer detected".to_string())
     }
@@ -4578,7 +4501,7 @@ impl TransactionsManager {
     /// Extract transaction type based on instruction analysis
     async fn extract_instruction_based_type(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<TransactionType, String> {
         if transaction.instructions.is_empty() {
             return Err("No instructions to analyze".to_string());
@@ -4622,9 +4545,8 @@ impl TransactionsManager {
 
             _ => {
                 // For unknown programs, try to classify based on behavior
-                if
-                    transaction.sol_balance_change.abs() > 0.001 &&
-                    transaction.token_transfers.is_empty()
+                if transaction.sol_balance_change.abs() > 0.001
+                    && transaction.token_transfers.is_empty()
                 {
                     return Ok(TransactionType::SolTransfer {
                         amount: transaction.sol_balance_change.abs(),
@@ -4633,9 +4555,8 @@ impl TransactionsManager {
                     });
                 }
 
-                if
-                    !transaction.token_transfers.is_empty() &&
-                    transaction.sol_balance_change.abs() < 0.001
+                if !transaction.token_transfers.is_empty()
+                    && transaction.sol_balance_change.abs() < 0.001
                 {
                     let transfer = &transaction.token_transfers[0];
                     return Ok(TransactionType::TokenTransfer {
@@ -4657,7 +4578,7 @@ impl TransactionsManager {
         &self,
         transaction: &Transaction,
         token_symbol_cache: &std::collections::HashMap<String, String>,
-        silent: bool
+        silent: bool,
     ) -> Option<SwapPnLInfo> {
         if !silent && self.debug_enabled {
             log(
@@ -4665,10 +4586,8 @@ impl TransactionsManager {
                 "CONVERT_ATTEMPT",
                 &format!(
                     "Converting {} to SwapPnLInfo - type: {:?}, success: {}",
-                    &transaction.signature,
-                    transaction.transaction_type,
-                    transaction.success
-                )
+                    &transaction.signature, transaction.transaction_type, transaction.success
+                ),
             );
         }
 
@@ -4679,9 +4598,8 @@ impl TransactionsManager {
                     "CONVERT_NOT_SWAP",
                     &format!(
                         "Transaction {} is not a swap transaction - type: {:?}",
-                        &transaction.signature,
-                        transaction.transaction_type
-                    )
+                        &transaction.signature, transaction.transaction_type
+                    ),
                 );
             }
             return None;
@@ -4694,22 +4612,44 @@ impl TransactionsManager {
                 &format!(
                     "Transaction {} identified as swap - proceeding with conversion",
                     &transaction.signature
-                )
+                ),
             );
         }
 
         // Extract swap data from transaction balance changes and token transfers
         // rather than from enum fields (which may not have complete data)
-        let (swap_type, sol_amount_raw, token_amount, token_mint, router) = match
-            &transaction.transaction_type
+        let (swap_type, sol_amount_raw, token_amount, token_mint, router) = match &transaction
+            .transaction_type
         {
-            TransactionType::SwapSolToToken { router, token_mint, sol_amount, token_amount } => {
+            TransactionType::SwapSolToToken {
+                router,
+                token_mint,
+                sol_amount,
+                token_amount,
+            } => {
                 // For buy: use the data from the transaction type which now has corrected amounts
-                ("Buy".to_string(), *sol_amount, *token_amount, token_mint.clone(), router.clone())
+                (
+                    "Buy".to_string(),
+                    *sol_amount,
+                    *token_amount,
+                    token_mint.clone(),
+                    router.clone(),
+                )
             }
-            TransactionType::SwapTokenToSol { router, token_mint, token_amount, sol_amount } => {
+            TransactionType::SwapTokenToSol {
+                router,
+                token_mint,
+                token_amount,
+                sol_amount,
+            } => {
                 // For sell: use the data from the transaction type
-                ("Sell".to_string(), *sol_amount, *token_amount, token_mint.clone(), router.clone())
+                (
+                    "Sell".to_string(),
+                    *sol_amount,
+                    *token_amount,
+                    token_mint.clone(),
+                    router.clone(),
+                )
             }
             TransactionType::SwapTokenToToken {
                 router,
@@ -4721,14 +4661,12 @@ impl TransactionsManager {
                 // For token-to-token swaps, determine if this involves SOL
                 if !transaction.token_transfers.is_empty() {
                     // Find the largest absolute token transfer (this is usually the main trade)
-                    let largest_transfer = transaction.token_transfers
-                        .iter()
-                        .max_by(|a, b| {
-                            a.amount
-                                .abs()
-                                .partial_cmp(&b.amount.abs())
-                                .unwrap_or(std::cmp::Ordering::Equal)
-                        })?;
+                    let largest_transfer = transaction.token_transfers.iter().max_by(|a, b| {
+                        a.amount
+                            .abs()
+                            .partial_cmp(&b.amount.abs())
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })?;
 
                     let token_mint = largest_transfer.mint.clone();
 
@@ -4742,9 +4680,8 @@ impl TransactionsManager {
                             router.clone(),
                         )
                     } else if
-                        // If we spent SOL and have token inflow (positive), it's a buy
-                        transaction.sol_balance_change < 0.0 &&
-                        largest_transfer.amount > 0.0
+                    // If we spent SOL and have token inflow (positive), it's a buy
+                    transaction.sol_balance_change < 0.0 && largest_transfer.amount > 0.0
                     {
                         (
                             "Buy".to_string(),
@@ -4766,17 +4703,16 @@ impl TransactionsManager {
         };
 
         // Get precise ATA rent information from the new ATA analysis
-        let (net_ata_rent_flow, ata_rents_display, token_rent_recovered_exact) = if
-            let Some(ata_analysis) = &transaction.ata_analysis
-        {
-            (
-                ata_analysis.net_rent_impact,
-                ata_analysis.net_rent_impact,
-                ata_analysis.token_rent_recovered,
-            )
-        } else {
-            (0.0, 0.0, 0.0)
-        };
+        let (net_ata_rent_flow, ata_rents_display, token_rent_recovered_exact) =
+            if let Some(ata_analysis) = &transaction.ata_analysis {
+                (
+                    ata_analysis.net_rent_impact,
+                    ata_analysis.net_rent_impact,
+                    ata_analysis.token_rent_recovered,
+                )
+            } else {
+                (0.0, 0.0, 0.0)
+            };
 
         if self.debug_enabled && !silent {
             log(
@@ -4788,7 +4724,7 @@ impl TransactionsManager {
                     transaction.sol_balance_change,
                     net_ata_rent_flow,
                     swap_type
-                )
+                ),
             );
         }
 
@@ -4796,7 +4732,8 @@ impl TransactionsManager {
         if !transaction.success {
             let failed_costs = transaction.sol_balance_change.abs();
 
-            let token_symbol = transaction.token_symbol
+            let token_symbol = transaction
+                .token_symbol
                 .clone()
                 .unwrap_or_else(|| format!("TOKEN_{}", &token_mint));
 
@@ -4837,22 +4774,26 @@ impl TransactionsManager {
         // - When you close ATAs: you get rent back (should be excluded from trading profit)
         // - If ATAs remain open, rent is NOT recovered and should be included in P&L
         //
-        let (ata_creations_count, ata_closures_count) = if
-            let Some(ata_analysis) = &transaction.ata_analysis
-        {
-            (ata_analysis.total_ata_creations, ata_analysis.total_ata_closures)
-        } else {
-            (0, 0)
-        };
+        let (ata_creations_count, ata_closures_count) =
+            if let Some(ata_analysis) = &transaction.ata_analysis {
+                (
+                    ata_analysis.total_ata_creations,
+                    ata_analysis.total_ata_closures,
+                )
+            } else {
+                (0, 0)
+            };
 
         // ENHANCED ATA RENT LOGIC: Get token-specific ATA operations from analysis
-        let (token_ata_creations, token_ata_closures) = if
-            let Some(ata_analysis) = &transaction.ata_analysis
-        {
-            (ata_analysis.token_ata_creations, ata_analysis.token_ata_closures)
-        } else {
-            (0, 0)
-        };
+        let (token_ata_creations, token_ata_closures) =
+            if let Some(ata_analysis) = &transaction.ata_analysis {
+                (
+                    ata_analysis.token_ata_creations,
+                    ata_analysis.token_ata_closures,
+                )
+            } else {
+                (0, 0)
+            };
 
         if is_debug_transactions_enabled() {
             log(
@@ -4936,9 +4877,8 @@ impl TransactionsManager {
 
                     pure_trade
                 } else if
-                    // 2. Very small amount (close to zero): This is likely a miscalculation
-                    sol_amount_raw.abs() < 0.001
-                {
+                // 2. Very small amount (close to zero): This is likely a miscalculation
+                sol_amount_raw.abs() < 0.001 {
                     // This is likely a buy with our standard amount (0.005)
                     let pure_trade = -0.005;
 
@@ -4990,7 +4930,7 @@ impl TransactionsManager {
                                 "SELL tx {}: router SOL amount used as pure trade = {:.9}",
                                 transaction.signature.chars().take(8).collect::<String>(),
                                 pure_trade
-                            )
+                            ),
                         );
                     }
                     pure_trade
@@ -5061,7 +5001,7 @@ impl TransactionsManager {
                     log(
                         LogTag::Transactions,
                         "FALLBACK",
-                        &format!("Using fallback calculation: {:.9} SOL", fallback_amount)
+                        &format!("Using fallback calculation: {:.9} SOL", fallback_amount),
                     );
                 }
             }
@@ -5072,7 +5012,8 @@ impl TransactionsManager {
             pure_trade_amount
         } else {
             // Last resort: try to find meaningful SOL transfer in token_transfers
-            let sol_transfer_amount = transaction.token_transfers
+            let sol_transfer_amount = transaction
+                .token_transfers
                 .iter()
                 .find(|transfer| transfer.mint == "So11111111111111111111111111111111111111112")
                 .map(|transfer| transfer.amount.abs())
@@ -5083,7 +5024,7 @@ impl TransactionsManager {
                     log(
                         LogTag::Transactions,
                         "SOL_TRANSFER",
-                        &format!("Using SOL transfer amount: {:.9} SOL", sol_transfer_amount)
+                        &format!("Using SOL transfer amount: {:.9} SOL", sol_transfer_amount),
                     );
                 }
                 sol_transfer_amount
@@ -5142,7 +5083,7 @@ impl TransactionsManager {
                     &transaction.signature[..8],
                     final_sol_amount,
                     calculated_price_sol
-                )
+                ),
             );
         }
 
@@ -5160,7 +5101,7 @@ impl TransactionsManager {
                             "Buy {}: effective_spent={:.9} (pure trade amount)",
                             &transaction.signature[..8],
                             effective_spent
-                        )
+                        ),
                     );
                 }
 
@@ -5178,7 +5119,7 @@ impl TransactionsManager {
                             "Sell {}: effective_received={:.9} (pure trade amount)",
                             &transaction.signature[..8],
                             effective_received
-                        )
+                        ),
                     );
                 }
 
@@ -5213,7 +5154,7 @@ impl TransactionsManager {
         &self,
         transaction: &Transaction,
         swap_type: &str,
-        sol_amount: f64
+        sol_amount: f64,
     ) -> String {
         if !transaction.success {
             if let Some(ref error_msg) = transaction.error_message {

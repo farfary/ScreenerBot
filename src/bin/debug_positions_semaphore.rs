@@ -1,7 +1,7 @@
 use screenerbot::{
-    positions::{ get_open_positions_count },
     arguments,
-    logger::{ log, LogTag, init_file_logging },
+    logger::{init_file_logging, log, LogTag},
+    positions::get_open_positions_count,
 };
 
 #[tokio::main]
@@ -15,13 +15,19 @@ async fn main() -> Result<(), String> {
     log(
         LogTag::Positions,
         "INFO",
-        &format!("Open positions: {} / {} (semaphore reconciliation implicit)", open, max)
+        &format!(
+            "Open positions: {} / {} (semaphore reconciliation implicit)",
+            open, max
+        ),
     );
     if arguments::is_debug_positions_enabled() {
         log(
             LogTag::Positions,
             "DEBUG",
-            &format!("Enabled debug modes: {:?}", arguments::get_enabled_debug_modes())
+            &format!(
+                "Enabled debug modes: {:?}",
+                arguments::get_enabled_debug_modes()
+            ),
         );
     }
     Ok(())

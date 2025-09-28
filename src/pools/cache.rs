@@ -1,14 +1,13 @@
+use super::db; // Database module for persistence
+use super::types::{PriceHistory, PriceResult, PRICE_CACHE_TTL_SECONDS, PRICE_HISTORY_MAX_ENTRIES};
+use crate::arguments::is_debug_pool_cache_enabled;
 /// Price cache and history management
 ///
 /// This module provides thread-safe caching for pool prices and maintains
 /// price history for tokens. It uses efficient concurrent data structures
 /// to minimize lock contention on the hot path.
-
 use crate::global::is_debug_pool_service_enabled;
-use crate::arguments::is_debug_pool_cache_enabled;
-use crate::logger::{ log, LogTag };
-use super::types::{ PriceResult, PriceHistory, PRICE_CACHE_TTL_SECONDS, PRICE_HISTORY_MAX_ENTRIES };
-use super::db; // Database module for persistence
+use crate::logger::{log, LogTag};
 use dashmap::DashMap;
 use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
@@ -17,19 +16,21 @@ use std::time::Instant;
 use tokio::sync::Notify;
 
 /// Global price cache - high-performance concurrent hashmap
-static PRICE_CACHE: once_cell::sync::Lazy<
-    DashMap<String, PriceResult>
-> = once_cell::sync::Lazy::new(|| DashMap::new());
+static PRICE_CACHE: once_cell::sync::Lazy<DashMap<String, PriceResult>> =
+    once_cell::sync::Lazy::new(|| DashMap::new());
 
 /// Global price history - protected by RwLock for batch operations
-static PRICE_HISTORY: once_cell::sync::Lazy<
-    RwLock<dashmap::DashMap<String, PriceHistory>>
-> = once_cell::sync::Lazy::new(|| RwLock::new(DashMap::new()));
+static PRICE_HISTORY: once_cell::sync::Lazy<RwLock<dashmap::DashMap<String, PriceHistory>>> =
+    once_cell::sync::Lazy::new(|| RwLock::new(DashMap::new()));
 
 /// Initialize the cache system
 pub async fn initialize_cache() {
     if is_debug_pool_cache_enabled() {
-        log(LogTag::PoolCache, "DEBUG", "Initializing price cache system");
+        log(
+            LogTag::PoolCache,
+            "DEBUG",
+            "Initializing price cache system",
+        );
     }
 
     // Load historical data from database into cache
@@ -63,7 +64,7 @@ pub fn update_price(price: PriceResult) {
                 log(
                     LogTag::PoolCache,
                     "ERROR",
-                    &format!("Failed to queue price for storage: {}", e)
+                    &format!("Failed to queue price for storage: {}", e),
                 );
             }
         }
@@ -79,16 +80,19 @@ pub fn update_price(price: PriceResult) {
                     "GAP_CLEANUP",
                     &format!(
                         "Removed {} gapped entries from memory for token: {}",
-                        removed_count,
-                        mint
-                    )
+                        removed_count, mint
+                    ),
                 );
             }
 
             history.add_price(price);
 
             if is_debug_pool_cache_enabled() {
-                log(LogTag::PoolCache, "DEBUG", &format!("Updated price for token: {}", mint));
+                log(
+                    LogTag::PoolCache,
+                    "DEBUG",
+                    &format!("Updated price for token: {}", mint),
+                );
             }
 
             // Trigger database gap cleanup if gaps were detected in memory
@@ -101,9 +105,8 @@ pub fn update_price(price: PriceResult) {
                             "ERROR",
                             &format!(
                                 "Failed to cleanup gapped data in database for {}: {}",
-                                mint_for_cleanup,
-                                e
-                            )
+                                mint_for_cleanup, e
+                            ),
                         );
                     }
                 });
@@ -123,7 +126,7 @@ pub fn update_price(price: PriceResult) {
             log(
                 LogTag::PoolCache,
                 "DEBUG",
-                &format!("Created new price history for token: {}", mint)
+                &format!("Created new price history for token: {}", mint),
             );
         }
     }
@@ -132,7 +135,8 @@ pub fn update_price(price: PriceResult) {
 /// Get available tokens (tokens with fresh prices)
 pub fn get_available_tokens() -> Vec<String> {
     let now = Instant::now();
-    PRICE_CACHE.iter()
+    PRICE_CACHE
+        .iter()
         .filter_map(|entry| {
             let price = entry.value();
             if now.duration_since(price.timestamp).as_secs() < PRICE_CACHE_TTL_SECONDS {
@@ -206,14 +210,22 @@ fn cleanup_stale_entries() {
     });
 
     if removed_count > 0 && is_debug_pool_cache_enabled() {
-        log(LogTag::PoolCache, "DEBUG", &format!("Cleaned {} stale price entries", removed_count));
+        log(
+            LogTag::PoolCache,
+            "DEBUG",
+            &format!("Cleaned {} stale price entries", removed_count),
+        );
     }
 }
 
 /// Load historical data from database into in-memory cache
 async fn load_historical_data_into_cache() {
     if is_debug_pool_cache_enabled() {
-        log(LogTag::PoolCache, "DEBUG", "Loading historical data from database into cache");
+        log(
+            LogTag::PoolCache,
+            "DEBUG",
+            "Loading historical data from database into cache",
+        );
     }
 
     // Get list of all tokens that have available prices in cache (this will be empty on first run)
@@ -221,7 +233,11 @@ async fn load_historical_data_into_cache() {
     // For now, we'll load on-demand when prices are requested
 
     if is_debug_pool_cache_enabled() {
-        log(LogTag::PoolCache, "DEBUG", "Historical data loading setup completed");
+        log(
+            LogTag::PoolCache,
+            "DEBUG",
+            "Historical data loading setup completed",
+        );
     }
 }
 
@@ -232,10 +248,8 @@ pub async fn load_token_history_from_database(mint: &str) -> Result<(), String> 
             if !historical_prices.is_empty() {
                 // Create or update history entry
                 if let Ok(mut history_map) = PRICE_HISTORY.write() {
-                    let mut new_history = PriceHistory::new(
-                        mint.to_string(),
-                        PRICE_HISTORY_MAX_ENTRIES
-                    );
+                    let mut new_history =
+                        PriceHistory::new(mint.to_string(), PRICE_HISTORY_MAX_ENTRIES);
                     let prices_count = historical_prices.len();
 
                     // Add all historical prices
@@ -251,9 +265,8 @@ pub async fn load_token_history_from_database(mint: &str) -> Result<(), String> 
                             "DEBUG",
                             &format!(
                                 "Loaded {} historical prices for token: {}",
-                                prices_count,
-                                mint
-                            )
+                                prices_count, mint
+                            ),
                         );
                     }
                 }
@@ -265,7 +278,7 @@ pub async fn load_token_history_from_database(mint: &str) -> Result<(), String> 
                 log(
                     LogTag::PoolCache,
                     "WARN",
-                    &format!("Failed to load historical data for {}: {}", mint, e)
+                    &format!("Failed to load historical data for {}: {}", mint, e),
                 );
             }
             Err(e)

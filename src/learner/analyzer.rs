@@ -15,11 +15,11 @@
 //! * Temporal patterns and seasonality
 //! * Historical token behavior
 
-use crate::learner::types::*;
-use crate::learner::database::LearningDatabase;
-use crate::logger::{ log, LogTag };
 use crate::global::is_debug_learning_enabled;
-use chrono::{ DateTime, Utc, Timelike, Datelike };
+use crate::learner::database::LearningDatabase;
+use crate::learner::types::*;
+use crate::logger::{log, LogTag};
+use chrono::{DateTime, Datelike, Timelike, Utc};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
@@ -56,7 +56,7 @@ impl PatternAnalyzer {
     pub async fn extract_features(
         &self,
         trade: &TradeRecord,
-        database: &LearningDatabase
+        database: &LearningDatabase,
     ) -> Result<FeatureVector, String> {
         let mut features = FeatureVector::new(trade.id);
 
@@ -64,7 +64,8 @@ impl PatternAnalyzer {
         self.extract_drop_features(trade, &mut features).await?;
 
         // Extract market context features
-        self.extract_market_context_features(trade, &mut features).await?;
+        self.extract_market_context_features(trade, &mut features)
+            .await?;
 
         // Extract ATH proximity features
         self.extract_ath_features(trade, &mut features).await?;
@@ -73,7 +74,8 @@ impl PatternAnalyzer {
         self.extract_temporal_features(trade, &mut features).await?;
 
         // Extract historical features
-        self.extract_historical_features(trade, database, &mut features).await?;
+        self.extract_historical_features(trade, database, &mut features)
+            .await?;
 
         // Generate labels for training
         self.generate_labels(trade, &mut features).await?;
@@ -87,7 +89,7 @@ impl PatternAnalyzer {
                     trade.id,
                     FeatureVector::FEATURE_COUNT,
                     features.success_label
-                )
+                ),
             );
         }
 
@@ -98,7 +100,7 @@ impl PatternAnalyzer {
     async fn extract_drop_features(
         &self,
         trade: &TradeRecord,
-        features: &mut FeatureVector
+        features: &mut FeatureVector,
     ) -> Result<(), String> {
         // Normalize drop percentages by typical volatility for the timeframe
         features.drop_10s_norm = self.normalize_drop(trade.drop_10s_pct, 10.0);
@@ -109,7 +111,8 @@ impl PatternAnalyzer {
 
         // Calculate drop velocity (percentage per minute)
         if let Some(drop_30s) = trade.drop_30s_pct {
-            features.drop_velocity_30s = (drop_30s / 0.5).abs().min(100.0) / 100.0; // Normalize to 0-1
+            features.drop_velocity_30s = (drop_30s / 0.5).abs().min(100.0) / 100.0;
+            // Normalize to 0-1
         }
 
         // Calculate drop acceleration (change in velocity)
@@ -126,7 +129,7 @@ impl PatternAnalyzer {
     async fn extract_market_context_features(
         &self,
         trade: &TradeRecord,
-        features: &mut FeatureVector
+        features: &mut FeatureVector,
     ) -> Result<(), String> {
         // Liquidity tier (0-1 scale)
         if let Some(liquidity) = trade.liquidity_at_entry {
@@ -145,21 +148,16 @@ impl PatternAnalyzer {
 
         // Holder count (log scale)
         if let Some(holder_count) = trade.holder_count {
-            features.holder_count_log = (holder_count as f64).ln().max(0.0) / 20.0; // Normalize to ~0-1
+            features.holder_count_log = (holder_count as f64).ln().max(0.0) / 20.0;
+            // Normalize to ~0-1
         }
 
         // Market cap tier (estimated from liquidity and price)
-        if
-            let (Some(liquidity), Some(sol_reserves)) = (
-                trade.liquidity_at_entry,
-                trade.sol_reserves_at_entry,
-            )
+        if let (Some(liquidity), Some(sol_reserves)) =
+            (trade.liquidity_at_entry, trade.sol_reserves_at_entry)
         {
-            features.market_cap_tier = self.estimate_market_cap_tier(
-                liquidity,
-                sol_reserves,
-                trade.entry_price
-            );
+            features.market_cap_tier =
+                self.estimate_market_cap_tier(liquidity, sol_reserves, trade.entry_price);
         }
 
         Ok(())
@@ -169,23 +167,30 @@ impl PatternAnalyzer {
     async fn extract_ath_features(
         &self,
         trade: &TradeRecord,
-        features: &mut FeatureVector
+        features: &mut FeatureVector,
     ) -> Result<(), String> {
         // Convert distance from ATH to proximity (closer = higher value)
-        features.ath_prox_15m = trade.ath_dist_15m_pct
+        features.ath_prox_15m = trade
+            .ath_dist_15m_pct
             .map(|dist| 1.0 - (dist / 100.0).min(1.0))
             .unwrap_or(0.0);
 
-        features.ath_prox_1h = trade.ath_dist_1h_pct
+        features.ath_prox_1h = trade
+            .ath_dist_1h_pct
             .map(|dist| 1.0 - (dist / 100.0).min(1.0))
             .unwrap_or(0.0);
 
-        features.ath_prox_6h = trade.ath_dist_6h_pct
+        features.ath_prox_6h = trade
+            .ath_dist_6h_pct
             .map(|dist| 1.0 - (dist / 100.0).min(1.0))
             .unwrap_or(0.0);
 
         // Combined ATH risk score (higher when very close to any ATH)
-        let proximities = [features.ath_prox_15m, features.ath_prox_1h, features.ath_prox_6h];
+        let proximities = [
+            features.ath_prox_15m,
+            features.ath_prox_1h,
+            features.ath_prox_6h,
+        ];
         let max_proximity = proximities.iter().cloned().fold(0.0f64, f64::max);
         let avg_proximity = proximities.iter().sum::<f64>() / 3.0;
 
@@ -199,7 +204,7 @@ impl PatternAnalyzer {
     async fn extract_temporal_features(
         &self,
         trade: &TradeRecord,
-        features: &mut FeatureVector
+        features: &mut FeatureVector,
     ) -> Result<(), String> {
         // Encode hour of day as sine/cosine for cyclical nature
         let hour_radians = ((trade.hour_of_day as f64) * 2.0 * PI) / 24.0;
@@ -219,7 +224,7 @@ impl PatternAnalyzer {
         &self,
         trade: &TradeRecord,
         database: &LearningDatabase,
-        features: &mut FeatureVector
+        features: &mut FeatureVector,
     ) -> Result<(), String> {
         // Check if this is a re-entry
         features.re_entry_flag = if trade.was_re_entry { 1.0 } else { 0.0 };
@@ -245,7 +250,7 @@ impl PatternAnalyzer {
     async fn generate_labels(
         &self,
         trade: &TradeRecord,
-        features: &mut FeatureVector
+        features: &mut FeatureVector,
     ) -> Result<(), String> {
         // Success label: profitable exit
         features.success_label = Some(if trade.pnl_pct > 0.0 { 1.0 } else { 0.0 });
@@ -255,14 +260,14 @@ impl PatternAnalyzer {
         features.quick_success_label = Some(if quick_profit { 1.0 } else { 0.0 });
 
         // Risk label: >18% drawdown in first 8 minutes
-        let high_early_risk =
-            trade.max_down_pct.abs() > 18.0 &&
-            trade.dd_reached_sec.map(|t| t < 480).unwrap_or(false); // 8 minutes
+        let high_early_risk = trade.max_down_pct.abs() > 18.0
+            && trade.dd_reached_sec.map(|t| t < 480).unwrap_or(false); // 8 minutes
         features.risk_label = Some(if high_early_risk { 1.0 } else { 0.0 });
 
         // Peak time label: normalized time to reach peak
         if let Some(peak_time) = trade.peak_reached_sec {
-            features.peak_time_label = Some(((peak_time as f64) / 3600.0).min(1.0)); // Normalize to hours, max 1
+            features.peak_time_label = Some(((peak_time as f64) / 3600.0).min(1.0));
+            // Normalize to hours, max 1
         }
 
         Ok(())
@@ -272,7 +277,7 @@ impl PatternAnalyzer {
     async fn get_token_statistics(
         &self,
         mint: &str,
-        database: &LearningDatabase
+        database: &LearningDatabase,
     ) -> Result<TokenStatistics, String> {
         // Cleanup cache if needed
         self.cleanup_cache_if_needed().await;
@@ -314,36 +319,29 @@ impl PatternAnalyzer {
             };
         }
 
-        let profitable_trades = trades
-            .iter()
-            .filter(|t| t.pnl_pct > 0.0)
-            .count();
+        let profitable_trades = trades.iter().filter(|t| t.pnl_pct > 0.0).count();
         let success_rate = (profitable_trades as f64) / (trades.len() as f64);
 
-        let avg_profit =
-            trades
-                .iter()
-                .map(|t| t.pnl_pct)
-                .sum::<f64>() / (trades.len() as f64);
-        let avg_hold_duration =
-            trades
-                .iter()
-                .map(|t| t.hold_duration_sec as f64)
-                .sum::<f64>() / (trades.len() as f64);
+        let avg_profit = trades.iter().map(|t| t.pnl_pct).sum::<f64>() / (trades.len() as f64);
+        let avg_hold_duration = trades
+            .iter()
+            .map(|t| t.hold_duration_sec as f64)
+            .sum::<f64>()
+            / (trades.len() as f64);
 
-        let avg_peak_time =
-            trades
-                .iter()
-                .filter_map(|t| t.peak_reached_sec)
-                .map(|t| t as f64)
-                .sum::<f64>() / (trades.len() as f64);
+        let avg_peak_time = trades
+            .iter()
+            .filter_map(|t| t.peak_reached_sec)
+            .map(|t| t as f64)
+            .sum::<f64>()
+            / (trades.len() as f64);
 
         // Calculate volatility as average of max swings
-        let volatility_score =
-            trades
-                .iter()
-                .map(|t| (t.max_up_pct - t.max_down_pct).abs())
-                .sum::<f64>() / (trades.len() as f64);
+        let volatility_score = trades
+            .iter()
+            .map(|t| (t.max_up_pct - t.max_down_pct).abs())
+            .sum::<f64>()
+            / (trades.len() as f64);
 
         TokenStatistics {
             trade_count: trades.len(),
@@ -461,7 +459,7 @@ impl PatternAnalyzer {
     fn calculate_multi_timeframe_drops(
         &self,
         price_history: &[crate::pools::PriceResult],
-        current_price: f64
+        current_price: f64,
     ) -> (f64, f64, f64, f64, f64) {
         use chrono::Utc;
 
@@ -500,7 +498,7 @@ impl PatternAnalyzer {
     fn calculate_ath_distances(
         &self,
         price_history: &[crate::pools::PriceResult],
-        current_price: f64
+        current_price: f64,
     ) -> (f64, f64, f64) {
         use chrono::Utc;
 
@@ -537,7 +535,7 @@ impl PatternAnalyzer {
         &self,
         target_mint: &str,
         database: &LearningDatabase,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<SimilarToken>, String> {
         // Get target token's features
         let target_trades = database.get_trades_for_mint(target_mint).await?;
@@ -561,7 +559,10 @@ impl PatternAnalyzer {
                 continue; // Skip self
             }
 
-            let trades = database.get_trades_for_mint(&mint).await.unwrap_or_default();
+            let trades = database
+                .get_trades_for_mint(&mint)
+                .await
+                .unwrap_or_default();
             if trades.is_empty() {
                 continue;
             }
@@ -584,9 +585,11 @@ impl PatternAnalyzer {
         }
 
         // Sort by similarity score descending
-        similar_tokens.sort_by(|a, b|
-            b.similarity_score.partial_cmp(&a.similarity_score).unwrap_or(std::cmp::Ordering::Equal)
-        );
+        similar_tokens.sort_by(|a, b| {
+            b.similarity_score
+                .partial_cmp(&a.similarity_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Limit results
         similar_tokens.truncate(limit);
@@ -598,7 +601,7 @@ impl PatternAnalyzer {
     fn calculate_token_similarity(
         &self,
         stats1: &TokenStatistics,
-        stats2: &TokenStatistics
+        stats2: &TokenStatistics,
     ) -> f64 {
         let mut similarity_sum = 0.0;
         let mut weight_sum = 0.0;
@@ -703,12 +706,12 @@ impl PatternAnalyzer {
         mint: &str,
         current_price: f64,
         drop_percent: f64,
-        ath_proximity: f64
+        ath_proximity: f64,
     ) -> Result<FeatureVector, String> {
+        use crate::pools::{get_price_history, get_price_history_stats};
+        use crate::tokens::security::get_security_analyzer;
         use chrono::Timelike;
         use std::f64::consts::PI;
-        use crate::pools::{ get_price_history, get_price_history_stats };
-        use crate::tokens::security::get_security_analyzer;
 
         let now = chrono::Utc::now();
         let hour = now.hour() as f64;
@@ -722,24 +725,19 @@ impl PatternAnalyzer {
             self.calculate_multi_timeframe_drops(&price_history, current_price);
 
         // Calculate real ATH distances from pools data
-        let (ath_dist_15m_pct, ath_dist_1h_pct, ath_dist_6h_pct) = self.calculate_ath_distances(
-            &price_history,
-            current_price
-        );
+        let (ath_dist_15m_pct, ath_dist_1h_pct, ath_dist_6h_pct) =
+            self.calculate_ath_distances(&price_history, current_price);
 
         // Calculate actual market context features from real data
-        let (liquidity_tier, market_cap_tier, tx_activity_score) = if
-            let Some(latest_price) = price_history.last()
+        let (liquidity_tier, market_cap_tier, tx_activity_score) = if let Some(latest_price) =
+            price_history.last()
         {
             let liquidity = latest_price.sol_reserves;
             let liquidity_tier = self.liquidity_to_tier(liquidity);
 
             // Estimate market cap tier from reserves and price
-            let market_cap_tier = self.estimate_market_cap_tier(
-                liquidity,
-                latest_price.sol_reserves,
-                current_price
-            );
+            let market_cap_tier =
+                self.estimate_market_cap_tier(liquidity, latest_price.sol_reserves, current_price);
 
             // Simple activity score based on price volatility in last 10 points
             let tx_activity_score = if price_history.len() >= 10 {
@@ -864,7 +862,7 @@ impl PatternAnalyzer {
         mint: &str,
         current_price: f64,
         entry_price: f64,
-        position_duration_mins: u32
+        position_duration_mins: u32,
     ) -> Result<FeatureVector, String> {
         use chrono::Timelike;
         use std::f64::consts::PI;
@@ -934,7 +932,7 @@ impl PatternAnalyzer {
         drop_60s: f64,
         drop_120s: f64,
         drop_320s: f64,
-        confidence_threshold: f64
+        confidence_threshold: f64,
     ) -> Result<Vec<TradingPattern>, String> {
         // Get historical trades with similar drop patterns
         let trades = database.get_trades_for_mint(mint).await?;
@@ -974,11 +972,7 @@ impl PatternAnalyzer {
                         trade.hold_duration_sec - 300, // +/- 5 min
                         trade.hold_duration_sec + 300,
                     ),
-                    success_rate: if trade.pnl_pct > 0.0 {
-                        1.0
-                    } else {
-                        0.0
-                    },
+                    success_rate: if trade.pnl_pct > 0.0 { 1.0 } else { 0.0 },
                     avg_profit: trade.pnl_pct,
                     avg_duration: trade.hold_duration_sec,
                     sample_count: 1,
@@ -1004,7 +998,7 @@ impl PatternAnalyzer {
                     pattern_matches.len(),
                     mint,
                     confidence_threshold
-                )
+                ),
             );
         }
 
@@ -1043,10 +1037,9 @@ impl PatternAnalyzer {
         }
 
         // Double bottom: Drop, recovery, then another drop
-        if
-            drop_60s.abs() > drop_30s.abs() &&
-            drop_120s.abs() > drop_60s.abs() &&
-            drop_320s.abs() < drop_120s.abs()
+        if drop_60s.abs() > drop_30s.abs()
+            && drop_120s.abs() > drop_60s.abs()
+            && drop_320s.abs() < drop_120s.abs()
         {
             return PatternType::DoubleBottom;
         }

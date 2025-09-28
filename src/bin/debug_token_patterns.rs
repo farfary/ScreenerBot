@@ -1,8 +1,7 @@
-/// Debug tool for token pattern analysis
-
-use screenerbot::logger::init_file_logging;
-use screenerbot::tokens::patterns::{ initialize_pattern_analyzer, log_pattern_analysis_results };
 use colored::*;
+/// Debug tool for token pattern analysis
+use screenerbot::logger::init_file_logging;
+use screenerbot::tokens::patterns::{initialize_pattern_analyzer, log_pattern_analysis_results};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

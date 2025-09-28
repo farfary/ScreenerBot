@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let test_tokens = vec![
         "UmTt1cGStKwAQFXbQWELJzyjNFrdwV2JrFW6pcEpump".to_string(),
         "9vyLnN3TYexVA2fZ1fScHWfXdkye4XnEsGX5gfW7pump".to_string(),
-        "8rWQDhktodDA2WP5b1o241taN2sujxCUGrrJ3JnZpump".to_string()
+        "8rWQDhktodDA2WP5b1o241taN2sujxCUGrrJ3JnZpump".to_string(),
     ];
 
     let analyzer = get_security_analyzer();
@@ -24,8 +24,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match analyzer.database.get_security_info(&mint) {
             Ok(Some(info)) => {
                 println!("✅ Found in database:");
-                println!("  - Mint Authority Disabled: {}", info.mint_authority_disabled);
-                println!("  - Freeze Authority Disabled: {}", info.freeze_authority_disabled);
+                println!(
+                    "  - Mint Authority Disabled: {}",
+                    info.mint_authority_disabled
+                );
+                println!(
+                    "  - Freeze Authority Disabled: {}",
+                    info.freeze_authority_disabled
+                );
                 println!("  - LP Safe: {}", info.lp_is_safe);
                 println!("  - Is Safe: {}", info.is_safe);
                 println!("  - Analyzed At: {}", info.analyzed_at);
@@ -36,7 +42,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let now = chrono::Utc::now();
                 let age = now.signed_duration_since(info.timestamps.last_updated);
                 println!("  - Age: {} hours", age.num_hours());
-                println!("  - Less than 1 day old: {}", age < chrono::Duration::days(1));
+                println!(
+                    "  - Less than 1 day old: {}",
+                    age < chrono::Duration::days(1)
+                );
             }
             Ok(None) => println!("❌ Not found in database"),
             Err(e) => println!("⚠️ Database error: {}", e),

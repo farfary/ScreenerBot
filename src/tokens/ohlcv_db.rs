@@ -1,8 +1,8 @@
 use crate::global::is_debug_ohlcv_enabled;
-use crate::logger::{ log, LogTag };
-use chrono::{ DateTime, Duration as ChronoDuration, Utc };
-use rusqlite::{ params, Connection, Row };
-use serde::{ Deserialize, Serialize };
+use crate::logger::{log, LogTag};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use rusqlite::{params, Connection, Row};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
@@ -30,11 +30,11 @@ pub struct DbOhlcvDataPoint {
     pub mint: String,
     pub pool_address: String,
     pub timestamp: i64, // Unix timestamp
-    pub open: f64, // Open price (SOL-denominated)
-    pub high: f64, // High price (SOL-denominated)
-    pub low: f64, // Low price (SOL-denominated)
-    pub close: f64, // Close price (SOL-denominated)
-    pub volume: f64, // Volume (SOL-denominated)
+    pub open: f64,      // Open price (SOL-denominated)
+    pub high: f64,      // High price (SOL-denominated)
+    pub low: f64,       // Low price (SOL-denominated)
+    pub close: f64,     // Close price (SOL-denominated)
+    pub volume: f64,    // Volume (SOL-denominated)
     pub created_at: DateTime<Utc>,
 }
 
@@ -48,7 +48,7 @@ impl DbOhlcvDataPoint {
         high: f64,
         low: f64,
         close: f64,
-        volume: f64
+        volume: f64,
     ) -> Self {
         Self {
             id: None,
@@ -80,13 +80,13 @@ impl DbOhlcvDataPoint {
     pub fn from_row(row: &Row) -> Result<Self, rusqlite::Error> {
         let created_at_str: String = row.get("created_at")?;
         let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-            .map_err(|e|
+            .map_err(|e| {
                 rusqlite::Error::InvalidColumnType(
                     0,
                     "created_at".to_string(),
-                    rusqlite::types::Type::Text
+                    rusqlite::types::Type::Text,
                 )
-            )?
+            })?
             .with_timezone(&Utc);
 
         Ok(Self {
@@ -143,14 +143,12 @@ impl OhlcvDatabase {
     pub fn initialize(&self) -> Result<(), String> {
         // Ensure data directory exists
         if let Some(parent) = Path::new(&self.db_path).parent() {
-            fs
-                ::create_dir_all(parent)
+            fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create data directory: {}", e))?;
         }
 
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database: {}", e)
-        )?;
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open OHLCV database: {}", e))?;
 
         // Check for legacy schema (columns with *_sol suffix) and migrate if needed
         {
@@ -159,19 +157,19 @@ impl OhlcvDatabase {
                     .prepare("PRAGMA table_info('ohlcv_data')")
                     .map_err(|e| format!("Failed to inspect ohlcv_data schema: {}", e))?;
                 let mut has_legacy = false;
-                let mut rows = stmt.query([]).map_err(|e| format!("Failed to run PRAGMA: {}", e))?;
-                while
-                    let Some(row) = rows
-                        .next()
-                        .map_err(|e| format!("Failed to iterate PRAGMA rows: {}", e))?
+                let mut rows = stmt
+                    .query([])
+                    .map_err(|e| format!("Failed to run PRAGMA: {}", e))?;
+                while let Some(row) = rows
+                    .next()
+                    .map_err(|e| format!("Failed to iterate PRAGMA rows: {}", e))?
                 {
                     let col_name: String = row.get(1).unwrap_or_default(); // name column
-                    if
-                        col_name == "open_sol" ||
-                        col_name == "high_sol" ||
-                        col_name == "low_sol" ||
-                        col_name == "close_sol" ||
-                        col_name == "volume_sol"
+                    if col_name == "open_sol"
+                        || col_name == "high_sol"
+                        || col_name == "low_sol"
+                        || col_name == "close_sol"
+                        || col_name == "volume_sol"
                     {
                         has_legacy = true;
                         break;
@@ -187,9 +185,8 @@ impl OhlcvDatabase {
                     .map_err(|e| format!("Failed to begin migration transaction: {}", e))?;
 
                 // Create new table with updated column names
-                tx
-                    .execute(
-                        "CREATE TABLE IF NOT EXISTS ohlcv_data_new (
+                tx.execute(
+                    "CREATE TABLE IF NOT EXISTS ohlcv_data_new (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         mint TEXT NOT NULL,
                         pool_address TEXT NOT NULL,
@@ -202,9 +199,9 @@ impl OhlcvDatabase {
                         created_at TEXT NOT NULL DEFAULT (datetime('now')),
                         UNIQUE(mint, pool_address, timestamp)
                     )",
-                        []
-                    )
-                    .map_err(|e| format!("Failed to create ohlcv_data_new table: {}", e))?;
+                    [],
+                )
+                .map_err(|e| format!("Failed to create ohlcv_data_new table: {}", e))?;
 
                 // Copy data from legacy columns
                 tx
@@ -216,29 +213,27 @@ impl OhlcvDatabase {
                     .map_err(|e| format!("Failed to migrate legacy OHLCV rows: {}", e))?;
 
                 // Drop old table and rename new one
-                tx
-                    .execute("DROP TABLE ohlcv_data", [])
+                tx.execute("DROP TABLE ohlcv_data", [])
                     .map_err(|e| format!("Failed to drop legacy ohlcv_data table: {}", e))?;
-                tx
-                    .execute("ALTER TABLE ohlcv_data_new RENAME TO ohlcv_data", [])
+                tx.execute("ALTER TABLE ohlcv_data_new RENAME TO ohlcv_data", [])
                     .map_err(|e| format!("Failed to rename migrated table: {}", e))?;
 
-                tx.commit().map_err(|e| format!("Failed to commit migration transaction: {}", e))?;
+                tx.commit()
+                    .map_err(|e| format!("Failed to commit migration transaction: {}", e))?;
 
                 if is_debug_ohlcv_enabled() {
                     log(
                         LogTag::Ohlcv,
                         "DB_MIGRATION",
-                        "🔧 Migrated ohlcv_data schema from *_sol columns to unified column names"
+                        "🔧 Migrated ohlcv_data schema from *_sol columns to unified column names",
                     );
                 }
             }
         }
 
         // Create OHLCV data table (SOL-denominated only)
-        conn
-            .execute(
-                "CREATE TABLE IF NOT EXISTS ohlcv_data (
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ohlcv_data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 mint TEXT NOT NULL,
                 pool_address TEXT NOT NULL,
@@ -251,39 +246,35 @@ impl OhlcvDatabase {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(mint, pool_address, timestamp)
             )",
-                []
-            )
-            .map_err(|e| format!("Failed to create ohlcv_data table: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create ohlcv_data table: {}", e))?;
 
         // Create indices for faster queries
-        conn
-            .execute(
-                "CREATE INDEX IF NOT EXISTS idx_ohlcv_mint_timestamp 
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ohlcv_mint_timestamp 
              ON ohlcv_data(mint, timestamp DESC)",
-                []
-            )
-            .map_err(|e| format!("Failed to create mint timestamp index: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create mint timestamp index: {}", e))?;
 
-        conn
-            .execute(
-                "CREATE INDEX IF NOT EXISTS idx_ohlcv_pool_timestamp 
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ohlcv_pool_timestamp 
              ON ohlcv_data(pool_address, timestamp DESC)",
-                []
-            )
-            .map_err(|e| format!("Failed to create pool timestamp index: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create pool timestamp index: {}", e))?;
 
-        conn
-            .execute(
-                "CREATE INDEX IF NOT EXISTS idx_ohlcv_created_at 
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ohlcv_created_at 
              ON ohlcv_data(created_at)",
-                []
-            )
-            .map_err(|e| format!("Failed to create created_at index: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create created_at index: {}", e))?;
 
         // Create metadata table for cache tracking
-        conn
-            .execute(
-                "CREATE TABLE IF NOT EXISTS ohlcv_cache_metadata (
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ohlcv_cache_metadata (
                 mint TEXT PRIMARY KEY,
                 pool_address TEXT NOT NULL,
                 data_points_count INTEGER NOT NULL DEFAULT 0,
@@ -291,15 +282,15 @@ impl OhlcvDatabase {
                 last_timestamp INTEGER,
                 UNIQUE(mint)
             )",
-                []
-            )
-            .map_err(|e| format!("Failed to create ohlcv_cache_metadata table: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create ohlcv_cache_metadata table: {}", e))?;
 
         if is_debug_ohlcv_enabled() {
             log(
                 LogTag::Ohlcv,
                 "DB_INIT",
-                &format!("✅ OHLCV database initialized: {}", self.db_path)
+                &format!("✅ OHLCV database initialized: {}", self.db_path),
             );
         }
 
@@ -311,15 +302,14 @@ impl OhlcvDatabase {
         &self,
         mint: &str,
         pool_address: &str,
-        sol_data_points: &[DbOhlcvDataPoint]
+        sol_data_points: &[DbOhlcvDataPoint],
     ) -> Result<(), String> {
         if sol_data_points.is_empty() {
             return Ok(());
         }
 
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database for SOL storage: {}", e)
-        )?;
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open OHLCV database for SOL storage: {}", e))?;
 
         // Begin transaction for atomicity
         let tx = conn
@@ -332,50 +322,44 @@ impl OhlcvDatabase {
                 .prepare(
                     "INSERT OR REPLACE INTO ohlcv_data 
                       (mint, pool_address, timestamp, open, high, low, close, volume, created_at) 
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 )
                 .map_err(|e| format!("Failed to prepare SOL insert statement: {}", e))?;
 
             for point in sol_data_points {
-                stmt
-                    .execute(
-                        params![
-                            mint,
-                            pool_address,
-                            point.timestamp,
-                            point.open,
-                            point.high,
-                            point.low,
-                            point.close,
-                            point.volume,
-                            point.created_at.to_rfc3339()
-                        ]
-                    )
-                    .map_err(|e| format!("Failed to insert SOL OHLCV point: {}", e))?;
+                stmt.execute(params![
+                    mint,
+                    pool_address,
+                    point.timestamp,
+                    point.open,
+                    point.high,
+                    point.low,
+                    point.close,
+                    point.volume,
+                    point.created_at.to_rfc3339()
+                ])
+                .map_err(|e| format!("Failed to insert SOL OHLCV point: {}", e))?;
             }
         }
 
         // Update metadata
-        let last_timestamp = sol_data_points
-            .iter()
-            .map(|p| p.timestamp)
-            .max();
-        tx
-            .execute(
-                "INSERT OR REPLACE INTO ohlcv_cache_metadata 
+        let last_timestamp = sol_data_points.iter().map(|p| p.timestamp).max();
+        tx.execute(
+            "INSERT OR REPLACE INTO ohlcv_cache_metadata 
              (mint, pool_address, data_points_count, last_updated, last_timestamp) 
              VALUES (?, ?, ?, ?, ?)",
-                params![
-                    mint,
-                    pool_address,
-                    sol_data_points.len(),
-                    Utc::now().to_rfc3339(),
-                    last_timestamp
-                ]
-            )
-            .map_err(|e| format!("Failed to update SOL OHLCV metadata: {}", e))?;
+            params![
+                mint,
+                pool_address,
+                sol_data_points.len(),
+                Utc::now().to_rfc3339(),
+                last_timestamp
+            ],
+        )
+        .map_err(|e| format!("Failed to update SOL OHLCV metadata: {}", e))?;
 
-        tx.commit().map_err(|e| format!("Failed to commit SOL OHLCV transaction: {}", e))?;
+        tx.commit()
+            .map_err(|e| format!("Failed to commit SOL OHLCV transaction: {}", e))?;
 
         if is_debug_ohlcv_enabled() {
             log(
@@ -385,7 +369,7 @@ impl OhlcvDatabase {
                     "💾 Stored {} SOL-denominated OHLCV points for {}",
                     sol_data_points.len(),
                     mint
-                )
+                ),
             );
         }
 
@@ -396,11 +380,10 @@ impl OhlcvDatabase {
     pub fn get_ohlcv_data(
         &self,
         mint: &str,
-        limit: Option<u32>
+        limit: Option<u32>,
     ) -> Result<Vec<crate::tokens::geckoterminal::OhlcvDataPoint>, String> {
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database for reading: {}", e)
-        )?;
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open OHLCV database for reading: {}", e))?;
 
         let limit = limit.unwrap_or(100).min(1000); // Safety limit
 
@@ -415,7 +398,7 @@ impl OhlcvDatabase {
             .map_err(|e| format!("Failed to prepare select statement: {}", e))?;
 
         let rows = stmt
-            .query_map(params![mint, limit], |row| { DbOhlcvDataPoint::from_row(row) })
+            .query_map(params![mint, limit], |row| DbOhlcvDataPoint::from_row(row))
             .map_err(|e| format!("Failed to query OHLCV data: {}", e))?;
 
         let mut data_points = Vec::new();
@@ -425,7 +408,11 @@ impl OhlcvDatabase {
                     data_points.push(db_point.to_ohlcv_data_point());
                 }
                 Err(e) => {
-                    log(LogTag::Ohlcv, "WARNING", &format!("Failed to parse OHLCV row: {}", e));
+                    log(
+                        LogTag::Ohlcv,
+                        "WARNING",
+                        &format!("Failed to parse OHLCV row: {}", e),
+                    );
                 }
             }
         }
@@ -438,7 +425,7 @@ impl OhlcvDatabase {
                     "📖 Retrieved {} SOL-denominated OHLCV points for {} from database",
                     data_points.len(),
                     mint
-                )
+                ),
             );
         }
 
@@ -447,29 +434,32 @@ impl OhlcvDatabase {
 
     /// Check if OHLCV data is available and fresh
     pub fn check_data_availability(&self, mint: &str) -> Result<OhlcvCacheMetadata, String> {
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database for availability check: {}", e)
-        )?;
+        let conn = Connection::open(&self.db_path).map_err(|e| {
+            format!(
+                "Failed to open OHLCV database for availability check: {}",
+                e
+            )
+        })?;
 
         // Get metadata
         let mut stmt = conn
             .prepare(
                 "SELECT mint, pool_address, data_points_count, last_updated, last_timestamp 
              FROM ohlcv_cache_metadata 
-             WHERE mint = ?"
+             WHERE mint = ?",
             )
             .map_err(|e| format!("Failed to prepare metadata query: {}", e))?;
 
         let result = stmt.query_row(params![mint], |row| {
             let last_updated_str: String = row.get("last_updated")?;
             let last_updated = DateTime::parse_from_rfc3339(&last_updated_str)
-                .map_err(|_|
+                .map_err(|_| {
                     rusqlite::Error::InvalidColumnType(
                         0,
                         "last_updated".to_string(),
-                        rusqlite::types::Type::Text
+                        rusqlite::types::Type::Text,
                     )
-                )?
+                })?
                 .with_timezone(&Utc);
 
             let age_minutes = (Utc::now() - last_updated).num_minutes();
@@ -493,10 +483,8 @@ impl OhlcvDatabase {
                         "DB_AVAILABILITY",
                         &format!(
                             "📊 OHLCV availability for {}: {} points, fresh: {}",
-                            mint,
-                            metadata.data_points_count,
-                            !metadata.is_expired
-                        )
+                            mint, metadata.data_points_count, !metadata.is_expired
+                        ),
                     );
                 }
                 Ok(metadata)
@@ -518,9 +506,8 @@ impl OhlcvDatabase {
 
     /// Clean up old OHLCV data
     pub fn cleanup_old_data(&self) -> Result<usize, String> {
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database for cleanup: {}", e)
-        )?;
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open OHLCV database for cleanup: {}", e))?;
 
         let cutoff_time = Utc::now() - ChronoDuration::hours(MAX_OHLCV_AGE_HOURS);
 
@@ -528,24 +515,23 @@ impl OhlcvDatabase {
         let deleted_count = conn
             .execute(
                 "DELETE FROM ohlcv_data WHERE created_at < ?",
-                params![cutoff_time.to_rfc3339()]
+                params![cutoff_time.to_rfc3339()],
             )
             .map_err(|e| format!("Failed to delete old OHLCV data: {}", e))?;
 
         // Clean up metadata for mints with no data
-        conn
-            .execute(
-                "DELETE FROM ohlcv_cache_metadata 
+        conn.execute(
+            "DELETE FROM ohlcv_cache_metadata 
              WHERE mint NOT IN (SELECT DISTINCT mint FROM ohlcv_data)",
-                []
-            )
-            .map_err(|e| format!("Failed to clean up metadata: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to clean up metadata: {}", e))?;
 
         if deleted_count > 0 && is_debug_ohlcv_enabled() {
             log(
                 LogTag::Ohlcv,
                 "DB_CLEANUP",
-                &format!("🧹 Cleaned up {} old OHLCV database entries", deleted_count)
+                &format!("🧹 Cleaned up {} old OHLCV database entries", deleted_count),
             );
         }
 
@@ -554,9 +540,8 @@ impl OhlcvDatabase {
 
     /// Get database statistics
     pub fn get_stats(&self) -> Result<(usize, usize, usize), String> {
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open OHLCV database for stats: {}", e)
-        )?;
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open OHLCV database for stats: {}", e))?;
 
         // Get total data points
         let total_points: usize = conn
@@ -565,7 +550,9 @@ impl OhlcvDatabase {
 
         // Get unique mints count
         let unique_mints: usize = conn
-            .query_row("SELECT COUNT(DISTINCT mint) FROM ohlcv_data", [], |row| row.get(0))
+            .query_row("SELECT COUNT(DISTINCT mint) FROM ohlcv_data", [], |row| {
+                row.get(0)
+            })
             .map_err(|e| format!("Failed to get unique mints count: {}", e))?;
 
         // Get fresh cache entries (within expiry)
@@ -574,7 +561,7 @@ impl OhlcvDatabase {
                 "SELECT COUNT(*) FROM ohlcv_cache_metadata 
              WHERE datetime(last_updated) > datetime('now', '-2 minutes')",
                 [],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .map_err(|e| format!("Failed to get fresh cache count: {}", e))?;
 
@@ -590,15 +577,14 @@ use std::sync::LazyLock;
 use std::sync::RwLock as StdRwLock;
 
 /// Global OHLCV database instance
-static GLOBAL_OHLCV_DB: LazyLock<StdRwLock<Option<OhlcvDatabase>>> = LazyLock::new(||
-    StdRwLock::new(None)
-);
+static GLOBAL_OHLCV_DB: LazyLock<StdRwLock<Option<OhlcvDatabase>>> =
+    LazyLock::new(|| StdRwLock::new(None));
 
 /// Initialize global OHLCV database
 pub fn init_ohlcv_database() -> Result<(), String> {
-    let mut db_guard = GLOBAL_OHLCV_DB.write().map_err(|e|
-        format!("Failed to acquire database write lock: {}", e)
-    )?;
+    let mut db_guard = GLOBAL_OHLCV_DB
+        .write()
+        .map_err(|e| format!("Failed to acquire database write lock: {}", e))?;
 
     if db_guard.is_some() {
         // Already initialized
@@ -609,19 +595,24 @@ pub fn init_ohlcv_database() -> Result<(), String> {
     db.initialize()?;
 
     *db_guard = Some(db);
-    log(LogTag::Ohlcv, "DB_INIT", "✅ Global OHLCV database initialized");
+    log(
+        LogTag::Ohlcv,
+        "DB_INIT",
+        "✅ Global OHLCV database initialized",
+    );
     Ok(())
 }
 
 /// Get OHLCV database instance
 pub fn get_ohlcv_database() -> Result<OhlcvDatabase, String> {
-    let db_guard = GLOBAL_OHLCV_DB.read().map_err(|e|
-        format!("Failed to acquire database read lock: {}", e)
-    )?;
+    let db_guard = GLOBAL_OHLCV_DB
+        .read()
+        .map_err(|e| format!("Failed to acquire database read lock: {}", e))?;
 
     match db_guard.as_ref() {
         Some(db) => Ok(db.clone()),
-        None =>
-            Err("OHLCV database not initialized - call init_ohlcv_database() first".to_string()),
+        None => {
+            Err("OHLCV database not initialized - call init_ohlcv_database() first".to_string())
+        }
     }
 }

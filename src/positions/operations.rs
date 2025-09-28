@@ -1,48 +1,41 @@
-use crate::{
-    tokens::{ get_token_from_db, PriceResult },
-    pools::get_pool_price,
-    swaps::{ execute_best_swap, get_best_quote, get_best_quote_for_opening, config::SOL_MINT },
-    rpc::{ get_rpc_client, sol_to_lamports },
-    utils::{ get_wallet_address, get_token_balance, get_total_token_balance },
-    arguments::{ is_dry_run_enabled, is_debug_positions_enabled },
-    logger::{ log, LogTag },
-    trader::{
-        TRADE_SIZE_SOL,
-        MAX_OPEN_POSITIONS,
-        SLIPPAGE_QUOTE_DEFAULT_PCT,
-        SLIPPAGE_EXIT_RETRY_STEPS_PCT,
-    },
-};
-use super::{ db::save_position, types::Position };
 use super::db as positions_db;
-use serde_json::json;
 use super::{
+    apply::apply_transition,
+    queue::{enqueue_verification, VerificationItem, VerificationKind},
     state::{
-        acquire_position_lock,
-        acquire_global_position_permit,
-        release_global_position_permit,
-        add_position,
-        add_signature_to_index,
-        LAST_OPEN_TIME,
+        acquire_global_position_permit, acquire_position_lock, add_position,
+        add_signature_to_index, release_global_position_permit, LAST_OPEN_TIME,
         POSITION_OPEN_COOLDOWN_SECS,
     },
-    queue::{ enqueue_verification, VerificationItem, VerificationKind },
     transitions::PositionTransition,
-    apply::apply_transition,
+};
+use super::{db::save_position, types::Position};
+use crate::{
+    arguments::{is_debug_positions_enabled, is_dry_run_enabled},
+    logger::{log, LogTag},
+    pools::get_pool_price,
+    rpc::{get_rpc_client, sol_to_lamports},
+    swaps::{config::SOL_MINT, execute_best_swap, get_best_quote, get_best_quote_for_opening},
+    tokens::{get_token_from_db, PriceResult},
+    trader::{
+        MAX_OPEN_POSITIONS, SLIPPAGE_EXIT_RETRY_STEPS_PCT, SLIPPAGE_QUOTE_DEFAULT_PCT,
+        TRADE_SIZE_SOL,
+    },
+    utils::{get_token_balance, get_total_token_balance, get_wallet_address},
 };
 use chrono::Utc;
+use serde_json::json;
 
 const SOLANA_BLOCKHASH_VALIDITY_SLOTS: u64 = 150;
 
 /// Open a new position
 pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
-    let token = get_token_from_db(token_mint).await.ok_or_else(||
-        format!("Token not found: {}", token_mint)
-    )?;
+    let token = get_token_from_db(token_mint)
+        .await
+        .ok_or_else(|| format!("Token not found: {}", token_mint))?;
 
-    let price_info = get_pool_price(token_mint).ok_or_else(||
-        format!("No price data for token: {}", token_mint)
-    )?;
+    let price_info = get_pool_price(token_mint)
+        .ok_or_else(|| format!("No price data for token: {}", token_mint))?;
 
     let entry_price = match price_info.price_sol {
         price if price > 0.0 && price.is_finite() => price,
@@ -66,19 +59,18 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     // Re-check no existing open position for this mint (prevents duplicate concurrent entries)
     if super::state::is_open_position(&token.mint).await {
         // Record event for better post-mortem visibility
-        crate::events::record_safe(
-            crate::events::Event::new(
-                crate::events::EventCategory::Position,
-                Some("open_blocked_in_memory".to_string()),
-                crate::events::Severity::Warn,
-                Some(token.mint.clone()),
-                None,
-                json!({
-                    "reason": "is_open_position_guard",
-                    "mint": token.mint,
-                })
-            )
-        ).await;
+        crate::events::record_safe(crate::events::Event::new(
+            crate::events::EventCategory::Position,
+            Some("open_blocked_in_memory".to_string()),
+            crate::events::Severity::Warn,
+            Some(token.mint.clone()),
+            None,
+            json!({
+                "reason": "is_open_position_guard",
+                "mint": token.mint,
+            }),
+        ))
+        .await;
         return Err("Already have open position for this token".to_string());
     }
 
@@ -86,10 +78,10 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     // This covers edge cases across restarts or rare state desyncs where in-memory guards miss.
     if let Ok(db_pos_opt) = positions_db::get_position_by_mint(&token.mint).await {
         if let Some(db_pos) = db_pos_opt {
-            let is_still_open =
-                db_pos.position_type == "buy" &&
-                db_pos.exit_time.is_none() &&
-                (!db_pos.exit_transaction_signature.is_some() || !db_pos.transaction_exit_verified);
+            let is_still_open = db_pos.position_type == "buy"
+                && db_pos.exit_time.is_none()
+                && (!db_pos.exit_transaction_signature.is_some()
+                    || !db_pos.transaction_exit_verified);
             if is_still_open {
                 log(
                     LogTag::Positions,
@@ -103,21 +95,20 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
                     )
                 );
                 // Record event for DB guard block
-                crate::events::record_safe(
-                    crate::events::Event::new(
-                        crate::events::EventCategory::Position,
-                        Some("open_blocked_db_guard".to_string()),
-                        crate::events::Severity::Warn,
-                        Some(token.mint.clone()),
-                        db_pos.entry_transaction_signature.clone(),
-                        json!({
-                            "db_position_id": db_pos.id,
-                            "entry_sig": db_pos.entry_transaction_signature,
-                            "exit_sig": db_pos.exit_transaction_signature,
-                            "has_exit_verified": db_pos.transaction_exit_verified,
-                        })
-                    )
-                ).await;
+                crate::events::record_safe(crate::events::Event::new(
+                    crate::events::EventCategory::Position,
+                    Some("open_blocked_db_guard".to_string()),
+                    crate::events::Severity::Warn,
+                    Some(token.mint.clone()),
+                    db_pos.entry_transaction_signature.clone(),
+                    json!({
+                        "db_position_id": db_pos.id,
+                        "entry_sig": db_pos.entry_transaction_signature,
+                        "exit_sig": db_pos.exit_transaction_signature,
+                        "has_exit_verified": db_pos.transaction_exit_verified,
+                    }),
+                ))
+                .await;
                 return Err("Open position already exists in DB".to_string());
             }
         }
@@ -131,12 +122,10 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         if let Some(last_open) = last_open_opt {
             let elapsed = Utc::now().signed_duration_since(last_open).num_seconds();
             if elapsed < POSITION_OPEN_COOLDOWN_SECS {
-                return Err(
-                    format!(
-                        "Opening positions cooldown active: wait {}s",
-                        POSITION_OPEN_COOLDOWN_SECS - elapsed
-                    )
-                );
+                return Err(format!(
+                    "Opening positions cooldown active: wait {}s",
+                    POSITION_OPEN_COOLDOWN_SECS - elapsed
+                ));
             }
         }
     }
@@ -147,32 +136,29 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
             "DRY-RUN",
             &format!(
                 "🚫 DRY-RUN: Would open position for {} at {:.6} SOL",
-                token.symbol,
-                entry_price
-            )
+                token.symbol, entry_price
+            ),
         );
         return Err("DRY-RUN: Position would be opened".to_string());
     }
 
     // Execute swap
-    let wallet_address = get_wallet_address().map_err(|e|
-        format!("Failed to get wallet address: {}", e)
-    )?;
+    let wallet_address =
+        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
 
     // Mark mint as pending-open BEFORE submitting the swap to avoid duplicate attempts
     super::state::set_pending_open(&token.mint, super::state::PENDING_OPEN_TTL_SECS).await;
-    crate::events::record_safe(
-        crate::events::Event::new(
-            crate::events::EventCategory::Position,
-            Some("pending_open_set".to_string()),
-            crate::events::Severity::Debug,
-            Some(token.mint.clone()),
-            None,
-            json!({
-                "ttl_secs": super::state::PENDING_OPEN_TTL_SECS,
-            })
-        )
-    ).await;
+    crate::events::record_safe(crate::events::Event::new(
+        crate::events::EventCategory::Position,
+        Some("pending_open_set".to_string()),
+        crate::events::Severity::Debug,
+        Some(token.mint.clone()),
+        None,
+        json!({
+            "ttl_secs": super::state::PENDING_OPEN_TTL_SECS,
+        }),
+    ))
+    .await;
 
     let quote = get_best_quote_for_opening(
         SOL_MINT,
@@ -180,20 +166,24 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         sol_to_lamports(TRADE_SIZE_SOL),
         &wallet_address,
         SLIPPAGE_QUOTE_DEFAULT_PCT, // Use configured slippage for opening
-        &token.symbol
-    ).await.map_err(|e| format!("Quote failed: {}", e))?;
+        &token.symbol,
+    )
+    .await
+    .map_err(|e| format!("Quote failed: {}", e))?;
 
     let swap_result = execute_best_swap(
         &token,
         SOL_MINT,
         &token.mint,
         sol_to_lamports(TRADE_SIZE_SOL),
-        quote
-    ).await.map_err(|e| format!("Swap failed: {}", e))?;
+        quote,
+    )
+    .await
+    .map_err(|e| format!("Swap failed: {}", e))?;
 
-    let transaction_signature = swap_result.transaction_signature.ok_or(
-        "No transaction signature"
-    )?;
+    let transaction_signature = swap_result
+        .transaction_signature
+        .ok_or("No transaction signature")?;
 
     // Create position
     let position = Position {
@@ -263,12 +253,14 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         TRADE_SIZE_SOL,
         swap_result.output_amount.parse().unwrap_or(0),
         None,
-        None
-    ).await;
+        None,
+    )
+    .await;
 
     // Get block height for expiration
     let expiry_height = get_rpc_client()
-        .get_block_height().await
+        .get_block_height()
+        .await
         .map(|h| h + SOLANA_BLOCKHASH_VALIDITY_SLOTS)
         .ok();
 
@@ -278,33 +270,30 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         token.mint.clone(),
         Some(position_id),
         VerificationKind::Entry,
-        expiry_height
+        expiry_height,
     );
 
     enqueue_verification(verification_item).await;
 
     // We successfully created the position; clear pending-open now
     super::state::clear_pending_open(&token.mint).await;
-    crate::events::record_safe(
-        crate::events::Event::new(
-            crate::events::EventCategory::Position,
-            Some("pending_open_cleared".to_string()),
-            crate::events::Severity::Debug,
-            Some(token.mint.clone()),
-            Some(transaction_signature.clone()),
-            json!({})
-        )
-    ).await;
+    crate::events::record_safe(crate::events::Event::new(
+        crate::events::EventCategory::Position,
+        Some("pending_open_cleared".to_string()),
+        crate::events::Severity::Debug,
+        Some(token.mint.clone()),
+        Some(transaction_signature.clone()),
+        json!({}),
+    ))
+    .await;
 
     log(
         LogTag::Positions,
         "SUCCESS",
         &format!(
             "✅ Position opened: {} (ID: {}) | TX: {}",
-            token.symbol,
-            position_id,
-            transaction_signature
-        )
+            token.symbol, position_id, transaction_signature
+        ),
     );
 
     // Update global last open time
@@ -319,15 +308,14 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
 /// Close an existing position
 pub async fn close_position_direct(
     token_mint: &str,
-    exit_reason: String
+    exit_reason: String,
 ) -> Result<String, String> {
-    let token = get_token_from_db(token_mint).await.ok_or_else(||
-        format!("Token not found: {}", token_mint)
-    )?;
+    let token = get_token_from_db(token_mint)
+        .await
+        .ok_or_else(|| format!("Token not found: {}", token_mint))?;
 
-    let price_info = get_pool_price(token_mint).ok_or_else(||
-        format!("No price data for token: {}", token_mint)
-    )?;
+    let price_info = get_pool_price(token_mint)
+        .ok_or_else(|| format!("No price data for token: {}", token_mint))?;
 
     let exit_price = match price_info.price_sol {
         price if price > 0.0 && price.is_finite() => price,
@@ -349,23 +337,23 @@ pub async fn close_position_direct(
                     "🚫 Position {} already has pending exit transaction: {}",
                     token.symbol,
                     &pending_sig[..8]
-                )
+                ),
             );
-            crate::events::record_safe(
-                crate::events::Event::new(
-                    crate::events::EventCategory::Position,
-                    Some("exit_blocked_pending_sig".to_string()),
-                    crate::events::Severity::Warn,
-                    Some(token.mint.clone()),
-                    Some(pending_sig.clone()),
-                    json!({
-                        "reason": "pending_exit_tx_present"
-                    })
-                )
-            ).await;
-            return Err(
-                format!("Position already has pending exit transaction: {}", &pending_sig[..8])
-            );
+            crate::events::record_safe(crate::events::Event::new(
+                crate::events::EventCategory::Position,
+                Some("exit_blocked_pending_sig".to_string()),
+                crate::events::Severity::Warn,
+                Some(token.mint.clone()),
+                Some(pending_sig.clone()),
+                json!({
+                    "reason": "pending_exit_tx_present"
+                }),
+            ))
+            .await;
+            return Err(format!(
+                "Position already has pending exit transaction: {}",
+                &pending_sig[..8]
+            ));
         }
     }
 
@@ -373,45 +361,45 @@ pub async fn close_position_direct(
         log(
             LogTag::Positions,
             "DRY-RUN",
-            &format!("🚫 DRY-RUN: Would close position for {}", token.symbol)
+            &format!("🚫 DRY-RUN: Would close position for {}", token.symbol),
         );
         return Err("DRY-RUN: Position would be closed".to_string());
     }
 
     // Get TOTAL token balance across ALL accounts (CRITICAL FOR COMPLETE LIQUIDATION)
-    let wallet_address = get_wallet_address().map_err(|e|
-        format!("Failed to get wallet address: {}", e)
-    )?;
+    let wallet_address =
+        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
 
-    let total_token_balance = get_total_token_balance(&wallet_address, token_mint).await.map_err(|e|
-        format!("Failed to get total token balance: {}", e)
-    )?;
+    let total_token_balance = get_total_token_balance(&wallet_address, token_mint)
+        .await
+        .map_err(|e| format!("Failed to get total token balance: {}", e))?;
 
     // Fetch primary (associated) token account balance separately. This is the balance most
     // swap routes will actually spend from. When multiple token accounts exist, passing the
     // aggregated total to a router that only sources a single ATA causes an "insufficient funds"
     // simulation failure (observed in logs). We therefore cap the sell amount to the primary
     // balance when it is lower than the aggregate, and log the discrepancy.
-    let primary_token_balance = get_token_balance(&wallet_address, token_mint).await.unwrap_or(0);
+    let primary_token_balance = get_token_balance(&wallet_address, token_mint)
+        .await
+        .unwrap_or(0);
 
-    let (sell_amount, multi_account_note) = if
-        primary_token_balance == 0 &&
-        total_token_balance > 0
+    let (sell_amount, multi_account_note) = if primary_token_balance == 0 && total_token_balance > 0
     {
         // We have tokens but not in the primary ATA (likely split or token-2022 alt). Use total but
         // expect potential router failure; still attempt but log.
-        (total_token_balance, Some("primary_ata_empty_using_total".to_string()))
+        (
+            total_token_balance,
+            Some("primary_ata_empty_using_total".to_string()),
+        )
     } else if total_token_balance > primary_token_balance && primary_token_balance > 0 {
         (
             primary_token_balance,
-            Some(
-                format!(
-                    "multi_account_total={} primary={} shortfall={}, limiting_to_primary",
-                    total_token_balance,
-                    primary_token_balance,
-                    total_token_balance - primary_token_balance
-                )
-            ),
+            Some(format!(
+                "multi_account_total={} primary={} shortfall={}, limiting_to_primary",
+                total_token_balance,
+                primary_token_balance,
+                total_token_balance - primary_token_balance
+            )),
         )
     } else {
         (total_token_balance, None)
@@ -426,16 +414,18 @@ pub async fn close_position_direct(
         "SELL_ALL",
         &format!(
             "🔄 Selling ALL tokens for {}: {} total units across all accounts",
-            token.symbol,
-            total_token_balance
-        )
+            token.symbol, total_token_balance
+        ),
     );
 
     if let Some(note) = &multi_account_note {
         log(
             LogTag::Positions,
             "MULTI_ACCOUNT_SELL_ADJUSTMENT",
-            &format!("⚠️ Sell amount adjusted due to account distribution: {}", note)
+            &format!(
+                "⚠️ Sell amount adjusted due to account distribution: {}",
+                note
+            ),
         );
     }
 
@@ -450,8 +440,10 @@ pub async fn close_position_direct(
         sell_amount,
         &wallet_address,
         SLIPPAGE_EXIT_RETRY_STEPS_PCT[0], // Use first step (3.0%) for initial exit attempt
-        "ExactIn" // Spend exactly the available input tokens; router computes SOL out
-    ).await.map_err(|e| format!("Quote failed: {}", e))?;
+        "ExactIn", // Spend exactly the available input tokens; router computes SOL out
+    )
+    .await
+    .map_err(|e| format!("Quote failed: {}", e))?;
 
     let swap_result = execute_best_swap(
         &token,
@@ -474,9 +466,9 @@ pub async fn close_position_direct(
         }
     })?;
 
-    let transaction_signature = swap_result.transaction_signature.ok_or(
-        "No transaction signature"
-    )?;
+    let transaction_signature = swap_result
+        .transaction_signature
+        .ok_or("No transaction signature")?;
 
     // CRITICAL: Log execution vs requested amounts to detect partial execution
     if let Ok(executed_amount) = swap_result.input_amount.parse::<u64>() {
@@ -496,7 +488,10 @@ pub async fn close_position_direct(
             log(
                 LogTag::Positions,
                 "FULL_EXECUTION",
-                &format!("✅ Full swap executed for {}: {} tokens", token.symbol, executed_amount)
+                &format!(
+                    "✅ Full swap executed for {}: {} tokens",
+                    token.symbol, executed_amount
+                ),
             );
         }
     } else {
@@ -505,9 +500,8 @@ pub async fn close_position_direct(
             "EXECUTION_PARSE_ERROR",
             &format!(
                 "⚠️ Could not parse executed amount '{}' for {}",
-                swap_result.input_amount,
-                token.symbol
-            )
+                swap_result.input_amount, token.symbol
+            ),
         );
     }
 
@@ -516,13 +510,14 @@ pub async fn close_position_direct(
         pos.exit_transaction_signature = Some(transaction_signature.clone());
         pos.exit_price = Some(exit_price); // Store pool/market price at exit decision time
         pos.closed_reason = Some(format!("{}_pending_verification", exit_reason));
-    }).await;
+    })
+    .await;
 
     add_signature_to_index(&transaction_signature, token_mint).await;
 
     // Get position ID (needed for event recording)
-    let position_id = super::state
-        ::get_position_by_mint(token_mint).await
+    let position_id = super::state::get_position_by_mint(token_mint)
+        .await
         .and_then(|p| p.id)
         .unwrap_or(0);
 
@@ -536,12 +531,14 @@ pub async fn close_position_direct(
         0.0,
         sell_amount,
         None,
-        None
-    ).await;
+        None,
+    )
+    .await;
 
     // Get block height for expiration
     let expiry_height = get_rpc_client()
-        .get_block_height().await
+        .get_block_height()
+        .await
         .map(|h| h + SOLANA_BLOCKHASH_VALIDITY_SLOTS)
         .ok();
 
@@ -551,7 +548,7 @@ pub async fn close_position_direct(
         token_mint.to_string(),
         Some(position_id),
         VerificationKind::Exit,
-        expiry_height
+        expiry_height,
     );
 
     enqueue_verification(verification_item).await;
@@ -561,10 +558,8 @@ pub async fn close_position_direct(
         "SUCCESS",
         &format!(
             "✅ Position closing: {} | TX: {} | Reason: {}",
-            token.symbol,
-            transaction_signature,
-            exit_reason
-        )
+            token.symbol, transaction_signature, exit_reason
+        ),
     );
 
     Ok(transaction_signature)

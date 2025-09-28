@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 /// Debug tool for analyzing decimal fetching issues
 ///
 /// This tool investigates why many tokens are missing decimals by:
@@ -5,30 +6,24 @@
 /// 2. Checking failed decimals cache for patterns
 /// 3. Testing batch decimal fetching on problem tokens
 /// 4. Outputting detailed JSON reports for analysis
-
-use screenerbot::logger::{ init_file_logging, log, LogTag };
-use screenerbot::rpc::{ init_rpc_client };
+use screenerbot::logger::{init_file_logging, log, LogTag};
+use screenerbot::rpc::get_rpc_client;
+use screenerbot::rpc::init_rpc_client;
+use screenerbot::tokens::blacklist;
 use screenerbot::tokens::cache::TokenDatabase;
 use screenerbot::tokens::decimals::{
-    batch_fetch_token_decimals,
-    get_database_stats,
-    get_failed_cache_stats,
-    cleanup_retryable_failed_cache,
-    migrate_failed_tokens_to_blacklist,
-    get_token_decimals_from_chain,
+    batch_fetch_token_decimals, cleanup_retryable_failed_cache, get_database_stats,
+    get_failed_cache_stats, get_token_decimals_from_chain, migrate_failed_tokens_to_blacklist,
 };
 use screenerbot::tokens::get_token_decimals_sync;
-use screenerbot::tokens::blacklist;
-use screenerbot::rpc::get_rpc_client;
 use screenerbot::utils::safe_truncate;
-use solana_sdk::pubkey::Pubkey;
+use serde::{Deserialize, Serialize};
 use solana_program::program_pack::Pack;
+use solana_sdk::pubkey::Pubkey;
 use spl_token::state::Mint;
-use std::str::FromStr;
-use chrono::{ DateTime, Utc };
-use serde::{ Serialize, Deserialize };
 use std::collections::HashMap;
 use std::env;
+use std::str::FromStr;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DecimalAnalysisReport {
@@ -111,7 +106,11 @@ struct DatabaseStats {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     init_file_logging();
-    log(LogTag::System, "START", "🔍 Starting decimal fetching analysis...");
+    log(
+        LogTag::System,
+        "START",
+        "🔍 Starting decimal fetching analysis...",
+    );
 
     // Parse command line arguments
     let args: Vec<String> = env::args().collect();
@@ -150,26 +149,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             "--test-failed" => {
                 // Test some tokens from the failed cache to debug why they're failing
-                log(LogTag::System, "TEST_FAILED", "🔍 Testing failed tokens for debugging...");
+                log(
+                    LogTag::System,
+                    "TEST_FAILED",
+                    "🔍 Testing failed tokens for debugging...",
+                );
                 let test_results = test_failed_tokens().await;
                 for result in test_results {
                     log(
                         LogTag::System,
                         "TEST_FAILED",
-                        &format!("Tested {}: {:?}", result.mint, result.final_result)
+                        &format!("Tested {}: {:?}", result.mint, result.final_result),
                     );
                 }
                 return Ok(());
             }
             "--test-retry-limit" => {
                 // Test retry limit functionality with a specific problematic token
-                log(LogTag::System, "TEST_RETRY", "🔄 Testing retry limit functionality...");
+                log(
+                    LogTag::System,
+                    "TEST_RETRY",
+                    "🔄 Testing retry limit functionality...",
+                );
                 test_retry_limit_functionality().await;
                 return Ok(());
             }
             "--test-blacklist" => {
                 // Test blacklist integration and migration
-                log(LogTag::System, "TEST_BLACKLIST", "🛡️ Testing blacklist integration...");
+                log(
+                    LogTag::System,
+                    "TEST_BLACKLIST",
+                    "🛡️ Testing blacklist integration...",
+                );
                 test_blacklist_integration().await;
                 return Ok(());
             }
@@ -197,9 +208,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize RPC client
     match init_rpc_client() {
-        Ok(_) => log(LogTag::System, "RPC", "✅ RPC client initialized successfully"),
+        Ok(_) => log(
+            LogTag::System,
+            "RPC",
+            "✅ RPC client initialized successfully",
+        ),
         Err(e) => {
-            log(LogTag::System, "ERROR", &format!("❌ Failed to initialize RPC client: {}", e));
+            log(
+                LogTag::System,
+                "ERROR",
+                &format!("❌ Failed to initialize RPC client: {}", e),
+            );
             return Err(e.into());
         }
     }
@@ -207,18 +226,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize database
     let database = match TokenDatabase::new() {
         Ok(db) => {
-            log(LogTag::System, "DB", "✅ Token database connected successfully");
+            log(
+                LogTag::System,
+                "DB",
+                "✅ Token database connected successfully",
+            );
             db
         }
         Err(e) => {
-            log(LogTag::System, "ERROR", &format!("❌ Failed to connect to database: {}", e));
+            log(
+                LogTag::System,
+                "ERROR",
+                &format!("❌ Failed to connect to database: {}", e),
+            );
             return Err(e.into());
         }
     };
 
     // Optional: Cleanup retryable failed cache
     if cleanup_failed_cache {
-        log(LogTag::System, "CLEANUP", "🧹 Cleaning up retryable failed cache...");
+        log(
+            LogTag::System,
+            "CLEANUP",
+            "🧹 Cleaning up retryable failed cache...",
+        );
         match cleanup_retryable_failed_cache() {
             Ok((removed, remaining)) => {
                 log(
@@ -232,7 +263,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
             Err(e) => {
-                log(LogTag::System, "CLEANUP", &format!("⚠️ Failed to cleanup cache: {}", e));
+                log(
+                    LogTag::System,
+                    "CLEANUP",
+                    &format!("⚠️ Failed to cleanup cache: {}", e),
+                );
             }
         }
     }
@@ -262,7 +297,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Step 1: Get database statistics
-    log(LogTag::System, "STATS", "📊 Analyzing database statistics...");
+    log(
+        LogTag::System,
+        "STATS",
+        "📊 Analyzing database statistics...",
+    );
     match get_database_stats() {
         Ok((cached_decimals, failed_decimals)) => {
             report.database_stats.decimals_cached = cached_decimals;
@@ -272,13 +311,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "STATS",
                 &format!(
                     "Database: {} cached decimals, {} failed tokens",
-                    cached_decimals,
-                    failed_decimals
-                )
+                    cached_decimals, failed_decimals
+                ),
             );
         }
         Err(e) => {
-            log(LogTag::System, "ERROR", &format!("Failed to get database stats: {}", e));
+            log(
+                LogTag::System,
+                "ERROR",
+                &format!("Failed to get database stats: {}", e),
+            );
         }
     }
 
@@ -297,7 +339,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     total_failed,
                     permanent_failed,
                     total_failed - permanent_failed
-                )
+                ),
             );
 
             if !sample_errors.is_empty() {
@@ -308,19 +350,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            log(LogTag::System, "ERROR", &format!("Failed to get failed cache stats: {}", e));
+            log(
+                LogTag::System,
+                "ERROR",
+                &format!("Failed to get failed cache stats: {}", e),
+            );
         }
     }
 
     // Step 3: Analyze tokens in database
-    log(LogTag::System, "TOKENS", "🔍 Analyzing tokens without decimals...");
+    log(
+        LogTag::System,
+        "TOKENS",
+        "🔍 Analyzing tokens without decimals...",
+    );
     let all_tokens = match database.get_all_tokens_with_update_time().await {
         Ok(tokens) => {
-            log(LogTag::System, "TOKENS", &format!("Found {} tokens in database", tokens.len()));
+            log(
+                LogTag::System,
+                "TOKENS",
+                &format!("Found {} tokens in database", tokens.len()),
+            );
             tokens
         }
         Err(e) => {
-            log(LogTag::System, "ERROR", &format!("Failed to get tokens from database: {}", e));
+            log(
+                LogTag::System,
+                "ERROR",
+                &format!("Failed to get tokens from database: {}", e),
+            );
             return Err(e.into());
         }
     };
@@ -338,7 +396,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(
         LogTag::System,
         "TOKENS",
-        &format!("Found {} fresh tokens (updated in last hour)", fresh_tokens.len())
+        &format!(
+            "Found {} fresh tokens (updated in last hour)",
+            fresh_tokens.len()
+        ),
     );
 
     // Analyze tokens for decimal status
@@ -356,9 +417,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Get full token info to analyze why decimals are missing
             if let Ok(Some(token)) = database.get_token_by_mint(mint) {
                 let age_hours = token.pair_created_at.map(|created| {
-                    let created_dt = DateTime::from_timestamp(created, 0).unwrap_or_else(||
-                        Utc::now()
-                    );
+                    let created_dt =
+                        DateTime::from_timestamp(created, 0).unwrap_or_else(|| Utc::now());
                     let age = now - created_dt;
                     age.num_hours()
                 });
@@ -397,11 +457,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tokens_with_decimals,
             fresh_tokens.len(),
             report.summary.success_rate
-        )
+        ),
     );
 
     // Step 4: Test batch fetching on problematic tokens
-    log(LogTag::System, "TEST", "🧪 Testing batch decimal fetching...");
+    log(
+        LogTag::System,
+        "TEST",
+        "🧪 Testing batch decimal fetching...",
+    );
 
     // Select high-liquidity tokens without decimals for testing
     let mut test_tokens: Vec<_> = tokens_without_decimals
@@ -424,13 +488,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log(
             LogTag::System,
             "TEST",
-            &format!("Testing decimal fetching for {} tokens...", test_tokens.len())
+            &format!(
+                "Testing decimal fetching for {} tokens...",
+                test_tokens.len()
+            ),
         );
 
-        let test_mints: Vec<String> = test_tokens
-            .iter()
-            .map(|t| t.mint.clone())
-            .collect();
+        let test_mints: Vec<String> = test_tokens.iter().map(|t| t.mint.clone()).collect();
         let start_time = std::time::Instant::now();
 
         let batch_results = batch_fetch_token_decimals(&test_mints).await;
@@ -444,14 +508,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 test_type: "batch_fetch".to_string(),
                 success: result.is_ok(),
                 decimals: result.as_ref().ok().copied(),
-                error: result
-                    .as_ref()
-                    .err()
-                    .map(|e| e.clone()),
+                error: result.as_ref().err().map(|e| e.clone()),
                 response_time_ms: elapsed_ms / (batch_results.len() as u64),
-                rpc_raw_response: None, // Will be filled by detailed debug
+                rpc_raw_response: None,    // Will be filled by detailed debug
                 mint_account_exists: None, // Will be filled by detailed debug
-                mint_account_size: None, // Will be filled by detailed debug
+                mint_account_size: None,   // Will be filled by detailed debug
             };
 
             if test_result.success {
@@ -463,7 +524,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         safe_truncate(&test_result.mint, 8),
                         test_result.symbol,
                         test_result.decimals.unwrap_or(0)
-                    )
+                    ),
                 );
             } else {
                 log(
@@ -473,18 +534,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         "❌ {} ({}): {}",
                         safe_truncate(&test_result.mint, 8),
                         test_result.symbol,
-                        test_result.error.as_ref().unwrap_or(&"Unknown error".to_string())
-                    )
+                        test_result
+                            .error
+                            .as_ref()
+                            .unwrap_or(&"Unknown error".to_string())
+                    ),
                 );
             }
 
             report.test_results.push(test_result);
         }
 
-        let successful_tests = report.test_results
-            .iter()
-            .filter(|t| t.success)
-            .count();
+        let successful_tests = report.test_results.iter().filter(|t| t.success).count();
         log(
             LogTag::System,
             "TEST",
@@ -493,22 +554,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 successful_tests,
                 report.test_results.len(),
                 ((successful_tests as f64) / (report.test_results.len() as f64)) * 100.0
-            )
+            ),
         );
     } else {
-        log(LogTag::System, "TEST", "⚠️ No suitable tokens found for testing");
+        log(
+            LogTag::System,
+            "TEST",
+            "⚠️ No suitable tokens found for testing",
+        );
     }
 
     // Step 4.5: Detailed debugging of core fetching logic
     if enable_detailed_debug {
-        log(LogTag::System, "DETAILED", "🔬 Starting detailed debugging of fetching logic...");
+        log(
+            LogTag::System,
+            "DETAILED",
+            "🔬 Starting detailed debugging of fetching logic...",
+        );
         let detailed_debug_results = perform_detailed_debugging(&tokens_without_decimals, 5).await;
         report.detailed_debug = detailed_debug_results;
     } else {
         log(
             LogTag::System,
             "DETAILED",
-            "🔬 Detailed debugging disabled (use --detailed-debug to enable)"
+            "🔬 Detailed debugging disabled (use --detailed-debug to enable)",
         );
     }
 
@@ -519,7 +588,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     generate_recommendations(&mut report);
 
     // Step 7: Save report to file
-    log(LogTag::System, "SAVE", &format!("💾 Saving analysis report to {}", output_file));
+    log(
+        LogTag::System,
+        "SAVE",
+        &format!("💾 Saving analysis report to {}", output_file),
+    );
     let json_output = serde_json::to_string_pretty(&report)?;
     std::fs::write(&output_file, json_output)?;
 
@@ -533,7 +606,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// Perform detailed step-by-step debugging of decimal fetching for specific tokens
 async fn perform_detailed_debugging(
     tokens_without_decimals: &[TokenWithoutDecimals],
-    max_tokens: usize
+    max_tokens: usize,
 ) -> Vec<DetailedDebugInfo> {
     let mut debug_results = Vec::new();
 
@@ -545,15 +618,23 @@ async fn perform_detailed_debugging(
         .collect();
 
     if tokens_to_debug.is_empty() {
-        log(LogTag::System, "DETAILED", "No tokens found for detailed debugging");
+        log(
+            LogTag::System,
+            "DETAILED",
+            "No tokens found for detailed debugging",
+        );
         // If no tokens without decimals, let's test a few known tokens
         let test_mints = vec![
             ("So11111111111111111111111111111111111111112", "SOL"), // Should work
             ("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "USDC"), // Should work
-            ("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", "USDT") // Should work
+            ("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", "USDT"), // Should work
         ];
 
-        log(LogTag::System, "DETAILED", "Testing known tokens for debugging");
+        log(
+            LogTag::System,
+            "DETAILED",
+            "Testing known tokens for debugging",
+        );
         for (mint, symbol) in test_mints {
             let debug_info = debug_single_token_fetching(mint, symbol).await;
             debug_results.push(debug_info);
@@ -564,7 +645,10 @@ async fn perform_detailed_debugging(
     log(
         LogTag::System,
         "DETAILED",
-        &format!("Performing detailed debugging on {} tokens", tokens_to_debug.len())
+        &format!(
+            "Performing detailed debugging on {} tokens",
+            tokens_to_debug.len()
+        ),
     );
 
     for token in tokens_to_debug {
@@ -584,7 +668,11 @@ async fn debug_single_token_fetching(mint_str: &str, symbol: &str) -> DetailedDe
     log(
         LogTag::System,
         "DETAILED",
-        &format!("🔬 Debugging token: {} ({})", safe_truncate(mint_str, 8), symbol)
+        &format!(
+            "🔬 Debugging token: {} ({})",
+            safe_truncate(mint_str, 8),
+            symbol
+        ),
     );
 
     // Step 1: Validate mint address format
@@ -752,7 +840,7 @@ async fn debug_single_token_fetching(mint_str: &str, symbol: &str) -> DetailedDe
             steps.len(),
             final_decimals,
             total_time
-        )
+        ),
     );
 
     DetailedDebugInfo {
@@ -769,22 +857,31 @@ async fn test_failed_tokens() -> Vec<DetailedDebugInfo> {
 
     // Test some hardcoded tokens that we know might fail to demonstrate the debugging
     let test_tokens = vec![
-        ("EJwHi2ct3oNnDJzQpSFoayHgjLk5U8Gzj8P7Z3k4BjvT", "KNOWN_FAILED_1"),
-        ("MmaTxLbE6z4gEL5RdQz3u4TKL2k3f2bF8Y3nRnQ9t9bS", "KNOWN_FAILED_2"),
-        ("Eh4RFjAQ8u8LkP5n3mE9zN2vW8fK7qJ4A1cY6dR5x2uT", "KNOWN_FAILED_3")
+        (
+            "EJwHi2ct3oNnDJzQpSFoayHgjLk5U8Gzj8P7Z3k4BjvT",
+            "KNOWN_FAILED_1",
+        ),
+        (
+            "MmaTxLbE6z4gEL5RdQz3u4TKL2k3f2bF8Y3nRnQ9t9bS",
+            "KNOWN_FAILED_2",
+        ),
+        (
+            "Eh4RFjAQ8u8LkP5n3mE9zN2vW8fK7qJ4A1cY6dR5x2uT",
+            "KNOWN_FAILED_3",
+        ),
     ];
 
     log(
         LogTag::System,
         "TEST_FAILED",
-        &format!("Testing {} known problematic tokens", test_tokens.len())
+        &format!("Testing {} known problematic tokens", test_tokens.len()),
     );
 
     for (mint, symbol) in test_tokens {
         log(
             LogTag::System,
             "TEST_FAILED",
-            &format!("Testing token {}: {}", safe_truncate(mint, 8), symbol)
+            &format!("Testing token {}: {}", safe_truncate(mint, 8), symbol),
         );
         let debug_info = debug_single_token_fetching(mint, symbol).await;
         debug_results.push(debug_info);
@@ -800,8 +897,15 @@ async fn test_blacklist_integration() {
     // First, migrate any existing failed tokens
     match migrate_failed_tokens_to_blacklist() {
         Ok(migrated) => {
-            println!("✅ Migration completed. {} tokens migrated to blacklist", migrated);
-            log(LogTag::System, "BLACKLIST_MIGRATION", &format!("Migrated {} tokens", migrated));
+            println!(
+                "✅ Migration completed. {} tokens migrated to blacklist",
+                migrated
+            );
+            log(
+                LogTag::System,
+                "BLACKLIST_MIGRATION",
+                &format!("Migrated {} tokens", migrated),
+            );
         }
         Err(e) => {
             println!("❌ Migration failed: {}", e);
@@ -861,7 +965,11 @@ async fn test_blacklist_integration() {
     }
 
     println!("\n✅ Blacklist integration test completed");
-    log(LogTag::System, "TEST_COMPLETE", "Blacklist integration test finished");
+    log(
+        LogTag::System,
+        "TEST_COMPLETE",
+        "Blacklist integration test finished",
+    );
 }
 
 /// Test retry limit functionality by repeatedly trying to fetch a problematic token
@@ -871,7 +979,10 @@ async fn test_retry_limit_functionality() {
     log(
         LogTag::System,
         "TEST_RETRY",
-        &format!("Testing retry limit with problematic token: {}", safe_truncate(test_mint, 12))
+        &format!(
+            "Testing retry limit with problematic token: {}",
+            safe_truncate(test_mint, 12)
+        ),
     );
 
     // Try to fetch the same token multiple times to test retry limits
@@ -879,7 +990,10 @@ async fn test_retry_limit_functionality() {
         log(
             LogTag::System,
             "TEST_RETRY",
-            &format!("Attempt {}: Trying to fetch decimals for test token", attempt)
+            &format!(
+                "Attempt {}: Trying to fetch decimals for test token",
+                attempt
+            ),
         );
 
         let results = batch_fetch_token_decimals(&[test_mint.to_string()]).await;
@@ -890,7 +1004,7 @@ async fn test_retry_limit_functionality() {
                     log(
                         LogTag::System,
                         "TEST_RETRY",
-                        &format!("✅ Attempt {}: SUCCESS - {} decimals", attempt, decimals)
+                        &format!("✅ Attempt {}: SUCCESS - {} decimals", attempt, decimals),
                     );
                     break;
                 }
@@ -898,7 +1012,7 @@ async fn test_retry_limit_functionality() {
                     log(
                         LogTag::System,
                         "TEST_RETRY",
-                        &format!("❌ Attempt {}: FAILED - {}", attempt, error)
+                        &format!("❌ Attempt {}: FAILED - {}", attempt, error),
                     );
 
                     // Check if it's now marked as permanently failed
@@ -906,7 +1020,7 @@ async fn test_retry_limit_functionality() {
                         log(
                             LogTag::System,
                             "TEST_RETRY",
-                            &format!("🛑 Token reached retry limit and is now permanently failed")
+                            &format!("🛑 Token reached retry limit and is now permanently failed"),
                         );
                         break;
                     }
@@ -933,25 +1047,17 @@ fn generate_recommendations(report: &mut DecimalAnalysisReport) {
 
     // High permanent failures
     if report.summary.permanently_failed > 100 {
-        recommendations.push(
-            format!(
-                "Consider cleaning {} permanently failed tokens from cache if they're outdated.",
-                report.summary.permanently_failed
-            )
-        );
+        recommendations.push(format!(
+            "Consider cleaning {} permanently failed tokens from cache if they're outdated.",
+            report.summary.permanently_failed
+        ));
     }
 
     // Test results analysis
     if !report.test_results.is_empty() {
-        let test_success_rate =
-            ((
-                report.test_results
-                    .iter()
-                    .filter(|t| t.success)
-                    .count() as f64
-            ) /
-                (report.test_results.len() as f64)) *
-            100.0;
+        let test_success_rate = ((report.test_results.iter().filter(|t| t.success).count() as f64)
+            / (report.test_results.len() as f64))
+            * 100.0;
 
         if test_success_rate < 30.0 {
             recommendations.push(
@@ -982,13 +1088,10 @@ fn generate_recommendations(report: &mut DecimalAnalysisReport) {
 
         for (pattern, count) in error_patterns {
             if count > 2 {
-                recommendations.push(
-                    format!(
-                        "Frequent error pattern: {} ({}x) - investigate and fix",
-                        pattern,
-                        count
-                    )
-                );
+                recommendations.push(format!(
+                    "Frequent error pattern: {} ({}x) - investigate and fix",
+                    pattern, count
+                ));
             }
         }
     }
@@ -1003,7 +1106,8 @@ fn generate_recommendations(report: &mut DecimalAnalysisReport) {
     // Cache performance
     if report.database_stats.decimals_cached < 1000 {
         recommendations.push(
-            "Low decimal cache size. Consider pre-fetching decimals for commonly traded tokens.".to_string()
+            "Low decimal cache size. Consider pre-fetching decimals for commonly traded tokens."
+                .to_string(),
         );
     }
 
@@ -1014,42 +1118,68 @@ fn print_summary(report: &DecimalAnalysisReport) {
     println!("\n{}", "=".repeat(80));
     println!("📊 DECIMAL ANALYSIS SUMMARY");
     println!("{}", "=".repeat(80));
-    println!("Timestamp: {}", report.timestamp.format("%Y-%m-%d %H:%M:%S UTC"));
+    println!(
+        "Timestamp: {}",
+        report.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+    );
     println!();
 
     println!("🔢 TOKEN STATISTICS:");
-    println!("  Total tokens in DB:       {}", report.summary.total_tokens_in_db);
+    println!(
+        "  Total tokens in DB:       {}",
+        report.summary.total_tokens_in_db
+    );
     println!(
         "  Tokens with decimals:     {} ({:.1}%)",
-        report.summary.tokens_with_decimals,
-        report.summary.success_rate
+        report.summary.tokens_with_decimals, report.summary.success_rate
     );
-    println!("  Tokens without decimals:  {}", report.summary.tokens_without_decimals);
-    println!("  Zero liquidity tokens:    {}", report.summary.zero_liquidity_tokens);
+    println!(
+        "  Tokens without decimals:  {}",
+        report.summary.tokens_without_decimals
+    );
+    println!(
+        "  Zero liquidity tokens:    {}",
+        report.summary.zero_liquidity_tokens
+    );
     println!();
 
     println!("❌ FAILED TOKENS:");
-    println!("  Permanently failed:       {}", report.summary.permanently_failed);
-    println!("  Retryable failed:         {}", report.summary.retryable_failed);
+    println!(
+        "  Permanently failed:       {}",
+        report.summary.permanently_failed
+    );
+    println!(
+        "  Retryable failed:         {}",
+        report.summary.retryable_failed
+    );
     println!();
 
     println!("💾 CACHE STATISTICS:");
-    println!("  Cached decimals:          {}", report.database_stats.decimals_cached);
-    println!("  Failed cache entries:     {}", report.database_stats.failed_cached);
+    println!(
+        "  Cached decimals:          {}",
+        report.database_stats.decimals_cached
+    );
+    println!(
+        "  Failed cache entries:     {}",
+        report.database_stats.failed_cached
+    );
     println!();
 
     if !report.test_results.is_empty() {
-        let successful_tests = report.test_results
-            .iter()
-            .filter(|t| t.success)
-            .count();
+        let successful_tests = report.test_results.iter().filter(|t| t.success).count();
         let test_success_rate =
             ((successful_tests as f64) / (report.test_results.len() as f64)) * 100.0;
 
         println!("🧪 LIVE TEST RESULTS:");
         println!("  Tests performed:          {}", report.test_results.len());
-        println!("  Successful:               {} ({:.1}%)", successful_tests, test_success_rate);
-        println!("  Failed:                   {}", report.test_results.len() - successful_tests);
+        println!(
+            "  Successful:               {} ({:.1}%)",
+            successful_tests, test_success_rate
+        );
+        println!(
+            "  Failed:                   {}",
+            report.test_results.len() - successful_tests
+        );
         println!();
     }
 
@@ -1061,7 +1191,10 @@ fn print_summary(report: &DecimalAnalysisReport) {
         println!();
     }
 
-    println!("📁 Full report saved to: {}", "decimal_analysis_report.json");
+    println!(
+        "📁 Full report saved to: {}",
+        "decimal_analysis_report.json"
+    );
     println!("{}", "=".repeat(80));
 }
 

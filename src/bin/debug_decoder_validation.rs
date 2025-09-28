@@ -18,21 +18,21 @@
 //! cargo run --bin debug_decoder_validation -- --program-filter raydium --verbose
 
 use clap::Parser;
-use screenerbot::logger::{ log, LogTag };
+use screenerbot::logger::{log, LogTag};
 use screenerbot::pools::calculator::PriceCalculator;
 use screenerbot::pools::decoders::raydium_cpmm::RaydiumCpmmDecoder;
 use screenerbot::pools::fetcher::AccountData;
-use screenerbot::pools::types::{ ProgramKind, SOL_MINT };
+use screenerbot::pools::types::{ProgramKind, SOL_MINT};
 use screenerbot::pools::utils::is_stablecoin_mint;
-use screenerbot::rpc::{ get_rpc_client, parse_pubkey };
+use screenerbot::rpc::{get_rpc_client, parse_pubkey};
 use screenerbot::tokens::cache::TokenDatabase;
-use screenerbot::tokens::dexscreener::{ init_dexscreener_api, get_global_dexscreener_api };
+use screenerbot::tokens::dexscreener::{get_global_dexscreener_api, init_dexscreener_api};
 use screenerbot::tokens::types::ApiToken;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::Instant;
-use tokio::time::{ sleep, Duration };
+use tokio::time::{sleep, Duration};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -136,7 +136,11 @@ struct ProgramStats {
 impl TestPool {
     /// Get the target token mint (non-SOL token)
     fn get_target_token_mint(&self) -> &str {
-        if self.base_mint == SOL_MINT { &self.quote_mint } else { &self.base_mint }
+        if self.base_mint == SOL_MINT {
+            &self.quote_mint
+        } else {
+            &self.base_mint
+        }
     }
 }
 
@@ -145,9 +149,9 @@ async fn find_pools_for_token(token: &ApiToken, args: &Args) -> Result<Vec<TestP
     let mut test_pools = Vec::new();
 
     // Get DexScreener API
-    let dex_api = get_global_dexscreener_api().await.map_err(|e|
-        format!("Failed to get DexScreener API: {}", e)
-    )?;
+    let dex_api = get_global_dexscreener_api()
+        .await
+        .map_err(|e| format!("Failed to get DexScreener API: {}", e))?;
     let mut api_lock = dex_api.lock().await;
 
     // Get all pools for this token from DexScreener
@@ -161,7 +165,7 @@ async fn find_pools_for_token(token: &ApiToken, args: &Args) -> Result<Vec<TestP
                 log(
                     LogTag::System,
                     "API_ERROR",
-                    &format!("Failed to get pairs for token {}: {}", &token.mint[..8], e)
+                    &format!("Failed to get pairs for token {}: {}", &token.mint[..8], e),
                 );
             }
             return Ok(test_pools);
@@ -177,10 +181,7 @@ async fn find_pools_for_token(token: &ApiToken, args: &Args) -> Result<Vec<TestP
 
     // Process each pool from DexScreener
     for pair in pairs.iter().take(args.max_pools_per_token) {
-        let liquidity_usd = pair.liquidity
-            .as_ref()
-            .map(|l| l.usd)
-            .unwrap_or(0.0);
+        let liquidity_usd = pair.liquidity.as_ref().map(|l| l.usd).unwrap_or(0.0);
 
         if liquidity_usd < args.min_liquidity {
             continue;
@@ -266,7 +267,7 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                 pool.program_kind.display_name(),
                 &pool.pool_address[..8],
                 pool.pair_type
-            )
+            ),
         );
     }
 
@@ -310,49 +311,55 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
 
     // Create the main pool account data
     let mut pool_accounts = HashMap::new();
-    pool_accounts.insert(pool_pubkey.to_string(), AccountData {
-        pubkey: pool_pubkey,
-        data: pool_account.data.clone(),
-        slot: 0,
-        fetched_at: std::time::Instant::now(),
-        lamports: pool_account.lamports,
-        owner: pool_account.owner,
-    });
+    pool_accounts.insert(
+        pool_pubkey.to_string(),
+        AccountData {
+            pubkey: pool_pubkey,
+            data: pool_account.data.clone(),
+            slot: 0,
+            fetched_at: std::time::Instant::now(),
+            lamports: pool_account.lamports,
+            owner: pool_account.owner,
+        },
+    );
 
     // Fetch auxiliary accounts based on DEX type
     match pool.program_kind {
         ProgramKind::RaydiumCpmm => {
             // For Raydium CPMM, we need to fetch vault accounts for proper price calculation
-            if
-                let Some(pool_info) = RaydiumCpmmDecoder::decode_raydium_cpmm_pool(
-                    &pool_account.data,
-                    &pool.pool_address
-                )
+            if let Some(pool_info) =
+                RaydiumCpmmDecoder::decode_raydium_cpmm_pool(&pool_account.data, &pool.pool_address)
             {
                 // Fetch vault accounts
                 if let Ok(vault_0_pubkey) = parse_pubkey(&pool_info.token_0_vault) {
                     if let Ok(vault_0_account) = rpc_client.client().get_account(&vault_0_pubkey) {
-                        pool_accounts.insert(vault_0_pubkey.to_string(), AccountData {
-                            pubkey: vault_0_pubkey,
-                            data: vault_0_account.data,
-                            slot: 0,
-                            fetched_at: std::time::Instant::now(),
-                            lamports: vault_0_account.lamports,
-                            owner: vault_0_account.owner,
-                        });
+                        pool_accounts.insert(
+                            vault_0_pubkey.to_string(),
+                            AccountData {
+                                pubkey: vault_0_pubkey,
+                                data: vault_0_account.data,
+                                slot: 0,
+                                fetched_at: std::time::Instant::now(),
+                                lamports: vault_0_account.lamports,
+                                owner: vault_0_account.owner,
+                            },
+                        );
                     }
                 }
 
                 if let Ok(vault_1_pubkey) = parse_pubkey(&pool_info.token_1_vault) {
                     if let Ok(vault_1_account) = rpc_client.client().get_account(&vault_1_pubkey) {
-                        pool_accounts.insert(vault_1_pubkey.to_string(), AccountData {
-                            pubkey: vault_1_pubkey,
-                            data: vault_1_account.data,
-                            slot: 0,
-                            fetched_at: std::time::Instant::now(),
-                            lamports: vault_1_account.lamports,
-                            owner: vault_1_account.owner,
-                        });
+                        pool_accounts.insert(
+                            vault_1_pubkey.to_string(),
+                            AccountData {
+                                pubkey: vault_1_pubkey,
+                                data: vault_1_account.data,
+                                slot: 0,
+                                fetched_at: std::time::Instant::now(),
+                                lamports: vault_1_account.lamports,
+                                owner: vault_1_account.owner,
+                            },
+                        );
                     }
                 }
 
@@ -364,7 +371,7 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                             "Fetched vault accounts: {} and {} for CPMM pool",
                             &pool_info.token_0_vault[..8],
                             &pool_info.token_1_vault[..8]
-                        )
+                        ),
                     );
                 }
             }
@@ -373,10 +380,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
         ProgramKind::OrcaWhirlpool => {
             // For Orca Whirlpool, we need to fetch token vault accounts
             use screenerbot::pools::decoders::orca_whirlpool::OrcaWhirlpoolDecoder;
-            if
-                let Some(vault_accounts) = OrcaWhirlpoolDecoder::extract_reserve_accounts(
-                    &pool_account.data
-                )
+            if let Some(vault_accounts) =
+                OrcaWhirlpoolDecoder::extract_reserve_accounts(&pool_account.data)
             {
                 let vault_count = vault_accounts.len();
 
@@ -384,7 +389,10 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                     log(
                         LogTag::System,
                         "ORCA_VAULT_EXTRACT",
-                        &format!("Extracted {} vault addresses: {:?}", vault_count, vault_accounts)
+                        &format!(
+                            "Extracted {} vault addresses: {:?}",
+                            vault_count, vault_accounts
+                        ),
                     );
                 }
 
@@ -393,51 +401,50 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                         log(
                             LogTag::System,
                             "ORCA_VAULT_FETCH",
-                            &format!("Attempting to fetch vault account: {}", vault_address)
+                            &format!("Attempting to fetch vault account: {}", vault_address),
                         );
                     }
 
                     match parse_pubkey(vault_address) {
-                        Ok(vault_pubkey) => {
-                            match rpc_client.client().get_account(&vault_pubkey) {
-                                Ok(vault_account) => {
-                                    let data_len = vault_account.data.len();
-                                    pool_accounts.insert(vault_address.clone(), AccountData {
+                        Ok(vault_pubkey) => match rpc_client.client().get_account(&vault_pubkey) {
+                            Ok(vault_account) => {
+                                let data_len = vault_account.data.len();
+                                pool_accounts.insert(
+                                    vault_address.clone(),
+                                    AccountData {
                                         pubkey: vault_pubkey,
                                         data: vault_account.data,
                                         slot: 0,
                                         fetched_at: std::time::Instant::now(),
                                         lamports: vault_account.lamports,
                                         owner: vault_account.owner,
-                                    });
+                                    },
+                                );
 
-                                    if args.verbose {
-                                        log(
-                                            LogTag::System,
-                                            "ORCA_VAULT_SUCCESS",
-                                            &format!(
-                                                "Successfully fetched vault account: {} ({} bytes)",
-                                                vault_address,
-                                                data_len
-                                            )
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    if args.verbose {
-                                        log(
-                                            LogTag::System,
-                                            "ORCA_VAULT_ERROR",
-                                            &format!(
-                                                "Failed to fetch vault account {}: {}",
-                                                vault_address,
-                                                e
-                                            )
-                                        );
-                                    }
+                                if args.verbose {
+                                    log(
+                                        LogTag::System,
+                                        "ORCA_VAULT_SUCCESS",
+                                        &format!(
+                                            "Successfully fetched vault account: {} ({} bytes)",
+                                            vault_address, data_len
+                                        ),
+                                    );
                                 }
                             }
-                        }
+                            Err(e) => {
+                                if args.verbose {
+                                    log(
+                                        LogTag::System,
+                                        "ORCA_VAULT_ERROR",
+                                        &format!(
+                                            "Failed to fetch vault account {}: {}",
+                                            vault_address, e
+                                        ),
+                                    );
+                                }
+                            }
+                        },
                         Err(e) => {
                             if args.verbose {
                                 log(
@@ -445,9 +452,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                                     "ORCA_VAULT_PARSE_ERROR",
                                     &format!(
                                         "Failed to parse vault address {}: {}",
-                                        vault_address,
-                                        e
-                                    )
+                                        vault_address, e
+                                    ),
                                 );
                             }
                         }
@@ -458,7 +464,10 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                     log(
                         LogTag::System,
                         "ORCA_VAULTS",
-                        &format!("Fetched {} vault accounts for Orca Whirlpool pool", vault_count)
+                        &format!(
+                            "Fetched {} vault accounts for Orca Whirlpool pool",
+                            vault_count
+                        ),
                     );
                 }
             } else {
@@ -466,7 +475,7 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                     log(
                         LogTag::System,
                         "ORCA_VAULT_EXTRACT_FAIL",
-                        "Failed to extract vault accounts from Orca pool data"
+                        "Failed to extract vault accounts from Orca pool data",
                     );
                 }
             }
@@ -475,23 +484,24 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
         ProgramKind::RaydiumLegacyAmm => {
             // For Raydium Legacy AMM, we need to fetch coin and pc vault accounts
             use screenerbot::pools::decoders::raydium_legacy_amm::RaydiumLegacyAmmDecoder;
-            if
-                let Some(vault_accounts) = RaydiumLegacyAmmDecoder::extract_reserve_accounts(
-                    &pool_account.data
-                )
+            if let Some(vault_accounts) =
+                RaydiumLegacyAmmDecoder::extract_reserve_accounts(&pool_account.data)
             {
                 let vault_count = vault_accounts.len();
                 for vault_address in &vault_accounts {
                     if let Ok(vault_pubkey) = parse_pubkey(vault_address) {
                         if let Ok(vault_account) = rpc_client.client().get_account(&vault_pubkey) {
-                            pool_accounts.insert(vault_address.clone(), AccountData {
-                                pubkey: vault_pubkey,
-                                data: vault_account.data,
-                                slot: 0,
-                                fetched_at: std::time::Instant::now(),
-                                lamports: vault_account.lamports,
-                                owner: vault_account.owner,
-                            });
+                            pool_accounts.insert(
+                                vault_address.clone(),
+                                AccountData {
+                                    pubkey: vault_pubkey,
+                                    data: vault_account.data,
+                                    slot: 0,
+                                    fetched_at: std::time::Instant::now(),
+                                    lamports: vault_account.lamports,
+                                    owner: vault_account.owner,
+                                },
+                            );
                         }
                     }
                 }
@@ -500,7 +510,10 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                     log(
                         LogTag::System,
                         "LEGACY_VAULTS",
-                        &format!("Fetched {} vault accounts for Raydium Legacy AMM pool", vault_count)
+                        &format!(
+                            "Fetched {} vault accounts for Raydium Legacy AMM pool",
+                            vault_count
+                        ),
                     );
                 }
             }
@@ -509,23 +522,24 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
         ProgramKind::RaydiumClmm => {
             // For Raydium CLMM, we need to fetch vault accounts
             use screenerbot::pools::decoders::raydium_clmm::RaydiumClmmDecoder;
-            if
-                let Some(vault_accounts) = RaydiumClmmDecoder::extract_reserve_accounts(
-                    &pool_account.data
-                )
+            if let Some(vault_accounts) =
+                RaydiumClmmDecoder::extract_reserve_accounts(&pool_account.data)
             {
                 let vault_count = vault_accounts.len();
                 for vault_address in &vault_accounts {
                     if let Ok(vault_pubkey) = parse_pubkey(vault_address) {
                         if let Ok(vault_account) = rpc_client.client().get_account(&vault_pubkey) {
-                            pool_accounts.insert(vault_address.clone(), AccountData {
-                                pubkey: vault_pubkey,
-                                data: vault_account.data,
-                                slot: 0,
-                                fetched_at: std::time::Instant::now(),
-                                lamports: vault_account.lamports,
-                                owner: vault_account.owner,
-                            });
+                            pool_accounts.insert(
+                                vault_address.clone(),
+                                AccountData {
+                                    pubkey: vault_pubkey,
+                                    data: vault_account.data,
+                                    slot: 0,
+                                    fetched_at: std::time::Instant::now(),
+                                    lamports: vault_account.lamports,
+                                    owner: vault_account.owner,
+                                },
+                            );
                         }
                     }
                 }
@@ -534,7 +548,10 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                     log(
                         LogTag::System,
                         "CLMM_VAULTS",
-                        &format!("Fetched {} vault accounts for Raydium CLMM pool", vault_count)
+                        &format!(
+                            "Fetched {} vault accounts for Raydium CLMM pool",
+                            vault_count
+                        ),
                     );
                 }
             }
@@ -543,23 +560,24 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
         ProgramKind::MeteoraDlmm => {
             // For Meteora DLMM, we need to fetch reserve accounts
             use screenerbot::pools::decoders::meteora_dlmm::MeteoraDlmmDecoder;
-            if
-                let Some(vault_accounts) = MeteoraDlmmDecoder::extract_reserve_accounts(
-                    &pool_account.data
-                )
+            if let Some(vault_accounts) =
+                MeteoraDlmmDecoder::extract_reserve_accounts(&pool_account.data)
             {
                 let vault_count = vault_accounts.len();
                 for vault_address in &vault_accounts {
                     if let Ok(vault_pubkey) = parse_pubkey(vault_address) {
                         if let Ok(vault_account) = rpc_client.client().get_account(&vault_pubkey) {
-                            pool_accounts.insert(vault_address.clone(), AccountData {
-                                pubkey: vault_pubkey,
-                                data: vault_account.data,
-                                slot: 0,
-                                fetched_at: std::time::Instant::now(),
-                                lamports: vault_account.lamports,
-                                owner: vault_account.owner,
-                            });
+                            pool_accounts.insert(
+                                vault_address.clone(),
+                                AccountData {
+                                    pubkey: vault_pubkey,
+                                    data: vault_account.data,
+                                    slot: 0,
+                                    fetched_at: std::time::Instant::now(),
+                                    lamports: vault_account.lamports,
+                                    owner: vault_account.owner,
+                                },
+                            );
                         }
                     }
                 }
@@ -568,7 +586,10 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                     log(
                         LogTag::System,
                         "METEORA_DLMM_VAULTS",
-                        &format!("Fetched {} vault accounts for Meteora DLMM pool", vault_count)
+                        &format!(
+                            "Fetched {} vault accounts for Meteora DLMM pool",
+                            vault_count
+                        ),
                     );
                 }
             }
@@ -577,23 +598,24 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
         ProgramKind::MeteoraDamm => {
             // For Meteora DAMM, we need to fetch reserve accounts
             use screenerbot::pools::decoders::meteora_damm::MeteoraDammDecoder;
-            if
-                let Some(vault_accounts) = MeteoraDammDecoder::extract_reserve_accounts(
-                    &pool_account.data
-                )
+            if let Some(vault_accounts) =
+                MeteoraDammDecoder::extract_reserve_accounts(&pool_account.data)
             {
                 let vault_count = vault_accounts.len();
                 for vault_address in &vault_accounts {
                     if let Ok(vault_pubkey) = parse_pubkey(vault_address) {
                         if let Ok(vault_account) = rpc_client.client().get_account(&vault_pubkey) {
-                            pool_accounts.insert(vault_address.clone(), AccountData {
-                                pubkey: vault_pubkey,
-                                data: vault_account.data,
-                                slot: 0,
-                                fetched_at: std::time::Instant::now(),
-                                lamports: vault_account.lamports,
-                                owner: vault_account.owner,
-                            });
+                            pool_accounts.insert(
+                                vault_address.clone(),
+                                AccountData {
+                                    pubkey: vault_pubkey,
+                                    data: vault_account.data,
+                                    slot: 0,
+                                    fetched_at: std::time::Instant::now(),
+                                    lamports: vault_account.lamports,
+                                    owner: vault_account.owner,
+                                },
+                            );
                         }
                     }
                 }
@@ -602,7 +624,10 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                     log(
                         LogTag::System,
                         "METEORA_DAMM_VAULTS",
-                        &format!("Fetched {} vault accounts for Meteora DAMM pool", vault_count)
+                        &format!(
+                            "Fetched {} vault accounts for Meteora DAMM pool",
+                            vault_count
+                        ),
                     );
                 }
             }
@@ -615,7 +640,7 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                 log(
                     LogTag::System,
                     "PUMPFUN_CHECK",
-                    "PumpFun pool - checking if additional accounts needed"
+                    "PumpFun pool - checking if additional accounts needed",
                 );
             }
         }
@@ -629,15 +654,15 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                     &format!(
                         "Unknown DEX type: {} - using pool account only",
                         pool.program_kind.display_name()
-                    )
+                    ),
                 );
             }
         }
     }
 
     // Create calculator instance with empty pool directory (we don't need it for direct calculation)
-    use std::sync::{ Arc, RwLock };
     use std::collections::HashMap;
+    use std::sync::{Arc, RwLock};
     let pool_directory = Arc::new(RwLock::new(HashMap::new()));
     let calculator = PriceCalculator::new(pool_directory);
 
@@ -649,21 +674,17 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
 
     // Use the pools module calculator to get price
     let (decoder_success, decoder_error, pool_info_extracted, reserves_info, calculated_price_sol) =
-        match
-            calculator.calculate_price_sync(
-                &pool_accounts,
-                pool.program_kind,
-                base_mint,
-                quote_mint,
-                &pool.pool_address
-            )
-        {
+        match calculator.calculate_price_sync(
+            &pool_accounts,
+            pool.program_kind,
+            base_mint,
+            quote_mint,
+            &pool.pool_address,
+        ) {
             Some(price_result) => {
                 let reserves_info = format!(
                     "SOL reserves: {:.9}, Token reserves: {:.6}, Price: {:.12} SOL",
-                    price_result.sol_reserves,
-                    price_result.token_reserves,
-                    price_result.price_sol
+                    price_result.sol_reserves, price_result.token_reserves, price_result.price_sol
                 );
 
                 if args.verbose {
@@ -674,11 +695,17 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                             "{} calculation successful: {}",
                             pool.program_kind.display_name(),
                             reserves_info
-                        )
+                        ),
                     );
                 }
 
-                (true, None, true, Some(reserves_info), Some(price_result.price_sol))
+                (
+                    true,
+                    None,
+                    true,
+                    Some(reserves_info),
+                    Some(price_result.price_sol),
+                )
             }
             None => {
                 let error = format!(
@@ -695,8 +722,7 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
     let decode_time_ms = start_time.elapsed().as_millis() as u64;
 
     // Get API price for comparison if not skipping validation
-    let (api_price_sol, price_diff_percent, price_validation_passed) = if
-        args.skip_price_validation
+    let (api_price_sol, price_diff_percent, price_validation_passed) = if args.skip_price_validation
     {
         (None, None, true) // Always pass validation when skipping
     } else {
@@ -721,7 +747,7 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
 async fn get_api_price_and_compare(
     pool: &TestPool,
     calculated_price_sol: Option<f64>,
-    args: &Args
+    args: &Args,
 ) -> (Option<f64>, Option<f64>, bool) {
     let target_token = pool.get_target_token_mint();
 
@@ -736,33 +762,34 @@ async fn get_api_price_and_compare(
         None
     };
 
-    let (price_diff_percent, price_validation_passed) = if
-        let (Some(calculated), Some(api)) = (calculated_price_sol, api_price_sol)
-    {
-        if api > 0.0 {
-            let diff = ((calculated - api).abs() / api) * 100.0;
-            let passed = diff <= args.price_diff_threshold;
-            (Some(diff), passed)
+    let (price_diff_percent, price_validation_passed) =
+        if let (Some(calculated), Some(api)) = (calculated_price_sol, api_price_sol) {
+            if api > 0.0 {
+                let diff = ((calculated - api).abs() / api) * 100.0;
+                let passed = diff <= args.price_diff_threshold;
+                (Some(diff), passed)
+            } else {
+                (None, false) // Fail if API price is invalid
+            }
         } else {
-            (None, false) // Fail if API price is invalid
-        }
-    } else {
-        // Fail validation if we couldn't calculate a price (decoder not working properly)
-        // Only pass if we explicitly skip price validation
-        (None, false)
-    };
+            // Fail validation if we couldn't calculate a price (decoder not working properly)
+            // Only pass if we explicitly skip price validation
+            (None, false)
+        };
 
     (api_price_sol, price_diff_percent, price_validation_passed)
 }
 
 /// Organize test pools by program type and pair direction
 fn organize_pools_by_program(
-    test_pools: Vec<TestPool>
+    test_pools: Vec<TestPool>,
 ) -> HashMap<ProgramKind, (Vec<TestPool>, Vec<TestPool>)> {
     let mut organized: HashMap<ProgramKind, (Vec<TestPool>, Vec<TestPool>)> = HashMap::new();
 
     for pool in test_pools {
-        let entry = organized.entry(pool.program_kind).or_insert_with(|| (Vec::new(), Vec::new()));
+        let entry = organized
+            .entry(pool.program_kind)
+            .or_insert_with(|| (Vec::new(), Vec::new()));
 
         match pool.pair_type {
             PairType::TokenSol => entry.0.push(pool),
@@ -772,12 +799,16 @@ fn organize_pools_by_program(
 
     // Sort pools by liquidity (descending) within each category
     for (token_sol_pools, sol_token_pools) in organized.values_mut() {
-        token_sol_pools.sort_by(|a, b|
-            b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
-        );
-        sol_token_pools.sort_by(|a, b|
-            b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
-        );
+        token_sol_pools.sort_by(|a, b| {
+            b.liquidity_usd
+                .partial_cmp(&a.liquidity_usd)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        sol_token_pools.sort_by(|a, b| {
+            b.liquidity_usd
+                .partial_cmp(&a.liquidity_usd)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
     }
 
     organized
@@ -824,7 +855,11 @@ fn print_test_results(results: &[DecoderTestResult], args: &Args) {
                     println!("   💲 Calculated: {:.12} SOL", calc);
                     println!("   📡 API Price: {:.12} SOL", api);
                     if let Some(diff) = result.price_diff_percent {
-                        let warning = if diff > args.price_diff_threshold { "⚠️" } else { "✅" };
+                        let warning = if diff > args.price_diff_threshold {
+                            "⚠️"
+                        } else {
+                            "✅"
+                        };
                         println!("   {} Price Diff: {:.2}%", warning, diff);
                     }
                 }
@@ -850,19 +885,21 @@ fn print_summary_statistics(results: &[DecoderTestResult], args: &Args) {
 
     // Collect statistics
     for result in results {
-        let stat = stats.entry(result.pool.program_kind).or_insert_with(|| ProgramStats {
-            program_kind: result.pool.program_kind,
-            total_pools_found: 0,
-            token_sol_pools: 0,
-            sol_token_pools: 0,
-            decoder_successes: 0,
-            decoder_failures: 0,
-            price_validation_successes: 0,
-            price_validation_failures: 0,
-            avg_decode_time_ms: 0.0,
-            suspicious_price_diffs: 0,
-            error_messages: Vec::new(),
-        });
+        let stat = stats
+            .entry(result.pool.program_kind)
+            .or_insert_with(|| ProgramStats {
+                program_kind: result.pool.program_kind,
+                total_pools_found: 0,
+                token_sol_pools: 0,
+                sol_token_pools: 0,
+                decoder_successes: 0,
+                decoder_failures: 0,
+                price_validation_successes: 0,
+                price_validation_failures: 0,
+                avg_decode_time_ms: 0.0,
+                suspicious_price_diffs: 0,
+                error_messages: Vec::new(),
+            });
 
         stat.total_pools_found += 1;
 
@@ -915,7 +952,11 @@ fn print_summary_statistics(results: &[DecoderTestResult], args: &Args) {
     sorted_stats.reverse();
 
     for stat in sorted_stats {
-        println!("\n🏷️  {} ({} pools)", stat.program_kind.display_name(), stat.total_pools_found);
+        println!(
+            "\n🏷️  {} ({} pools)",
+            stat.program_kind.display_name(),
+            stat.total_pools_found
+        );
         println!("   TOKEN/SOL pairs: {}", stat.token_sol_pools);
         println!("   SOL/TOKEN pairs: {}", stat.sol_token_pools);
         println!(
@@ -935,8 +976,8 @@ fn print_summary_statistics(results: &[DecoderTestResult], args: &Args) {
                 stat.price_validation_successes,
                 stat.total_pools_found,
                 if stat.total_pools_found > 0 {
-                    ((stat.price_validation_successes as f64) / (stat.total_pools_found as f64)) *
-                        100.0
+                    ((stat.price_validation_successes as f64) / (stat.total_pools_found as f64))
+                        * 100.0
                 } else {
                     0.0
                 }
@@ -945,8 +986,7 @@ fn print_summary_statistics(results: &[DecoderTestResult], args: &Args) {
             if stat.suspicious_price_diffs > 0 {
                 println!(
                     "   ⚠️  Suspicious price diffs (>{}%): {}",
-                    args.price_diff_threshold,
-                    stat.suspicious_price_diffs
+                    args.price_diff_threshold, stat.suspicious_price_diffs
                 );
             }
         }
@@ -971,29 +1011,31 @@ fn print_summary_statistics(results: &[DecoderTestResult], args: &Args) {
 
     // Overall summary
     let total_pools = results.len();
-    let total_successes = results
-        .iter()
-        .filter(|r| r.decoder_success)
-        .count();
-    let total_price_validation_passed = results
-        .iter()
-        .filter(|r| r.price_validation_passed)
-        .count();
+    let total_successes = results.iter().filter(|r| r.decoder_success).count();
+    let total_price_validation_passed =
+        results.iter().filter(|r| r.price_validation_passed).count();
     let total_suspicious = results
         .iter()
-        .filter(|r| r.price_diff_percent.map(|d| d > args.price_diff_threshold).unwrap_or(false))
+        .filter(|r| {
+            r.price_diff_percent
+                .map(|d| d > args.price_diff_threshold)
+                .unwrap_or(false)
+        })
         .count();
 
     println!("\n🎯 OVERALL SUMMARY");
     println!("==================");
     println!("Total pools tested: {}", total_pools);
-    println!("Decoder success rate: {}/{} ({:.1}%)", total_successes, total_pools, if
-        total_pools > 0
-    {
-        ((total_successes as f64) / (total_pools as f64)) * 100.0
-    } else {
-        0.0
-    });
+    println!(
+        "Decoder success rate: {}/{} ({:.1}%)",
+        total_successes,
+        total_pools,
+        if total_pools > 0 {
+            ((total_successes as f64) / (total_pools as f64)) * 100.0
+        } else {
+            0.0
+        }
+    );
 
     if !args.skip_price_validation {
         println!(
@@ -1008,7 +1050,10 @@ fn print_summary_statistics(results: &[DecoderTestResult], args: &Args) {
         );
 
         if total_suspicious > 0 {
-            println!("⚠️  Suspicious price differences: {} pools", total_suspicious);
+            println!(
+                "⚠️  Suspicious price differences: {} pools",
+                total_suspicious
+            );
         }
     }
 }
@@ -1028,14 +1073,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         global_args.push("--debug-pool-calculator".to_string());
     }
     if args.debug_all {
-        global_args.extend_from_slice(
-            &[
-                "--debug-pool-decoders".to_string(),
-                "--debug-pool-calculator".to_string(),
-                "--debug-pool-fetcher".to_string(),
-                "--debug-pool-analyzer".to_string(),
-            ]
-        );
+        global_args.extend_from_slice(&[
+            "--debug-pool-decoders".to_string(),
+            "--debug-pool-calculator".to_string(),
+            "--debug-pool-fetcher".to_string(),
+            "--debug-pool-analyzer".to_string(),
+        ]);
     }
 
     // Set the global arguments
@@ -1063,7 +1106,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::System, "INIT", "Initializing services...");
 
     if let Err(e) = screenerbot::rpc::init_rpc_client() {
-        log(LogTag::System, "WARN", &format!("RPC initialization failed: {}", e));
+        log(
+            LogTag::System,
+            "WARN",
+            &format!("RPC initialization failed: {}", e),
+        );
     }
 
     // Always initialize DexScreener API since we need it to discover pools
@@ -1077,28 +1124,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Filter tokens by liquidity
     tokens.retain(|token| {
-        token.liquidity
-            .as_ref()
-            .and_then(|l| l.usd)
-            .unwrap_or(0.0) >= args.min_liquidity
+        token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0) >= args.min_liquidity
     });
 
     // Sort by liquidity descending
     tokens.sort_by(|a, b| {
-        let a_liq = a.liquidity
-            .as_ref()
-            .and_then(|l| l.usd)
-            .unwrap_or(0.0);
-        let b_liq = b.liquidity
-            .as_ref()
-            .and_then(|l| l.usd)
-            .unwrap_or(0.0);
-        b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
+        let a_liq = a.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
+        let b_liq = b.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
+        b_liq
+            .partial_cmp(&a_liq)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
 
     let tokens = tokens.into_iter().take(args.max_tokens).collect::<Vec<_>>();
 
-    log(LogTag::System, "DB", &format!("Scanning {} tokens for pools", tokens.len()));
+    log(
+        LogTag::System,
+        "DB",
+        &format!("Scanning {} tokens for pools", tokens.len()),
+    );
 
     // Find pools for each token
     let mut all_test_pools = Vec::new();
@@ -1106,7 +1150,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (i, token) in tokens.iter().enumerate() {
         if i > 0 && i % 50 == 0 {
-            log(LogTag::System, "PROGRESS", &format!("Processed {}/{} tokens", i, tokens.len()));
+            log(
+                LogTag::System,
+                "PROGRESS",
+                &format!("Processed {}/{} tokens", i, tokens.len()),
+            );
         }
 
         // Rate limiting
@@ -1125,7 +1173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             &token.mint[..8],
                             &token.symbol,
                             pools.len()
-                        )
+                        ),
                     );
                 }
                 all_test_pools.extend(pools);
@@ -1133,7 +1181,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(e) => {
                 error_count += 1;
                 if args.verbose {
-                    log(LogTag::System, "ERROR", &format!("Token {}: {}", &token.mint[..8], e));
+                    log(
+                        LogTag::System,
+                        "ERROR",
+                        &format!("Token {}: {}", &token.mint[..8], e),
+                    );
                 }
             }
         }
@@ -1147,7 +1199,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             all_test_pools.len(),
             tokens.len(),
             error_count
-        )
+        ),
     );
 
     if all_test_pools.is_empty() {

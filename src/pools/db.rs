@@ -1,20 +1,19 @@
+use super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
+use crate::arguments::is_debug_pool_cache_enabled;
 /// Database module for persistent price history storage
 ///
 /// This module provides SQLite-based storage for price history data,
 /// enabling price history to survive service restarts and providing
 /// full historical data access beyond the in-memory cache limits.
-
 use crate::global::is_debug_pool_service_enabled;
-use crate::arguments::is_debug_pool_cache_enabled;
-use crate::logger::{ log, LogTag };
-use super::types::{ PriceResult, PRICE_HISTORY_MAX_ENTRIES };
-use chrono::{ DateTime, Utc };
-use rusqlite::{ params, Connection, Row };
+use crate::logger::{log, LogTag};
+use chrono::{DateTime, Utc};
+use rusqlite::{params, Connection, Row};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{ SystemTime, UNIX_EPOCH };
-use tokio::sync::{ mpsc, Mutex };
+use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::{mpsc, Mutex};
 
 // =============================================================================
 // CONSTANTS
@@ -101,13 +100,13 @@ impl DbPriceResult {
     pub fn from_row(row: &Row) -> Result<Self, rusqlite::Error> {
         let created_at_str: String = row.get("created_at")?;
         let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-            .map_err(|_|
+            .map_err(|_| {
                 rusqlite::Error::InvalidColumnType(
                     0,
                     "created_at".to_string(),
-                    rusqlite::types::Type::Text
+                    rusqlite::types::Type::Text,
                 )
-            )?
+            })?
             .with_timezone(&Utc);
 
         Ok(Self {
@@ -159,20 +158,17 @@ impl PoolsDatabase {
     pub async fn initialize(&mut self) -> Result<(), String> {
         // Ensure data directory exists
         if let Some(parent) = Path::new(&self.db_path).parent() {
-            fs
-                ::create_dir_all(parent)
+            fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create data directory: {}", e))?;
         }
 
         // Create database connection
-        let conn = Connection::open(&self.db_path).map_err(|e|
-            format!("Failed to open pools database: {}", e)
-        )?;
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open pools database: {}", e))?;
 
         // Create price history table
-        conn
-            .execute(
-                "CREATE TABLE IF NOT EXISTS price_history (
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS price_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 mint TEXT NOT NULL,
                 pool_address TEXT NOT NULL,
@@ -187,34 +183,31 @@ impl PoolsDatabase {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(mint, pool_address, timestamp_unix)
             )",
-                []
-            )
-            .map_err(|e| format!("Failed to create price_history table: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create price_history table: {}", e))?;
 
         // Create indices for faster queries
-        conn
-            .execute(
-                "CREATE INDEX IF NOT EXISTS idx_price_history_mint_timestamp 
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_price_history_mint_timestamp 
              ON price_history(mint, timestamp_unix DESC)",
-                []
-            )
-            .map_err(|e| format!("Failed to create mint timestamp index: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create mint timestamp index: {}", e))?;
 
-        conn
-            .execute(
-                "CREATE INDEX IF NOT EXISTS idx_price_history_pool_timestamp 
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_price_history_pool_timestamp 
              ON price_history(pool_address, timestamp_unix DESC)",
-                []
-            )
-            .map_err(|e| format!("Failed to create pool timestamp index: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create pool timestamp index: {}", e))?;
 
-        conn
-            .execute(
-                "CREATE INDEX IF NOT EXISTS idx_price_history_created_at 
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_price_history_created_at 
              ON price_history(created_at)",
-                []
-            )
-            .map_err(|e| format!("Failed to create created_at index: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create created_at index: {}", e))?;
 
         // Store connection
         let mut connection_guard = self.connection.lock().await;
@@ -234,7 +227,7 @@ impl PoolsDatabase {
             log(
                 LogTag::PoolService,
                 "DB_INIT",
-                &format!("✅ Pools database initialized: {}", self.db_path)
+                &format!("✅ Pools database initialized: {}", self.db_path),
             );
         }
 
@@ -244,7 +237,9 @@ impl PoolsDatabase {
     /// Queue a price for batched database storage
     pub async fn queue_price_for_storage(&self, price: PriceResult) -> Result<(), String> {
         if let Some(ref sender) = self.write_queue {
-            sender.send(price).map_err(|e| format!("Failed to queue price for storage: {}", e))?;
+            sender
+                .send(price)
+                .map_err(|e| format!("Failed to queue price for storage: {}", e))?;
         }
         Ok(())
     }
@@ -253,22 +248,26 @@ impl PoolsDatabase {
     pub async fn load_recent_price_history(
         &self,
         mint: &str,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<PriceResult>, String> {
         let connection_guard = self.connection.lock().await;
-        let conn = connection_guard.as_ref().ok_or("Database not initialized")?;
+        let conn = connection_guard
+            .as_ref()
+            .ok_or("Database not initialized")?;
 
         let mut stmt = conn
             .prepare(
                 "SELECT * FROM price_history 
              WHERE mint = ? 
              ORDER BY timestamp_unix DESC 
-             LIMIT ?"
+             LIMIT ?",
             )
             .map_err(|e| format!("Failed to prepare select statement: {}", e))?;
 
         let rows = stmt
-            .query_map(params![mint, limit as i64], |row| DbPriceResult::from_row(row))
+            .query_map(params![mint, limit as i64], |row| {
+                DbPriceResult::from_row(row)
+            })
             .map_err(|e| format!("Failed to query price history: {}", e))?;
 
         let mut results = Vec::new();
@@ -284,7 +283,11 @@ impl PoolsDatabase {
             log(
                 LogTag::PoolCache,
                 "DB_LOAD",
-                &format!("Loaded {} price history entries for token: {}", results.len(), mint)
+                &format!(
+                    "Loaded {} price history entries for token: {}",
+                    results.len(),
+                    mint
+                ),
             );
         }
 
@@ -296,10 +299,12 @@ impl PoolsDatabase {
         &self,
         mint: &str,
         limit: Option<usize>,
-        since_timestamp: Option<i64>
+        since_timestamp: Option<i64>,
     ) -> Result<Vec<PriceResult>, String> {
         let connection_guard = self.connection.lock().await;
-        let conn = connection_guard.as_ref().ok_or("Database not initialized")?;
+        let conn = connection_guard
+            .as_ref()
+            .ok_or("Database not initialized")?;
 
         let limit_value = limit.unwrap_or(1000) as i64;
 
@@ -311,12 +316,14 @@ impl PoolsDatabase {
                     "SELECT * FROM price_history 
                  WHERE mint = ? AND timestamp_unix >= ? 
                  ORDER BY timestamp_unix DESC 
-                 LIMIT ?"
+                 LIMIT ?",
                 )
                 .map_err(|e| format!("Failed to prepare history query: {}", e))?;
 
             let rows = stmt
-                .query_map(params![mint, since, limit_value], |row| DbPriceResult::from_row(row))
+                .query_map(params![mint, since, limit_value], |row| {
+                    DbPriceResult::from_row(row)
+                })
                 .map_err(|e| format!("Failed to query price history: {}", e))?;
 
             for row in rows {
@@ -329,12 +336,14 @@ impl PoolsDatabase {
                     "SELECT * FROM price_history 
                  WHERE mint = ? 
                  ORDER BY timestamp_unix DESC 
-                 LIMIT ?"
+                 LIMIT ?",
                 )
                 .map_err(|e| format!("Failed to prepare history query: {}", e))?;
 
             let rows = stmt
-                .query_map(params![mint, limit_value], |row| DbPriceResult::from_row(row))
+                .query_map(params![mint, limit_value], |row| {
+                    DbPriceResult::from_row(row)
+                })
                 .map_err(|e| format!("Failed to query price history: {}", e))?;
 
             for row in rows {
@@ -352,20 +361,25 @@ impl PoolsDatabase {
     /// Cleanup old price history entries
     pub async fn cleanup_old_entries(&self) -> Result<usize, String> {
         let connection_guard = self.connection.lock().await;
-        let conn = connection_guard.as_ref().ok_or("Database not initialized")?;
+        let conn = connection_guard
+            .as_ref()
+            .ok_or("Database not initialized")?;
 
         let cutoff_timestamp = Utc::now() - chrono::Duration::days(MAX_PRICE_HISTORY_AGE_DAYS);
         let cutoff_unix = cutoff_timestamp.timestamp();
 
         let deleted = conn
-            .execute("DELETE FROM price_history WHERE timestamp_unix < ?", params![cutoff_unix])
+            .execute(
+                "DELETE FROM price_history WHERE timestamp_unix < ?",
+                params![cutoff_unix],
+            )
             .map_err(|e| format!("Failed to cleanup old entries: {}", e))?;
 
         if deleted > 0 && is_debug_pool_service_enabled() {
             log(
                 LogTag::PoolService,
                 "DB_CLEANUP",
-                &format!("Cleaned up {} old price history entries", deleted)
+                &format!("Cleaned up {} old price history entries", deleted),
             );
         }
 
@@ -375,7 +389,9 @@ impl PoolsDatabase {
     /// Remove price history entries older than the most recent gap for a specific token
     pub async fn cleanup_gapped_data_for_token(&self, mint: &str) -> Result<usize, String> {
         let connection_guard = self.connection.lock().await;
-        let conn = connection_guard.as_ref().ok_or("Database not initialized")?;
+        let conn = connection_guard
+            .as_ref()
+            .ok_or("Database not initialized")?;
 
         // Find the most recent timestamp where continuous data starts (no gaps > 1 minute)
         let continuous_start_timestamp = self.find_continuous_data_start_timestamp(conn, mint)?;
@@ -384,7 +400,7 @@ impl PoolsDatabase {
             let deleted = conn
                 .execute(
                     "DELETE FROM price_history WHERE mint = ? AND timestamp_unix < ?",
-                    params![mint, cutoff_timestamp]
+                    params![mint, cutoff_timestamp],
                 )
                 .map_err(|e| format!("Failed to cleanup gapped data for token {}: {}", mint, e))?;
 
@@ -392,7 +408,10 @@ impl PoolsDatabase {
                 log(
                     LogTag::PoolCache,
                     "GAP_CLEANUP",
-                    &format!("Removed {} gapped price entries for token: {}", deleted, mint)
+                    &format!(
+                        "Removed {} gapped price entries for token: {}",
+                        deleted, mint
+                    ),
                 );
             }
 
@@ -406,19 +425,22 @@ impl PoolsDatabase {
     fn find_continuous_data_start_timestamp(
         &self,
         conn: &Connection,
-        mint: &str
+        mint: &str,
     ) -> Result<Option<i64>, String> {
         // Get all timestamps for the token, ordered by newest first
         let mut stmt = conn
             .prepare(
                 "SELECT timestamp_unix FROM price_history 
                  WHERE mint = ? 
-                 ORDER BY timestamp_unix DESC"
+                 ORDER BY timestamp_unix DESC",
             )
             .map_err(|e| format!("Failed to prepare gap detection query: {}", e))?;
 
         let rows = stmt
-            .query_map(params![mint], |row| { Ok(row.get::<_, i64>("timestamp_unix")?) })
+            .query_map(
+                params![mint],
+                |row| Ok(row.get::<_, i64>("timestamp_unix")?),
+            )
             .map_err(|e| format!("Failed to execute gap detection query: {}", e))?;
 
         let mut timestamps = Vec::new();
@@ -451,14 +473,16 @@ impl PoolsDatabase {
         // Get all unique tokens in the database
         let tokens = {
             let connection_guard = self.connection.lock().await;
-            let conn = connection_guard.as_ref().ok_or("Database not initialized")?;
+            let conn = connection_guard
+                .as_ref()
+                .ok_or("Database not initialized")?;
 
             let mut stmt = conn
                 .prepare("SELECT DISTINCT mint FROM price_history")
                 .map_err(|e| format!("Failed to prepare token list query: {}", e))?;
 
             let rows = stmt
-                .query_map([], |row| { Ok(row.get::<_, String>("mint")?) })
+                .query_map([], |row| Ok(row.get::<_, String>("mint")?))
                 .map_err(|e| format!("Failed to execute token list query: {}", e))?;
 
             let mut tokens = Vec::new();
@@ -480,7 +504,7 @@ impl PoolsDatabase {
                     log(
                         LogTag::PoolCache,
                         "ERROR",
-                        &format!("Failed to cleanup gapped data for token {}: {}", token, e)
+                        &format!("Failed to cleanup gapped data for token {}: {}", token, e),
                     );
                 }
             }
@@ -490,7 +514,10 @@ impl PoolsDatabase {
             log(
                 LogTag::PoolService,
                 "GAP_CLEANUP",
-                &format!("Removed {} total gapped price entries across all tokens", total_deleted)
+                &format!(
+                    "Removed {} total gapped price entries across all tokens",
+                    total_deleted
+                ),
             );
         }
 
@@ -505,12 +532,11 @@ impl PoolsDatabase {
 /// Background task for batched database writes
 async fn run_database_writer(
     mut rx: mpsc::UnboundedReceiver<PriceResult>,
-    db_connection: Arc<Mutex<Option<Connection>>>
+    db_connection: Arc<Mutex<Option<Connection>>>,
 ) {
     let mut write_buffer = Vec::with_capacity(DB_BATCH_SIZE);
-    let mut interval = tokio::time::interval(
-        tokio::time::Duration::from_secs(DB_WRITE_INTERVAL_SECONDS)
-    );
+    let mut interval =
+        tokio::time::interval(tokio::time::Duration::from_secs(DB_WRITE_INTERVAL_SECONDS));
 
     loop {
         tokio::select! {
@@ -519,7 +545,7 @@ async fn run_database_writer(
                 match price {
                     Some(price) => {
                         write_buffer.push(price);
-                        
+
                         // Flush if buffer is full
                         if write_buffer.len() >= DB_BATCH_SIZE {
                             flush_write_buffer(&mut write_buffer, &db_connection).await;
@@ -532,7 +558,7 @@ async fn run_database_writer(
                     }
                 }
             }
-            
+
             // Periodic flush
             _ = interval.tick() => {
                 if !write_buffer.is_empty() {
@@ -546,7 +572,7 @@ async fn run_database_writer(
 /// Flush the write buffer to database
 async fn flush_write_buffer(
     buffer: &mut Vec<PriceResult>,
-    db_connection: &Arc<Mutex<Option<Connection>>>
+    db_connection: &Arc<Mutex<Option<Connection>>>,
 ) {
     if buffer.is_empty() {
         return;
@@ -559,35 +585,30 @@ async fn flush_write_buffer(
             let mut insert_count = 0;
 
             // Prepare insert statement
-            if
-                let Ok(mut stmt) = tx.prepare(
-                    "INSERT OR REPLACE INTO price_history 
+            if let Ok(mut stmt) = tx.prepare(
+                "INSERT OR REPLACE INTO price_history 
                  (mint, pool_address, price_usd, price_sol, confidence, slot, 
                   timestamp_unix, sol_reserves, token_reserves, source_pool, created_at) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                )
-            {
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ) {
                 for price in buffer.iter() {
                     let db_price = DbPriceResult::from_price_result(price);
 
-                    if
-                        stmt
-                            .execute(
-                                params![
-                                    db_price.mint,
-                                    db_price.pool_address,
-                                    db_price.price_usd,
-                                    db_price.price_sol,
-                                    db_price.confidence,
-                                    db_price.slot,
-                                    db_price.timestamp_unix,
-                                    db_price.sol_reserves,
-                                    db_price.token_reserves,
-                                    db_price.source_pool,
-                                    db_price.created_at.to_rfc3339()
-                                ]
-                            )
-                            .is_ok()
+                    if stmt
+                        .execute(params![
+                            db_price.mint,
+                            db_price.pool_address,
+                            db_price.price_usd,
+                            db_price.price_sol,
+                            db_price.confidence,
+                            db_price.slot,
+                            db_price.timestamp_unix,
+                            db_price.sol_reserves,
+                            db_price.token_reserves,
+                            db_price.source_pool,
+                            db_price.created_at.to_rfc3339()
+                        ])
+                        .is_ok()
                     {
                         insert_count += 1;
                     }
@@ -600,7 +621,7 @@ async fn flush_write_buffer(
                     log(
                         LogTag::PoolCache,
                         "DB_WRITE",
-                        &format!("Stored {} price history entries to database", insert_count)
+                        &format!("Stored {} price history entries to database", insert_count),
                     );
                 }
             }
@@ -642,7 +663,8 @@ pub async fn queue_price_for_storage(price: PriceResult) -> Result<(), String> {
 pub async fn load_historical_data_for_token(mint: &str) -> Result<Vec<PriceResult>, String> {
     unsafe {
         if let Some(ref db) = GLOBAL_POOLS_DB {
-            db.load_recent_price_history(mint, PRICE_HISTORY_MAX_ENTRIES).await
+            db.load_recent_price_history(mint, PRICE_HISTORY_MAX_ENTRIES)
+                .await
         } else {
             Ok(Vec::new()) // Return empty if DB not available
         }
@@ -653,7 +675,7 @@ pub async fn load_historical_data_for_token(mint: &str) -> Result<Vec<PriceResul
 pub async fn get_extended_price_history(
     mint: &str,
     limit: Option<usize>,
-    since_timestamp: Option<i64>
+    since_timestamp: Option<i64>,
 ) -> Result<Vec<PriceResult>, String> {
     unsafe {
         if let Some(ref db) = GLOBAL_POOLS_DB {
@@ -667,7 +689,11 @@ pub async fn get_extended_price_history(
 /// Cleanup old database entries
 pub async fn cleanup_old_entries() -> Result<usize, String> {
     unsafe {
-        if let Some(ref db) = GLOBAL_POOLS_DB { db.cleanup_old_entries().await } else { Ok(0) }
+        if let Some(ref db) = GLOBAL_POOLS_DB {
+            db.cleanup_old_entries().await
+        } else {
+            Ok(0)
+        }
     }
 }
 
@@ -685,6 +711,10 @@ pub async fn cleanup_gapped_data_for_token(mint: &str) -> Result<usize, String> 
 /// Cleanup gapped data for all tokens
 pub async fn cleanup_all_gapped_data() -> Result<usize, String> {
     unsafe {
-        if let Some(ref db) = GLOBAL_POOLS_DB { db.cleanup_all_gapped_data().await } else { Ok(0) }
+        if let Some(ref db) = GLOBAL_POOLS_DB {
+            db.cleanup_all_gapped_data().await
+        } else {
+            Ok(0)
+        }
     }
 }

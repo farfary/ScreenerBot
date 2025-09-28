@@ -1,6 +1,6 @@
 // Debug security scan functionality
-use screenerbot::logger::{ init_file_logging, log, LogTag };
-use screenerbot::tokens::security::{ get_security_analyzer, check_api_status };
+use screenerbot::logger::{init_file_logging, log, LogTag};
+use screenerbot::tokens::security::{check_api_status, get_security_analyzer};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -77,21 +77,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Check tokens.db
     let tokens_conn = rusqlite::Connection::open("data/tokens.db")?;
-    let token_count: i64 = tokens_conn.query_row("SELECT COUNT(*) FROM tokens", [], |row|
-        row.get(0)
-    )?;
+    let token_count: i64 =
+        tokens_conn.query_row("SELECT COUNT(*) FROM tokens", [], |row| row.get(0))?;
     println!("✅ tokens.db has {} tokens", token_count);
 
     // Check security.db
     match rusqlite::Connection::open("data/security.db") {
         Ok(security_conn) => {
-            match
-                security_conn.query_row("SELECT COUNT(*) FROM security", [], |row|
-                    row.get::<_, i64>(0)
-                )
-            {
-                Ok(security_count) =>
-                    println!("✅ security.db has {} security records", security_count),
+            match security_conn.query_row("SELECT COUNT(*) FROM security", [], |row| {
+                row.get::<_, i64>(0)
+            }) {
+                Ok(security_count) => {
+                    println!("✅ security.db has {} security records", security_count)
+                }
                 Err(e) => println!("❌ Failed to query security table: {}", e),
             }
         }
