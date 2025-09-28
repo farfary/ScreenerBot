@@ -1,5 +1,5 @@
 /// Program IDs for transaction analysis and router detection
-/// 
+///
 /// This module contains all program IDs needed for analyzing transactions
 /// and detecting which platform/router was used for swaps. This is separate
 /// from the pools module to maintain clean separation of concerns.
@@ -51,30 +51,30 @@ pub fn detect_router_from_program_id(program_id: &str) -> Option<&'static str> {
     match program_id {
         // Jupiter variants
         JUPITER_V6_PROGRAM_ID | JUPITER_V4_PROGRAM_ID | JUPITER_V3_PROGRAM_ID => Some("jupiter"),
-        
+
         // GMGN
         GMGN_PROGRAM_ID => Some("gmgn"),
-        
+
         // Raydium variants
         RAYDIUM_CPMM_PROGRAM_ID | RAYDIUM_LEGACY_AMM_PROGRAM_ID | RAYDIUM_CLMM_PROGRAM_ID => {
             Some("raydium")
         }
-        
+
         // Orca variants
         ORCA_WHIRLPOOL_PROGRAM_ID | ORCA_V1_PROGRAM_ID => Some("orca"),
-        
+
         // Meteora variants
         METEORA_DAMM_PROGRAM_ID | METEORA_DLMM_PROGRAM_ID | METEORA_DBC_PROGRAM_ID => {
             Some("meteora")
         }
-        
+
         // PumpFun variants
         PUMP_FUN_AMM_PROGRAM_ID | PUMP_FUN_LEGACY_PROGRAM_ID => Some("pumpfun"),
-        
+
         // Other DEXes
         MOONSHOT_PROGRAM_ID => Some("moonshot"),
         FLUXBEAM_AMM_PROGRAM_ID => Some("fluxbeam"),
-        
+
         _ => None,
     }
 }
@@ -83,7 +83,7 @@ pub fn detect_router_from_program_id(program_id: &str) -> Option<&'static str> {
 pub fn detect_router_from_logs(log_messages: &[String]) -> Option<&'static str> {
     for log_line in log_messages {
         let log_lower = log_line.to_lowercase();
-        
+
         if log_lower.contains("jupiter") {
             return Some("jupiter");
         }
@@ -109,7 +109,7 @@ pub fn detect_router_from_logs(log_messages: &[String]) -> Option<&'static str> 
             return Some("fluxbeam");
         }
     }
-    
+
     None
 }
 
@@ -120,10 +120,7 @@ pub fn get_jupiter_program_ids() -> &'static [&'static str] {
 
 /// Check if a program ID belongs to Jupiter
 pub fn is_jupiter_program_id(program_id: &str) -> bool {
-    matches!(
-        program_id,
-        JUPITER_V6_PROGRAM_ID | JUPITER_V4_PROGRAM_ID | JUPITER_V3_PROGRAM_ID
-    )
+    matches!(program_id, JUPITER_V6_PROGRAM_ID | JUPITER_V4_PROGRAM_ID | JUPITER_V3_PROGRAM_ID)
 }
 
 /// Check if a program ID belongs to any known DEX aggregator
