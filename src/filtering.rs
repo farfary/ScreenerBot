@@ -3,18 +3,15 @@
 /// This module provides a single, focused function to get filtered tokens ready for pool monitoring.
 /// All filtering logic is consolidated here for clarity and efficiency.
 use crate::global::is_debug_filtering_enabled;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::decimals::get_cached_decimals;
 use crate::tokens::security::{
-    get_security_analyzer,
-    initialize_security_analyzer,
-    RiskLevel,
-    SecurityAnalysis,
+    get_security_analyzer, initialize_security_analyzer, RiskLevel, SecurityAnalysis,
     SecurityAnalyzer,
 };
-use crate::tokens::types::{ ApiToken, Token };
-use chrono::{ Duration as ChronoDuration, Utc };
+use crate::tokens::types::{ApiToken, Token};
+use chrono::{Duration as ChronoDuration, Utc};
 use std::collections::HashMap;
 
 // =============================================================================
@@ -101,7 +98,8 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
     let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
 
     let all_tokens = db
-        .get_all_tokens().await
+        .get_all_tokens()
+        .await
         .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
 
     if all_tokens.is_empty() {
@@ -115,10 +113,17 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
             log(
                 LogTag::Filtering,
                 "WARN",
-                &format!("Security analyzer not initialized and failed to init: {}", e)
+                &format!(
+                    "Security analyzer not initialized and failed to init: {}",
+                    e
+                ),
             );
         } else if debug_enabled {
-            log(LogTag::Filtering, "INFO", "Security analyzer initialized lazily for filtering");
+            log(
+                LogTag::Filtering,
+                "INFO",
+                "Security analyzer initialized lazily for filtering",
+            );
         }
     }
 
@@ -172,7 +177,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
             filtered_tokens.len(),
             filtering_stats.total_processed,
             elapsed.as_millis()
-        )
+        ),
     );
 
     if debug_enabled {
@@ -191,7 +196,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
 /// Also records which filtering stages were passed for statistics
 async fn apply_all_filters(
     token: &Token,
-    stats: &mut FilteringStats
+    stats: &mut FilteringStats,
 ) -> Option<FilterRejectionReason> {
     // 1. Check decimals availability in database
     if !has_decimals_in_database(&token.mint) {
@@ -279,7 +284,7 @@ async fn check_security_requirements(mint: &str) -> Option<FilterRejectionReason
                 log(
                     LogTag::Filtering,
                     "SECURITY_REJECT",
-                    &format!("No security analyzer available for mint={}", mint)
+                    &format!("No security analyzer available for mint={}", mint),
                 );
             }
             return Some(FilterRejectionReason::SecurityNoData);
@@ -295,7 +300,7 @@ async fn check_security_requirements(mint: &str) -> Option<FilterRejectionReason
                     log(
                         LogTag::Filtering,
                         "AUTHORITY_REJECT",
-                        &format!("Unsafe authorities detected for mint={}", mint)
+                        &format!("Unsafe authorities detected for mint={}", mint),
                     );
                 }
                 return Some(FilterRejectionReason::SecurityHighRisk);
@@ -308,7 +313,7 @@ async fn check_security_requirements(mint: &str) -> Option<FilterRejectionReason
                         log(
                             LogTag::Filtering,
                             "RISK_REJECT",
-                            &format!("High risk level detected for mint={}", mint)
+                            &format!("High risk level detected for mint={}", mint),
                         );
                     }
                     Some(FilterRejectionReason::SecurityHighRisk)
@@ -320,9 +325,8 @@ async fn check_security_requirements(mint: &str) -> Option<FilterRejectionReason
                             "SECURITY_PASS",
                             &format!(
                                 "Security check passed for mint={} risk={:?}",
-                                mint,
-                                analysis.risk_level
-                            )
+                                mint, analysis.risk_level
+                            ),
                         );
                     }
                     None // Allow Safe, Warning, Unknown if authorities are safe
@@ -335,7 +339,7 @@ async fn check_security_requirements(mint: &str) -> Option<FilterRejectionReason
                 log(
                     LogTag::Filtering,
                     "NO_DATA_REJECT",
-                    &format!("No security data available for mint={}", mint)
+                    &format!("No security data available for mint={}", mint),
                 );
             }
             Some(FilterRejectionReason::SecurityNoData)
@@ -371,14 +375,22 @@ fn check_basic_token_info(token: &Token) -> Option<FilterRejectionReason> {
 
     // Check logo URL if required
     if REQUIRE_LOGO_URL {
-        if token.logo_url.as_ref().map_or(true, |url| url.trim().is_empty()) {
+        if token
+            .logo_url
+            .as_ref()
+            .map_or(true, |url| url.trim().is_empty())
+        {
             return Some(FilterRejectionReason::EmptyLogoUrl);
         }
     }
 
     // Check website URL if required
     if REQUIRE_WEBSITE_URL {
-        if token.website.as_ref().map_or(true, |url| url.trim().is_empty()) {
+        if token
+            .website
+            .as_ref()
+            .map_or(true, |url| url.trim().is_empty())
+        {
             return Some(FilterRejectionReason::EmptyWebsiteUrl);
         }
     }
@@ -575,17 +587,20 @@ fn log_filtering_stats(filtering_stats: &FilteringStats, total_in_db: usize) {
     let mut summary = String::new();
 
     // Header with bright cyan color
-    summary.push_str(&format!("{}\n", "🔍 INTEGRATED FILTERING RESULTS".bright_cyan().bold()));
+    summary.push_str(&format!(
+        "{}\n",
+        "🔍 INTEGRATED FILTERING RESULTS".bright_cyan().bold()
+    ));
 
     // Database overview
-    summary.push_str(
-        &format!(
-            "{} {} tokens in DB; processed: {}\n",
-            "💾 Database:".bright_white().bold(),
-            format!("{}", total_in_db).bright_cyan().bold(),
-            format!("{}", filtering_stats.total_processed).bright_yellow().bold()
-        )
-    );
+    summary.push_str(&format!(
+        "{} {} tokens in DB; processed: {}\n",
+        "💾 Database:".bright_white().bold(),
+        format!("{}", total_in_db).bright_cyan().bold(),
+        format!("{}", filtering_stats.total_processed)
+            .bright_yellow()
+            .bold()
+    ));
 
     // Overall pipeline results
     let overall_pass_rate = if filtering_stats.total_processed > 0 {
@@ -593,140 +608,154 @@ fn log_filtering_stats(filtering_stats: &FilteringStats, total_in_db: usize) {
     } else {
         0.0
     };
-    summary.push_str(
-        &format!(
-            "{} processed={}, final={} ({}%)\n",
-            "� Pipeline:".bright_white().bold(),
-            format!("{}", filtering_stats.total_processed).bright_yellow().bold(),
-            format!("{}", filtering_stats.final_passed).bright_magenta().bold(),
-            format!("{:.1}", overall_pass_rate).bright_magenta().bold()
-        )
-    );
+    summary.push_str(&format!(
+        "{} processed={}, final={} ({}%)\n",
+        "� Pipeline:".bright_white().bold(),
+        format!("{}", filtering_stats.total_processed)
+            .bright_yellow()
+            .bold(),
+        format!("{}", filtering_stats.final_passed)
+            .bright_magenta()
+            .bold(),
+        format!("{:.1}", overall_pass_rate).bright_magenta().bold()
+    ));
 
     // Detailed stage breakdown
     summary.push_str(&format!("{}\n", "📈 Stage Details:".bright_white().bold()));
-    summary.push_str(
-        &format!(
-            "  • Decimals: {} → {} (lost {})\n",
-            format!("{}", filtering_stats.total_processed).bright_yellow().bold(),
-            format!("{}", filtering_stats.decimals_check_passed).bright_cyan().bold(),
-            format!(
-                "{}",
-                filtering_stats.total_processed.saturating_sub(
-                    filtering_stats.decimals_check_passed
-                )
-            )
-                .bright_red()
-                .bold()
+    summary.push_str(&format!(
+        "  • Decimals: {} → {} (lost {})\n",
+        format!("{}", filtering_stats.total_processed)
+            .bright_yellow()
+            .bold(),
+        format!("{}", filtering_stats.decimals_check_passed)
+            .bright_cyan()
+            .bold(),
+        format!(
+            "{}",
+            filtering_stats
+                .total_processed
+                .saturating_sub(filtering_stats.decimals_check_passed)
         )
-    );
-    summary.push_str(
-        &format!(
-            "  • Age: {} → {} (lost {})\n",
-            format!("{}", filtering_stats.decimals_check_passed).bright_cyan().bold(),
-            format!("{}", filtering_stats.age_check_passed).bright_blue().bold(),
-            format!(
-                "{}",
-                filtering_stats.decimals_check_passed.saturating_sub(
-                    filtering_stats.age_check_passed
-                )
-            )
-                .bright_red()
-                .bold()
+        .bright_red()
+        .bold()
+    ));
+    summary.push_str(&format!(
+        "  • Age: {} → {} (lost {})\n",
+        format!("{}", filtering_stats.decimals_check_passed)
+            .bright_cyan()
+            .bold(),
+        format!("{}", filtering_stats.age_check_passed)
+            .bright_blue()
+            .bold(),
+        format!(
+            "{}",
+            filtering_stats
+                .decimals_check_passed
+                .saturating_sub(filtering_stats.age_check_passed)
         )
-    );
-    summary.push_str(
-        &format!(
-            "  • Security: {} → {} (lost {})\n",
-            format!("{}", filtering_stats.age_check_passed).bright_blue().bold(),
-            format!("{}", filtering_stats.security_check_passed).bright_blue().bold(),
-            format!(
-                "{}",
-                filtering_stats.age_check_passed.saturating_sub(
-                    filtering_stats.security_check_passed
-                )
-            )
-                .bright_red()
-                .bold()
+        .bright_red()
+        .bold()
+    ));
+    summary.push_str(&format!(
+        "  • Security: {} → {} (lost {})\n",
+        format!("{}", filtering_stats.age_check_passed)
+            .bright_blue()
+            .bold(),
+        format!("{}", filtering_stats.security_check_passed)
+            .bright_blue()
+            .bold(),
+        format!(
+            "{}",
+            filtering_stats
+                .age_check_passed
+                .saturating_sub(filtering_stats.security_check_passed)
         )
-    );
-    summary.push_str(
-        &format!(
-            "  • Basic Info: {} → {} (lost {})\n",
-            format!("{}", filtering_stats.security_check_passed).bright_blue().bold(),
-            format!("{}", filtering_stats.basic_info_check_passed).bright_green().bold(),
-            format!(
-                "{}",
-                filtering_stats.security_check_passed.saturating_sub(
-                    filtering_stats.basic_info_check_passed
-                )
-            )
-                .bright_red()
-                .bold()
+        .bright_red()
+        .bold()
+    ));
+    summary.push_str(&format!(
+        "  • Basic Info: {} → {} (lost {})\n",
+        format!("{}", filtering_stats.security_check_passed)
+            .bright_blue()
+            .bold(),
+        format!("{}", filtering_stats.basic_info_check_passed)
+            .bright_green()
+            .bold(),
+        format!(
+            "{}",
+            filtering_stats
+                .security_check_passed
+                .saturating_sub(filtering_stats.basic_info_check_passed)
         )
-    );
-    summary.push_str(
-        &format!(
-            "  • Transactions: {} → {} (lost {})\n",
-            format!("{}", filtering_stats.basic_info_check_passed).bright_green().bold(),
-            format!("{}", filtering_stats.transaction_check_passed).bright_yellow().bold(),
-            format!(
-                "{}",
-                filtering_stats.basic_info_check_passed.saturating_sub(
-                    filtering_stats.transaction_check_passed
-                )
-            )
-                .bright_red()
-                .bold()
+        .bright_red()
+        .bold()
+    ));
+    summary.push_str(&format!(
+        "  • Transactions: {} → {} (lost {})\n",
+        format!("{}", filtering_stats.basic_info_check_passed)
+            .bright_green()
+            .bold(),
+        format!("{}", filtering_stats.transaction_check_passed)
+            .bright_yellow()
+            .bold(),
+        format!(
+            "{}",
+            filtering_stats
+                .basic_info_check_passed
+                .saturating_sub(filtering_stats.transaction_check_passed)
         )
-    );
-    summary.push_str(
-        &format!(
-            "  • Liquidity: {} → {} (lost {})\n",
-            format!("{}", filtering_stats.transaction_check_passed).bright_yellow().bold(),
-            format!("{}", filtering_stats.liquidity_check_passed).bright_cyan().bold(),
-            format!(
-                "{}",
-                filtering_stats.transaction_check_passed.saturating_sub(
-                    filtering_stats.liquidity_check_passed
-                )
-            )
-                .bright_red()
-                .bold()
+        .bright_red()
+        .bold()
+    ));
+    summary.push_str(&format!(
+        "  • Liquidity: {} → {} (lost {})\n",
+        format!("{}", filtering_stats.transaction_check_passed)
+            .bright_yellow()
+            .bold(),
+        format!("{}", filtering_stats.liquidity_check_passed)
+            .bright_cyan()
+            .bold(),
+        format!(
+            "{}",
+            filtering_stats
+                .transaction_check_passed
+                .saturating_sub(filtering_stats.liquidity_check_passed)
         )
-    );
-    summary.push_str(
-        &format!(
-            "  • Market Cap: {} → {} (lost {})\n",
-            format!("{}", filtering_stats.liquidity_check_passed).bright_cyan().bold(),
-            format!("{}", filtering_stats.market_cap_check_passed).bright_magenta().bold(),
-            format!(
-                "{}",
-                filtering_stats.liquidity_check_passed.saturating_sub(
-                    filtering_stats.market_cap_check_passed
-                )
-            )
-                .bright_red()
-                .bold()
+        .bright_red()
+        .bold()
+    ));
+    summary.push_str(&format!(
+        "  • Market Cap: {} → {} (lost {})\n",
+        format!("{}", filtering_stats.liquidity_check_passed)
+            .bright_cyan()
+            .bold(),
+        format!("{}", filtering_stats.market_cap_check_passed)
+            .bright_magenta()
+            .bold(),
+        format!(
+            "{}",
+            filtering_stats
+                .liquidity_check_passed
+                .saturating_sub(filtering_stats.market_cap_check_passed)
         )
-    );
+        .bright_red()
+        .bold()
+    ));
 
     // Rejection breakdown
-    let total_rejections = filtering_stats.total_processed.saturating_sub(
-        filtering_stats.final_passed
-    );
-    summary.push_str(
-        &format!(
-            "{} {} total ({:.1}% of processed)\n",
-            "❌ Rejections:".bright_white().bold(),
-            format!("{}", total_rejections).bright_red().bold(),
-            if filtering_stats.total_processed > 0 {
-                ((total_rejections as f64) / (filtering_stats.total_processed as f64)) * 100.0
-            } else {
-                0.0
-            }
-        )
-    );
+    let total_rejections = filtering_stats
+        .total_processed
+        .saturating_sub(filtering_stats.final_passed);
+    summary.push_str(&format!(
+        "{} {} total ({:.1}% of processed)\n",
+        "❌ Rejections:".bright_white().bold(),
+        format!("{}", total_rejections).bright_red().bold(),
+        if filtering_stats.total_processed > 0 {
+            ((total_rejections as f64) / (filtering_stats.total_processed as f64)) * 100.0
+        } else {
+            0.0
+        }
+    ));
 
     // Top rejection reasons
     let mut rejection_vec: Vec<_> = filtering_stats.rejection_counts.iter().collect();
