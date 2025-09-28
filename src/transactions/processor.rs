@@ -17,6 +17,22 @@ use crate::tokens::{ decimals::lamports_to_sol, get_token_decimals, get_token_fr
 use crate::transactions::{ analyzer, fetcher::TransactionFetcher, program_ids, types::*, utils::* };
 
 // =============================================================================
+// CONSTANTS
+// =============================================================================
+
+/// Known MEV/Jito tip addresses that should be excluded from swap calculations
+const KNOWN_MEV_TIP_ADDRESSES: &[&str] = &[
+    "BB5dnY55FXS1e1NXqZDwCzgdYJdMCj3B92PU6Q5Fb6DT", // Jito tip address
+    "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5", // Jito tip address
+    "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe", // Jito tip address
+    "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY", // Jito tip address
+    "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49", // Jito tip address
+    "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh", // Jito tip address
+    "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt", // Jito tip address
+    "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL", // Jito tip address
+];
+
+// =============================================================================
 // TRANSACTION PROCESSOR
 // =============================================================================
 
@@ -40,6 +56,253 @@ impl TransactionProcessor {
     /// Get wallet pubkey
     pub fn get_wallet_pubkey(&self) -> Pubkey {
         self.wallet_pubkey
+    }
+
+    /// Check if an address is a known MEV/Jito tip address
+    fn is_mev_tip_address(address: &str) -> bool {
+        KNOWN_MEV_TIP_ADDRESSES.contains(&address)
+    }
+
+    /// Calculate total tip amount from system transfers to MEV addresses
+    fn calculate_tip_amount(
+        &self,
+        transaction: &Transaction,
+        tx_data: &crate::rpc::TransactionDetails
+    ) -> f64 {
+        let wallet = self.wallet_pubkey.to_string();
+        let mut total_tips = 0.0;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "TIP_DEBUG",
+                &format!("{}: Starting tip detection for wallet {}", &transaction.signature, wallet)
+            );
+        }
+
+        let message = &tx_data.transaction.message;
+        let account_keys = account_keys_from_message(message);
+
+        // Check outer instructions for system transfers to MEV addresses
+        if let Some(instructions) = message.get("instructions").and_then(|v| v.as_array()) {
+            for (idx, instruction) in instructions.iter().enumerate() {
+                // Handle both programId (string) and programIdIndex (number) formats like extract_instruction_info does
+                let program_id = instruction
+                    .get("programId")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .or_else(|| {
+                        instruction
+                            .get("programIdIndex")
+                            .and_then(|v| v.as_u64())
+                            .and_then(|idx| account_keys.get(idx as usize).cloned())
+                    })
+                    .unwrap_or_else(|| "unknown".to_string());
+
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "TIP_DEBUG",
+                        &format!("Instruction {}: program_id={}", idx, program_id)
+                    );
+                }
+
+                // Check for system program transfers
+                if program_id == "11111111111111111111111111111111" {
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "TIP_DEBUG",
+                            &format!("System instruction {}: {:?}", idx, instruction)
+                        );
+
+                        // Decode accounts and check for MEV transfers
+                        if
+                            let Some(accounts_array) = instruction
+                                .get("accounts")
+                                .and_then(|v| v.as_array())
+                        {
+                            let mut source_account = None;
+                            let mut dest_account = None;
+
+                            for (acc_idx, acc_val) in accounts_array.iter().enumerate() {
+                                if let Some(account_index) = acc_val.as_u64() {
+                                    let account_key = account_keys.get(account_index as usize);
+                                    let account_key_str = account_key
+                                        .map(|s| s.as_str())
+                                        .unwrap_or("unknown");
+                                    let is_mev = Self::is_mev_tip_address(account_key_str);
+
+                                    if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "TIP_DEBUG",
+                                            &format!(
+                                                "  Account {}: index={} key={} is_mev={}",
+                                                acc_idx,
+                                                account_index,
+                                                account_key_str,
+                                                is_mev
+                                            )
+                                        );
+                                    }
+
+                                    if acc_idx == 0 {
+                                        source_account = account_key.cloned();
+                                    } else if acc_idx == 1 {
+                                        dest_account = account_key.cloned();
+                                    }
+                                }
+                            }
+
+                            // Check if this is a transfer from wallet to MEV address
+                            if let (Some(source), Some(dest)) = (source_account, dest_account) {
+                                if source == wallet && Self::is_mev_tip_address(&dest) {
+                                    // This is likely a system transfer (tip), try to decode the amount from instruction data
+                                    if
+                                        let Some(data_str) = instruction
+                                            .get("data")
+                                            .and_then(|v| v.as_str())
+                                    {
+                                        if let Ok(decoded) = bs58::decode(data_str).into_vec() {
+                                            if self.debug_enabled {
+                                                log(
+                                                    LogTag::Transactions,
+                                                    "TIP_DEBUG",
+                                                    &format!(
+                                                        "System instruction data: {:?} (len={})",
+                                                        decoded,
+                                                        decoded.len()
+                                                    )
+                                                );
+                                            }
+
+                                            // System transfer instruction format: [2, 0, 0, 0] followed by 8-byte lamports amount (little endian)
+                                            if decoded.len() >= 12 && decoded[0] == 2 {
+                                                let lamports_bytes = &decoded[4..12];
+                                                let lamports = u64::from_le_bytes(
+                                                    lamports_bytes.try_into().unwrap_or([0; 8])
+                                                );
+                                                let tip_amount = lamports_to_sol(lamports);
+
+                                                total_tips += tip_amount;
+
+                                                if self.debug_enabled {
+                                                    log(
+                                                        LogTag::Transactions,
+                                                        "TIP_DETECTED",
+                                                        &format!(
+                                                            "{}: MEV tip {} SOL ({} lamports) to {} (system instruction {})",
+                                                            &transaction.signature,
+                                                            tip_amount,
+                                                            lamports,
+                                                            &dest,
+                                                            idx
+                                                        )
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(parsed) = instruction.get("parsed").and_then(|v| v.as_object()) {
+                        if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
+                            let instruction_type = parsed
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+
+                            if self.debug_enabled {
+                                log(
+                                    LogTag::Transactions,
+                                    "TIP_DEBUG",
+                                    &format!("System instruction type: {}", instruction_type)
+                                );
+                            }
+
+                            if instruction_type == "transfer" {
+                                let source = info
+                                    .get("source")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                let destination = info
+                                    .get("destination")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                let lamports = info
+                                    .get("lamports")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0);
+                                let source_is_wallet = source == wallet;
+                                let destination_is_mev = Self::is_mev_tip_address(destination);
+
+                                if self.debug_enabled {
+                                    log(
+                                        LogTag::Transactions,
+                                        "TIP_DEBUG",
+                                        &format!(
+                                            "Transfer: {} lamports from {} (is_wallet={}) to {} (is_mev={})",
+                                            lamports,
+                                            source,
+                                            source_is_wallet,
+                                            destination,
+                                            destination_is_mev
+                                        )
+                                    );
+                                }
+
+                                if source_is_wallet && destination_is_mev {
+                                    let tip_amount = lamports_to_sol(lamports);
+                                    total_tips += tip_amount;
+
+                                    if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "TIP_DETECTED",
+                                            &format!(
+                                                "{}: MEV tip {} SOL ({} lamports) to {}",
+                                                &transaction.signature,
+                                                tip_amount,
+                                                lamports,
+                                                destination
+                                            )
+                                        );
+                                    }
+                                } else if source_is_wallet {
+                                    // Log all transfers from wallet for investigation
+                                    if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "TIP_DEBUG",
+                                            &format!(
+                                                "Wallet transfer: {} lamports to {} (not in MEV list)",
+                                                lamports,
+                                                destination
+                                            )
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "TIP_DEBUG",
+                &format!("{}: Total tips detected: {} SOL", &transaction.signature, total_tips)
+            );
+        }
+
+        total_tips
     }
 }
 
@@ -84,7 +347,7 @@ impl TransactionProcessor {
 
         // Step 7: Calculate swap P&L when classification indicates a swap
         if self.is_swap_transaction(&transaction) {
-            self.calculate_swap_pnl(&mut transaction).await?;
+            self.calculate_swap_pnl(&mut transaction, &tx_data).await?;
         }
 
         let processing_duration = start_time.elapsed();
@@ -416,13 +679,51 @@ impl TransactionProcessor {
         if let Some((sol_change, lamport_delta)) = self.extract_sol_balance_change(tx_data).await? {
             transaction.sol_balance_change = sol_change.change;
             transaction.wallet_lamport_change = lamport_delta;
-            transaction.sol_balance_changes = vec![sol_change];
+            transaction.sol_balance_changes = vec![sol_change.clone()];
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "SOL_BALANCE_DEBUG",
+                    &format!(
+                        "{}: SOL pre={:.9} post={:.9} change={:.9} lamports_delta={}",
+                        &transaction.signature,
+                        sol_change.pre_balance,
+                        sol_change.post_balance,
+                        sol_change.change,
+                        lamport_delta
+                    )
+                );
+            }
         } else {
             transaction.sol_balance_changes.clear();
         }
 
         let token_changes = self.extract_token_balance_changes(tx_data).await?;
         transaction.token_balance_changes = token_changes;
+
+        // Debug log token balance changes
+        if self.debug_enabled && !transaction.token_balance_changes.is_empty() {
+            for token_change in &transaction.token_balance_changes {
+                log(
+                    LogTag::Transactions,
+                    "TOKEN_BALANCE_DEBUG",
+                    &format!(
+                        "{}: token={} pre={} post={} change={:.9} decimals={}",
+                        &transaction.signature,
+                        token_change.mint,
+                        token_change.pre_balance
+                            .map(|v| format!("{:.9}", v))
+                            .unwrap_or("None".to_string()),
+                        token_change.post_balance
+                            .map(|v| format!("{:.9}", v))
+                            .unwrap_or("None".to_string()),
+                        token_change.change,
+                        token_change.decimals
+                    )
+                );
+            }
+        }
 
         transaction.token_transfers = self.derive_token_transfers(
             &transaction.token_balance_changes
@@ -1212,9 +1513,13 @@ impl TransactionProcessor {
     }
 
     /// Calculate P&L for swap transactions
-    async fn calculate_swap_pnl(&self, transaction: &mut Transaction) -> Result<(), String> {
+    async fn calculate_swap_pnl(
+        &self,
+        transaction: &mut Transaction,
+        tx_data: &crate::rpc::TransactionDetails
+    ) -> Result<(), String> {
         // Extract swap information first
-        if let Some(swap_info) = self.extract_swap_info(transaction).await? {
+        if let Some(swap_info) = self.extract_swap_info(transaction, tx_data).await? {
             if self.debug_enabled {
                 log(
                     LogTag::Transactions,
@@ -1258,7 +1563,8 @@ impl TransactionProcessor {
     /// Extract swap information from transaction
     async fn extract_swap_info(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
+        tx_data: &crate::rpc::TransactionDetails
     ) -> Result<Option<TokenSwapInfo>, String> {
         let epsilon = 1e-9;
 
@@ -1370,15 +1676,85 @@ impl TransactionProcessor {
         }
 
         let fee_sol = transaction.fee_sol;
+        let mut tip_amount = self.calculate_tip_amount(transaction, tx_data);
+
+        // TEMPORARY WORKAROUND: If no tips detected but we have a common Jito tip amount difference
+        // This handles cases where the tip address isn't in our known list
+        if tip_amount == 0.0 {
+            let total_sol_spent = (-sol_change).max(0.0);
+            let sol_spent_for_tokens_raw = (total_sol_spent - fee_sol).max(0.0);
+            let sol_spent_lamports = (sol_spent_for_tokens_raw * 1_000_000_000.0) as u64;
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "TIP_HEURISTIC",
+                    &format!(
+                        "Heuristic check: total_sol_spent={:.9} fee_sol={:.9} raw={:.9} lamports={}",
+                        total_sol_spent,
+                        fee_sol,
+                        sol_spent_for_tokens_raw,
+                        sol_spent_lamports
+                    )
+                );
+            }
+
+            // Common Jito tip amounts to check for and subtract
+            let common_tip_amounts = [50_000, 100_000, 150_000]; // lamports
+
+            for &tip_lamports in &common_tip_amounts {
+                let adjusted_lamports = sol_spent_lamports.saturating_sub(tip_lamports);
+                let adjusted_sol = (adjusted_lamports as f64) / 1_000_000_000.0;
+
+                // Check if removing this tip amount results in a round number that's more likely to be intentional
+                let remainder = adjusted_lamports % 1_000_000; // Check if close to increments of 0.001 SOL
+                if remainder < 10_000 {
+                    // Within 0.00001 SOL tolerance
+                    tip_amount = (tip_lamports as f64) / 1_000_000_000.0;
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "TIP_HEURISTIC",
+                            &format!(
+                                "{}: Detected likely Jito tip via heuristic: {} SOL ({} lamports)",
+                                &transaction.signature,
+                                tip_amount,
+                                tip_lamports
+                            )
+                        );
+                    }
+                    break;
+                }
+            }
+        }
 
         let total_sol_spent = (-sol_change).max(0.0);
-        let sol_spent_for_tokens = (total_sol_spent - fee_sol).max(0.0);
+        let sol_spent_for_tokens = (total_sol_spent - fee_sol - tip_amount).max(0.0);
+
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "SWAP_CALC_DEBUG",
+                &format!(
+                    "Swap calculation: total_spent={:.9} fee={:.9} tip={:.9} for_tokens={:.9}",
+                    total_sol_spent,
+                    fee_sol,
+                    tip_amount,
+                    sol_spent_for_tokens
+                )
+            );
+        }
 
         let router = Self::infer_swap_router(transaction);
+
+        if self.debug_enabled {
+            log(LogTag::Transactions, "SWAP_CALC_DEBUG", &format!("Router detected: {}", router));
+        }
+
         let mut sol_spent_effective = if sol_spent_for_tokens > epsilon {
             sol_spent_for_tokens
         } else {
-            total_sol_spent.max(0.0)
+            (total_sol_spent - tip_amount).max(0.0)
         };
 
         let net_sol_received = sol_change.max(0.0);
@@ -1387,7 +1763,53 @@ impl TransactionProcessor {
         // Router-specific precise extraction overrides
         if matches!(router.as_str(), "jupiter" | "pumpfun") {
             if is_buy {
-                if let Some(exact) = self.detect_wallet_wsol_transfer_amount(transaction) {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "TIP_ADJUSTMENT",
+                        "Checking WSOL transfer amount detection..."
+                    );
+                }
+                if let Some(mut exact) = self.detect_wallet_wsol_transfer_amount(transaction) {
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "TIP_ADJUSTMENT",
+                            &format!(
+                                "{}: WSOL exact amount detected: {:.9} SOL ({} lamports)",
+                                &transaction.signature,
+                                exact,
+                                (exact * 1_000_000_000.0) as u64
+                            )
+                        );
+                    }
+
+                    // Post-process to remove likely Jito tips that weren't caught by the main detection
+                    let exact_lamports = (exact * 1_000_000_000.0) as u64;
+
+                    // Check if removing common tip amounts results in a rounder number
+                    let common_tips = [50_000, 100_000, 150_000];
+                    for &tip in &common_tips {
+                        let adjusted = exact_lamports.saturating_sub(tip);
+                        // Check if the adjusted amount is a round increment of 0.001 SOL (1,000,000 lamports)
+                        if adjusted > 0 && adjusted % 1_000_000 == 0 {
+                            exact = (adjusted as f64) / 1_000_000_000.0;
+                            if self.debug_enabled {
+                                log(
+                                    LogTag::Transactions,
+                                    "TIP_ADJUSTMENT",
+                                    &format!(
+                                        "{}: Adjusted WSOL amount from {:.9} to {:.9} SOL (removed {} lamport tip)",
+                                        &transaction.signature,
+                                        (exact_lamports as f64) / 1_000_000_000.0,
+                                        exact,
+                                        tip
+                                    )
+                                );
+                            }
+                            break;
+                        }
+                    }
                     sol_spent_effective = exact;
                 }
             } else if is_sell {
@@ -1425,6 +1847,36 @@ impl TransactionProcessor {
                 let add_back = ata.token_rent_spent - ata.token_rent_recovered;
                 if add_back.abs() > epsilon {
                     sol_received_from_swap = (sol_received_from_swap + add_back).max(0.0);
+                }
+            }
+        }
+
+        // Final adjustment for likely Jito tips that weren't detected by other methods
+        if is_buy {
+            let input_lamports = (sol_spent_effective * 1_000_000_000.0) as u64;
+
+            // Check if removing common tip amounts results in a round number
+            let common_tips = [50_000, 100_000, 150_000];
+            for &tip in &common_tips {
+                let adjusted = input_lamports.saturating_sub(tip);
+                // Check if adjusted amount is a round increment (multiple of 0.001 SOL = 1M lamports)
+                if adjusted > 0 && adjusted % 1_000_000 == 0 {
+                    let adjusted_sol = (adjusted as f64) / 1_000_000_000.0;
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "FINAL_TIP_ADJUSTMENT",
+                            &format!(
+                                "{}: Final tip adjustment: {:.9} -> {:.9} SOL (removed {} lamport tip)",
+                                &transaction.signature,
+                                sol_spent_effective,
+                                adjusted_sol,
+                                tip
+                            )
+                        );
+                    }
+                    sol_spent_effective = adjusted_sol;
+                    break;
                 }
             }
         }
@@ -1818,7 +2270,15 @@ impl TransactionProcessor {
                     .and_then(|v| v.as_str())
                     .map(|m| m == WSOL_MINT)
                     .unwrap_or(false);
-                if mint_is_wsol && authority_is_wallet {
+
+                // Check if this is a transfer to a MEV/tip address - exclude these from swap calculations
+                let destination_is_mev = info
+                    .get("destination")
+                    .and_then(|v| v.as_str())
+                    .map(|addr| Self::is_mev_tip_address(addr))
+                    .unwrap_or(false);
+
+                if mint_is_wsol && authority_is_wallet && !destination_is_mev {
                     if let Some(ta) = info.get("tokenAmount").and_then(|v| v.as_object()) {
                         if let Some(ui) = ta.get("uiAmount").and_then(|v| v.as_f64()) {
                             if ui > 0.0 {
@@ -2619,7 +3079,7 @@ impl TransactionProcessor {
         let account_keys = account_keys_from_message(message);
 
         if let Some(array) = message.get("instructions").and_then(|v| v.as_array()) {
-            for inst in array {
+            for (idx, inst) in array.iter().enumerate() {
                 let program_id = inst
                     .get("programId")
                     .and_then(|v| v.as_str())
@@ -2663,26 +3123,42 @@ impl TransactionProcessor {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
-                instructions.push(InstructionInfo {
-                    program_id,
-                    instruction_type,
-                    accounts,
-                    data,
-                });
+                let instruction_info = InstructionInfo {
+                    program_id: program_id.clone(),
+                    instruction_type: instruction_type.clone(),
+                    accounts: accounts.clone(),
+                    data: data.clone(),
+                };
+
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "INSTRUCTION_DEBUG",
+                        &format!(
+                            "Instruction {}: program_id={} type={} accounts_count={}",
+                            idx,
+                            program_id,
+                            instruction_type,
+                            accounts.len()
+                        )
+                    );
+                }
+
+                instructions.push(instruction_info);
             }
         }
 
         // Handle compiled instructions for v0 transactions
         if instructions.is_empty() {
             if let Some(compiled) = message.get("compiledInstructions").and_then(|v| v.as_array()) {
-                for inst in compiled {
+                for (idx, inst) in compiled.iter().enumerate() {
                     let program_id = inst
                         .get("programIdIndex")
                         .and_then(|v| v.as_u64())
                         .and_then(|idx| account_keys.get(idx as usize).cloned())
                         .unwrap_or_else(|| "unknown".to_string());
 
-                    let accounts = inst
+                    let accounts: Vec<String> = inst
                         .get("accountIndexes")
                         .and_then(|v| v.as_array())
                         .map(|accs| {
@@ -2697,6 +3173,19 @@ impl TransactionProcessor {
                         .get("data")
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string());
+
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "INSTRUCTION_DEBUG",
+                            &format!(
+                                "CompiledInstruction {}: program_id={} type=compiled accounts_count={}",
+                                idx,
+                                program_id,
+                                accounts.len()
+                            )
+                        );
+                    }
 
                     instructions.push(InstructionInfo {
                         program_id,

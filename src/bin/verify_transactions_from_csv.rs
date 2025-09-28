@@ -45,6 +45,14 @@ struct Args {
     /// Print verbose details for mismatched transactions
     #[arg(long)]
     verbose: bool,
+
+    /// Enable debug logging for transactions processing
+    #[arg(long)]
+    debug_transactions: bool,
+
+    /// Check only a specific transaction signature
+    #[arg(long, value_name = "SIGNATURE")]
+    signature: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -120,17 +128,20 @@ struct ComparisonOutcome {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    set_cmd_args(vec!["verify_transactions_from_csv".to_string()]);
     let args = Args::parse();
+
+    // Set command line arguments for the global system including debug flags
+    let mut cmd_args = vec!["verify_transactions_from_csv".to_string()];
+    if args.debug_transactions {
+        cmd_args.push("--debug-transactions".to_string());
+    }
+    set_cmd_args(cmd_args);
 
     // Initialize events system to enable structured recording from transaction processing
     if let Err(e) = events::init().await {
         eprintln!(
             "{}",
-            format!(
-                "[WARN] Events system not initialized (continuing without persistent events): {}",
-                e
-            )
+            format!("[WARN] Events system not initialized (continuing without persistent events): {}", e)
         );
     } else {
         // Spawn background maintenance (non-blocking)
@@ -180,6 +191,13 @@ async fn main() -> Result<()> {
                 break;
             }
 
+            // Skip if signature filter is specified and doesn't match
+            if let Some(ref target_sig) = args.signature {
+                if row.signature != *target_sig {
+                    continue;
+                }
+            }
+
             stats.processed += 1;
 
             match processor.process_transaction(&row.signature).await {
@@ -190,11 +208,7 @@ async fn main() -> Result<()> {
                         if !args.mismatches_only {
                             println!(
                                 "{}",
-                                format!(
-                                    "{} {}",
-                                    "MATCH".green().bold(),
-                                    &row.signature
-                                )
+                                format!("{} {}", "MATCH".green().bold(), &row.signature)
                             );
                         }
                     } else {
@@ -220,12 +234,7 @@ async fn main() -> Result<()> {
                     stats.processing_failures += 1;
                     println!(
                         "{}",
-                        format!(
-                            "{} {}: {}",
-                            "PROCESSING_ERROR".red().bold(),
-                            &row.signature,
-                            err
-                        )
+                        format!("{} {}: {}", "PROCESSING_ERROR".red().bold(), &row.signature, err)
                     );
                 }
             }
@@ -484,10 +493,7 @@ fn decimals_or_default(token: &str, decimals: Option<u32>) -> Result<u32, String
     }
 
     decimals.ok_or_else(|| {
-        format!(
-            "Missing decimals for token {} in CSV (required for verification)",
-            token
-        )
+        format!("Missing decimals for token {} in CSV (required for verification)", token)
     })
 }
 
