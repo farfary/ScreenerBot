@@ -758,13 +758,13 @@ async fn validate_transaction(
     // Process transaction if not cached or if we want fresh analysis
     let transaction = if let Some(cached) = cached_transaction {
         if args.verbose {
-            println!("  📋 Using cached transaction: {}", format_signature_short(signature));
+            println!("  📋 Using cached transaction: {}", signature);
         }
         cached
     } else {
         // Process fresh
         if args.verbose {
-            println!("  ⚙️  Processing fresh: {}", format_signature_short(signature));
+            println!("  ⚙️  Processing fresh: {}", signature);
         }
 
         match processor.process_transaction(signature).await {
@@ -790,7 +790,7 @@ async fn validate_transaction(
             Err(e) => {
                 stats.processing_errors += 1;
                 return ValidationResult {
-                    signature: format_signature_short(signature).to_string(),
+                    signature: signature.to_string(),
                     status: "ProcessError".to_string(),
                     tx_type: "Unknown".to_string(),
                     direction: "Unknown".to_string(),
@@ -838,7 +838,7 @@ async fn validate_transaction(
     update_transaction_stats(&transaction, stats);
 
     ValidationResult {
-        signature: format_signature_short(&transaction.signature).to_string(),
+        signature: &transaction.signature.to_string(),
         status: format!("{:?}", transaction.status),
         tx_type: format_transaction_type(&transaction.transaction_type),
         direction: format!("{:?}", transaction.direction),

@@ -12,7 +12,15 @@ use std::time::{ Duration, Instant };
 
 use crate::global::is_debug_transactions_enabled;
 use crate::logger::{ log, LogTag };
-use crate::tokens::decimals::lamports_to_sol;
+use crate::pools::types::{
+    ORCA_WHIRLPOOL_PROGRAM_ID,
+    PUMP_FUN_AMM_PROGRAM_ID,
+    PUMP_FUN_LEGACY_PROGRAM_ID,
+    RAYDIUM_CLMM_PROGRAM_ID,
+    RAYDIUM_CPMM_PROGRAM_ID,
+    RAYDIUM_LEGACY_AMM_PROGRAM_ID,
+};
+use crate::tokens::{ decimals::lamports_to_sol, get_token_decimals, get_token_from_db };
 use crate::transactions::{ analyzer, fetcher::TransactionFetcher, types::*, utils::* };
 
 // =============================================================================
@@ -57,8 +65,8 @@ impl TransactionProcessor {
                 "PROCESS",
                 &format!(
                     "Processing transaction: {} for wallet: {}",
-                    format_signature_short(signature),
-                    format_pubkey_short(&self.wallet_pubkey.to_string())
+                    signature,
+                    &self.wallet_pubkey.to_string()
                 )
             );
         }
@@ -95,7 +103,7 @@ impl TransactionProcessor {
                 "PROCESS_COMPLETE",
                 &format!(
                     "✅ Processed {}: type={:?}, direction={:?}, duration={}ms",
-                    format_signature_short(signature),
+                    signature,
                     transaction.transaction_type,
                     transaction.direction,
                     processing_duration.as_millis()
@@ -113,7 +121,7 @@ impl TransactionProcessor {
                             "CACHE_STORE",
                             &format!(
                                 "Cached {} (status={:?}, analysis_v={}, success={})",
-                                format_signature_short(signature),
+                                signature,
                                 transaction.status,
                                 ANALYSIS_CACHE_VERSION,
                                 transaction.success
@@ -125,11 +133,7 @@ impl TransactionProcessor {
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!(
-                            "Failed to persist transaction {}: {}",
-                            format_signature_short(signature),
-                            e
-                        )
+                        &format!("Failed to persist transaction {}: {}", signature, e)
                     );
                 }
             }
@@ -364,7 +368,7 @@ impl TransactionProcessor {
                 "DATA_EXTRACT",
                 &format!(
                     "Extracted data for {}: success={}, fee={}SOL, instructions={}, accounts={}",
-                    format_signature_short(signature),
+                    signature,
                     success,
                     fee_lamports.map_or(0.0, |f| (f as f64) / 1_000_000_000.0),
                     instructions_count,
@@ -400,7 +404,7 @@ impl TransactionProcessor {
                 "ANALYZE",
                 &format!(
                     "Analyzed {}: type={:?}, direction={:?}",
-                    format_signature_short(&transaction.signature),
+                    &transaction.signature,
                     transaction.transaction_type,
                     transaction.direction
                 )
@@ -441,7 +445,7 @@ impl TransactionProcessor {
                 "BALANCE_EXTRACT",
                 &format!(
                     "Extracted balances for {}: SOL change = {:.9}, tokens = {}",
-                    format_signature_short(&transaction.signature),
+                    &transaction.signature,
                     transaction.sol_balance_change,
                     transaction.token_balance_changes.len()
                 )
@@ -691,7 +695,7 @@ impl TransactionProcessor {
                 &format!(
                     "Detected {} ATA operations in {}",
                     transaction.ata_operations.len(),
-                    format_signature_short(&transaction.signature)
+                    &transaction.signature
                 )
             );
         }
@@ -828,15 +832,27 @@ impl TransactionProcessor {
     async fn calculate_swap_pnl(&self, transaction: &mut Transaction) -> Result<(), String> {
         // Extract swap information first
         if let Some(swap_info) = self.extract_swap_info(transaction).await? {
-            transaction.token_swap_info = Some(swap_info.clone());
-            transaction.token_info = Some(swap_info);
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "SWAP_INFO",
+                    &format!(
+                        "Derived swap info for {}: type={}, token={}, sol_change={:.6}",
+                        &transaction.signature,
+                        swap_info.swap_type,
+                        &swap_info.mint,
+                        transaction.sol_balance_change
+                    )
+                );
+            }
 
-            // Calculate P&L based on swap information
-            if
-                let Some(pnl_info) = self.calculate_pnl_from_swap(
-                    &transaction.token_swap_info
-                ).await?
-            {
+            transaction.token_symbol = Some(swap_info.symbol.clone());
+            transaction.token_decimals = Some(swap_info.decimals);
+            transaction.token_swap_info = Some(swap_info.clone());
+            transaction.token_info = Some(swap_info.clone());
+
+            if let Some(pnl_info) = self.calculate_pnl_from_swap(transaction, &swap_info).await? {
+                transaction.calculated_token_price_sol = Some(pnl_info.calculated_price_sol);
                 transaction.swap_pnl_info = Some(pnl_info);
 
                 if self.debug_enabled {
@@ -845,7 +861,7 @@ impl TransactionProcessor {
                         "PNL_CALC",
                         &format!(
                             "Calculated P&L for {}: net_sol={:.6}",
-                            format_signature_short(&transaction.signature),
+                            &transaction.signature,
                             transaction.swap_pnl_info.as_ref().unwrap().net_sol_change
                         )
                     );
@@ -861,19 +877,310 @@ impl TransactionProcessor {
         &self,
         transaction: &Transaction
     ) -> Result<Option<TokenSwapInfo>, String> {
-        // This would analyze transaction instructions and logs to extract swap details
-        // For now, return None as placeholder - will be implemented with full swap analysis
-        Ok(None)
+        let epsilon = 1e-9;
+
+        if transaction.token_balance_changes.is_empty() {
+            return Ok(None);
+        }
+
+        let Some(primary_change) = transaction.token_balance_changes
+            .iter()
+            .filter(|change| !is_wsol_mint(&change.mint))
+            .max_by(|a, b| {
+                a.change.abs().partial_cmp(&b.change.abs()).unwrap_or(std::cmp::Ordering::Equal)
+            }) else {
+            return Ok(None);
+        };
+
+        if primary_change.change.abs() <= epsilon {
+            return Ok(None);
+        }
+
+        let sol_change = transaction.sol_balance_change;
+
+        let is_buy = sol_change < -epsilon && primary_change.change > epsilon;
+        let is_sell = sol_change > epsilon && primary_change.change < -epsilon;
+
+        if !is_buy && !is_sell {
+            return Ok(None);
+        }
+
+        let mut decimals = primary_change.decimals;
+        let token_mint = primary_change.mint.clone();
+
+        if decimals == 0 {
+            if let Some(db_decimals) = get_token_decimals(&token_mint).await {
+                decimals = db_decimals;
+            } else {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "SWAP_SKIP",
+                        &format!("Missing decimals for {}, cannot derive swap info", &token_mint)
+                    );
+                }
+                return Ok(None);
+            }
+        }
+
+        let mut symbol = format!("{}", &token_mint);
+        let mut current_price_sol = None;
+        let mut is_verified = false;
+
+        if let Some(token) = get_token_from_db(&token_mint).await {
+            if let Some(db_decimals) = token.decimals {
+                decimals = db_decimals;
+            }
+
+            if !token.symbol.is_empty() {
+                symbol = token.symbol.clone();
+            }
+
+            current_price_sol = token.price_pool_sol.or(token.price_dexscreener_sol);
+            is_verified = token.is_verified;
+        }
+
+        if decimals == 0 {
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "SWAP_SKIP",
+                    &format!(
+                        "Unable to determine decimals for {}, swap analysis skipped",
+                        &token_mint
+                    )
+                );
+            }
+            return Ok(None);
+        }
+
+        let token_amount_ui = primary_change.change.abs();
+        if token_amount_ui <= epsilon {
+            return Ok(None);
+        }
+
+        let fee_sol = transaction.fee_sol;
+
+        let total_sol_spent = (-sol_change).max(0.0);
+        let sol_spent_for_tokens = (total_sol_spent - fee_sol).max(0.0);
+        let mut sol_spent_effective = if sol_spent_for_tokens > epsilon {
+            sol_spent_for_tokens
+        } else {
+            total_sol_spent.max(0.0)
+        };
+
+        let net_sol_received = sol_change.max(0.0);
+        let mut sol_received_from_swap = (net_sol_received + fee_sol).max(0.0);
+
+        let net_wsol_rent = transaction.ata_analysis
+            .as_ref()
+            .map(|ata| ata.wsol_rent_spent - ata.wsol_rent_recovered)
+            .unwrap_or(0.0);
+
+        if net_wsol_rent.abs() > epsilon {
+            if is_buy {
+                sol_spent_effective = (sol_spent_effective - net_wsol_rent).max(0.0);
+            } else if is_sell {
+                sol_received_from_swap = (sol_received_from_swap + net_wsol_rent).max(0.0);
+            }
+        }
+
+        let (swap_type, input_mint, output_mint, input_ui_amount, output_ui_amount) = if is_buy {
+            (
+                "sol_to_token".to_string(),
+                WSOL_MINT.to_string(),
+                token_mint.clone(),
+                sol_spent_effective,
+                token_amount_ui,
+            )
+        } else {
+            (
+                "token_to_sol".to_string(),
+                token_mint.clone(),
+                WSOL_MINT.to_string(),
+                token_amount_ui,
+                sol_received_from_swap,
+            )
+        };
+
+        let input_decimals = if input_mint == WSOL_MINT { 9 } else { decimals };
+
+        let output_decimals = if output_mint == WSOL_MINT { 9 } else { decimals };
+
+        let input_amount = Self::ui_to_raw_amount(input_ui_amount, input_decimals);
+        let output_amount = Self::ui_to_raw_amount(output_ui_amount, output_decimals);
+
+        let router = Self::infer_swap_router(transaction);
+
+        Ok(
+            Some(TokenSwapInfo {
+                mint: token_mint,
+                symbol,
+                decimals,
+                current_price_sol,
+                is_verified,
+                router,
+                swap_type,
+                input_mint,
+                output_mint,
+                input_amount,
+                output_amount,
+                input_ui_amount,
+                output_ui_amount,
+                pool_address: None,
+                program_id: "heuristic".to_string(),
+            })
+        )
     }
 
     /// Calculate P&L from swap information
     async fn calculate_pnl_from_swap(
         &self,
-        swap_info: &Option<TokenSwapInfo>
+        transaction: &Transaction,
+        swap_info: &TokenSwapInfo
     ) -> Result<Option<SwapPnLInfo>, String> {
-        // This would calculate P&L based on swap details and current prices
-        // For now, return None as placeholder - will be implemented with price integration
-        Ok(None)
+        let swap_direction = match swap_info.swap_type.as_str() {
+            "sol_to_token" => "Buy",
+            "token_to_sol" => "Sell",
+            _ => {
+                return Ok(None);
+            }
+        };
+
+        let mut pnl_info = SwapPnLInfo {
+            token_mint: swap_info.mint.clone(),
+            token_symbol: swap_info.symbol.clone(),
+            swap_type: swap_direction.to_string(),
+            sol_amount: 0.0,
+            token_amount: 0.0,
+            calculated_price_sol: 0.0,
+            timestamp: transaction.timestamp,
+            signature: transaction.signature.clone(),
+            router: swap_info.router.clone(),
+            fee_sol: transaction.fee_sol,
+            ata_rents: 0.0,
+            effective_sol_spent: 0.0,
+            effective_sol_received: 0.0,
+            ata_created_count: 0,
+            ata_closed_count: 0,
+            slot: transaction.slot,
+            status: if transaction.success {
+                "✅ Success".to_string()
+            } else {
+                "❌ Failed".to_string()
+            },
+            sol_spent: 0.0,
+            sol_received: 0.0,
+            tokens_bought: 0.0,
+            tokens_sold: 0.0,
+            net_sol_change: transaction.sol_balance_change,
+            estimated_token_value_sol: None,
+            estimated_pnl_sol: None,
+            fees_paid_sol: transaction.fee_sol,
+        };
+
+        let price_numerator = match swap_direction {
+            "Buy" => swap_info.input_ui_amount,
+            "Sell" => swap_info.output_ui_amount,
+            _ => 0.0,
+        };
+
+        match swap_direction {
+            "Buy" => {
+                let gross_sol_spent = swap_info.input_ui_amount + transaction.fee_sol;
+                pnl_info.sol_amount = gross_sol_spent;
+                pnl_info.sol_spent = gross_sol_spent;
+                pnl_info.effective_sol_spent = swap_info.input_ui_amount;
+                pnl_info.token_amount = swap_info.output_ui_amount;
+                pnl_info.tokens_bought = swap_info.output_ui_amount;
+                pnl_info.net_sol_change = transaction.sol_balance_change;
+            }
+            "Sell" => {
+                let net_sol_received = (swap_info.output_ui_amount - transaction.fee_sol).max(0.0);
+                pnl_info.sol_amount = net_sol_received;
+                pnl_info.sol_received = net_sol_received;
+                pnl_info.effective_sol_received = net_sol_received;
+                pnl_info.token_amount = swap_info.input_ui_amount;
+                pnl_info.tokens_sold = swap_info.input_ui_amount;
+                pnl_info.net_sol_change = transaction.sol_balance_change;
+            }
+            _ => {}
+        }
+
+        if pnl_info.token_amount > f64::EPSILON {
+            pnl_info.calculated_price_sol = price_numerator / pnl_info.token_amount;
+        }
+
+        if let Some(ata) = &transaction.ata_analysis {
+            let rent_delta = ata.token_rent_spent - ata.token_rent_recovered;
+            pnl_info.ata_created_count = ata.token_ata_creations;
+            pnl_info.ata_closed_count = ata.token_ata_closures;
+            pnl_info.ata_rents = rent_delta;
+
+            if swap_direction == "Buy" {
+                pnl_info.effective_sol_spent = (
+                    pnl_info.effective_sol_spent - rent_delta.max(0.0)
+                ).max(0.0);
+            } else if swap_direction == "Sell" {
+                if rent_delta < 0.0 {
+                    pnl_info.effective_sol_received += rent_delta.abs();
+                }
+            }
+        }
+
+        Ok(Some(pnl_info))
+    }
+
+    fn ui_to_raw_amount(amount: f64, decimals: u8) -> u64 {
+        if !amount.is_finite() || amount <= 0.0 {
+            return 0;
+        }
+
+        let scale = (10_f64).powi(decimals as i32);
+        let raw = (amount * scale).round();
+
+        if !raw.is_finite() || raw <= 0.0 {
+            return 0;
+        }
+
+        raw.min(u64::MAX as f64) as u64
+    }
+
+    fn infer_swap_router(transaction: &Transaction) -> String {
+        for log_line in &transaction.log_messages {
+            let log_lower = log_line.to_lowercase();
+            if log_lower.contains("jupiter") {
+                return "jupiter".to_string();
+            }
+            if log_lower.contains("raydium") {
+                return "raydium".to_string();
+            }
+            if log_lower.contains("orca") {
+                return "orca".to_string();
+            }
+            if log_lower.contains("pumpfun") || log_lower.contains("pump.fun") {
+                return "pumpfun".to_string();
+            }
+        }
+
+        for instruction in &transaction.instructions {
+            match instruction.program_id.as_str() {
+                PUMP_FUN_AMM_PROGRAM_ID | PUMP_FUN_LEGACY_PROGRAM_ID => {
+                    return "pumpfun".to_string();
+                }
+                | RAYDIUM_CPMM_PROGRAM_ID
+                | RAYDIUM_LEGACY_AMM_PROGRAM_ID
+                | RAYDIUM_CLMM_PROGRAM_ID => {
+                    return "raydium".to_string();
+                }
+                ORCA_WHIRLPOOL_PROGRAM_ID => {
+                    return "orca".to_string();
+                }
+                _ => {}
+            }
+        }
+
+        "unknown".to_string()
     }
 }
 
@@ -899,7 +1206,7 @@ impl TransactionProcessor {
                 &format!(
                     "Analyzed {} instructions in {}",
                     transaction.instruction_info.len(),
-                    format_signature_short(&transaction.signature)
+                    &transaction.signature
                 )
             );
         }
@@ -1024,7 +1331,7 @@ impl TransactionProcessor {
         log(
             LogTag::Transactions,
             "ERROR",
-            &format!("Processing error for {}: {}", format_signature_short(signature), error)
+            &format!("Processing error for {}: {}", signature, error)
         );
 
         // Record error event for analytics
@@ -1042,17 +1349,14 @@ impl TransactionProcessor {
             log(
                 LogTag::Transactions,
                 "RECOVERY",
-                &format!(
-                    "Error is recoverable for {}, will retry later",
-                    format_signature_short(signature)
-                )
+                &format!("Error is recoverable for {}, will retry later", signature)
             );
             // Add to deferred retries (would be handled by service layer)
         } else {
             log(
                 LogTag::Transactions,
                 "PERMANENT_ERROR",
-                &format!("Error is permanent for {}, skipping", format_signature_short(signature))
+                &format!("Error is permanent for {}, skipping", signature)
             );
         }
 

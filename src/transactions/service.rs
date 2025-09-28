@@ -118,11 +118,11 @@ pub async fn start_global_transaction_service(
             "BOOTSTRAP",
             &format!(
                 "Newest observed signature: {} (oldest: {})",
-                format_signature_short(first_sig),
+                first_sig,
                 bootstrap_stats.oldest_signature
                     .as_ref()
-                    .map(|sig| format_signature_short(sig))
-                    .unwrap_or_else(|| "unknown".to_string())
+                    .map(|sig| sig)
+                    .map_or("unknown", |v| v)
             )
         );
     }
@@ -153,10 +153,7 @@ pub async fn start_global_transaction_service(
     log(
         LogTag::Transactions,
         "INFO",
-        &format!(
-            "Global transaction service started for wallet: {}",
-            format_address_full(&wallet_pubkey.to_string())
-        )
+        &format!("Global transaction service started for wallet: {}", &wallet_pubkey.to_string())
     );
 
     // Signal that transactions system is ready
@@ -244,10 +241,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                         log(
                             LogTag::Transactions,
                             "CACHE_REFRESH",
-                            &format!(
-                                "Processed {} on-demand and refreshed cache",
-                                format_signature_short(signature)
-                            )
+                            &format!("Processed {} on-demand and refreshed cache", signature)
                         );
                     }
                     return Ok(Some(tx));
@@ -265,7 +259,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                             "WARN",
                             &format!(
                                 "On-demand processing failed for {} (attempt {}): {}",
-                                format_signature_short(signature),
+                                signature,
                                 attempts + 1,
                                 e
                             )
@@ -288,7 +282,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
         log(
             LogTag::Transactions,
             "CACHE_MISS",
-            &format!("No transaction data available for {}", format_signature_short(signature))
+            &format!("No transaction data available for {}", signature)
         );
     }
 
@@ -341,7 +335,7 @@ async fn perform_initial_transaction_bootstrap(
         "BOOTSTRAP",
         &format!(
             "Bootstrapping transaction cache for wallet: {} (batch_limit={})",
-            format_address_full(&wallet_pubkey.to_string()),
+            &wallet_pubkey.to_string(),
             batch_limit
         )
     );
@@ -388,11 +382,7 @@ async fn perform_initial_transaction_bootstrap(
                         log(
                             LogTag::Transactions,
                             "WARN",
-                            &format!(
-                                "Failed to query known status for {}: {}",
-                                format_signature_short(signature),
-                                e
-                            )
+                            &format!("Failed to query known status for {}: {}", signature, e)
                         );
                         stats.errors += 1;
                     }
@@ -414,11 +404,7 @@ async fn perform_initial_transaction_bootstrap(
                             log(
                                 LogTag::Transactions,
                                 "WARN",
-                                &format!(
-                                    "Failed to persist known signature {}: {}",
-                                    format_signature_short(signature),
-                                    e
-                                )
+                                &format!("Failed to persist known signature {}: {}", signature, e)
                             );
                             stats.errors += 1;
                         }
@@ -435,11 +421,7 @@ async fn perform_initial_transaction_bootstrap(
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!(
-                            "Failed to process bootstrap transaction {}: {}",
-                            format_signature_short(signature),
-                            e
-                        )
+                        &format!("Failed to process bootstrap transaction {}: {}", signature, e)
                     );
                     stats.errors += 1;
                 }
@@ -491,7 +473,7 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
         "INFO",
         &format!(
             "Transaction service running for wallet: {} (interval: {}s)",
-            format_address_full(&config.wallet_pubkey.to_string()),
+            &config.wallet_pubkey.to_string(),
             config.check_interval_secs
         )
     );
@@ -680,11 +662,7 @@ async fn perform_fallback_transaction_check(
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!(
-                            "Failed to process fallback transaction {}: {}",
-                            format_signature_short(&signature),
-                            e
-                        )
+                        &format!("Failed to process fallback transaction {}: {}", &signature, e)
                     );
                 }
             }
@@ -774,7 +752,7 @@ async fn handle_websocket_transaction(
     log(
         LogTag::Transactions,
         "WEBSOCKET",
-        &format!("Processing WebSocket transaction: {}", format_signature_short(&signature))
+        &format!("Processing WebSocket transaction: {}", &signature)
     );
 
     // Add to pending transactions for monitoring
@@ -789,21 +767,14 @@ async fn handle_websocket_transaction(
             log(
                 LogTag::Transactions,
                 "WEBSOCKET",
-                &format!(
-                    "Successfully processed WebSocket transaction: {}",
-                    format_signature_short(&signature)
-                )
+                &format!("Successfully processed WebSocket transaction: {}", &signature)
             );
         }
         Err(e) => {
             log(
                 LogTag::Transactions,
                 "ERROR",
-                &format!(
-                    "Failed to process WebSocket transaction {}: {}",
-                    format_signature_short(&signature),
-                    e
-                )
+                &format!("Failed to process WebSocket transaction {}: {}", &signature, e)
             );
         }
     }

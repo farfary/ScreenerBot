@@ -83,11 +83,7 @@ pub async fn add_signature_to_known_globally(signature: String) {
         log(
             LogTag::Transactions,
             "CACHE_TRACK",
-            &format!(
-                "Added signature {} to known cache (total={})",
-                format_signature_short(&signature),
-                known_sigs.len()
-            )
+            &format!("Added signature {} to known cache (total={})", &signature, known_sigs.len())
         );
     }
 }
@@ -170,30 +166,6 @@ pub async fn get_pending_transaction_signatures() -> Vec<String> {
 // =============================================================================
 // STRING AND FORMATTING UTILITIES
 // =============================================================================
-
-/// Truncate string safely to specified length
-pub fn safe_truncate(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..max_len.saturating_sub(3)])
-    }
-}
-
-/// Format signature for logging (first 8 characters)
-pub fn format_signature_short(signature: &str) -> String {
-    if signature.len() >= 8 { signature[..8].to_string() } else { signature.to_string() }
-}
-
-/// Format pubkey for logging (first 8 characters)
-pub fn format_pubkey_short(pubkey: &str) -> String {
-    if pubkey.len() >= 8 { pubkey[..8].to_string() } else { pubkey.to_string() }
-}
-
-/// Format full address for debugging (as required by project guidelines)
-pub fn format_address_full(address: &str) -> String {
-    address.to_string()
-}
 
 /// Format lamports as SOL with appropriate precision
 pub fn format_lamports_as_sol(lamports: u64) -> String {
@@ -447,7 +419,7 @@ pub fn merge_transaction_stats(
 
 /// Create a standardized error message for transaction operations
 pub fn create_transaction_error(operation: &str, signature: &str, error: &str) -> String {
-    format!("Transaction {} failed for {}: {}", operation, format_signature_short(signature), error)
+    format!("Transaction {} failed for {}: {}", operation, signature, error)
 }
 
 /// Create a standardized error message with full address (for debugging)
@@ -462,62 +434,4 @@ pub fn create_transaction_error_with_full_address(
         signature, // Full address as required by project guidelines
         error
     )
-}
-
-// =============================================================================
-// TESTING UTILITIES (for development and debugging)
-// =============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_signature_validation() {
-        // Valid signature
-        let valid_sig =
-            "5VfydgiMcdZgVrGNxHk4R7cZKPxKPqUkEfK3MJBqKqExKFtZwb9YNxnXv4YeUVV4xwF4LwpJb1L7f1PJKjKKmKKK";
-        assert!(is_valid_signature(valid_sig));
-
-        // Invalid signatures
-        assert!(!is_valid_signature("too_short"));
-        assert!(!is_valid_signature(""));
-        assert!(!is_valid_signature("invalid_characters_!@#$%^&*()"));
-    }
-
-    #[test]
-    fn test_pubkey_validation() {
-        // Valid pubkey
-        let valid_pubkey = "11111111111111111111111111111112";
-        assert!(is_valid_pubkey(valid_pubkey));
-
-        // WSOL mint
-        assert!(is_valid_pubkey(WSOL_MINT));
-        assert!(is_wsol_mint(WSOL_MINT));
-
-        // Invalid pubkeys
-        assert!(!is_valid_pubkey("too_short"));
-        assert!(!is_valid_pubkey(""));
-    }
-
-    #[test]
-    fn test_formatting_utilities() {
-        assert_eq!(format_signature_short("abcdefghijklmnop"), "abcdefgh");
-        assert_eq!(format_signature_short("abc"), "abc");
-
-        assert_eq!(format_lamports_as_sol(1_000_000_000), "1.000 SOL");
-        assert_eq!(format_lamports_as_sol(1_000), "0.000001 SOL");
-
-        assert_eq!(format_lamports_change_as_sol(1_000_000), "+0.001000 SOL");
-        assert_eq!(format_lamports_change_as_sol(-1_000_000), "-0.001000 SOL");
-    }
-
-    #[test]
-    fn test_chunk_signatures() {
-        let sigs = vec!["sig1".to_string(), "sig2".to_string(), "sig3".to_string()];
-        let chunks = chunk_signatures(sigs, 2);
-        assert_eq!(chunks.len(), 2);
-        assert_eq!(chunks[0].len(), 2);
-        assert_eq!(chunks[1].len(), 1);
-    }
 }

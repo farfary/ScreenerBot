@@ -1,14 +1,16 @@
 use super::{
-    apply::apply_transition, state::update_position_state, transitions::PositionTransition,
+    apply::apply_transition,
+    state::update_position_state,
+    transitions::PositionTransition,
 };
-use crate::{arguments::is_debug_positions_enabled, tokens::PriceResult};
+use crate::{ arguments::is_debug_positions_enabled, tokens::PriceResult };
 use tokio::time::Duration;
 
 /// Update position price tracking
 pub async fn update_position_tracking(
     mint: &str,
     current_price: f64,
-    _price_result: &PriceResult,
+    _price_result: &PriceResult
 ) -> bool {
     if current_price <= 0.0 || !current_price.is_finite() {
         return false;
@@ -17,9 +19,8 @@ pub async fn update_position_tracking(
     // Try to acquire lock with timeout to avoid blocking
     let lock_result = tokio::time::timeout(
         Duration::from_millis(100),
-        super::state::acquire_position_lock(mint),
-    )
-    .await;
+        super::state::acquire_position_lock(mint)
+    ).await;
 
     let _lock = match lock_result {
         Ok(lock) => lock,
@@ -58,8 +59,7 @@ pub async fn update_position_tracking(
         pos.current_price = Some(current_price);
         pos.current_price_updated = Some(chrono::Utc::now());
         needs_update = true;
-    })
-    .await;
+    }).await;
 
     if position_exists && needs_update {
         // Apply price tracking transition (doesn't require DB update)
@@ -79,11 +79,11 @@ pub async fn update_position_tracking(
                 "DEBUG",
                 &format!(
                     "📊 Price update for {}: current={:.8}, high={}, low={}",
-                    crate::utils::safe_truncate(mint, 8),
+                    mint,
                     current_price,
                     new_highest.map_or("unchanged".to_string(), |h| format!("{:.8}", h)),
                     new_lowest.map_or("unchanged".to_string(), |l| format!("{:.8}", l))
-                ),
+                )
             );
         }
 

@@ -104,7 +104,7 @@ impl TransactionFetcher {
             &format!(
                 "Fetching {} recent signatures for wallet: {}",
                 limit,
-                format_address_full(&wallet_pubkey.to_string())
+                &wallet_pubkey.to_string()
             )
         );
 
@@ -127,7 +127,7 @@ impl TransactionFetcher {
                 "Fetched {} signatures in {}ms for wallet: {}",
                 signatures.len(),
                 duration.as_millis(),
-                format_pubkey_short(&wallet_pubkey.to_string())
+                &wallet_pubkey.to_string()
             )
         );
 
@@ -155,7 +155,7 @@ impl TransactionFetcher {
                             &format!(
                                 "Signature fetch succeeded after {} retries for wallet: {}",
                                 attempts,
-                                format_pubkey_short(&wallet_pubkey.to_string())
+                                &wallet_pubkey.to_string()
                             )
                         );
                     }
@@ -223,10 +223,8 @@ impl TransactionFetcher {
             &format!(
                 "Fetching {} signatures for wallet: {} (before={})",
                 limit,
-                format_address_full(&wallet_pubkey.to_string()),
-                before
-                    .map(|sig| format_signature_short(sig))
-                    .unwrap_or_else(|| "latest".to_string())
+                &wallet_pubkey.to_string(),
+                before.map(|sig| sig).unwrap_or_else(|| "latest")
             )
         );
 
@@ -248,7 +246,7 @@ impl TransactionFetcher {
                 "Fetched {} signatures in {}ms for wallet: {}",
                 signatures.len(),
                 duration.as_millis(),
-                format_pubkey_short(&wallet_pubkey.to_string())
+                &wallet_pubkey.to_string()
             )
         );
 
@@ -277,11 +275,7 @@ impl TransactionFetcher {
             log(
                 LogTag::Transactions,
                 "SLOW",
-                &format!(
-                    "Slow transaction fetch: {} took {}ms",
-                    format_signature_short(signature),
-                    duration.as_millis()
-                )
+                &format!("Slow transaction fetch: {} took {}ms", signature, duration.as_millis())
             );
         }
 
@@ -306,7 +300,7 @@ impl TransactionFetcher {
                             &format!(
                                 "Transaction details fetch succeeded after {} retries: {}",
                                 attempts,
-                                format_signature_short(signature)
+                                signature
                             )
                         );
                     }
@@ -616,7 +610,7 @@ impl BatchSignatureFetcher {
             &format!(
                 "Fetched {} total signatures for wallet: {}",
                 all_signatures.len(),
-                format_pubkey_short(&wallet_pubkey.to_string())
+                &wallet_pubkey.to_string()
             )
         );
 

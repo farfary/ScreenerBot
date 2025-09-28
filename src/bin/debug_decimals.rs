@@ -16,7 +16,6 @@ use screenerbot::tokens::decimals::{
     get_failed_cache_stats, get_token_decimals_from_chain, migrate_failed_tokens_to_blacklist,
 };
 use screenerbot::tokens::get_token_decimals_sync;
-use screenerbot::utils::safe_truncate;
 use serde::{Deserialize, Serialize};
 use solana_program::program_pack::Pack;
 use solana_sdk::pubkey::Pubkey;
@@ -521,7 +520,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "TEST",
                     &format!(
                         "✅ {} ({}): {} decimals",
-                        safe_truncate(&test_result.mint, 8),
+                        &test_result.mint,
                         test_result.symbol,
                         test_result.decimals.unwrap_or(0)
                     ),
@@ -532,7 +531,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "TEST",
                     &format!(
                         "❌ {} ({}): {}",
-                        safe_truncate(&test_result.mint, 8),
+                        &test_result.mint,
                         test_result.symbol,
                         test_result
                             .error
@@ -670,7 +669,7 @@ async fn debug_single_token_fetching(mint_str: &str, symbol: &str) -> DetailedDe
         "DETAILED",
         &format!(
             "🔬 Debugging token: {} ({})",
-            safe_truncate(mint_str, 8),
+            mint_str,
             symbol
         ),
     );
@@ -836,7 +835,7 @@ async fn debug_single_token_fetching(mint_str: &str, symbol: &str) -> DetailedDe
         "DETAILED",
         &format!(
             "🔬 Debug complete for {}: {} steps, final result: {:?} ({} ms)",
-            safe_truncate(mint_str, 8),
+            mint_str,
             steps.len(),
             final_decimals,
             total_time
@@ -881,7 +880,7 @@ async fn test_failed_tokens() -> Vec<DetailedDebugInfo> {
         log(
             LogTag::System,
             "TEST_FAILED",
-            &format!("Testing token {}: {}", safe_truncate(mint, 8), symbol),
+            &format!("Testing token {}: {}", mint, symbol),
         );
         let debug_info = debug_single_token_fetching(mint, symbol).await;
         debug_results.push(debug_info);
@@ -981,7 +980,7 @@ async fn test_retry_limit_functionality() {
         "TEST_RETRY",
         &format!(
             "Testing retry limit with problematic token: {}",
-            safe_truncate(test_mint, 12)
+            test_mint
         ),
     );
 

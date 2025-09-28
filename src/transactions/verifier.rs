@@ -81,7 +81,7 @@ pub async fn verify_transaction_for_position(
         "VERIFY",
         &format!(
             "Verifying transaction {} for position (expected: {:?})",
-            format_signature_short(signature),
+            signature,
             expected_type
         ),
     );
@@ -118,7 +118,7 @@ pub async fn verify_transaction_for_position(
         "VERIFY_RESULT",
         &format!(
             "Verification complete for {}: verified={}, confidence={:.2}, issues={}",
-            format_signature_short(signature),
+            signature,
             verification_result.verified,
             verification_result.confidence_score,
             verification_result.issues.len()

@@ -565,7 +565,7 @@ impl TransactionDatabase {
                 "DB_RAW",
                 &format!(
                     "Stored raw {} (status={}, success={})",
-                    format_signature_short(&transaction.signature),
+                    &transaction.signature,
                     status_str,
                     transaction.success
                 )
@@ -645,7 +645,7 @@ impl TransactionDatabase {
                 "DB_PROCESSED",
                 &format!(
                     "Stored processed {} (type={:?}, direction={:?}, fee_sol={:.8})",
-                    format_signature_short(&transaction.signature),
+                    &transaction.signature,
                     transaction.transaction_type,
                     transaction.direction,
                     transaction.fee_sol
@@ -740,7 +740,7 @@ impl TransactionDatabase {
                         "DB_HIT",
                         &format!(
                             "Cache hit for {} (status={:?})",
-                            format_signature_short(signature),
+                            signature,
                             transaction.status
                         )
                     );
