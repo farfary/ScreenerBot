@@ -18,8 +18,10 @@
 use crate::global::is_debug_learning_enabled;
 use crate::learner::database::LearningDatabase;
 use crate::learner::types::*;
-use crate::logger::{log, LogTag};
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use crate::logger::{ log, LogTag };
+use crate::positions::get_recent_closed_positions_for_mint;
+use crate::tokens::security::get_security_analyzer;
+use chrono::{ DateTime, Datelike, Timelike, Utc };
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
@@ -56,7 +58,7 @@ impl PatternAnalyzer {
     pub async fn extract_features(
         &self,
         trade: &TradeRecord,
-        database: &LearningDatabase,
+        database: &LearningDatabase
     ) -> Result<FeatureVector, String> {
         let mut features = FeatureVector::new(trade.id);
 
@@ -64,8 +66,7 @@ impl PatternAnalyzer {
         self.extract_drop_features(trade, &mut features).await?;
 
         // Extract market context features
-        self.extract_market_context_features(trade, &mut features)
-            .await?;
+        self.extract_market_context_features(trade, &mut features).await?;
 
         // Extract ATH proximity features
         self.extract_ath_features(trade, &mut features).await?;
@@ -74,8 +75,7 @@ impl PatternAnalyzer {
         self.extract_temporal_features(trade, &mut features).await?;
 
         // Extract historical features
-        self.extract_historical_features(trade, database, &mut features)
-            .await?;
+        self.extract_historical_features(trade, database, &mut features).await?;
 
         // Generate labels for training
         self.generate_labels(trade, &mut features).await?;
@@ -89,47 +89,47 @@ impl PatternAnalyzer {
                     trade.id,
                     FeatureVector::FEATURE_COUNT,
                     features.success_label
-                ),
+                )
             );
         }
 
         Ok(features)
     }
 
-    /// Extract drop pattern features
+    /// Extract drop-related features from a trade record
     async fn extract_drop_features(
         &self,
         trade: &TradeRecord,
-        features: &mut FeatureVector,
+        features: &mut FeatureVector
     ) -> Result<(), String> {
-        // Normalize drop percentages by typical volatility for the timeframe
         features.drop_10s_norm = self.normalize_drop(trade.drop_10s_pct, 10.0);
         features.drop_30s_norm = self.normalize_drop(trade.drop_30s_pct, 30.0);
         features.drop_60s_norm = self.normalize_drop(trade.drop_60s_pct, 60.0);
         features.drop_120s_norm = self.normalize_drop(trade.drop_120s_pct, 120.0);
         features.drop_320s_norm = self.normalize_drop(trade.drop_320s_pct, 320.0);
 
-        // Calculate drop velocity (percentage per minute)
-        if let Some(drop_30s) = trade.drop_30s_pct {
-            features.drop_velocity_30s = (drop_30s / 0.5).abs().min(100.0) / 100.0;
-            // Normalize to 0-1
-        }
+        let drop_30 = trade.drop_30s_pct.unwrap_or(0.0);
+        let drop_60 = trade.drop_60s_pct.unwrap_or(0.0);
 
-        // Calculate drop acceleration (change in velocity)
-        if let (Some(drop_30s), Some(drop_60s)) = (trade.drop_30s_pct, trade.drop_60s_pct) {
-            let vel_early = (drop_30s / 0.5).abs();
-            let vel_total = (drop_60s / 1.0).abs();
-            features.drop_acceleration = ((vel_early - vel_total) / 50.0).clamp(-1.0, 1.0);
-        }
+        features.drop_velocity_30s = if drop_30 > 0.0 {
+            (drop_30 / 0.5).min(100.0) / 100.0
+        } else {
+            0.0
+        };
+
+        features.drop_acceleration = {
+            let vel_30s = drop_30 / 0.5; // percent per minute
+            let vel_60s = drop_60 / 1.0; // percent per minute
+            ((vel_30s - vel_60s) / 50.0).clamp(-1.0, 1.0)
+        };
 
         Ok(())
     }
-
     /// Extract market context features
     async fn extract_market_context_features(
         &self,
         trade: &TradeRecord,
-        features: &mut FeatureVector,
+        features: &mut FeatureVector
     ) -> Result<(), String> {
         // Liquidity tier (0-1 scale)
         if let Some(liquidity) = trade.liquidity_at_entry {
@@ -153,11 +153,17 @@ impl PatternAnalyzer {
         }
 
         // Market cap tier (estimated from liquidity and price)
-        if let (Some(liquidity), Some(sol_reserves)) =
-            (trade.liquidity_at_entry, trade.sol_reserves_at_entry)
+        if
+            let (Some(liquidity), Some(sol_reserves)) = (
+                trade.liquidity_at_entry,
+                trade.sol_reserves_at_entry,
+            )
         {
-            features.market_cap_tier =
-                self.estimate_market_cap_tier(liquidity, sol_reserves, trade.entry_price);
+            features.market_cap_tier = self.estimate_market_cap_tier(
+                liquidity,
+                sol_reserves,
+                trade.entry_price
+            );
         }
 
         Ok(())
@@ -167,30 +173,23 @@ impl PatternAnalyzer {
     async fn extract_ath_features(
         &self,
         trade: &TradeRecord,
-        features: &mut FeatureVector,
+        features: &mut FeatureVector
     ) -> Result<(), String> {
         // Convert distance from ATH to proximity (closer = higher value)
-        features.ath_prox_15m = trade
-            .ath_dist_15m_pct
+        features.ath_prox_15m = trade.ath_dist_15m_pct
             .map(|dist| 1.0 - (dist / 100.0).min(1.0))
             .unwrap_or(0.0);
 
-        features.ath_prox_1h = trade
-            .ath_dist_1h_pct
+        features.ath_prox_1h = trade.ath_dist_1h_pct
             .map(|dist| 1.0 - (dist / 100.0).min(1.0))
             .unwrap_or(0.0);
 
-        features.ath_prox_6h = trade
-            .ath_dist_6h_pct
+        features.ath_prox_6h = trade.ath_dist_6h_pct
             .map(|dist| 1.0 - (dist / 100.0).min(1.0))
             .unwrap_or(0.0);
 
         // Combined ATH risk score (higher when very close to any ATH)
-        let proximities = [
-            features.ath_prox_15m,
-            features.ath_prox_1h,
-            features.ath_prox_6h,
-        ];
+        let proximities = [features.ath_prox_15m, features.ath_prox_1h, features.ath_prox_6h];
         let max_proximity = proximities.iter().cloned().fold(0.0f64, f64::max);
         let avg_proximity = proximities.iter().sum::<f64>() / 3.0;
 
@@ -204,7 +203,7 @@ impl PatternAnalyzer {
     async fn extract_temporal_features(
         &self,
         trade: &TradeRecord,
-        features: &mut FeatureVector,
+        features: &mut FeatureVector
     ) -> Result<(), String> {
         // Encode hour of day as sine/cosine for cyclical nature
         let hour_radians = ((trade.hour_of_day as f64) * 2.0 * PI) / 24.0;
@@ -224,7 +223,7 @@ impl PatternAnalyzer {
         &self,
         trade: &TradeRecord,
         database: &LearningDatabase,
-        features: &mut FeatureVector,
+        features: &mut FeatureVector
     ) -> Result<(), String> {
         // Check if this is a re-entry
         features.re_entry_flag = if trade.was_re_entry { 1.0 } else { 0.0 };
@@ -250,7 +249,7 @@ impl PatternAnalyzer {
     async fn generate_labels(
         &self,
         trade: &TradeRecord,
-        features: &mut FeatureVector,
+        features: &mut FeatureVector
     ) -> Result<(), String> {
         // Success label: profitable exit
         features.success_label = Some(if trade.pnl_pct > 0.0 { 1.0 } else { 0.0 });
@@ -260,8 +259,9 @@ impl PatternAnalyzer {
         features.quick_success_label = Some(if quick_profit { 1.0 } else { 0.0 });
 
         // Risk label: >18% drawdown in first 8 minutes
-        let high_early_risk = trade.max_down_pct.abs() > 18.0
-            && trade.dd_reached_sec.map(|t| t < 480).unwrap_or(false); // 8 minutes
+        let high_early_risk =
+            trade.max_down_pct.abs() > 18.0 &&
+            trade.dd_reached_sec.map(|t| t < 480).unwrap_or(false); // 8 minutes
         features.risk_label = Some(if high_early_risk { 1.0 } else { 0.0 });
 
         // Peak time label: normalized time to reach peak
@@ -277,7 +277,7 @@ impl PatternAnalyzer {
     async fn get_token_statistics(
         &self,
         mint: &str,
-        database: &LearningDatabase,
+        database: &LearningDatabase
     ) -> Result<TokenStatistics, String> {
         // Cleanup cache if needed
         self.cleanup_cache_if_needed().await;
@@ -319,29 +319,36 @@ impl PatternAnalyzer {
             };
         }
 
-        let profitable_trades = trades.iter().filter(|t| t.pnl_pct > 0.0).count();
+        let profitable_trades = trades
+            .iter()
+            .filter(|t| t.pnl_pct > 0.0)
+            .count();
         let success_rate = (profitable_trades as f64) / (trades.len() as f64);
 
-        let avg_profit = trades.iter().map(|t| t.pnl_pct).sum::<f64>() / (trades.len() as f64);
-        let avg_hold_duration = trades
-            .iter()
-            .map(|t| t.hold_duration_sec as f64)
-            .sum::<f64>()
-            / (trades.len() as f64);
+        let avg_profit =
+            trades
+                .iter()
+                .map(|t| t.pnl_pct)
+                .sum::<f64>() / (trades.len() as f64);
+        let avg_hold_duration =
+            trades
+                .iter()
+                .map(|t| t.hold_duration_sec as f64)
+                .sum::<f64>() / (trades.len() as f64);
 
-        let avg_peak_time = trades
-            .iter()
-            .filter_map(|t| t.peak_reached_sec)
-            .map(|t| t as f64)
-            .sum::<f64>()
-            / (trades.len() as f64);
+        let avg_peak_time =
+            trades
+                .iter()
+                .filter_map(|t| t.peak_reached_sec)
+                .map(|t| t as f64)
+                .sum::<f64>() / (trades.len() as f64);
 
         // Calculate volatility as average of max swings
-        let volatility_score = trades
-            .iter()
-            .map(|t| (t.max_up_pct - t.max_down_pct).abs())
-            .sum::<f64>()
-            / (trades.len() as f64);
+        let volatility_score =
+            trades
+                .iter()
+                .map(|t| (t.max_up_pct - t.max_down_pct).abs())
+                .sum::<f64>() / (trades.len() as f64);
 
         TokenStatistics {
             trade_count: trades.len(),
@@ -454,12 +461,33 @@ impl PatternAnalyzer {
         changes.iter().sum::<f64>() / (changes.len() as f64)
     }
 
+    /// Fetch recent position-derived context for a mint (avg hold, trade count, exits, re-entry flag)
+    async fn fetch_recent_position_context(&self, mint: &str) -> (f64, f64, f64, f64) {
+        match get_recent_closed_positions_for_mint(mint, 6).await {
+            Ok(recent_positions) if !recent_positions.is_empty() => {
+                let total_hold_seconds: f64 = recent_positions
+                    .iter()
+                    .map(|pos| {
+                        let exit_ts = pos.exit_time.unwrap_or(pos.entry_time);
+                        (exit_ts - pos.entry_time).num_seconds().max(0) as f64
+                    })
+                    .sum();
+                let avg_hold_hours = total_hold_seconds / (recent_positions.len() as f64) / 3600.0;
+                let avg_hold_norm = avg_hold_hours.min(24.0) / 24.0;
+                let trade_count_norm = (recent_positions.len() as f64).min(25.0) / 25.0;
+                let exit_count_norm = (recent_positions.len().min(10) as f64) / 10.0;
+                (avg_hold_norm.max(0.02), trade_count_norm, exit_count_norm, 1.0)
+            }
+            _ => (0.1, 0.0, 0.0, 0.0),
+        }
+    }
+
     /// Calculate multi-timeframe drops from pools price history
     /// Returns (drop_10s, drop_30s, drop_60s, drop_120s, drop_320s) in percentages
     fn calculate_multi_timeframe_drops(
         &self,
         price_history: &[crate::pools::PriceResult],
-        current_price: f64,
+        current_price: f64
     ) -> (f64, f64, f64, f64, f64) {
         use chrono::Utc;
 
@@ -498,7 +526,7 @@ impl PatternAnalyzer {
     fn calculate_ath_distances(
         &self,
         price_history: &[crate::pools::PriceResult],
-        current_price: f64,
+        current_price: f64
     ) -> (f64, f64, f64) {
         use chrono::Utc;
 
@@ -535,7 +563,7 @@ impl PatternAnalyzer {
         &self,
         target_mint: &str,
         database: &LearningDatabase,
-        limit: usize,
+        limit: usize
     ) -> Result<Vec<SimilarToken>, String> {
         // Get target token's features
         let target_trades = database.get_trades_for_mint(target_mint).await?;
@@ -559,10 +587,7 @@ impl PatternAnalyzer {
                 continue; // Skip self
             }
 
-            let trades = database
-                .get_trades_for_mint(&mint)
-                .await
-                .unwrap_or_default();
+            let trades = database.get_trades_for_mint(&mint).await.unwrap_or_default();
             if trades.is_empty() {
                 continue;
             }
@@ -586,9 +611,7 @@ impl PatternAnalyzer {
 
         // Sort by similarity score descending
         similar_tokens.sort_by(|a, b| {
-            b.similarity_score
-                .partial_cmp(&a.similarity_score)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            b.similarity_score.partial_cmp(&a.similarity_score).unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Limit results
@@ -601,7 +624,7 @@ impl PatternAnalyzer {
     fn calculate_token_similarity(
         &self,
         stats1: &TokenStatistics,
-        stats2: &TokenStatistics,
+        stats2: &TokenStatistics
     ) -> f64 {
         let mut similarity_sum = 0.0;
         let mut weight_sum = 0.0;
@@ -706,9 +729,9 @@ impl PatternAnalyzer {
         mint: &str,
         current_price: f64,
         drop_percent: f64,
-        ath_proximity: f64,
+        ath_proximity: f64
     ) -> Result<FeatureVector, String> {
-        use crate::pools::{get_price_history, get_price_history_stats};
+        use crate::pools::get_price_history;
         use crate::tokens::security::get_security_analyzer;
         use chrono::Timelike;
         use std::f64::consts::PI;
@@ -721,23 +744,50 @@ impl PatternAnalyzer {
         let price_history = get_price_history(mint);
 
         // Calculate multi-timeframe drops from real pools data
-        let (drop_10s_pct, drop_30s_pct, drop_60s_pct, drop_120s_pct, drop_320s_pct) =
-            self.calculate_multi_timeframe_drops(&price_history, current_price);
+        let (
+            mut drop_10s_pct,
+            mut drop_30s_pct,
+            mut drop_60s_pct,
+            mut drop_120s_pct,
+            mut drop_320s_pct,
+        ) = self.calculate_multi_timeframe_drops(&price_history, current_price);
+
+        // Fallback to provided drop percent when history is sparse
+        if
+            drop_10s_pct <= 0.0 &&
+            drop_30s_pct <= 0.0 &&
+            drop_60s_pct <= 0.0 &&
+            drop_120s_pct <= 0.0
+        {
+            let fallback = drop_percent.max(0.0);
+            drop_10s_pct = (fallback * 0.4).min(99.0);
+            drop_30s_pct = (fallback * 0.7).min(99.0);
+            drop_60s_pct = fallback.min(99.0);
+            drop_120s_pct = (fallback * 1.1).min(99.0);
+            drop_320s_pct = (fallback * 1.3).min(99.0);
+        }
 
         // Calculate real ATH distances from pools data
-        let (ath_dist_15m_pct, ath_dist_1h_pct, ath_dist_6h_pct) =
-            self.calculate_ath_distances(&price_history, current_price);
+        let (ath_dist_15m_pct, ath_dist_1h_pct, ath_dist_6h_pct) = self.calculate_ath_distances(
+            &price_history,
+            current_price
+        );
+
+        let ath_prox_override = ath_proximity.clamp(0.0, 1.0);
 
         // Calculate actual market context features from real data
-        let (liquidity_tier, market_cap_tier, tx_activity_score) = if let Some(latest_price) =
-            price_history.last()
+        let (liquidity_tier, market_cap_tier, tx_activity_score) = if
+            let Some(latest_price) = price_history.last()
         {
             let liquidity = latest_price.sol_reserves;
             let liquidity_tier = self.liquidity_to_tier(liquidity);
 
             // Estimate market cap tier from reserves and price
-            let market_cap_tier =
-                self.estimate_market_cap_tier(liquidity, latest_price.sol_reserves, current_price);
+            let market_cap_tier = self.estimate_market_cap_tier(
+                liquidity,
+                latest_price.sol_reserves,
+                current_price
+            );
 
             // Simple activity score based on price volatility in last 10 points
             let tx_activity_score = if price_history.len() >= 10 {
@@ -760,32 +810,38 @@ impl PatternAnalyzer {
             (0.2, 0.2, 0.1)
         };
 
-        // Get real security data if available - simplified for new security system
-        let (security_score_norm, holder_count_log) = {
-            // TODO: Reimplement with new async security API
-            // For now, use neutral values
-            (0.5, 0.1)
-        };
+        // Pull cached security data when available
+        let (mut security_score_norm, mut holder_count_log) = (0.5, 0.1);
+        if let Some(analyzer) = get_security_analyzer() {
+            if let Some(analysis) = analyzer.analyze_token_any_cached(mint).await {
+                security_score_norm = ((analysis.score_normalized as f64) / 100.0).clamp(0.0, 1.0);
+                holder_count_log = if analysis.holders_safe { 0.45 } else { 0.15 };
+            }
+        }
+
+        // Use recent closed positions to derive historical context when available
+        let (avg_hold_duration_norm, token_trade_count, recent_exit_count, re_entry_flag) =
+            self.fetch_recent_position_context(mint).await;
 
         // Create feature vector with real market data
         let features = FeatureVector {
             trade_id: 0, // Not associated with a trade yet
 
             // Real drop pattern features from pools price history
-            drop_10s_norm: (drop_10s_pct / 100.0).min(1.0),
-            drop_30s_norm: (drop_30s_pct / 100.0).min(1.0),
-            drop_60s_norm: (drop_60s_pct / 100.0).min(1.0),
-            drop_120s_norm: (drop_120s_pct / 100.0).min(1.0),
-            drop_320s_norm: (drop_320s_pct / 100.0).min(1.0),
+            drop_10s_norm: self.normalize_drop(Some(drop_10s_pct), 10.0),
+            drop_30s_norm: self.normalize_drop(Some(drop_30s_pct), 30.0),
+            drop_60s_norm: self.normalize_drop(Some(drop_60s_pct), 60.0),
+            drop_120s_norm: self.normalize_drop(Some(drop_120s_pct), 120.0),
+            drop_320s_norm: self.normalize_drop(Some(drop_320s_pct), 320.0),
             drop_velocity_30s: if drop_30s_pct > 0.0 {
-                drop_30s_pct / 30.0
+                (drop_30s_pct / 0.5).abs().min(100.0) / 100.0
             } else {
                 0.0
             },
             drop_acceleration: {
                 // Calculate acceleration from drop differences
-                let vel_30s = drop_30s_pct / 0.5; // 30s velocity per minute
-                let vel_60s = drop_60s_pct / 1.0; // 60s velocity per minute
+                let vel_30s = (drop_30s_pct / 0.5).abs(); // per minute
+                let vel_60s = (drop_60s_pct / 1.0).abs();
                 ((vel_30s - vel_60s) / 50.0).clamp(-1.0, 1.0)
             },
 
@@ -797,9 +853,30 @@ impl PatternAnalyzer {
             market_cap_tier,
 
             // Real ATH proximity from pools data
-            ath_prox_15m: 1.0 - (ath_dist_15m_pct / 100.0).min(1.0),
-            ath_prox_1h: 1.0 - (ath_dist_1h_pct / 100.0).min(1.0),
-            ath_prox_6h: 1.0 - (ath_dist_6h_pct / 100.0).min(1.0),
+            ath_prox_15m: {
+                let prox = 1.0 - (ath_dist_15m_pct / 100.0).min(1.0);
+                if prox > 0.0 {
+                    prox
+                } else {
+                    ath_prox_override
+                }
+            },
+            ath_prox_1h: {
+                let prox = 1.0 - (ath_dist_1h_pct / 100.0).min(1.0);
+                if prox > 0.0 {
+                    prox
+                } else {
+                    ath_prox_override
+                }
+            },
+            ath_prox_6h: {
+                let prox = 1.0 - (ath_dist_6h_pct / 100.0).min(1.0);
+                if prox > 0.0 {
+                    prox
+                } else {
+                    ath_prox_override
+                }
+            },
             ath_risk_score: {
                 let proximities = [
                     1.0 - (ath_dist_15m_pct / 100.0).min(1.0),
@@ -818,10 +895,10 @@ impl PatternAnalyzer {
             day_cos: ((day * 2.0 * PI) / 7.0).cos(),
 
             // Historical features (defaults for now, can be enhanced later)
-            re_entry_flag: 0.0,
-            token_trade_count: 0.0,
-            recent_exit_count: 0.0,
-            avg_hold_duration: 60.0,
+            re_entry_flag,
+            token_trade_count,
+            recent_exit_count,
+            avg_hold_duration: avg_hold_duration_norm,
 
             // Labels (not set for prediction)
             success_label: None,
@@ -862,55 +939,216 @@ impl PatternAnalyzer {
         mint: &str,
         current_price: f64,
         entry_price: f64,
-        position_duration_mins: u32,
+        position_duration_mins: u32
     ) -> Result<FeatureVector, String> {
-        use chrono::Timelike;
+        use crate::pools::get_price_history;
+        use crate::tokens::security::get_security_analyzer;
+        use chrono::{ Duration, Timelike };
         use std::f64::consts::PI;
 
         let now = chrono::Utc::now();
         let hour = now.hour() as f64;
         let day = now.weekday().num_days_from_sunday() as f64;
-        let current_profit = ((current_price - entry_price) / entry_price) * 100.0;
+        let hold_minutes = position_duration_mins.max(1);
+        let lookback_minutes = hold_minutes.min(360); // cap at 6 hours for history window
+        let lookback = Duration::minutes(lookback_minutes as i64);
+        let entry_estimate = now - lookback;
 
-        // Create feature vector for exit prediction
+        let price_history = get_price_history(mint);
+        let mut window_points: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
+            .iter()
+            .filter_map(|price| {
+                let ts = price.get_utc_timestamp();
+                if ts >= entry_estimate {
+                    Some((ts, price.price_sol))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Ensure we include the estimated entry point and current price
+        window_points.push((entry_estimate, entry_price));
+        window_points.push((now, current_price));
+        window_points.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let window_prices: Vec<f64> = window_points
+            .iter()
+            .map(|(_, price)| *price)
+            .collect();
+
+        let current_profit_pct = if entry_price > 0.0 {
+            ((current_price - entry_price) / entry_price) * 100.0
+        } else {
+            0.0
+        };
+
+        let peak_price = window_prices.iter().copied().fold(current_price, f64::max);
+        let trough_price = window_prices.iter().copied().fold(current_price, f64::min);
+
+        let peak_profit_pct = if entry_price > 0.0 {
+            ((peak_price - entry_price) / entry_price) * 100.0
+        } else {
+            0.0
+        };
+
+        let drawdown_from_peak_pct = if peak_price > 0.0 {
+            (((peak_price - current_price) / peak_price) * 100.0).max(0.0)
+        } else {
+            0.0
+        };
+
+        let max_drawdown_pct = if peak_price > 0.0 {
+            (((peak_price - trough_price) / peak_price) * 100.0).max(0.0)
+        } else {
+            0.0
+        };
+
+        let giveback_pct = (peak_profit_pct - current_profit_pct).max(0.0);
+
+        // Momentum over the last 30s and 60s to detect acceleration
+        let mut price_30s_ago = current_price;
+        let mut price_60s_ago = current_price;
+        for (ts, price) in window_points.iter().rev() {
+            let age_seconds = (now - *ts).num_seconds();
+            if age_seconds >= 30 && price_30s_ago == current_price {
+                price_30s_ago = *price;
+            }
+            if age_seconds >= 60 && price_60s_ago == current_price {
+                price_60s_ago = *price;
+                break;
+            }
+        }
+
+        let momentum_30s_pct = if price_30s_ago > 0.0 {
+            ((current_price - price_30s_ago) / price_30s_ago) * 100.0
+        } else {
+            0.0
+        };
+        let momentum_60s_pct = if price_60s_ago > 0.0 {
+            ((current_price - price_60s_ago) / price_60s_ago) * 100.0
+        } else {
+            0.0
+        };
+
+        let velocity_drop_pct = (-momentum_30s_pct).max(0.0);
+        let drop_velocity_30s =
+            (velocity_drop_pct / 5.0).min(1.0) * 0.6 + (giveback_pct / 20.0).min(1.0) * 0.4;
+
+        let acceleration_component = (-momentum_30s_pct - -momentum_60s_pct) / 10.0;
+        let profit_component = (current_profit_pct / 50.0).clamp(-1.0, 1.0);
+        let drop_acceleration = (
+            0.5 * acceleration_component.clamp(-1.0, 1.0) +
+            0.5 * profit_component
+        ).clamp(-1.0, 1.0);
+
+        let (
+            mut drop_10s_pct,
+            mut drop_30s_pct,
+            mut drop_60s_pct,
+            mut drop_120s_pct,
+            mut drop_320s_pct,
+        ) = self.calculate_multi_timeframe_drops(&price_history, current_price);
+
+        // Fallback to drawdown-derived drops when history window is sparse
+        if drop_10s_pct <= 0.0 {
+            drop_10s_pct = (drawdown_from_peak_pct * 0.5).min(99.0);
+        }
+        if drop_30s_pct <= 0.0 {
+            drop_30s_pct = (drawdown_from_peak_pct * 0.7).min(99.0);
+        }
+        if drop_60s_pct <= 0.0 {
+            drop_60s_pct = drawdown_from_peak_pct.min(99.0);
+        }
+        if drop_120s_pct <= 0.0 {
+            drop_120s_pct = (drawdown_from_peak_pct * 1.1).min(99.0);
+        }
+        if drop_320s_pct <= 0.0 {
+            drop_320s_pct = (drawdown_from_peak_pct * 1.2).min(99.0);
+        }
+
+        let (ath_dist_15m_pct, ath_dist_1h_pct, ath_dist_6h_pct) = self.calculate_ath_distances(
+            &price_history,
+            current_price
+        );
+
+        let recent_prices_for_volatility: Vec<f64> = price_history
+            .iter()
+            .rev()
+            .take(20)
+            .map(|p| p.price_sol)
+            .collect();
+        let volatility = self.calculate_price_volatility(&recent_prices_for_volatility);
+        let tx_activity_score = (volatility / 40.0).min(1.0);
+
+        let (liquidity_tier, market_cap_tier) = if let Some(latest) = price_history.last() {
+            let liquidity = latest.sol_reserves;
+            let liquidity_tier = self.liquidity_to_tier(liquidity);
+            let market_cap_tier = self.estimate_market_cap_tier(
+                liquidity,
+                latest.sol_reserves,
+                current_price
+            );
+            (liquidity_tier, market_cap_tier)
+        } else {
+            (0.2, 0.2)
+        };
+
+        let (mut security_score_norm, mut holder_count_log) = (0.5, 0.2);
+        if let Some(analyzer) = get_security_analyzer() {
+            if let Some(analysis) = analyzer.analyze_token_any_cached(mint).await {
+                security_score_norm = ((analysis.score_normalized as f64) / 100.0).clamp(0.0, 1.0);
+                holder_count_log = if analysis.holders_safe { 0.45 } else { 0.15 };
+            }
+        }
+
+        let (avg_hold_context_norm, token_trade_count, recent_exit_count, re_entry_flag) =
+            self.fetch_recent_position_context(mint).await;
+
+        let hold_duration_norm = (position_duration_mins as f64).min(24.0 * 60.0) / (24.0 * 60.0);
+        let avg_hold_duration = (avg_hold_context_norm * 0.5 + hold_duration_norm * 0.5).max(0.02);
+
         let features = FeatureVector {
-            trade_id: 0, // Not associated with a trade yet
+            trade_id: 0,
 
-            // Drop pattern features (use entry assumptions)
-            drop_10s_norm: 0.3,
-            drop_30s_norm: 0.3,
-            drop_60s_norm: 0.3,
-            drop_120s_norm: 0.3,
-            drop_320s_norm: 0.3,
-            drop_velocity_30s: 1.0,
-            drop_acceleration: 0.0,
+            drop_10s_norm: self.normalize_drop(Some(drop_10s_pct), 10.0),
+            drop_30s_norm: self.normalize_drop(Some(drop_30s_pct), 30.0),
+            drop_60s_norm: self.normalize_drop(Some(drop_60s_pct), 60.0),
+            drop_120s_norm: self.normalize_drop(Some(drop_120s_pct), 120.0),
+            drop_320s_norm: self.normalize_drop(Some(drop_320s_pct.max(max_drawdown_pct)), 320.0),
+            drop_velocity_30s,
+            drop_acceleration,
 
-            // Market context (reasonable defaults)
-            liquidity_tier: 0.5,
-            tx_activity_score: 0.5,
-            security_score_norm: 0.8,
-            holder_count_log: 8.0,
-            market_cap_tier: 0.5,
+            liquidity_tier,
+            tx_activity_score,
+            security_score_norm,
+            holder_count_log,
+            market_cap_tier,
 
-            // ATH proximity (assume still good)
-            ath_prox_15m: 0.8,
-            ath_prox_1h: 0.8,
-            ath_prox_6h: 0.8,
-            ath_risk_score: 0.2,
+            ath_prox_15m: 1.0 - (ath_dist_15m_pct / 100.0).min(1.0),
+            ath_prox_1h: 1.0 - (ath_dist_1h_pct / 100.0).min(1.0),
+            ath_prox_6h: 1.0 - (ath_dist_6h_pct / 100.0).min(1.0),
+            ath_risk_score: {
+                let proximities = [
+                    1.0 - (ath_dist_15m_pct / 100.0).min(1.0),
+                    1.0 - (ath_dist_1h_pct / 100.0).min(1.0),
+                    1.0 - (ath_dist_6h_pct / 100.0).min(1.0),
+                ];
+                let max_prox = proximities.iter().cloned().fold(0.0f64, f64::max);
+                let avg_prox = proximities.iter().sum::<f64>() / 3.0;
+                (max_prox * 0.7 + avg_prox * 0.3).powf(2.0)
+            },
 
-            // Temporal features
             hour_sin: ((hour * 2.0 * PI) / 24.0).sin(),
             hour_cos: ((hour * 2.0 * PI) / 24.0).cos(),
             day_sin: ((day * 2.0 * PI) / 7.0).sin(),
             day_cos: ((day * 2.0 * PI) / 7.0).cos(),
 
-            // Historical features
-            re_entry_flag: 0.0,
-            token_trade_count: 1.0, // At least one trade (current)
-            recent_exit_count: 0.0,
-            avg_hold_duration: position_duration_mins as f64,
+            re_entry_flag,
+            token_trade_count,
+            recent_exit_count,
+            avg_hold_duration,
 
-            // Labels (not set for prediction)
             success_label: None,
             quick_success_label: None,
             risk_label: None,
@@ -918,6 +1156,24 @@ impl PatternAnalyzer {
 
             created_at: chrono::Utc::now(),
         };
+
+        if crate::global::is_debug_learning_enabled() {
+            crate::logger::log(
+                crate::logger::LogTag::Learning,
+                "EXIT_FEATURES",
+                &format!(
+                    "Exit features {} profit={:.2}% peak_profit={:.2}% giveback={:.2}% max_dd={:.2}% drawdown_now={:.2}% velocity={:.2} accel={:.2}",
+                    mint,
+                    current_profit_pct,
+                    peak_profit_pct,
+                    giveback_pct,
+                    max_drawdown_pct,
+                    drawdown_from_peak_pct,
+                    drop_velocity_30s,
+                    drop_acceleration
+                )
+            );
+        }
 
         Ok(features)
     }
@@ -932,7 +1188,7 @@ impl PatternAnalyzer {
         drop_60s: f64,
         drop_120s: f64,
         drop_320s: f64,
-        confidence_threshold: f64,
+        confidence_threshold: f64
     ) -> Result<Vec<TradingPattern>, String> {
         // Get historical trades with similar drop patterns
         let trades = database.get_trades_for_mint(mint).await?;
@@ -972,7 +1228,11 @@ impl PatternAnalyzer {
                         trade.hold_duration_sec - 300, // +/- 5 min
                         trade.hold_duration_sec + 300,
                     ),
-                    success_rate: if trade.pnl_pct > 0.0 { 1.0 } else { 0.0 },
+                    success_rate: if trade.pnl_pct > 0.0 {
+                        1.0
+                    } else {
+                        0.0
+                    },
                     avg_profit: trade.pnl_pct,
                     avg_duration: trade.hold_duration_sec,
                     sample_count: 1,
@@ -998,7 +1258,7 @@ impl PatternAnalyzer {
                     pattern_matches.len(),
                     mint,
                     confidence_threshold
-                ),
+                )
             );
         }
 
@@ -1037,9 +1297,10 @@ impl PatternAnalyzer {
         }
 
         // Double bottom: Drop, recovery, then another drop
-        if drop_60s.abs() > drop_30s.abs()
-            && drop_120s.abs() > drop_60s.abs()
-            && drop_320s.abs() < drop_120s.abs()
+        if
+            drop_60s.abs() > drop_30s.abs() &&
+            drop_120s.abs() > drop_60s.abs() &&
+            drop_320s.abs() < drop_120s.abs()
         {
             return PatternType::DoubleBottom;
         }
