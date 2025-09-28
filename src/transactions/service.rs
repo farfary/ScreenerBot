@@ -89,8 +89,15 @@ pub async fn start_global_transaction_service(
     let mut manager = TransactionsManager::new(wallet_pubkey).await?;
     manager.initialize().await?;
 
+    // Create manager Arc and register globally BEFORE bootstrap so on-demand calls can access it
+    let manager = Arc::new(Mutex::new(manager));
+    {
+        let mut global_manager = GLOBAL_TRANSACTION_MANAGER.lock().await;
+        *global_manager = Some(manager.clone());
+    }
+
     // Perform initial cache bootstrap before allowing trader start
-    let bootstrap_stats = perform_initial_transaction_bootstrap(&mut manager).await?;
+    let bootstrap_stats = perform_initial_transaction_bootstrap(&manager).await?;
 
     log(
         LogTag::Transactions,
@@ -121,14 +128,9 @@ pub async fn start_global_transaction_service(
     }
 
     // Reset new transactions counter post-bootstrap to avoid double counting
-    manager.new_transactions_count = 0;
-
-    let manager = Arc::new(Mutex::new(manager));
-
-    // Store global manager
     {
-        let mut global_manager = GLOBAL_TRANSACTION_MANAGER.lock().await;
-        *global_manager = Some(manager.clone());
+        let mut mgr = manager.lock().await;
+        mgr.new_transactions_count = 0;
     }
 
     // Create service configuration
@@ -225,32 +227,58 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
         }
     }
 
-    // If not in DB, attempt on-demand processing via processor
+    // If not in DB, attempt on-demand processing via processor with short retries for indexing delays
     if let Some(manager_arc) = get_global_transaction_manager().await {
         let manager = manager_arc.lock().await;
         let processor = TransactionProcessor::new(manager.get_wallet_pubkey());
-        match processor.process_transaction(signature).await {
-            Ok(tx) => {
-                if debug {
-                    log(
-                        LogTag::Transactions,
-                        "CACHE_REFRESH",
-                        &format!(
-                            "Processed {} on-demand and refreshed cache",
-                            format_signature_short(signature)
-                        )
-                    );
+        drop(manager); // Avoid holding lock across RPC
+
+        let mut attempts = 0u32;
+        let max_attempts = 3u32;
+        let mut delay_ms = 300u64;
+
+        loop {
+            match processor.process_transaction(signature).await {
+                Ok(tx) => {
+                    if debug {
+                        log(
+                            LogTag::Transactions,
+                            "CACHE_REFRESH",
+                            &format!(
+                                "Processed {} on-demand and refreshed cache",
+                                format_signature_short(signature)
+                            )
+                        );
+                    }
+                    return Ok(Some(tx));
                 }
-                // Persisted by processor; return the processed transaction
-                return Ok(Some(tx));
-            }
-            Err(e) => {
-                if debug {
-                    log(
-                        LogTag::Transactions,
-                        "WARN",
-                        &format!("On-demand processing failed for {}: {}", signature, e)
-                    );
+                Err(e) => {
+                    let el = e.to_lowercase();
+                    let indexing_delay =
+                        el.contains("not yet indexed") ||
+                        el.contains("not found") ||
+                        el.contains("transaction not available");
+
+                    if debug {
+                        log(
+                            LogTag::Transactions,
+                            "WARN",
+                            &format!(
+                                "On-demand processing failed for {} (attempt {}): {}",
+                                format_signature_short(signature),
+                                attempts + 1,
+                                e
+                            )
+                        );
+                    }
+
+                    if indexing_delay && attempts < max_attempts - 1 {
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        attempts += 1;
+                        delay_ms = ((delay_ms as f64) * 1.8) as u64; // mild backoff
+                        continue;
+                    }
+                    break;
                 }
             }
         }
@@ -294,15 +322,15 @@ struct BootstrapStats {
 
 /// Perform full transaction history bootstrap before marking system ready
 async fn perform_initial_transaction_bootstrap(
-    manager: &mut TransactionsManager
+    manager_arc: &Arc<Mutex<TransactionsManager>>
 ) -> Result<BootstrapStats, String> {
     let bootstrap_timer = std::time::Instant::now();
-
-    let wallet_pubkey = manager.wallet_pubkey;
-    let debug = manager.debug_enabled;
+    let (wallet_pubkey, debug, transaction_db) = {
+        let mgr = manager_arc.lock().await;
+        (mgr.wallet_pubkey, mgr.debug_enabled, mgr.transaction_database.clone())
+    };
     let fetcher = TransactionFetcher::new();
     let processor = TransactionProcessor::new(wallet_pubkey);
-    let transaction_db = manager.transaction_database.clone();
 
     let mut stats = BootstrapStats::default();
     let mut before: Option<String> = None;
@@ -373,7 +401,9 @@ async fn perform_initial_transaction_bootstrap(
 
             if signature_is_known {
                 add_signature_to_known_globally(signature.clone()).await;
-                manager.known_signatures.insert(signature.clone());
+                if let Ok(mut mgr) = manager_arc.try_lock() {
+                    mgr.known_signatures.insert(signature.clone());
+                }
                 continue;
             }
 
@@ -395,8 +425,10 @@ async fn perform_initial_transaction_bootstrap(
                     }
 
                     add_signature_to_known_globally(signature.clone()).await;
-                    manager.known_signatures.insert(signature.clone());
-                    manager.total_transactions += 1;
+                    if let Ok(mut mgr) = manager_arc.try_lock() {
+                        mgr.known_signatures.insert(signature.clone());
+                        mgr.total_transactions += 1;
+                    }
                     stats.newly_processed += 1;
                 }
                 Err(e) => {
@@ -424,7 +456,9 @@ async fn perform_initial_transaction_bootstrap(
     if let Some(db) = transaction_db.as_ref() {
         match db.get_known_signatures_count().await {
             Ok(count) => {
-                manager.total_transactions = count;
+                if let Ok(mut mgr) = manager_arc.try_lock() {
+                    mgr.total_transactions = count;
+                }
             }
             Err(e) => {
                 log(
