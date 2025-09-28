@@ -15,11 +15,11 @@
 
 use crate::global::*;
 use crate::learner::get_learning_integration;
-use crate::logger::{log, LogTag};
-use crate::positions::{calculate_position_pnl, Position};
+use crate::logger::{ log, LogTag };
+use crate::positions::{ calculate_position_pnl, Position };
 use chrono::Utc;
 use once_cell::sync::Lazy;
-use std::time::{Duration, Instant};
+use std::time::{ Duration, Instant };
 use tokio::sync::RwLock as AsyncRwLock; // replaced StdRwLock
 
 // ============================= ATH (Recent High Proximity) Adaptation =============================
@@ -69,8 +69,9 @@ struct AthCached {
     high_6h: f64,
 }
 
-static ATH_CACHE: Lazy<AsyncRwLock<std::collections::HashMap<String, AthCached>>> =
-    Lazy::new(|| AsyncRwLock::new(std::collections::HashMap::new()));
+static ATH_CACHE: Lazy<AsyncRwLock<std::collections::HashMap<String, AthCached>>> = Lazy::new(||
+    AsyncRwLock::new(std::collections::HashMap::new())
+);
 
 struct AthContext {
     level: AthLevel,
@@ -159,15 +160,12 @@ async fn fetch_ath_context(mint: &str, current_price: f64) -> AthContext {
     // Store cache
     {
         let mut mapw = ATH_CACHE.write().await;
-        mapw.insert(
-            mint.to_string(),
-            AthCached {
-                last_fetch: Instant::now(),
-                high_15m,
-                high_1h,
-                high_6h,
-            },
-        );
+        mapw.insert(mint.to_string(), AthCached {
+            last_fetch: Instant::now(),
+            high_15m,
+            high_1h,
+            high_6h,
+        });
     }
     build_ath_context_from_cached(
         &(AthCached {
@@ -176,7 +174,7 @@ async fn fetch_ath_context(mint: &str, current_price: f64) -> AthContext {
             high_1h,
             high_6h,
         }),
-        current_price,
+        current_price
     )
 }
 
@@ -190,8 +188,7 @@ fn build_ath_context_from_cached(c: &AthCached, current_price: f64) -> AthContex
     } else {
         ((high - current_price) / high) * 100.0
     };
-    let (level, trail_factor, target_max_factor, score_nudge) = if distance_pct <= ATH_DIST_EXTREME
-    {
+    let (level, trail_factor, target_max_factor, score_nudge) = if distance_pct <= ATH_DIST_EXTREME {
         (
             AthLevel::Extreme,
             ATH_TRAIL_TIGHTEN_EXTREME,
@@ -226,8 +223,9 @@ fn build_ath_context_from_cached(c: &AthCached, current_price: f64) -> AthContex
 }
 
 // Re-entry adaptive exit cache: key = mint + entry_time_unix -> capped profit percent
-static REENTRY_CAP_CACHE: Lazy<AsyncRwLock<std::collections::HashMap<String, f64>>> =
-    Lazy::new(|| AsyncRwLock::new(std::collections::HashMap::new()));
+static REENTRY_CAP_CACHE: Lazy<AsyncRwLock<std::collections::HashMap<String, f64>>> = Lazy::new(||
+    AsyncRwLock::new(std::collections::HashMap::new())
+);
 
 /// Re-entry optimization tunables
 /// Goal: On re-entering a token that previously had higher exit prices, avoid waiting
@@ -274,9 +272,9 @@ pub const EARLY_HOLD_GRACE_SECS: f64 = 8.0; // Reduced to 8s for faster spike ca
 // Quick capture windows (post initial fast tier phase): (minutes, required profit %)
 // Only include mid/late windows not already covered by FAST_TIERS logic.
 const QUICK_WINDOWS: &[(f64, f64)] = &[
-    (3.0, 50.0),  // 3 minutes: 50% profit
-    (5.0, 60.0),  // 5 minutes: 60% profit
-    (8.0, 70.0),  // 8 minutes: 70% profit
+    (3.0, 50.0), // 3 minutes: 50% profit
+    (5.0, 60.0), // 5 minutes: 60% profit
+    (8.0, 70.0), // 8 minutes: 70% profit
     (12.0, 80.0), // 12 minutes: 80% profit
 ];
 
@@ -301,11 +299,7 @@ const FAST_TIERS: &[(f64, f64, &str, f64)] = &[
 
 #[inline]
 fn clamp01(v: f64) -> f64 {
-    if v.is_finite() {
-        v.max(0.0).min(1.0)
-    } else {
-        0.0
-    }
+    if v.is_finite() { v.max(0.0).min(1.0) } else { 0.0 }
 }
 
 /// Compute (and cache) a re-entry adaptive profit cap for a position.
@@ -342,9 +336,8 @@ async fn get_reentry_cap_percent(position: &Position) -> Option<f64> {
         return None;
     };
     // Use lightweight price-only fetch to minimize DB parsing & lock time
-    let recent_prices = match db
-        .get_recent_closed_exit_prices_for_mint(&position.mint, REENTRY_LOOKBACK_POSITIONS)
-        .await
+    let recent_prices = match
+        db.get_recent_closed_exit_prices_for_mint(&position.mint, REENTRY_LOOKBACK_POSITIONS).await
     {
         Ok(v) => v,
         Err(_) => {
@@ -355,9 +348,7 @@ async fn get_reentry_cap_percent(position: &Position) -> Option<f64> {
         return None;
     }
 
-    let entry_price = position
-        .effective_entry_price
-        .unwrap_or(position.entry_price);
+    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
     if entry_price <= 0.0 || !entry_price.is_finite() {
         return None;
     }
@@ -383,8 +374,9 @@ async fn get_reentry_cap_percent(position: &Position) -> Option<f64> {
     let extra_discount =
         (higher_exits.len().saturating_sub(1) as f64) * REENTRY_ADDITIONAL_DISCOUNT_PER_PRIOR_PCT;
     let total_discount = (REENTRY_CAP_DISCOUNT_PCT + extra_discount).min(40.0); // cap total discount at 40%
-    let discounted =
-        (raw_profit_pct * (1.0 - total_discount / 100.0)).max(REENTRY_MIN_PROFIT_OVERRIDE_PCT);
+    let discounted = (raw_profit_pct * (1.0 - total_discount / 100.0)).max(
+        REENTRY_MIN_PROFIT_OVERRIDE_PCT
+    );
     let capped = discounted.min(REENTRY_MAX_CAP_PCT);
 
     // Store (async lock)
@@ -403,11 +395,7 @@ async fn get_reentry_cap_percent(position: &Position) -> Option<f64> {
 /// - Returned value rounded to 2 decimals to reduce log churn.
 pub fn trailing_gap(peak_profit: f64, minutes_held: f64) -> f64 {
     // Sanitize inputs
-    let minutes = if minutes_held.is_finite() && minutes_held > 0.0 {
-        minutes_held
-    } else {
-        0.0
-    };
+    let minutes = if minutes_held.is_finite() && minutes_held > 0.0 { minutes_held } else { 0.0 };
 
     if !peak_profit.is_finite() || peak_profit <= 0.0 {
         return TRAIL_MIN_GAP;
@@ -431,9 +419,10 @@ pub fn trailing_gap(peak_profit: f64, minutes_held: f64) -> f64 {
 
     // Time tightening: from TRAIL_TIGHTEN_START -> TRAIL_TIGHTEN_FULL reduce gap by up to 30%
     if minutes >= TRAIL_TIGHTEN_START && TRAIL_TIGHTEN_FULL > TRAIL_TIGHTEN_START {
-        let progress = ((minutes - TRAIL_TIGHTEN_START)
-            / (TRAIL_TIGHTEN_FULL - TRAIL_TIGHTEN_START))
-            .clamp(0.0, 1.0);
+        let progress = (
+            (minutes - TRAIL_TIGHTEN_START) /
+            (TRAIL_TIGHTEN_FULL - TRAIL_TIGHTEN_START)
+        ).clamp(0.0, 1.0);
         let shrink = 0.3 * progress;
         gap *= 1.0 - shrink;
     }
@@ -447,11 +436,7 @@ pub fn trailing_gap(peak_profit: f64, minutes_held: f64) -> f64 {
 /// - Odds decay with holding time and current profit (diminishing returns).
 /// - Very quick, large moves get a temporary early_boost.
 pub fn continuation_odds(profit_percent: f64, minutes_held: f64) -> f64 {
-    let minutes = if minutes_held.is_finite() && minutes_held >= 0.0 {
-        minutes_held
-    } else {
-        0.0
-    };
+    let minutes = if minutes_held.is_finite() && minutes_held >= 0.0 { minutes_held } else { 0.0 };
 
     // Minimal floor - a slight edge to holding small profiting positions
     if profit_percent <= 0.0 {
@@ -465,11 +450,7 @@ pub fn continuation_odds(profit_percent: f64, minutes_held: f64) -> f64 {
     let profit_decay = (-(profit_percent / 120.0).powf(1.1)).exp();
 
     // Early boost for very fast moves
-    let early_boost = if minutes < 5.0 && profit_percent > 40.0 {
-        0.1
-    } else {
-        0.0
-    };
+    let early_boost = if minutes < 5.0 && profit_percent > 40.0 { 0.1 } else { 0.0 };
 
     (time_decay * profit_decay + early_boost).clamp(0.0, 1.0)
 }
@@ -486,9 +467,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         return false;
     }
 
-    let entry = position
-        .effective_entry_price
-        .unwrap_or(position.entry_price);
+    let entry = position.effective_entry_price.unwrap_or(position.entry_price);
     if !entry.is_finite() || entry <= 0.0 {
         return false;
     }
@@ -523,11 +502,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     // Peak profit (percentage)
     let highest = position.price_highest.max(current_price);
-    let peak_profit = if entry > 0.0 {
-        ((highest - entry) / entry) * 100.0
-    } else {
-        0.0
-    };
+    let peak_profit = if entry > 0.0 { ((highest - entry) / entry) * 100.0 } else { 0.0 };
 
     // Drawdown from peak (how far we've come off the peak)
     let drawdown = peak_profit - pnl_percent;
@@ -553,12 +528,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     // ============================= Profit Targets Integration (ATH Adaptive) =============================
     // Use position-specific targets when available. Keep it simple and local.
-    let target_min = position
-        .profit_target_min
+    let target_min = position.profit_target_min
         .unwrap_or(BASE_MIN_PROFIT_PERCENT)
         .clamp(1.0, 300.0);
-    let mut target_max = position
-        .profit_target_max
+    let mut target_max = position.profit_target_max
         .unwrap_or(INSTANT_EXIT_LEVEL_1)
         .clamp(1.0, 500.0);
     if target_max < target_min {
@@ -609,9 +582,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     // to avoid being trapped for long periods waiting for the hard stop. This is deliberately
     // simple and avoids new functions/complexity.
     if peak_profit < 5.0 {
-        let trigger = (minutes_held >= 6.0 && pnl_percent <= -18.0)
-            || (minutes_held >= 15.0 && pnl_percent <= -25.0)
-            || (minutes_held >= 30.0 && pnl_percent <= -32.0);
+        let trigger =
+            (minutes_held >= 6.0 && pnl_percent <= -18.0) ||
+            (minutes_held >= 15.0 && pnl_percent <= -25.0) ||
+            (minutes_held >= 30.0 && pnl_percent <= -32.0);
         if trigger {
             if is_debug_profit_enabled() {
                 log(
@@ -619,8 +593,11 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                     "LOSS_SOFT_STOP",
                     &format!(
                         "{} pnl={:.2}% peak={:.2}% t={:.1}m (soft stop)",
-                        position.symbol, pnl_percent, peak_profit, minutes_held
-                    ),
+                        position.symbol,
+                        pnl_percent,
+                        peak_profit,
+                        minutes_held
+                    )
                 );
             }
             return true;
@@ -674,8 +651,11 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                 "ROUND_TRIP_NEUTRAL_EXIT",
                 &format!(
                     "{} pnl={:.2}% peak={:.2}% t={:.1}m",
-                    position.symbol, pnl_percent, peak_profit, minutes_held
-                ),
+                    position.symbol,
+                    pnl_percent,
+                    peak_profit,
+                    minutes_held
+                )
             );
         }
         return true;
@@ -684,9 +664,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     // Re-entry adaptive cap (only if no custom profit targets provided on position)
     if position.profit_target_min.is_none() && position.profit_target_max.is_none() {
         if let Some(cap_pct) = get_reentry_cap_percent(position).await {
-            if pnl_percent >= cap_pct
-                && !early_hold_active
-                && cap_pct >= REENTRY_MIN_PROFIT_OVERRIDE_PCT
+            if
+                pnl_percent >= cap_pct &&
+                !early_hold_active &&
+                cap_pct >= REENTRY_MIN_PROFIT_OVERRIDE_PCT
             {
                 if is_debug_profit_enabled() {
                     log(
@@ -694,8 +675,12 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                         "REENTRY_CAP_EXIT",
                         &format!(
                             "{} pnl={:.2}% >= reentry_cap={:.2}% (entry={:.6} peak={:.2}%)",
-                            position.symbol, pnl_percent, cap_pct, entry, peak_profit
-                        ),
+                            position.symbol,
+                            pnl_percent,
+                            cap_pct,
+                            entry,
+                            peak_profit
+                        )
                     );
                 }
                 return true;
@@ -711,8 +696,11 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                 "TARGET_MAX_HIT",
                 &format!(
                     "{} pnl={:.2}% target_max={:.2}% t={:.1}m",
-                    position.symbol, pnl_percent, target_max, minutes_held
-                ),
+                    position.symbol,
+                    pnl_percent,
+                    target_max,
+                    minutes_held
+                )
             );
         }
         return true;
@@ -727,8 +715,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                 "EXCEPTIONAL_PROFIT_200PCT",
                 &format!(
                     "{} pnl={:.2}% t={:.1}m (exceptional 200%+ capture)",
-                    position.symbol, pnl_percent, minutes_held
-                ),
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held
+                )
             );
         }
         return true;
@@ -742,8 +732,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                 "VERY_HIGH_PROFIT_150PCT",
                 &format!(
                     "{} pnl={:.2}% t={:.1}m (150%+ timed capture)",
-                    position.symbol, pnl_percent, minutes_held
-                ),
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held
+                )
             );
         }
         return true;
@@ -805,8 +797,12 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                     "BIG_PEAK_RETAIN_EXIT",
                     &format!(
                         "{} pnl={:.2}% peak={:.2}% retain_req={:.2}% t={:.1}m",
-                        position.symbol, pnl_percent, peak_profit, must_retain, minutes_held
-                    ),
+                        position.symbol,
+                        pnl_percent,
+                        peak_profit,
+                        must_retain,
+                        minutes_held
+                    )
                 );
             }
             return true;
@@ -842,8 +838,12 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                         "PEAK_RETAIN_EXIT",
                         &format!(
                             "{} pnl={:.2}% peak={:.2}% retain_req={:.2}% t={:.1}m",
-                            position.symbol, pnl_percent, peak_profit, must_retain, minutes_held
-                        ),
+                            position.symbol,
+                            pnl_percent,
+                            peak_profit,
+                            must_retain,
+                            minutes_held
+                        )
                     );
                 }
                 return true;
@@ -857,10 +857,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
             log(
                 LogTag::Profit,
                 "INSTANT_EXIT_L2",
-                &format!(
-                    "{} pnl={:.2}% t={:.1}m",
-                    position.symbol, pnl_percent, minutes_held
-                ),
+                &format!("{} pnl={:.2}% t={:.1}m", position.symbol, pnl_percent, minutes_held)
             );
         }
         return true;
@@ -875,8 +872,11 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                     "INSTANT_EXIT_L1",
                     &format!(
                         "{} pnl={:.2}% dd={:.2}% t={:.2}m",
-                        position.symbol, pnl_percent, drawdown_from_peak, minutes_held
-                    ),
+                        position.symbol,
+                        pnl_percent,
+                        drawdown_from_peak,
+                        minutes_held
+                    )
                 );
             }
             return true;
@@ -890,11 +890,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         // Base decays from target_min toward 0.5 * target_min over time pressure
         let decay_component = target_min * (1.0 - 0.5 * time_pressure);
         // After 25 minutes allow a further soft decay to encourage freeing capital
-        let long_hold_bonus = if minutes_held > 25.0 {
-            target_min * 0.15
-        } else {
-            0.0
-        };
+        let long_hold_bonus = if minutes_held > 25.0 { target_min * 0.15 } else { 0.0 };
         (decay_component - long_hold_bonus).max(3.0)
     };
 
@@ -914,12 +910,13 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         let large_relative_giveback = pnl_percent < peak_profit * 0.25; // retain <25% of peak
         let not_still_ok_profit = pnl_percent < target_min * 0.8; // scale with target
 
-        if meaningful_peak
-            && warmup_passed
-            && within_window
-            && large_absolute_drawdown
-            && large_relative_giveback
-            && not_still_ok_profit
+        if
+            meaningful_peak &&
+            warmup_passed &&
+            within_window &&
+            large_absolute_drawdown &&
+            large_relative_giveback &&
+            not_still_ok_profit
         {
             if is_debug_profit_enabled() {
                 log(
@@ -1001,7 +998,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                         gap,
                         minutes_held,
                         time_pressure
-                    ),
+                    )
                 );
             }
             return true;
@@ -1018,16 +1015,20 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                 "GRACE_HOLD",
                 &format!(
                     "{} pnl={:.2}% peak={:.2}% t={:.1}s — suppressing scoring/trailing exits",
-                    position.symbol, pnl_percent, peak_profit, seconds_held
-                ),
+                    position.symbol,
+                    pnl_percent,
+                    peak_profit,
+                    seconds_held
+                )
             );
         }
         return false;
     }
     // Score components: negative adds to exit_score; positive subtracts (hold bias).
     let odds = continuation_odds(pnl_percent, minutes_held);
-    let future_gap = trailing_gap(pnl_percent.max(peak_profit), minutes_held)
-        * trailing_time_pressure_multiplier;
+    let future_gap =
+        trailing_gap(pnl_percent.max(peak_profit), minutes_held) *
+        trailing_time_pressure_multiplier;
     let potential_gain_ceiling = 200.0;
     let potential_gain = (potential_gain_ceiling - pnl_percent).max(0.0).min(100.0);
     let expected_edge = odds * potential_gain - (1.0 - odds) * future_gap;
@@ -1037,16 +1038,13 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     // Drawdown vs dynamic gap: heavy weight
     if peak_profit >= target_min {
         let gap_now = trailing_gap(peak_profit, minutes_held) * trailing_time_pressure_multiplier;
-        let dd_ratio = if gap_now > 0.0 {
-            drawdown / gap_now
-        } else {
-            0.0
-        };
+        let dd_ratio = if gap_now > 0.0 { drawdown / gap_now } else { 0.0 };
         if dd_ratio >= 1.0 {
             exit_score += 2.0;
         } else if
-        // would trigger trail
-        dd_ratio >= 0.7 {
+            // would trigger trail
+            dd_ratio >= 0.7
+        {
             exit_score += 1.2;
         } else if dd_ratio >= 0.4 {
             exit_score += 0.6;
@@ -1094,7 +1092,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
 
     // Normalize and threshold
     let mut score_threshold = 1.2; // calibrated to act after 1-3 weak signals or one strong
-                                   // ATH proximity adds a nudge to exit_score (risk of rejection) if adaptation allowed
+    // ATH proximity adds a nudge to exit_score (risk of rejection) if adaptation allowed
     if ath_ctx.level != AthLevel::None {
         exit_score += ath_ctx.score_nudge;
     }
@@ -1102,9 +1100,12 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     // Apply learner exit urgency multiplier to exit score
     let learning = get_learning_integration();
     let original_exit_score = exit_score;
-    let urgency_multiplier = learning
-        .get_exit_score_adjustment(&position.mint, current_price, entry, minutes_held as u32)
-        .await;
+    let urgency_multiplier = learning.get_exit_score_adjustment(
+        &position.mint,
+        current_price,
+        entry,
+        minutes_held as u32
+    ).await;
     exit_score *= urgency_multiplier;
 
     if is_debug_profit_enabled() && (urgency_multiplier - 1.0).abs() > 0.05 {
@@ -1113,8 +1114,11 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
             "LEARNER_EXIT_URGENCY",
             &format!(
                 "🧠 {} learner exit urgency: score {:.2} → {:.2} (multiplier: {:.2}x)",
-                position.symbol, original_exit_score, exit_score, urgency_multiplier
-            ),
+                position.symbol,
+                original_exit_score,
+                exit_score,
+                urgency_multiplier
+            )
         );
     }
 
@@ -1152,8 +1156,11 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                 "TIME_PRESSURE_EXIT",
                 &format!(
                     "{} pnl={:.2}% t={:.1}m pressure={:.2}",
-                    position.symbol, pnl_percent, minutes_held, time_pressure
-                ),
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held,
+                    time_pressure
+                )
             );
         }
         return true;
