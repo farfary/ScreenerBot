@@ -65,7 +65,7 @@ const REQUIRE_WEBSITE_URL: bool = false;
 
 // ===== TOKEN AGE REQUIREMENTS =====
 /// Minimum token age in minutes before allowing monitoring
-const MIN_TOKEN_AGE_MINUTES: i64 = 60;
+const MIN_TOKEN_AGE_MINUTES: i64 = 24 * 60;
 
 // ===== TRANSACTION ACTIVITY REQUIREMENTS =====
 /// Minimum transactions in 5 minutes (very low for small tokens)
