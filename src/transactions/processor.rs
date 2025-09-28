@@ -241,7 +241,11 @@ impl TransactionProcessor {
         };
 
         // Determine success status
-        let success = tx_data.meta.as_ref().map_or(false, |meta| meta.err.is_none());
+        let success = tx_data.meta
+            .as_ref()
+            .map_or(false, |meta| {
+                meta.err.is_none() || meta.err.as_ref().map_or(false, |e| e.is_null())
+            });
 
         // Extract error message if transaction failed
         let error_message = tx_data.meta

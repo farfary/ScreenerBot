@@ -63,6 +63,10 @@ path = "src/bin/debug_decimals.rs"
 name = "debug_token_patterns"
 path = "src/bin/debug_token_patterns.rs"
 
+[[bin]]
+name = "validate_transactions_system"
+path = "src/bin/validate_transactions_system.rs"
+
 [dependencies]
 # Core async runtime with minimal features for faster builds
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "net"] }
