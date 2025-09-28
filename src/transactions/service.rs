@@ -3,25 +3,25 @@
 // This module provides the main background service that coordinates
 // real-time transaction monitoring, WebSocket integration, and periodic processing.
 
+use chrono::{ DateTime, Utc };
+use once_cell::sync::Lazy;
 use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{ Mutex, Notify };
 use tokio::time::{ interval, timeout };
-use chrono::{ DateTime, Utc };
-use once_cell::sync::Lazy;
 
-use crate::logger::{ log, LogTag };
-use crate::global::is_debug_transactions_enabled;
 use crate::configs::read_configs;
-use crate::websocket;
+use crate::global::is_debug_transactions_enabled;
+use crate::logger::{ log, LogTag };
 use crate::transactions::{
+    fetcher::TransactionFetcher,
     manager::TransactionsManager,
+    processor::TransactionProcessor,
     types::*,
     utils::*,
-    processor::TransactionProcessor,
-    fetcher::TransactionFetcher,
 };
+use crate::websocket;
 
 // =============================================================================
 // GLOBAL SERVICE STATE
@@ -183,13 +183,49 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
         log(LogTag::Transactions, "GET_TX", &format!("{}", &signature));
     }
 
-    // For now, return None until the architecture is properly refactored
-    // TODO: Implement proper transaction retrieval from database
+    // Try database first
+    if let Some(db) = super::database::get_transaction_database().await {
+        if let Ok(Some(tx)) = db.get_transaction(signature).await {
+            return Ok(Some(tx));
+        }
+    }
+
+    // If not in DB, attempt on-demand processing via processor
+    if let Some(manager_arc) = get_global_transaction_manager().await {
+        let manager = manager_arc.lock().await;
+        let processor = TransactionProcessor::new(manager.get_wallet_pubkey());
+        match processor.process_transaction(signature).await {
+            Ok(tx) => {
+                if debug {
+                    log(
+                        LogTag::Transactions,
+                        "CACHE_REFRESH",
+                        &format!(
+                            "Processed {} on-demand and refreshed cache",
+                            format_signature_short(signature)
+                        )
+                    );
+                }
+                // Persisted by processor; return the processed transaction
+                return Ok(Some(tx));
+            }
+            Err(e) => {
+                if debug {
+                    log(
+                        LogTag::Transactions,
+                        "WARN",
+                        &format!("On-demand processing failed for {}: {}", signature, e)
+                    );
+                }
+            }
+        }
+    }
+
     if debug {
         log(
             LogTag::Transactions,
-            "WARN",
-            &format!("get_transaction not fully implemented yet for signature: {}", signature)
+            "CACHE_MISS",
+            &format!("No transaction data available for {}", format_signature_short(signature))
         );
     }
 
@@ -341,6 +377,7 @@ async fn perform_fallback_transaction_check(
     fetcher: &Arc<TransactionFetcher>,
     processor: &Arc<TransactionProcessor>
 ) -> Result<usize, String> {
+    let debug = is_debug_transactions_enabled();
     log(
         LogTag::Transactions,
         "FALLBACK",
@@ -349,6 +386,7 @@ async fn perform_fallback_transaction_check(
 
     // Fetch recent transactions
     let signatures = fetcher.fetch_recent_signatures(config.wallet_pubkey, 100).await?;
+    let fetched_count = signatures.len();
 
     let mut new_count = 0;
     for signature in signatures {
@@ -380,6 +418,17 @@ async fn perform_fallback_transaction_check(
             LogTag::Transactions,
             "INFO",
             &format!("Fallback check found {} new transactions", new_count)
+        );
+    } else if debug {
+        let known = get_known_signatures_count().await;
+        log(
+            LogTag::Transactions,
+            "DEBUG",
+            &format!(
+                "Fallback check processed 0 new transactions (known cache: {}, fetched: {})",
+                known,
+                fetched_count
+            )
         );
     }
 

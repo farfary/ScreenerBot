@@ -3,12 +3,12 @@
 // This module provides transaction verification functionality specifically
 // designed for integration with the positions system to verify entry and exit transactions.
 
-use std::collections::HashMap;
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use solana_sdk::pubkey::Pubkey;
+use std::collections::HashMap;
 
-use crate::logger::{ log, LogTag };
-use crate::transactions::{ types::*, utils::*, processor::TransactionProcessor };
+use crate::logger::{log, LogTag};
+use crate::transactions::{processor::TransactionProcessor, types::*, utils::*};
 
 // =============================================================================
 // VERIFICATION RESULT STRUCTURES
@@ -72,7 +72,7 @@ pub enum IssueSeverity {
 pub async fn verify_transaction_for_position(
     signature: &str,
     expected_type: TransactionType,
-    wallet_pubkey: Pubkey
+    wallet_pubkey: Pubkey,
 ) -> Result<TransactionVerificationResult, String> {
     let processor = TransactionProcessor::new(wallet_pubkey);
 
@@ -83,7 +83,7 @@ pub async fn verify_transaction_for_position(
             "Verifying transaction {} for position (expected: {:?})",
             format_signature_short(signature),
             expected_type
-        )
+        ),
     );
 
     // Step 1: Process transaction to get full details
@@ -110,11 +110,8 @@ pub async fn verify_transaction_for_position(
     };
 
     // Step 2: Perform comprehensive verification
-    let verification_result = perform_comprehensive_verification(
-        &transaction,
-        expected_type,
-        wallet_pubkey
-    ).await?;
+    let verification_result =
+        perform_comprehensive_verification(&transaction, expected_type, wallet_pubkey).await?;
 
     log(
         LogTag::Transactions,
@@ -125,7 +122,7 @@ pub async fn verify_transaction_for_position(
             verification_result.verified,
             verification_result.confidence_score,
             verification_result.issues.len()
-        )
+        ),
     );
 
     Ok(verification_result)
@@ -136,13 +133,10 @@ pub async fn verify_entry_transaction(
     signature: &str,
     expected_mint: &str,
     expected_amount_range: Option<(f64, f64)>,
-    wallet_pubkey: Pubkey
+    wallet_pubkey: Pubkey,
 ) -> Result<TransactionVerificationResult, String> {
-    let mut result = verify_transaction_for_position(
-        signature,
-        TransactionType::Buy,
-        wallet_pubkey
-    ).await?;
+    let mut result =
+        verify_transaction_for_position(signature, TransactionType::Buy, wallet_pubkey).await?;
 
     result.verification_type = VerificationType::EntryTransaction;
 
@@ -155,8 +149,7 @@ pub async fn verify_entry_transaction(
                     issue_type: IssueType::TokenMismatch,
                     description: format!(
                         "Expected mint {} but found {}",
-                        expected_mint,
-                        swap_info.output_mint
+                        expected_mint, swap_info.output_mint
                     ),
                     severity: IssueSeverity::Critical,
                 });
@@ -165,20 +158,15 @@ pub async fn verify_entry_transaction(
         }
 
         // Verify amount is within expected range
-        if
-            let (Some(swap_info), Some((min_amount, max_amount))) = (
-                &transaction.token_swap_info,
-                expected_amount_range,
-            )
+        if let (Some(swap_info), Some((min_amount, max_amount))) =
+            (&transaction.token_swap_info, expected_amount_range)
         {
             if swap_info.output_ui_amount < min_amount || swap_info.output_ui_amount > max_amount {
                 result.issues.push(VerificationIssue {
                     issue_type: IssueType::AmountMismatch,
                     description: format!(
                         "Amount {:.6} outside expected range {:.6}-{:.6}",
-                        swap_info.output_ui_amount,
-                        min_amount,
-                        max_amount
+                        swap_info.output_ui_amount, min_amount, max_amount
                     ),
                     severity: IssueSeverity::Warning,
                 });
@@ -194,13 +182,10 @@ pub async fn verify_exit_transaction(
     signature: &str,
     expected_mint: &str,
     expected_amount_range: Option<(f64, f64)>,
-    wallet_pubkey: Pubkey
+    wallet_pubkey: Pubkey,
 ) -> Result<TransactionVerificationResult, String> {
-    let mut result = verify_transaction_for_position(
-        signature,
-        TransactionType::Sell,
-        wallet_pubkey
-    ).await?;
+    let mut result =
+        verify_transaction_for_position(signature, TransactionType::Sell, wallet_pubkey).await?;
 
     result.verification_type = VerificationType::ExitTransaction;
 
@@ -213,8 +198,7 @@ pub async fn verify_exit_transaction(
                     issue_type: IssueType::TokenMismatch,
                     description: format!(
                         "Expected mint {} but found {}",
-                        expected_mint,
-                        swap_info.input_mint
+                        expected_mint, swap_info.input_mint
                     ),
                     severity: IssueSeverity::Critical,
                 });
@@ -223,20 +207,15 @@ pub async fn verify_exit_transaction(
         }
 
         // Verify amount is within expected range
-        if
-            let (Some(swap_info), Some((min_amount, max_amount))) = (
-                &transaction.token_swap_info,
-                expected_amount_range,
-            )
+        if let (Some(swap_info), Some((min_amount, max_amount))) =
+            (&transaction.token_swap_info, expected_amount_range)
         {
             if swap_info.input_ui_amount < min_amount || swap_info.input_ui_amount > max_amount {
                 result.issues.push(VerificationIssue {
                     issue_type: IssueType::AmountMismatch,
                     description: format!(
                         "Amount {:.6} outside expected range {:.6}-{:.6}",
-                        swap_info.input_ui_amount,
-                        min_amount,
-                        max_amount
+                        swap_info.input_ui_amount, min_amount, max_amount
                     ),
                     severity: IssueSeverity::Warning,
                 });
@@ -255,7 +234,7 @@ pub async fn verify_exit_transaction(
 async fn perform_comprehensive_verification(
     transaction: &Transaction,
     expected_type: TransactionType,
-    wallet_pubkey: Pubkey
+    wallet_pubkey: Pubkey,
 ) -> Result<TransactionVerificationResult, String> {
     let mut issues = Vec::new();
     let mut confidence_score = 1.0;
@@ -264,7 +243,8 @@ async fn perform_comprehensive_verification(
     if !transaction.success {
         issues.push(VerificationIssue {
             issue_type: IssueType::TransactionFailed,
-            description: transaction.error_message
+            description: transaction
+                .error_message
                 .clone()
                 .unwrap_or_else(|| "Transaction failed without specific error".to_string()),
             severity: IssueSeverity::Critical,
@@ -278,8 +258,7 @@ async fn perform_comprehensive_verification(
             issue_type: IssueType::UnexpectedTransactionType,
             description: format!(
                 "Expected {:?} but found {:?}",
-                expected_type,
-                transaction.transaction_type
+                expected_type, transaction.transaction_type
             ),
             severity: IssueSeverity::Critical,
         });
@@ -287,9 +266,8 @@ async fn perform_comprehensive_verification(
     }
 
     // Check 3: Transaction has sufficient data
-    if
-        transaction.token_swap_info.is_none() &&
-        matches!(expected_type, TransactionType::Buy | TransactionType::Sell)
+    if transaction.token_swap_info.is_none()
+        && matches!(expected_type, TransactionType::Buy | TransactionType::Sell)
     {
         issues.push(VerificationIssue {
             issue_type: IssueType::InsufficientData,
@@ -428,14 +406,17 @@ async fn calculate_slippage_estimate(swap_info: &TokenSwapInfo) -> Result<Option
 /// Verify multiple transactions in batch
 pub async fn verify_transactions_batch(
     verifications: Vec<(String, TransactionType)>,
-    wallet_pubkey: Pubkey
+    wallet_pubkey: Pubkey,
 ) -> HashMap<String, TransactionVerificationResult> {
     let mut results = HashMap::new();
 
     log(
         LogTag::Transactions,
         "BATCH_VERIFY",
-        &format!("Starting batch verification of {} transactions", verifications.len())
+        &format!(
+            "Starting batch verification of {} transactions",
+            verifications.len()
+        ),
     );
 
     // Process verifications concurrently
@@ -444,11 +425,8 @@ pub async fn verify_transactions_batch(
         .map(|(signature, expected_type)| {
             let sig_clone = signature.clone();
             async move {
-                let result = verify_transaction_for_position(
-                    &sig_clone,
-                    expected_type,
-                    wallet_pubkey
-                ).await;
+                let result =
+                    verify_transaction_for_position(&sig_clone, expected_type, wallet_pubkey).await;
                 (sig_clone, result)
             }
         })
@@ -466,18 +444,21 @@ pub async fn verify_transactions_batch(
                 results.insert(signature, verification_result);
             }
             Err(e) => {
-                results.insert(signature.clone(), TransactionVerificationResult {
-                    verified: false,
-                    transaction: None,
-                    verification_type: VerificationType::GeneralVerification,
-                    confidence_score: 0.0,
-                    issues: vec![VerificationIssue {
-                        issue_type: IssueType::InsufficientData,
-                        description: e,
-                        severity: IssueSeverity::Critical,
-                    }],
-                    verification_timestamp: Utc::now(),
-                });
+                results.insert(
+                    signature.clone(),
+                    TransactionVerificationResult {
+                        verified: false,
+                        transaction: None,
+                        verification_type: VerificationType::GeneralVerification,
+                        confidence_score: 0.0,
+                        issues: vec![VerificationIssue {
+                            issue_type: IssueType::InsufficientData,
+                            description: e,
+                            severity: IssueSeverity::Critical,
+                        }],
+                        verification_timestamp: Utc::now(),
+                    },
+                );
             }
         }
     }
@@ -489,7 +470,7 @@ pub async fn verify_transactions_batch(
             "Batch verification complete: {}/{} verified successfully",
             success_count,
             results.len()
-        )
+        ),
     );
 
     results
@@ -501,13 +482,10 @@ pub async fn verify_transactions_batch(
 
 /// Generate verification summary report
 pub fn generate_verification_report(
-    results: &HashMap<String, TransactionVerificationResult>
+    results: &HashMap<String, TransactionVerificationResult>,
 ) -> VerificationReport {
     let total_verifications = results.len();
-    let successful_verifications = results
-        .values()
-        .filter(|r| r.verified)
-        .count();
+    let successful_verifications = results.values().filter(|r| r.verified).count();
     let failed_verifications = total_verifications - successful_verifications;
 
     let mut issue_counts = HashMap::new();
@@ -518,10 +496,7 @@ pub fn generate_verification_report(
     }
 
     let average_confidence = if total_verifications > 0 {
-        results
-            .values()
-            .map(|r| r.confidence_score)
-            .sum::<f64>() / (total_verifications as f64)
+        results.values().map(|r| r.confidence_score).sum::<f64>() / (total_verifications as f64)
     } else {
         0.0
     };
@@ -573,19 +548,16 @@ impl VerificationReport {
 /// Legacy verification function for compatibility during migration
 pub async fn verify_transaction_legacy(
     signature: &str,
-    wallet_pubkey: Pubkey
+    wallet_pubkey: Pubkey,
 ) -> Result<bool, String> {
     log(
         LogTag::Transactions,
         "WARN",
-        "Using legacy verification function - please migrate to new verification API"
+        "Using legacy verification function - please migrate to new verification API",
     );
 
-    let result = verify_transaction_for_position(
-        signature,
-        TransactionType::Unknown,
-        wallet_pubkey
-    ).await?;
+    let result =
+        verify_transaction_for_position(signature, TransactionType::Unknown, wallet_pubkey).await?;
 
     Ok(result.verified)
 }

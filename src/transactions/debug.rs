@@ -3,17 +3,17 @@
 // This module provides comprehensive debugging tools, diagnostics, and troubleshooting
 // utilities for the transactions system.
 
+use chrono::{DateTime, Utc};
 use std::collections::HashMap;
-use std::time::{ Duration, Instant };
-use chrono::{ DateTime, Utc };
-use tabled::{ settings::{ object::Rows, Alignment, Modify, Style }, Table, Tabled };
+use std::time::{Duration, Instant};
+use tabled::{
+    settings::{object::Rows, Alignment, Modify, Style},
+    Table, Tabled,
+};
 
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::transactions::{
-    types::*,
-    utils::*,
-    processor::TransactionProcessor,
-    database::get_transaction_database,
+    database::get_transaction_database, processor::TransactionProcessor, types::*, utils::*,
 };
 
 // =============================================================================
@@ -102,12 +102,15 @@ pub struct DebugValidation {
 pub async fn debug_transaction(
     signature: &str,
     wallet_pubkey: solana_sdk::pubkey::Pubkey,
-    verbose: bool
+    verbose: bool,
 ) -> Result<DebugAnalysisResult, String> {
     log(
         LogTag::Transactions,
         "DEBUG",
-        &format!("Starting debug analysis for transaction: {}", format_address_full(signature))
+        &format!(
+            "Starting debug analysis for transaction: {}",
+            format_address_full(signature)
+        ),
     );
 
     let start_time = Instant::now();
@@ -150,7 +153,7 @@ pub async fn debug_transaction(
         total_duration_ms: total_duration.as_millis() as u64,
         rpc_fetch_ms: None, // Would be tracked in actual implementation
         analysis_ms: transaction.analysis_duration_ms,
-        database_ms: None, // Would be tracked in actual implementation
+        database_ms: None,     // Would be tracked in actual implementation
         memory_usage_mb: None, // Would be tracked in actual implementation
     };
 
@@ -175,7 +178,7 @@ pub async fn debug_transaction(
             result.analysis_steps.len(),
             result.validation_results.len(),
             result.performance_metrics.total_duration_ms
-        )
+        ),
     );
 
     Ok(result)
@@ -184,12 +187,15 @@ pub async fn debug_transaction(
 /// Debug multiple transactions and generate summary
 pub async fn debug_transactions_batch(
     signatures: Vec<String>,
-    wallet_pubkey: solana_sdk::pubkey::Pubkey
+    wallet_pubkey: solana_sdk::pubkey::Pubkey,
 ) -> Result<Vec<DebugAnalysisResult>, String> {
     log(
         LogTag::Transactions,
         "DEBUG_BATCH",
-        &format!("Starting batch debug analysis for {} transactions", signatures.len())
+        &format!(
+            "Starting batch debug analysis for {} transactions",
+            signatures.len()
+        ),
     );
 
     let start_time = Instant::now();
@@ -198,9 +204,7 @@ pub async fn debug_transactions_batch(
     // Process transactions concurrently
     let tasks: Vec<_> = signatures
         .into_iter()
-        .map(|signature| {
-            async move { debug_transaction(&signature, wallet_pubkey, false).await }
-        })
+        .map(|signature| async move { debug_transaction(&signature, wallet_pubkey, false).await })
         .collect();
 
     let batch_results = futures::future::join_all(tasks).await;
@@ -213,7 +217,11 @@ pub async fn debug_transactions_batch(
                 results.push(debug_result);
             }
             Err(e) => {
-                log(LogTag::Transactions, "ERROR", &format!("Failed to debug transaction: {}", e));
+                log(
+                    LogTag::Transactions,
+                    "ERROR",
+                    &format!("Failed to debug transaction: {}", e),
+                );
             }
         }
     }
@@ -233,7 +241,7 @@ pub async fn debug_transactions_batch(
             } else {
                 0
             }
-        )
+        ),
     );
 
     Ok(results)
@@ -242,15 +250,17 @@ pub async fn debug_transactions_batch(
 /// Generate debug statistics from transaction list
 pub async fn generate_debug_statistics(transactions: &[Transaction]) -> TransactionDebugStats {
     let total_processed = transactions.len();
-    let successful_transactions = transactions
-        .iter()
-        .filter(|tx| tx.success)
-        .count();
+    let successful_transactions = transactions.iter().filter(|tx| tx.success).count();
     let failed_transactions = total_processed - successful_transactions;
 
     let swap_transactions = transactions
         .iter()
-        .filter(|tx| matches!(tx.transaction_type, TransactionType::Buy | TransactionType::Sell))
+        .filter(|tx| {
+            matches!(
+                tx.transaction_type,
+                TransactionType::Buy | TransactionType::Sell
+            )
+        })
         .count();
 
     let transfer_transactions = transactions
@@ -268,7 +278,8 @@ pub async fn generate_debug_statistics(transactions: &[Transaction]) -> Transact
             .iter()
             .filter_map(|tx| tx.analysis_duration_ms)
             .map(|d| d as f64)
-            .sum::<f64>() / (total_processed as f64)
+            .sum::<f64>()
+            / (total_processed as f64)
     } else {
         0.0
     };
@@ -280,10 +291,7 @@ pub async fn generate_debug_statistics(transactions: &[Transaction]) -> Transact
         .sum();
 
     let date_range = if !transactions.is_empty() {
-        let timestamps: Vec<_> = transactions
-            .iter()
-            .map(|tx| tx.timestamp)
-            .collect();
+        let timestamps: Vec<_> = transactions.iter().map(|tx| tx.timestamp).collect();
         let min_time = timestamps.iter().min().copied();
         let max_time = timestamps.iter().max().copied();
         min_time.zip(max_time)
@@ -325,11 +333,13 @@ fn create_debug_info(transaction: &Transaction) -> TransactionDebugInfo {
         "Unknown".to_string()
     };
 
-    let fee_sol = transaction.fee_lamports
+    let fee_sol = transaction
+        .fee_lamports
         .map(|f| format!("{:.6}", (f as f64) / 1_000_000_000.0))
         .unwrap_or_else(|| "Unknown".to_string());
 
-    let analysis_duration = transaction.analysis_duration_ms
+    let analysis_duration = transaction
+        .analysis_duration_ms
         .map(|d| format!("{}ms", d))
         .unwrap_or_else(|| "N/A".to_string());
 
@@ -351,7 +361,7 @@ fn create_debug_info(transaction: &Transaction) -> TransactionDebugInfo {
 
 /// Perform comprehensive debug validations
 async fn perform_debug_validations(
-    transaction: &Transaction
+    transaction: &Transaction,
 ) -> Result<Vec<DebugValidation>, String> {
     let mut validations = Vec::new();
 
@@ -377,17 +387,21 @@ async fn perform_debug_validations(
     });
 
     // Validation 3: Fee reasonableness
-    let reasonable_fee = transaction.fee_lamports
+    let reasonable_fee = transaction
+        .fee_lamports
         .map(|fee| fee < 10_000_000) // Less than 0.01 SOL
         .unwrap_or(true);
     validations.push(DebugValidation {
         validation_name: "Reasonable Fee".to_string(),
         passed: reasonable_fee,
-        message: format!("Transaction fee is {}", if reasonable_fee {
-            "reasonable"
-        } else {
-            "unusually high"
-        }),
+        message: format!(
+            "Transaction fee is {}",
+            if reasonable_fee {
+                "reasonable"
+            } else {
+                "unusually high"
+            }
+        ),
         severity: (if reasonable_fee { "Info" } else { "Warning" }).to_string(),
     });
 
@@ -405,7 +419,10 @@ async fn perform_debug_validations(
     });
 
     // Validation 5: Swap transaction data completeness
-    if matches!(transaction.transaction_type, TransactionType::Buy | TransactionType::Sell) {
+    if matches!(
+        transaction.transaction_type,
+        TransactionType::Buy | TransactionType::Sell
+    ) {
         let has_swap_info = transaction.token_swap_info.is_some();
         validations.push(DebugValidation {
             validation_name: "Swap Data Completeness".to_string(),
@@ -433,10 +450,20 @@ pub fn print_debug_analysis(result: &DebugAnalysisResult) {
 
     // Basic transaction info
     println!("\n📋 TRANSACTION DETAILS");
-    println!("Signature: {}", format_address_full(&result.transaction.signature));
+    println!(
+        "Signature: {}",
+        format_address_full(&result.transaction.signature)
+    );
     println!("Type: {:?}", result.transaction.transaction_type);
     println!("Direction: {:?}", result.transaction.direction);
-    println!("Success: {}", if result.transaction.success { "✅ Yes" } else { "❌ No" });
+    println!(
+        "Success: {}",
+        if result.transaction.success {
+            "✅ Yes"
+        } else {
+            "❌ No"
+        }
+    );
 
     if let Some(error) = &result.transaction.error_message {
         println!("Error: {}", error);
@@ -460,12 +487,17 @@ pub fn print_debug_analysis(result: &DebugAnalysisResult) {
         println!("Router: {}", swap_info.router);
         println!("Type: {}", swap_info.swap_type);
         println!("Input Mint: {}", format_address_full(&swap_info.input_mint));
-        println!("Output Mint: {}", format_address_full(&swap_info.output_mint));
-        println!("Input Amount: {:.6} ({} raw)", swap_info.input_ui_amount, swap_info.input_amount);
+        println!(
+            "Output Mint: {}",
+            format_address_full(&swap_info.output_mint)
+        );
+        println!(
+            "Input Amount: {:.6} ({} raw)",
+            swap_info.input_ui_amount, swap_info.input_amount
+        );
         println!(
             "Output Amount: {:.6} ({} raw)",
-            swap_info.output_ui_amount,
-            swap_info.output_amount
+            swap_info.output_ui_amount, swap_info.output_amount
         );
 
         if let Some(ref pool) = swap_info.pool_address {
@@ -506,7 +538,10 @@ pub fn print_debug_analysis(result: &DebugAnalysisResult) {
 
     // Performance metrics
     println!("\n⚡ PERFORMANCE METRICS");
-    println!("Total Duration: {}ms", result.performance_metrics.total_duration_ms);
+    println!(
+        "Total Duration: {}ms",
+        result.performance_metrics.total_duration_ms
+    );
 
     if let Some(analysis_ms) = result.performance_metrics.analysis_ms {
         println!("Analysis Duration: {}ms", analysis_ms);
@@ -517,7 +552,10 @@ pub fn print_debug_analysis(result: &DebugAnalysisResult) {
         println!("\n🔄 ANALYSIS STEPS");
         for step in &result.analysis_steps {
             let status = if step.success { "✅" } else { "❌" };
-            println!("  {} {} - {}ms - {}", status, step.step_name, step.duration_ms, step.details);
+            println!(
+                "  {} {} - {}ms - {}",
+                status, step.step_name, step.duration_ms, step.details
+            );
         }
     }
 
@@ -528,10 +566,7 @@ pub fn print_debug_analysis(result: &DebugAnalysisResult) {
             let status = if validation.passed { "✅" } else { "❌" };
             println!(
                 "  {} [{}] {} - {}",
-                status,
-                validation.severity,
-                validation.validation_name,
-                validation.message
+                status, validation.severity, validation.validation_name, validation.message
             );
         }
     }
@@ -544,23 +579,34 @@ pub fn print_debug_statistics(stats: &TransactionDebugStats) {
     println!("\n📊 TRANSACTION DEBUG STATISTICS");
     println!("═══════════════════════════════════════════════════════════════");
     println!("Total Processed: {}", stats.total_processed);
-    println!("Successful: {} ({:.1}%)", stats.successful_transactions, if stats.total_processed > 0 {
-        ((stats.successful_transactions as f64) / (stats.total_processed as f64)) * 100.0
-    } else {
-        0.0
-    });
-    println!("Failed: {} ({:.1}%)", stats.failed_transactions, if stats.total_processed > 0 {
-        ((stats.failed_transactions as f64) / (stats.total_processed as f64)) * 100.0
-    } else {
-        0.0
-    });
+    println!(
+        "Successful: {} ({:.1}%)",
+        stats.successful_transactions,
+        if stats.total_processed > 0 {
+            ((stats.successful_transactions as f64) / (stats.total_processed as f64)) * 100.0
+        } else {
+            0.0
+        }
+    );
+    println!(
+        "Failed: {} ({:.1}%)",
+        stats.failed_transactions,
+        if stats.total_processed > 0 {
+            ((stats.failed_transactions as f64) / (stats.total_processed as f64)) * 100.0
+        } else {
+            0.0
+        }
+    );
     println!();
     println!("Transaction Types:");
     println!("  • Swaps: {}", stats.swap_transactions);
     println!("  • Transfers: {}", stats.transfer_transactions);
     println!("  • Unknown: {}", stats.unknown_transactions);
     println!();
-    println!("Average Processing Time: {:.1}ms", stats.average_processing_time_ms);
+    println!(
+        "Average Processing Time: {:.1}ms",
+        stats.average_processing_time_ms
+    );
     println!("Total Fees: {:.6} SOL", stats.total_fees_sol);
 
     if let Some((start, end)) = stats.date_range {
@@ -611,9 +657,15 @@ pub async fn debug_database_connection() -> Result<(), String> {
             Ok(stats) => {
                 println!("📊 Database Statistics:");
                 println!("  • Raw Transactions: {}", stats.total_raw_transactions);
-                println!("  • Processed Transactions: {}", stats.total_processed_transactions);
+                println!(
+                    "  • Processed Transactions: {}",
+                    stats.total_processed_transactions
+                );
                 println!("  • Known Signatures: {}", stats.total_known_signatures);
-                println!("  • Pending Transactions: {}", stats.total_pending_transactions);
+                println!(
+                    "  • Pending Transactions: {}",
+                    stats.total_pending_transactions
+                );
                 println!("  • Deferred Retries: {}", stats.total_deferred_retries);
                 println!(
                     "  • Database Size: {:.2} MB",
@@ -628,13 +680,22 @@ pub async fn debug_database_connection() -> Result<(), String> {
         match db.get_integrity_report().await {
             Ok(report) => {
                 println!("🔍 Database Integrity:");
-                println!("  • Schema Version Correct: {}", if report.schema_version_correct {
-                    "✅"
-                } else {
-                    "❌"
-                });
-                println!("  • Orphaned Processed: {}", report.orphaned_processed_transactions);
-                println!("  • Missing Processed: {}", report.missing_processed_transactions);
+                println!(
+                    "  • Schema Version Correct: {}",
+                    if report.schema_version_correct {
+                        "✅"
+                    } else {
+                        "❌"
+                    }
+                );
+                println!(
+                    "  • Orphaned Processed: {}",
+                    report.orphaned_processed_transactions
+                );
+                println!(
+                    "  • Missing Processed: {}",
+                    report.missing_processed_transactions
+                );
             }
             Err(e) => println!("❌ Database integrity check: ERROR - {}", e),
         }
@@ -653,7 +714,7 @@ pub async fn debug_database_connection() -> Result<(), String> {
 /// Profile transaction processing performance
 pub async fn profile_transaction_processing(
     signatures: Vec<String>,
-    wallet_pubkey: solana_sdk::pubkey::Pubkey
+    wallet_pubkey: solana_sdk::pubkey::Pubkey,
 ) -> Result<PerformanceProfile, String> {
     let start_time = Instant::now();
     let processor = TransactionProcessor::new(wallet_pubkey);
@@ -697,7 +758,10 @@ pub async fn profile_transaction_processing(
         } else {
             0.0
         },
-        min_processing_time_ms: processing_times.iter().cloned().fold(f64::INFINITY, f64::min),
+        min_processing_time_ms: processing_times
+            .iter()
+            .cloned()
+            .fold(f64::INFINITY, f64::min),
         max_processing_time_ms: processing_times.iter().cloned().fold(0.0, f64::max),
         transactions_per_second: if total_duration.as_secs_f64() > 0.0 {
             (signatures.len() as f64) / total_duration.as_secs_f64()
@@ -740,9 +804,21 @@ fn print_performance_profile(profile: &PerformanceProfile) {
     );
     println!();
     println!("Total Duration: {:.1}ms", profile.total_duration_ms);
-    println!("Average Processing Time: {:.1}ms", profile.average_processing_time_ms);
-    println!("Min Processing Time: {:.1}ms", profile.min_processing_time_ms);
-    println!("Max Processing Time: {:.1}ms", profile.max_processing_time_ms);
-    println!("Throughput: {:.1} transactions/second", profile.transactions_per_second);
+    println!(
+        "Average Processing Time: {:.1}ms",
+        profile.average_processing_time_ms
+    );
+    println!(
+        "Min Processing Time: {:.1}ms",
+        profile.min_processing_time_ms
+    );
+    println!(
+        "Max Processing Time: {:.1}ms",
+        profile.max_processing_time_ms
+    );
+    println!(
+        "Throughput: {:.1} transactions/second",
+        profile.transactions_per_second
+    );
     println!("═══════════════════════════════════════════════════════════════");
 }

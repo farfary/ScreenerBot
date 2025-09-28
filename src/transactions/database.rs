@@ -3,18 +3,19 @@
 // This module provides high-performance SQLite-based caching and persistence
 // for transaction data, replacing the previous JSON file-based approach.
 
-use std::collections::HashMap;
-use std::path::Path;
-use std::sync::atomic::{ AtomicBool, Ordering };
-use std::sync::Arc;
 use chrono::{ DateTime, Utc };
 use once_cell::sync::Lazy;
 use r2d2::{ Pool, PooledConnection };
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{ params, Connection, OptionalExtension, Result as SqliteResult };
 use serde::{ Deserialize, Serialize };
+use std::collections::HashMap;
+use std::path::{ Path, PathBuf };
+use std::sync::atomic::{ AtomicBool, Ordering };
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::global::is_debug_transactions_enabled;
 use crate::logger::{ log, LogTag };
 use crate::transactions::{ types::*, utils::* };
 
@@ -23,7 +24,7 @@ use crate::transactions::{ types::*, utils::* };
 // =============================================================================
 
 /// Database schema version for migration management
-const DATABASE_SCHEMA_VERSION: u32 = 2;
+const DATABASE_SCHEMA_VERSION: u32 = 3;
 
 /// Static flag to track if database has been initialized (to reduce log noise)
 static DATABASE_INITIALIZED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
@@ -78,6 +79,8 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     analysis_duration_ms INTEGER,
     cached_analysis TEXT, -- JSON blob of CachedAnalysis
     analysis_version INTEGER NOT NULL DEFAULT 2,
+    -- Commonly queried scalar fields
+    fee_sol REAL NOT NULL DEFAULT 0,
     
     -- Processing timestamps
     processed_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -198,9 +201,8 @@ pub struct TransactionDatabase {
 impl TransactionDatabase {
     /// Create new TransactionDatabase with connection pooling
     pub async fn new() -> Result<Self, String> {
-        let data_dir = std::path::PathBuf::from("data");
+        let data_dir = PathBuf::from("data");
 
-        // Ensure data directory exists
         if !data_dir.exists() {
             std::fs
                 ::create_dir_all(&data_dir)
@@ -208,11 +210,18 @@ impl TransactionDatabase {
         }
 
         let database_path = data_dir.join("transactions.db");
+        let is_first_init = !DATABASE_INITIALIZED.load(Ordering::Relaxed);
+        let db = Self::create_database(database_path, is_first_init).await?;
+
+        DATABASE_INITIALIZED.store(true, Ordering::Relaxed);
+
+        Ok(db)
+    }
+
+    async fn create_database(database_path: PathBuf, log_details: bool) -> Result<Self, String> {
         let database_path_str = database_path.to_string_lossy().to_string();
 
-        // Only log detailed initialization on first database creation
-        let is_first_init = !DATABASE_INITIALIZED.load(Ordering::Relaxed);
-        if is_first_init {
+        if log_details {
             log(
                 LogTag::Transactions,
                 "INIT",
@@ -220,20 +229,18 @@ impl TransactionDatabase {
             );
         }
 
-        // Create connection pool
         let manager = SqliteConnectionManager::file(&database_path).with_init(|c| {
-            // Enable WAL mode and tune performance pragmas using pragma_update to avoid result sets
             c.pragma_update(None, "journal_mode", &"WAL")?;
             c.pragma_update(None, "synchronous", &"NORMAL")?;
             c.pragma_update(None, "cache_size", &10000)?;
             c.pragma_update(None, "temp_store", &"MEMORY")?;
-            c.pragma_update(None, "mmap_size", &268_435_456)?; // 256MB mmap
+            c.pragma_update(None, "mmap_size", &268_435_456)?;
             c.pragma_update(None, "foreign_keys", &1)?;
             Ok(())
         });
 
         let pool = Pool::builder()
-            .max_size(10) // Allow up to 10 concurrent connections
+            .max_size(10)
             .build(manager)
             .map_err(|e| format!("Failed to create connection pool: {}", e))?;
 
@@ -243,17 +250,26 @@ impl TransactionDatabase {
             schema_version: DATABASE_SCHEMA_VERSION,
         };
 
-        // Initialize database schema
         db.initialize_schema().await?;
 
-        // Set initialization flag
-        DATABASE_INITIALIZED.store(true, Ordering::Relaxed);
-
-        if is_first_init {
+        if log_details {
             log(LogTag::Transactions, "INIT", "TransactionDatabase initialization complete");
         }
 
         Ok(db)
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn new_with_path<P: AsRef<Path>>(path: P) -> Result<Self, String> {
+        let database_path = path.as_ref().to_path_buf();
+
+        if let Some(parent) = database_path.parent() {
+            std::fs
+                ::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create data directory: {}", e))?;
+        }
+
+        Self::create_database(database_path, true).await
     }
 
     /// Initialize database schema and indexes
@@ -281,6 +297,9 @@ impl TransactionDatabase {
             conn.execute(index_sql, []).map_err(|e| format!("Failed to create index: {}", e))?;
         }
 
+        // Apply lightweight migrations for existing databases
+        self.apply_migrations(&conn)?;
+
         // Set or update schema version
         conn
             .execute(
@@ -289,6 +308,37 @@ impl TransactionDatabase {
             )
             .map_err(|e| format!("Failed to set schema version: {}", e))?;
 
+        Ok(())
+    }
+
+    /// Apply schema migrations when upgrading versions
+    fn apply_migrations(&self, conn: &Connection) -> Result<(), String> {
+        // Ensure processed_transactions has fee_sol column for MCP tools compatibility
+        let mut has_fee_sol = false;
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(processed_transactions)")
+            .map_err(|e| format!("Failed to inspect processed_transactions schema: {}", e))?;
+        let rows = stmt
+            .query_map([], |row| {
+                let name: String = row.get(1)?;
+                Ok(name)
+            })
+            .map_err(|e| format!("Failed to read processed_transactions schema: {}", e))?;
+        for r in rows {
+            let name = r.map_err(|e| format!("Failed to parse schema row: {}", e))?;
+            if name.eq_ignore_ascii_case("fee_sol") {
+                has_fee_sol = true;
+                break;
+            }
+        }
+        if !has_fee_sol {
+            conn
+                .execute(
+                    "ALTER TABLE processed_transactions ADD COLUMN fee_sol REAL NOT NULL DEFAULT 0",
+                    []
+                )
+                .map_err(|e| format!("Failed to add fee_sol column: {}", e))?;
+        }
         Ok(())
     }
 
@@ -303,9 +353,9 @@ impl TransactionDatabase {
 
         // Test basic query
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table'", [], |row| {
+            .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table'", [], |row|
                 row.get(0)
-            })
+            )
             .map_err(|e| format!("Database health check failed: {}", e))?;
 
         if count < 5 {
@@ -355,7 +405,7 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| { row.get(0) })
             .map_err(|e| format!("Failed to get known signatures count: {}", e))?;
 
         Ok(count as u64)
@@ -419,13 +469,13 @@ impl TransactionDatabase {
                 let signature: String = row.get(0)?;
                 let timestamp_str: String = row.get(1)?;
                 let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
-                    .map_err(|e|
+                    .map_err(|e| {
                         rusqlite::Error::InvalidColumnType(
                             0,
                             "timestamp".to_string(),
                             rusqlite::types::Type::Text
                         )
-                    )?
+                    })?
                     .with_timezone(&Utc);
                 Ok((signature, timestamp))
             })
@@ -458,7 +508,7 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| { row.get(0) })
             .map_err(|e| format!("Failed to get pending transactions count: {}", e))?;
 
         Ok(count as u64)
@@ -472,6 +522,7 @@ impl TransactionDatabase {
 impl TransactionDatabase {
     /// Store raw transaction data
     pub async fn store_raw_transaction(&self, transaction: &Transaction) -> Result<(), String> {
+        let debug = is_debug_transactions_enabled();
         let conn = self.get_connection()?;
 
         let status_str = match &transaction.status {
@@ -481,12 +532,16 @@ impl TransactionDatabase {
             TransactionStatus::Failed(msg) => "Failed",
         };
 
+        let raw_transaction_json = transaction.raw_transaction_data
+            .as_ref()
+            .and_then(|value| serde_json::to_string(value).ok());
+
         conn
             .execute(
                 r#"INSERT OR REPLACE INTO raw_transactions 
                (signature, slot, block_time, timestamp, status, success, error_message, 
-                fee_lamports, compute_units_consumed, instructions_count, accounts_count, updated_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, datetime('now'))"#,
+                fee_lamports, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data, updated_at)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, datetime('now'))"#,
                 params![
                     transaction.signature,
                     transaction.slot,
@@ -498,11 +553,113 @@ impl TransactionDatabase {
                     transaction.fee_lamports,
                     transaction.compute_units_consumed,
                     transaction.instructions_count,
-                    transaction.accounts_count
+                    transaction.accounts_count,
+                    raw_transaction_json
                 ]
             )
             .map_err(|e| format!("Failed to store raw transaction: {}", e))?;
 
+        if debug {
+            log(
+                LogTag::Transactions,
+                "DB_RAW",
+                &format!(
+                    "Stored raw {} (status={}, success={})",
+                    format_signature_short(&transaction.signature),
+                    status_str,
+                    transaction.success
+                )
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Store processed transaction analysis snapshot
+    pub async fn store_processed_transaction(
+        &self,
+        transaction: &Transaction
+    ) -> Result<(), String> {
+        let debug = is_debug_transactions_enabled();
+        let conn = self.get_connection()?;
+
+        // Serialize complex fields as JSON strings
+        let sol_balance_change_json = serde_json
+            ::to_string(&transaction.sol_balance_changes)
+            .unwrap_or_else(|_| "[]".to_string());
+        let token_balance_changes_json = serde_json
+            ::to_string(&transaction.token_balance_changes)
+            .unwrap_or_else(|_| "[]".to_string());
+        let token_swap_info_json = serde_json
+            ::to_string(&transaction.token_swap_info)
+            .unwrap_or_else(|_| "null".to_string());
+        let swap_pnl_info_json = serde_json
+            ::to_string(&transaction.swap_pnl_info)
+            .unwrap_or_else(|_| "null".to_string());
+        let ata_operations_json = serde_json
+            ::to_string(&transaction.ata_operations)
+            .unwrap_or_else(|_| "[]".to_string());
+        let token_transfers_json = serde_json
+            ::to_string(&transaction.token_transfers)
+            .unwrap_or_else(|_| "[]".to_string());
+        let instruction_info_json = serde_json
+            ::to_string(&transaction.instructions)
+            .unwrap_or_else(|_| "[]".to_string());
+        let cached_analysis_json = serde_json
+            ::to_string(&transaction.cached_analysis)
+            .unwrap_or_else(|_| "null".to_string());
+
+        let tx_type = format!("{:?}", transaction.transaction_type);
+        let dir = format!("{:?}", transaction.direction);
+
+        conn
+            .execute(
+                r#"INSERT OR REPLACE INTO processed_transactions
+                   (signature, transaction_type, direction, sol_balance_change, token_balance_changes,
+                    token_swap_info, swap_pnl_info, ata_operations, token_transfers, instruction_info,
+                    analysis_duration_ms, cached_analysis, analysis_version, fee_sol, updated_at)
+                 VALUES
+                   (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, datetime('now'))"#,
+                params![
+                    transaction.signature,
+                    tx_type,
+                    dir,
+                    sol_balance_change_json,
+                    token_balance_changes_json,
+                    token_swap_info_json,
+                    swap_pnl_info_json,
+                    ata_operations_json,
+                    token_transfers_json,
+                    instruction_info_json,
+                    transaction.analysis_duration_ms,
+                    cached_analysis_json,
+                    ANALYSIS_CACHE_VERSION as i64,
+                    transaction.fee_sol
+                ]
+            )
+            .map_err(|e| format!("Failed to store processed transaction: {}", e))?;
+
+        if debug {
+            log(
+                LogTag::Transactions,
+                "DB_PROCESSED",
+                &format!(
+                    "Stored processed {} (type={:?}, direction={:?}, fee_sol={:.8})",
+                    format_signature_short(&transaction.signature),
+                    transaction.transaction_type,
+                    transaction.direction,
+                    transaction.fee_sol
+                )
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Convenience: upsert both raw and processed snapshots
+    pub async fn upsert_full_transaction(&self, transaction: &Transaction) -> Result<(), String> {
+        self.store_raw_transaction(transaction).await?;
+        self.store_processed_transaction(transaction).await?;
         Ok(())
     }
 
@@ -528,6 +685,7 @@ impl TransactionDatabase {
 
     /// Get transaction by signature
     pub async fn get_transaction(&self, signature: &str) -> Result<Option<Transaction>, String> {
+        let debug = is_debug_transactions_enabled();
         let conn = self.get_connection()?;
 
         let result = conn.query_row(
@@ -538,13 +696,13 @@ impl TransactionDatabase {
             |row| {
                 let timestamp_str: String = row.get(3)?;
                 let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
-                    .map_err(|_|
+                    .map_err(|_| {
                         rusqlite::Error::InvalidColumnType(
                             3,
                             "timestamp".to_string(),
                             rusqlite::types::Type::Text
                         )
-                    )?
+                    })?
                     .with_timezone(&Utc);
 
                 let status_str: String = row.get(4)?;
@@ -575,7 +733,20 @@ impl TransactionDatabase {
         );
 
         match result {
-            Ok(transaction) => Ok(Some(transaction)),
+            Ok(transaction) => {
+                if debug {
+                    log(
+                        LogTag::Transactions,
+                        "DB_HIT",
+                        &format!(
+                            "Cache hit for {} (status={:?})",
+                            format_signature_short(signature),
+                            transaction.status
+                        )
+                    );
+                }
+                Ok(Some(transaction))
+            }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(format!("Failed to get transaction: {}", e)),
         }
@@ -622,23 +793,23 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
 
         let raw_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM raw_transactions", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM raw_transactions", [], |row| { row.get(0) })
             .unwrap_or(0);
 
         let processed_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM processed_transactions", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM processed_transactions", [], |row| { row.get(0) })
             .unwrap_or(0);
 
         let known_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| { row.get(0) })
             .unwrap_or(0);
 
         let retries_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM deferred_retries", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM deferred_retries", [], |row| { row.get(0) })
             .unwrap_or(0);
 
         let pending_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| { row.get(0) })
             .unwrap_or(0);
 
         // Get database file size
@@ -705,11 +876,11 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
 
         let raw_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM raw_transactions", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM raw_transactions", [], |row| { row.get(0) })
             .unwrap_or(0);
 
         let processed_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM processed_transactions", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM processed_transactions", [], |row| { row.get(0) })
             .unwrap_or(0);
 
         let orphaned: i64 = conn
@@ -723,7 +894,7 @@ impl TransactionDatabase {
         let missing: i64 = raw_count - processed_count;
 
         let pending_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| { row.get(0) })
             .unwrap_or(0);
 
         // Check schema version
@@ -744,6 +915,83 @@ impl TransactionDatabase {
             index_integrity_ok: true, // Would require index check
             pending_transactions_count: pending_count as u64,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use rusqlite::Connection;
+    use serde_json::json;
+    use tempfile::tempdir;
+
+    use crate::transactions::types::{
+        SolBalanceChange,
+        TransactionDirection,
+        TransactionStatus,
+        TransactionType,
+    };
+
+    #[tokio::test]
+    async fn upsert_and_fetch_transaction_caches_raw_and_processed() {
+        let dir = tempdir().expect("create temp dir");
+        let db_path = dir.path().join("transactions.db");
+        let db = TransactionDatabase::new_with_path(&db_path).await.expect("create database");
+
+        let mut transaction = Transaction::new("test_signature".to_string());
+        transaction.slot = Some(12345);
+        transaction.block_time = Some(1_700_000_000);
+        transaction.timestamp = Utc::now();
+        transaction.status = TransactionStatus::Finalized;
+        transaction.success = true;
+        transaction.fee_lamports = Some(5_000);
+        transaction.fee_sol = 0.000005;
+        transaction.instructions_count = 2;
+        transaction.accounts_count = 3;
+        transaction.transaction_type = TransactionType::Transfer;
+        transaction.direction = TransactionDirection::Outgoing;
+        transaction.sol_balance_change = -0.25;
+        transaction.sol_balance_changes = vec![SolBalanceChange {
+            account: "wallet".to_string(),
+            pre_balance: 1.0,
+            post_balance: 0.75,
+            change: -0.25,
+        }];
+        let raw_json = json!({ "signature": transaction.signature });
+        let raw_json_string = raw_json.to_string();
+        transaction.raw_transaction_data = Some(raw_json);
+
+        db.upsert_full_transaction(&transaction).await.expect("upsert transaction");
+
+        let fetched = db
+            .get_transaction(&transaction.signature).await
+            .expect("fetch transaction")
+            .expect("transaction exists");
+
+        assert_eq!(fetched.signature, transaction.signature);
+        assert!(fetched.success);
+        assert_eq!(fetched.fee_lamports, transaction.fee_lamports);
+        assert_eq!(fetched.instructions_count, transaction.instructions_count);
+
+        let conn = Connection::open(&db_path).expect("open sqlite connection");
+        let stored_raw: Option<String> = conn
+            .query_row(
+                "SELECT raw_transaction_data FROM raw_transactions WHERE signature = ?1",
+                [transaction.signature.as_str()],
+                |row| row.get(0)
+            )
+            .expect("query raw data");
+        assert_eq!(stored_raw, Some(raw_json_string));
+
+        let stored_fee: f64 = conn
+            .query_row(
+                "SELECT fee_sol FROM processed_transactions WHERE signature = ?1",
+                [transaction.signature.as_str()],
+                |row| row.get(0)
+            )
+            .expect("query processed fee");
+        assert!((stored_fee - transaction.fee_sol).abs() < 1e-12);
     }
 }
 

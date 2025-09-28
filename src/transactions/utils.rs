@@ -3,12 +3,13 @@
 // This module provides shared utility functions, constants, and helper code
 // used throughout the transactions system.
 
+use chrono::{ DateTime, Utc };
+use once_cell::sync::Lazy;
 use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use chrono::{ DateTime, Utc };
-use once_cell::sync::Lazy;
 
+use crate::global::is_debug_transactions_enabled;
 use crate::logger::{ log, LogTag };
 use crate::transactions::types::*;
 
@@ -77,7 +78,18 @@ pub async fn is_signature_known_globally(signature: &str) -> bool {
 /// Add signature to global known cache
 pub async fn add_signature_to_known_globally(signature: String) {
     let mut known_sigs = GLOBAL_KNOWN_SIGNATURES.lock().await;
-    known_sigs.insert(signature);
+    let inserted = known_sigs.insert(signature.clone());
+    if inserted && is_debug_transactions_enabled() {
+        log(
+            LogTag::Transactions,
+            "CACHE_TRACK",
+            &format!(
+                "Added signature {} to known cache (total={})",
+                format_signature_short(&signature),
+                known_sigs.len()
+            )
+        );
+    }
 }
 
 /// Remove signature from global known cache

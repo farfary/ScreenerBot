@@ -3,14 +3,14 @@
 // This module provides comprehensive analysis of Solana transactions including
 // type classification, DEX detection, swap analysis, and pattern recognition.
 
-use std::collections::HashMap;
-use solana_sdk::pubkey::Pubkey;
 use serde_json::Value;
+use solana_sdk::pubkey::Pubkey;
+use std::collections::HashMap;
 
-use crate::logger::{ log, LogTag };
-use crate::transactions::{ types::*, utils::* };
-use crate::tokens::{ get_token_decimals_sync, decimals::lamports_to_sol };
-use crate::pools::types::{ PUMP_FUN_AMM_PROGRAM_ID, PUMP_FUN_LEGACY_PROGRAM_ID };
+use crate::logger::{log, LogTag};
+use crate::pools::types::{PUMP_FUN_AMM_PROGRAM_ID, PUMP_FUN_LEGACY_PROGRAM_ID};
+use crate::tokens::{decimals::lamports_to_sol, get_token_decimals_sync};
+use crate::transactions::{types::*, utils::*};
 
 // =============================================================================
 // ANALYSIS RESULT STRUCTURES
@@ -53,7 +53,7 @@ pub struct SwapDetails {
 /// Analyze transaction and classify its type and direction
 pub async fn analyze_transaction(
     transaction: &Transaction,
-    wallet_pubkey: &Pubkey
+    wallet_pubkey: &Pubkey,
 ) -> Result<TransactionAnalysisResult, String> {
     let mut analysis_notes = Vec::new();
 
@@ -83,16 +83,13 @@ pub async fn analyze_transaction(
         transaction,
         wallet_pubkey,
         &instruction_analysis,
-        &dex_detection
-    ).await?;
+        &dex_detection,
+    )
+    .await?;
 
     // Step 5: Validate classification with additional checks
-    let final_confidence = validate_classification(
-        transaction,
-        &tx_type,
-        &direction,
-        confidence
-    ).await?;
+    let final_confidence =
+        validate_classification(transaction, &tx_type, &direction, confidence).await?;
 
     Ok(TransactionAnalysisResult {
         transaction_type: tx_type,
@@ -107,7 +104,7 @@ pub async fn classify_transaction_type(
     transaction: &Transaction,
     wallet_pubkey: &Pubkey,
     instruction_analysis: &InstructionAnalysis,
-    dex_detection: &Option<DexRouterDetection>
+    dex_detection: &Option<DexRouterDetection>,
 ) -> Result<(TransactionType, TransactionDirection, f64), String> {
     // Check for DEX swap operations first
     if let Some(dex) = dex_detection {
@@ -116,21 +113,26 @@ pub async fn classify_transaction_type(
 
     // Check for token transfers
     if instruction_analysis.has_token_transfers {
-        return classify_transfer_transaction(
-            transaction,
-            wallet_pubkey,
-            instruction_analysis
-        ).await;
+        return classify_transfer_transaction(transaction, wallet_pubkey, instruction_analysis)
+            .await;
     }
 
     // Check for ATA operations
     if instruction_analysis.has_ata_operations {
-        return Ok((TransactionType::AtaOperation, TransactionDirection::Internal, 0.8));
+        return Ok((
+            TransactionType::AtaOperation,
+            TransactionDirection::Internal,
+            0.8,
+        ));
     }
 
     // Check for compute-only transactions
     if instruction_analysis.is_compute_only {
-        return Ok((TransactionType::Compute, TransactionDirection::Internal, 0.9));
+        return Ok((
+            TransactionType::Compute,
+            TransactionDirection::Internal,
+            0.9,
+        ));
     }
 
     // Default to unknown
@@ -139,7 +141,7 @@ pub async fn classify_transaction_type(
 
 /// Detect swap operations and extract swap information
 pub async fn detect_swap_operations(
-    transaction: &Transaction
+    transaction: &Transaction,
 ) -> Result<Option<TokenSwapInfo>, String> {
     // Analyze transaction for swap patterns
     let _dex_detection = detect_dex_operations(transaction).await?;
@@ -152,7 +154,7 @@ pub async fn detect_swap_operations(
 /// Calculate P&L for swap transactions
 pub async fn calculate_swap_pnl(
     transaction: &Transaction,
-    swap_info: &TokenSwapInfo
+    swap_info: &TokenSwapInfo,
 ) -> Result<SwapPnLInfo, String> {
     let mut pnl_info = SwapPnLInfo {
         token_mint: "".to_string(),
@@ -164,7 +166,9 @@ pub async fn calculate_swap_pnl(
         timestamp: transaction.timestamp,
         signature: transaction.signature.clone(),
         router: "".to_string(),
-        fee_sol: transaction.fee_lamports.map_or(0.0, |f| (f as f64) / 1_000_000_000.0),
+        fee_sol: transaction
+            .fee_lamports
+            .map_or(0.0, |f| (f as f64) / 1_000_000_000.0),
         ata_rents: 0.0,
         effective_sol_spent: 0.0,
         effective_sol_received: 0.0,
@@ -183,7 +187,9 @@ pub async fn calculate_swap_pnl(
         net_sol_change: 0.0,
         estimated_token_value_sol: None,
         estimated_pnl_sol: None,
-        fees_paid_sol: transaction.fee_lamports.map_or(0.0, |f| (f as f64) / 1_000_000_000.0),
+        fees_paid_sol: transaction
+            .fee_lamports
+            .map_or(0.0, |f| (f as f64) / 1_000_000_000.0),
     };
 
     // Calculate based on swap type
@@ -240,7 +246,9 @@ async fn analyze_instructions(transaction: &Transaction) -> Result<InstructionAn
     // Check for common program IDs in logs or instruction data
     // This is a simplified version - full implementation would parse actual instructions
 
-    analysis.notes.push("Basic instruction analysis complete".to_string());
+    analysis
+        .notes
+        .push("Basic instruction analysis complete".to_string());
     Ok(analysis)
 }
 
@@ -250,7 +258,7 @@ async fn analyze_instructions(transaction: &Transaction) -> Result<InstructionAn
 
 /// Detect DEX operations and router used
 async fn detect_dex_operations(
-    transaction: &Transaction
+    transaction: &Transaction,
 ) -> Result<Option<DexRouterDetection>, String> {
     // Check for Jupiter router
     if let Some(jupiter_detection) = detect_jupiter_swap(transaction).await? {
@@ -277,7 +285,7 @@ async fn detect_dex_operations(
 
 /// Detect Jupiter swap operations
 async fn detect_jupiter_swap(
-    transaction: &Transaction
+    transaction: &Transaction,
 ) -> Result<Option<DexRouterDetection>, String> {
     // Check for Jupiter program ID and swap patterns
     // This is a placeholder - full implementation would parse instructions and logs
@@ -286,7 +294,7 @@ async fn detect_jupiter_swap(
 
 /// Detect Raydium swap operations
 async fn detect_raydium_swap(
-    transaction: &Transaction
+    transaction: &Transaction,
 ) -> Result<Option<DexRouterDetection>, String> {
     // Check for Raydium program IDs and swap patterns
     // This is a placeholder - full implementation would parse instructions and logs
@@ -302,7 +310,7 @@ async fn detect_orca_swap(transaction: &Transaction) -> Result<Option<DexRouterD
 
 /// Detect PumpFun swap operations
 async fn detect_pumpfun_swap(
-    transaction: &Transaction
+    transaction: &Transaction,
 ) -> Result<Option<DexRouterDetection>, String> {
     // Check for PumpFun program IDs
     let program_ids = [PUMP_FUN_AMM_PROGRAM_ID, PUMP_FUN_LEGACY_PROGRAM_ID];
@@ -321,7 +329,7 @@ async fn detect_pumpfun_swap(
 async fn classify_swap_transaction(
     transaction: &Transaction,
     wallet_pubkey: &Pubkey,
-    dex_detection: &DexRouterDetection
+    dex_detection: &DexRouterDetection,
 ) -> Result<(TransactionType, TransactionDirection, f64), String> {
     if let Some(ref swap_details) = dex_detection.swap_details {
         // Determine if buying or selling based on WSOL involvement
@@ -367,12 +375,16 @@ async fn classify_swap_transaction(
 async fn classify_transfer_transaction(
     transaction: &Transaction,
     wallet_pubkey: &Pubkey,
-    instruction_analysis: &InstructionAnalysis
+    instruction_analysis: &InstructionAnalysis,
 ) -> Result<(TransactionType, TransactionDirection, f64), String> {
     // Analyze transfer direction based on wallet involvement
     // This is a placeholder - full implementation would analyze balance changes
 
-    Ok((TransactionType::Transfer, TransactionDirection::Unknown, 0.7))
+    Ok((
+        TransactionType::Transfer,
+        TransactionDirection::Unknown,
+        0.7,
+    ))
 }
 
 /// Validate transaction classification with additional checks
@@ -380,7 +392,7 @@ async fn validate_classification(
     transaction: &Transaction,
     tx_type: &TransactionType,
     direction: &TransactionDirection,
-    confidence: f64
+    confidence: f64,
 ) -> Result<f64, String> {
     let mut adjusted_confidence = confidence;
 
@@ -475,7 +487,7 @@ fn extract_pool_addresses(transaction: &Transaction) -> Vec<String> {
 
 /// Recognize common transaction patterns
 pub async fn recognize_transaction_patterns(
-    transaction: &Transaction
+    transaction: &Transaction,
 ) -> Result<Vec<String>, String> {
     let mut patterns = Vec::new();
 

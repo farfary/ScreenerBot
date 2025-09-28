@@ -3,17 +3,17 @@
 // This module handles the core transaction processing logic including
 // data extraction, analysis, and classification of blockchain transactions.
 
-use std::collections::{ HashMap, HashSet };
-use std::time::{ Duration, Instant };
 use chrono::{ DateTime, Utc };
 use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
+use std::collections::{ HashMap, HashSet };
+use std::time::{ Duration, Instant };
 // Using our centralized RPC TransactionDetails type
 
-use crate::logger::{ log, LogTag };
 use crate::global::is_debug_transactions_enabled;
-use crate::transactions::{ types::*, utils::*, fetcher::TransactionFetcher, analyzer };
+use crate::logger::{ log, LogTag };
 use crate::tokens::decimals::lamports_to_sol;
+use crate::transactions::{ analyzer, fetcher::TransactionFetcher, types::*, utils::* };
 
 // =============================================================================
 // TRANSACTION PROCESSOR
@@ -102,6 +102,48 @@ impl TransactionProcessor {
                 )
             );
         }
+
+        // Persist transaction snapshots to the database (best-effort)
+        if let Some(db) = crate::transactions::database::get_transaction_database().await {
+            match db.upsert_full_transaction(&transaction).await {
+                Ok(_) => {
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "CACHE_STORE",
+                            &format!(
+                                "Cached {} (status={:?}, analysis_v={}, success={})",
+                                format_signature_short(signature),
+                                transaction.status,
+                                ANALYSIS_CACHE_VERSION,
+                                transaction.success
+                            )
+                        );
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Transactions,
+                        "WARN",
+                        &format!(
+                            "Failed to persist transaction {}: {}",
+                            format_signature_short(signature),
+                            e
+                        )
+                    );
+                }
+            }
+        }
+
+        // Record event for analytics
+        crate::events::record_transaction_event(
+            signature,
+            "processed",
+            transaction.success,
+            transaction.fee_lamports,
+            transaction.slot,
+            None
+        ).await;
 
         Ok(transaction)
     }
