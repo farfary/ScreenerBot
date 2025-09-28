@@ -471,23 +471,24 @@ impl TransactionsManager {
     pub fn get_ready_retries(&mut self) -> Vec<DeferredRetry> {
         let now = Utc::now();
         let mut ready_retries = Vec::new();
+        let mut to_remove: Vec<String> = Vec::new();
+        let mut to_update: Vec<(String, DeferredRetry)> = Vec::new();
 
-        self.deferred_retries.retain(|signature, retry| {
+        for (signature, retry) in self.deferred_retries.iter() {
             if now >= retry.next_retry_at {
                 if retry.remaining_attempts > 0 {
                     ready_retries.push(retry.clone());
 
-                    // Update retry for next attempt
                     let mut updated_retry = retry.clone();
                     updated_retry.remaining_attempts -= 1;
-                    updated_retry.current_delay_secs *= 2; // Exponential backoff
+                    updated_retry.current_delay_secs *= 2;
                     updated_retry.next_retry_at =
                         now + chrono::Duration::seconds(updated_retry.current_delay_secs);
 
                     if updated_retry.remaining_attempts > 0 {
-                        self.deferred_retries.insert(signature.clone(), updated_retry);
-                        false // Keep in map for future retries
+                        to_update.push((signature.clone(), updated_retry));
                     } else {
+                        to_remove.push(signature.clone());
                         if self.debug_enabled {
                             log(
                                 LogTag::Transactions,
@@ -498,15 +499,20 @@ impl TransactionsManager {
                                 )
                             );
                         }
-                        true // Remove from map
                     }
                 } else {
-                    true // Remove expired retry
+                    to_remove.push(signature.clone());
                 }
-            } else {
-                false // Keep for future processing
             }
-        });
+        }
+
+        // Apply removals and updates outside of iteration to avoid borrow issues
+        for sig in to_remove {
+            self.deferred_retries.remove(&sig);
+        }
+        for (sig, updated) in to_update {
+            self.deferred_retries.insert(sig, updated);
+        }
 
         ready_retries
     }

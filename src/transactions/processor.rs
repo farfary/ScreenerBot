@@ -8,7 +8,7 @@ use std::time::{ Duration, Instant };
 use chrono::{ DateTime, Utc };
 use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
-use solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta;
+// Using our centralized RPC TransactionDetails type
 
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_transactions_enabled;
@@ -171,7 +171,7 @@ impl TransactionProcessor {
     async fn fetch_transaction_data(
         &self,
         signature: &str
-    ) -> Result<EncodedConfirmedTransactionWithStatusMeta, String> {
+    ) -> Result<crate::rpc::TransactionDetails, String> {
         self.fetcher.fetch_transaction_details(signature).await.map_err(|e| {
             if e.contains("not found") || e.contains("no longer available") {
                 format!("Transaction not found: {}", signature)
@@ -185,7 +185,7 @@ impl TransactionProcessor {
     async fn create_transaction_from_data(
         &self,
         signature: &str,
-        tx_data: EncodedConfirmedTransactionWithStatusMeta
+        tx_data: crate::rpc::TransactionDetails
     ) -> Result<Transaction, String> {
         // Extract timestamp
         let timestamp = if let Some(block_time) = tx_data.block_time {
@@ -220,47 +220,39 @@ impl TransactionProcessor {
         let fee_lamports = tx_data.meta.as_ref().map(|meta| meta.fee);
 
         // Extract compute units consumed
-        let compute_units_consumed = tx_data.meta
-            .as_ref()
-            .and_then(|meta| meta.compute_units_consumed);
+        // Our TransactionMeta doesn't currently track compute units consumed
+        let compute_units_consumed = None;
 
         // Count instructions and accounts
-        let instructions_count = tx_data.transaction
-            .as_object()
-            .and_then(|obj| obj.get("message"))
-            .and_then(|msg| msg.get("instructions"))
+        let instructions_count = tx_data.transaction.message
+            .get("instructions")
             .and_then(|inst| inst.as_array())
             .map(|arr| arr.len())
             .unwrap_or(0);
 
-        let accounts_count = tx_data.transaction
-            .as_object()
-            .and_then(|obj| obj.get("message"))
-            .and_then(|msg| msg.get("accountKeys"))
+        let accounts_count = tx_data.transaction.message
+            .get("accountKeys")
             .and_then(|keys| keys.as_array())
             .map(|arr| arr.len())
             .unwrap_or(0);
 
         // Create transaction structure
-        let mut transaction = Transaction {
-            signature: signature.to_string(),
-            slot: Some(tx_data.slot),
-            block_time: tx_data.block_time,
-            timestamp,
-            status: if success {
-                TransactionStatus::Finalized
-            } else {
-                TransactionStatus::Failed(error_message.clone().unwrap_or_default())
-            },
-            success,
-            error_message,
-            fee_lamports,
-            compute_units_consumed,
-            instructions_count,
-            accounts_count,
-            // Analysis fields will be populated by subsequent steps
-            ..Transaction::new(signature.to_string())
+        let mut transaction = Transaction::new(signature.to_string());
+        transaction.slot = Some(tx_data.slot);
+        transaction.block_time = tx_data.block_time;
+        transaction.timestamp = timestamp;
+        transaction.status = if success {
+            TransactionStatus::Finalized
+        } else {
+            TransactionStatus::Failed(error_message.clone().unwrap_or_default())
         };
+        transaction.success = success;
+        transaction.error_message = error_message;
+        transaction.fee_lamports = fee_lamports;
+        transaction.fee_sol = fee_lamports.map_or(0.0, |f| (f as f64) / 1_000_000_000.0);
+        transaction.compute_units_consumed = compute_units_consumed;
+        transaction.instructions_count = instructions_count;
+        transaction.accounts_count = accounts_count;
 
         if self.debug_enabled {
             log(
@@ -318,7 +310,7 @@ impl TransactionProcessor {
     async fn extract_balance_changes(&self, transaction: &mut Transaction) -> Result<(), String> {
         // Extract SOL balance changes
         if let Some(sol_change) = self.extract_sol_balance_change(transaction).await? {
-            transaction.sol_balance_change = Some(sol_change);
+            transaction.sol_balance_change = sol_change.change;
         }
 
         // Extract token balance changes
@@ -329,8 +321,7 @@ impl TransactionProcessor {
 
         if
             self.debug_enabled &&
-            (transaction.sol_balance_change.is_some() ||
-                !transaction.token_balance_changes.is_empty())
+            (transaction.sol_balance_change != 0.0 || !transaction.token_balance_changes.is_empty())
         {
             log(
                 LogTag::Transactions,
@@ -338,7 +329,7 @@ impl TransactionProcessor {
                 &format!(
                     "Extracted balances for {}: SOL={}, tokens={}",
                     format_signature_short(&transaction.signature),
-                    transaction.sol_balance_change.is_some(),
+                    transaction.sol_balance_change != 0.0,
                     transaction.token_balance_changes.len()
                 )
             );
@@ -432,7 +423,8 @@ impl TransactionProcessor {
     async fn calculate_swap_pnl(&self, transaction: &mut Transaction) -> Result<(), String> {
         // Extract swap information first
         if let Some(swap_info) = self.extract_swap_info(transaction).await? {
-            transaction.token_swap_info = Some(swap_info);
+            transaction.token_swap_info = Some(swap_info.clone());
+            transaction.token_info = Some(swap_info);
 
             // Calculate P&L based on swap information
             if
@@ -488,7 +480,8 @@ impl TransactionProcessor {
     /// Analyze transaction instructions for detailed breakdown
     async fn analyze_instructions(&self, transaction: &mut Transaction) -> Result<(), String> {
         let instruction_info = self.extract_instruction_info(transaction).await?;
-        transaction.instruction_info = instruction_info;
+        transaction.instruction_info = instruction_info.clone();
+        transaction.instructions = instruction_info;
 
         if self.debug_enabled && !transaction.instruction_info.is_empty() {
             log(

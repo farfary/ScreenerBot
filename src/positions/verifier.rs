@@ -498,30 +498,11 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
     };
 
     // Get swap analysis
-    let swap_pnl_info = match get_global_transaction_manager().await {
-        Some(manager_guard) => {
-            let manager = manager_guard.lock().await;
-            if let Some(ref manager) = *manager {
-                let empty_cache = std::collections::HashMap::new();
-                manager.convert_to_swap_pnl_info(&transaction, &empty_cache, false)
-            } else {
-                return VerificationOutcome::RetryTransient(
-                    "Transaction manager not initialized".to_string()
-                );
-            }
-        }
-        None => {
-            return VerificationOutcome::RetryTransient(
-                "Transaction manager not available".to_string()
-            );
-        }
-    };
-
-    let swap_info = match swap_pnl_info {
-        Some(info) => info,
-        None => {
-            return VerificationOutcome::RetryTransient("No valid swap analysis".to_string());
-        }
+    // Prefer attached swap analysis if present; otherwise defer
+    let swap_info = if let Some(pnl) = transaction.swap_pnl_info.clone() {
+        pnl
+    } else {
+        return VerificationOutcome::RetryTransient("No valid swap analysis".to_string());
     };
 
     // Verify token mint matches

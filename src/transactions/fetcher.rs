@@ -8,9 +8,10 @@ use std::time::{ Duration, Instant };
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
+use std::str::FromStr;
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config;
-use solana_transaction_status::{ EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding };
+use solana_transaction_status::UiTransactionEncoding;
 use tokio::time::sleep;
 
 use crate::logger::{ log, LogTag };
@@ -139,7 +140,7 @@ impl TransactionFetcher {
         rpc_client: &crate::rpc::RpcClient,
         wallet_pubkey: Pubkey,
         limit: usize,
-        before: Option<Signature>
+        before: Option<&str>
     ) -> Result<Vec<String>, String> {
         let mut attempts = 0;
         let mut delay = self.config.retry_base_delay_ms;
@@ -192,7 +193,7 @@ impl TransactionFetcher {
         rpc_client: &crate::rpc::RpcClient,
         wallet_pubkey: Pubkey,
         limit: usize,
-        before: Option<Signature>
+        before: Option<&str>
     ) -> Result<Vec<String>, String> {
         // Use the existing RPC client method
         let sig_infos = rpc_client
@@ -217,7 +218,7 @@ impl TransactionFetcher {
     pub async fn fetch_transaction_details(
         &self,
         signature: &str
-    ) -> Result<EncodedConfirmedTransactionWithStatusMeta, String> {
+    ) -> Result<crate::rpc::TransactionDetails, String> {
         let start_time = Instant::now();
 
         let details = self.fetch_transaction_details_with_retry(signature).await?;
@@ -244,7 +245,7 @@ impl TransactionFetcher {
     async fn fetch_transaction_details_with_retry(
         &self,
         signature: &str
-    ) -> Result<EncodedConfirmedTransactionWithStatusMeta, String> {
+    ) -> Result<crate::rpc::TransactionDetails, String> {
         let mut attempts = 0;
         let mut delay = self.config.retry_base_delay_ms;
 
@@ -303,7 +304,7 @@ impl TransactionFetcher {
     async fn fetch_single_transaction_details(
         &self,
         signature: &str
-    ) -> Result<EncodedConfirmedTransactionWithStatusMeta, String> {
+    ) -> Result<crate::rpc::TransactionDetails, String> {
         let rpc_client = get_rpc_client();
 
         // Use existing RPC client method
@@ -316,7 +317,7 @@ impl TransactionFetcher {
     pub async fn fetch_multiple_transaction_details(
         &self,
         signatures: Vec<String>
-    ) -> HashMap<String, Result<EncodedConfirmedTransactionWithStatusMeta, String>> {
+    ) -> HashMap<String, Result<crate::rpc::TransactionDetails, String>> {
         let start_time = Instant::now();
         let total_count = signatures.len();
 
@@ -330,9 +331,11 @@ impl TransactionFetcher {
 
         // Process in chunks to respect concurrency limits
         let chunks = chunk_signatures(signatures, self.config.max_concurrent_details);
+        let total_chunks = chunks.len();
 
         for (chunk_idx, chunk) in chunks.into_iter().enumerate() {
             let chunk_start = Instant::now();
+            let chunk_len = chunk.len();
 
             // Process chunk concurrently
             let chunk_tasks: Vec<_> = chunk
@@ -361,14 +364,14 @@ impl TransactionFetcher {
                 &format!(
                     "Processed chunk {}/{} ({} transactions) in {}ms",
                     chunk_idx + 1,
-                    chunks.len(),
-                    results.len(),
+                    total_chunks,
+                    chunk_len,
                     chunk_duration.as_millis()
                 )
             );
 
             // Add delay between chunks to avoid rate limiting
-            if chunk_idx < chunks.len() - 1 {
+            if chunk_idx < total_chunks - 1 {
                 sleep(Duration::from_millis(self.config.batch_delay_ms)).await;
             }
         }
@@ -521,7 +524,7 @@ impl BatchSignatureFetcher {
         max_signatures: Option<usize>
     ) -> Result<Vec<String>, String> {
         let mut all_signatures = Vec::new();
-        let mut before: Option<Signature> = None;
+        let mut before: Option<String> = None;
         let limit = max_signatures.unwrap_or(usize::MAX);
 
         loop {
@@ -534,7 +537,7 @@ impl BatchSignatureFetcher {
                 &get_rpc_client(),
                 wallet_pubkey,
                 batch_limit,
-                before
+                before.as_deref()
             ).await?;
 
             if batch_signatures.is_empty() {
@@ -543,11 +546,7 @@ impl BatchSignatureFetcher {
 
             // Set 'before' for next batch
             if let Some(last_sig) = batch_signatures.last() {
-                before = Some(
-                    Signature::from_str(last_sig).map_err(|e|
-                        format!("Invalid signature format: {}", e)
-                    )?
-                );
+                before = Some(last_sig.clone());
 
                 all_signatures.extend(batch_signatures);
 

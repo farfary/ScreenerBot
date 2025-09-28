@@ -42,7 +42,7 @@ pub struct VerificationIssue {
 }
 
 /// Types of verification issues
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IssueType {
     TransactionNotFound,
     TransactionFailed,

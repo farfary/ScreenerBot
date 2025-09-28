@@ -75,15 +75,10 @@ pub use types::{
     InstructionInfo,
     CachedAnalysis,
     DeferredRetry,
-    // Constants
-    ANALYSIS_CACHE_VERSION,
-    ATA_RENT_COST_SOL,
-    DEFAULT_COMPUTE_UNIT_PRICE,
-    WSOL_MINT,
-    RPC_BATCH_SIZE,
-    PROCESS_BATCH_SIZE,
-    TRANSACTION_DATA_BATCH_SIZE,
 };
+
+// Public API exports - Constants from types
+pub use types::ANALYSIS_CACHE_VERSION;
 
 // Public API exports - Analysis and verification
 pub use analyzer::{
@@ -119,5 +114,6 @@ pub use utils::{
     TRANSACTION_DATA_BATCH_SIZE,
     ATA_RENT_COST_SOL,
     ATA_RENT_TOLERANCE_LAMPORTS,
+    DEFAULT_COMPUTE_UNIT_PRICE,
     WSOL_MINT,
 };

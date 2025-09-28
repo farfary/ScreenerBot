@@ -581,7 +581,8 @@ pub fn print_transactions_debug_table(debug_infos: &[TransactionDebugInfo]) {
         return;
     }
 
-    let table = Table::new(debug_infos)
+    let mut table_builder = Table::new(debug_infos);
+    let table = table_builder
         .with(Style::rounded())
         .with(Modify::new(Rows::new(1..)).with(Alignment::left()));
 

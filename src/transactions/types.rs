@@ -9,17 +9,6 @@ use tabled::Tabled;
 // Analysis cache versioning (bump when snapshot schema changes)
 pub const ANALYSIS_CACHE_VERSION: u32 = 2;
 
-// Solana network constants
-pub const ATA_RENT_COST_SOL: f64 = 0.00203928; // Standard ATA creation/closure cost
-pub const ATA_RENT_TOLERANCE_LAMPORTS: i64 = 10000; // Tolerance for ATA rent variations (lamports)
-pub const DEFAULT_COMPUTE_UNIT_PRICE: u64 = 1000; // Default compute unit price (micro-lamports)
-pub const WSOL_MINT: &str = "So11111111111111111111111111111111111111112"; // Wrapped SOL mint address
-
-// RPC and processing constants
-pub const RPC_BATCH_SIZE: usize = 1000; // Transaction signatures fetch batch size
-pub const PROCESS_BATCH_SIZE: usize = 50; // Transaction processing batch size
-pub const TRANSACTION_DATA_BATCH_SIZE: usize = 1; // Transaction data fetch batch size
-
 /// Deferred retry record for signatures that timed out/dropped
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeferredRetry {
@@ -54,6 +43,11 @@ pub struct Transaction {
     // Financial data - NEVER CACHED - always calculated fresh
     #[serde(skip_serializing, default)]
     pub fee_sol: f64,
+    // Legacy/raw metrics for compatibility with existing modules
+    pub fee_lamports: Option<u64>,
+    pub compute_units_consumed: Option<u64>,
+    pub instructions_count: usize,
+    pub accounts_count: usize,
     #[serde(skip_serializing, default)]
     pub sol_balance_change: f64,
     #[serde(skip_serializing, default)]
@@ -69,6 +63,8 @@ pub struct Transaction {
     pub log_messages: Vec<String>,
     #[serde(skip_serializing, default)]
     pub instructions: Vec<InstructionInfo>,
+    // Compatibility alias used by some modules
+    pub instruction_info: Vec<InstructionInfo>,
 
     // Balance changes - NEVER CACHED - always calculated fresh
     #[serde(skip_serializing, default)]
@@ -83,10 +79,14 @@ pub struct Transaction {
     pub profit_calculation: Option<ProfitCalculation>,
     #[serde(skip_serializing, default)]
     pub ata_analysis: Option<AtaAnalysis>, // SINGLE source of truth for ATA operations
+    // Compatibility field expected by debug/processor (list of raw ops)
+    pub ata_operations: Vec<AtaOperation>,
 
     // Token information integration - NEVER CACHED - always calculated fresh
     #[serde(skip_serializing, default)]
     pub token_info: Option<TokenSwapInfo>,
+    // Compatibility alias used by old code
+    pub token_swap_info: Option<TokenSwapInfo>,
     #[serde(skip_serializing, default)]
     pub calculated_token_price_sol: Option<f64>,
     #[serde(skip_serializing, default)]
@@ -94,12 +94,63 @@ pub struct Transaction {
     #[serde(skip_serializing, default)]
     pub token_decimals: Option<u8>,
 
+    // Compatibility: swap PnL snapshot attached to transaction
+    #[serde(skip_serializing, default)]
+    pub swap_pnl_info: Option<SwapPnLInfo>,
+
+    // Analysis timing (used by debug)
+    pub analysis_duration_ms: Option<u64>,
+
     // Cache metadata
     pub last_updated: DateTime<Utc>,
 
     // Optional persisted analysis snapshot for finalized txs to avoid re-analysis on every load
     #[serde(default)]
     pub cached_analysis: Option<CachedAnalysis>,
+}
+
+impl Transaction {
+    pub fn new(signature: String) -> Self {
+        Self {
+            signature,
+            slot: None,
+            block_time: None,
+            timestamp: Utc::now(),
+            status: TransactionStatus::Pending,
+            transaction_type: TransactionType::default(),
+            direction: TransactionDirection::default(),
+            success: false,
+            error_message: None,
+            fee_sol: 0.0,
+            fee_lamports: None,
+            compute_units_consumed: None,
+            instructions_count: 0,
+            accounts_count: 0,
+            sol_balance_change: 0.0,
+            wallet_lamport_change: 0,
+            wallet_signed: false,
+            token_transfers: Vec::new(),
+            raw_transaction_data: None,
+            log_messages: Vec::new(),
+            instructions: Vec::new(),
+            instruction_info: Vec::new(),
+            sol_balance_changes: Vec::new(),
+            token_balance_changes: Vec::new(),
+            position_impact: None,
+            profit_calculation: None,
+            ata_analysis: None,
+            ata_operations: Vec::new(),
+            token_info: None,
+            token_swap_info: None,
+            calculated_token_price_sol: None,
+            token_symbol: None,
+            token_decimals: None,
+            swap_pnl_info: None,
+            analysis_duration_ms: None,
+            last_updated: Utc::now(),
+            cached_analysis: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -112,6 +163,16 @@ pub enum TransactionStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TransactionType {
+    // Legacy simple variants (compatibility)
+    Buy,
+    Sell,
+    Transfer,
+    Compute,
+    AtaOperation,
+    Failed,
+    Unknown,
+
+    // New rich variants
     SwapSolToToken {
         token_mint: String,
         sol_amount: f64,
@@ -150,7 +211,6 @@ pub enum TransactionType {
         description: String,
         details: String,
     },
-    Unknown,
 }
 
 impl Default for TransactionType {
@@ -164,6 +224,7 @@ pub enum TransactionDirection {
     Incoming,
     Outgoing,
     Internal,
+    Unknown,
 }
 
 impl Default for TransactionDirection {
@@ -250,6 +311,9 @@ pub struct AtaOperation {
     pub token_mint: String, // The mint this ATA is associated with
     pub rent_amount: f64, // SOL amount involved (spent or recovered)
     pub is_wsol: bool, // Whether this is a WSOL ATA
+    // Compatibility alias fields for debug tools
+    pub mint: String,
+    pub rent_cost_sol: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -260,11 +324,24 @@ pub enum AtaOperationType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenSwapInfo {
+    // Basic token info (enrichment)
     pub mint: String,
     pub symbol: String,
     pub decimals: u8,
     pub current_price_sol: Option<f64>,
     pub is_verified: bool,
+
+    // Detected swap info (DEX/router level)
+    pub router: String,
+    pub swap_type: String, // sol_to_token | token_to_sol | token_to_token
+    pub input_mint: String,
+    pub output_mint: String,
+    pub input_amount: u64,
+    pub output_amount: u64,
+    pub input_ui_amount: f64,
+    pub output_ui_amount: f64,
+    pub pool_address: Option<String>,
+    pub program_id: String,
 }
 
 /// SwapPnLInfo - Swap analysis data structure
@@ -295,6 +372,16 @@ pub struct SwapPnLInfo {
 
     pub slot: Option<u64>, // Solana slot number for reliable chronological sorting
     pub status: String, // Transaction status: "✅ Success", "❌ Failed", "⚠️ Partial", etc.
+
+    // Legacy fields used by debug tools
+    pub sol_spent: f64,
+    pub sol_received: f64,
+    pub tokens_bought: f64,
+    pub tokens_sold: f64,
+    pub net_sol_change: f64,
+    pub estimated_token_value_sol: Option<f64>,
+    pub estimated_pnl_sol: Option<f64>,
+    pub fees_paid_sol: f64,
 }
 
 // =============================================================================
@@ -508,9 +595,37 @@ pub struct PositionDisplayRow {
     pub duration: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TransactionStats {
     pub total_transactions: u64,
     pub new_transactions_count: u64,
     pub known_signatures_count: u64,
+    pub pending_transactions_count: u64,
+    pub failed_transactions_count: u64,
+    pub successful_transactions_count: u64,
+}
+
+impl TransactionStats {
+    /// Create a new empty statistics object
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Success rate percentage across all tracked transactions
+    pub fn success_rate(&self) -> f64 {
+        if self.total_transactions == 0 {
+            0.0
+        } else {
+            ((self.successful_transactions_count as f64) / (self.total_transactions as f64)) * 100.0
+        }
+    }
+
+    /// Failure rate percentage across all tracked transactions
+    pub fn failure_rate(&self) -> f64 {
+        if self.total_transactions == 0 {
+            0.0
+        } else {
+            ((self.failed_transactions_count as f64) / (self.total_transactions as f64)) * 100.0
+        }
+    }
 }

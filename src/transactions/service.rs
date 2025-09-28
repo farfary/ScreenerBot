@@ -28,9 +28,8 @@ use crate::transactions::{
 // =============================================================================
 
 /// Global transaction service manager instance
-static GLOBAL_TRANSACTION_MANAGER: Lazy<Arc<Mutex<Option<TransactionsManager>>>> = Lazy::new(||
-    Arc::new(Mutex::new(None))
-);
+static GLOBAL_TRANSACTION_MANAGER: Lazy<Arc<Mutex<Option<Arc<Mutex<TransactionsManager>>>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
 
 /// Global service running flag
 static SERVICE_RUNNING: Lazy<Arc<Mutex<bool>>> = Lazy::new(|| Arc::new(Mutex::new(false)));
@@ -89,11 +88,12 @@ pub async fn start_global_transaction_service(
     // Create and initialize manager
     let mut manager = TransactionsManager::new(wallet_pubkey).await?;
     manager.initialize().await?;
+    let manager = Arc::new(Mutex::new(manager));
 
     // Store global manager
     {
         let mut global_manager = GLOBAL_TRANSACTION_MANAGER.lock().await;
-        *global_manager = Some(manager);
+        *global_manager = Some(manager.clone());
     }
 
     // Create service configuration
@@ -144,12 +144,14 @@ pub async fn stop_global_transaction_service() -> Result<(), String> {
     *running = false;
 
     // Shutdown manager
-    {
+    let manager_arc_opt = {
         let mut global_manager = GLOBAL_TRANSACTION_MANAGER.lock().await;
-        if let Some(manager) = global_manager.as_mut() {
-            manager.shutdown().await?;
-        }
-        *global_manager = None;
+        global_manager.take()
+    };
+
+    if let Some(manager_arc) = manager_arc_opt {
+        let mut manager = manager_arc.lock().await;
+        manager.shutdown().await?;
     }
 
     log(LogTag::Transactions, "INFO", "Global transaction service stopped");
@@ -165,15 +167,7 @@ pub async fn is_global_transaction_service_running() -> bool {
 /// Get reference to global transaction manager
 pub async fn get_global_transaction_manager() -> Option<Arc<Mutex<TransactionsManager>>> {
     let global_manager = GLOBAL_TRANSACTION_MANAGER.lock().await;
-    match global_manager.as_ref() {
-        Some(manager) => {
-            // We need to clone the manager and wrap it in Arc<Mutex<>>
-            // This is a workaround for the current architecture
-            // TODO: Refactor to better architecture in the future
-            None // For now, return None to avoid compilation issues
-        }
-        None => None,
-    }
+    global_manager.as_ref().cloned()
 }
 
 /// Get transaction by signature (for positions.rs integration) - cache-first approach with status validation
@@ -292,19 +286,6 @@ async fn perform_periodic_check(
     metrics: &mut ServiceMetrics
 ) -> Result<(), String> {
     let start_time = std::time::Instant::now();
-
-    // Get global manager for processing
-    let manager_opt = {
-        let global_manager = GLOBAL_TRANSACTION_MANAGER.lock().await;
-        global_manager.as_ref().cloned()
-    };
-
-    let manager = match manager_opt {
-        Some(mgr) => mgr,
-        None => {
-            return Err("Global transaction manager not available".to_string());
-        }
-    };
 
     // Cleanup expired pending transactions
     let expired_count = cleanup_expired_pending_transactions().await;

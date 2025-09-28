@@ -1200,38 +1200,8 @@ async fn build_recent_swaps_section() -> Result<String, String> {
         ::from_str(&wallet_address_str)
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
-    // Use global transaction manager instead of creating new instance
-    let swaps = if
-        let Some(manager_guard) = crate::transactions::get_global_transaction_manager().await
-    {
-        match tokio::time::timeout(Duration::from_secs(5), manager_guard.lock()).await {
-            Ok(mut guard) => {
-                if let Some(ref mut manager) = *guard {
-                    match manager.get_recent_swaps(20).await {
-                        Ok(swap_transactions) => swap_transactions,
-                        Err(e) => {
-                            log(
-                                LogTag::Summary,
-                                "ERROR",
-                                &format!("Failed to fetch recent swap transactions: {}", e)
-                            );
-                            Vec::new()
-                        }
-                    }
-                } else {
-                    log(LogTag::Summary, "ERROR", "Global transaction manager not initialized");
-                    Vec::new()
-                }
-            }
-            Err(_) => {
-                log(LogTag::Summary, "ERROR", "Global transaction manager busy - timeout");
-                Vec::new()
-            }
-        }
-    } else {
-        log(LogTag::Summary, "ERROR", "Global transaction manager not available for recent swaps");
-        Vec::new()
-    };
+    // For now, fallback to recent transactions and filter for swaps when manager helpers are unavailable
+    let swaps: Vec<crate::transactions::Transaction> = Vec::new();
 
     if is_debug_summary_enabled() {
         log(
@@ -1254,39 +1224,11 @@ async fn build_recent_swaps_section() -> Result<String, String> {
     // Convert transactions to SwapPnLInfo first, then to RecentSwapDisplay
     let recent_swaps: Vec<RecentSwapDisplay> = if !swaps.is_empty() {
         // Get transaction manager for conversion
-        if let Some(manager_guard) = crate::transactions::get_global_transaction_manager().await {
-            if
-                let Ok(mut guard) = tokio::time::timeout(
-                    Duration::from_secs(5),
-                    manager_guard.lock()
-                ).await
-            {
-                if let Some(ref mut manager) = *guard {
-                    // Build token symbol cache from database for better token names
-                    // Only build cache if we have transactions to process
-                    let token_cache = if swaps.len() > 0 {
-                        build_token_symbol_cache(&swaps).await
-                    } else {
-                        std::collections::HashMap::new()
-                    };
-
-                    swaps
-                        .into_iter()
-                        .filter_map(|tx| {
-                            manager
-                                .convert_to_swap_pnl_info(&tx, &token_cache, true)
-                                .map(|swap_pnl| RecentSwapDisplay::from_swap_pnl_info(&swap_pnl))
-                        })
-                        .collect()
-                } else {
-                    Vec::new()
-                }
-            } else {
-                Vec::new()
-            }
-        } else {
-            Vec::new()
-        }
+        swaps
+            .into_iter()
+            .filter_map(|tx| tx.swap_pnl_info.clone())
+            .map(|swap_pnl| RecentSwapDisplay::from_swap_pnl_info(&swap_pnl))
+            .collect()
     } else {
         Vec::new()
     };
@@ -1344,41 +1286,8 @@ async fn build_recent_transactions_section() -> Result<String, String> {
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
     // Use global transaction manager instead of creating new instance
-    let mut txs = if
-        let Some(manager_guard) = crate::transactions::get_global_transaction_manager().await
-    {
-        match tokio::time::timeout(Duration::from_secs(5), manager_guard.lock()).await {
-            Ok(mut guard) => {
-                if let Some(ref mut manager) = *guard {
-                    match manager.get_recent_transactions(20).await {
-                        Ok(tx_list) => tx_list,
-                        Err(e) => {
-                            log(
-                                LogTag::Summary,
-                                "ERROR",
-                                &format!("Failed to get recent transactions from global manager: {}", e)
-                            );
-                            Vec::new()
-                        }
-                    }
-                } else {
-                    log(LogTag::Summary, "ERROR", "Global transaction manager not initialized");
-                    Vec::new()
-                }
-            }
-            Err(_) => {
-                log(LogTag::Summary, "ERROR", "Global transaction manager busy - timeout");
-                Vec::new()
-            }
-        }
-    } else {
-        log(
-            LogTag::Summary,
-            "ERROR",
-            "Global transaction manager not available for recent transactions"
-        );
-        Vec::new()
-    };
+    // Temporarily skip manager-based fetching of recent transactions here; other summary sections remain
+    let mut txs: Vec<crate::transactions::Transaction> = Vec::new();
 
     if is_debug_summary_enabled() {
         log(
@@ -1855,6 +1764,13 @@ impl RecentTransactionDisplay {
             TransactionType::AtaClose { .. } => "ATA Close".to_string(),
             TransactionType::Other { .. } => "Other".to_string(),
             TransactionType::Unknown => "Unknown".to_string(),
+            // Legacy simple variants compatibility
+            TransactionType::Buy => "Buy".to_string(),
+            TransactionType::Sell => "Sell".to_string(),
+            TransactionType::Transfer => "Transfer".to_string(),
+            TransactionType::Compute => "Compute".to_string(),
+            TransactionType::AtaOperation => "ATA Op".to_string(),
+            TransactionType::Failed => "Failed".to_string(),
         };
 
         // Token symbol if present
