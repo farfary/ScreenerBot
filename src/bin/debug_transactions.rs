@@ -80,10 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Set debug flags if requested
     if args.debug {
-        set_cmd_args(vec![
-            "debug_transactions".to_string(),
-            "--debug-transactions".to_string(),
-        ]);
+        set_cmd_args(vec!["debug_transactions".to_string(), "--debug-transactions".to_string()]);
     }
 
     // Initialize logger - use basic print for now since init_logger might not exist
@@ -167,6 +164,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         success: false,
         fee_sol: 0.0,
         sol_balance_change: 0.0,
+        wallet_lamport_change: 0,
+        wallet_signed: false,
         sol_balance_changes: Vec::new(),
         token_transfers: Vec::new(),
         token_balance_changes: Vec::new(),
@@ -181,7 +180,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         calculated_token_price_sol: None,
         error_message: None,
         raw_transaction_data: Some(
-            serde_json::to_value(&raw_transaction).unwrap_or(serde_json::Value::Null),
+            serde_json::to_value(&raw_transaction).unwrap_or(serde_json::Value::Null)
         ),
         last_updated: chrono::Utc::now(),
         cached_analysis: None,
@@ -192,10 +191,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 4: Extract basic transaction information using the real library method
     println!("🔧 Step 4: Extracting basic transaction information...");
-    if let Err(e) = tx_manager
-        .extract_basic_transaction_info(&mut transaction)
-        .await
-    {
+    if let Err(e) = tx_manager.extract_basic_transaction_info(&mut transaction).await {
         eprintln!("❌ Error extracting basic info: {}", e);
         return Ok(());
     }
@@ -258,10 +254,12 @@ fn extract_basic_info_from_raw(transaction: &mut Transaction) {
             }
 
             // Calculate SOL balance change
-            if let (Some(pre_balances), Some(post_balances)) = (
-                meta.get("preBalances").and_then(|v| v.as_array()),
-                meta.get("postBalances").and_then(|v| v.as_array()),
-            ) {
+            if
+                let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preBalances").and_then(|v| v.as_array()),
+                    meta.get("postBalances").and_then(|v| v.as_array()),
+                )
+            {
                 if !pre_balances.is_empty() && !post_balances.is_empty() {
                     let pre_balance = pre_balances[0].as_i64().unwrap_or(0);
                     let post_balance = post_balances[0].as_i64().unwrap_or(0);
@@ -331,8 +329,9 @@ fn analyze_transaction_type_simple(transaction: &mut Transaction) {
     let log_text = transaction.log_messages.join(" ");
 
     // Simple pattern matching for common DEX patterns
-    if log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
-        || log_text.contains("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA")
+    if
+        log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") ||
+        log_text.contains("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA")
     {
         // Pump.fun
         if transaction.sol_balance_change < 0.0 {
@@ -367,8 +366,9 @@ fn analyze_transaction_type_simple(transaction: &mut Transaction) {
                 sol_amount: transaction.sol_balance_change,
             };
         }
-    } else if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8")
-        || log_text.contains("CPMMoo8L3")
+    } else if
+        log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") ||
+        log_text.contains("CPMMoo8L3")
     {
         // Raydium
         if transaction.sol_balance_change < 0.0 {
@@ -386,10 +386,11 @@ fn analyze_transaction_type_simple(transaction: &mut Transaction) {
                 sol_amount: transaction.sol_balance_change,
             };
         }
-    } else if log_text.contains("GMGN")
-        || (transaction.sol_balance_change.abs() > 0.001
-            && (log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
-                || log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")))
+    } else if
+        log_text.contains("GMGN") ||
+        (transaction.sol_balance_change.abs() > 0.001 &&
+            (log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") ||
+                log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")))
     {
         // GMGN or similar
         if transaction.sol_balance_change < 0.0 {
@@ -407,11 +408,9 @@ fn analyze_transaction_type_simple(transaction: &mut Transaction) {
                 sol_amount: transaction.sol_balance_change,
             };
         }
-    } else if transaction.sol_balance_change.abs() > 0.001
-        && transaction
-            .instructions
-            .iter()
-            .any(|i| i.program_id == "11111111111111111111111111111111")
+    } else if
+        transaction.sol_balance_change.abs() > 0.001 &&
+        transaction.instructions.iter().any(|i| i.program_id == "11111111111111111111111111111111")
     {
         // SOL transfer
         transaction.transaction_type = TransactionType::SolTransfer {
@@ -439,19 +438,9 @@ fn analyze_transaction_type_simple(transaction: &mut Transaction) {
 fn print_basic_info(transaction: &Transaction, verbose: bool) {
     println!("📋 Basic Transaction Information:");
     println!("   Status: {:?}", transaction.status);
-    println!(
-        "   Success: {}",
-        if transaction.success {
-            "✅ Yes"
-        } else {
-            "❌ No"
-        }
-    );
+    println!("   Success: {}", if transaction.success { "✅ Yes" } else { "❌ No" });
     println!("   Fee: {:.9} SOL", transaction.fee_sol);
-    println!(
-        "   SOL Balance Change: {:.9} SOL",
-        transaction.sol_balance_change
-    );
+    println!("   SOL Balance Change: {:.9} SOL", transaction.sol_balance_change);
 
     if let Some(slot) = transaction.slot {
         println!("   Slot: {}", slot);
@@ -469,14 +458,8 @@ fn print_basic_info(transaction: &Transaction, verbose: bool) {
         println!("   Timestamp: {}", transaction.timestamp);
         println!("   Instructions Count: {}", transaction.instructions.len());
         println!("   Log Messages Count: {}", transaction.log_messages.len());
-        println!(
-            "   Token Transfers Count: {}",
-            transaction.token_transfers.len()
-        );
-        println!(
-            "   Token Balance Changes Count: {}",
-            transaction.token_balance_changes.len()
-        );
+        println!("   Token Transfers Count: {}", transaction.token_transfers.len());
+        println!("   Token Balance Changes Count: {}", transaction.token_balance_changes.len());
     }
 
     println!();
@@ -486,24 +469,14 @@ fn print_transaction_type(transaction: &Transaction, _verbose: bool) {
     println!("🏷️  Transaction Type Analysis:");
 
     match &transaction.transaction_type {
-        TransactionType::SwapSolToToken {
-            router,
-            token_mint,
-            sol_amount,
-            token_amount,
-        } => {
+        TransactionType::SwapSolToToken { router, token_mint, sol_amount, token_amount } => {
             println!("   Type: 🟢 SOL → Token (BUY)");
             println!("   Router: {}", router);
             println!("   Token Mint: {}", token_mint);
             println!("   SOL Amount: {:.9}", sol_amount);
             println!("   Token Amount: {:.6}", token_amount);
         }
-        TransactionType::SwapTokenToSol {
-            router,
-            token_mint,
-            token_amount,
-            sol_amount,
-        } => {
+        TransactionType::SwapTokenToSol { router, token_mint, token_amount, sol_amount } => {
             println!("   Type: 🔴 Token → SOL (SELL)");
             println!("   Router: {}", router);
             println!("   Token Mint: {}", token_mint);
@@ -530,30 +503,19 @@ fn print_transaction_type(transaction: &Transaction, _verbose: bool) {
             println!("   From: {}", from);
             println!("   To: {}", to);
         }
-        TransactionType::TokenTransfer {
-            mint,
-            amount,
-            from,
-            to,
-        } => {
+        TransactionType::TokenTransfer { mint, amount, from, to } => {
             println!("   Type: 🪙 Token Transfer");
             println!("   Mint: {}", mint);
             println!("   Amount: {:.6}", amount);
             println!("   From: {}", from);
             println!("   To: {}", to);
         }
-        TransactionType::AtaClose {
-            recovered_sol,
-            token_mint,
-        } => {
+        TransactionType::AtaClose { recovered_sol, token_mint } => {
             println!("   Type: 🔒 ATA Close");
             println!("   Recovered SOL: {:.9}", recovered_sol);
             println!("   Token Mint: {}", token_mint);
         }
-        TransactionType::Other {
-            description,
-            details,
-        } => {
+        TransactionType::Other { description, details } => {
             println!("   Type: ❓ Other");
             println!("   Description: {}", description);
             println!("   Details: {}", details);
@@ -572,25 +534,23 @@ fn print_ata_analysis(transaction: &Transaction, verbose: bool) {
     println!("===================================");
 
     // Check for closeAccount instructions in Token Programs
-    let has_close_account_instruction = transaction.instructions.iter().any(|instruction| {
-        (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-            || instruction.program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
-            && instruction.instruction_type == "closeAccount"
-    });
+    let has_close_account_instruction = transaction.instructions
+        .iter()
+        .any(|instruction| {
+            (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" ||
+                instruction.program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") &&
+                instruction.instruction_type == "closeAccount"
+        });
 
     // Check for closeAccount in logs
-    let has_close_account_log = transaction
-        .log_messages
+    let has_close_account_log = transaction.log_messages
         .iter()
         .any(|log| log.contains("Instruction: CloseAccount"));
 
     let has_close_account = has_close_account_instruction || has_close_account_log;
 
     println!("   📋 closeAccount Detection:");
-    println!(
-        "      ✅ In instructions: {}",
-        has_close_account_instruction
-    );
+    println!("      ✅ In instructions: {}", has_close_account_instruction);
     println!("      ✅ In logs: {}", has_close_account_log);
     println!("      🎯 Overall result: {}", has_close_account);
 
@@ -608,8 +568,7 @@ fn print_ata_analysis(transaction: &Transaction, verbose: bool) {
     println!("      🎯 Rent-like: {}", is_rent_like);
 
     // Check for significant token trading
-    let max_token_amount = transaction
-        .token_transfers
+    let max_token_amount = transaction.token_transfers
         .iter()
         .map(|transfer| transfer.amount.abs())
         .fold(0.0, f64::max);
@@ -617,15 +576,9 @@ fn print_ata_analysis(transaction: &Transaction, verbose: bool) {
     let has_significant_token_trading = max_token_amount > 100.0;
 
     println!("   🪙 Token Trading Analysis:");
-    println!(
-        "      📊 Token transfers count: {}",
-        transaction.token_transfers.len()
-    );
+    println!("      📊 Token transfers count: {}", transaction.token_transfers.len());
     println!("      💰 Max token amount: {:.6}", max_token_amount);
-    println!(
-        "      🚫 Has significant trading (>100): {}",
-        has_significant_token_trading
-    );
+    println!("      🚫 Has significant trading (>100): {}", has_significant_token_trading);
 
     // Final ATA detection result
     let should_be_ata_close = has_close_account && is_rent_like && !has_significant_token_trading;
@@ -633,10 +586,7 @@ fn print_ata_analysis(transaction: &Transaction, verbose: bool) {
     println!("   🎯 Final ATA Detection Result:");
     println!("      ✅ closeAccount found: {}", has_close_account);
     println!("      ✅ Rent-like recovery: {}", is_rent_like);
-    println!(
-        "      ✅ No significant trading: {}",
-        !has_significant_token_trading
-    );
+    println!("      ✅ No significant trading: {}", !has_significant_token_trading);
     println!("      🏆 SHOULD BE ATA CLOSE: {}", should_be_ata_close);
 
     // Show what the current classification is
@@ -645,22 +595,13 @@ fn print_ata_analysis(transaction: &Transaction, verbose: bool) {
             println!("      🟢 Current classification: ATA Close (CORRECT)");
         }
         TransactionType::SwapTokenToSol { router, .. } => {
-            println!(
-                "      🔴 Current classification: {} Swap Token→SOL (INCORRECT!)",
-                router
-            );
+            println!("      🔴 Current classification: {} Swap Token→SOL (INCORRECT!)", router);
         }
         TransactionType::SwapSolToToken { router, .. } => {
-            println!(
-                "      🔴 Current classification: {} Swap SOL→Token (INCORRECT!)",
-                router
-            );
+            println!("      🔴 Current classification: {} Swap SOL→Token (INCORRECT!)", router);
         }
         _ => {
-            println!(
-                "      ⚪ Current classification: {:?}",
-                transaction.transaction_type
-            );
+            println!("      ⚪ Current classification: {:?}", transaction.transaction_type);
         }
     }
 
@@ -723,10 +664,7 @@ fn print_token_info(transaction: &Transaction, _verbose: bool) {
 fn print_balance_changes(transaction: &Transaction) {
     println!("💰 Balance Changes:");
 
-    println!(
-        "   SOL Balance Change: {:.9} SOL",
-        transaction.sol_balance_change
-    );
+    println!("   SOL Balance Change: {:.9} SOL", transaction.sol_balance_change);
 
     if !transaction.sol_balance_changes.is_empty() {
         println!("   Detailed SOL Changes:");
@@ -768,11 +706,7 @@ fn print_balance_changes(transaction: &Transaction) {
                 &transfer.mint[..8],
                 transfer.amount
             );
-            println!(
-                "        From: {} To: {}",
-                &transfer.from[..8],
-                &transfer.to[..8]
-            );
+            println!("        From: {} To: {}", &transfer.from[..8], &transfer.to[..8]);
         }
     }
 
@@ -796,8 +730,7 @@ fn print_instructions(transaction: &Transaction) {
             println!(
                 "      Accounts ({}): {}",
                 instruction.accounts.len(),
-                instruction
-                    .accounts
+                instruction.accounts
                     .iter()
                     .take(3)
                     .map(|acc| format!("{}...", &acc[..8]))
@@ -805,10 +738,7 @@ fn print_instructions(transaction: &Transaction) {
                     .join(", ")
             );
             if instruction.accounts.len() > 3 {
-                println!(
-                    "                    ... and {} more",
-                    instruction.accounts.len() - 3
-                );
+                println!("                    ... and {} more", instruction.accounts.len() - 3);
             }
         }
 
@@ -840,10 +770,7 @@ fn print_log_analysis(transaction: &Transaction) {
     let dex_patterns = [
         ("Jupiter", "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"),
         ("Pump.fun", "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"),
-        (
-            "Pump.fun (Legacy)",
-            "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
-        ),
+        ("Pump.fun (Legacy)", "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"),
         ("Raydium", "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"),
         ("Raydium CPMM", "CPMMoo8L3"),
         ("Orca", "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP"),
@@ -886,19 +813,12 @@ fn print_log_analysis(transaction: &Transaction) {
     // Show first few log messages for context
     println!("   Sample Log Messages:");
     for (i, log) in transaction.log_messages.iter().take(5).enumerate() {
-        let truncated = if log.len() > 100 {
-            format!("{}...", &log[..100])
-        } else {
-            log.clone()
-        };
+        let truncated = if log.len() > 100 { format!("{}...", &log[..100]) } else { log.clone() };
         println!("     {}. {}", i + 1, truncated);
     }
 
     if transaction.log_messages.len() > 5 {
-        println!(
-            "     ... and {} more messages",
-            transaction.log_messages.len() - 5
-        );
+        println!("     ... and {} more messages", transaction.log_messages.len() - 5);
     }
 
     println!();
@@ -910,21 +830,18 @@ fn print_final_summary(transaction: &Transaction) {
 
     // Classification success
     let is_classified = !matches!(transaction.transaction_type, TransactionType::Unknown);
-    println!(
-        "✅ Transaction Classification: {}",
-        if is_classified {
-            "Successfully classified"
-        } else {
-            "❌ Failed to classify"
-        }
-    );
+    println!("✅ Transaction Classification: {}", if is_classified {
+        "Successfully classified"
+    } else {
+        "❌ Failed to classify"
+    });
 
     // Swap detection
     let is_swap = matches!(
         transaction.transaction_type,
-        TransactionType::SwapSolToToken { .. }
-            | TransactionType::SwapTokenToSol { .. }
-            | TransactionType::SwapTokenToToken { .. }
+        TransactionType::SwapSolToToken { .. } |
+            TransactionType::SwapTokenToSol { .. } |
+            TransactionType::SwapTokenToToken { .. }
     );
 
     if is_swap {
@@ -932,7 +849,7 @@ fn print_final_summary(transaction: &Transaction) {
 
         // Router detection
         let router = match &transaction.transaction_type {
-            TransactionType::SwapSolToToken { router, .. }
+            | TransactionType::SwapSolToToken { router, .. }
             | TransactionType::SwapTokenToSol { router, .. }
             | TransactionType::SwapTokenToToken { router, .. } => router.clone(),
             _ => "Unknown".to_string(),
@@ -941,7 +858,7 @@ fn print_final_summary(transaction: &Transaction) {
 
         // Token mint extraction
         let token_mint = match &transaction.transaction_type {
-            TransactionType::SwapSolToToken { token_mint, .. }
+            | TransactionType::SwapSolToToken { token_mint, .. }
             | TransactionType::SwapTokenToSol { token_mint, .. } => Some(token_mint.clone()),
             TransactionType::SwapTokenToToken { to_mint, .. } => Some(to_mint.clone()),
             _ => None,

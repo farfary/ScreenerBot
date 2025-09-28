@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use solana_sdk::{pubkey::Pubkey, signature::Signature};
+use chrono::{ DateTime, Utc };
+use serde::{ Deserialize, Serialize };
+use solana_sdk::{ pubkey::Pubkey, signature::Signature };
 use solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta;
 /// Transactions Manager - Real-time background transaction monitoring and analysis
 /// Tracks wallet transactions, caches data, detects transaction types, and integrates with positions
@@ -10,7 +10,7 @@ use solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta;
 ///
 /// Debug Tool: Use `cargo run --bin main_debug` for comprehensive debugging,
 /// monitoring, analysis, and performance testing of the transaction management system.
-use std::collections::{HashMap, HashSet};
+use std::collections::{ HashMap, HashSet };
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -19,15 +19,28 @@ use tokio::time::Duration;
 use crate::configs::read_configs;
 use crate::errors::blockchain::parse_structured_solana_error;
 use crate::global::is_debug_transactions_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use crate::rpc::get_rpc_client;
 use crate::tokens::decimals::lamports_to_sol;
 use crate::tokens::TokenDatabase;
 use crate::transactions_db::TransactionDatabase;
 use crate::transactions_types::{
-    AtaAnalysis, AtaOperation, AtaOperationType, CachedAnalysis, DeferredRetry, InstructionInfo,
-    SolBalanceChange, SwapPnLInfo, TokenBalanceChange, TokenSwapInfo, TokenTransfer, Transaction,
-    TransactionDirection, TransactionStats, TransactionStatus, TransactionType,
+    AtaAnalysis,
+    AtaOperation,
+    AtaOperationType,
+    CachedAnalysis,
+    DeferredRetry,
+    InstructionInfo,
+    SolBalanceChange,
+    SwapPnLInfo,
+    TokenBalanceChange,
+    TokenSwapInfo,
+    TokenTransfer,
+    Transaction,
+    TransactionDirection,
+    TransactionStats,
+    TransactionStatus,
+    TransactionType,
 };
 use crate::utils::get_wallet_address;
 use crate::websocket;
@@ -40,6 +53,8 @@ use crate::transactions_lib;
 // =============================================================================
 
 const NORMAL_CHECK_INTERVAL_SECS: u64 = 3; // Normal transaction checking every 3 seconds (faster for position verification)
+const MIN_PENDING_LAMPORT_DELTA: i64 = 1_000; // Ignore WebSocket pendings with <0.000001 SOL impact
+const PENDING_MAX_AGE_SECS: i64 = 180; // Drop pending signatures after 3 minutes without progress
 
 // =============================================================================
 // TRANSACTIONS MANAGER
@@ -74,6 +89,16 @@ pub struct TransactionsManager {
     pub pending_transactions: HashMap<String, chrono::DateTime<chrono::Utc>>,
 }
 
+#[derive(Default)]
+pub struct PendingProcessStats {
+    pub rechecked: usize,
+    pub confirmed: usize,
+    pub failed: usize,
+    pub not_found: usize,
+    pub ttl_evicted: usize,
+    pub remaining: usize,
+}
+
 impl TransactionsManager {
     /// Create new TransactionsManager instance with token database integration
     pub async fn new(wallet_pubkey: Pubkey) -> Result<Self, String> {
@@ -84,7 +109,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to initialize token database: {}", e),
+                    &format!("Failed to initialize token database: {}", e)
                 );
                 None
             }
@@ -96,7 +121,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "WARN",
-                "Price service initialization moved to pool_service module",
+                "Price service initialization moved to pool_service module"
             );
         }
 
@@ -107,7 +132,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to initialize transaction database: {}", e),
+                    &format!("Failed to initialize transaction database: {}", e)
                 );
                 None
             }
@@ -123,8 +148,8 @@ impl TransactionsManager {
             token_database,
             transaction_database,
             deferred_retries: HashMap::new(),
-            websocket_receiver: None,             // Will be set up later
-            websocket_shutdown: None,             // Will be set up later
+            websocket_receiver: None, // Will be set up later
+            websocket_shutdown: None, // Will be set up later
             pending_transactions: HashMap::new(), // Track pending transactions for reprocessing
         })
     }
@@ -136,10 +161,7 @@ impl TransactionsManager {
         log(
             LogTag::Transactions,
             "WEBSOCKET_INIT",
-            &format!(
-                "🔌 Initializing WebSocket monitoring for wallet: {}",
-                &wallet_address
-            ),
+            &format!("🔌 Initializing WebSocket monitoring for wallet: {}", &wallet_address)
         );
 
         // Load WebSocket URL from config, use first RPC URL and convert to websocket
@@ -154,17 +176,14 @@ impl TransactionsManager {
                     log(
                         LogTag::Transactions,
                         "WEBSOCKET_CONFIG",
-                        &format!(
-                            "📡 Using WebSocket URL derived from RPC config: {}",
-                            &ws_url
-                        ),
+                        &format!("📡 Using WebSocket URL derived from RPC config: {}", &ws_url)
                     );
                     ws_url
                 } else {
                     log(
                         LogTag::Transactions,
                         "WEBSOCKET_FALLBACK",
-                        "⚠️ No RPC URLs in config, using default WebSocket URL",
+                        "⚠️ No RPC URLs in config, using default WebSocket URL"
                     );
                     websocket::SolanaWebSocketClient::get_default_ws_url()
                 }
@@ -173,10 +192,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "WEBSOCKET_FALLBACK",
-                    &format!(
-                        "⚠️ Failed to load config ({}), using default WebSocket URL",
-                        e
-                    ),
+                    &format!("⚠️ Failed to load config ({}), using default WebSocket URL", e)
                 );
                 websocket::SolanaWebSocketClient::get_default_ws_url()
             }
@@ -189,9 +205,8 @@ impl TransactionsManager {
         let receiver = websocket::start_websocket_monitoring(
             wallet_address,
             Some(ws_url),
-            websocket_shutdown.clone(),
-        )
-        .await?;
+            websocket_shutdown.clone()
+        ).await?;
 
         self.websocket_receiver = Some(receiver);
         self.websocket_shutdown = Some(websocket_shutdown);
@@ -199,7 +214,7 @@ impl TransactionsManager {
         log(
             LogTag::Transactions,
             "WEBSOCKET_READY",
-            "✅ WebSocket monitoring initialized successfully",
+            "✅ WebSocket monitoring initialized successfully"
         );
 
         Ok(())
@@ -211,7 +226,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "WEBSOCKET_SHUTDOWN",
-                "🔌 Signaling WebSocket to shutdown gracefully",
+                "🔌 Signaling WebSocket to shutdown gracefully"
             );
             shutdown_signal.notify_waiters();
         }
@@ -222,51 +237,56 @@ impl TransactionsManager {
     }
 
     /// Process pending transactions to check if they've been confirmed/finalized
-    pub async fn process_pending_transactions(&mut self) -> Result<usize, String> {
+    pub async fn process_pending_transactions(&mut self) -> Result<PendingProcessStats, String> {
+        let mut stats = PendingProcessStats::default();
+
         if self.pending_transactions.is_empty() {
-            return Ok(0);
+            return Ok(stats);
         }
 
-        let mut confirmed_count = 0;
-        let mut signatures_to_remove = Vec::new();
         let now = chrono::Utc::now();
-
-        // Collect signatures needing recheck using tiered backoff to accelerate verification:
-        // <10s age: recheck after 5s; <30s age: recheck after 15s; otherwise 30s.
         let mut signatures_to_recheck = Vec::new();
+        let mut ttl_evictions: Vec<(String, i64)> = Vec::new();
+
+        // Collect signatures needing recheck using tiered backoff and TTL eviction
         for (signature, first_seen) in &self.pending_transactions {
-            let age = now.signed_duration_since(*first_seen).num_seconds();
-            let threshold = if age < 10 {
-                5
-            } else if age < 30 {
-                15
-            } else {
-                30
-            };
-            if age > threshold {
+            let age_secs = now.signed_duration_since(*first_seen).num_seconds();
+
+            if age_secs > PENDING_MAX_AGE_SECS {
+                ttl_evictions.push((signature.clone(), age_secs));
+                continue;
+            }
+
+            let threshold = if age_secs < 10 { 5 } else if age_secs < 30 { 15 } else { 30 };
+
+            if age_secs > threshold {
                 signatures_to_recheck.push(signature.clone());
             }
         }
 
-        // Now process the collected signatures without borrowing conflicts
+        stats.rechecked = signatures_to_recheck.len();
+
+        let mut confirmed_signatures = Vec::new();
+        let mut failed_signatures = Vec::new();
+        let mut not_found_signatures = Vec::new();
+
         for signature in signatures_to_recheck {
             if self.debug_enabled {
                 log(
                     LogTag::Transactions,
                     "PENDING_RECHECK",
-                    &format!("🔄 Rechecking pending transaction: {}", &signature),
+                    &format!("🔄 Rechecking pending transaction: {}", &signature)
                 );
             }
 
-            // Reprocess the transaction to check current status
             match self.process_transaction(&signature).await {
                 Ok(tx) => {
-                    // Check if transaction is now confirmed/finalized
-                    if matches!(
-                        tx.status,
-                        TransactionStatus::Confirmed | TransactionStatus::Finalized
-                    ) {
-                        // Record confirmation event
+                    if
+                        matches!(
+                            tx.status,
+                            TransactionStatus::Confirmed | TransactionStatus::Finalized
+                        )
+                    {
                         let fee_lamports = if tx.fee_sol > 0.0 {
                             Some((tx.fee_sol * 1_000_000_000.0) as u64)
                         } else {
@@ -278,21 +298,18 @@ impl TransactionsManager {
                             true,
                             fee_lamports,
                             tx.slot,
-                            None,
-                        )
-                        .await;
-                        confirmed_count += 1;
-                        signatures_to_remove.push(signature.clone());
+                            None
+                        ).await;
+                        confirmed_signatures.push(signature.clone());
 
                         if self.debug_enabled {
                             log(
                                 LogTag::Transactions,
                                 "PENDING_CONFIRMED",
-                                &format!("✅ Pending transaction {} now confirmed", &signature),
+                                &format!("✅ Pending transaction {} now confirmed", &signature)
                             );
                         }
                     } else if matches!(tx.status, TransactionStatus::Failed(_)) {
-                        // Transaction failed, remove from pending
                         let fee_lamports = if tx.fee_sol > 0.0 {
                             Some((tx.fee_sol * 1_000_000_000.0) as u64)
                         } else {
@@ -304,27 +321,24 @@ impl TransactionsManager {
                             false,
                             fee_lamports,
                             tx.slot,
-                            tx.error_message.as_deref(),
-                        )
-                        .await;
-                        signatures_to_remove.push(signature.clone());
+                            tx.error_message.as_deref()
+                        ).await;
+                        failed_signatures.push(signature.clone());
 
                         log(
                             LogTag::Transactions,
                             "PENDING_FAILED",
-                            &format!("❌ Pending transaction {} failed", &signature),
+                            &format!("❌ Pending transaction {} failed", &signature)
                         );
                     }
-                    // If still pending, keep it in the list
                 }
                 Err(e) => {
-                    // If we can't fetch the transaction anymore, remove from pending
                     if e.contains("not found") {
-                        signatures_to_remove.push(signature.clone());
+                        not_found_signatures.push(signature.clone());
                         log(
                             LogTag::Transactions,
                             "PENDING_NOT_FOUND",
-                            &format!("🗑️ Pending transaction {} not found, removing", &signature),
+                            &format!("🗑️ Pending transaction {} not found, removing", &signature)
                         );
                         crate::events::record_transaction_event(
                             &signature,
@@ -332,32 +346,67 @@ impl TransactionsManager {
                             false,
                             None,
                             None,
-                            Some(&e),
-                        )
-                        .await;
+                            Some(&e)
+                        ).await;
                     }
-                    // For other errors, keep trying later
                 }
             }
         }
 
-        // Remove confirmed/failed/not-found transactions from pending list
-        for signature in signatures_to_remove {
-            self.pending_transactions.remove(&signature);
+        for signature in &confirmed_signatures {
+            self.pending_transactions.remove(signature);
+        }
+        stats.confirmed = confirmed_signatures.len();
+
+        for signature in &failed_signatures {
+            self.pending_transactions.remove(signature);
+        }
+        stats.failed = failed_signatures.len();
+
+        for signature in &not_found_signatures {
+            self.pending_transactions.remove(signature);
+        }
+        stats.not_found = not_found_signatures.len();
+
+        for (signature, age_secs) in ttl_evictions {
+            if self.pending_transactions.remove(&signature).is_some() {
+                stats.ttl_evicted += 1;
+                log(
+                    LogTag::Transactions,
+                    "PENDING_EXPIRED",
+                    &format!(
+                        "⏰ Dropping pending transaction {} after {}s without confirmation",
+                        signature,
+                        age_secs
+                    )
+                );
+            }
         }
 
-        if self.debug_enabled && confirmed_count > 0 {
+        stats.remaining = self.pending_transactions.len();
+
+        if
+            self.debug_enabled &&
+            (stats.confirmed > 0 ||
+                stats.failed > 0 ||
+                stats.not_found > 0 ||
+                stats.ttl_evicted > 0)
+        {
             log(
                 LogTag::Transactions,
                 "PENDING_SUMMARY",
                 &format!(
-                    "✅ Processed {} pending transactions, {} confirmed",
-                    confirmed_count, confirmed_count
-                ),
+                    "Pending summary → confirmed: {}, failed: {}, removed_not_found: {}, ttl_evicted: {}, still_pending: {}",
+                    stats.confirmed,
+                    stats.failed,
+                    stats.not_found,
+                    stats.ttl_evicted,
+                    stats.remaining
+                )
             );
         }
 
-        Ok(confirmed_count)
+        Ok(stats)
     }
 
     /// Fallback check - get last 100 transactions when WebSocket is not available
@@ -365,7 +414,7 @@ impl TransactionsManager {
         log(
             LogTag::Transactions,
             "FALLBACK",
-            "🔄 Performing fallback check of last 100 transactions",
+            "🔄 Performing fallback check of last 100 transactions"
         );
 
         // Get RPC client
@@ -375,10 +424,9 @@ impl TransactionsManager {
         let signatures = rpc_client
             .get_wallet_signatures_main_rpc(
                 &self.wallet_pubkey,
-                100,  // Last 100 transactions for fallback
-                None, // Start from most recent
-            )
-            .await
+                100, // Last 100 transactions for fallback
+                None // Start from most recent
+            ).await
             .map_err(|e| format!("Failed to fetch signatures in fallback: {}", e))?;
 
         let mut new_transaction_count = 0;
@@ -390,7 +438,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "FALLBACK_NEW",
-                    &format!("🆕 Found new transaction in fallback: {}", &signature),
+                    &format!("🆕 Found new transaction in fallback: {}", &signature)
                 );
 
                 // Add to known signatures first
@@ -398,7 +446,7 @@ impl TransactionsManager {
                     log(
                         LogTag::Transactions,
                         "ERROR",
-                        &format!("Failed to add fallback signature to known: {}", e),
+                        &format!("Failed to add fallback signature to known: {}", e)
                     );
                 }
 
@@ -412,19 +460,15 @@ impl TransactionsManager {
                             true,
                             None,
                             None,
-                            None,
-                        )
-                        .await;
+                            None
+                        ).await;
                         new_transaction_count += 1;
                     }
                     Err(e) => {
                         log(
                             LogTag::Transactions,
                             "ERROR",
-                            &format!(
-                                "Failed to process fallback transaction {}: {}",
-                                &signature, e
-                            ),
+                            &format!("Failed to process fallback transaction {}: {}", &signature, e)
                         );
                         crate::events::record_transaction_event(
                             signature,
@@ -432,9 +476,8 @@ impl TransactionsManager {
                             false,
                             None,
                             None,
-                            Some(&e),
-                        )
-                        .await;
+                            Some(&e)
+                        ).await;
                     }
                 }
             }
@@ -444,10 +487,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "FALLBACK_SUCCESS",
-                &format!(
-                    "✅ Fallback check complete - found {} new transactions",
-                    new_transaction_count
-                ),
+                &format!("✅ Fallback check complete - found {} new transactions", new_transaction_count)
             );
         }
 
@@ -474,10 +514,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "DB_INIT",
-                    &format!(
-                        "Loaded {} existing known signatures from database into memory",
-                        count
-                    ),
+                    &format!("Loaded {} existing known signatures from database into memory", count)
                 );
             }
 
@@ -489,7 +526,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "INIT",
-                "No database available - starting with empty transaction cache",
+                "No database available - starting with empty transaction cache"
             );
         }
 
@@ -503,7 +540,7 @@ impl TransactionsManager {
         log(
             LogTag::Transactions,
             "STARTUP_DISCOVERY",
-            "🔍 Starting initial fetch of 1000 transactions",
+            "🔍 Starting initial fetch of 1000 transactions"
         );
 
         let rpc_client = get_rpc_client();
@@ -511,28 +548,19 @@ impl TransactionsManager {
         let mut total_cached = 0;
 
         // Fetch exactly 1000 transactions in a single batch
-        log(
-            LogTag::Transactions,
-            "STARTUP_DISCOVERY",
-            "📦 Fetching 1000 most recent transactions",
-        );
+        log(LogTag::Transactions, "STARTUP_DISCOVERY", "📦 Fetching 1000 most recent transactions");
 
         // Fetch batch of signatures using rate-limited RPC
         let signatures = rpc_client
             .get_wallet_signatures_main_rpc(
                 &self.wallet_pubkey,
                 1000, // Exactly 1000 transactions as requested
-                None, // Start from most recent
-            )
-            .await
+                None // Start from most recent
+            ).await
             .map_err(|e| format!("Failed to fetch 1000 transactions: {}", e))?;
 
         if signatures.is_empty() {
-            log(
-                LogTag::Transactions,
-                "STARTUP_DISCOVERY",
-                "📭 No transactions found for wallet",
-            );
+            log(LogTag::Transactions, "STARTUP_DISCOVERY", "📭 No transactions found for wallet");
             return Ok(());
         }
 
@@ -554,7 +582,8 @@ impl TransactionsManager {
                 if let Err(e) = self.process_transaction(signature).await {
                     let error_msg = format!(
                         "Failed to process startup transaction {}: {}",
-                        &signature, e
+                        &signature,
+                        e
                     );
                     log(LogTag::Transactions, "WARN", &error_msg);
 
@@ -565,8 +594,9 @@ impl TransactionsManager {
                             "ERROR",
                             &format!(
                                 "Failed to save startup transaction failure state for {}: {}",
-                                &signature, db_err
-                            ),
+                                &signature,
+                                db_err
+                            )
                         );
                     }
                 }
@@ -578,8 +608,9 @@ impl TransactionsManager {
             "STARTUP_DISCOVERY",
             &format!(
                 "🎯 Discovery complete: processed {} signatures, cached {} new transactions",
-                total_processed, total_cached
-            ),
+                total_processed,
+                total_cached
+            )
         );
 
         // Update statistics
@@ -594,7 +625,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "PROCESS",
-                &format!("Processing transaction: {}", &signature),
+                &format!("Processing transaction: {}", &signature)
             );
         }
 
@@ -608,7 +639,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "RPC_FETCH",
-                &format!("Fetching new transaction: {}", &signature),
+                &format!("Fetching new transaction: {}", &signature)
             );
         }
 
@@ -618,10 +649,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Rpc,
                     "SUCCESS",
-                    &format!(
-                        "Retrieved transaction details for {} from premium RPC",
-                        &signature
-                    ),
+                    &format!("Retrieved transaction details for {} from premium RPC", &signature)
                 );
                 data
             }
@@ -634,14 +662,14 @@ impl TransactionsManager {
                         &format!(
                             "Transaction {} not found on-chain (likely failed swap)",
                             &signature
-                        ),
+                        )
                     );
                     return Err(format!("Transaction not found: {}", signature));
                 } else {
                     log(
                         LogTag::Rpc,
                         "ERROR",
-                        &format!("RPC error fetching {}: {}", &signature, error_msg),
+                        &format!("RPC error fetching {}: {}", &signature, error_msg)
                     );
                     return Err(format!("Failed to fetch transaction details: {}", e));
                 }
@@ -663,39 +691,31 @@ impl TransactionsManager {
             status: TransactionStatus::Finalized,
             transaction_type: TransactionType::Unknown,
             direction: TransactionDirection::Internal,
-            success: tx_data
-                .meta
-                .as_ref()
-                .map_or(false, |meta| meta.err.is_none()),
-            error_message: tx_data
-                .meta
+            success: tx_data.meta.as_ref().map_or(false, |meta| meta.err.is_none()),
+            error_message: tx_data.meta
                 .as_ref()
                 .and_then(|meta| meta.err.as_ref())
                 .map(|err| {
                     // Use structured error parsing for comprehensive error handling
                     let structured_error = parse_structured_solana_error(
                         &serde_json::to_value(err).unwrap_or_default(),
-                        Some(&signature),
+                        Some(&signature)
                     );
                     format!(
                         "[{}] {}: {} (code: {})",
                         structured_error.error_type_name(),
                         structured_error.error_name,
                         structured_error.description,
-                        structured_error
-                            .error_code
-                            .map_or("N/A".to_string(), |c| c.to_string())
+                        structured_error.error_code.map_or("N/A".to_string(), |c| c.to_string())
                     )
                 }),
-            fee_sol: tx_data
-                .meta
-                .as_ref()
-                .map_or(0.0, |meta| lamports_to_sol(meta.fee)),
+            fee_sol: tx_data.meta.as_ref().map_or(0.0, |meta| lamports_to_sol(meta.fee)),
             sol_balance_change: 0.0,
+            wallet_lamport_change: 0,
+            wallet_signed: false,
             token_transfers: Vec::new(),
             raw_transaction_data: Some(serde_json::to_value(&tx_data).unwrap_or_default()),
-            log_messages: tx_data
-                .meta
+            log_messages: tx_data.meta
                 .as_ref()
                 .and_then(|meta| meta.log_messages.clone())
                 .unwrap_or_default(),
@@ -717,8 +737,9 @@ impl TransactionsManager {
         self.analyze_transaction(&mut transaction).await?;
 
         // Persist a snapshot for finalized transactions to avoid future re-analysis
-        if matches!(transaction.status, TransactionStatus::Finalized)
-            && transaction.raw_transaction_data.is_some()
+        if
+            matches!(transaction.status, TransactionStatus::Finalized) &&
+            transaction.raw_transaction_data.is_some()
         {
             transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
         }
@@ -729,7 +750,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to cache raw transaction: {}", e),
+                    &format!("Failed to cache raw transaction: {}", e)
                 );
             }
         }
@@ -740,7 +761,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to cache processed transaction: {}", e),
+                    &format!("Failed to cache processed transaction: {}", e)
                 );
             }
         }
@@ -751,7 +772,7 @@ impl TransactionsManager {
     /// Analyze transaction to determine type and extract data
     pub async fn analyze_transaction(
         &mut self,
-        transaction: &mut Transaction,
+        transaction: &mut Transaction
     ) -> Result<(), String> {
         if self.debug_enabled {
             log(
@@ -762,7 +783,7 @@ impl TransactionsManager {
                     &transaction.signature,
                     transaction.transaction_type,
                     transaction.sol_balance_change
-                ),
+                )
             );
         }
 
@@ -784,8 +805,9 @@ impl TransactionsManager {
                             "WARN",
                             &format!(
                                 "ATA analysis failed for swap {}: {}",
-                                &transaction.signature, e
-                            ),
+                                &transaction.signature,
+                                e
+                            )
                         );
                     }
                 }
@@ -810,10 +832,14 @@ impl TransactionsManager {
             };
 
             let raw_data_string = match &transaction.raw_transaction_data {
-                Some(value) => Some(
-                    serde_json::to_string(value)
-                        .map_err(|e| format!("Failed to serialize raw transaction data: {}", e))?,
-                ),
+                Some(value) =>
+                    Some(
+                        serde_json
+                            ::to_string(value)
+                            .map_err(|e|
+                                format!("Failed to serialize raw transaction data: {}", e)
+                            )?
+                    ),
                 None => None,
             };
 
@@ -825,15 +851,14 @@ impl TransactionsManager {
                 status_string,
                 transaction.success,
                 transaction.error_message.as_deref(),
-                raw_data_string.as_deref(),
-            )
-            .await?;
+                raw_data_string.as_deref()
+            ).await?;
 
             if self.debug_enabled {
                 log(
                     LogTag::Transactions,
                     "DB_CACHE",
-                    &format!("Cached transaction {} to database", &transaction.signature),
+                    &format!("Cached transaction {} to database", &transaction.signature)
                 );
             }
 
@@ -847,16 +872,13 @@ impl TransactionsManager {
     /// This preserves all raw blockchain data and only updates calculated fields
     pub async fn recalculate_transaction_analysis(
         &mut self,
-        transaction: &mut Transaction,
+        transaction: &mut Transaction
     ) -> Result<(), String> {
         if self.debug_enabled {
             log(
                 LogTag::Transactions,
                 "RECALC",
-                &format!(
-                    "Recalculating analysis for transaction: {}",
-                    &transaction.signature
-                ),
+                &format!("Recalculating analysis for transaction: {}", &transaction.signature)
             );
         }
 
@@ -897,8 +919,9 @@ impl TransactionsManager {
                     "RECALC",
                     &format!(
                         "✅ Analysis recalculated: {} -> {:?}",
-                        &transaction.signature, transaction.transaction_type
-                    ),
+                        &transaction.signature,
+                        transaction.transaction_type
+                    )
                 );
             }
         } else {
@@ -908,7 +931,7 @@ impl TransactionsManager {
                 &format!(
                     "No raw transaction data available for {}, skipping recalculation",
                     &transaction.signature
-                ),
+                )
             );
         }
 
@@ -918,7 +941,7 @@ impl TransactionsManager {
     /// Get recent transactions from cache (for orphaned position recovery)
     pub async fn get_recent_transactions(
         &mut self,
-        limit: usize,
+        limit: usize
     ) -> Result<Vec<Transaction>, String> {
         // Database-only implementation using optimized batch retrieval
         if let Some(db) = &self.transaction_database {
@@ -929,8 +952,9 @@ impl TransactionsManager {
             let mut recalculated_count = 0;
             for tx in &mut transactions {
                 // Only recalculate if we have raw data and the transaction type is unknown
-                if matches!(tx.transaction_type, TransactionType::Unknown)
-                    && tx.raw_transaction_data.is_some()
+                if
+                    matches!(tx.transaction_type, TransactionType::Unknown) &&
+                    tx.raw_transaction_data.is_some()
                 {
                     // Always recalculate analysis (don't use cached analysis)
                     if let Err(e) = self.recalculate_transaction_analysis(tx).await {
@@ -940,8 +964,9 @@ impl TransactionsManager {
                                 "WARN",
                                 &format!(
                                     "Failed to recalculate analysis for {}: {}",
-                                    &tx.signature, e
-                                ),
+                                    &tx.signature,
+                                    e
+                                )
                             );
                         }
                     } else {
@@ -956,8 +981,9 @@ impl TransactionsManager {
                     "RECALC",
                     &format!(
                         "Recalculated analysis for {} transactions from {} requested",
-                        recalculated_count, limit
-                    ),
+                        recalculated_count,
+                        limit
+                    )
                 );
             }
 
@@ -985,10 +1011,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "RECENT_SWAPS",
-                &format!(
-                    "Looking for {} swaps in last {} transactions",
-                    limit, examine_count
-                ),
+                &format!("Looking for {} swaps in last {} transactions", limit, examine_count)
             );
         }
 
@@ -1005,8 +1028,10 @@ impl TransactionsManager {
                         "RECENT_SWAPS_FILTER",
                         &format!(
                             "Transaction {}: type = {:?}, is_swap = {}",
-                            &tx.signature, tx.transaction_type, is_swap
-                        ),
+                            &tx.signature,
+                            tx.transaction_type,
+                            is_swap
+                        )
                     );
                 }
                 is_swap
@@ -1023,7 +1048,7 @@ impl TransactionsManager {
                     swap_transactions.len(),
                     examine_count,
                     recent_count
-                ),
+                )
             );
         }
 
@@ -1038,21 +1063,13 @@ impl TransactionsManager {
 /// Start the transactions manager background service
 /// Simple pattern following other bot services
 pub async fn start_transactions_service(shutdown: Arc<Notify>) {
-    log(
-        LogTag::Transactions,
-        "INFO",
-        "TransactionsManager service starting...",
-    );
+    log(LogTag::Transactions, "INFO", "TransactionsManager service starting...");
 
     // Load wallet address fresh each time
     let wallet_address_str = match get_wallet_address() {
         Ok(address) => address,
         Err(e) => {
-            log(
-                LogTag::Transactions,
-                "ERROR",
-                &format!("Failed to load wallet address: {}", e),
-            );
+            log(LogTag::Transactions, "ERROR", &format!("Failed to load wallet address: {}", e));
             return;
         }
     };
@@ -1060,11 +1077,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
     let wallet_address = match Pubkey::from_str(&wallet_address_str) {
         Ok(address) => address,
         Err(e) => {
-            log(
-                LogTag::Transactions,
-                "ERROR",
-                &format!("Invalid wallet address format: {}", e),
-            );
+            log(LogTag::Transactions, "ERROR", &format!("Invalid wallet address format: {}", e));
             return;
         }
     };
@@ -1074,7 +1087,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         log(
             LogTag::Transactions,
             "ERROR",
-            &format!("Failed to initialize global transaction manager: {}", e),
+            &format!("Failed to initialize global transaction manager: {}", e)
         );
         return;
     }
@@ -1083,11 +1096,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
     let global_manager = match get_global_transaction_manager().await {
         Some(manager) => manager,
         None => {
-            log(
-                LogTag::Transactions,
-                "ERROR",
-                "Global transaction manager not available",
-            );
+            log(LogTag::Transactions, "ERROR", "Global transaction manager not available");
             return;
         }
     };
@@ -1098,11 +1107,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         if let Some(ref mut manager) = manager_guard.as_mut() {
             // Initialize known signatures
             if let Err(e) = manager.initialize_known_signatures().await {
-                log(
-                    LogTag::Transactions,
-                    "ERROR",
-                    &format!("Failed to initialize: {}", e),
-                );
+                log(LogTag::Transactions, "ERROR", &format!("Failed to initialize: {}", e));
                 return;
             }
 
@@ -1113,7 +1118,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                     "TransactionsManager initialized for wallet: {} (known transactions: {})",
                     wallet_address,
                     manager.known_signatures.len()
-                ),
+                )
             );
 
             // Perform startup transaction discovery and backfill
@@ -1121,7 +1126,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                 log(
                     LogTag::Transactions,
                     "ERROR",
-                    &format!("Failed to complete startup discovery: {}", e),
+                    &format!("Failed to complete startup discovery: {}", e)
                 );
                 // Don't return here - continue with normal operation even if discovery fails
             }
@@ -1131,21 +1136,13 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                 log(
                     LogTag::Transactions,
                     "ERROR",
-                    &format!("Failed to initialize WebSocket monitoring: {}", e),
+                    &format!("Failed to initialize WebSocket monitoring: {}", e)
                 );
                 // Fall back to polling if WebSocket fails
-                log(
-                    LogTag::Transactions,
-                    "INFO",
-                    "Falling back to polling-based monitoring",
-                );
+                log(LogTag::Transactions, "INFO", "Falling back to polling-based monitoring");
             }
         } else {
-            log(
-                LogTag::Transactions,
-                "ERROR",
-                "Global transaction manager is None",
-            );
+            log(LogTag::Transactions, "ERROR", "Global transaction manager is None");
             return;
         }
     }
@@ -1154,7 +1151,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
     log(
         LogTag::Transactions,
         "STARTUP",
-        "✅ Transaction service started - positions managed separately",
+        "✅ Transaction service started - positions managed separately"
     );
 
     // Signal that position recalculation is complete - traders can now start
@@ -1162,7 +1159,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
     log(
         LogTag::Transactions,
         "STARTUP",
-        "🟢 Position recalculation complete - traders can now operate",
+        "🟢 Position recalculation complete - traders can now operate"
     );
 
     // NEW: WebSocket-based monitoring with periodic checks
@@ -1232,6 +1229,10 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                             }
 
                             if should_process {
+                                let is_position_signature = crate::positions::SIG_TO_MINT_INDEX
+                                    .read()
+                                    .await
+                                    .contains_key(&signature);
                                 log(
                                     LogTag::Transactions,
                                     "WEBSOCKET_NEW",
@@ -1291,13 +1292,41 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                                     // Check transaction status
                                     match tx.status {
                                         TransactionStatus::Pending => {
-                                            // Transaction is pending, add to pending list for later reprocessing
-                                            manager.pending_transactions.insert(signature.clone(), chrono::Utc::now());
-                                            log(
-                                                LogTag::Transactions,
-                                                "WEBSOCKET_PENDING",
-                                                &format!("⏳ WebSocket transaction {} is pending, will recheck later", &signature)
-                                            );
+                                            let significant_wallet_change = tx
+                                                .wallet_lamport_change
+                                                .abs()
+                                                >= MIN_PENDING_LAMPORT_DELTA;
+                                            let has_token_change =
+                                                !tx.token_balance_changes.is_empty();
+                                            let should_queue_pending =
+                                                is_position_signature
+                                                    || tx.wallet_signed
+                                                    || significant_wallet_change
+                                                    || has_token_change;
+
+                                            if should_queue_pending {
+                                                manager.pending_transactions.insert(
+                                                    signature.clone(),
+                                                    chrono::Utc::now(),
+                                                );
+                                                log(
+                                                    LogTag::Transactions,
+                                                    "WEBSOCKET_PENDING",
+                                                    &format!(
+                                                        "⏳ WebSocket transaction {} is pending, will recheck later",
+                                                        &signature
+                                                    )
+                                                );
+                                            } else if manager.debug_enabled {
+                                                log(
+                                                    LogTag::Transactions,
+                                                    "WEBSOCKET_PENDING_SKIP",
+                                                    &format!(
+                                                        "Skipping pending queue for {} (no wallet impact)",
+                                                        &signature
+                                                    )
+                                                );
+                                            }
                                         }
                                         TransactionStatus::Confirmed | TransactionStatus::Finalized => {
                                             // Transaction is confirmed/finalized, fully processed
@@ -1330,12 +1359,28 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
 
                                     if is_indexing_delay {
                                         // Treat as transient: mark as pending-like to reprocess quickly
-                                        manager.pending_transactions.insert(signature.clone(), chrono::Utc::now());
-                                        log(
-                                            LogTag::Transactions,
-                                            "WEBSOCKET_TRANSIENT",
-                                            &format!("⏳ Transient WebSocket processing issue for {} (indexing delay) - scheduled fast pending recheck", &signature)
-                                        );
+                                        if is_position_signature {
+                                            manager
+                                                .pending_transactions
+                                                .insert(signature.clone(), chrono::Utc::now());
+                                            log(
+                                                LogTag::Transactions,
+                                                "WEBSOCKET_TRANSIENT",
+                                                &format!(
+                                                    "⏳ Transient WebSocket processing issue for {} (indexing delay) - scheduled fast pending recheck",
+                                                    &signature
+                                                )
+                                            );
+                                        } else if manager.debug_enabled {
+                                            log(
+                                                LogTag::Transactions,
+                                                "WEBSOCKET_TRANSIENT_SKIP",
+                                                &format!(
+                                                    "Ignoring transient WebSocket signature {} (untracked position)",
+                                                    &signature
+                                                )
+                                            );
+                                        }
                                     } else {
                                         log(
                                             LogTag::Transactions,
@@ -1459,14 +1504,35 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                 let mut manager_guard = global_manager.lock().await;
                 if let Some(ref mut manager) = manager_guard.as_mut() {
                     match manager.process_pending_transactions().await {
-                        Ok(processed_count) => {
-                            if processed_count > 0 {
-                                log(LogTag::Transactions, "PENDING_CHECK", &format!(
-                                    "⏱️  Processed {} pending transactions",
-                                    processed_count
-                                ));
+                        Ok(stats) => {
+                            if stats.rechecked > 0
+                                || stats.confirmed > 0
+                                || stats.failed > 0
+                                || stats.not_found > 0
+                                || stats.ttl_evicted > 0
+                            {
+                                log(
+                                    LogTag::Transactions,
+                                    "PENDING_CHECK",
+                                    &format!(
+                                        "⏱️ Rechecked {} pending (confirmed {}, failed {}, not_found {}, ttl_evicted {}, remaining {})",
+                                        stats.rechecked,
+                                        stats.confirmed,
+                                        stats.failed,
+                                        stats.not_found,
+                                        stats.ttl_evicted,
+                                        stats.remaining
+                                    ),
+                                );
                             } else if manager.debug_enabled {
-                                log(LogTag::Transactions, "PENDING_CHECK", "No pending transactions to process");
+                                log(
+                                    LogTag::Transactions,
+                                    "PENDING_CHECK",
+                                    &format!(
+                                        "No pending transactions to process ({} still tracked)",
+                                        stats.remaining
+                                    ),
+                                );
                             }
                         }
                         Err(e) => {
@@ -1506,11 +1572,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         }
     }
 
-    log(
-        LogTag::Transactions,
-        "INFO",
-        "TransactionsManager service stopped",
-    );
+    log(LogTag::Transactions, "INFO", "TransactionsManager service stopped");
 }
 
 /// Check last 100 transactions when WebSocket fails (fallback mechanism)
@@ -1519,7 +1581,7 @@ async fn do_websocket_fallback_check(manager: &mut TransactionsManager) -> Resul
         log(
             LogTag::Transactions,
             "FALLBACK_CHECK",
-            "🔄 WebSocket fallback: checking last 100 transactions",
+            "🔄 WebSocket fallback: checking last 100 transactions"
         );
     }
 
@@ -1527,8 +1589,7 @@ async fn do_websocket_fallback_check(manager: &mut TransactionsManager) -> Resul
 
     // Get last 100 transactions
     let signatures = rpc_client
-        .get_wallet_signatures_main_rpc(&manager.wallet_pubkey, 100, None)
-        .await
+        .get_wallet_signatures_main_rpc(&manager.wallet_pubkey, 100, None).await
         .map_err(|e| format!("Failed to fetch last 100 transactions for fallback: {}", e))?;
 
     let mut new_transaction_count = 0;
@@ -1546,25 +1607,26 @@ async fn do_websocket_fallback_check(manager: &mut TransactionsManager) -> Resul
                 log(
                     LogTag::Transactions,
                     "FALLBACK_NEW",
-                    &format!("🆕 Fallback found new transaction: {}", &signature),
+                    &format!("🆕 Fallback found new transaction: {}", &signature)
                 );
             }
 
             // OPTIMIZATION: Immediately enqueue verification for fallback transactions too
             let sig_clone = signature.clone();
             tokio::spawn(async move {
-                if let Some(mint) = crate::positions::SIG_TO_MINT_INDEX
-                    .read()
-                    .await
-                    .get(&sig_clone)
-                    .cloned()
+                if
+                    let Some(mint) = crate::positions::SIG_TO_MINT_INDEX
+                        .read().await
+                        .get(&sig_clone)
+                        .cloned()
                 {
                     if let Some(position) = crate::positions::get_position_by_mint(&mint).await {
-                        let kind = if position.entry_transaction_signature.as_deref()
-                            == Some(&sig_clone)
+                        let kind = if
+                            position.entry_transaction_signature.as_deref() == Some(&sig_clone)
                         {
                             crate::positions::queue::VerificationKind::Entry
-                        } else if position.exit_transaction_signature.as_deref() == Some(&sig_clone)
+                        } else if
+                            position.exit_transaction_signature.as_deref() == Some(&sig_clone)
                         {
                             crate::positions::queue::VerificationKind::Exit
                         } else {
@@ -1576,7 +1638,7 @@ async fn do_websocket_fallback_check(manager: &mut TransactionsManager) -> Resul
                             mint,
                             position.id,
                             kind,
-                            None,
+                            None
                         );
                         crate::positions::queue::enqueue_verification(item).await;
 
@@ -1600,13 +1662,14 @@ async fn do_websocket_fallback_check(manager: &mut TransactionsManager) -> Resul
                     // Handle transaction status like WebSocket processing
                     match tx.status {
                         TransactionStatus::Pending => {
-                            manager
-                                .pending_transactions
-                                .insert(signature.clone(), chrono::Utc::now());
+                            manager.pending_transactions.insert(
+                                signature.clone(),
+                                chrono::Utc::now()
+                            );
                             log(
                                 LogTag::Transactions,
                                 "FALLBACK_PENDING",
-                                &format!("⏳ Fallback transaction {} is pending", &signature),
+                                &format!("⏳ Fallback transaction {} is pending", &signature)
                             );
                         }
                         TransactionStatus::Confirmed | TransactionStatus::Finalized => {
@@ -1624,22 +1687,24 @@ async fn do_websocket_fallback_check(manager: &mut TransactionsManager) -> Resul
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!(
-                            "Failed to process fallback transaction {}: {}",
-                            &signature, e
-                        ),
+                        &format!("Failed to process fallback transaction {}: {}", &signature, e)
                     );
 
                     // Save failed transaction state
-                    if let Err(db_err) = manager.save_failed_transaction_state(&signature, &e).await
+                    if
+                        let Err(db_err) = manager.save_failed_transaction_state(
+                            &signature,
+                            &e
+                        ).await
                     {
                         log(
                             LogTag::Transactions,
                             "ERROR",
                             &format!(
                                 "Failed to save fallback transaction failure state for {}: {}",
-                                &signature, db_err
-                            ),
+                                &signature,
+                                db_err
+                            )
                         );
                     }
                 }
@@ -1651,10 +1716,7 @@ async fn do_websocket_fallback_check(manager: &mut TransactionsManager) -> Resul
         log(
             LogTag::Transactions,
             "FALLBACK_SUMMARY",
-            &format!(
-                "✅ Fallback check complete: found {} new transactions",
-                new_transaction_count
-            ),
+            &format!("✅ Fallback check complete: found {} new transactions", new_transaction_count)
         );
     }
 
@@ -1666,9 +1728,9 @@ async fn do_websocket_fallback_check(manager: &mut TransactionsManager) -> Resul
 // =============================================================================
 
 /// Global transaction manager instance for monitoring
-pub static GLOBAL_TRANSACTION_MANAGER: once_cell::sync::Lazy<
-    std::sync::Arc<tokio::sync::Mutex<Option<TransactionsManager>>>,
-> = once_cell::sync::Lazy::new(|| std::sync::Arc::new(tokio::sync::Mutex::new(None)));
+pub static GLOBAL_TRANSACTION_MANAGER: once_cell::sync::Lazy<std::sync::Arc<tokio::sync::Mutex<Option<TransactionsManager>>>> = once_cell::sync::Lazy::new(
+    || std::sync::Arc::new(tokio::sync::Mutex::new(None))
+);
 
 /// Initialize global transaction manager for monitoring
 pub async fn initialize_global_transaction_manager(wallet_pubkey: Pubkey) -> Result<(), String> {
@@ -1685,7 +1747,7 @@ pub async fn initialize_global_transaction_manager(wallet_pubkey: Pubkey) -> Res
             log(
                 LogTag::Transactions,
                 "INIT",
-                "Global transaction manager initialized for monitoring",
+                "Global transaction manager initialized for monitoring"
             );
             Ok(())
         }
@@ -1698,8 +1760,7 @@ pub async fn initialize_global_transaction_manager(wallet_pubkey: Pubkey) -> Res
 }
 
 /// Get global transaction manager instance
-pub async fn get_global_transaction_manager(
-) -> Option<std::sync::Arc<tokio::sync::Mutex<Option<TransactionsManager>>>> {
+pub async fn get_global_transaction_manager() -> Option<std::sync::Arc<tokio::sync::Mutex<Option<TransactionsManager>>>> {
     Some(GLOBAL_TRANSACTION_MANAGER.clone())
 }
 
@@ -1732,9 +1793,12 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                     "Finalized" => TransactionStatus::Finalized,
                                     "Confirmed" => TransactionStatus::Confirmed,
                                     "Pending" => TransactionStatus::Pending,
-                                    s if s.starts_with("Failed") => TransactionStatus::Failed(
-                                        raw.error_message.clone().unwrap_or_else(|| s.to_string()),
-                                    ),
+                                    s if s.starts_with("Failed") =>
+                                        TransactionStatus::Failed(
+                                            raw.error_message
+                                                .clone()
+                                                .unwrap_or_else(|| s.to_string())
+                                        ),
                                     _ => TransactionStatus::Pending,
                                 },
                                 transaction_type: TransactionType::Unknown,
@@ -1743,9 +1807,10 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                 error_message: raw.error_message.clone(),
                                 fee_sol: 0.0,
                                 sol_balance_change: 0.0,
+                                wallet_lamport_change: 0,
+                                wallet_signed: false,
                                 token_transfers: Vec::new(),
-                                raw_transaction_data: raw
-                                    .raw_transaction_data
+                                raw_transaction_data: raw.raw_transaction_data
                                     .as_ref()
                                     .and_then(|s| serde_json::from_str(s).ok()),
                                 log_messages: Vec::new(),
@@ -1809,11 +1874,13 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                         }
 
                                         // Only return if transaction is now finalized/confirmed and successful
-                                        if matches!(
-                                            fresh_tx.status,
-                                            TransactionStatus::Finalized
-                                                | TransactionStatus::Confirmed
-                                        ) {
+                                        if
+                                            matches!(
+                                                fresh_tx.status,
+                                                TransactionStatus::Finalized |
+                                                    TransactionStatus::Confirmed
+                                            )
+                                        {
                                             return Ok(Some(fresh_tx));
                                         } else {
                                             if debug {
@@ -1839,7 +1906,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                                     "Failed to fetch fresh transaction {}: {}",
                                                     &signature[..8],
                                                     e
-                                                ),
+                                                )
                                             );
                                         }
                                         return Ok(None);
@@ -1848,11 +1915,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                             }
 
                             // Step 3: Transaction exists and is finalized/confirmed, but ensure analysis is complete
-                            if manager
-                                .recalculate_transaction_analysis(&mut tx)
-                                .await
-                                .is_ok()
-                            {
+                            if manager.recalculate_transaction_analysis(&mut tx).await.is_ok() {
                                 if debug {
                                     log(
                                         LogTag::Transactions,
@@ -1861,7 +1924,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                             "Analysis completed for {} - type: {:?}",
                                             &signature[..8],
                                             tx.transaction_type
-                                        ),
+                                        )
                                     );
                                 }
 
@@ -1871,10 +1934,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                         log(
                                             LogTag::Transactions,
                                             "WARN",
-                                            &format!(
-                                                "Failed to update processed transaction in DB: {}",
-                                                e
-                                            ),
+                                            &format!("Failed to update processed transaction in DB: {}", e)
                                         );
                                     }
                                 }
@@ -1888,7 +1948,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                         &format!(
                                             "Failed to recalculate analysis for {}",
                                             &signature[..8]
-                                        ),
+                                        )
                                     );
                                 }
                                 return Ok(None);
@@ -1903,7 +1963,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                 &format!(
                                     "Transaction {} not found in database, fetching fresh",
                                     &signature
-                                ),
+                                )
                             );
                         }
 
@@ -1923,10 +1983,12 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                 }
 
                                 // Only return if transaction is finalized/confirmed
-                                if matches!(
-                                    fresh_tx.status,
-                                    TransactionStatus::Finalized | TransactionStatus::Confirmed
-                                ) {
+                                if
+                                    matches!(
+                                        fresh_tx.status,
+                                        TransactionStatus::Finalized | TransactionStatus::Confirmed
+                                    )
+                                {
                                     return Ok(Some(fresh_tx));
                                 } else {
                                     return Ok(None);
@@ -1941,7 +2003,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                             "Failed to process fresh transaction {}: {}",
                                             &signature[..8],
                                             e
-                                        ),
+                                        )
                                     );
                                 }
                                 return Ok(None);
@@ -1956,7 +2018,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                     log(
                         LogTag::Transactions,
                         "MANAGER_TIMEOUT",
-                        &format!("Manager timeout for {} - caller should retry", &signature),
+                        &format!("Manager timeout for {} - caller should retry", &signature)
                     );
                 }
                 return Ok(None);
@@ -1966,7 +2028,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
         log(
             LogTag::Transactions,
             "NO_GLOBAL_MANAGER",
-            &format!("No global transaction manager available for {}", &signature),
+            &format!("No global transaction manager available for {}", &signature)
         );
     }
 
@@ -1978,15 +2040,17 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
 pub async fn get_swap_transactions_for_token(
     token_mint: &str,
     swap_type: Option<&str>, // "Sell", "Buy", or None for both
-    limit: Option<usize>,
+    limit: Option<usize>
 ) -> Result<Vec<SwapPnLInfo>, String> {
     log(
         LogTag::Transactions,
         "FILTER_START",
         &format!(
             "Getting swap transactions for token {} (type: {:?}, limit: {:?})",
-            token_mint, swap_type, limit
-        ),
+            token_mint,
+            swap_type,
+            limit
+        )
     );
 
     // Create temporary manager for deadlock safety
@@ -1996,13 +2060,12 @@ pub async fn get_swap_transactions_for_token(
 
     // Get filtered signatures from database efficiently
     let signatures = if let Some(ref db) = temp_manager.transaction_database {
-        db.get_swap_signatures_for_token(token_mint, swap_type, limit)
-            .await?
+        db.get_swap_signatures_for_token(token_mint, swap_type, limit).await?
     } else {
         log(
             LogTag::Transactions,
             "WARN",
-            "No database available for filtering, falling back to empty result",
+            "No database available for filtering, falling back to empty result"
         );
         return Ok(Vec::new());
     };
@@ -2010,11 +2073,7 @@ pub async fn get_swap_transactions_for_token(
     log(
         LogTag::Transactions,
         "FILTER_SIGNATURES",
-        &format!(
-            "Found {} filtered signatures for token {}",
-            signatures.len(),
-            token_mint
-        ),
+        &format!("Found {} filtered signatures for token {}", signatures.len(), token_mint)
     );
 
     // Convert filtered signatures to SwapPnLInfo
@@ -2023,8 +2082,12 @@ pub async fn get_swap_transactions_for_token(
 
     for (index, signature) in signatures.iter().enumerate() {
         if let Ok(Some(tx)) = get_transaction(signature).await {
-            if let Some(swap_info) =
-                temp_manager.convert_to_swap_pnl_info(&tx, &token_symbol_cache, true)
+            if
+                let Some(swap_info) = temp_manager.convert_to_swap_pnl_info(
+                    &tx,
+                    &token_symbol_cache,
+                    true
+                )
             {
                 // Double-check the token mint matches (in case database filtering wasn't exact)
                 if swap_info.token_mint == token_mint {
@@ -2043,7 +2106,7 @@ pub async fn get_swap_transactions_for_token(
                     index + 1,
                     signatures.len(),
                     token_mint
-                ),
+                )
             );
         }
     }
@@ -2056,7 +2119,7 @@ pub async fn get_swap_transactions_for_token(
             swap_transactions.len(),
             token_mint,
             signatures.len()
-        ),
+        )
     );
 
     Ok(swap_transactions)
