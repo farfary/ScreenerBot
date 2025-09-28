@@ -69,6 +69,14 @@ struct Args {
     /// Show statistics summary only
     #[arg(long)]
     summary_only: bool,
+
+    /// Full debug mode: detailed analysis of a single transaction
+    #[arg(long)]
+    full_debug: bool,
+
+    /// Transaction index for full debug mode (0-based, default: 0)
+    #[arg(long, default_value = "0")]
+    debug_index: usize,
 }
 
 #[derive(Debug, Clone, Tabled)]
@@ -103,6 +111,307 @@ struct ValidationStats {
     sol_volume: f64,
     total_fees: f64,
     fee_total: f64,
+}
+
+/// Perform comprehensive debug analysis of a single transaction
+async fn perform_full_debug_analysis(
+    signature: &str,
+    processor: &TransactionProcessor,
+    wallet_pubkey: Pubkey
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!("🎯 Transaction Signature: {}", signature);
+    println!("👛 Wallet: {}", wallet_pubkey);
+    println!();
+
+    // Step 1: Fetch raw transaction data
+    println!("🌐 Step 1: Fetching raw transaction data from RPC...");
+    let fetch_start = Instant::now();
+
+    let transaction = match processor.process_transaction(signature).await {
+        Ok(tx) => {
+            println!("✅ Transaction processed in {:.2}ms", fetch_start.elapsed().as_millis());
+            tx
+        }
+        Err(e) => {
+            println!("❌ Failed to process transaction: {}", e);
+            return Ok(());
+        }
+    };
+
+    println!();
+
+    // Step 2: Basic Transaction Info
+    println!("📋 TRANSACTION OVERVIEW");
+    println!("=======================");
+    println!("🔗 Signature: {}", transaction.signature);
+    println!("🏷️  Status: {:?}", transaction.status);
+    println!("✅ Success: {}", transaction.success);
+    println!("🕒 Timestamp: {}", transaction.timestamp);
+    if let Some(slot) = transaction.slot {
+        println!("📍 Slot: {}", slot);
+    }
+    if let Some(block_time) = transaction.block_time {
+        println!("⏰ Block Time: {}", block_time);
+    }
+
+    // Show error if failed
+    if !transaction.success {
+        if let Some(ref error) = transaction.error_message {
+            println!("❌ Error: {}", error);
+        }
+    }
+
+    println!("💰 Fee (lamports): {:?}", transaction.fee_lamports);
+    println!("💰 Fee (SOL): {:.9}", transaction.fee_sol);
+    println!("📏 Instructions Count: {}", transaction.instructions_count);
+    println!("👥 Accounts Count: {}", transaction.accounts_count);
+
+    if let Some(duration) = transaction.analysis_duration_ms {
+        println!("⚡ Analysis Duration: {}ms", duration);
+    }
+
+    println!();
+
+    // Step 3: Transaction Classification
+    println!("🏷️  TRANSACTION CLASSIFICATION");
+    println!("==============================");
+    println!("🔄 Type: {:?}", transaction.transaction_type);
+    println!("➡️  Direction: {:?}", transaction.direction);
+    println!("💹 SOL Balance Change: {:.9} SOL", transaction.sol_balance_change);
+
+    println!();
+
+    // Step 4: Raw Transaction Data Analysis
+    if let Some(ref raw_data) = transaction.raw_transaction_data {
+        println!("🔬 RAW TRANSACTION DATA ANALYSIS");
+        println!("=================================");
+
+        // Show transaction metadata
+        if let Some(meta) = raw_data.get("meta") {
+            println!("📊 METADATA:");
+
+            if let Some(err) = meta.get("err") {
+                println!("  🚨 Error: {}", serde_json::to_string_pretty(err)?);
+            }
+
+            if let Some(fee) = meta.get("fee") {
+                println!("  💰 Fee: {} lamports", fee);
+            }
+
+            // Pre/Post balances
+            if let Some(pre_balances) = meta.get("preBalances").and_then(|v| v.as_array()) {
+                println!("  📉 Pre-Balances:");
+                for (i, balance) in pre_balances.iter().enumerate() {
+                    if let Some(bal) = balance.as_u64() {
+                        println!(
+                            "    Account {}: {} lamports ({:.9} SOL)",
+                            i,
+                            bal,
+                            (bal as f64) / 1_000_000_000.0
+                        );
+                    }
+                }
+            }
+
+            if let Some(post_balances) = meta.get("postBalances").and_then(|v| v.as_array()) {
+                println!("  📈 Post-Balances:");
+                for (i, balance) in post_balances.iter().enumerate() {
+                    if let Some(bal) = balance.as_u64() {
+                        println!(
+                            "    Account {}: {} lamports ({:.9} SOL)",
+                            i,
+                            bal,
+                            (bal as f64) / 1_000_000_000.0
+                        );
+                    }
+                }
+            }
+
+            // Token balances
+            if
+                let Some(pre_token_balances) = meta
+                    .get("preTokenBalances")
+                    .and_then(|v| v.as_array())
+            {
+                if !pre_token_balances.is_empty() {
+                    println!("  🪙 Pre-Token Balances:");
+                    for token_balance in pre_token_balances {
+                        display_token_balance(token_balance, "    ");
+                    }
+                }
+            }
+
+            if
+                let Some(post_token_balances) = meta
+                    .get("postTokenBalances")
+                    .and_then(|v| v.as_array())
+            {
+                if !post_token_balances.is_empty() {
+                    println!("  🪙 Post-Token Balances:");
+                    for token_balance in post_token_balances {
+                        display_token_balance(token_balance, "    ");
+                    }
+                }
+            }
+
+            // Log messages
+            if let Some(logs) = meta.get("logMessages").and_then(|v| v.as_array()) {
+                println!("  📝 LOG MESSAGES:");
+                for (i, log) in logs.iter().enumerate() {
+                    if let Some(log_str) = log.as_str() {
+                        println!("    {}: {}", i + 1, log_str);
+                    }
+                }
+            }
+
+            // Inner instructions
+            if
+                let Some(inner_instructions) = meta
+                    .get("innerInstructions")
+                    .and_then(|v| v.as_array())
+            {
+                if !inner_instructions.is_empty() {
+                    println!("  🔧 INNER INSTRUCTIONS:");
+                    for (i, inner_inst) in inner_instructions.iter().enumerate() {
+                        println!("    Inner Instruction Set {}:", i + 1);
+                        if
+                            let Some(instructions) = inner_inst
+                                .get("instructions")
+                                .and_then(|v| v.as_array())
+                        {
+                            for (j, inst) in instructions.iter().enumerate() {
+                                println!(
+                                    "      Instruction {}: {}",
+                                    j + 1,
+                                    serde_json::to_string_pretty(inst)?
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Show main transaction structure
+        if let Some(tx) = raw_data.get("transaction") {
+            println!();
+            println!("📋 TRANSACTION STRUCTURE:");
+
+            if let Some(message) = tx.get("message") {
+                if let Some(instructions) = message.get("instructions").and_then(|v| v.as_array()) {
+                    println!("  🔧 MAIN INSTRUCTIONS ({} total):", instructions.len());
+                    for (i, inst) in instructions.iter().enumerate() {
+                        println!("    Instruction {}:", i + 1);
+                        if let Some(program_id_index) = inst.get("programIdIndex") {
+                            println!("      Program ID Index: {}", program_id_index);
+                        }
+                        if let Some(accounts) = inst.get("accounts").and_then(|v| v.as_array()) {
+                            println!("      Accounts: {:?}", accounts);
+                        }
+                        if let Some(data) = inst.get("data").and_then(|v| v.as_str()) {
+                            println!("      Data: {} (length: {})", data, data.len());
+                        }
+                    }
+                }
+
+                if let Some(account_keys) = message.get("accountKeys").and_then(|v| v.as_array()) {
+                    println!("  👥 ACCOUNT KEYS ({} total):", account_keys.len());
+                    for (i, key) in account_keys.iter().enumerate() {
+                        if let Some(key_str) = key.as_str() {
+                            println!("    {}: {}", i, key_str);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    println!();
+
+    // Step 5: Processed Transaction Analysis
+    println!("🧮 PROCESSED ANALYSIS RESULTS");
+    println!("==============================");
+
+    // Balance changes
+    println!("💹 SOL Balance Change: {:.9} SOL", transaction.sol_balance_change);
+
+    // Token balance changes if any
+    if !transaction.token_balance_changes.is_empty() {
+        println!("🪙 Token Balance Changes:");
+        for change in &transaction.token_balance_changes {
+            println!("  Mint: {}", change.mint);
+            println!("  Change: {:.9}", change.change);
+            println!("  Decimals: {}", change.decimals);
+            if let Some(pre) = change.pre_balance {
+                println!("  Pre-Balance: {:.9}", pre);
+            }
+            if let Some(post) = change.post_balance {
+                println!("  Post-Balance: {:.9}", post);
+            }
+        }
+    }
+
+    // ATA operations
+    if !transaction.ata_operations.is_empty() {
+        println!("🏦 ATA Operations:");
+        for ata_op in &transaction.ata_operations {
+            println!("  Type: {:?}", ata_op.operation_type);
+            println!("  Account: {}", ata_op.account_address);
+            println!("  Mint: {}", ata_op.token_mint);
+            println!("  Rent Amount: {} lamports", ata_op.rent_amount);
+            println!("  Is WSOL: {}", ata_op.is_wsol);
+        }
+    }
+
+    // Swap info
+    if let Some(ref swap_info) = transaction.token_swap_info {
+        println!("🔄 Swap Information:");
+        println!("  Token Mint: {}", swap_info.mint);
+        println!("  Token Symbol: {}", swap_info.symbol);
+        if let Some(price) = swap_info.current_price_sol {
+            println!("  Current Price: {:.12} SOL", price);
+        }
+        println!("  Decimals: {}", swap_info.decimals);
+        println!("  Is Verified: {}", swap_info.is_verified);
+    }
+
+    // PnL info
+    if let Some(ref pnl_info) = transaction.swap_pnl_info {
+        println!("📊 P&L Information:");
+        println!("  Token Mint: {}", pnl_info.token_mint);
+        println!("  Token Symbol: {}", pnl_info.token_symbol);
+        println!("  Swap Type: {:?}", pnl_info.swap_type);
+        println!("  SOL Amount: {:.9}", pnl_info.sol_amount);
+        println!("  Token Amount: {:.9}", pnl_info.token_amount);
+    }
+
+    println!();
+    println!("✅ Full debug analysis completed!");
+
+    Ok(())
+}
+
+fn display_token_balance(token_balance: &serde_json::Value, indent: &str) {
+    if let Some(account_index) = token_balance.get("accountIndex") {
+        println!("{}Account Index: {}", indent, account_index);
+    }
+    if let Some(mint) = token_balance.get("mint").and_then(|v| v.as_str()) {
+        println!("{}Mint: {}", indent, mint);
+    }
+    if let Some(owner) = token_balance.get("owner").and_then(|v| v.as_str()) {
+        println!("{}Owner: {}", indent, owner);
+    }
+    if let Some(ui_token_amount) = token_balance.get("uiTokenAmount") {
+        if let Some(amount) = ui_token_amount.get("amount").and_then(|v| v.as_str()) {
+            println!("{}Amount: {}", indent, amount);
+        }
+        if let Some(ui_amount) = ui_token_amount.get("uiAmount") {
+            println!("{}UI Amount: {}", indent, ui_amount);
+        }
+        if let Some(decimals) = ui_token_amount.get("decimals") {
+            println!("{}Decimals: {}", indent, decimals);
+        }
+    }
 }
 
 #[tokio::main]
@@ -178,6 +487,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         fetch_time.as_secs_f64()
     );
     println!();
+
+    // Handle full debug mode for single transaction
+    if args.full_debug {
+        if let Some(signature) = signature_strings.get(args.debug_index) {
+            println!(
+                "🔬 FULL DEBUG MODE: Analyzing transaction {} of {}",
+                args.debug_index + 1,
+                signature_strings.len()
+            );
+            println!("================================================");
+            perform_full_debug_analysis(signature, &processor, wallet_pubkey).await?;
+            return Ok(());
+        } else {
+            println!(
+                "❌ No transaction found at index {} (total: {})",
+                args.debug_index,
+                signature_strings.len()
+            );
+            return Ok(());
+        }
+    }
 
     // Step 2: Process and validate each transaction
     println!("⚙️  Step 2: Processing and validating transactions...");
