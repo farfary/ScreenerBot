@@ -3,7 +3,7 @@
 // This module handles the core transaction processing logic including
 // data extraction, analysis, and classification of blockchain transactions.
 
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
 use std::time::{ Duration, Instant };
 use chrono::{ DateTime, Utc };
 use serde_json::Value;
@@ -13,6 +13,7 @@ use solana_sdk::pubkey::Pubkey;
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_transactions_enabled;
 use crate::transactions::{ types::*, utils::*, fetcher::TransactionFetcher, analyzer };
+use crate::tokens::decimals::lamports_to_sol;
 
 // =============================================================================
 // TRANSACTION PROCESSOR
@@ -65,19 +66,22 @@ impl TransactionProcessor {
         // Step 1: Fetch transaction details from blockchain
         let tx_data = self.fetch_transaction_data(signature).await?;
 
-        // Step 2: Create Transaction structure from raw data
-        let mut transaction = self.create_transaction_from_data(signature, tx_data).await?;
+        // Step 2: Create Transaction structure from raw data snapshot
+        let mut transaction = self.create_transaction_from_data(signature, &tx_data).await?;
 
-        // Step 3: Analyze transaction and classify type
+        // Step 3: Extract balance changes and transfers using raw metadata
+        self.extract_balance_changes(&mut transaction, &tx_data).await?;
+
+        // Step 4: Capture instruction breakdown for downstream debugging
+        self.analyze_instructions(&mut transaction, &tx_data).await?;
+
+        // Step 5: Analyze ATA operations (rent impact, ATA lifecycle)
+        self.analyze_ata_operations(&mut transaction, &tx_data).await?;
+
+        // Step 6: Classify transaction type and direction
         self.analyze_transaction(&mut transaction).await?;
 
-        // Step 4: Extract balance changes and transfers
-        self.extract_balance_changes(&mut transaction).await?;
-
-        // Step 5: Analyze ATA operations if applicable
-        self.analyze_ata_operations(&mut transaction).await?;
-
-        // Step 6: Calculate P&L for swap transactions
+        // Step 7: Calculate swap P&L when classification indicates a swap
         if self.is_swap_transaction(&transaction) {
             self.calculate_swap_pnl(&mut transaction).await?;
         }
@@ -185,7 +189,7 @@ impl TransactionProcessor {
     async fn create_transaction_from_data(
         &self,
         signature: &str,
-        tx_data: crate::rpc::TransactionDetails
+        tx_data: &crate::rpc::TransactionDetails
     ) -> Result<Transaction, String> {
         // Extract timestamp
         let timestamp = if let Some(block_time) = tx_data.block_time {
@@ -254,6 +258,60 @@ impl TransactionProcessor {
         transaction.instructions_count = instructions_count;
         transaction.accounts_count = accounts_count;
 
+        // Capture raw metadata for downstream debugging
+        transaction.raw_transaction_data = serde_json::to_value(tx_data).ok();
+        if let Some(meta) = tx_data.meta.as_ref() {
+            if let Some(logs) = &meta.log_messages {
+                transaction.log_messages = logs.clone();
+            }
+        }
+
+        // Determine whether the configured wallet signed the transaction
+        let wallet_str = self.wallet_pubkey.to_string();
+        let account_keys = account_keys_from_message(&tx_data.transaction.message);
+        if let Some(header) = tx_data.transaction.message.get("header") {
+            if let Some(required) = header.get("numRequiredSignatures").and_then(|v| v.as_u64()) {
+                if
+                    account_keys
+                        .iter()
+                        .take(required as usize)
+                        .any(|key| key == &wallet_str)
+                {
+                    transaction.wallet_signed = true;
+                }
+            }
+        }
+
+        if !transaction.wallet_signed {
+            if
+                let Some(array) = tx_data.transaction.message
+                    .get("accountKeys")
+                    .and_then(|v| v.as_array())
+            {
+                for entry in array {
+                    if let Some(obj) = entry.as_object() {
+                        if
+                            obj
+                                .get("pubkey")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s == wallet_str)
+                                .unwrap_or(false)
+                        {
+                            if
+                                obj
+                                    .get("signer")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(false)
+                            {
+                                transaction.wallet_signed = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if self.debug_enabled {
             log(
                 LogTag::Transactions,
@@ -306,30 +364,39 @@ impl TransactionProcessor {
         Ok(())
     }
 
-    /// Extract balance changes from transaction
-    async fn extract_balance_changes(&self, transaction: &mut Transaction) -> Result<(), String> {
-        // Extract SOL balance changes
-        if let Some(sol_change) = self.extract_sol_balance_change(transaction).await? {
+    /// Extract balance changes from transaction metadata
+    async fn extract_balance_changes(
+        &self,
+        transaction: &mut Transaction,
+        tx_data: &crate::rpc::TransactionDetails
+    ) -> Result<(), String> {
+        if let Some((sol_change, lamport_delta)) = self.extract_sol_balance_change(tx_data).await? {
             transaction.sol_balance_change = sol_change.change;
+            transaction.wallet_lamport_change = lamport_delta;
+            transaction.sol_balance_changes = vec![sol_change];
+        } else {
+            transaction.sol_balance_changes.clear();
         }
 
-        // Extract token balance changes
-        transaction.token_balance_changes = self.extract_token_balance_changes(transaction).await?;
+        let token_changes = self.extract_token_balance_changes(tx_data).await?;
+        transaction.token_balance_changes = token_changes;
 
-        // Extract token transfers
-        transaction.token_transfers = self.extract_token_transfers(transaction).await?;
+        transaction.token_transfers = self.derive_token_transfers(
+            &transaction.token_balance_changes
+        );
 
         if
             self.debug_enabled &&
-            (transaction.sol_balance_change != 0.0 || !transaction.token_balance_changes.is_empty())
+            (transaction.sol_balance_change.abs() > f64::EPSILON ||
+                !transaction.token_balance_changes.is_empty())
         {
             log(
                 LogTag::Transactions,
                 "BALANCE_EXTRACT",
                 &format!(
-                    "Extracted balances for {}: SOL={}, tokens={}",
+                    "Extracted balances for {}: SOL change = {:.9}, tokens = {}",
                     format_signature_short(&transaction.signature),
-                    transaction.sol_balance_change != 0.0,
+                    transaction.sol_balance_change,
                     transaction.token_balance_changes.len()
                 )
             );
@@ -338,35 +405,211 @@ impl TransactionProcessor {
         Ok(())
     }
 
-    /// Extract SOL balance change for wallet
+    /// Extract SOL balance change for the configured wallet
     async fn extract_sol_balance_change(
         &self,
-        transaction: &Transaction
-    ) -> Result<Option<SolBalanceChange>, String> {
-        // This would extract SOL balance changes from transaction metadata
-        // For now, return None as placeholder - will be implemented with full analysis
-        Ok(None)
+        tx_data: &crate::rpc::TransactionDetails
+    ) -> Result<Option<(SolBalanceChange, i64)>, String> {
+        let meta = match tx_data.meta.as_ref() {
+            Some(meta) => meta,
+            None => {
+                return Ok(None);
+            }
+        };
+
+        let account_keys = account_keys_from_message(&tx_data.transaction.message);
+        let wallet_str = self.wallet_pubkey.to_string();
+
+        if let Some(index) = account_keys.iter().position(|key| key == &wallet_str) {
+            let pre_lamports = *meta.pre_balances.get(index).unwrap_or(&0);
+            let post_lamports = *meta.post_balances.get(index).unwrap_or(&0);
+            let lamport_delta = (post_lamports as i64) - (pre_lamports as i64);
+
+            let sol_change = SolBalanceChange {
+                account: wallet_str,
+                pre_balance: lamports_to_sol(pre_lamports),
+                post_balance: lamports_to_sol(post_lamports),
+                change: lamports_to_sol(post_lamports) - lamports_to_sol(pre_lamports),
+            };
+
+            Ok(Some((sol_change, lamport_delta)))
+        } else {
+            Ok(None)
+        }
     }
 
-    /// Extract token balance changes for wallet
+    /// Extract token balance changes that impact the configured wallet
     async fn extract_token_balance_changes(
         &self,
-        transaction: &Transaction
+        tx_data: &crate::rpc::TransactionDetails
     ) -> Result<Vec<TokenBalanceChange>, String> {
-        // This would extract token balance changes from transaction metadata
-        // For now, return empty vector as placeholder - will be implemented with full analysis
-        Ok(Vec::new())
+        let mut changes = Vec::new();
+        let meta = match tx_data.meta.as_ref() {
+            Some(meta) => meta,
+            None => {
+                return Ok(changes);
+            }
+        };
+
+        let wallet_str = self.wallet_pubkey.to_string();
+        let mut pre_totals: HashMap<String, (u8, f64)> = HashMap::new();
+        let mut post_totals: HashMap<String, (u8, f64)> = HashMap::new();
+
+        if let Some(pre_balances) = &meta.pre_token_balances {
+            for balance in pre_balances {
+                if balance.owner.as_deref() == Some(wallet_str.as_str()) {
+                    let decimals = balance.ui_token_amount.decimals;
+                    let amount = parse_ui_amount(&balance.ui_token_amount);
+                    let entry = pre_totals.entry(balance.mint.clone()).or_insert((decimals, 0.0));
+                    entry.0 = decimals;
+                    entry.1 += amount;
+                }
+            }
+        }
+
+        if let Some(post_balances) = &meta.post_token_balances {
+            for balance in post_balances {
+                if balance.owner.as_deref() == Some(wallet_str.as_str()) {
+                    let decimals = balance.ui_token_amount.decimals;
+                    let amount = parse_ui_amount(&balance.ui_token_amount);
+                    let entry = post_totals.entry(balance.mint.clone()).or_insert((decimals, 0.0));
+                    entry.0 = decimals;
+                    entry.1 += amount;
+                }
+            }
+        }
+
+        let mut all_mints: HashSet<String> = pre_totals.keys().cloned().collect();
+        all_mints.extend(post_totals.keys().cloned());
+
+        for mint in all_mints {
+            let (pre_decimals, pre_amount) = pre_totals.get(&mint).cloned().unwrap_or((0, 0.0));
+            let (post_decimals, post_amount) = post_totals
+                .get(&mint)
+                .cloned()
+                .unwrap_or((pre_decimals, pre_amount));
+            let decimals = if post_decimals != 0 { post_decimals } else { pre_decimals };
+            let change = post_amount - pre_amount;
+
+            if change.abs() < 1e-12 {
+                continue;
+            }
+
+            changes.push(TokenBalanceChange {
+                mint: mint.clone(),
+                decimals,
+                pre_balance: if pre_amount.abs() < 1e-12 {
+                    None
+                } else {
+                    Some(pre_amount)
+                },
+                post_balance: if post_amount.abs() < 1e-12 {
+                    None
+                } else {
+                    Some(post_amount)
+                },
+                change,
+                usd_value: None,
+            });
+        }
+
+        Ok(changes)
     }
 
-    /// Extract token transfers from transaction
-    async fn extract_token_transfers(
-        &self,
-        transaction: &Transaction
-    ) -> Result<Vec<TokenTransfer>, String> {
-        // This would extract token transfers from transaction instructions
-        // For now, return empty vector as placeholder - will be implemented with full analysis
-        Ok(Vec::new())
+    /// Derive simple token transfer summaries from balance changes
+    fn derive_token_transfers(&self, token_changes: &[TokenBalanceChange]) -> Vec<TokenTransfer> {
+        if token_changes.is_empty() {
+            return Vec::new();
+        }
+
+        let wallet = self.wallet_pubkey.to_string();
+        token_changes
+            .iter()
+            .filter(|change| change.change.abs() > 1e-9)
+            .map(|change| TokenTransfer {
+                mint: change.mint.clone(),
+                amount: change.change.abs(),
+                from: if change.change < 0.0 {
+                    wallet.clone()
+                } else {
+                    "external".to_string()
+                },
+                to: if change.change > 0.0 {
+                    wallet.clone()
+                } else {
+                    "external".to_string()
+                },
+                program_id: "unknown".to_string(),
+            })
+            .collect()
     }
+}
+
+/// Extract account keys from a transaction message (legacy and v0 support)
+fn account_keys_from_message(message: &Value) -> Vec<String> {
+    // Legacy format: array of strings
+    if let Some(array) = message.get("accountKeys").and_then(|v| v.as_array()) {
+        return array
+            .iter()
+            .filter_map(|entry| {
+                if let Some(key) = entry.as_str() {
+                    Some(key.to_string())
+                } else if let Some(obj) = entry.as_object() {
+                    obj.get("pubkey")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                } else {
+                    None
+                }
+            })
+            .collect();
+    }
+
+    // v0 format: object with static and loaded keys
+    if let Some(obj) = message.get("accountKeys").and_then(|v| v.as_object()) {
+        let mut keys = Vec::new();
+        if let Some(static_keys) = obj.get("staticAccountKeys").and_then(|v| v.as_array()) {
+            keys.extend(
+                static_keys.iter().filter_map(|entry| entry.as_str().map(|s| s.to_string()))
+            );
+        }
+        if let Some(loaded_keys) = obj.get("accountKeys").and_then(|v| v.as_array()) {
+            keys.extend(
+                loaded_keys.iter().filter_map(|entry| entry.as_str().map(|s| s.to_string()))
+            );
+        }
+        if !keys.is_empty() {
+            return keys;
+        }
+    }
+
+    Vec::new()
+}
+
+/// Parse UI token amount with graceful fallback to raw representation
+fn parse_ui_amount(amount: &crate::rpc::UiTokenAmount) -> f64 {
+    if let Some(ui) = amount.ui_amount {
+        return ui;
+    }
+
+    if let Some(ui_str) = &amount.ui_amount_string {
+        if let Ok(parsed) = ui_str.parse::<f64>() {
+            return parsed;
+        }
+    }
+
+    if let Ok(raw) = amount.amount.parse::<u128>() {
+        if amount.decimals == 0 {
+            return raw as f64;
+        }
+        let scale = (10u128).saturating_pow(amount.decimals as u32);
+        if scale == 0 {
+            return 0.0;
+        }
+        return (raw as f64) / (scale as f64);
+    }
+
+    0.0
 }
 
 // =============================================================================
@@ -375,37 +618,153 @@ impl TransactionProcessor {
 
 impl TransactionProcessor {
     /// Analyze ATA (Associated Token Account) operations
-    async fn analyze_ata_operations(&self, transaction: &mut Transaction) -> Result<(), String> {
-        // Extract ATA operations from transaction instructions
-        let ata_operations = self.extract_ata_operations(transaction).await?;
+    async fn analyze_ata_operations(
+        &self,
+        transaction: &mut Transaction,
+        tx_data: &crate::rpc::TransactionDetails
+    ) -> Result<(), String> {
+        let (ata_operations, ata_analysis) = self.extract_ata_operations(
+            transaction,
+            tx_data
+        ).await?;
 
-        if !ata_operations.is_empty() {
-            transaction.ata_operations = ata_operations;
+        if ata_operations.is_empty() {
+            return Ok(());
+        }
 
-            if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "ATA_ANALYZE",
-                    &format!(
-                        "Found {} ATA operations in {}",
-                        transaction.ata_operations.len(),
-                        format_signature_short(&transaction.signature)
-                    )
-                );
-            }
+        if let Some(analysis) = ata_analysis {
+            transaction.ata_analysis = Some(analysis);
+        }
+
+        transaction.ata_operations = ata_operations;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "ATA_ANALYZE",
+                &format!(
+                    "Detected {} ATA operations in {}",
+                    transaction.ata_operations.len(),
+                    format_signature_short(&transaction.signature)
+                )
+            );
         }
 
         Ok(())
     }
 
-    /// Extract ATA operations from transaction instructions
+    /// Extract ATA operations from transaction instructions (best-effort heuristic)
     async fn extract_ata_operations(
         &self,
-        transaction: &Transaction
-    ) -> Result<Vec<AtaOperation>, String> {
-        // This would analyze transaction instructions for ATA operations
-        // For now, return empty vector as placeholder - will be implemented with full instruction analysis
-        Ok(Vec::new())
+        transaction: &Transaction,
+        _tx_data: &crate::rpc::TransactionDetails
+    ) -> Result<(Vec<AtaOperation>, Option<AtaAnalysis>), String> {
+        const ATA_PROGRAM_ID: &str = "ATokenGPvR93d9GZcT8rGFd5Z7ZV7vZy4zKZQwZ4sVQL";
+
+        let mut operations = Vec::new();
+
+        for instruction in &transaction.instructions {
+            if instruction.program_id != ATA_PROGRAM_ID {
+                continue;
+            }
+
+            let operation_type = if
+                instruction.instruction_type.eq_ignore_ascii_case("closeAccount")
+            {
+                Some(AtaOperationType::Closure)
+            } else if
+                instruction.instruction_type.eq_ignore_ascii_case("create") ||
+                instruction.instruction_type.eq_ignore_ascii_case("createIdempotent")
+            {
+                Some(AtaOperationType::Creation)
+            } else {
+                None
+            };
+
+            let Some(operation_type) = operation_type else {
+                continue;
+            };
+
+            let account_address = instruction.accounts
+                .get(0)
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
+            let token_mint = instruction.accounts
+                .get(1)
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
+
+            let rent_amount = match operation_type {
+                AtaOperationType::Creation | AtaOperationType::Closure => ATA_RENT_COST_SOL,
+            };
+
+            operations.push(AtaOperation {
+                operation_type,
+                account_address,
+                token_mint: token_mint.clone(),
+                rent_amount,
+                is_wsol: token_mint == WSOL_MINT,
+                mint: token_mint,
+                rent_cost_sol: Some(rent_amount),
+            });
+        }
+
+        if operations.is_empty() {
+            return Ok((operations, None));
+        }
+
+        let mut analysis = transaction.ata_analysis.clone().unwrap_or_else(|| AtaAnalysis {
+            total_ata_creations: 0,
+            total_ata_closures: 0,
+            token_ata_creations: 0,
+            token_ata_closures: 0,
+            wsol_ata_creations: 0,
+            wsol_ata_closures: 0,
+            total_rent_spent: 0.0,
+            total_rent_recovered: 0.0,
+            net_rent_impact: 0.0,
+            token_rent_spent: 0.0,
+            token_rent_recovered: 0.0,
+            token_net_rent_impact: 0.0,
+            wsol_rent_spent: 0.0,
+            wsol_rent_recovered: 0.0,
+            wsol_net_rent_impact: 0.0,
+            detected_operations: Vec::new(),
+        });
+
+        for op in &operations {
+            match op.operation_type {
+                AtaOperationType::Creation => {
+                    analysis.total_ata_creations += 1;
+                    analysis.total_rent_spent += op.rent_amount;
+                    if op.is_wsol {
+                        analysis.wsol_ata_creations += 1;
+                        analysis.wsol_rent_spent += op.rent_amount;
+                    } else {
+                        analysis.token_ata_creations += 1;
+                        analysis.token_rent_spent += op.rent_amount;
+                    }
+                }
+                AtaOperationType::Closure => {
+                    analysis.total_ata_closures += 1;
+                    analysis.total_rent_recovered += op.rent_amount;
+                    if op.is_wsol {
+                        analysis.wsol_ata_closures += 1;
+                        analysis.wsol_rent_recovered += op.rent_amount;
+                    } else {
+                        analysis.token_ata_closures += 1;
+                        analysis.token_rent_recovered += op.rent_amount;
+                    }
+                }
+            }
+        }
+
+        analysis.net_rent_impact = analysis.total_rent_recovered - analysis.total_rent_spent;
+        analysis.token_net_rent_impact = analysis.token_rent_recovered - analysis.token_rent_spent;
+        analysis.wsol_net_rent_impact = analysis.wsol_rent_recovered - analysis.wsol_rent_spent;
+        analysis.detected_operations = operations.clone();
+
+        Ok((operations, Some(analysis)))
     }
 }
 
@@ -478,8 +837,12 @@ impl TransactionProcessor {
 
 impl TransactionProcessor {
     /// Analyze transaction instructions for detailed breakdown
-    async fn analyze_instructions(&self, transaction: &mut Transaction) -> Result<(), String> {
-        let instruction_info = self.extract_instruction_info(transaction).await?;
+    async fn analyze_instructions(
+        &self,
+        transaction: &mut Transaction,
+        tx_data: &crate::rpc::TransactionDetails
+    ) -> Result<(), String> {
+        let instruction_info = self.extract_instruction_info(tx_data).await?;
         transaction.instruction_info = instruction_info.clone();
         transaction.instructions = instruction_info;
 
@@ -498,14 +861,106 @@ impl TransactionProcessor {
         Ok(())
     }
 
-    /// Extract instruction information from transaction
+    /// Extract instruction information from transaction message (legacy + v0)
     async fn extract_instruction_info(
         &self,
-        transaction: &Transaction
+        tx_data: &crate::rpc::TransactionDetails
     ) -> Result<Vec<InstructionInfo>, String> {
-        // This would parse transaction instructions for detailed analysis
-        // For now, return empty vector as placeholder - will be implemented with full instruction parsing
-        Ok(Vec::new())
+        let mut instructions = Vec::new();
+        let message = &tx_data.transaction.message;
+        let account_keys = account_keys_from_message(message);
+
+        if let Some(array) = message.get("instructions").and_then(|v| v.as_array()) {
+            for inst in array {
+                let program_id = inst
+                    .get("programId")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .or_else(|| {
+                        inst.get("programIdIndex")
+                            .and_then(|v| v.as_u64())
+                            .and_then(|idx| account_keys.get(idx as usize).cloned())
+                    })
+                    .unwrap_or_else(|| "unknown".to_string());
+
+                let instruction_type = inst
+                    .get("parsed")
+                    .and_then(|parsed| parsed.get("type").and_then(|v| v.as_str()))
+                    .or_else(|| inst.get("type").and_then(|v| v.as_str()))
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                let accounts = if let Some(accs) = inst.get("accounts").and_then(|v| v.as_array()) {
+                    accs.iter()
+                        .filter_map(|acc| {
+                            if let Some(s) = acc.as_str() {
+                                Some(s.to_string())
+                            } else if let Some(idx) = acc.as_u64() {
+                                account_keys.get(idx as usize).cloned()
+                            } else if let Some(obj) = acc.as_object() {
+                                obj.get("pubkey")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+
+                let data = inst
+                    .get("data")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                instructions.push(InstructionInfo {
+                    program_id,
+                    instruction_type,
+                    accounts,
+                    data,
+                });
+            }
+        }
+
+        // Handle compiled instructions for v0 transactions
+        if instructions.is_empty() {
+            if let Some(compiled) = message.get("compiledInstructions").and_then(|v| v.as_array()) {
+                for inst in compiled {
+                    let program_id = inst
+                        .get("programIdIndex")
+                        .and_then(|v| v.as_u64())
+                        .and_then(|idx| account_keys.get(idx as usize).cloned())
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    let accounts = inst
+                        .get("accountIndexes")
+                        .and_then(|v| v.as_array())
+                        .map(|accs| {
+                            accs.iter()
+                                .filter_map(|idx| idx.as_u64())
+                                .filter_map(|idx| account_keys.get(idx as usize).cloned())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    let data = inst
+                        .get("data")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+
+                    instructions.push(InstructionInfo {
+                        program_id,
+                        instruction_type: "compiled".to_string(),
+                        accounts,
+                        data,
+                    });
+                }
+            }
+        }
+
+        Ok(instructions)
     }
 }
 

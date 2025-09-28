@@ -222,13 +222,13 @@ impl TransactionDatabase {
 
         // Create connection pool
         let manager = SqliteConnectionManager::file(&database_path).with_init(|c| {
-            // Enable WAL mode for better concurrent performance
-            c.execute("PRAGMA journal_mode=WAL", [])?;
-            c.execute("PRAGMA synchronous=NORMAL", [])?;
-            c.execute("PRAGMA cache_size=10000", [])?;
-            c.execute("PRAGMA temp_store=memory", [])?;
-            c.execute("PRAGMA mmap_size=268435456", [])?; // 256MB mmap
-            c.execute("PRAGMA foreign_keys=ON", [])?;
+            // Enable WAL mode and tune performance pragmas using pragma_update to avoid result sets
+            c.pragma_update(None, "journal_mode", &"WAL")?;
+            c.pragma_update(None, "synchronous", &"NORMAL")?;
+            c.pragma_update(None, "cache_size", &10000)?;
+            c.pragma_update(None, "temp_store", &"MEMORY")?;
+            c.pragma_update(None, "mmap_size", &268_435_456)?; // 256MB mmap
+            c.pragma_update(None, "foreign_keys", &1)?;
             Ok(())
         });
 
