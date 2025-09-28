@@ -62,6 +62,30 @@ struct Args {
     #[arg(long)]
     types: Option<String>,
 
+    /// Only process swap transactions (Jupiter, Raydium, etc.)
+    #[arg(long)]
+    swaps_only: bool,
+
+    /// Only process ATA closure transactions
+    #[arg(long)]
+    ata_only: bool,
+
+    /// Only process bulk/spam transactions (multiple transfers)
+    #[arg(long)]
+    bulk_only: bool,
+
+    /// Only process SOL transfer transactions
+    #[arg(long)]
+    transfers_only: bool,
+
+    /// Filter by minimum SOL amount (e.g., 0.1 for transactions > 0.1 SOL)
+    #[arg(long)]
+    min_sol: Option<f64>,
+
+    /// Filter by maximum SOL amount (e.g., 10.0 for transactions < 10 SOL)
+    #[arg(long)]
+    max_sol: Option<f64>,
+
     /// Skip database operations (test processing only)
     #[arg(long)]
     no_db: bool,
@@ -111,6 +135,130 @@ struct ValidationStats {
     sol_volume: f64,
     total_fees: f64,
     fee_total: f64,
+}
+
+/// Check if a transaction matches the specified filters
+fn transaction_matches_filters(result: &ValidationResult, args: &Args) -> bool {
+    let tx_type_str = result.tx_type.to_lowercase();
+    let status_str = result.status.to_lowercase();
+
+    // Apply legacy types filter first
+    if let Some(ref types_filter) = args.types {
+        let allowed_types: Vec<&str> = types_filter.split(',').collect();
+
+        let matches_filter = allowed_types.iter().any(|t| {
+            let filter_type = t.trim().to_lowercase();
+            match filter_type.as_str() {
+                "swap" => tx_type_str.contains("swap"),
+                "transfer" => tx_type_str.contains("transfer"),
+                "ata" => tx_type_str.contains("ata") || tx_type_str.contains("close"),
+                "failed" => status_str.contains("failed"),
+                "bulk" => is_bulk_transaction(result),
+                "spam" => is_spam_transaction(result),
+                _ => tx_type_str.contains(&filter_type),
+            }
+        });
+
+        if !matches_filter {
+            return false;
+        }
+    }
+
+    // Apply specific type filters
+    if args.swaps_only {
+        // Match swap-related types: "Buy", "Sell", "Buy (Legacy)", "Sell (Legacy)", or anything containing "swap"
+        let is_swap =
+            tx_type_str.contains("buy") ||
+            tx_type_str.contains("sell") ||
+            tx_type_str.contains("swap");
+        if !is_swap {
+            return false;
+        }
+    }
+
+    if args.ata_only {
+        // Match ATA-related types: "ATA Operation", "ATA Close", or anything containing "ata" or "close"
+        let is_ata =
+            tx_type_str.contains("ata") ||
+            tx_type_str.contains("close") ||
+            tx_type_str.contains("operation");
+        if !is_ata {
+            return false;
+        }
+    }
+
+    if args.transfers_only {
+        // Match transfer types: "Transfer", "SOL Transfer", "Token Transfer", etc.
+        let is_transfer =
+            tx_type_str.contains("transfer") ||
+            (tx_type_str.contains("sol") && tx_type_str.contains("transfer"));
+        if !is_transfer {
+            return false;
+        }
+    }
+
+    if args.bulk_only && !is_bulk_transaction(result) {
+        return false;
+    }
+
+    // Apply SOL amount filters
+    if let Some(min_sol) = args.min_sol {
+        if result.sol_change.abs() < min_sol {
+            return false;
+        }
+    }
+
+    if let Some(max_sol) = args.max_sol {
+        if result.sol_change.abs() > max_sol {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Determine if a transaction is a bulk/spam transaction
+fn is_bulk_transaction(result: &ValidationResult) -> bool {
+    // Consider bulk transactions as:
+    // 1. Multiple small transfers (low SOL amounts)
+    // 2. High fee relative to amount (spam indicator)
+    // 3. Very small SOL changes (dust transactions)
+
+    let sol_change = result.sol_change.abs();
+    let fee_to_amount_ratio = if sol_change > 0.0 {
+        result.fee_sol / sol_change
+    } else {
+        f64::INFINITY
+    };
+
+    // Bulk/spam indicators:
+    // - Very small amounts (< 0.001 SOL)
+    // - High fee ratio (> 10% of transaction amount)
+    // - Dust amounts (< 0.0001 SOL)
+    sol_change < 0.001 || fee_to_amount_ratio > 0.1 || sol_change < 0.0001
+}
+
+/// Determine if a transaction is spam
+fn is_spam_transaction(result: &ValidationResult) -> bool {
+    // Spam transactions typically have:
+    // 1. Very high fee-to-amount ratio
+    // 2. Extremely small amounts
+    // 3. Unknown transaction type (often failed attempts)
+
+    let sol_change = result.sol_change.abs();
+    let fee_to_amount_ratio = if sol_change > 0.0 {
+        result.fee_sol / sol_change
+    } else {
+        f64::INFINITY
+    };
+
+    // Spam indicators:
+    // - Dust transactions (< 0.00001 SOL)
+    // - Extremely high fee ratio (> 50% of amount)
+    // - Unknown type with very small amounts
+    sol_change < 0.00001 ||
+        fee_to_amount_ratio > 0.5 ||
+        (result.tx_type.to_lowercase().contains("unknown") && sol_change < 0.0001)
 }
 
 /// Perform comprehensive debug analysis of a single transaction
@@ -546,25 +694,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        // Apply type filters
-        if let Some(ref types_filter) = args.types {
-            let allowed_types: Vec<&str> = types_filter.split(',').collect();
-            let tx_type_str = validation_result.tx_type.to_lowercase();
-
-            let matches_filter = allowed_types.iter().any(|t| {
-                let filter_type = t.trim().to_lowercase();
-                match filter_type.as_str() {
-                    "swap" => tx_type_str.contains("swap"),
-                    "transfer" => tx_type_str.contains("transfer"),
-                    "ata" => tx_type_str.contains("ata") || tx_type_str.contains("close"),
-                    "failed" => validation_result.status.contains("Failed"),
-                    _ => tx_type_str.contains(&filter_type),
-                }
-            });
-
-            if !matches_filter {
-                continue;
-            }
+        // Apply enhanced type filters
+        if !transaction_matches_filters(&validation_result, &args) {
+            continue;
         }
 
         results.push(validation_result);
@@ -636,7 +768,25 @@ async fn validate_transaction(
         }
 
         match processor.process_transaction(signature).await {
-            Ok(tx) => tx,
+            Ok(mut tx) => {
+                // Apply heuristic classification if transaction type is Unknown
+                if matches!(tx.transaction_type, TransactionType::Unknown) && tx.success {
+                    if let Some(ref raw_data) = tx.raw_transaction_data {
+                        let heuristic_type = classify_transaction_heuristically(&tx, raw_data);
+                        if !matches!(heuristic_type, TransactionType::Unknown) {
+                            if args.verbose {
+                                println!(
+                                    "    🧠 Heuristic classification: {:?} -> {:?}",
+                                    tx.transaction_type,
+                                    heuristic_type
+                                );
+                            }
+                            tx.transaction_type = heuristic_type;
+                        }
+                    }
+                }
+                tx
+            }
             Err(e) => {
                 stats.processing_errors += 1;
                 return ValidationResult {
@@ -1061,4 +1211,165 @@ fn analyze_issues_and_recommendations(results: &[ValidationResult], stats: &Vali
     }
 
     println!();
+}
+
+/// Perform heuristic classification based on transaction logs and patterns
+fn classify_transaction_heuristically(
+    transaction: &Transaction,
+    tx_details: &serde_json::Value
+) -> TransactionType {
+    // Get log messages from raw transaction data
+    let empty_vec = vec![];
+    let log_messages = tx_details
+        .get("meta")
+        .and_then(|m| m.get("logMessages"))
+        .and_then(|l| l.as_array())
+        .unwrap_or(&empty_vec);
+
+    // Convert to strings for analysis
+    let logs: Vec<String> = log_messages
+        .iter()
+        .filter_map(|msg| msg.as_str())
+        .map(|s| s.to_string())
+        .collect();
+
+    // Priority 1: Check for DEX/Swap patterns
+    for log in &logs {
+        // Jupiter aggregator
+        if log.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") {
+            // Check if buying or selling based on token balance changes
+            if
+                let Some(post_balances) = tx_details
+                    .get("meta")
+                    .and_then(|m| m.get("postTokenBalances"))
+                    .and_then(|b| b.as_array())
+            {
+                if
+                    let Some(pre_balances) = tx_details
+                        .get("meta")
+                        .and_then(|m| m.get("preTokenBalances"))
+                        .and_then(|b| b.as_array())
+                {
+                    // Simple heuristic: if we gained tokens, it's a buy; if we lost tokens, it's a sell
+                    return if post_balances.len() >= pre_balances.len() {
+                        TransactionType::Buy
+                    } else {
+                        TransactionType::Sell
+                    };
+                }
+            }
+            return TransactionType::Buy; // Default to buy for Jupiter
+        }
+
+        // Raydium CPMM
+        if
+            log.contains("cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG") ||
+            log.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8")
+        {
+            return TransactionType::Buy;
+        }
+
+        // Orca
+        if log.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
+            return TransactionType::Buy;
+        }
+
+        // Pump.fun
+        if
+            log.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") ||
+            log.contains("Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1")
+        {
+            return TransactionType::Buy;
+        }
+
+        // Generic swap instructions
+        if log.contains("Instruction: Swap") || log.contains("Instruction: Route") {
+            return TransactionType::Buy;
+        }
+    }
+
+    // Priority 2: Check for ATA operations
+    for log in &logs {
+        if log.contains("Instruction: CloseAccount") {
+            return TransactionType::AtaOperation;
+        }
+        if log.contains("Instruction: CreateIdempotent") {
+            return TransactionType::AtaOperation;
+        }
+        if log.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") {
+            return TransactionType::AtaOperation;
+        }
+        if log.contains("Initialize the associated token account") {
+            return TransactionType::AtaOperation;
+        }
+        if log.contains("Instruction: InitializeAccount") {
+            return TransactionType::AtaOperation;
+        }
+    }
+
+    // Priority 3: Check for transfers
+    for log in &logs {
+        if log.contains("Instruction: Transfer") || log.contains("Instruction: TransferChecked") {
+            return TransactionType::Transfer;
+        }
+    }
+
+    // Priority 4: Check for bulk SOL transfers (system program only)
+    let system_program_count = logs
+        .iter()
+        .filter(|log| log.contains("Program 11111111111111111111111111111111"))
+        .count();
+
+    // Check if transaction has no token operations
+    let has_token_operations =
+        tx_details
+            .get("meta")
+            .and_then(|m| m.get("preTokenBalances"))
+            .and_then(|b| b.as_array())
+            .map(|arr| !arr.is_empty())
+            .unwrap_or(false) ||
+        tx_details
+            .get("meta")
+            .and_then(|m| m.get("postTokenBalances"))
+            .and_then(|b| b.as_array())
+            .map(|arr| !arr.is_empty())
+            .unwrap_or(false);
+
+    // Bulk transfer: many system program calls with only SOL operations
+    if system_program_count >= 10 && !has_token_operations {
+        return TransactionType::SolTransfer {
+            amount: 0.0, // Will be calculated later from balance changes
+            from: "Multiple".to_string(),
+            to: "Multiple".to_string(),
+        };
+    }
+
+    // Simple transfer: few system program calls with only SOL operations
+    if system_program_count > 0 && system_program_count < 10 && !has_token_operations {
+        let non_system_logs = logs
+            .iter()
+            .filter(
+                |log|
+                    !log.contains("Program 11111111111111111111111111111111") &&
+                    !log.contains("ComputeBudget111111111111111111111111111111")
+            )
+            .count();
+
+        if non_system_logs == 0 {
+            return TransactionType::Transfer;
+        }
+    }
+
+    // Priority 5: Check for compute budget operations
+    let compute_budget_count = logs
+        .iter()
+        .filter(|log| log.contains("ComputeBudget111111111111111111111111111111"))
+        .count();
+
+    if compute_budget_count > 0 && logs.len() <= compute_budget_count + 2 {
+        return TransactionType::Compute;
+    }
+
+    // Use existing classification if available
+    transaction.transaction_type.clone()
 }
