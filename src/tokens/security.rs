@@ -710,6 +710,10 @@ pub fn initialize_security_analyzer() -> Result<(), String> {
     )?;
     *global_analyzer = Some(analyzer);
     log(LogTag::Security, "INIT", "Global security analyzer initialized");
+
+    // Signal that security analyzer is ready
+    crate::global::SECURITY_ANALYZER_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+
     Ok(())
 }
 

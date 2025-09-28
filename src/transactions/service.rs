@@ -122,6 +122,10 @@ pub async fn start_global_transaction_service(
         )
     );
 
+    // Signal that transactions system is ready
+    crate::global::TRANSACTIONS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+    log(LogTag::Transactions, "INFO", "🟢 Transactions system ready");
+
     // Don't await the service_handle here - let it run in background
     // The service will run until shutdown is requested
 
