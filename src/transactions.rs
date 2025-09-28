@@ -1764,6 +1764,41 @@ pub async fn get_global_transaction_manager() -> Option<std::sync::Arc<tokio::sy
     Some(GLOBAL_TRANSACTION_MANAGER.clone())
 }
 
+async fn ensure_transaction_manager_ready(
+    global: &Arc<tokio::sync::Mutex<Option<TransactionsManager>>>
+) -> Result<(), String> {
+    let needs_init = match tokio::time::timeout(Duration::from_secs(2), global.lock()).await {
+        Ok(manager_guard) => manager_guard.is_none(),
+        Err(_) => {
+            return Err("transaction manager lock timeout".to_string());
+        }
+    };
+
+    if !needs_init {
+        return Ok(());
+    }
+
+    let wallet_address = get_wallet_address().map_err(|e|
+        format!("failed to load wallet address for transaction manager: {}", e)
+    )?;
+    let wallet_pubkey = Pubkey::from_str(&wallet_address).map_err(|e|
+        format!("invalid wallet address for transaction manager: {}", e)
+    )?;
+
+    initialize_global_transaction_manager(wallet_pubkey).await?;
+
+    match tokio::time::timeout(Duration::from_secs(2), global.lock()).await {
+        Ok(manager_guard) => {
+            if manager_guard.is_some() {
+                Ok(())
+            } else {
+                Err("transaction manager unavailable after initialization".to_string())
+            }
+        }
+        Err(_) => Err("transaction manager lock timeout post-init".to_string()),
+    }
+}
+
 /// Get transaction by signature (for positions.rs integration) - cache-first approach with status validation
 /// CRITICAL: Only returns transactions that are in Finalized or Confirmed status with complete analysis
 /// This is the single function that handles ALL transaction requests properly
@@ -1774,6 +1809,21 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
     }
 
     if let Some(global) = get_global_transaction_manager().await {
+        if let Err(e) = ensure_transaction_manager_ready(&global).await {
+            if debug {
+                log(
+                    LogTag::Transactions,
+                    "MANAGER_UNAVAILABLE",
+                    &format!(
+                        "Unable to auto-initialize transaction manager for {}: {}",
+                        &signature,
+                        e
+                    )
+                );
+            }
+            return Err(format!("transaction manager not initialized: {}", e));
+        }
+
         // Wait for manager with reasonable timeout to avoid hanging
         match tokio::time::timeout(Duration::from_secs(15), global.lock()).await {
             Ok(mut manager_guard) => {
