@@ -740,6 +740,9 @@ impl TransactionProcessor {
         populate_balances(&meta.post_token_balances, &mut account_mints, &mut account_owners);
 
         let mut inner_instruction_map: HashMap<usize, Vec<Value>> = HashMap::new();
+        let mut sync_native_accounts: HashSet<String> = HashSet::new();
+        // Track which accounts were created by the wallet in this tx (to attribute rent even if not wallet-owned)
+        let mut account_creators: HashMap<String, String> = HashMap::new();
         if let Some(inner) = &meta.inner_instructions {
             for entry in inner {
                 if let Some(index) = entry.get("index").and_then(|v| v.as_u64()) {
@@ -750,6 +753,31 @@ impl TransactionProcessor {
                     {
                         let bucket = inner_instruction_map.entry(index as usize).or_default();
                         for inst in instructions {
+                            // Capture SyncNative accounts (WSOL native accounts)
+                            if let Some(parsed) = inst.get("parsed").and_then(|v| v.as_object()) {
+                                let program_id = inst
+                                    .get("programId")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                if program_id == TOKEN_PROGRAM_ID {
+                                    let itype = parsed
+                                        .get("type")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_ascii_lowercase();
+                                    if itype == "syncnative" {
+                                        if
+                                            let Some(acc) = parsed
+                                                .get("info")
+                                                .and_then(|v| v.as_object())
+                                                .and_then(|i| i.get("account"))
+                                                .and_then(|v| v.as_str())
+                                        {
+                                            sync_native_accounts.insert(acc.to_string());
+                                        }
+                                    }
+                                }
+                            }
                             bucket.push(inst.clone());
                         }
                     }
@@ -763,6 +791,73 @@ impl TransactionProcessor {
             .map(|arr| arr.iter().cloned().collect())
             .unwrap_or_default();
 
+        // Track ATAs created (account addresses) via the associated token program in this tx
+        let mut ata_created_accounts: HashSet<String> = HashSet::new();
+        let mut record_ata_account = |inst: &Value| {
+            if
+                let (Some(program_id), Some(parsed)) = (
+                    inst.get("programId").and_then(|v| v.as_str()),
+                    inst.get("parsed").and_then(|v| v.as_object()),
+                )
+            {
+                if program_id == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" {
+                    let itype = parsed
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_ascii_lowercase();
+                    if itype == "create" || itype == "createidempotent" {
+                        if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
+                            if let Some(acc) = info.get("account").and_then(|v| v.as_str()) {
+                                ata_created_accounts.insert(acc.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        for inst in &outer_instructions {
+            record_ata_account(inst);
+        }
+        if let Some(inner) = &meta.inner_instructions {
+            for entry in inner {
+                if let Some(instructions) = entry.get("instructions").and_then(|v| v.as_array()) {
+                    for inst in instructions {
+                        record_ata_account(inst);
+                    }
+                }
+            }
+        }
+
+        // Also capture SyncNative accounts from outer instructions
+        for inst in &outer_instructions {
+            if let Some(parsed) = inst.get("parsed").and_then(|v| v.as_object()) {
+                let program_id = inst
+                    .get("programId")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if program_id == TOKEN_PROGRAM_ID {
+                    let itype = parsed
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_ascii_lowercase();
+                    if itype == "syncnative" {
+                        if
+                            let Some(acc) = parsed
+                                .get("info")
+                                .and_then(|v| v.as_object())
+                                .and_then(|i| i.get("account"))
+                                .and_then(|v| v.as_str())
+                        {
+                            sync_native_accounts.insert(acc.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
         let value_to_u64 = |value: &Value| -> Option<u64> {
             if let Some(lamports) = value.as_u64() {
                 Some(lamports)
@@ -773,10 +868,10 @@ impl TransactionProcessor {
             }
         };
 
-    let mut account_rent_spent: HashMap<String, u64> = HashMap::new();
-    let mut account_rent_recovered: HashMap<String, u64> = HashMap::new();
+        let mut account_rent_spent: HashMap<String, u64> = HashMap::new();
+        let mut account_rent_recovered: HashMap<String, u64> = HashMap::new();
 
-    let mut handle_instruction = |instruction: &Value| {
+        let mut handle_instruction = |instruction: &Value| {
             let program_id = instruction
                 .get("programId")
                 .and_then(|v| v.as_str())
@@ -850,7 +945,10 @@ impl TransactionProcessor {
                                         // Created and closed within same transaction: rebate equals previously spent rent
                                         if let Some(spent) = account_rent_spent.get(account) {
                                             if *spent > 0 {
-                                                account_rent_recovered.insert(account.to_string(), *spent);
+                                                account_rent_recovered.insert(
+                                                    account.to_string(),
+                                                    *spent
+                                                );
                                             }
                                         }
                                     }
@@ -859,6 +957,50 @@ impl TransactionProcessor {
                         }
                     }
                     _ => {}
+                }
+            }
+
+            // SystemProgram createAccount often precedes token account initialization; capture rent lamports
+            if program_id == "11111111111111111111111111111111" {
+                if instruction_type == "createaccount" {
+                    if let Some(lamports_val) = info.get("lamports").and_then(|v| v.as_u64()) {
+                        if let Some(new_acc) = info.get("newAccount").and_then(|v| v.as_str()) {
+                            // Attribute rent to the created account; will be classified as WSOL via SyncNative later if applicable
+                            if !new_acc.is_empty() && lamports_val > 0 {
+                                account_rent_spent
+                                    .entry(new_acc.to_string())
+                                    .and_modify(|v| {
+                                        *v += lamports_val;
+                                    })
+                                    .or_insert(lamports_val);
+                                if let Some(source) = info.get("source").and_then(|v| v.as_str()) {
+                                    account_creators.insert(
+                                        new_acc.to_string(),
+                                        source.to_string()
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                // Also capture direct system transfers that fund newly created ATAs (allocate/assign + transfer path)
+                if instruction_type == "transfer" {
+                    if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
+                        let dest = info.get("destination").and_then(|v| v.as_str());
+                        let src = info.get("source").and_then(|v| v.as_str());
+                        let lamports_opt = info.get("lamports").and_then(|v| v.as_u64());
+                        if let (Some(dest), Some(src), Some(lamports)) = (dest, src, lamports_opt) {
+                            if ata_created_accounts.contains(dest) && lamports > 0 {
+                                account_rent_spent
+                                    .entry(dest.to_string())
+                                    .and_modify(|v| {
+                                        *v += lamports;
+                                    })
+                                    .or_insert(lamports);
+                                account_creators.insert(dest.to_string(), src.to_string());
+                            }
+                        }
+                    }
                 }
             }
         };
@@ -896,12 +1038,16 @@ impl TransactionProcessor {
                 if post > pre {
                     account_rent_spent
                         .entry(account.clone())
-                        .and_modify(|v| *v += post - pre)
+                        .and_modify(|v| {
+                            *v += post - pre;
+                        })
                         .or_insert(post - pre);
                 } else if pre > post {
                     account_rent_recovered
                         .entry(account.clone())
-                        .and_modify(|v| *v += pre - post)
+                        .and_modify(|v| {
+                            *v += pre - post;
+                        })
                         .or_insert(pre - post);
                 }
             }
@@ -909,24 +1055,35 @@ impl TransactionProcessor {
 
         let mut operations = Vec::new();
 
+        // Record ATA creations from rent spent
         for (account, lamports) in account_rent_spent.iter() {
             if *lamports == 0 {
                 continue;
             }
-
             let owner_matches_wallet = account_owners
                 .get(account)
                 .map(|owner| owner == &wallet)
                 .unwrap_or(false);
+            // Include ephemeral WSOL/native accounts or accounts later closed to wallet even if owner not recorded
+            let later_closed_to_wallet = account_rent_recovered.contains_key(account);
+            let created_by_wallet = account_creators
+                .get(account)
+                .map(|s| s == &wallet)
+                .unwrap_or(false);
+            let mut include = owner_matches_wallet || later_closed_to_wallet || created_by_wallet;
 
-            if !owner_matches_wallet {
-                continue;
-            }
-
-            let mint = account_mints
+            let mut mint = account_mints
                 .get(account)
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string());
+            // If we saw SyncNative on this account, it's WSOL even if mint wasn't recorded
+            if mint == "unknown" && sync_native_accounts.contains(account) {
+                mint = WSOL_MINT.to_string();
+                include = true; // sync-native implies wallet created native account for wrapping
+            }
+            if !include {
+                continue;
+            }
             let rent_sol = lamports_to_sol(*lamports);
             let is_wsol = mint == WSOL_MINT;
 
@@ -941,24 +1098,22 @@ impl TransactionProcessor {
             });
         }
 
+        // Record ATA closures from rent recovered
         for (account, lamports) in account_rent_recovered.iter() {
             if *lamports == 0 {
                 continue;
             }
+            // Destination already verified to be wallet when inserting into account_rent_recovered,
+            // so record closure regardless of whether owner mapping exists.
 
-            let owner_matches_wallet = account_owners
-                .get(account)
-                .map(|owner| owner == &wallet)
-                .unwrap_or(false);
-
-            if !owner_matches_wallet {
-                continue;
-            }
-
-            let mint = account_mints
+            let mut mint = account_mints
                 .get(account)
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string());
+            // If we saw SyncNative on this account, it's WSOL even if mint wasn't recorded
+            if mint == "unknown" && sync_native_accounts.contains(account) {
+                mint = WSOL_MINT.to_string();
+            }
             let rent_sol = lamports_to_sol(*lamports);
             let is_wsol = mint == WSOL_MINT;
 
@@ -1196,9 +1351,14 @@ impl TransactionProcessor {
                 let router_lc = router_str.to_ascii_lowercase();
                 let is_router_jup_or_pump = router_lc == "jupiter" || router_lc == "pumpfun";
                 if is_router_jup_or_pump && sol_change > epsilon {
-                    if let (Some(pre_bal), Some(post_bal)) = (primary_change.pre_balance, primary_change.post_balance) {
+                    if
+                        let (Some(pre_bal), Some(post_bal)) = (
+                            primary_change.pre_balance,
+                            primary_change.post_balance,
+                        )
+                    {
                         // Treat as a near-drain if the residual post balance is <0.1% of pre (very small dust)
-                        if pre_bal > 0.0 && post_bal > 0.0 && (post_bal / pre_bal) < 0.001 {
+                        if pre_bal > 0.0 && post_bal > 0.0 && post_bal / pre_bal < 0.001 {
                             token_amount_ui = pre_bal;
                         }
                     }
@@ -1215,9 +1375,7 @@ impl TransactionProcessor {
         let sol_spent_for_tokens = (total_sol_spent - fee_sol).max(0.0);
 
         let router = Self::infer_swap_router(transaction);
-        let mut sol_spent_effective = if matches!(router.as_str(), "jupiter" | "pumpfun") {
-            self.extract_dex_swap_amount(transaction, sol_spent_for_tokens, is_buy, &router)
-        } else if sol_spent_for_tokens > epsilon {
+        let mut sol_spent_effective = if sol_spent_for_tokens > epsilon {
             sol_spent_for_tokens
         } else {
             total_sol_spent.max(0.0)
@@ -1226,23 +1384,31 @@ impl TransactionProcessor {
         let net_sol_received = sol_change.max(0.0);
         let mut sol_received_from_swap = (net_sol_received + fee_sol).max(0.0);
 
-        let net_wsol_rent = transaction.ata_analysis
-            .as_ref()
-            .map(|ata| ata.wsol_rent_spent - ata.wsol_rent_recovered)
-            .unwrap_or(0.0);
-
-        if net_wsol_rent.abs() > epsilon {
+        // Router-specific precise extraction overrides
+        if matches!(router.as_str(), "jupiter" | "pumpfun") {
             if is_buy {
-                sol_spent_effective = (sol_spent_effective - net_wsol_rent).max(0.0);
+                if let Some(exact) = self.detect_wallet_wsol_transfer_amount(transaction) {
+                    sol_spent_effective = exact;
+                }
             } else if is_sell {
-                sol_received_from_swap = (sol_received_from_swap + net_wsol_rent).max(0.0);
+                if let Some(exact) = self.detect_wallet_wsol_receive_amount(transaction) {
+                    sol_received_from_swap = exact;
+                }
+            }
+        }
+
+        if let Some(ata) = transaction.ata_analysis.as_ref() {
+            // For sells: WSOL ATA rent recovered should increase effective SOL output
+            if is_sell && ata.wsol_rent_recovered > epsilon {
+                sol_received_from_swap = (sol_received_from_swap + ata.wsol_rent_recovered).max(
+                    0.0
+                );
             }
         }
 
         // If we couldn't detect the precise WSOL input (fallback path), remove token ATA rent from buy input
         if is_buy {
-            let token_rent_delta = transaction
-                .ata_analysis
+            let token_rent_delta = transaction.ata_analysis
                 .as_ref()
                 .map(|ata| ata.token_rent_spent - ata.token_rent_recovered)
                 .unwrap_or(0.0);
@@ -1250,6 +1416,15 @@ impl TransactionProcessor {
                 // Only subtract when we likely used the fallback amount (matches sol_spent_for_tokens)
                 if (sol_spent_effective - sol_spent_for_tokens).abs() <= epsilon {
                     sol_spent_effective = (sol_spent_effective - token_rent_delta).max(0.0);
+                }
+            }
+        } else if is_sell {
+            // For sells, amount2 should be the pure SOL output.
+            // Add back token ATA rent spent within the transaction (minus any token rent recovered).
+            if let Some(ata) = transaction.ata_analysis.as_ref() {
+                let add_back = ata.token_rent_spent - ata.token_rent_recovered;
+                if add_back.abs() > epsilon {
+                    sol_received_from_swap = (sol_received_from_swap + add_back).max(0.0);
                 }
             }
         }
@@ -1422,13 +1597,15 @@ impl TransactionProcessor {
         is_buy: bool,
         router: &str
     ) -> f64 {
-        if !is_buy {
-            return fallback_amount;
-        }
-
         if matches!(router, "jupiter" | "pumpfun") {
-            if let Some(amount) = self.detect_wallet_wsol_transfer_amount(transaction) {
-                return amount;
+            if is_buy {
+                if let Some(amount) = self.detect_wallet_wsol_transfer_amount(transaction) {
+                    return amount;
+                }
+            } else {
+                if let Some(amount) = self.detect_wallet_wsol_receive_amount(transaction) {
+                    return amount;
+                }
             }
         }
 
@@ -1444,6 +1621,7 @@ impl TransactionProcessor {
         // Build a map of token account -> owner using pre/post token balances for better filtering
         use std::collections::HashMap;
         let mut owner_map: HashMap<String, String> = HashMap::new();
+        let mut mint_map: HashMap<String, String> = HashMap::new();
 
         let account_keys: Vec<String> = raw
             .get("transaction")
@@ -1451,13 +1629,14 @@ impl TransactionProcessor {
             .and_then(|m| m.get("accountKeys"))
             .and_then(|v| v.as_array())
             .map(|arr| {
-                arr
-                    .iter()
+                arr.iter()
                     .filter_map(|k| {
                         if let Some(s) = k.as_str() {
                             Some(s.to_string())
                         } else if let Some(obj) = k.as_object() {
-                            obj.get("pubkey").and_then(|v| v.as_str()).map(|s| s.to_string())
+                            obj.get("pubkey")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
                         } else {
                             None
                         }
@@ -1466,36 +1645,251 @@ impl TransactionProcessor {
             })
             .unwrap_or_default();
 
-        let mut insert_owner = |entry: &Value| {
-            if let (Some(idx), Some(owner)) = (
-                entry.get("accountIndex").and_then(|v| v.as_u64()),
-                entry.get("owner").and_then(|v| v.as_str()),
-            ) {
+        let mut insert_owner_mint = |entry: &Value| {
+            let idx_opt = entry.get("accountIndex").and_then(|v| v.as_u64());
+            if let Some(idx) = idx_opt {
                 if let Some(key) = account_keys.get(idx as usize) {
-                    owner_map.insert(key.clone(), owner.to_string());
+                    if let Some(owner) = entry.get("owner").and_then(|v| v.as_str()) {
+                        owner_map.insert(key.clone(), owner.to_string());
+                    }
+                    if let Some(mint) = entry.get("mint").and_then(|v| v.as_str()) {
+                        mint_map.insert(key.clone(), mint.to_string());
+                    }
                 }
             }
         };
 
-        if let Some(pre) = raw
-            .get("meta")
-            .and_then(|m| m.get("preTokenBalances"))
-            .and_then(|v| v.as_array())
+        if
+            let Some(pre) = raw
+                .get("meta")
+                .and_then(|m| m.get("preTokenBalances"))
+                .and_then(|v| v.as_array())
         {
-            for entry in pre { insert_owner(entry); }
+            for entry in pre {
+                insert_owner_mint(entry);
+            }
         }
-        if let Some(post) = raw
-            .get("meta")
-            .and_then(|m| m.get("postTokenBalances"))
-            .and_then(|v| v.as_array())
+        if
+            let Some(post) = raw
+                .get("meta")
+                .and_then(|m| m.get("postTokenBalances"))
+                .and_then(|v| v.as_array())
         {
-            for entry in post { insert_owner(entry); }
+            for entry in post {
+                insert_owner_mint(entry);
+            }
         }
 
         let mut amounts: Vec<f64> = Vec::new();
 
+        // Discover wallet WSOL ATA from AToken createIdempotent (if any)
+        let mut wallet_wsol_ata: Option<String> = None;
+        if
+            let Some(outer) = raw
+                .get("transaction")
+                .and_then(|tx| tx.get("message"))
+                .and_then(|message| message.get("instructions"))
+                .and_then(|v| v.as_array())
+        {
+            for instruction in outer {
+                if
+                    let (Some(program_id), Some(parsed)) = (
+                        instruction.get("programId").and_then(|v| v.as_str()),
+                        instruction.get("parsed").and_then(|v| v.as_object()),
+                    )
+                {
+                    if program_id == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" {
+                        let itype = parsed
+                            .get("type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_ascii_lowercase();
+                        if itype == "createidempotent" {
+                            if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
+                                let mint_matches_wsol = info
+                                    .get("mint")
+                                    .and_then(|v| v.as_str())
+                                    .map(|m| m == WSOL_MINT)
+                                    .unwrap_or(false);
+                                let wallet_matches = info
+                                    .get("wallet")
+                                    .and_then(|v| v.as_str())
+                                    .map(|w| w == wallet)
+                                    .unwrap_or(false);
+                                if mint_matches_wsol && wallet_matches {
+                                    if let Some(acc) = info.get("account").and_then(|v| v.as_str()) {
+                                        wallet_wsol_ata = Some(acc.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Collect SyncNative accounts before parsing transfers
+        let meta = raw.get("meta")?;
+        let mut sync_native_accounts: std::collections::HashSet<String> = std::collections::HashSet::new();
+        if let Some(inner) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
+            for entry in inner {
+                if let Some(instructions) = entry.get("instructions").and_then(|v| v.as_array()) {
+                    for instruction in instructions {
+                        if
+                            let (Some(program_id), Some(parsed)) = (
+                                instruction.get("programId").and_then(|v| v.as_str()),
+                                instruction.get("parsed").and_then(|v| v.as_object()),
+                            )
+                        {
+                            if program_id == TOKEN_PROGRAM_ID {
+                                let itype = parsed
+                                    .get("type")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_ascii_lowercase();
+                                if itype == "syncnative" {
+                                    if
+                                        let Some(acc) = parsed
+                                            .get("info")
+                                            .and_then(|v| v.as_object())
+                                            .and_then(|i| i.get("account"))
+                                            .and_then(|v| v.as_str())
+                                    {
+                                        sync_native_accounts.insert(acc.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Outer fast path: detect a direct transferChecked WSOL with wallet authority
+        if
+            let Some(outer) = raw
+                .get("transaction")
+                .and_then(|tx| tx.get("message"))
+                .and_then(|m| m.get("instructions"))
+                .and_then(|v| v.as_array())
+        {
+            for instruction in outer {
+                let parsed = match instruction.get("parsed").and_then(|v| v.as_object()) {
+                    Some(p) => p,
+                    None => {
+                        continue;
+                    }
+                };
+                let program_id = instruction
+                    .get("programId")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .or_else(||
+                        instruction
+                            .get("programIdIndex")
+                            .and_then(|v| v.as_u64())
+                            .and_then(|idx| account_keys.get(idx as usize).cloned())
+                    )
+                    .unwrap_or_default();
+                if program_id != TOKEN_PROGRAM_ID {
+                    continue;
+                }
+                let itype = parsed
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if itype != "transferchecked" {
+                    continue;
+                }
+                let info = match parsed.get("info").and_then(|v| v.as_object()) {
+                    Some(i) => i,
+                    None => {
+                        continue;
+                    }
+                };
+                let authority_is_wallet = info
+                    .get("authority")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s == wallet)
+                    .unwrap_or(false);
+                let mint_is_wsol = info
+                    .get("mint")
+                    .and_then(|v| v.as_str())
+                    .map(|m| m == WSOL_MINT)
+                    .unwrap_or(false);
+                if mint_is_wsol && authority_is_wallet {
+                    if let Some(ta) = info.get("tokenAmount").and_then(|v| v.as_object()) {
+                        if let Some(ui) = ta.get("uiAmount").and_then(|v| v.as_f64()) {
+                            if ui > 0.0 {
+                                return Some(ui);
+                            }
+                        }
+                        if
+                            let (Some(amount_str), Some(dec)) = (
+                                ta.get("amount").and_then(|v| v.as_str()),
+                                ta.get("decimals").and_then(|v| v.as_u64()),
+                            )
+                        {
+                            if let Ok(raw) = amount_str.parse::<u128>() {
+                                let scale = (10_f64).powi(dec.min(18) as i32);
+                                if scale > 0.0 {
+                                    return Some((raw as f64) / scale);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if
+            let Some(outer) = raw
+                .get("transaction")
+                .and_then(|tx| tx.get("message"))
+                .and_then(|m| m.get("instructions"))
+                .and_then(|v| v.as_array())
+        {
+            for instruction in outer {
+                if
+                    let (Some(program_id), Some(parsed)) = (
+                        instruction.get("programId").and_then(|v| v.as_str()),
+                        instruction.get("parsed").and_then(|v| v.as_object()),
+                    )
+                {
+                    if program_id == TOKEN_PROGRAM_ID {
+                        let itype = parsed
+                            .get("type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_ascii_lowercase();
+                        if itype == "syncnative" {
+                            if
+                                let Some(acc) = parsed
+                                    .get("info")
+                                    .and_then(|v| v.as_object())
+                                    .and_then(|i| i.get("account"))
+                                    .and_then(|v| v.as_str())
+                            {
+                                sync_native_accounts.insert(acc.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let mut parse_amount = |instruction: &Value, wallet: &str| -> Option<f64> {
-            let program_id = instruction.get("programId").and_then(|v| v.as_str())?;
+            // Support both programId (string) and programIdIndex (u64) forms
+            let program_id = instruction
+                .get("programId")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    instruction
+                        .get("programIdIndex")
+                        .and_then(|v| v.as_u64())
+                        .and_then(|idx| account_keys.get(idx as usize).cloned())
+                })?;
             if program_id != TOKEN_PROGRAM_ID {
                 return None;
             }
@@ -1513,40 +1907,53 @@ impl TransactionProcessor {
 
             let info = parsed.get("info")?.as_object()?;
 
-            if
-                info
-                    .get("authority")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s != wallet)
-                    .unwrap_or(true)
-            {
+            // Must be WSOL transfer. If mint not present (plain transfer), infer via account mints or account identity.
+            let src_acc = info.get("source").and_then(|v| v.as_str());
+            let dst_acc = info.get("destination").and_then(|v| v.as_str());
+            let is_wsol = if let Some(m) = info.get("mint").and_then(|v| v.as_str()) {
+                m == WSOL_MINT
+            } else {
+                let src_mint_is_wsol = src_acc
+                    .and_then(|a| mint_map.get(a))
+                    .map(|m| m == WSOL_MINT)
+                    .unwrap_or(false);
+                let dst_mint_is_wsol = dst_acc
+                    .and_then(|a| mint_map.get(a))
+                    .map(|m| m == WSOL_MINT)
+                    .unwrap_or(false);
+                let src_is_wallet_ata = src_acc
+                    .and_then(|a| wallet_wsol_ata.as_ref().map(|w| a == w))
+                    .unwrap_or(false);
+                let dst_is_wallet_ata = dst_acc
+                    .and_then(|a| wallet_wsol_ata.as_ref().map(|w| a == w))
+                    .unwrap_or(false);
+                let src_is_sync = src_acc
+                    .map(|a| sync_native_accounts.contains(a))
+                    .unwrap_or(false);
+                let dst_is_sync = dst_acc
+                    .map(|a| sync_native_accounts.contains(a))
+                    .unwrap_or(false);
+                src_mint_is_wsol ||
+                    dst_mint_is_wsol ||
+                    src_is_wallet_ata ||
+                    dst_is_wallet_ata ||
+                    src_is_sync ||
+                    dst_is_sync
+            };
+            if !is_wsol {
                 return None;
             }
 
-            if
-                info
-                    .get("mint")
-                    .and_then(|v| v.as_str())
-                    .map(|mint| mint != WSOL_MINT)
-                    .unwrap_or(true)
-            {
-                return None;
-            }
-
-            // Filter: source owned by wallet, destination not owned by wallet (avoid self moves)
-            let source_acc = info.get("source").and_then(|v| v.as_str());
-            let dest_acc = info.get("destination").and_then(|v| v.as_str());
-            if let (Some(src), Some(dst)) = (source_acc, dest_acc) {
+            // Filter: prefer that the source is wallet-owned or a known wallet WSOL/native account; if unknown, allow
+            if let Some(src) = src_acc {
                 let src_owner = owner_map.get(src);
-                let dst_owner = owner_map.get(dst);
-                // If we know owners, enforce the filter; if unknown, still allow (best-effort)
+                let src_is_sync = sync_native_accounts.contains(src);
+                let src_is_wallet_ata = wallet_wsol_ata
+                    .as_deref()
+                    .map(|w| w == src)
+                    .unwrap_or(false);
                 if let Some(src_owner) = src_owner {
-                    if src_owner != &wallet {
-                        return None;
-                    }
-                }
-                if let Some(dst_owner) = dst_owner {
-                    if dst_owner == &wallet {
+                    if !src_is_sync && !src_is_wallet_ata && src_owner != &wallet {
                         return None;
                     }
                 }
@@ -1564,7 +1971,7 @@ impl TransactionProcessor {
                         let decimals = token_amount
                             .get("decimals")
                             .and_then(|v| v.as_u64())
-                            .unwrap_or(0);
+                            .unwrap_or(9);
                         let scale_power = decimals.min(18) as i32;
                         let scale = (10_f64).powi(scale_power);
                         if scale > 0.0 {
@@ -1591,7 +1998,86 @@ impl TransactionProcessor {
             None
         };
 
-        let meta = raw.get("meta")?;
+        // Fast path: inner transferChecked WSOL with authority == wallet (or source is a SyncNative'd account)
+        if let Some(inner) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
+            for entry in inner {
+                if let Some(instructions) = entry.get("instructions").and_then(|v| v.as_array()) {
+                    for instruction in instructions {
+                        let parsed = match instruction.get("parsed").and_then(|v| v.as_object()) {
+                            Some(p) => p,
+                            None => {
+                                continue;
+                            }
+                        };
+                        // Resolve program id from either programId or programIdIndex (v0 compiled)
+                        let program_id = instruction
+                            .get("programId")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                            .or_else(|| {
+                                instruction
+                                    .get("programIdIndex")
+                                    .and_then(|v| v.as_u64())
+                                    .and_then(|idx| account_keys.get(idx as usize).cloned())
+                            })
+                            .unwrap_or_default();
+                        if program_id != TOKEN_PROGRAM_ID {
+                            continue;
+                        }
+                        let itype = parsed
+                            .get("type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_ascii_lowercase();
+                        if itype != "transferchecked" {
+                            continue;
+                        }
+                        let info = match parsed.get("info").and_then(|v| v.as_object()) {
+                            Some(i) => i,
+                            None => {
+                                continue;
+                            }
+                        };
+                        let authority_is_wallet = info
+                            .get("authority")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s == wallet)
+                            .unwrap_or(false);
+                        let mint_is_wsol = info
+                            .get("mint")
+                            .and_then(|v| v.as_str())
+                            .map(|m| m == WSOL_MINT)
+                            .unwrap_or(false);
+                        let src_acc = info.get("source").and_then(|v| v.as_str());
+                        let src_is_syncnative = src_acc
+                            .map(|s| sync_native_accounts.contains(s))
+                            .unwrap_or(false);
+                        if mint_is_wsol && (authority_is_wallet || src_is_syncnative) {
+                            if let Some(ta) = info.get("tokenAmount").and_then(|v| v.as_object()) {
+                                if let Some(ui) = ta.get("uiAmount").and_then(|v| v.as_f64()) {
+                                    if ui > 0.0 {
+                                        return Some(ui);
+                                    }
+                                }
+                                if
+                                    let (Some(amount_str), Some(dec)) = (
+                                        ta.get("amount").and_then(|v| v.as_str()),
+                                        ta.get("decimals").and_then(|v| v.as_u64()),
+                                    )
+                                {
+                                    if let Ok(raw) = amount_str.parse::<u128>() {
+                                        let scale = (10_f64).powi(dec.min(18) as i32);
+                                        if scale > 0.0 {
+                                            return Some((raw as f64) / scale);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         if let Some(inner) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
             for entry in inner {
@@ -1619,85 +2105,63 @@ impl TransactionProcessor {
             }
         }
 
-    // Additional fallback: detect system transfer to wallet WSOL ATA followed by SyncNative
-        // 1) Find wallet WSOL ATA account from associated-token createIdempotent
-        let mut wallet_wsol_ata: Option<String> = None;
-        if let Some(outer) = raw
-            .get("transaction")
-            .and_then(|tx| tx.get("message"))
-            .and_then(|message| message.get("instructions"))
-            .and_then(|v| v.as_array())
-        {
-            for instruction in outer {
-                if let (Some(program_id), Some(parsed)) = (
-                    instruction.get("programId").and_then(|v| v.as_str()),
-                    instruction.get("parsed").and_then(|v| v.as_object()),
-                ) {
-                    if program_id == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" {
-                        let itype = parsed
-                            .get("type")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_ascii_lowercase();
-                        if itype == "createidempotent" {
-                            if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
-                                let mint_matches_wsol = info
-                                    .get("mint")
-                                    .and_then(|v| v.as_str())
-                                    .map(|m| m == WSOL_MINT)
-                                    .unwrap_or(false);
-                                let wallet_matches = info
-                                    .get("wallet")
-                                    .and_then(|v| v.as_str())
-                                    .map(|w| w == wallet)
-                                    .unwrap_or(false);
-                                if mint_matches_wsol && wallet_matches {
-                                    if let Some(acc) = info.get("account").and_then(|v| v.as_str()) {
-                                        wallet_wsol_ata = Some(acc.to_string());
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // If we collected SPL WSOL transfer amounts, prefer the largest positive amount (main input)
+        let mut spl_min_amount = amounts
+            .iter()
+            .copied()
+            .filter(|a| *a > 0.0 && a.is_finite())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-        if let Some(wsol_ata) = wallet_wsol_ata {
-            // Find a system transfer to this ATA and take lamports as input amount
-            if let Some(outer) = raw
-                .get("transaction")
-                .and_then(|tx| tx.get("message"))
-                .and_then(|message| message.get("instructions"))
-                .and_then(|v| v.as_array())
-            {
-                for instruction in outer {
-                    if let (Some(program_id), Some(parsed)) = (
-                        instruction.get("programId").and_then(|v| v.as_str()),
-                        instruction.get("parsed").and_then(|v| v.as_object()),
-                    ) {
-                        if program_id == "11111111111111111111111111111111" {
-                            let itype = parsed
-                                .get("type")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_ascii_lowercase();
-                            if itype == "transfer" {
-                                if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
-                                    let dest_matches = info
-                                        .get("destination")
-                                        .and_then(|v| v.as_str())
-                                        .map(|d| d == wsol_ata)
-                                        .unwrap_or(false);
-                                    let src_matches_wallet = info
-                                        .get("source")
-                                        .and_then(|v| v.as_str())
-                                        .map(|s| s == wallet)
-                                        .unwrap_or(false);
-                                    if dest_matches && src_matches_wallet {
-                                        if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
-                                            return Some(lamports as f64 / 1_000_000_000.0);
+        if spl_min_amount.is_none() {
+            if let Some(wsol_ata) = wallet_wsol_ata.clone() {
+                // Find a system transfer to this ATA and take lamports as input amount
+                if
+                    let Some(outer) = raw
+                        .get("transaction")
+                        .and_then(|tx| tx.get("message"))
+                        .and_then(|message| message.get("instructions"))
+                        .and_then(|v| v.as_array())
+                {
+                    for instruction in outer {
+                        if
+                            let (Some(program_id), Some(parsed)) = (
+                                instruction.get("programId").and_then(|v| v.as_str()),
+                                instruction.get("parsed").and_then(|v| v.as_object()),
+                            )
+                        {
+                            if program_id == "11111111111111111111111111111111" {
+                                let itype = parsed
+                                    .get("type")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_ascii_lowercase();
+                                if itype == "transfer" {
+                                    if
+                                        let Some(info) = parsed
+                                            .get("info")
+                                            .and_then(|v| v.as_object())
+                                    {
+                                        let dest_matches = info
+                                            .get("destination")
+                                            .and_then(|v| v.as_str())
+                                            .map(|d| d == wsol_ata)
+                                            .unwrap_or(false);
+                                        let src_matches_wallet = info
+                                            .get("source")
+                                            .and_then(|v| v.as_str())
+                                            .map(|s| s == wallet)
+                                            .unwrap_or(false);
+                                        if dest_matches && src_matches_wallet {
+                                            if
+                                                let Some(lamports) = info
+                                                    .get("lamports")
+                                                    .and_then(|v| v.as_u64())
+                                            {
+                                                spl_min_amount = Some(
+                                                    (lamports as f64) / 1_000_000_000.0
+                                                );
+                                                break;
+                                            }
                                         }
                                     }
                                 }
@@ -1709,52 +2173,22 @@ impl TransactionProcessor {
         }
 
         // Another robust path: derive funding from any account that is later SyncNative'd
-        let mut sync_native_accounts: std::collections::HashSet<String> = std::collections::HashSet::new();
-        if let Some(outer) = raw
-            .get("transaction")
-            .and_then(|tx| tx.get("message"))
-            .and_then(|message| message.get("instructions"))
-            .and_then(|v| v.as_array())
-        {
-            for instruction in outer {
-                if let (Some(program_id), Some(parsed)) = (
-                    instruction.get("programId").and_then(|v| v.as_str()),
-                    instruction.get("parsed").and_then(|v| v.as_object()),
-                ) {
-                    if program_id == TOKEN_PROGRAM_ID {
-                        let itype = parsed
-                            .get("type")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_ascii_lowercase();
-                        if itype == "syncnative" {
-                            if let Some(acc) = parsed
-                                .get("info")
-                                .and_then(|v| v.as_object())
-                                .and_then(|i| i.get("account"))
-                                .and_then(|v| v.as_str())
-                            {
-                                sync_native_accounts.insert(acc.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if !sync_native_accounts.is_empty() {
-            if let Some(outer) = raw
-                .get("transaction")
-                .and_then(|tx| tx.get("message"))
-                .and_then(|message| message.get("instructions"))
-                .and_then(|v| v.as_array())
+        if spl_min_amount.is_none() && !sync_native_accounts.is_empty() {
+            if
+                let Some(outer) = raw
+                    .get("transaction")
+                    .and_then(|tx| tx.get("message"))
+                    .and_then(|message| message.get("instructions"))
+                    .and_then(|v| v.as_array())
             {
                 let mut best: Option<f64> = None;
                 for instruction in outer {
-                    if let (Some(program_id), Some(parsed)) = (
-                        instruction.get("programId").and_then(|v| v.as_str()),
-                        instruction.get("parsed").and_then(|v| v.as_object()),
-                    ) {
+                    if
+                        let (Some(program_id), Some(parsed)) = (
+                            instruction.get("programId").and_then(|v| v.as_str()),
+                            instruction.get("parsed").and_then(|v| v.as_object()),
+                        )
+                    {
                         if program_id == "11111111111111111111111111111111" {
                             let itype = parsed
                                 .get("type")
@@ -1771,9 +2205,16 @@ impl TransactionProcessor {
                                         .unwrap_or(false);
                                     if let (Some(dest), true) = (dest, src_is_wallet) {
                                         if sync_native_accounts.contains(dest) {
-                                            if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
-                                                let val = lamports as f64 / 1_000_000_000.0;
-                                                best = Some(match best { Some(b) => b.min(val), None => val });
+                                            if
+                                                let Some(lamports) = info
+                                                    .get("lamports")
+                                                    .and_then(|v| v.as_u64())
+                                            {
+                                                let val = (lamports as f64) / 1_000_000_000.0;
+                                                best = Some(match best {
+                                                    Some(b) => b.min(val),
+                                                    None => val,
+                                                });
                                             }
                                         }
                                     }
@@ -1782,8 +2223,15 @@ impl TransactionProcessor {
                         }
                     }
                 }
-                if let Some(b) = best { return Some(b); }
+                if spl_min_amount.is_none() {
+                    spl_min_amount = best;
+                }
             }
+        }
+
+        // Prefer SPL-detected amounts first; fall back to heuristics only if none found
+        if let Some(val) = spl_min_amount {
+            return Some(val);
         }
 
         // Heuristic: choose the smallest positive transfer out of wallet-owned WSOL accounts
@@ -1791,6 +2239,323 @@ impl TransactionProcessor {
             .into_iter()
             .filter(|a| *a > 0.0 && a.is_finite())
             .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+    }
+
+    fn detect_wallet_wsol_receive_amount(&self, transaction: &Transaction) -> Option<f64> {
+        const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
+        let wallet = self.wallet_pubkey.to_string();
+        let raw = transaction.raw_transaction_data.as_ref()?;
+
+        let account_keys: Vec<String> = raw
+            .get("transaction")
+            .and_then(|tx| tx.get("message"))
+            .and_then(|m| m.get("accountKeys"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|k| {
+                        if let Some(s) = k.as_str() {
+                            Some(s.to_string())
+                        } else if let Some(obj) = k.as_object() {
+                            obj.get("pubkey")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Build map token account -> owner
+        let mut owner_map: HashMap<String, String> = HashMap::new();
+        let mut insert_owner = |entry: &Value| {
+            if
+                let (Some(idx), Some(owner)) = (
+                    entry.get("accountIndex").and_then(|v| v.as_u64()),
+                    entry.get("owner").and_then(|v| v.as_str()),
+                )
+            {
+                if let Some(key) = account_keys.get(idx as usize) {
+                    owner_map.insert(key.clone(), owner.to_string());
+                }
+            }
+        };
+        if
+            let Some(pre) = raw
+                .get("meta")
+                .and_then(|m| m.get("preTokenBalances"))
+                .and_then(|v| v.as_array())
+        {
+            for e in pre {
+                insert_owner(e);
+            }
+        }
+        if
+            let Some(post) = raw
+                .get("meta")
+                .and_then(|m| m.get("postTokenBalances"))
+                .and_then(|v| v.as_array())
+        {
+            for e in post {
+                insert_owner(e);
+            }
+        }
+
+        let mut amounts: Vec<f64> = Vec::new();
+        let push_amount = |info: &serde_json::Map<String, Value>, amounts: &mut Vec<f64>| {
+            if let Some(ta) = info.get("tokenAmount").and_then(|v| v.as_object()) {
+                if let Some(ui) = ta.get("uiAmount").and_then(|v| v.as_f64()) {
+                    if ui > 0.0 {
+                        amounts.push(ui);
+                        return;
+                    }
+                }
+                if
+                    let (Some(amount_str), Some(dec)) = (
+                        ta.get("amount").and_then(|v| v.as_str()),
+                        ta.get("decimals").and_then(|v| v.as_u64()),
+                    )
+                {
+                    if let Ok(raw) = amount_str.parse::<u128>() {
+                        let scale = (10_f64).powi(dec.min(18) as i32);
+                        if scale > 0.0 {
+                            amounts.push((raw as f64) / scale);
+                            return;
+                        }
+                    }
+                }
+            }
+            if
+                let (Some(amount_str), Some(dec)) = (
+                    info.get("amount").and_then(|v| v.as_str()),
+                    info.get("decimals").and_then(|v| v.as_u64()),
+                )
+            {
+                if let Ok(raw) = amount_str.parse::<u128>() {
+                    let scale = (10_f64).powi(dec.min(18) as i32);
+                    if scale > 0.0 {
+                        amounts.push((raw as f64) / scale);
+                        return;
+                    }
+                }
+            }
+        };
+
+        // Scan inner first (support programIdIndex indirection too)
+        if
+            let Some(inner) = raw
+                .get("meta")
+                .and_then(|m| m.get("innerInstructions"))
+                .and_then(|v| v.as_array())
+        {
+            for entry in inner {
+                if let Some(instructions) = entry.get("instructions").and_then(|v| v.as_array()) {
+                    for inst in instructions {
+                        let parsed = match inst.get("parsed").and_then(|v| v.as_object()) {
+                            Some(p) => p,
+                            None => {
+                                continue;
+                            }
+                        };
+                        // Resolve program id possibly via index
+                        let program_id = inst
+                            .get("programId")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                            .or_else(||
+                                inst
+                                    .get("programIdIndex")
+                                    .and_then(|v| v.as_u64())
+                                    .and_then(|idx| account_keys.get(idx as usize).cloned())
+                            );
+                        if program_id.as_deref() != Some(TOKEN_PROGRAM_ID) {
+                            continue;
+                        }
+                        let itype = parsed
+                            .get("type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_ascii_lowercase();
+                        if itype != "transfer" && itype != "transferchecked" {
+                            continue;
+                        }
+                        let info = match parsed.get("info").and_then(|v| v.as_object()) {
+                            Some(i) => i,
+                            None => {
+                                continue;
+                            }
+                        };
+                        let mint_is_wsol = info
+                            .get("mint")
+                            .and_then(|v| v.as_str())
+                            .map(|m| m == WSOL_MINT);
+                        // If mint field missing, infer via account identity/owner map later
+                        // destination must be wallet-owned; source must not be wallet-owned
+                        let src = info.get("source").and_then(|v| v.as_str());
+                        let dst = info.get("destination").and_then(|v| v.as_str());
+                        if let (Some(src), Some(dst)) = (src, dst) {
+                            let src_owner = owner_map.get(src);
+                            let dst_owner = owner_map.get(dst);
+                            if let Some(dst_owner) = dst_owner {
+                                if dst_owner != &wallet {
+                                    continue;
+                                }
+                            }
+                            if let Some(src_owner) = src_owner {
+                                if src_owner == &wallet {
+                                    continue;
+                                }
+                            }
+                            // If mint isn't explicitly WSOL, infer using account identity
+                            if mint_is_wsol != Some(true) {
+                                let dst_is_wallet_ata = raw
+                                    .get("transaction")
+                                    .and_then(|tx| tx.get("message"))
+                                    .and_then(|m| m.get("instructions"))
+                                    .and_then(|v| v.as_array())
+                                    .and_then(|arr| {
+                                        for instruction in arr {
+                                            if
+                                                let (Some(program_id), Some(parsed)) = (
+                                                    instruction
+                                                        .get("programId")
+                                                        .and_then(|v| v.as_str()),
+                                                    instruction
+                                                        .get("parsed")
+                                                        .and_then(|v| v.as_object()),
+                                                )
+                                            {
+                                                if
+                                                    program_id ==
+                                                    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+                                                {
+                                                    let itype = parsed
+                                                        .get("type")
+                                                        .and_then(|v| v.as_str())
+                                                        .unwrap_or("")
+                                                        .to_ascii_lowercase();
+                                                    if itype == "createidempotent" {
+                                                        if
+                                                            let Some(info) = parsed
+                                                                .get("info")
+                                                                .and_then(|v| v.as_object())
+                                                        {
+                                                            let mint_matches_wsol = info
+                                                                .get("mint")
+                                                                .and_then(|v| v.as_str())
+                                                                .map(|m| m == WSOL_MINT)
+                                                                .unwrap_or(false);
+                                                            let wallet_matches = info
+                                                                .get("wallet")
+                                                                .and_then(|v| v.as_str())
+                                                                .map(|w| w == wallet)
+                                                                .unwrap_or(false);
+                                                            let acc = info
+                                                                .get("account")
+                                                                .and_then(|v| v.as_str());
+                                                            if mint_matches_wsol && wallet_matches {
+                                                                if let Some(acc) = acc {
+                                                                    if acc == dst {
+                                                                        return Some(true);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        None
+                                    })
+                                    .unwrap_or(false);
+                                if !dst_is_wallet_ata {
+                                    continue;
+                                }
+                            }
+                            push_amount(info, &mut amounts);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Then outer
+        if
+            let Some(outer) = raw
+                .get("transaction")
+                .and_then(|tx| tx.get("message"))
+                .and_then(|m| m.get("instructions"))
+                .and_then(|v| v.as_array())
+        {
+            for inst in outer {
+                let parsed = match inst.get("parsed").and_then(|v| v.as_object()) {
+                    Some(p) => p,
+                    None => {
+                        continue;
+                    }
+                };
+                let program_id = inst
+                    .get("programId")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .or_else(||
+                        inst
+                            .get("programIdIndex")
+                            .and_then(|v| v.as_u64())
+                            .and_then(|idx| account_keys.get(idx as usize).cloned())
+                    );
+                if program_id.as_deref() != Some(TOKEN_PROGRAM_ID) {
+                    continue;
+                }
+                let itype = parsed
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if itype != "transfer" && itype != "transferchecked" {
+                    continue;
+                }
+                let info = match parsed.get("info").and_then(|v| v.as_object()) {
+                    Some(i) => i,
+                    None => {
+                        continue;
+                    }
+                };
+                let mint_is_wsol = info
+                    .get("mint")
+                    .and_then(|v| v.as_str())
+                    .map(|m| m == WSOL_MINT)
+                    .unwrap_or(false);
+                if !mint_is_wsol {
+                    continue;
+                }
+                let src = info.get("source").and_then(|v| v.as_str());
+                let dst = info.get("destination").and_then(|v| v.as_str());
+                if let (Some(src), Some(dst)) = (src, dst) {
+                    let src_owner = owner_map.get(src);
+                    let dst_owner = owner_map.get(dst);
+                    if let Some(dst_owner) = dst_owner {
+                        if dst_owner != &wallet {
+                            continue;
+                        }
+                    }
+                    if let Some(src_owner) = src_owner {
+                        if src_owner == &wallet {
+                            continue;
+                        }
+                    }
+                    push_amount(info, &mut amounts);
+                }
+            }
+        }
+
+        amounts
+            .into_iter()
+            .filter(|a| *a > 0.0 && a.is_finite())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
     }
 
     fn infer_swap_router(transaction: &Transaction) -> String {
