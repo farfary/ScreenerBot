@@ -42,6 +42,7 @@ pub mod debug;
 pub mod fetcher;
 pub mod manager;
 pub mod processor;
+pub mod program_ids;
 pub mod service;
 pub mod types;
 pub mod utils;

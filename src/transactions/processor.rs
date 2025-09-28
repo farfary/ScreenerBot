@@ -12,16 +12,9 @@ use std::time::{ Duration, Instant };
 
 use crate::global::is_debug_transactions_enabled;
 use crate::logger::{ log, LogTag };
-use crate::pools::types::{
-    ORCA_WHIRLPOOL_PROGRAM_ID,
-    PUMP_FUN_AMM_PROGRAM_ID,
-    PUMP_FUN_LEGACY_PROGRAM_ID,
-    RAYDIUM_CLMM_PROGRAM_ID,
-    RAYDIUM_CPMM_PROGRAM_ID,
-    RAYDIUM_LEGACY_AMM_PROGRAM_ID,
-};
+
 use crate::tokens::{ decimals::lamports_to_sol, get_token_decimals, get_token_from_db };
-use crate::transactions::{ analyzer, fetcher::TransactionFetcher, types::*, utils::* };
+use crate::transactions::{ analyzer, fetcher::TransactionFetcher, program_ids, types::*, utils::* };
 
 // =============================================================================
 // TRANSACTION PROCESSOR
@@ -1147,37 +1140,16 @@ impl TransactionProcessor {
     }
 
     fn infer_swap_router(transaction: &Transaction) -> String {
-        for log_line in &transaction.log_messages {
-            let log_lower = log_line.to_lowercase();
-            if log_lower.contains("jupiter") {
-                return "jupiter".to_string();
-            }
-            if log_lower.contains("raydium") {
-                return "raydium".to_string();
-            }
-            if log_lower.contains("orca") {
-                return "orca".to_string();
-            }
-            if log_lower.contains("pumpfun") || log_lower.contains("pump.fun") {
-                return "pumpfun".to_string();
+        // First, try to detect router from program IDs (more reliable)
+        for instruction in &transaction.instructions {
+            if let Some(router) = program_ids::detect_router_from_program_id(&instruction.program_id) {
+                return router.to_string();
             }
         }
 
-        for instruction in &transaction.instructions {
-            match instruction.program_id.as_str() {
-                PUMP_FUN_AMM_PROGRAM_ID | PUMP_FUN_LEGACY_PROGRAM_ID => {
-                    return "pumpfun".to_string();
-                }
-                | RAYDIUM_CPMM_PROGRAM_ID
-                | RAYDIUM_LEGACY_AMM_PROGRAM_ID
-                | RAYDIUM_CLMM_PROGRAM_ID => {
-                    return "raydium".to_string();
-                }
-                ORCA_WHIRLPOOL_PROGRAM_ID => {
-                    return "orca".to_string();
-                }
-                _ => {}
-            }
+        // Fallback to log message detection
+        if let Some(router) = program_ids::detect_router_from_logs(&transaction.log_messages) {
+            return router.to_string();
         }
 
         "unknown".to_string()
