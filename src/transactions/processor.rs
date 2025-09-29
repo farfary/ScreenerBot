@@ -832,7 +832,7 @@ impl TransactionProcessor {
                     let entry = pre_totals.entry(balance.mint.clone()).or_insert((decimals, 0.0));
                     entry.0 = decimals;
                     entry.1 += amount;
-                    
+
                     if self.debug_enabled {
                         log(
                             LogTag::Transactions,
@@ -864,7 +864,7 @@ impl TransactionProcessor {
                     let entry = post_totals.entry(balance.mint.clone()).or_insert((decimals, 0.0));
                     entry.0 = decimals;
                     entry.1 += amount;
-                    
+
                     if self.debug_enabled {
                         log(
                             LogTag::Transactions,
