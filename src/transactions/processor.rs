@@ -799,26 +799,79 @@ impl TransactionProcessor {
         let mut pre_totals: HashMap<String, (u8, f64)> = HashMap::new();
         let mut post_totals: HashMap<String, (u8, f64)> = HashMap::new();
 
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "TOKEN_EXTRACT_DEBUG",
+                &format!(
+                    "Extracting token balances for wallet: {}, pre_count: {}, post_count: {}",
+                    wallet_str,
+                    meta.pre_token_balances.as_ref().map_or(0, |v| v.len()),
+                    meta.post_token_balances.as_ref().map_or(0, |v| v.len())
+                )
+            );
+        }
+
         if let Some(pre_balances) = &meta.pre_token_balances {
             for balance in pre_balances {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "TOKEN_EXTRACT_DEBUG",
+                        &format!(
+                            "Pre-balance: mint={}, owner={:?}, amount={:?}",
+                            balance.mint,
+                            balance.owner,
+                            balance.ui_token_amount
+                        )
+                    );
+                }
                 if balance.owner.as_deref() == Some(wallet_str.as_str()) {
                     let decimals = balance.ui_token_amount.decimals;
                     let amount = parse_ui_amount(&balance.ui_token_amount);
                     let entry = pre_totals.entry(balance.mint.clone()).or_insert((decimals, 0.0));
                     entry.0 = decimals;
                     entry.1 += amount;
+                    
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "TOKEN_EXTRACT_DEBUG",
+                            &format!("Added pre-balance: mint={}, amount={}", balance.mint, amount)
+                        );
+                    }
                 }
             }
         }
 
         if let Some(post_balances) = &meta.post_token_balances {
             for balance in post_balances {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "TOKEN_EXTRACT_DEBUG",
+                        &format!(
+                            "Post-balance: mint={}, owner={:?}, amount={:?}",
+                            balance.mint,
+                            balance.owner,
+                            balance.ui_token_amount
+                        )
+                    );
+                }
                 if balance.owner.as_deref() == Some(wallet_str.as_str()) {
                     let decimals = balance.ui_token_amount.decimals;
                     let amount = parse_ui_amount(&balance.ui_token_amount);
                     let entry = post_totals.entry(balance.mint.clone()).or_insert((decimals, 0.0));
                     entry.0 = decimals;
                     entry.1 += amount;
+                    
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "TOKEN_EXTRACT_DEBUG",
+                            &format!("Added post-balance: mint={}, amount={}", balance.mint, amount)
+                        );
+                    }
                 }
             }
         }
@@ -831,7 +884,7 @@ impl TransactionProcessor {
             let (post_decimals, post_amount) = post_totals
                 .get(&mint)
                 .cloned()
-                .unwrap_or((pre_decimals, pre_amount));
+                .unwrap_or((pre_decimals, 0.0)); // Default to 0.0 when missing from post-balances
             let decimals = if post_decimals != 0 { post_decimals } else { pre_decimals };
             let change = post_amount - pre_amount;
 
