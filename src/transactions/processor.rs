@@ -1147,6 +1147,9 @@ impl TransactionProcessor {
 
         // Track ATAs created (account addresses) via the associated token program in this tx
         let mut ata_created_accounts: HashSet<String> = HashSet::new();
+        // Track token accounts created via Token Program initializeAccount* in this tx
+        // Some aggregators do allocate+assign+transfer and then initialize via Token program without AToken CPI.
+        let mut created_token_accounts: HashSet<String> = HashSet::new();
         let mut record_ata_account = |inst: &Value| {
             if
                 let (Some(program_id), Some(parsed)) = (
@@ -1270,6 +1273,8 @@ impl TransactionProcessor {
                             .or_else(|| info.get("newAccount"))
                             .and_then(|v| v.as_str());
                         if let Some(account) = account {
+                            // Record token accounts initialized in this tx (may be ATAs or regular token accounts)
+                            created_token_accounts.insert(account.to_string());
                             if let Some(mint) = info.get("mint").and_then(|v| v.as_str()) {
                                 account_mints.insert(account.to_string(), mint.to_string());
                             }
@@ -1333,6 +1338,22 @@ impl TransactionProcessor {
                                         source.to_string()
                                     );
                                 }
+                                if self.debug_enabled {
+                                    log(
+                                        LogTag::Transactions,
+                                        "ATA_DEBUG",
+                                        &format!(
+                                            "{}: System createAccount -> new={} lamports={} source={}",
+                                            &transaction.signature,
+                                            new_acc,
+                                            lamports_val,
+                                            info
+                                                .get("source")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("?")
+                                        )
+                                    );
+                                }
                             }
                         }
                     }
@@ -1344,7 +1365,12 @@ impl TransactionProcessor {
                         let src = info.get("source").and_then(|v| v.as_str());
                         let lamports_opt = info.get("lamports").and_then(|v| v.as_u64());
                         if let (Some(dest), Some(src), Some(lamports)) = (dest, src, lamports_opt) {
-                            if ata_created_accounts.contains(dest) && lamports > 0 {
+                            // Consider both ATAs created via AToken program and token accounts initialized via Token program
+                            if
+                                (ata_created_accounts.contains(dest) ||
+                                    created_token_accounts.contains(dest)) &&
+                                lamports > 0
+                            {
                                 account_rent_spent
                                     .entry(dest.to_string())
                                     .and_modify(|v| {
@@ -1352,6 +1378,20 @@ impl TransactionProcessor {
                                     })
                                     .or_insert(lamports);
                                 account_creators.insert(dest.to_string(), src.to_string());
+                                if self.debug_enabled {
+                                    log(
+                                        LogTag::Transactions,
+                                        "ATA_DEBUG",
+                                        &format!(
+                                            "{}: System transfer funding new token account -> dest={} lamports={} src={} (dest_is_created_in_tx={})",
+                                            &transaction.signature,
+                                            dest,
+                                            lamports,
+                                            src,
+                                            true
+                                        )
+                                    );
+                                }
                             }
                         }
                     }
@@ -1378,6 +1418,88 @@ impl TransactionProcessor {
             }
             for inner_inst in inner_list {
                 handle_instruction(inner_inst);
+            }
+        }
+
+        // Fallback: if we detected ATAs created in this tx but didn't attribute their rent yet,
+        // scan for any SystemProgram transfers from the wallet to those ATA accounts and record them.
+        // This covers allocate+assign+transfer -> initializeAccount patterns where ordering or CPI parsing
+        // caused us to miss the funding transfer in the first pass.
+        // Use union of ATA-created and Token-program-initialized accounts for fallback detection
+        if !ata_created_accounts.is_empty() || !created_token_accounts.is_empty() {
+            let mut ensure_rent_for_atas = |inst: &Value| {
+                let program_id = inst
+                    .get("programId")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .or_else(|| {
+                        inst.get("programIdIndex")
+                            .and_then(|v| v.as_u64())
+                            .and_then(|idx| account_keys.get(idx as usize).cloned())
+                    })
+                    .unwrap_or_default();
+                if program_id != "11111111111111111111111111111111" {
+                    return;
+                }
+                if let Some(parsed) = inst.get("parsed").and_then(|v| v.as_object()) {
+                    let itype = parsed
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_ascii_lowercase();
+                    if itype != "transfer" {
+                        return;
+                    }
+                    if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
+                        let dest = info.get("destination").and_then(|v| v.as_str());
+                        let src = info.get("source").and_then(|v| v.as_str());
+                        let lamports_opt = info.get("lamports").and_then(|v| v.as_u64());
+                        if let (Some(dest), Some(src), Some(lamports)) = (dest, src, lamports_opt) {
+                            let created_in_tx =
+                                ata_created_accounts.contains(dest) ||
+                                created_token_accounts.contains(dest);
+                            if src == wallet && created_in_tx && lamports > 0 {
+                                if !account_rent_spent.contains_key(dest) {
+                                    account_rent_spent.insert(dest.to_string(), lamports);
+                                    account_creators.insert(dest.to_string(), src.to_string());
+                                    if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "ATA_DEBUG",
+                                            &format!(
+                                                "{}: FALLBACK transfer funding new token account -> dest={} lamports={} src={} (dest_is_created_in_tx={})",
+                                                &transaction.signature,
+                                                dest,
+                                                lamports,
+                                                src,
+                                                true
+                                            )
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Outer first
+            for inst in &outer_instructions {
+                ensure_rent_for_atas(inst);
+            }
+            // Then inner
+            if let Some(inner) = &meta.inner_instructions {
+                for entry in inner {
+                    if
+                        let Some(instructions) = entry
+                            .get("instructions")
+                            .and_then(|v| v.as_array())
+                    {
+                        for inst in instructions {
+                            ensure_rent_for_atas(inst);
+                        }
+                    }
+                }
             }
         }
 
@@ -1435,6 +1557,23 @@ impl TransactionProcessor {
                 mint = WSOL_MINT.to_string();
                 include = true; // sync-native implies wallet created native account for wrapping
             }
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "ATA_DEBUG",
+                    &format!(
+                        "{}: RENT_SPENT account={} lamports={} owner_matches_wallet={} created_by_wallet={} later_closed_to_wallet={} mint={} include={}",
+                        &transaction.signature,
+                        account,
+                        lamports,
+                        owner_matches_wallet,
+                        created_by_wallet,
+                        later_closed_to_wallet,
+                        mint,
+                        include
+                    )
+                );
+            }
             if !include {
                 continue;
             }
@@ -1471,6 +1610,7 @@ impl TransactionProcessor {
             let rent_sol = lamports_to_sol(*lamports);
             let is_wsol = mint == WSOL_MINT;
 
+            let mint_for_log = mint.clone();
             operations.push(AtaOperation {
                 operation_type: AtaOperationType::Closure,
                 account_address: account.clone(),
@@ -1480,6 +1620,20 @@ impl TransactionProcessor {
                 mint,
                 rent_cost_sol: Some(rent_sol),
             });
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "ATA_DEBUG",
+                    &format!(
+                        "{}: RENT_RECOVERED account={} lamports={} mint={} is_wsol={} (destination was wallet)",
+                        &transaction.signature,
+                        account,
+                        lamports,
+                        mint_for_log,
+                        is_wsol
+                    )
+                );
+            }
         }
 
         // Enhanced fallback ATA detection for missed closures
@@ -1608,6 +1762,45 @@ impl TransactionProcessor {
                     analysis.total_rent_recovered
                 )
             );
+            // Also log a compact summary of rent maps for troubleshooting
+            if !account_rent_spent.is_empty() {
+                for (acc, lam) in &account_rent_spent {
+                    let owner = account_owners.get(acc).cloned().unwrap_or("?".to_string());
+                    let creator = account_creators.get(acc).cloned().unwrap_or("?".to_string());
+                    let mint = account_mints.get(acc).cloned().unwrap_or("?".to_string());
+                    log(
+                        LogTag::Transactions,
+                        "ATA_SUMMARY",
+                        &format!(
+                            "{}: SPENT acc={} lamports={} owner={} creator={} mint={}",
+                            &transaction.signature,
+                            acc,
+                            lam,
+                            owner,
+                            creator,
+                            mint
+                        )
+                    );
+                }
+            }
+            if !account_rent_recovered.is_empty() {
+                for (acc, lam) in &account_rent_recovered {
+                    let owner = account_owners.get(acc).cloned().unwrap_or("?".to_string());
+                    let mint = account_mints.get(acc).cloned().unwrap_or("?".to_string());
+                    log(
+                        LogTag::Transactions,
+                        "ATA_SUMMARY",
+                        &format!(
+                            "{}: RECOVERED acc={} lamports={} owner={} mint={}",
+                            &transaction.signature,
+                            acc,
+                            lam,
+                            owner,
+                            mint
+                        )
+                    );
+                }
+            }
         }
 
         Ok((operations, Some(analysis)))
@@ -1978,39 +2171,552 @@ impl TransactionProcessor {
                 }
             } else if is_sell {
                 if let Some(exact) = self.detect_wallet_wsol_receive_amount(transaction) {
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "SWAP_CALC_DEBUG",
+                            &format!(
+                                "{}: Detected exact WSOL receive amount: {:.9} SOL ({} lamports)",
+                                &transaction.signature,
+                                exact,
+                                (exact * 1_000_000_000.0) as u64
+                            )
+                        );
+                    }
                     sol_received_from_swap = exact;
+                } else if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "SWAP_CALC_DEBUG",
+                        &format!(
+                            "{}: No exact WSOL receive amount detected; using net_sol+fee path",
+                            &transaction.signature
+                        )
+                    );
                 }
             }
         }
 
-        if let Some(ata) = transaction.ata_analysis.as_ref() {
-            // For sells: WSOL ATA rent recovered should increase effective SOL output
-            if is_sell && ata.wsol_rent_recovered > epsilon {
-                sol_received_from_swap = (sol_received_from_swap + ata.wsol_rent_recovered).max(
-                    0.0
-                );
-            }
-        }
+        // Note: ATA rent recovery is already included in sol_change, so no need to add it again
+        // The sol_change represents the net balance change which includes ATA rent recovery
 
-        // If we couldn't detect the precise WSOL input (fallback path), remove token ATA rent from buy input
+        // If we couldn't detect the precise WSOL input (fallback path), remove TOTAL ATA rent impact from buy input
         if is_buy {
-            let token_rent_delta = transaction.ata_analysis
-                .as_ref()
-                .map(|ata| ata.token_rent_spent - ata.token_rent_recovered)
-                .unwrap_or(0.0);
-            if token_rent_delta.abs() > epsilon {
-                // Only subtract when we likely used the fallback amount (matches sol_spent_for_tokens)
-                if (sol_spent_effective - sol_spent_for_tokens).abs() <= epsilon {
-                    sol_spent_effective = (sol_spent_effective - token_rent_delta).max(0.0);
+            if let Some(ata) = transaction.ata_analysis.as_ref() {
+                // Pure swap input should exclude any rent flows in this tx
+                let total_rent_delta = ata.total_rent_spent - ata.total_rent_recovered; // spent minus recovered
+                if total_rent_delta.abs() > epsilon {
+                    // Only subtract when we likely used the fallback amount (matches sol_spent_for_tokens)
+                    if (sol_spent_effective - sol_spent_for_tokens).abs() <= epsilon {
+                        sol_spent_effective = (sol_spent_effective - total_rent_delta).max(0.0);
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "ATA_RENT_ADJUST",
+                                &format!(
+                                    "{}: BUY rent adjust: total_spent={:.9} -> {:.9} (spent={:.9}, recovered={:.9})",
+                                    &transaction.signature,
+                                    sol_spent_effective + total_rent_delta,
+                                    sol_spent_effective,
+                                    ata.total_rent_spent,
+                                    ata.total_rent_recovered
+                                )
+                            );
+                        }
+                    }
                 }
             }
         } else if is_sell {
-            // For sells, amount2 should be the pure SOL output.
-            // Add back token ATA rent spent within the transaction (minus any token rent recovered).
+            // For sells, amount2 should be the pure SOL output (swap proceeds + fee), excluding any rent recovered and including any rent spent.
             if let Some(ata) = transaction.ata_analysis.as_ref() {
-                let add_back = ata.token_rent_spent - ata.token_rent_recovered;
-                if add_back.abs() > epsilon {
-                    sol_received_from_swap = (sol_received_from_swap + add_back).max(0.0);
+                let rent_adjustment = ata.total_rent_spent - ata.total_rent_recovered; // spent minus recovered
+                if rent_adjustment.abs() > epsilon {
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "ATA_RENT_ADJUST",
+                            &format!(
+                                "{}: SELL rent adjust: output={:.9} -> {:.9} (spent={:.9}, recovered={:.9})",
+                                &transaction.signature,
+                                sol_received_from_swap,
+                                (sol_received_from_swap + rent_adjustment).max(0.0),
+                                ata.total_rent_spent,
+                                ata.total_rent_recovered
+                            )
+                        );
+                    }
+                    sol_received_from_swap = (sol_received_from_swap + rent_adjustment).max(0.0);
+                }
+            } else if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "ATA_RENT_ADJUST",
+                    &format!(
+                        "{}: No ATA analysis available; skipping rent adjustment",
+                        &transaction.signature
+                    )
+                );
+            }
+
+            // Fallback: if ATA analysis is missing, detect rent funding transfers to newly created token accounts in this tx.
+            if transaction.ata_analysis.is_none() {
+                if let Some(meta) = tx_data.meta.as_ref() {
+                    // Build account keys, supporting both string and { pubkey } object forms
+                    let account_keys: Vec<String> = tx_data.transaction.message
+                        .get("accountKeys")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|k| {
+                                    if let Some(s) = k.as_str() {
+                                        Some(s.to_string())
+                                    } else {
+                                        k.get("pubkey")
+                                            .and_then(|s| s.as_str())
+                                            .map(|s| s.to_string())
+                                    }
+                                })
+                                .collect::<Vec<String>>()
+                        })
+                        .unwrap_or_default();
+
+                    // Collect created token accounts from AToken and Token Program initializeAccount*
+                    // Track both the account pubkey and its intended owner to avoid counting wallet-owned accounts (e.g., WSOL ATA)
+                    let mut created_in_tx: std::collections::HashSet<String> = std::collections::HashSet::new();
+                    let mut created_owners: std::collections::HashMap<
+                        String,
+                        String
+                    > = std::collections::HashMap::new();
+                    let wallet_str = self.wallet_pubkey.to_string();
+                    let mut record_created = |inst: &serde_json::Value| {
+                        // Resolve program id from either programId or programIdIndex
+                        let mut program_id: Option<String> = inst
+                            .get("programId")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        if program_id.is_none() {
+                            if let Some(idx) = inst.get("programIdIndex").and_then(|v| v.as_u64()) {
+                                program_id = account_keys.get(idx as usize).cloned();
+                            }
+                        }
+                        let program_id = program_id.as_deref().unwrap_or("");
+                        if let Some(parsed) = inst.get("parsed").and_then(|v| v.as_object()) {
+                            let itype = parsed
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+                            if program_id == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" {
+                                if itype == "create" || itype == "createidempotent" {
+                                    if
+                                        let Some(info) = parsed
+                                            .get("info")
+                                            .and_then(|i| i.as_object())
+                                    {
+                                        if
+                                            let Some(acc) = info
+                                                .get("account")
+                                                .and_then(|v| v.as_str())
+                                        {
+                                            created_in_tx.insert(acc.to_string());
+                                            if
+                                                let Some(owner) = info
+                                                    .get("wallet")
+                                                    .and_then(|v| v.as_str())
+                                            {
+                                                created_owners.insert(
+                                                    acc.to_string(),
+                                                    owner.to_string()
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" {
+                                if
+                                    itype == "initializeaccount" ||
+                                    itype == "initializeaccount2" ||
+                                    itype == "initializeaccount3"
+                                {
+                                    if
+                                        let Some(info) = parsed
+                                            .get("info")
+                                            .and_then(|i| i.as_object())
+                                    {
+                                        if
+                                            let Some(acc) = info
+                                                .get("account")
+                                                .and_then(|v| v.as_str())
+                                        {
+                                            created_in_tx.insert(acc.to_string());
+                                            if
+                                                let Some(owner) = info
+                                                    .get("owner")
+                                                    .and_then(|v| v.as_str())
+                                            {
+                                                created_owners.insert(
+                                                    acc.to_string(),
+                                                    owner.to_string()
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    // Outer instructions
+                    if
+                        let Some(outer) = tx_data.transaction.message
+                            .get("instructions")
+                            .and_then(|v| v.as_array())
+                    {
+                        for inst in outer {
+                            record_created(inst);
+                        }
+                    }
+                    // Inner instructions
+                    if let Some(inner) = &meta.inner_instructions {
+                        for entry in inner {
+                            if
+                                let Some(instructions) = entry
+                                    .get("instructions")
+                                    .and_then(|v| v.as_array())
+                            {
+                                for inst in instructions {
+                                    record_created(inst);
+                                }
+                            }
+                        }
+                    }
+
+                    // Build owners map from token balance metadata to help filter wallet-owned accounts
+                    let mut owners_by_key: std::collections::HashMap<
+                        String,
+                        String
+                    > = std::collections::HashMap::new();
+                    if let Some(pre_toks) = &meta.pre_token_balances {
+                        for tb in pre_toks {
+                            if let Some(owner) = tb.owner.as_ref() {
+                                let idx = tb.account_index as usize;
+                                if let Some(key) = account_keys.get(idx) {
+                                    owners_by_key.insert(key.clone(), owner.clone());
+                                }
+                            }
+                        }
+                    }
+                    if let Some(post_toks) = &meta.post_token_balances {
+                        for tb in post_toks {
+                            if let Some(owner) = tb.owner.as_ref() {
+                                let idx = tb.account_index as usize;
+                                if let Some(key) = account_keys.get(idx) {
+                                    owners_by_key.insert(key.clone(), owner.clone());
+                                }
+                            }
+                        }
+                    }
+
+                    // Seed candidate accounts with any we explicitly detected via parsed instructions
+                    let mut candidate_accounts: std::collections::HashSet<String> = created_in_tx.clone();
+
+                    // If none were detected via parsed instructions, derive candidates via balance heuristics
+                    if candidate_accounts.is_empty() {
+                        const STANDARD_ATA_RENT: u64 = 2_039_280;
+                        let tolerance = STANDARD_ATA_RENT / 20; // 5%
+                        for (idx, key) in account_keys.iter().enumerate() {
+                            // Skip obvious non-candidates
+                            if key == &wallet_str {
+                                continue;
+                            }
+                            if
+                                key == "11111111111111111111111111111111" ||
+                                key == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" ||
+                                key == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" ||
+                                key == "ComputeBudget111111111111111111111111111111"
+                            {
+                                continue;
+                            }
+                            let pre = meta.pre_balances.get(idx).copied().unwrap_or(0);
+                            let post = meta.post_balances.get(idx).copied().unwrap_or(0);
+                            let looks_like_rent =
+                                post >= STANDARD_ATA_RENT.saturating_sub(tolerance) &&
+                                post <= STANDARD_ATA_RENT.saturating_add(tolerance);
+                            // Prefer accounts that appear to be token accounts (owner known) and not owned by wallet
+                            let owner_opt = owners_by_key.get(key);
+                            let owner_differs = owner_opt.map(|o| o != &wallet_str).unwrap_or(true);
+                            if pre == 0 && looks_like_rent && owner_differs {
+                                candidate_accounts.insert(key.clone());
+                            }
+                        }
+                        if self.debug_enabled && !candidate_accounts.is_empty() {
+                            let mut details: Vec<String> = candidate_accounts
+                                .iter()
+                                .map(|k| {
+                                    let owner = owners_by_key
+                                        .get(k)
+                                        .cloned()
+                                        .unwrap_or_else(|| "?".to_string());
+                                    format!("{}->{}", k, owner)
+                                })
+                                .collect();
+                            details.sort();
+                            log(
+                                LogTag::Transactions,
+                                "ATA_RENT_ADJUST",
+                                &format!(
+                                    "{}: SELL fallback candidates (derived from balances): {}",
+                                    &transaction.signature,
+                                    details.join(", ")
+                                )
+                            );
+                        }
+                    }
+
+                    // If we have any candidate accounts, look for SystemProgram transfers/createAccount from wallet to them
+                    if !candidate_accounts.is_empty() {
+                        if self.debug_enabled {
+                            // Log discovered created accounts and owners
+                            let mut details: Vec<String> = Vec::new();
+                            for acc in &candidate_accounts {
+                                let owner = created_owners
+                                    .get(acc)
+                                    .cloned()
+                                    .or_else(|| owners_by_key.get(acc).cloned())
+                                    .unwrap_or_else(|| "?".to_string());
+                                details.push(format!("{}->{}", acc, owner));
+                            }
+                            details.sort();
+                            log(
+                                LogTag::Transactions,
+                                "ATA_RENT_ADJUST",
+                                &format!(
+                                    "{}: SELL fallback created accounts: {}",
+                                    &transaction.signature,
+                                    details.join(", ")
+                                )
+                            );
+                        }
+                        let mut detect_funding = |
+                            inst: &serde_json::Value,
+                            acc_keys: &Vec<String>,
+                            wallet: &str
+                        | -> u64 {
+                            // Resolve program id
+                            let mut pid: Option<String> = inst
+                                .get("programId")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+                            if pid.is_none() {
+                                if
+                                    let Some(idx) = inst
+                                        .get("programIdIndex")
+                                        .and_then(|v| v.as_u64())
+                                {
+                                    pid = acc_keys.get(idx as usize).cloned();
+                                }
+                            }
+                            if pid.as_deref() != Some("11111111111111111111111111111111") {
+                                return 0;
+                            }
+                            let parsed = match inst.get("parsed").and_then(|v| v.as_object()) {
+                                Some(p) => p,
+                                None => {
+                                    return 0;
+                                }
+                            };
+                            let itype = parsed
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+                            let info = match parsed.get("info").and_then(|v| v.as_object()) {
+                                Some(i) => i,
+                                None => {
+                                    return 0;
+                                }
+                            };
+                            if itype == "transfer" {
+                                let dest = info
+                                    .get("destination")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                let src = info
+                                    .get("source")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                let lamports = info
+                                    .get("lamports")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0);
+                                // Only attribute if the created account's owner is not the wallet (avoid counting WSOL ATA etc.)
+                                let owner_differs = created_owners
+                                    .get(dest)
+                                    .map(|o| o != wallet)
+                                    .or_else(|| owners_by_key.get(dest).map(|o| o != wallet))
+                                    .unwrap_or(true);
+                                if self.debug_enabled {
+                                    log(
+                                        LogTag::Transactions,
+                                        "ATA_RENT_ADJUST",
+                                        &format!(
+                                            "{}: SELL fallback check transfer: src={} dest={} lamports={} created_in_tx={} owner_differs={}",
+                                            &transaction.signature,
+                                            src,
+                                            dest,
+                                            lamports,
+                                            candidate_accounts.contains(dest),
+                                            owner_differs
+                                        )
+                                    );
+                                }
+                                if
+                                    src == wallet &&
+                                    lamports > 0 &&
+                                    candidate_accounts.contains(dest) &&
+                                    owner_differs
+                                {
+                                    return lamports;
+                                }
+                            } else if itype == "createaccount" {
+                                // Some flows fund token accounts via createAccount directly
+                                let dest = info
+                                    .get("newAccount")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                // Payer can be in "source" (most common) but support "from" as well just in case
+                                let src = info
+                                    .get("source")
+                                    .and_then(|v| v.as_str())
+                                    .or_else(|| info.get("from").and_then(|v| v.as_str()))
+                                    .unwrap_or("");
+                                let lamports = info
+                                    .get("lamports")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0);
+                                let owner_differs = created_owners
+                                    .get(dest)
+                                    .map(|o| o != wallet)
+                                    .or_else(|| owners_by_key.get(dest).map(|o| o != wallet))
+                                    .unwrap_or(true);
+                                if self.debug_enabled {
+                                    log(
+                                        LogTag::Transactions,
+                                        "ATA_RENT_ADJUST",
+                                        &format!(
+                                            "{}: SELL fallback check createAccount: src={} dest={} lamports={} created_in_tx={} owner_differs={}",
+                                            &transaction.signature,
+                                            src,
+                                            dest,
+                                            lamports,
+                                            candidate_accounts.contains(dest),
+                                            owner_differs
+                                        )
+                                    );
+                                }
+                                if
+                                    src == wallet &&
+                                    lamports > 0 &&
+                                    candidate_accounts.contains(dest) &&
+                                    owner_differs
+                                {
+                                    return lamports;
+                                }
+                            }
+                            0
+                        };
+
+                        let mut rent_lamports: u64 = 0;
+                        // Outer first
+                        if
+                            let Some(outer) = tx_data.transaction.message
+                                .get("instructions")
+                                .and_then(|v| v.as_array())
+                        {
+                            for inst in outer {
+                                rent_lamports = rent_lamports.saturating_add(
+                                    detect_funding(inst, &account_keys, &wallet_str)
+                                );
+                            }
+                        }
+                        // Then inner
+                        if let Some(inner) = &meta.inner_instructions {
+                            for entry in inner {
+                                if
+                                    let Some(instructions) = entry
+                                        .get("instructions")
+                                        .and_then(|v| v.as_array())
+                                {
+                                    for inst in instructions {
+                                        rent_lamports = rent_lamports.saturating_add(
+                                            detect_funding(inst, &account_keys, &wallet_str)
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
+                        // Balance-based fallback for when inner instructions lack parsed data
+                        if rent_lamports == 0 {
+                            const STANDARD_ATA_RENT: u64 = 2_039_280;
+                            let tolerance = STANDARD_ATA_RENT / 20; // 5%
+                            for acc in &candidate_accounts {
+                                // Skip wallet-owned created accounts (e.g., WSOL ATA)
+                                let owner_differs = created_owners
+                                    .get(acc)
+                                    .map(|o| o != &wallet_str)
+                                    .or_else(|| owners_by_key.get(acc).map(|o| o != &wallet_str))
+                                    .unwrap_or(true);
+                                if !owner_differs {
+                                    continue;
+                                }
+                                if let Some(idx) = account_keys.iter().position(|k| k == acc) {
+                                    let pre = meta.pre_balances.get(idx).copied().unwrap_or(0);
+                                    let post = meta.post_balances.get(idx).copied().unwrap_or(0);
+                                    let looks_like_rent =
+                                        post >= STANDARD_ATA_RENT.saturating_sub(tolerance) &&
+                                        post <= STANDARD_ATA_RENT.saturating_add(tolerance);
+                                    if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "ATA_RENT_ADJUST",
+                                            &format!(
+                                                "{}: SELL fallback balance-check: acc={} idx={} pre={} post={} looks_like_rent={}",
+                                                &transaction.signature,
+                                                acc,
+                                                idx,
+                                                pre,
+                                                post,
+                                                looks_like_rent
+                                            )
+                                        );
+                                    }
+                                    if pre == 0 && looks_like_rent {
+                                        rent_lamports = rent_lamports.saturating_add(post);
+                                    }
+                                }
+                            }
+                        }
+
+                        if rent_lamports > 0 {
+                            let rent_sol = lamports_to_sol(rent_lamports);
+                            let before = sol_received_from_swap;
+                            sol_received_from_swap = (sol_received_from_swap + rent_sol).max(0.0);
+                            if self.debug_enabled {
+                                log(
+                                    LogTag::Transactions,
+                                    "ATA_RENT_ADJUST",
+                                    &format!(
+                                        "{}: SELL rent fallback adjust: output={:.9} -> {:.9} (rent_spent_detected={:.9} SOL)",
+                                        &transaction.signature,
+                                        before,
+                                        sol_received_from_swap,
+                                        rent_sol
+                                    )
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2045,104 +2751,7 @@ impl TransactionProcessor {
                 }
             }
         } else if is_sell {
-            // More selective ATA rent adjustment logic
-            // Apply when there's strong evidence that ATA rent recovery occurred but wasn't detected
-            let output_lamports = (sol_received_from_swap * 1_000_000_000.0) as u64;
-
-            let ata_rent_recovered = transaction.ata_analysis
-                .as_ref()
-                .map(|ata| (ata.wsol_rent_recovered * 1_000_000_000.0) as u64)
-                .unwrap_or(0);
-
-            // Apply ATA rent adjustment when we have evidence of missing ATA rent recovery
-            let has_detected_closures_without_recovery = transaction.ata_analysis
-                .as_ref()
-                .map_or(false, |ata| {
-                    // We detected ATA closures but got no rent recovery
-                    ata.total_ata_closures > 0 && ata.total_rent_recovered == 0.0
-                });
-
-            // Heuristic for completely missed ATA closures: reasonable sell amount that could be missing one ATA rent
-            let likely_missing_ata_rent =
-                output_lamports > 1_000_000 &&
-                output_lamports < 50_000_000 &&
-                transaction.ata_analysis.as_ref().map_or(true, |ata| {
-                    // Only apply heuristic if we detected no ATA activity at all
-                    ata.total_ata_closures == 0 && ata.total_rent_recovered == 0.0
-                });
-
-            if self.debug_enabled {
-                let ata_info = transaction.ata_analysis
-                    .as_ref()
-                    .map(|ata|
-                        format!(
-                            "closures={}, recovered={}",
-                            ata.total_ata_closures,
-                            ata.total_rent_recovered
-                        )
-                    )
-                    .unwrap_or_else(|| "None".to_string());
-                log(
-                    LogTag::Transactions,
-                    "ATA_RENT_DEBUG",
-                    &format!(
-                        "ATA rent check: output_lamports={}, ata_rent_recovered={}, has_detected_closures={}, likely_missing={}, ATA: {}",
-                        output_lamports,
-                        ata_rent_recovered,
-                        has_detected_closures_without_recovery,
-                        likely_missing_ata_rent,
-                        ata_info
-                    )
-                );
-            }
-
-            let should_adjust_ata_rent =
-                ata_rent_recovered == 0 &&
-                (has_detected_closures_without_recovery || likely_missing_ata_rent);
-
-            if should_adjust_ata_rent {
-                // Common ATA rent amounts to check for and add back
-                let common_ata_rents = [2_039_280]; // Standard ATA rent amount
-
-                for &rent in &common_ata_rents {
-                    let adjusted = output_lamports.saturating_add(rent);
-
-                    if self.debug_enabled {
-                        log(
-                            LogTag::Transactions,
-                            "ATA_HEURISTIC_DEBUG",
-                            &format!(
-                                "Checking ATA rent adjustment (detected closures but no recovery): {} + {} = {}",
-                                output_lamports,
-                                rent,
-                                adjusted
-                            )
-                        );
-                    }
-
-                    // Only apply if this looks like a reasonable adjustment
-                    if adjusted > output_lamports && adjusted < 100_000_000 {
-                        let adjusted_sol = (adjusted as f64) / 1_000_000_000.0;
-
-                        if self.debug_enabled {
-                            log(
-                                LogTag::Transactions,
-                                "FINAL_ATA_ADJUSTMENT",
-                                &format!(
-                                    "{}: ATA rent recovery adjustment: {:.9} -> {:.9} SOL (added {} lamport rent)",
-                                    &transaction.signature,
-                                    sol_received_from_swap,
-                                    adjusted_sol,
-                                    rent
-                                )
-                            );
-                        }
-
-                        sol_received_from_swap = adjusted_sol;
-                        break;
-                    }
-                }
-            }
+            // No further ATA heuristics for sells; rent flows are handled by the principled adjustment above.
         }
 
         let (swap_type, input_mint, output_mint, input_ui_amount, output_ui_amount) = if is_buy {
@@ -2270,18 +2879,23 @@ impl TransactionProcessor {
         }
 
         if let Some(ata) = &transaction.ata_analysis {
-            let rent_delta = ata.token_rent_spent - ata.token_rent_recovered;
+            // Use TOTAL rent delta to reflect all rent flows this tx
+            let total_rent_delta = ata.total_rent_spent - ata.total_rent_recovered; // spent minus recovered
             pnl_info.ata_created_count = ata.token_ata_creations;
             pnl_info.ata_closed_count = ata.token_ata_closures;
-            pnl_info.ata_rents = rent_delta;
+            pnl_info.ata_rents = total_rent_delta;
 
             if swap_direction == "Buy" {
+                // Effective SOL spent for tokens should exclude rent flows
                 pnl_info.effective_sol_spent = (
-                    pnl_info.effective_sol_spent - rent_delta.max(0.0)
+                    pnl_info.effective_sol_spent - total_rent_delta.max(0.0)
                 ).max(0.0);
             } else if swap_direction == "Sell" {
-                if rent_delta < 0.0 {
-                    pnl_info.effective_sol_received += rent_delta.abs();
+                // Effective SOL received for tokens should include rent spent and exclude rent recovered
+                if total_rent_delta.abs() > f64::EPSILON {
+                    pnl_info.effective_sol_received = (
+                        pnl_info.effective_sol_received + total_rent_delta
+                    ).max(0.0);
                 }
             }
         }
@@ -3068,6 +3682,124 @@ impl TransactionProcessor {
             }
         };
 
+        // Helper: determine if a token account was created/initialized for this wallet in this tx
+        let dst_was_initialized_for_wallet = |dst: &str| -> bool {
+            // Check AToken createIdempotent for WSOL + this wallet
+            if
+                let Some(outer) = raw
+                    .get("transaction")
+                    .and_then(|tx| tx.get("message"))
+                    .and_then(|m| m.get("instructions"))
+                    .and_then(|v| v.as_array())
+            {
+                for instruction in outer {
+                    if
+                        let (Some(program_id), Some(parsed)) = (
+                            instruction.get("programId").and_then(|v| v.as_str()),
+                            instruction.get("parsed").and_then(|v| v.as_object()),
+                        )
+                    {
+                        if program_id == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" {
+                            let itype = parsed
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+                            if itype == "createidempotent" {
+                                if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
+                                    let mint_matches_wsol = info
+                                        .get("mint")
+                                        .and_then(|v| v.as_str())
+                                        .map(|m| m == WSOL_MINT)
+                                        .unwrap_or(false);
+                                    let wallet_matches = info
+                                        .get("wallet")
+                                        .and_then(|v| v.as_str())
+                                        .map(|w| w == wallet)
+                                        .unwrap_or(false);
+                                    let acc = info.get("account").and_then(|v| v.as_str());
+                                    if mint_matches_wsol && wallet_matches {
+                                        if let Some(acc) = acc {
+                                            if acc == dst {
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check Token initializeAccount/3 for owner == wallet and account == dst
+            let mut check_parsed_init = |inst: &serde_json::Map<String, Value>| -> bool {
+                let itype = inst
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if
+                    itype == "initializeaccount" ||
+                    itype == "initializeaccount2" ||
+                    itype == "initializeaccount3"
+                {
+                    if let Some(info) = inst.get("info").and_then(|v| v.as_object()) {
+                        let acc = info.get("account").and_then(|v| v.as_str());
+                        let owner = info.get("owner").and_then(|v| v.as_str());
+                        if let (Some(acc), Some(owner)) = (acc, owner) {
+                            if acc == dst && owner == wallet {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            };
+
+            if
+                let Some(inner) = raw
+                    .get("meta")
+                    .and_then(|m| m.get("innerInstructions"))
+                    .and_then(|v| v.as_array())
+            {
+                for entry in inner {
+                    if
+                        let Some(instructions) = entry
+                            .get("instructions")
+                            .and_then(|v| v.as_array())
+                    {
+                        for inst in instructions {
+                            if let Some(parsed) = inst.get("parsed").and_then(|v| v.as_object()) {
+                                // programId can be token or others; we only care about parsed type
+                                if check_parsed_init(parsed) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if
+                let Some(outer) = raw
+                    .get("transaction")
+                    .and_then(|tx| tx.get("message"))
+                    .and_then(|m| m.get("instructions"))
+                    .and_then(|v| v.as_array())
+            {
+                for inst in outer {
+                    if let Some(parsed) = inst.get("parsed").and_then(|v| v.as_object()) {
+                        if check_parsed_init(parsed) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            false
+        };
+
         // Scan inner first (support programIdIndex indirection too)
         if
             let Some(inner) = raw
@@ -3123,10 +3855,13 @@ impl TransactionProcessor {
                         if let (Some(src), Some(dst)) = (src, dst) {
                             let src_owner = owner_map.get(src);
                             let dst_owner = owner_map.get(dst);
-                            if let Some(dst_owner) = dst_owner {
-                                if dst_owner != &wallet {
-                                    continue;
-                                }
+                            // Accept if owner_map shows wallet OR we initialized/created it in this tx
+                            let dst_ok = match dst_owner {
+                                Some(o) => o == &wallet,
+                                None => dst_was_initialized_for_wallet(dst),
+                            };
+                            if !dst_ok {
+                                continue;
                             }
                             if let Some(src_owner) = src_owner {
                                 if src_owner == &wallet {

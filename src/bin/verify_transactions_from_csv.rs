@@ -444,58 +444,22 @@ fn verify_swap_amounts(
         }
     }
 
-    // For sell transactions (token_to_sol), handle ATA rent reconciliation carefully
-    // Some transactions show net amounts (after ATA recovery) vs CSV gross amounts
+    // For sell transactions (token_to_sol), our processor adds ATA rent recovery to output
+    // when the CSV shows pure swap amounts. Only subtract ATA rent if we significantly
+    // over-include it (actual > expected by roughly ATA rent amount)
     if swap.swap_type == "token_to_sol" {
-        let excess = actual_output_raw - (expected_output_raw as i128);
-        let deficit = (expected_output_raw as i128) - actual_output_raw;
-        let mut ata_rent_adjusted = false;
-
-        // First try explicit PnL ata_rents if available
         if let Some(pnl) = pnl_info {
-            let ata_rent_lamports = (pnl.ata_rents.abs() * 1_000_000_000.0) as i128;
+            let ata_rent_lamports = (pnl.ata_rents * 1_000_000_000.0) as i128;
             if ata_rent_lamports > 0 {
-                let ata_rent_tolerance = ata_rent_lamports / 10; // 10% tolerance
-
-                // Case 1: We calculated more than expected (need to subtract ATA rent)
-                if
-                    excess >= ata_rent_lamports - ata_rent_tolerance &&
-                    excess <= ata_rent_lamports + ata_rent_tolerance
-                {
-                    actual_output_raw = actual_output_raw.saturating_sub(ata_rent_lamports);
-                    ata_rent_adjusted = true;
-                } else if
-                    // Case 2: We calculated less than expected (need to add ATA rent) - specific patterns only
-                    deficit > 0
-                {
-                    // Only adjust for specific small deficit patterns, not large ATA rents
-                    let small_deficit_patterns = [61867_i128, 61866_i128, 61868_i128]; // Observed patterns
-                    for &pattern in &small_deficit_patterns {
-                        let pattern_tolerance = pattern / 5; // 20% tolerance for small amounts
-                        if
-                            deficit >= pattern - pattern_tolerance &&
-                            deficit <= pattern + pattern_tolerance
-                        {
-                            actual_output_raw = actual_output_raw.saturating_add(pattern);
-                            ata_rent_adjusted = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        // If no explicit PnL ata_rents, check for common ATA rent amounts (heuristic adjustments)
-        if !ata_rent_adjusted && excess > 0 {
-            let common_ata_rents = [2_039_280_i128, 2_039_279_i128]; // Standard ATA rent amounts
-            for &ata_rent_lamports in &common_ata_rents {
+                let excess = actual_output_raw - (expected_output_raw as i128);
+                // Only subtract ATA rent if we're over by approximately the ATA rent amount
+                // (within 10% tolerance to account for minor variations)
                 let ata_rent_tolerance = ata_rent_lamports / 10; // 10% tolerance
                 if
                     excess >= ata_rent_lamports - ata_rent_tolerance &&
                     excess <= ata_rent_lamports + ata_rent_tolerance
                 {
                     actual_output_raw = actual_output_raw.saturating_sub(ata_rent_lamports);
-                    break;
                 }
             }
         }
