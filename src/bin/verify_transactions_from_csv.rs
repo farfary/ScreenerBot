@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 //! Verify transaction swap analysis against a Solscan CSV export.
 //!
 //! This tool parses a Solscan DeFi activities export, reprocesses each
@@ -53,6 +55,14 @@ struct Args {
     /// Check only a specific transaction signature
     #[arg(long, value_name = "SIGNATURE")]
     signature: Option<String>,
+
+    /// Read raw transactions from cache only (no RPC fetch). Fast and deterministic.
+    #[arg(long)]
+    cache_only: bool,
+
+    /// Force refresh raw transactions from RPC even when cache exists.
+    #[arg(long)]
+    force_refresh: bool,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -134,6 +144,12 @@ async fn main() -> Result<()> {
     let mut cmd_args = vec!["verify_transactions_from_csv".to_string()];
     if args.debug_transactions {
         cmd_args.push("--debug-transactions".to_string());
+    }
+    if args.cache_only {
+        cmd_args.push("--cache-only".to_string());
+    }
+    if args.force_refresh {
+        cmd_args.push("--force-refresh".to_string());
     }
     set_cmd_args(cmd_args);
 
@@ -420,50 +436,10 @@ fn verify_swap_amounts(
         format!("Failed to parse Token2 amount: {}", e)
     )?;
 
-    let mut actual_input_raw = swap.input_amount as i128;
-    let mut actual_output_raw = swap.output_amount as i128;
-
-    // For buy transactions (sol_to_token), sometimes our processing includes ATA rent
-    // when the CSV shows pure swap amounts. Only subtract ATA rent if we significantly
-    // over-include it (actual > expected by roughly ATA rent amount)
-    if swap.swap_type == "sol_to_token" {
-        if let Some(pnl) = pnl_info {
-            let ata_rent_lamports = (pnl.ata_rents * 1_000_000_000.0) as i128;
-            if ata_rent_lamports > 0 {
-                let excess = actual_input_raw - (expected_input_raw as i128);
-                // Only subtract ATA rent if we're over by approximately the ATA rent amount
-                // (within 10% tolerance to account for minor variations)
-                let ata_rent_tolerance = ata_rent_lamports / 10; // 10% tolerance
-                if
-                    excess >= ata_rent_lamports - ata_rent_tolerance &&
-                    excess <= ata_rent_lamports + ata_rent_tolerance
-                {
-                    actual_input_raw = actual_input_raw.saturating_sub(ata_rent_lamports);
-                }
-            }
-        }
-    }
-
-    // For sell transactions (token_to_sol), our processor adds ATA rent recovery to output
-    // when the CSV shows pure swap amounts. Only subtract ATA rent if we significantly
-    // over-include it (actual > expected by roughly ATA rent amount)
-    if swap.swap_type == "token_to_sol" {
-        if let Some(pnl) = pnl_info {
-            let ata_rent_lamports = (pnl.ata_rents * 1_000_000_000.0) as i128;
-            if ata_rent_lamports > 0 {
-                let excess = actual_output_raw - (expected_output_raw as i128);
-                // Only subtract ATA rent if we're over by approximately the ATA rent amount
-                // (within 10% tolerance to account for minor variations)
-                let ata_rent_tolerance = ata_rent_lamports / 10; // 10% tolerance
-                if
-                    excess >= ata_rent_lamports - ata_rent_tolerance &&
-                    excess <= ata_rent_lamports + ata_rent_tolerance
-                {
-                    actual_output_raw = actual_output_raw.saturating_sub(ata_rent_lamports);
-                }
-            }
-        }
-    }
+    // The verifier is a diagnostics-only tool: it must not adjust values.
+    // Compare the processor's output verbatim against CSV expectations.
+    let actual_input_raw = swap.input_amount as i128;
+    let actual_output_raw = swap.output_amount as i128;
 
     let input_diff = ((expected_input_raw as i128) - actual_input_raw).abs();
     let output_diff = ((expected_output_raw as i128) - actual_output_raw).abs();

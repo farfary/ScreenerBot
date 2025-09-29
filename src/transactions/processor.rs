@@ -11,6 +11,7 @@ use std::time::{ Duration, Instant };
 // Using our centralized RPC TransactionDetails type
 
 use crate::global::is_debug_transactions_enabled;
+use crate::arguments::{ is_cache_only_enabled, is_force_refresh_enabled };
 use crate::logger::{ log, LogTag };
 
 use crate::tokens::{ decimals::lamports_to_sol, get_token_decimals, get_token_from_db };
@@ -71,6 +72,7 @@ impl TransactionProcessor {
     ) -> f64 {
         let wallet = self.wallet_pubkey.to_string();
         let mut total_tips = 0.0;
+        let mut counted_transfers: HashSet<(String, String, u64)> = HashSet::new();
 
         if self.debug_enabled {
             log(
@@ -82,6 +84,125 @@ impl TransactionProcessor {
 
         let message = &tx_data.transaction.message;
         let account_keys = account_keys_from_message(message);
+
+        // Pre-scan to identify accounts that should NOT be considered tips recipients:
+        // - Token accounts created/initialized in this tx (likely ATA funding)
+        // - Wallet's WSOL ATA (funding WSOL for buys)
+        // - Accounts that are SyncNative'd (WSOL native accounts)
+        let mut created_token_accounts: HashSet<String> = HashSet::new();
+        let mut wallet_wsol_ata: Option<String> = None;
+        let mut sync_native_accounts: HashSet<String> = HashSet::new();
+
+        let record_inst_for_exclusions = |
+            inst: &Value,
+            created_token_accounts: &mut HashSet<String>,
+            wallet_wsol_ata: &mut Option<String>,
+            sync_native_accounts: &mut HashSet<String>,
+            account_keys: &Vec<String>,
+            wallet: &str
+        | {
+            let program_id = inst
+                .get("programId")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    inst.get("programIdIndex")
+                        .and_then(|v| v.as_u64())
+                        .and_then(|idx| account_keys.get(idx as usize).cloned())
+                })
+                .unwrap_or_default();
+            if program_id.is_empty() {
+                return;
+            }
+            if let Some(parsed) = inst.get("parsed").and_then(|v| v.as_object()) {
+                let itype = parsed
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                // Associated Token Program: capture created accounts and detect wallet WSOL ATA
+                if program_id == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" {
+                    if itype == "create" || itype == "createidempotent" {
+                        if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
+                            if let Some(acc) = info.get("account").and_then(|v| v.as_str()) {
+                                created_token_accounts.insert(acc.to_string());
+                            }
+                            // Detect wallet WSOL ATA
+                            let is_wsol = info
+                                .get("mint")
+                                .and_then(|v| v.as_str())
+                                .map(|m| m == WSOL_MINT)
+                                .unwrap_or(false);
+                            let wallet_matches = info
+                                .get("wallet")
+                                .and_then(|v| v.as_str())
+                                .map(|w| w == wallet)
+                                .unwrap_or(false);
+                            if is_wsol && wallet_matches {
+                                if let Some(acc) = info.get("account").and_then(|v| v.as_str()) {
+                                    *wallet_wsol_ata = Some(acc.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+                // Token Program: capture initializeAccount* and SyncNative
+                if program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" {
+                    if
+                        itype == "initializeaccount" ||
+                        itype == "initializeaccount2" ||
+                        itype == "initializeaccount3"
+                    {
+                        if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
+                            if let Some(acc) = info.get("account").and_then(|v| v.as_str()) {
+                                created_token_accounts.insert(acc.to_string());
+                            }
+                        }
+                    } else if itype == "syncnative" {
+                        if
+                            let Some(acc) = parsed
+                                .get("info")
+                                .and_then(|v| v.as_object())
+                                .and_then(|i| i.get("account"))
+                                .and_then(|v| v.as_str())
+                        {
+                            sync_native_accounts.insert(acc.to_string());
+                        }
+                    }
+                }
+            }
+        };
+
+        // Scan outer instructions
+        if let Some(outer) = message.get("instructions").and_then(|v| v.as_array()) {
+            for inst in outer {
+                record_inst_for_exclusions(
+                    inst,
+                    &mut created_token_accounts,
+                    &mut wallet_wsol_ata,
+                    &mut sync_native_accounts,
+                    &account_keys,
+                    &wallet
+                );
+            }
+        }
+        // Scan inner instructions
+        if let Some(inner) = tx_data.meta.as_ref().and_then(|m| m.inner_instructions.as_ref()) {
+            for entry in inner {
+                if let Some(instructions) = entry.get("instructions").and_then(|v| v.as_array()) {
+                    for inst in instructions {
+                        record_inst_for_exclusions(
+                            inst,
+                            &mut created_token_accounts,
+                            &mut wallet_wsol_ata,
+                            &mut sync_native_accounts,
+                            &account_keys,
+                            &wallet
+                        );
+                    }
+                }
+            }
+        }
 
         // Check outer instructions for system transfers to MEV addresses
         if let Some(instructions) = message.get("instructions").and_then(|v| v.as_array()) {
@@ -157,43 +278,72 @@ impl TransactionProcessor {
 
                             // Check if this is a transfer from wallet to MEV address
                             if let (Some(source), Some(dest)) = (source_account, dest_account) {
-                                if source == wallet && Self::is_mev_tip_address(&dest) {
-                                    // This is likely a system transfer (tip), try to decode the amount from instruction data
-                                    if
-                                        let Some(data_str) = instruction
-                                            .get("data")
-                                            .and_then(|v| v.as_str())
-                                    {
-                                        if let Ok(decoded) = bs58::decode(data_str).into_vec() {
-                                            if self.debug_enabled {
-                                                log(
-                                                    LogTag::Transactions,
-                                                    "TIP_DEBUG",
-                                                    &format!(
-                                                        "System instruction data: {:?} (len={})",
-                                                        decoded,
-                                                        decoded.len()
-                                                    )
-                                                );
-                                            }
+                                // Decode lamports amount from raw data when parsed info isn't available
+                                let decode_lamports = || -> Option<u64> {
+                                    let data_str = instruction
+                                        .get("data")
+                                        .and_then(|v| v.as_str())?;
+                                    let decoded = bs58::decode(data_str).into_vec().ok()?;
+                                    if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "TIP_DEBUG",
+                                            &format!(
+                                                "System instruction data: {:?} (len={})",
+                                                decoded,
+                                                decoded.len()
+                                            )
+                                        );
+                                    }
+                                    if decoded.len() >= 12 && decoded[0] == 2 {
+                                        let lamports_bytes = &decoded[4..12];
+                                        let lamports = u64::from_le_bytes(
+                                            lamports_bytes.try_into().unwrap_or([0; 8])
+                                        );
+                                        Some(lamports)
+                                    } else {
+                                        None
+                                    }
+                                };
 
-                                            // System transfer instruction format: [2, 0, 0, 0] followed by 8-byte lamports amount (little endian)
-                                            if decoded.len() >= 12 && decoded[0] == 2 {
-                                                let lamports_bytes = &decoded[4..12];
-                                                let lamports = u64::from_le_bytes(
-                                                    lamports_bytes.try_into().unwrap_or([0; 8])
-                                                );
+                                if source == wallet {
+                                    if let Some(lamports) = decode_lamports() {
+                                        let destination_is_mev = Self::is_mev_tip_address(&dest);
+                                        let destination_is_created =
+                                            created_token_accounts.contains(&dest);
+                                        let destination_is_wallet_wsol_ata = wallet_wsol_ata
+                                            .as_deref()
+                                            .map(|w| w == dest)
+                                            .unwrap_or(false);
+                                        let destination_is_syncnative =
+                                            sync_native_accounts.contains(&dest);
+
+                                        let transfer_key = (source.clone(), dest.clone(), lamports);
+                                        if counted_transfers.insert(transfer_key) {
+                                            if
+                                                destination_is_mev ||
+                                                (!destination_is_created &&
+                                                    !destination_is_wallet_wsol_ata &&
+                                                    !destination_is_syncnative)
+                                            {
                                                 let tip_amount = lamports_to_sol(lamports);
-
                                                 total_tips += tip_amount;
-
                                                 if self.debug_enabled {
                                                     log(
                                                         LogTag::Transactions,
-                                                        "TIP_DETECTED",
+                                                        if destination_is_mev {
+                                                            "TIP_DETECTED"
+                                                        } else {
+                                                            "TIP_DETECTED"
+                                                        },
                                                         &format!(
-                                                            "{}: MEV tip {} SOL ({} lamports) to {} (system instruction {})",
+                                                            "{}: {} {} SOL ({} lamports) to {} (system instruction {})",
                                                             &transaction.signature,
+                                                            if destination_is_mev {
+                                                                "MEV tip"
+                                                            } else {
+                                                                "Priority fee"
+                                                            },
                                                             tip_amount,
                                                             lamports,
                                                             &dest,
@@ -201,6 +351,17 @@ impl TransactionProcessor {
                                                         )
                                                     );
                                                 }
+                                            } else if self.debug_enabled {
+                                                log(
+                                                    LogTag::Transactions,
+                                                    "TIP_DEBUG",
+                                                    &format!(
+                                                        "Ignoring system transfer in tip calc: dest_created={} dest_wallet_wsol_ata={} dest_syncnative={}",
+                                                        destination_is_created,
+                                                        destination_is_wallet_wsol_ata,
+                                                        destination_is_syncnative
+                                                    )
+                                                );
                                             }
                                         }
                                     }
@@ -240,25 +401,43 @@ impl TransactionProcessor {
                                     .unwrap_or(0);
                                 let source_is_wallet = source == wallet;
                                 let destination_is_mev = Self::is_mev_tip_address(destination);
+                                let destination_is_created =
+                                    created_token_accounts.contains(destination);
+                                let destination_is_wallet_wsol_ata = wallet_wsol_ata
+                                    .as_deref()
+                                    .map(|w| w == destination)
+                                    .unwrap_or(false);
+                                let destination_is_syncnative =
+                                    sync_native_accounts.contains(destination);
 
                                 if self.debug_enabled {
                                     log(
                                         LogTag::Transactions,
                                         "TIP_DEBUG",
                                         &format!(
-                                            "Transfer: {} lamports from {} (is_wallet={}) to {} (is_mev={})",
+                                            "Transfer: {} lamports from {} (is_wallet={}) to {} (is_mev={}) excl:created={} wsol_ata={} syncnative={}",
                                             lamports,
                                             source,
                                             source_is_wallet,
                                             destination,
-                                            destination_is_mev
+                                            destination_is_mev,
+                                            destination_is_created,
+                                            destination_is_wallet_wsol_ata,
+                                            destination_is_syncnative
                                         )
                                     );
                                 }
 
                                 if source_is_wallet && destination_is_mev {
                                     let tip_amount = lamports_to_sol(lamports);
-                                    total_tips += tip_amount;
+                                    let key = (
+                                        source.to_string(),
+                                        destination.to_string(),
+                                        lamports,
+                                    );
+                                    if counted_transfers.insert(key) {
+                                        total_tips += tip_amount;
+                                    }
 
                                     if self.debug_enabled {
                                         log(
@@ -270,6 +449,47 @@ impl TransactionProcessor {
                                                 tip_amount,
                                                 lamports,
                                                 destination
+                                            )
+                                        );
+                                    }
+                                } else if source_is_wallet && lamports > 0 {
+                                    // Generalize: count non-MEV System transfers as priority fees when they are not ATA/WSOL funding
+                                    if
+                                        !destination_is_created &&
+                                        !destination_is_wallet_wsol_ata &&
+                                        !destination_is_syncnative
+                                    {
+                                        let tip_amount = lamports_to_sol(lamports);
+                                        let key = (
+                                            source.to_string(),
+                                            destination.to_string(),
+                                            lamports,
+                                        );
+                                        if counted_transfers.insert(key) {
+                                            total_tips += tip_amount;
+                                        }
+                                        if self.debug_enabled {
+                                            log(
+                                                LogTag::Transactions,
+                                                "TIP_DETECTED",
+                                                &format!(
+                                                    "{}: Priority fee {} SOL ({} lamports) to {} (non-MEV)",
+                                                    &transaction.signature,
+                                                    tip_amount,
+                                                    lamports,
+                                                    destination
+                                                )
+                                            );
+                                        }
+                                    } else if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "TIP_DEBUG",
+                                            &format!(
+                                                "Ignoring wallet System transfer as non-tip: dest_created={} dest_wallet_wsol_ata={} dest_syncnative={}",
+                                                destination_is_created,
+                                                destination_is_wallet_wsol_ata,
+                                                destination_is_syncnative
                                             )
                                         );
                                     }
@@ -478,13 +698,110 @@ impl TransactionProcessor {
         &self,
         signature: &str
     ) -> Result<crate::rpc::TransactionDetails, String> {
-        self.fetcher.fetch_transaction_details(signature).await.map_err(|e| {
+        // Cache-first path: try DB unless force-refresh is requested
+        let cache_only = is_cache_only_enabled();
+        let force_refresh = is_force_refresh_enabled();
+
+        if !force_refresh {
+            if let Some(db) = crate::transactions::database::get_transaction_database().await {
+                match db.get_raw_transaction_details(signature).await {
+                    Ok(Some(details)) => {
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "DB_HIT",
+                                &format!("Raw tx cache hit for {}", signature)
+                            );
+                        }
+                        return Ok(details);
+                    }
+                    Ok(None) => {
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "DB_MISS",
+                                &format!("No cached raw tx for {}", signature)
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Transactions,
+                            "WARN",
+                            &format!("DB read error for {}: {}", signature, e)
+                        );
+                    }
+                }
+            }
+        }
+
+        if cache_only {
+            return Err(
+                format!("Cache-only mode: raw transaction not available in DB for {}", signature)
+            );
+        }
+
+        // Otherwise fetch from RPC and persist raw blob immediately
+        let details = self.fetcher.fetch_transaction_details(signature).await.map_err(|e| {
             if e.contains("not found") || e.contains("no longer available") {
                 format!("Transaction not found: {}", signature)
             } else {
                 format!("Failed to fetch transaction data: {}", e)
             }
-        })
+        })?;
+
+        // Persist raw snapshot for future cache hits
+        if let Some(db) = crate::transactions::database::get_transaction_database().await {
+            // Build a minimal Transaction record just to store raw blob and metadata
+            let mut tx = Transaction::new(signature.to_string());
+            tx.slot = Some(details.slot);
+            tx.block_time = details.block_time;
+            tx.timestamp = if let Some(bt) = details.block_time {
+                DateTime::<Utc>::from_timestamp(bt, 0).unwrap_or_else(|| Utc::now())
+            } else {
+                Utc::now()
+            };
+            let success = details.meta
+                .as_ref()
+                .map_or(
+                    false,
+                    |m| (m.err.is_none() || m.err.as_ref().map_or(false, |e| e.is_null()))
+                );
+            tx.status = if success {
+                TransactionStatus::Finalized
+            } else {
+                TransactionStatus::Failed("Failed".to_string())
+            };
+            tx.success = success;
+            tx.fee_lamports = details.meta.as_ref().map(|m| m.fee);
+            tx.instructions_count = details.transaction.message
+                .get("instructions")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            tx.accounts_count = details.transaction.message
+                .get("accountKeys")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            tx.raw_transaction_data = serde_json::to_value(&details).ok();
+
+            if let Err(e) = db.store_raw_transaction(&tx).await {
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    &format!("Failed to persist raw tx {}: {}", signature, e)
+                );
+            } else if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "CACHE_STORE",
+                    &format!("Stored raw {} to cache", signature)
+                );
+            }
+        }
+
+        Ok(details)
     }
 
     /// Create Transaction structure from raw blockchain data
@@ -2117,8 +2434,8 @@ impl TransactionProcessor {
             (net_sol_received + fee_sol).max(0.0)
         };
 
-        // Router-specific precise extraction overrides
-        if matches!(router.as_str(), "jupiter" | "pumpfun") {
+        // Precise WSOL extraction overrides (attempt for all routers)
+        {
             if is_buy {
                 if self.debug_enabled {
                     log(
@@ -2202,24 +2519,361 @@ impl TransactionProcessor {
 
         // If we couldn't detect the precise WSOL input (fallback path), remove TOTAL ATA rent impact from buy input
         if is_buy {
-            if let Some(ata) = transaction.ata_analysis.as_ref() {
-                // Pure swap input should exclude any rent flows in this tx
-                let total_rent_delta = ata.total_rent_spent - ata.total_rent_recovered; // spent minus recovered
-                if total_rent_delta.abs() > epsilon {
-                    // Only subtract when we likely used the fallback amount (matches sol_spent_for_tokens)
-                    if (sol_spent_effective - sol_spent_for_tokens).abs() <= epsilon {
-                        sol_spent_effective = (sol_spent_effective - total_rent_delta).max(0.0);
+            // Do not adjust buys using ata_analysis (that over-corrects common WSOL-funded flows).
+            // We'll use a conservative fallback only when ata_analysis is None further below.
+            if transaction.ata_analysis.is_some() && self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "ATA_RENT_ADJUST",
+                    &format!(
+                        "{}: ATA analysis present; skipping buy-side rent adjustment (handled by core calc)",
+                        &transaction.signature
+                    )
+                );
+            }
+
+            // Fallback for buys: if ATA analysis is missing, detect rent funding from System transfers
+            if transaction.ata_analysis.is_none() {
+                if let Some(meta) = tx_data.meta.as_ref() {
+                    // Build account keys list (strings or { pubkey })
+                    let account_keys: Vec<String> = tx_data.transaction.message
+                        .get("accountKeys")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|k| {
+                                    if let Some(s) = k.as_str() {
+                                        Some(s.to_string())
+                                    } else {
+                                        k.get("pubkey")
+                                            .and_then(|s| s.as_str())
+                                            .map(|s| s.to_string())
+                                    }
+                                })
+                                .collect::<Vec<String>>()
+                        })
+                        .unwrap_or_default();
+
+                    // Gather created accounts (AToken create* and Token initializeAccount*) and their owners
+                    let mut created_in_tx: std::collections::HashSet<String> = std::collections::HashSet::new();
+                    let mut created_owners: std::collections::HashMap<
+                        String,
+                        String
+                    > = std::collections::HashMap::new();
+                    let wallet_str = self.wallet_pubkey.to_string();
+                    let mut record_created = |inst: &serde_json::Value| {
+                        // Resolve program id from programId or programIdIndex
+                        let mut program_id: Option<String> = inst
+                            .get("programId")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        if program_id.is_none() {
+                            if let Some(idx) = inst.get("programIdIndex").and_then(|v| v.as_u64()) {
+                                program_id = account_keys.get(idx as usize).cloned();
+                            }
+                        }
+                        let program_id = program_id.as_deref().unwrap_or("");
+                        if let Some(parsed) = inst.get("parsed").and_then(|v| v.as_object()) {
+                            let itype = parsed
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+                            if program_id == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" {
+                                if itype == "create" || itype == "createidempotent" {
+                                    if
+                                        let Some(info) = parsed
+                                            .get("info")
+                                            .and_then(|i| i.as_object())
+                                    {
+                                        if
+                                            let Some(acc) = info
+                                                .get("account")
+                                                .and_then(|v| v.as_str())
+                                        {
+                                            created_in_tx.insert(acc.to_string());
+                                            if
+                                                let Some(owner) = info
+                                                    .get("wallet")
+                                                    .and_then(|v| v.as_str())
+                                            {
+                                                created_owners.insert(
+                                                    acc.to_string(),
+                                                    owner.to_string()
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" {
+                                if
+                                    itype == "initializeaccount" ||
+                                    itype == "initializeaccount2" ||
+                                    itype == "initializeaccount3"
+                                {
+                                    if
+                                        let Some(info) = parsed
+                                            .get("info")
+                                            .and_then(|i| i.as_object())
+                                    {
+                                        if
+                                            let Some(acc) = info
+                                                .get("account")
+                                                .and_then(|v| v.as_str())
+                                        {
+                                            created_in_tx.insert(acc.to_string());
+                                            if
+                                                let Some(owner) = info
+                                                    .get("owner")
+                                                    .and_then(|v| v.as_str())
+                                            {
+                                                created_owners.insert(
+                                                    acc.to_string(),
+                                                    owner.to_string()
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    if
+                        let Some(arr) = tx_data.transaction.message
+                            .get("instructions")
+                            .and_then(|v| v.as_array())
+                    {
+                        for inst in arr {
+                            record_created(inst);
+                        }
+                    }
+                    if let Some(meta_inst) = meta.inner_instructions.as_ref() {
+                        for inner in meta_inst {
+                            if
+                                let Some(instructions) = inner
+                                    .get("instructions")
+                                    .and_then(|v| v.as_array())
+                            {
+                                for inst in instructions {
+                                    record_created(inst);
+                                }
+                            }
+                        }
+                    }
+
+                    // Derive candidate accounts (non-wallet owners) and detect funding system transfers/createAccount from wallet
+                    // Build owners_by_key from both pre and post token balances
+                    let owners_by_key: std::collections::HashMap<String, String> = {
+                        let mut map = std::collections::HashMap::new();
+                        if let Some(pre_toks) = &meta.pre_token_balances {
+                            for tb in pre_toks {
+                                if let Some(owner) = tb.owner.as_ref() {
+                                    let idx = tb.account_index as usize;
+                                    if let Some(k) = account_keys.get(idx) {
+                                        map.insert(k.clone(), owner.clone());
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(post_toks) = &meta.post_token_balances {
+                            for tb in post_toks {
+                                if let Some(owner) = tb.owner.as_ref() {
+                                    let idx = tb.account_index as usize;
+                                    if let Some(k) = account_keys.get(idx) {
+                                        map.insert(k.clone(), owner.clone());
+                                    }
+                                }
+                            }
+                        }
+                        map
+                    };
+
+                    // Build candidate set: created accounts not owned by wallet
+                    let mut candidate_accounts: std::collections::HashSet<String> = created_in_tx
+                        .into_iter()
+                        .filter(|acc| {
+                            let owner = created_owners
+                                .get(acc)
+                                .or_else(|| owners_by_key.get(acc))
+                                .cloned()
+                                .unwrap_or_default();
+                            !owner.is_empty() && owner != wallet_str
+                        })
+                        .collect();
+
+                    // If none, derive via balance heuristic (pre=0, post≈rent, owner != wallet)
+                    if candidate_accounts.is_empty() {
+                        let standard: u64 = 2_039_280;
+                        let tol: u64 = standard / 20; // 5%
+                        let mut derived = std::collections::HashSet::new();
+                        for (idx, pre) in meta.pre_balances.iter().enumerate() {
+                            let post = *meta.post_balances.get(idx).unwrap_or(&0);
+                            if *pre == 0 && post >= standard - tol && post <= standard + tol {
+                                if let Some(key) = account_keys.get(idx) {
+                                    let owner = owners_by_key.get(key).cloned().unwrap_or_default();
+                                    if owner != wallet_str {
+                                        derived.insert(key.clone());
+                                    }
+                                }
+                            }
+                        }
+                        if self.debug_enabled && !derived.is_empty() {
+                            let mut details: Vec<String> = derived
+                                .iter()
+                                .map(|k| {
+                                    let owner = owners_by_key
+                                        .get(k)
+                                        .cloned()
+                                        .unwrap_or_else(|| "?".to_string());
+                                    format!("{}->{}", k, owner)
+                                })
+                                .collect();
+                            details.sort();
+                            log(
+                                LogTag::Transactions,
+                                "ATA_RENT_ADJUST",
+                                &format!(
+                                    "{}: BUY fallback candidates (derived from balances): {}",
+                                    &transaction.signature,
+                                    details.join(", ")
+                                )
+                            );
+                        }
+                        candidate_accounts.extend(derived.into_iter());
+                    }
+
+                    // Detect wallet funding to these candidates via System transfer/createAccount and subtract
+                    let mut rent_lamports: u64 = 0;
+                    let mut handle_system_inst = |inst: &serde_json::Value| {
+                        // Resolve program id
+                        let mut program_id: Option<String> = inst
+                            .get("programId")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        if program_id.is_none() {
+                            if let Some(idx) = inst.get("programIdIndex").and_then(|v| v.as_u64()) {
+                                program_id = account_keys.get(idx as usize).cloned();
+                            }
+                        }
+                        let program_id = program_id.as_deref().unwrap_or("");
+                        if program_id != "11111111111111111111111111111111" {
+                            return;
+                        }
+                        if let Some(parsed) = inst.get("parsed").and_then(|v| v.as_object()) {
+                            let itype = parsed
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+                            if itype == "transfer" {
+                                if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
+                                    let src = info.get("source").and_then(|v| v.as_str());
+                                    let dest = info.get("destination").and_then(|v| v.as_str());
+                                    let lam = info
+                                        .get("lamports")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0);
+                                    if let (Some(s), Some(d)) = (src, dest) {
+                                        if s == wallet_str && candidate_accounts.contains(d) {
+                                            rent_lamports = rent_lamports.saturating_add(lam);
+                                        }
+                                    }
+                                }
+                            } else if itype == "createaccount" {
+                                if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
+                                    let src = info.get("source").and_then(|v| v.as_str());
+                                    let new_acc = info.get("newAccount").and_then(|v| v.as_str());
+                                    let lam = info
+                                        .get("lamports")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0);
+                                    if let (Some(s), Some(d)) = (src, new_acc) {
+                                        if s == wallet_str && candidate_accounts.contains(d) {
+                                            rent_lamports = rent_lamports.saturating_add(lam);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    if
+                        let Some(arr) = tx_data.transaction.message
+                            .get("instructions")
+                            .and_then(|v| v.as_array())
+                    {
+                        for inst in arr {
+                            handle_system_inst(inst);
+                        }
+                    }
+                    if let Some(meta_inst) = meta.inner_instructions.as_ref() {
+                        for inner in meta_inst {
+                            if
+                                let Some(instructions) = inner
+                                    .get("instructions")
+                                    .and_then(|v| v.as_array())
+                            {
+                                for inst in instructions {
+                                    handle_system_inst(inst);
+                                }
+                            }
+                        }
+                    }
+
+                    // If still zero, fallback to balance check over candidates
+                    if rent_lamports == 0 {
+                        let standard: u64 = 2_039_280;
+                        let tol: u64 = standard / 20; // 5%
+                        for (idx, pre) in meta.pre_balances.iter().enumerate() {
+                            if *pre != 0 {
+                                continue;
+                            }
+                            let post = *meta.post_balances.get(idx).unwrap_or(&0);
+                            if post == 0 {
+                                continue;
+                            }
+                            if let Some(key) = account_keys.get(idx) {
+                                if
+                                    candidate_accounts.contains(key) &&
+                                    post >= standard - tol &&
+                                    post <= standard + tol
+                                {
+                                    rent_lamports = rent_lamports.saturating_add(post);
+                                    if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "ATA_RENT_ADJUST",
+                                            &format!(
+                                                "{}: BUY fallback balance-check: acc={} idx={} pre={} post={} looks_like_rent={}",
+                                                &transaction.signature,
+                                                key,
+                                                idx,
+                                                0,
+                                                post,
+                                                true
+                                            )
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if rent_lamports > 0 {
+                        let rent_sol = (rent_lamports as f64) / 1_000_000_000.0;
+                        let before = sol_spent_effective;
+                        sol_spent_effective = (sol_spent_effective - rent_sol).max(0.0);
                         if self.debug_enabled {
                             log(
                                 LogTag::Transactions,
                                 "ATA_RENT_ADJUST",
                                 &format!(
-                                    "{}: BUY rent adjust: total_spent={:.9} -> {:.9} (spent={:.9}, recovered={:.9})",
+                                    "{}: BUY rent fallback adjust: total_spent={:.9} -> {:.9} (rent_spent_detected={:.9} SOL)",
                                     &transaction.signature,
-                                    sol_spent_effective + total_rent_delta,
+                                    before,
                                     sol_spent_effective,
-                                    ata.total_rent_spent,
-                                    ata.total_rent_recovered
+                                    rent_sol
                                 )
                             );
                         }
@@ -2751,6 +3405,22 @@ impl TransactionProcessor {
                 }
             }
         } else if is_sell {
+            // Apply priority fees (tips) back to sell outputs to match CSV expectations
+            let tip_for_sell = self.calculate_tip_amount(transaction, tx_data);
+            if tip_for_sell > 0.0 {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "TIP_APPLY_SELL",
+                        &format!(
+                            "{}: Adding detected tips back to sell output: +{:.9} SOL",
+                            &transaction.signature,
+                            tip_for_sell
+                        )
+                    );
+                }
+                sol_received_from_swap += tip_for_sell;
+            }
             // No further ATA heuristics for sells; rent flows are handled by the principled adjustment above.
         }
 
