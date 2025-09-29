@@ -180,6 +180,17 @@ fn classify_using_balance_changes(
         return Some((TransactionType::Sell, TransactionDirection::Incoming, 0.85));
     }
 
+    // Handle small sells where fee exceeds the swap amount
+    // For very small swaps, the net SOL change can be negative due to fees
+    // but we can still detect it as a sell if tokens went out and the net loss is small
+    if
+        sol_change < 0.0 &&
+        sol_change > -0.01 && // Net loss is less than 0.01 SOL (could be fee-dominated small sell)
+        primary_change.change < -epsilon
+    {
+        return Some((TransactionType::Sell, TransactionDirection::Incoming, 0.75)); // Lower confidence due to edge case
+    }
+
     None
 }
 

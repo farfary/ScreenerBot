@@ -1429,6 +1429,65 @@ impl TransactionProcessor {
             });
         }
 
+        // Enhanced fallback ATA detection for missed closures
+        // Look for accounts that decreased to zero but weren't detected as closures
+        const STANDARD_ATA_RENT: u64 = 2_039_280;
+        let tolerance = STANDARD_ATA_RENT / 20; // 5% tolerance
+
+        for (account, &pre_balance) in meta.pre_balances.iter().enumerate() {
+            let post_balance = meta.post_balances.get(account).copied().unwrap_or(0);
+
+            // Look for accounts that went to zero (closed) with ATA-sized rent
+            if pre_balance > 0 && post_balance == 0 {
+                // Check if this looks like ATA rent (close to standard amount)
+                let diff = if
+                    pre_balance >= STANDARD_ATA_RENT - tolerance &&
+                    pre_balance <= STANDARD_ATA_RENT + tolerance
+                {
+                    pre_balance
+                } else {
+                    continue;
+                };
+
+                let account_address = format!("account_index_{}", account);
+
+                // Only add if we haven't already detected this closure and it's not already in our operations
+                let already_detected_as_operation = operations.iter().any(|op| {
+                    op.operation_type == AtaOperationType::Closure &&
+                        (op.rent_amount - lamports_to_sol(diff)).abs() < 0.0001 // Within tolerance
+                });
+
+                if
+                    !account_rent_recovered.contains_key(&account_address) &&
+                    !already_detected_as_operation
+                {
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "ATA_FALLBACK_DETECT",
+                            &format!(
+                                "{}: Detected missed ATA closure at index {} with {} lamports (close to standard ATA rent)",
+                                &transaction.signature,
+                                account,
+                                pre_balance
+                            )
+                        );
+                    }
+
+                    // Create a synthetic closure entry for the missed rent recovery
+                    operations.push(AtaOperation {
+                        operation_type: AtaOperationType::Closure,
+                        account_address: account_address,
+                        token_mint: "unknown_token".to_string(),
+                        rent_amount: lamports_to_sol(diff),
+                        is_wsol: false,
+                        mint: "unknown_token".to_string(),
+                        rent_cost_sol: Some(lamports_to_sol(diff)),
+                    });
+                }
+            }
+        }
+
         if operations.is_empty() {
             return Ok((operations, None));
         }
@@ -1568,7 +1627,27 @@ impl TransactionProcessor {
     ) -> Result<Option<TokenSwapInfo>, String> {
         let epsilon = 1e-9;
 
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "EXTRACT_SWAP_ENTRY",
+                &format!(
+                    "{}: Extracting swap info, token_balance_changes={}, sol_change={:.9}",
+                    &transaction.signature,
+                    transaction.token_balance_changes.len(),
+                    transaction.sol_balance_change
+                )
+            );
+        }
+
         if transaction.token_balance_changes.is_empty() {
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "EXTRACT_SWAP_SKIP",
+                    &format!("{}: No token balance changes", &transaction.signature)
+                );
+            }
             return Ok(None);
         }
 
@@ -1590,7 +1669,33 @@ impl TransactionProcessor {
         let is_buy = sol_change < -epsilon && primary_change.change > epsilon;
         let is_sell = sol_change > epsilon && primary_change.change < -epsilon;
 
-        if !is_buy && !is_sell {
+        // Handle small sells where fee exceeds the swap amount
+        // For very small swaps, the net SOL change can be negative due to fees
+        // but we can still detect it as a sell if tokens went out and the net loss is small
+        let is_small_sell =
+            !is_buy &&
+            !is_sell &&
+            sol_change < 0.0 &&
+            primary_change.change < -epsilon &&
+            sol_change.abs() < 0.01; // Net loss is less than 0.01 SOL (could be fee-dominated small sell)
+
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "SWAP_DETECTION_DEBUG",
+                &format!(
+                    "Swap detection: sol_change={:.9}, token_change={:.9}, is_buy={}, is_sell={}, is_small_sell={}, epsilon={:.9}",
+                    sol_change,
+                    primary_change.change,
+                    is_buy,
+                    is_sell,
+                    is_small_sell,
+                    epsilon
+                )
+            );
+        }
+
+        if !is_buy && !is_sell && !is_small_sell {
             return Ok(None);
         }
 
@@ -1758,7 +1863,13 @@ impl TransactionProcessor {
         };
 
         let net_sol_received = sol_change.max(0.0);
-        let mut sol_received_from_swap = (net_sol_received + fee_sol).max(0.0);
+        let mut sol_received_from_swap = if is_small_sell && sol_change < 0.0 {
+            // For small sells where fee exceeds swap proceeds, calculate actual swap proceeds
+            // Swap proceeds = Fee + Net SOL change (which is negative)
+            (fee_sol + sol_change).max(0.0)
+        } else {
+            (net_sol_received + fee_sol).max(0.0)
+        };
 
         // Router-specific precise extraction overrides
         if matches!(router.as_str(), "jupiter" | "pumpfun") {
@@ -1851,8 +1962,9 @@ impl TransactionProcessor {
             }
         }
 
-        // Final adjustment for likely Jito tips that weren't detected by other methods
+        // Final adjustments for common issues not detected by other methods
         if is_buy {
+            // Adjustment for likely Jito tips
             let input_lamports = (sol_spent_effective * 1_000_000_000.0) as u64;
 
             // Check if removing common tip amounts results in a round number
@@ -1877,6 +1989,105 @@ impl TransactionProcessor {
                     }
                     sol_spent_effective = adjusted_sol;
                     break;
+                }
+            }
+        } else if is_sell {
+            // More selective ATA rent adjustment logic
+            // Apply when there's strong evidence that ATA rent recovery occurred but wasn't detected
+            let output_lamports = (sol_received_from_swap * 1_000_000_000.0) as u64;
+
+            let ata_rent_recovered = transaction.ata_analysis
+                .as_ref()
+                .map(|ata| (ata.wsol_rent_recovered * 1_000_000_000.0) as u64)
+                .unwrap_or(0);
+
+            // Apply ATA rent adjustment when we have evidence of missing ATA rent recovery
+            let has_detected_closures_without_recovery = transaction.ata_analysis
+                .as_ref()
+                .map_or(false, |ata| {
+                    // We detected ATA closures but got no rent recovery
+                    ata.total_ata_closures > 0 && ata.total_rent_recovered == 0.0
+                });
+
+            // Heuristic for completely missed ATA closures: reasonable sell amount that could be missing one ATA rent
+            let likely_missing_ata_rent =
+                output_lamports > 1_000_000 &&
+                output_lamports < 50_000_000 &&
+                transaction.ata_analysis.as_ref().map_or(true, |ata| {
+                    // Only apply heuristic if we detected no ATA activity at all
+                    ata.total_ata_closures == 0 && ata.total_rent_recovered == 0.0
+                });
+
+            if self.debug_enabled {
+                let ata_info = transaction.ata_analysis
+                    .as_ref()
+                    .map(|ata|
+                        format!(
+                            "closures={}, recovered={}",
+                            ata.total_ata_closures,
+                            ata.total_rent_recovered
+                        )
+                    )
+                    .unwrap_or_else(|| "None".to_string());
+                log(
+                    LogTag::Transactions,
+                    "ATA_RENT_DEBUG",
+                    &format!(
+                        "ATA rent check: output_lamports={}, ata_rent_recovered={}, has_detected_closures={}, likely_missing={}, ATA: {}",
+                        output_lamports,
+                        ata_rent_recovered,
+                        has_detected_closures_without_recovery,
+                        likely_missing_ata_rent,
+                        ata_info
+                    )
+                );
+            }
+
+            let should_adjust_ata_rent =
+                ata_rent_recovered == 0 &&
+                (has_detected_closures_without_recovery || likely_missing_ata_rent);
+
+            if should_adjust_ata_rent {
+                // Common ATA rent amounts to check for and add back
+                let common_ata_rents = [2_039_280]; // Standard ATA rent amount
+
+                for &rent in &common_ata_rents {
+                    let adjusted = output_lamports.saturating_add(rent);
+
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "ATA_HEURISTIC_DEBUG",
+                            &format!(
+                                "Checking ATA rent adjustment (detected closures but no recovery): {} + {} = {}",
+                                output_lamports,
+                                rent,
+                                adjusted
+                            )
+                        );
+                    }
+
+                    // Only apply if this looks like a reasonable adjustment
+                    if adjusted > output_lamports && adjusted < 100_000_000 {
+                        let adjusted_sol = (adjusted as f64) / 1_000_000_000.0;
+
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "FINAL_ATA_ADJUSTMENT",
+                                &format!(
+                                    "{}: ATA rent recovery adjustment: {:.9} -> {:.9} SOL (added {} lamport rent)",
+                                    &transaction.signature,
+                                    sol_received_from_swap,
+                                    adjusted_sol,
+                                    rent
+                                )
+                            );
+                        }
+
+                        sol_received_from_swap = adjusted_sol;
+                        break;
+                    }
                 }
             }
         }
