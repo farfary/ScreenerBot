@@ -368,6 +368,9 @@ async fn main() -> Result<()> {
                             )
                         );
 
+                        // Print a compact details line even without --verbose for faster triage
+                        print_mismatch_compact(&outcome);
+
                         if args.verbose {
                             print_verbose_details(&outcome);
                         }
@@ -740,5 +743,94 @@ fn print_verbose_details(outcome: &ComparisonOutcome) {
             pnl.fees_paid_sol,
             pnl.ata_rents
         );
+    }
+}
+
+/// Print a compact, single-block details view for mismatches to aid quick triage
+fn print_mismatch_compact(outcome: &ComparisonOutcome) {
+    let csv = &outcome.csv_row;
+
+    // CSV platform hint and decimals
+    let platform = csv.platform
+        .as_ref()
+        .map(|s| s.as_str())
+        .unwrap_or("-");
+
+    // Always show CSV-side token+amount context
+    let d1 = match decimals_or_default(&csv.token1, csv.token_decimals1) {
+        Ok(v) => v,
+        Err(_) => 0,
+    };
+    let d2 = match decimals_or_default(&csv.token2, csv.token_decimals2) {
+        Ok(v) => v,
+        Err(_) => 0,
+    };
+
+    // Calculate diffs if swap_info is present
+    if let Some(ref swap) = outcome.swap_info {
+        let exp_in_raw = parse_amount(&csv.amount1, d1).unwrap_or(0);
+        let exp_out_raw = parse_amount(&csv.amount2, d2).unwrap_or(0);
+
+        let act_in_raw = swap.input_amount as i128;
+        let act_out_raw = swap.output_amount as i128;
+
+        let in_diff = ((exp_in_raw as i128) - act_in_raw).abs();
+        let out_diff = ((exp_out_raw as i128) - act_out_raw).abs();
+
+        let in_pct = if exp_in_raw > 0 {
+            ((in_diff as f64) / (exp_in_raw as f64)) * 100.0
+        } else {
+            0.0
+        };
+        let out_pct = if exp_out_raw > 0 {
+            ((out_diff as f64) / (exp_out_raw as f64)) * 100.0
+        } else {
+            0.0
+        };
+
+        let exp_in_ui = format_ui_amount(exp_in_raw as u128, d1);
+        let exp_out_ui = format_ui_amount(exp_out_raw as u128, d2);
+        let act_in_ui = format_ui_amount(swap.input_amount as u128, d1);
+        let act_out_ui = format_ui_amount(swap.output_amount as u128, d2);
+
+        println!(
+            "  Details: router={} type={} mints={} -> {} | csv_platform={} | csv_decimals={}/{}",
+            swap.router,
+            swap.swap_type,
+            swap.input_mint,
+            swap.output_mint,
+            platform,
+            d1,
+            d2
+        );
+        println!(
+            "           in: exp {} (raw {}) vs got {} (raw {}) [Δ {} ({:.2}%)]",
+            exp_in_ui,
+            exp_in_raw,
+            act_in_ui,
+            act_in_raw,
+            in_diff,
+            in_pct
+        );
+        println!(
+            "           out: exp {} (raw {}) vs got {} (raw {}) [Δ {} ({:.2}%)]",
+            exp_out_ui,
+            exp_out_raw,
+            act_out_ui,
+            act_out_raw,
+            out_diff,
+            out_pct
+        );
+    } else {
+        // No swap info captured; still provide CSV context for investigation
+        println!(
+            "  Details: router=<none> type=<none> mints={} -> {} | csv_platform={} | csv_decimals={}/{}",
+            csv.token1,
+            csv.token2,
+            platform,
+            d1,
+            d2
+        );
+        println!("           csv amounts: token1={} | token2={}", csv.amount1, csv.amount2);
     }
 }
