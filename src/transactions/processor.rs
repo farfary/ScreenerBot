@@ -143,7 +143,15 @@ impl TransactionProcessor {
 
         // Extract basic data from tx_data
         if let Some(meta) = &tx_data.meta {
-            transaction.success = meta.err.is_none();
+            // Treat JSON null as success (Solana encodes no-error as null)
+            let success = match &meta.err {
+                None => true,
+                Some(v) => v.is_null(),
+            };
+            transaction.success = success;
+            if !success {
+                transaction.error_message = meta.err.as_ref().map(|v| v.to_string());
+            }
             transaction.fee_lamports = Some(meta.fee);
             transaction.fee_sol = lamports_to_sol(meta.fee);
         }
@@ -316,9 +324,332 @@ impl TransactionProcessor {
                 .collect(),
         });
 
-        // Map token swap info if available from P&L analysis
-        // TODO: Map P&L analysis - complex mapping needed
-        // For now, skip complex P&L mapping until type alignment is complete
+        // Map token swap info and swap PnL info based on analysis outputs
+        // This fills Transaction.token_swap_info and swap_pnl_info so downstream tools (CSV verifier)
+        // can validate amounts, mints, and router detection.
+        if
+            matches!(
+                analysis.classification.transaction_type,
+                crate::transactions::analyzer::classify::ClassifiedType::Buy |
+                    crate::transactions::analyzer::classify::ClassifiedType::Sell |
+                    crate::transactions::analyzer::classify::ClassifiedType::Swap
+            )
+        {
+            // Determine swap orientation and primary token
+            let direction_opt = &analysis.classification.direction;
+            let primary_token_opt = &analysis.classification.primary_token;
+
+            if
+                let (Some(direction), Some(primary_mint)) = (
+                    direction_opt.as_ref(),
+                    primary_token_opt.as_ref(),
+                )
+            {
+                // Resolve router string from DEX detection
+                let router_str = (
+                    match analysis.dex.detected_dex.as_ref() {
+                        Some(crate::transactions::analyzer::dex::DetectedDex::Jupiter) => "jupiter",
+                        Some(crate::transactions::analyzer::dex::DetectedDex::Raydium) => "raydium",
+                        Some(crate::transactions::analyzer::dex::DetectedDex::RaydiumCLMM) =>
+                            "raydium",
+                        Some(crate::transactions::analyzer::dex::DetectedDex::Orca) => "orca",
+                        Some(crate::transactions::analyzer::dex::DetectedDex::OrcaWhirlpool) =>
+                            "orca",
+                        Some(crate::transactions::analyzer::dex::DetectedDex::PumpFun) => "pumpfun",
+                        Some(crate::transactions::analyzer::dex::DetectedDex::Meteora) => "meteora",
+                        Some(_) => "unknown",
+                        None => "unknown",
+                    }
+                ).to_string();
+
+                // Helper to get wallet key string
+                let wallet_key = self.wallet_pubkey.to_string();
+
+                // Fetch token decimals once
+                let token_decimals: u8 = crate::tokens
+                    ::get_token_decimals(primary_mint).await
+                    .unwrap_or(9) as u8;
+
+                // Locate token balance change for the wallet and mint
+                let token_ui_change: Option<f64> = analysis.balance.token_changes
+                    .get(&wallet_key)
+                    .and_then(|changes|
+                        changes
+                            .iter()
+                            .find(|c| c.mint == *primary_mint)
+                            .map(|c| c.change)
+                    )
+                    // fallback: largest change across owners for this mint
+                    .or_else(|| {
+                        analysis.balance.token_changes
+                            .values()
+                            .flat_map(|v| v.iter())
+                            .filter(|c| c.mint == *primary_mint)
+                            .max_by(|a, b|
+                                a.change
+                                    .abs()
+                                    .partial_cmp(&b.change.abs())
+                                    .unwrap_or(std::cmp::Ordering::Equal)
+                            )
+                            .map(|c| c.change)
+                    });
+
+                // Locate SOL change for the wallet
+                let sol_change_wallet = analysis.balance.sol_changes
+                    .get(&wallet_key)
+                    .map(|c| c.change);
+                // fallback: use largest SOL change if wallet-specific not found
+                let sol_change_any = analysis.balance.sol_changes
+                    .values()
+                    .max_by(|a, b|
+                        a.change
+                            .abs()
+                            .partial_cmp(&b.change.abs())
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    )
+                    .map(|c| c.change);
+
+                // Compute raw amounts and UI amounts based on direction
+                let mut input_mint = String::new();
+                let mut output_mint = String::new();
+                let mut input_ui: f64 = 0.0;
+                let mut output_ui: f64 = 0.0;
+                let mut input_raw: u64 = 0;
+                let mut output_raw: u64 = 0;
+                let swap_type_str: &str;
+
+                match direction {
+                    crate::transactions::analyzer::classify::SwapDirection::SolToToken => {
+                        swap_type_str = "sol_to_token";
+                        input_mint = WSOL_MINT.to_string();
+                        output_mint = primary_mint.clone();
+
+                        let sol_abs = sol_change_wallet.or(sol_change_any).unwrap_or(0.0).abs();
+                        // Compute swap input SOL excluding non-swap costs (base fee, priority, tips, rent)
+                        let fb = &analysis.pnl.fee_breakdown;
+                        let non_swap_costs =
+                            fb.base_fee + fb.priority_fee + fb.mev_tips + fb.rent_costs;
+                        let sol_for_swap = (sol_abs - non_swap_costs).max(0.0);
+                        input_ui = sol_for_swap;
+                        input_raw = (sol_for_swap * 1_000_000_000.0)
+                            .round()
+                            .clamp(0.0, u64::MAX as f64) as u64;
+
+                        let token_abs = token_ui_change.unwrap_or(0.0).abs();
+                        output_ui = token_abs;
+                        let scale = (10f64).powi(token_decimals as i32);
+                        output_raw = (token_abs * scale).round().clamp(0.0, u64::MAX as f64) as u64;
+                    }
+                    crate::transactions::analyzer::classify::SwapDirection::TokenToSol => {
+                        swap_type_str = "token_to_sol";
+                        input_mint = primary_mint.clone();
+                        output_mint = WSOL_MINT.to_string();
+
+                        let token_abs = token_ui_change.unwrap_or(0.0).abs();
+                        input_ui = token_abs;
+                        let scale = (10f64).powi(token_decimals as i32);
+                        input_raw = (token_abs * scale).round().clamp(0.0, u64::MAX as f64) as u64;
+
+                        let sol_abs = sol_change_wallet.or(sol_change_any).unwrap_or(0.0).abs();
+                        output_ui = sol_abs;
+                        output_raw = (sol_abs * 1_000_000_000.0)
+                            .round()
+                            .clamp(0.0, u64::MAX as f64) as u64;
+                    }
+                    crate::transactions::analyzer::classify::SwapDirection::TokenToToken => {
+                        swap_type_str = "token_to_token";
+                        // For token-to-token, use primary as input and try to infer secondary from classification
+                        input_mint = primary_mint.clone();
+                        output_mint = analysis.classification.secondary_token
+                            .clone()
+                            .unwrap_or_default();
+
+                        let token_abs = token_ui_change.unwrap_or(0.0).abs();
+                        input_ui = token_abs;
+                        let scale_in = (10f64).powi(token_decimals as i32);
+                        input_raw = (token_abs * scale_in)
+                            .round()
+                            .clamp(0.0, u64::MAX as f64) as u64;
+                        // Output side unknown without deeper decoding; leave zeros
+                        output_ui = 0.0;
+                        output_raw = 0;
+                    }
+                }
+
+                // Build TokenSwapInfo snapshot
+                let token_swap_info = TokenSwapInfo {
+                    mint: primary_mint.clone(),
+                    symbol: String::new(), // enrichment optional
+                    decimals: token_decimals,
+                    current_price_sol: None,
+                    is_verified: false,
+                    router: router_str.clone(),
+                    swap_type: swap_type_str.to_string(),
+                    input_mint: input_mint.clone(),
+                    output_mint: output_mint.clone(),
+                    input_amount: input_raw,
+                    output_amount: output_raw,
+                    input_ui_amount: input_ui,
+                    output_ui_amount: output_ui,
+                    pool_address: analysis.dex.pool_address.clone(),
+                    program_id: analysis.dex.program_ids.get(0).cloned().unwrap_or_default(),
+                };
+
+                // Map PnL main component if present
+                let swap_pnl_info = if let Some(main) = &analysis.pnl.main_pnl {
+                    let swap_type = match direction {
+                        crate::transactions::analyzer::classify::SwapDirection::SolToToken => "Buy",
+                        crate::transactions::analyzer::classify::SwapDirection::TokenToSol =>
+                            "Sell",
+                        crate::transactions::analyzer::classify::SwapDirection::TokenToToken =>
+                            "Swap",
+                    };
+
+                    let fees_total = analysis.pnl.fee_breakdown.total_fees;
+                    let status_str = if transaction.success { "✅ Success" } else { "❌ Failed" };
+
+                    Some(SwapPnLInfo {
+                        token_mint: primary_mint.clone(),
+                        token_symbol: String::new(),
+                        swap_type: swap_type.to_string(),
+                        sol_amount: main.sol_amount_adjusted.abs(),
+                        token_amount: main.token_amount.abs(),
+                        calculated_price_sol: main.price_per_token,
+                        timestamp: transaction.timestamp,
+                        signature: transaction.signature.clone(),
+                        router: router_str.clone(),
+                        fee_sol: analysis.pnl.fee_breakdown.base_fee,
+                        ata_rents: analysis.pnl.fee_breakdown.rent_costs,
+                        effective_sol_spent: if
+                            matches!(
+                                direction,
+                                crate::transactions::analyzer::classify::SwapDirection::SolToToken
+                            )
+                        {
+                            main.sol_amount_adjusted.abs()
+                        } else {
+                            0.0
+                        },
+                        effective_sol_received: if
+                            matches!(
+                                direction,
+                                crate::transactions::analyzer::classify::SwapDirection::TokenToSol
+                            )
+                        {
+                            main.sol_amount_adjusted.abs()
+                        } else {
+                            0.0
+                        },
+                        ata_created_count: transaction.ata_analysis
+                            .as_ref()
+                            .map(|a| a.total_ata_creations)
+                            .unwrap_or(0),
+                        ata_closed_count: transaction.ata_analysis
+                            .as_ref()
+                            .map(|a| a.total_ata_closures)
+                            .unwrap_or(0),
+                        slot: transaction.slot,
+                        status: status_str.to_string(),
+                        // Legacy fields for debug tools
+                        sol_spent: if
+                            matches!(
+                                direction,
+                                crate::transactions::analyzer::classify::SwapDirection::SolToToken
+                            )
+                        {
+                            main.sol_amount_raw.abs()
+                        } else {
+                            0.0
+                        },
+                        sol_received: if
+                            matches!(
+                                direction,
+                                crate::transactions::analyzer::classify::SwapDirection::TokenToSol
+                            )
+                        {
+                            main.sol_amount_raw.abs()
+                        } else {
+                            0.0
+                        },
+                        tokens_bought: if
+                            matches!(
+                                direction,
+                                crate::transactions::analyzer::classify::SwapDirection::SolToToken
+                            )
+                        {
+                            main.token_amount.abs()
+                        } else {
+                            0.0
+                        },
+                        tokens_sold: if
+                            matches!(
+                                direction,
+                                crate::transactions::analyzer::classify::SwapDirection::TokenToSol
+                            )
+                        {
+                            main.token_amount.abs()
+                        } else {
+                            0.0
+                        },
+                        net_sol_change: analysis.balance.sol_changes
+                            .values()
+                            .map(|c| c.change)
+                            .sum(),
+                        estimated_token_value_sol: None,
+                        estimated_pnl_sol: None,
+                        fees_paid_sol: fees_total,
+                    })
+                } else {
+                    None
+                };
+
+                transaction.token_swap_info = Some(token_swap_info.clone());
+                transaction.token_info = Some(token_swap_info);
+                transaction.swap_pnl_info = swap_pnl_info;
+
+                if self.debug_enabled {
+                    if
+                        matches!(
+                            direction,
+                            crate::transactions::analyzer::classify::SwapDirection::SolToToken
+                        )
+                    {
+                        let fb = &analysis.pnl.fee_breakdown;
+                        log(
+                            LogTag::Transactions,
+                            "MAP_SWAP_FEES",
+                            &format!(
+                                "fee_components: base={:.9} priority={:.9} tips={:.9} rent={:.9} swap_fees={:.9}",
+                                fb.base_fee,
+                                fb.priority_fee,
+                                fb.mev_tips,
+                                fb.rent_costs,
+                                fb.swap_fees
+                            )
+                        );
+                    }
+                    log(
+                        LogTag::Transactions,
+                        "MAP_SWAP",
+                        &format!(
+                            "Mapped swap: dir={:?} router={} in {} (ui={:.9}) -> out {} (ui={:.6})",
+                            direction,
+                            router_str,
+                            input_raw,
+                            input_ui,
+                            output_raw,
+                            output_ui
+                        )
+                    );
+                }
+            } else if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "MAP_SWAP_SKIPPED",
+                    &"Skipping swap mapping: missing direction or primary token".to_string()
+                );
+            }
+        }
 
         Ok(())
     }
