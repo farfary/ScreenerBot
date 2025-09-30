@@ -180,7 +180,10 @@ pub async fn classify_transaction(
         "CLASSIFY_DECISION",
         &format!(
             "classification={:?} direction={:?} primary_token={:?} confidence={:?}",
-            classification.0, classification.1, classification.2, confidence
+            classification.0,
+            classification.1,
+            classification.2,
+            confidence
         )
     );
 
@@ -576,7 +579,10 @@ fn calculate_flow_confidence(nodes: &[FlowNode], edges: &[FlowEdge]) -> f64 {
     factors += 1;
 
     // Factor 3: Balance between inflows and outflows
-    let total_amount: f64 = edges.iter().map(|e| e.amount).sum();
+    let total_amount: f64 = edges
+        .iter()
+        .map(|e| e.amount)
+        .sum();
     if total_amount > 0.0 {
         score += 0.3;
     }

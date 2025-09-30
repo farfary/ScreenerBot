@@ -217,7 +217,10 @@ async fn extract_sol_balance_changes(
     }
 
     // Align account_keys length to balances length (jsonParsed often includes additional LUT keys)
-    let min_len = std::cmp::min(account_keys.len(), std::cmp::min(pre_balances.len(), post_balances.len()));
+    let min_len = std::cmp::min(
+        account_keys.len(),
+        std::cmp::min(pre_balances.len(), post_balances.len())
+    );
     let account_keys = account_keys.into_iter().take(min_len).collect::<Vec<_>>();
 
     // Calculate changes for each account
@@ -485,7 +488,12 @@ fn account_keys_from_message(message: &Value) -> Vec<String> {
         // Fallback: array of objects with pubkey field
         keys = array
             .iter()
-            .filter_map(|v| v.get("pubkey").and_then(|p| p.as_str()).map(|s| s.to_string()))
+            .filter_map(|v|
+                v
+                    .get("pubkey")
+                    .and_then(|p| p.as_str())
+                    .map(|s| s.to_string())
+            )
             .collect();
         return keys;
     }

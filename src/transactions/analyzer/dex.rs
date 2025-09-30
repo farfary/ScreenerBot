@@ -366,7 +366,12 @@ fn extract_account_keys(message: &Value) -> Vec<String> {
         // Fallback: array of objects with { pubkey, ... }
         keys = array
             .iter()
-            .filter_map(|v| v.get("pubkey").and_then(|p| p.as_str()).map(|s| s.to_string()))
+            .filter_map(|v|
+                v
+                    .get("pubkey")
+                    .and_then(|p| p.as_str())
+                    .map(|s| s.to_string())
+            )
             .collect();
         return keys;
     }
