@@ -15,6 +15,7 @@ use std::collections::HashMap;
 
 use crate::logger::{ log, LogTag };
 use crate::transactions::types::*;
+use crate::transactions::utils::WSOL_MINT;
 use super::{ balance::BalanceAnalysis, dex::DexAnalysis, AnalysisConfidence };
 
 // =============================================================================
@@ -173,6 +174,29 @@ pub async fn classify_transaction(
         dex_analysis
     );
 
+    // Decision summary
+    log(
+        LogTag::Transactions,
+        "CLASSIFY_DECISION",
+        &format!(
+            "classification={:?} direction={:?} primary_token={:?} confidence={:?}",
+            classification.0, classification.1, classification.2, confidence
+        )
+    );
+
+    // Debug: summarize nodes, edges, and patterns
+    log(
+        LogTag::Transactions,
+        "CLASSIFY_DEBUG",
+        &format!(
+            "Flow graph: nodes={} edges={} patterns={} dex_conf={:.2}",
+            flow_analysis.nodes.len(),
+            flow_analysis.edges.len(),
+            flow_patterns.len(),
+            dex_analysis.confidence
+        )
+    );
+
     Ok(TransactionClass {
         transaction_type: classification.0,
         direction: classification.1,
@@ -297,7 +321,7 @@ async fn detect_flow_patterns(flow_analysis: &FlowAnalysis) -> Result<Vec<FlowPa
 /// Detect swap patterns (buy/sell operations)
 async fn detect_swap_patterns(flow_analysis: &FlowAnalysis) -> Result<Vec<FlowPattern>, String> {
     let mut patterns = Vec::new();
-    let sol_mint = "So11111111111111111111111111111111111111112";
+    let sol_mint = WSOL_MINT;
 
     // Find accounts with both SOL and token changes
     for node in &flow_analysis.nodes {
@@ -344,7 +368,7 @@ async fn detect_transfer_patterns(
     // Look for edges that represent pure transfers
     for edge in &flow_analysis.edges {
         if matches!(edge.edge_type, EdgeType::Transfer) {
-            let pattern_type = if edge.token == "So11111111111111111111111111111111111111112" {
+            let pattern_type = if edge.token == WSOL_MINT {
                 PatternType::SolTransfer
             } else {
                 PatternType::TokenTransfer
@@ -429,8 +453,7 @@ async fn classify_from_patterns(
         .iter()
         .max_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap();
-
-    let sol_mint = "So11111111111111111111111111111111111111112";
+    let sol_mint = WSOL_MINT;
 
     match dominant_pattern.pattern_type {
         PatternType::SimpleSwap => {
@@ -553,12 +576,8 @@ fn calculate_flow_confidence(nodes: &[FlowNode], edges: &[FlowEdge]) -> f64 {
     factors += 1;
 
     // Factor 3: Balance between inflows and outflows
-    let total_inflow: f64 = edges
-        .iter()
-        .map(|e| e.amount)
-        .sum();
-    let total_outflow: f64 = total_inflow; // Simplified
-    if (total_inflow - total_outflow).abs() < total_inflow * 0.1 {
+    let total_amount: f64 = edges.iter().map(|e| e.amount).sum();
+    if total_amount > 0.0 {
         score += 0.3;
     }
     factors += 1;

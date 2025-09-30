@@ -206,16 +206,19 @@ async fn extract_sol_balance_changes(
     if account_keys.len() != pre_balances.len() || account_keys.len() != post_balances.len() {
         log(
             LogTag::Transactions,
-            "BALANCE_ERROR",
+            "BALANCE_WARN",
             &format!(
-                "Length mismatch - account_keys: {}, pre_balances: {}, post_balances: {}",
+                "Length mismatch - account_keys: {}, pre_balances: {}, post_balances: {} (will align)",
                 account_keys.len(),
                 pre_balances.len(),
                 post_balances.len()
             )
         );
-        return Err("Account keys and balance arrays length mismatch".to_string());
     }
+
+    // Align account_keys length to balances length (jsonParsed often includes additional LUT keys)
+    let min_len = std::cmp::min(account_keys.len(), std::cmp::min(pre_balances.len(), post_balances.len()));
+    let account_keys = account_keys.into_iter().take(min_len).collect::<Vec<_>>();
 
     // Calculate changes for each account
     for (i, account_key) in account_keys.iter().enumerate() {
@@ -260,15 +263,21 @@ async fn extract_token_balance_changes(
     // Create lookup maps for efficient matching
     let mut pre_map: HashMap<(u32, String), &crate::rpc::UiTokenAmount> = HashMap::new();
     let mut post_map: HashMap<(u32, String), &crate::rpc::UiTokenAmount> = HashMap::new();
+    let mut pre_owner_map: HashMap<(u32, String), Option<String>> = HashMap::new();
+    let mut post_owner_map: HashMap<(u32, String), Option<String>> = HashMap::new();
 
     for balance in pre_token_balances {
-        let key = (balance.account_index, balance.mint.clone());
-        pre_map.insert(key, &balance.ui_token_amount);
+        let key_for_amount = (balance.account_index, balance.mint.clone());
+        let key_for_owner = (balance.account_index, balance.mint.clone());
+        pre_map.insert(key_for_amount, &balance.ui_token_amount);
+        pre_owner_map.insert(key_for_owner, balance.owner.clone());
     }
 
     for balance in post_token_balances {
-        let key = (balance.account_index, balance.mint.clone());
-        post_map.insert(key, &balance.ui_token_amount);
+        let key_for_amount = (balance.account_index, balance.mint.clone());
+        let key_for_owner = (balance.account_index, balance.mint.clone());
+        post_map.insert(key_for_amount, &balance.ui_token_amount);
+        post_owner_map.insert(key_for_owner, balance.owner.clone());
     }
 
     // Find all unique (account_index, mint) combinations
@@ -280,10 +289,19 @@ async fn extract_token_balance_changes(
     let account_keys = account_keys_from_message(message);
 
     for (account_index, mint) in all_keys {
-        let account_key = if (account_index as usize) < account_keys.len() {
-            &account_keys[account_index as usize]
+        // Prefer attributing token changes to the owner (wallet) rather than the token account
+        let owner_opt = post_owner_map
+            .get(&(account_index, mint.clone()))
+            .and_then(|o| o.clone())
+            .or_else(|| pre_owner_map.get(&(account_index, mint.clone())).and_then(|o| o.clone()));
+
+        let account_key_owned = if let Some(owner) = owner_opt {
+            owner
+        } else if (account_index as usize) < account_keys.len() {
+            account_keys[account_index as usize].clone()
         } else {
-            continue; // Skip invalid indices
+            // Skip invalid indices with no resolvable owner
+            continue;
         };
 
         let pre_amount = pre_map.get(&(account_index, mint.clone()));
@@ -305,9 +323,21 @@ async fn extract_token_balance_changes(
                 usd_value: None, // Will be calculated later if needed
             };
 
-            token_changes.entry(account_key.clone()).or_insert_with(Vec::new).push(token_change);
+            token_changes.entry(account_key_owned).or_insert_with(Vec::new).push(token_change);
         }
     }
+
+    // Diagnostic: summarize aggregation distribution
+    log(
+        LogTag::Transactions,
+        "BALANCE_DEBUG",
+        &format!(
+            "Token changes aggregated across {} owners/accounts (pre={} post={})",
+            token_changes.len(),
+            pre_token_balances.len(),
+            post_token_balances.len()
+        )
+    );
 
     Ok(token_changes)
 }
@@ -349,7 +379,7 @@ async fn filter_noise_transfers(
             } else {
                 "unknown".to_string()
             },
-            mint: "So11111111111111111111111111111111111111112".to_string(), // SOL mint
+            mint: WSOL_MINT.to_string(), // SOL mint
             amount: change.change.abs(),
             transfer_type: TransferType::SolTransfer,
         });
@@ -439,13 +469,25 @@ fn calculate_balance_confidence(
 
 /// Get account keys from transaction message (supports both legacy and v0)
 fn account_keys_from_message(message: &Value) -> Vec<String> {
-    // Legacy format: array of strings
+    // jsonParsed v0 can be:
+    // - array of strings
+    // - array of objects { pubkey, signer, writable, source }
+    // - object { staticAccountKeys, loadedAddresses { writable, readonly } }
     if let Some(array) = message.get("accountKeys").and_then(|v| v.as_array()) {
-        return array
+        // Try strings first
+        let mut keys: Vec<String> = array
             .iter()
-            .filter_map(|v| v.as_str())
-            .map(|s| s.to_string())
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
             .collect();
+        if !keys.is_empty() {
+            return keys;
+        }
+        // Fallback: array of objects with pubkey field
+        keys = array
+            .iter()
+            .filter_map(|v| v.get("pubkey").and_then(|p| p.as_str()).map(|s| s.to_string()))
+            .collect();
+        return keys;
     }
 
     // v0 format: object with staticAccountKeys and loadedAddresses

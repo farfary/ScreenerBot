@@ -353,13 +353,22 @@ fn extract_program_ids(tx_data: &crate::rpc::TransactionDetails) -> Result<Vec<S
 
 /// Extract account keys from transaction message
 fn extract_account_keys(message: &Value) -> Vec<String> {
-    // Legacy format
+    // Legacy or v0 array format
     if let Some(array) = message.get("accountKeys").and_then(|v| v.as_array()) {
-        return array
+        // Try plain strings first
+        let mut keys: Vec<String> = array
             .iter()
-            .filter_map(|v| v.as_str())
-            .map(|s| s.to_string())
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
             .collect();
+        if !keys.is_empty() {
+            return keys;
+        }
+        // Fallback: array of objects with { pubkey, ... }
+        keys = array
+            .iter()
+            .filter_map(|v| v.get("pubkey").and_then(|p| p.as_str()).map(|s| s.to_string()))
+            .collect();
+        return keys;
     }
 
     // v0 format
